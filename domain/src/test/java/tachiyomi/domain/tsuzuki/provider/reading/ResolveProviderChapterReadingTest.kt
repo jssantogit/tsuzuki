@@ -106,10 +106,12 @@ class ResolveProviderChapterReadingTest {
             request.providerChapterId shouldBe "provider-chapter-1"
             ProviderCallResult.Success(
                 ProviderReadingDelivery.PageList(
-                    listOf(ProviderPageRequest(
-                        url = "https://cdn.example/page.jpg",
-                        allowedOrigins = setOf("https://cdn.example"),
-                    )),
+                    listOf(
+                        ProviderPageRequest(
+                            url = "https://cdn.example/page.jpg",
+                            allowedOrigins = setOf("https://cdn.example"),
+                        ),
+                    ),
                 ),
             )
         }
@@ -122,10 +124,12 @@ class ResolveProviderChapterReadingTest {
 
         resolver.delivery(option) shouldBe ProviderCallResult.Success(
             ProviderReadingDelivery.PageList(
-                listOf(ProviderPageRequest(
+                listOf(
+                    ProviderPageRequest(
                         url = "https://cdn.example/page.jpg",
                         allowedOrigins = setOf("https://cdn.example"),
-                    )),
+                    ),
+                ),
             ),
         )
         pagesCalls shouldBe 1
