@@ -16,6 +16,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
@@ -99,6 +100,7 @@ class ProviderRuntimeIsolationTest {
                 runtime = runtime,
                 source = "await tsuzuki.http.get('https://allowed.example/data')",
                 hostBridge = host,
+                hostModules = setOf(ProviderHostModule.HTTP),
             ) shouldBeSuccess "broker-ok"
         } finally {
             if (bound) {
@@ -112,6 +114,7 @@ class ProviderRuntimeIsolationTest {
         source: String,
         limits: ProviderRuntimeLimitsDto = ProviderRuntimeLimitsDto(),
         hostBridge: IProviderHostBridge? = null,
+        hostModules: Set<ProviderHostModule> = emptySet(),
     ): ProviderRuntimeInvocationResponse {
         val request = ProviderRuntimeInvocationRequest(
             protocolVersion = ProviderRuntimeProtocol.VERSION,
@@ -122,6 +125,7 @@ class ProviderRuntimeIsolationTest {
             capabilityVersion = 1,
             configurationFingerprint = "instrumented-config",
             fileName = "main.js",
+            hostModules = hostModules,
             limits = limits,
         )
         val pipe = ParcelFileDescriptor.createPipe()
