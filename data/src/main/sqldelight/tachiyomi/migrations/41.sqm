@@ -1,0 +1,19 @@
+CREATE TABLE tsuzuki_provider_bindings(
+    id TEXT NOT NULL PRIMARY KEY,
+    canonical_title_id TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    facet_id TEXT NOT NULL,
+    external_work_id TEXT NOT NULL,
+    verification TEXT NOT NULL,
+    availability TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE(provider_id, facet_id, external_work_id),
+    FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
+);
+
+CREATE INDEX tsuzuki_provider_binding_title_index
+ON tsuzuki_provider_bindings(canonical_title_id);
+
+CREATE INDEX tsuzuki_provider_binding_provider_index
+ON tsuzuki_provider_bindings(provider_id);
