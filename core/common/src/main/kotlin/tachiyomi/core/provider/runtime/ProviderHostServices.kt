@@ -2,6 +2,8 @@ package tachiyomi.core.provider.runtime
 
 interface ProviderHttpHostService {
     suspend fun getText(url: String): String
+
+    suspend fun getResource(url: String): ProviderResourceHandle
 }
 
 interface ProviderDomHostService {
