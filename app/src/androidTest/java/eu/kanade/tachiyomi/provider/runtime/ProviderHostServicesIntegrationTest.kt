@@ -18,6 +18,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
@@ -86,6 +87,11 @@ class ProviderHostServicesIntegrationTest {
                 source = script,
                 invocationId = "complex-reading",
                 hostBridge = invocation.bridge,
+                hostModules = setOf(
+                    ProviderHostModule.BINARY,
+                    ProviderHostModule.CRYPTO,
+                    ProviderHostModule.IMAGE,
+                ),
             )
 
             assertEquals(null, response.failure)
@@ -154,6 +160,7 @@ class ProviderHostServicesIntegrationTest {
                 "browser-a1",
                 a1.bridge,
                 providerId = "org.example.a",
+                hostModules = setOf(ProviderHostModule.BROWSER),
             )
             assertEquals("alpha", first.value)
 
@@ -163,6 +170,7 @@ class ProviderHostServicesIntegrationTest {
                 "browser-a2",
                 a2.bridge,
                 providerId = "org.example.a",
+                hostModules = setOf(ProviderHostModule.BROWSER),
             )
             assertEquals("alpha", second.value)
 
@@ -172,6 +180,7 @@ class ProviderHostServicesIntegrationTest {
                 "browser-b1",
                 b1.bridge,
                 providerId = "org.example.b",
+                hostModules = setOf(ProviderHostModule.BROWSER),
             )
             assertEquals("empty", other.value)
         } finally {
@@ -190,6 +199,7 @@ class ProviderHostServicesIntegrationTest {
         invocationId: String,
         hostBridge: IProviderHostBridge,
         providerId: String = "org.example.reader",
+        hostModules: Set<ProviderHostModule> = emptySet(),
     ): ProviderRuntimeInvocationResponse {
         val request = ProviderRuntimeInvocationRequest(
             protocolVersion = ProviderRuntimeProtocol.VERSION,
@@ -200,6 +210,7 @@ class ProviderHostServicesIntegrationTest {
             capabilityVersion = 1,
             configurationFingerprint = "instrumentation",
             fileName = "main.js",
+            hostModules = hostModules,
             limits = ProviderRuntimeLimitsDto(
                 wallClockTimeoutMs = 10_000,
                 jsExecutionTimeoutMs = 3_000,
