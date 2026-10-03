@@ -136,43 +136,13 @@ class ScriptProviderReadingGatewayIsolationTest {
             val pageList = pages.value as ProviderReadingDelivery.PageList
             assertEquals("$origin/pages/001.jpg", pageList.pages.single().url)
 
-            val prepared = PreparedChapterContent.HttpPages(
-                pageList.pages.map { page ->
-                    PreparedHttpPage(
-                        url = page.url,
-                        headers = page.headers,
-                        allowedOrigins = page.allowedOrigins,
-                        allowLocalNetwork = page.allowLocalNetwork,
-                    )
-                },
+            assertEquals(
+                "reader-image-bytes",
+                readFirstProviderPage(
+                    pageList = pageList,
+                    canonicalChapterId = "canonical-chapter-1",
+                ),
             )
-            val plan = CanonicalReaderTargetPlan.HttpPages(
-                canonicalChapterId = "canonical-chapter-1",
-                pages = prepared.pages,
-            )
-            val readerLoader = ProviderHttpChapterLoader.from(
-                InstrumentationRegistry.getInstrumentation().targetContext,
-                plan,
-            )
-            val readerChapter = ReaderChapter(
-                ChapterImpl().apply {
-                    id = Long.MIN_VALUE
-                    url = "provider-pages:canonical-chapter-1"
-                    name = "Chapter 1"
-                },
-            )
-            try {
-                readerLoader.loadChapter(readerChapter)
-                val readerPage = readerChapter.pages!!.single()
-                readerChapter.pageLoader!!.loadPage(readerPage)
-                assertEquals(Page.State.Ready, readerPage.status)
-                assertEquals(
-                    "reader-image-bytes",
-                    readerPage.stream!!.invoke().use { it.readBytes().decodeToString() },
-                )
-            } finally {
-                readerChapter.pageLoader?.recycle()
-            }
 
             assertEquals("/lookup", server.takeRequest().url.encodedPath)
             assertEquals("/chapters", server.takeRequest().url.encodedPath)
@@ -190,6 +160,11 @@ class ScriptProviderReadingGatewayIsolationTest {
         server.enqueue(
             MockResponse.Builder()
                 .body("""<html><body><h1 id="title">DOM Title</h1></body></html>""")
+                .build(),
+        )
+        server.enqueue(
+            MockResponse.Builder()
+                .body("dom-reader-image")
                 .build(),
         )
 
@@ -231,7 +206,22 @@ class ScriptProviderReadingGatewayIsolationTest {
             ) as ProviderCallResult.Success
 
             assertEquals("DOM Title", result.value.items.single().title)
-            assertEquals(1, server.requestCount)
+
+            val pages = gateway.pages(
+                PROVIDER_ID,
+                ProviderReadingPagesRequest(
+                    binding = ProviderBindingRef(PROVIDER_ID, "en", "dom-work"),
+                    providerChapterId = "dom-chapter-1",
+                ),
+            ) as ProviderCallResult.Success
+            assertEquals(
+                "dom-reader-image",
+                readFirstProviderPage(
+                    pageList = pages.value as ProviderReadingDelivery.PageList,
+                    canonicalChapterId = "canonical-dom-chapter-1",
+                ),
+            )
+            assertEquals(2, server.requestCount)
         } finally {
             server.close()
         }
@@ -259,9 +249,14 @@ class ScriptProviderReadingGatewayIsolationTest {
                 )
                 .build(),
         )
+        server.enqueue(
+            MockResponse.Builder()
+                .body("browser-reader-image")
+                .build(),
+        )
 
         val gateway = gateway(
-            networkOrigins = emptySet(),
+            networkOrigins = setOf(origin),
             browserOrigins = setOf(origin),
             localNetwork = true,
             main = """
@@ -298,9 +293,65 @@ class ScriptProviderReadingGatewayIsolationTest {
             ) as ProviderCallResult.Success
 
             assertEquals("Browser Title", result.value.items.single().title)
-            assertEquals(1, server.requestCount)
+
+            val pages = gateway.pages(
+                PROVIDER_ID,
+                ProviderReadingPagesRequest(
+                    binding = ProviderBindingRef(PROVIDER_ID, "en", "browser-work"),
+                    providerChapterId = "browser-chapter-1",
+                ),
+            ) as ProviderCallResult.Success
+            assertEquals(
+                "browser-reader-image",
+                readFirstProviderPage(
+                    pageList = pages.value as ProviderReadingDelivery.PageList,
+                    canonicalChapterId = "canonical-browser-chapter-1",
+                ),
+            )
+            assertEquals(2, server.requestCount)
         } finally {
             server.close()
+        }
+    }
+
+    private suspend fun readFirstProviderPage(
+        pageList: ProviderReadingDelivery.PageList,
+        canonicalChapterId: String,
+    ): String {
+        val prepared = PreparedChapterContent.HttpPages(
+            pageList.pages.map { page ->
+                PreparedHttpPage(
+                    url = page.url,
+                    headers = page.headers,
+                    allowedOrigins = page.allowedOrigins,
+                    allowLocalNetwork = page.allowLocalNetwork,
+                )
+            },
+        )
+        val plan = CanonicalReaderTargetPlan.HttpPages(
+            canonicalChapterId = canonicalChapterId,
+            pages = prepared.pages,
+        )
+        val readerLoader = ProviderHttpChapterLoader.from(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+            plan,
+        )
+        val readerChapter = ReaderChapter(
+            ChapterImpl().apply {
+                id = Long.MIN_VALUE
+                url = "provider-pages:$canonicalChapterId"
+                name = "Provider chapter"
+            },
+        )
+
+        return try {
+            readerLoader.loadChapter(readerChapter)
+            val readerPage = readerChapter.pages!!.single()
+            readerChapter.pageLoader!!.loadPage(readerPage)
+            assertEquals(Page.State.Ready, readerPage.status)
+            readerPage.stream!!.invoke().use { it.readBytes().decodeToString() }
+        } finally {
+            readerChapter.pageLoader?.recycle()
         }
     }
 
