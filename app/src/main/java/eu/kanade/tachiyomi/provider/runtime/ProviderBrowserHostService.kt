@@ -39,6 +39,7 @@ class AndroidProviderBrowserHostService(
     private val context = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
     private val activeCancellations = ConcurrentHashMap<String, () -> Unit>()
+    private val closed = AtomicBoolean(false)
 
     init {
         require(providerProfileName.isNotBlank()) { "Provider browser profile must not be blank" }
@@ -57,6 +58,9 @@ class AndroidProviderBrowserHostService(
             throw ProviderHostServiceException("Provider browser selector is invalid")
         }
 
+        if (closed.get()) {
+            throw ProviderHostServiceException("Provider browser broker is closed")
+        }
         val initialUrl = policy.validate(url)
         val operationId = UUID.randomUUID().toString()
         val result = AtomicReference<Result<String>?>(null)
@@ -89,6 +93,9 @@ class AndroidProviderBrowserHostService(
                     ProviderHostServiceException("Provider browser operation was cancelled"),
                 ),
             )
+        }
+        if (closed.get()) {
+            activeCancellations.remove(operationId)?.invoke()
         }
 
         mainHandler.post {
@@ -223,6 +230,7 @@ class AndroidProviderBrowserHostService(
     }
 
     override fun close() {
+        closed.set(true)
         activeCancellations.values.toList().forEach { cancel ->
             cancel()
         }
