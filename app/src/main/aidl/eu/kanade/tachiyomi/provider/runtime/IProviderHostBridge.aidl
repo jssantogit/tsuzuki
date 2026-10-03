@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.provider.runtime;
 
 interface IProviderHostBridge {
     String httpGet(String url);
+    String httpGetResource(String url);
     String domSelectText(String resourceHandle, String cssSelector);
     String browserReadText(String url, String cssSelector);
     String storageGet(String key);
