@@ -1,5 +1,7 @@
 package tachiyomi.core.provider.packageformat
 
+import tachiyomi.core.provider.runtime.ProviderPackageContract
+import tachiyomi.core.provider.runtime.ProviderScriptPackageRuntime
 import tachiyomi.core.provider.supplychain.ProviderArtifactStore
 import tachiyomi.core.provider.supplychain.VerifiedProviderArtifact
 
@@ -7,12 +9,13 @@ class ProviderPackageActivator(
     private val hostApiVersion: Int,
     private val parser: ProviderPackageParser,
     private val artifactStore: ProviderArtifactStore,
+    private val scriptRuntime: ProviderScriptPackageRuntime = ProviderScriptPackageRuntime(),
 ) {
     init {
         require(hostApiVersion > 0) { "Host API version must be positive" }
     }
 
-    fun activate(artifact: VerifiedProviderArtifact): ParsedProviderPackage {
+    suspend fun activate(artifact: VerifiedProviderArtifact): ParsedProviderPackage {
         val parsed = parser.parse(artifact.bytes)
         val manifest = parsed.manifest
         val descriptor = artifact.descriptor
@@ -31,6 +34,12 @@ class ProviderPackageActivator(
         }
         if (manifest.minHostApi > hostApiVersion) {
             fail("Provider package requires a newer Host API")
+        }
+
+        when (scriptRuntime.validateContract(parsed)) {
+            ProviderPackageContract.Valid -> Unit
+            is ProviderPackageContract.Invalid ->
+                fail("Provider package capability exports do not match its manifest")
         }
 
         artifactStore.activate(artifact)
