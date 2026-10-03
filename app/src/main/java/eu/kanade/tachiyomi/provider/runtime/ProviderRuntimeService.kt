@@ -5,7 +5,10 @@ import android.content.Intent
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.os.Process
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import tachiyomi.core.provider.runtime.ProviderBinaryHostService
 import tachiyomi.core.provider.runtime.ProviderBrowserHostService
@@ -28,8 +31,11 @@ import tachiyomi.core.provider.runtime.ProviderStorageHostService
 import java.io.ByteArrayOutputStream
 import java.io.FileInputStream
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 
 class ProviderRuntimeService : Service() {
+
+    private val activeInvocations = ConcurrentHashMap<String, SupervisorJob>()
 
     private val binder = object : IProviderRuntimeService.Stub() {
 
@@ -44,35 +50,56 @@ class ProviderRuntimeService : Service() {
                 return failure(ProviderRuntimeFailureCode.MALFORMED_REQUEST)
             }
 
-            val source = try {
-                readSource(sourceFd)
-            } catch (_: SourceTooLargeException) {
-                return failure(ProviderRuntimeFailureCode.SOURCE_TOO_LARGE)
-            } catch (_: Exception) {
-                return failure(ProviderRuntimeFailureCode.SOURCE_READ_ERROR)
+            val invocationJob = SupervisorJob()
+            if (activeInvocations.putIfAbsent(request.invocationId, invocationJob) != null) {
+                return failure(ProviderRuntimeFailureCode.INVOCATION_CONFLICT)
             }
 
-            val result = runBlocking {
-                ProviderQuickJsRuntime(
-                    dispatcher = Dispatchers.Default,
-                    limits = request.limits.toRuntimeLimits(),
-                ).evaluate(
-                    source = source,
-                    fileName = request.fileName,
-                    hostServices = hostBridge.toHostServices(),
-                )
-            }
+            try {
+                val source = try {
+                    readSource(sourceFd)
+                } catch (_: SourceTooLargeException) {
+                    return failure(ProviderRuntimeFailureCode.SOURCE_TOO_LARGE)
+                } catch (_: Exception) {
+                    return failure(ProviderRuntimeFailureCode.SOURCE_READ_ERROR)
+                }
 
-            return when (result) {
-                is ProviderScriptExecution.Success ->
-                    ProviderRuntimeProtocol.encodeResponse(
-                        ProviderRuntimeInvocationResponse.success(result.value),
-                    )
-                is ProviderScriptExecution.Failure ->
-                    ProviderRuntimeProtocol.encodeResponse(
-                        ProviderRuntimeInvocationResponse.failure(result.reason.toFailureCode()),
-                    )
+                val result = try {
+                    runBlocking(Dispatchers.Default + invocationJob) {
+                        ProviderQuickJsRuntime(
+                            dispatcher = Dispatchers.Default,
+                            limits = request.limits.toRuntimeLimits(),
+                        ).evaluate(
+                            source = source,
+                            fileName = request.fileName,
+                            hostServices = hostBridge.toHostServices(),
+                        )
+                    }
+                } catch (_: CancellationException) {
+                    return failure(ProviderRuntimeFailureCode.CANCELLED)
+                }
+
+                return when (result) {
+                    is ProviderScriptExecution.Success ->
+                        ProviderRuntimeProtocol.encodeResponse(
+                            ProviderRuntimeInvocationResponse.success(result.value),
+                        )
+                    is ProviderScriptExecution.Failure ->
+                        ProviderRuntimeProtocol.encodeResponse(
+                            ProviderRuntimeInvocationResponse.failure(result.reason.toFailureCode()),
+                        )
+                }
+            } finally {
+                activeInvocations.remove(request.invocationId, invocationJob)
+                invocationJob.cancel()
             }
+        }
+
+        override fun cancel(invocationId: String?) {
+            if (invocationId.isNullOrBlank()) return
+            activeInvocations[invocationId]?.cancel(
+                CancellationException("Provider invocation cancelled by host"),
+            )
         }
 
         override fun processUid(): Int = Process.myUid()
