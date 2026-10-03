@@ -93,6 +93,9 @@ private fun QuickJs.installHostServices(
                 asyncFunction("get") { args ->
                     hostFailures.call { http.getText(args.stringArgument(0)) }
                 }
+                asyncFunction("getResource") { args ->
+                    hostFailures.call { http.getResource(args.stringArgument(0)).value }
+                }
             }
         }
         services.dom?.let { dom ->
