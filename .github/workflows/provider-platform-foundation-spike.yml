@@ -37,7 +37,8 @@ jobs:
         run: >
           ./gradlew :core:common:testDebugUnitTest --rerun-tasks
           --tests 'app.cash.quickjs.QuickJsAbiTest'
-          --tests 'tachiyomi.core.provider.runtime.ProviderQuickJsRuntimeTest'\n          --tests 'tachiyomi.core.provider.runtime.ProviderHostBridgeRuntimeTest'
+          --tests 'tachiyomi.core.provider.runtime.ProviderQuickJsRuntimeTest'
+          --tests 'tachiyomi.core.provider.runtime.ProviderHostBridgeRuntimeTest'
       - name: Run app unit tests and compile Android instrumentation
         run: ./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin
 
