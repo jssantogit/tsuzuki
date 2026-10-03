@@ -170,6 +170,23 @@ class ProviderScriptPackageRuntimeTest {
     }
 
     @Test
+    fun `oversized provider result fails closed before Binder response`() = runBlocking {
+        val pkg = providerPackage(
+            main = """
+                export default {
+                  reading: {
+                    chapters: async () => ({ value: "x".repeat(${ProviderRuntimeProtocol.MAX_RESULT_JSON_CHARS + 1}) })
+                  }
+                };
+            """.trimIndent(),
+        )
+        val runtime = ProviderScriptPackageRuntime()
+
+        runtime.invoke(pkg, "reading.chapters", 1, "{}") shouldBe
+            ProviderPackageExecution.Failure(ProviderPackageFailure.MALFORMED_RESULT)
+    }
+
+    @Test
     fun `malformed provider result fails closed at JSON boundary`() = runBlocking {
         val pkg = providerPackage(
             main = """
