@@ -5,6 +5,8 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
+import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 
 data class ProviderChapterReadingOption(
     val canonicalChapterId: String,
@@ -88,6 +90,32 @@ class ResolveProviderChapterReading(
                 providerChapterId = current.providerChapterId,
             ),
         )
+    }
+
+    suspend fun preparedContent(
+        option: ProviderChapterReadingOption,
+    ): ProviderCallResult<PreparedChapterContent> {
+        return when (val result = delivery(option)) {
+            is ProviderCallResult.Failure -> result
+            is ProviderCallResult.Success -> when (val delivery = result.value) {
+                is ProviderReadingDelivery.PageList -> ProviderCallResult.Success(
+                    PreparedChapterContent.HttpPages(
+                        delivery.pages.map { page ->
+                            PreparedHttpPage(
+                                url = page.url,
+                                headers = page.headers,
+                            )
+                        },
+                    ),
+                )
+                is ProviderReadingDelivery.ManagedFile -> ProviderCallResult.Failure(
+                    ProviderError(
+                        code = ProviderErrorCode.MALFORMED_RESULT,
+                        retryable = false,
+                    ),
+                )
+            }
+        }
     }
 
     private fun unavailable() =
