@@ -27,9 +27,9 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.Inet6Address
 import java.net.InetAddress
+import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -195,10 +195,11 @@ class ProviderHostBroker(
     ): String {
         require(width > 0 && height > 0) { "Image crop dimensions must be positive" }
 
+        val bytes = resource(resourceHandle)
         val source = BitmapFactory.decodeByteArray(
-            resource(resourceHandle),
+            bytes,
             0,
-            resource(resourceHandle).size,
+            bytes.size,
         ) ?: throw IOException("Provider image resource could not be decoded")
 
         try {
