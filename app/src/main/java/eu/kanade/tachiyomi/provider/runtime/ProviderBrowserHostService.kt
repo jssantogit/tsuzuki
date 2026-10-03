@@ -99,6 +99,7 @@ class AndroidProviderBrowserHostService(
         }
 
         mainHandler.post {
+            if (finished.get()) return@post
             try {
                 if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
                     throw ProviderHostServiceException("Provider browser requires WebView multi-profile support")
