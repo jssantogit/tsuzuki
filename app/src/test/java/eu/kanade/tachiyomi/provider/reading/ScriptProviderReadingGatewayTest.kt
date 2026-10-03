@@ -192,6 +192,9 @@ class ScriptProviderReadingGatewayTest {
         val success = allowed.pages(providerId, request) as ProviderCallResult.Success
         val delivery = success.value as ProviderReadingDelivery.PageList
         delivery.pages.single().url shouldBe "https://cdn.example/001.jpg"
+        delivery.pages.single().allowedOrigins shouldBe
+            setOf("https://reader.example", "https://cdn.example")
+        delivery.pages.single().allowLocalNetwork shouldBe false
 
         val escaped = gateway { _, _, _, _ ->
             ProviderRuntimeInvocationResponse.success(
