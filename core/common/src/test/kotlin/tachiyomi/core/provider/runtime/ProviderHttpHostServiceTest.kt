@@ -1,12 +1,15 @@
 package tachiyomi.core.provider.runtime
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
 import okhttp3.Headers.Companion.headersOf
+import java.util.concurrent.TimeUnit
 import org.junit.jupiter.api.Test
 
 class ProviderHttpHostServiceTest {
@@ -59,6 +62,43 @@ class ProviderHttpHostServiceTest {
                 cookieJar = sessions.cookieJar("org.example.b"),
             )
             otherProvider.getText(server.url("/read").toString()) shouldBe "empty"
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun `closing http broker cancels in flight request`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse.Builder()
+                .body("late")
+                .bodyDelay(30, TimeUnit.SECONDS)
+                .build(),
+        )
+        server.start()
+
+        try {
+            val owner = ProviderResourceOwner("org.example.reader", "invocation-cancel")
+            val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+            val http = DefaultProviderHttpHostService(
+                owner = owner,
+                resources = ProviderResourceStore(),
+                policy = ProviderNetworkPolicy(
+                    allowedOrigins = setOf(origin),
+                    allowLocalNetwork = true,
+                ),
+                cookieJar = ProviderHttpSessionStore().cookieJar(owner.providerId),
+            )
+
+            val pending = async { runCatching { http.getText(server.url("/slow").toString()) } }
+            server.takeRequest()
+
+            http.close()
+
+            withTimeout(2_000) {
+                pending.await().isFailure shouldBe true
+            }
         } finally {
             server.close()
         }
