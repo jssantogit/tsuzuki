@@ -61,6 +61,24 @@ class ProviderReadingContractTest {
     }
 
     @Test
+    fun `one provider inventory snapshot shares one observed timestamp`() {
+        var clock = 100L
+        val adapter = ProviderChapterEvidenceAdapter(clock = { clock++ })
+
+        val evidence = adapter.toEvidence(
+            canonicalTitleId = "title",
+            binding = binding,
+            observations = listOf(
+                ProviderChapterObservation("c1", "Chapter 1"),
+                ProviderChapterObservation("c2", "Chapter 2"),
+            ),
+        )
+
+        evidence.map { it.observedAt } shouldBe listOf(100L, 100L)
+        clock shouldBe 101L
+    }
+
+    @Test
     fun `evidence ids are stable within one provider binding and distinct across providers`() {
         val observation = ProviderChapterObservation(
             providerChapterId = "chapter-12",
