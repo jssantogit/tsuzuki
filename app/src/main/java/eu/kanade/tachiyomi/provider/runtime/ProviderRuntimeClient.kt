@@ -80,6 +80,10 @@ class ProviderRuntimeClient(
         require(source.size <= ProviderRuntimeProtocol.MAX_SOURCE_BYTES) {
             "Provider JavaScript source exceeds the runtime source-size limit"
         }
+        val allowedModules = hostPolicy.allowedHostModules()
+        require(request.hostModules.all { it in allowedModules }) {
+            "Provider runtime request asks for a Host Service module outside its permission snapshot"
+        }
     }
 
     private suspend fun invokeRemote(
