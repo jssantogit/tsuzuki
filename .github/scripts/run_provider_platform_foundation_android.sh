@@ -4,6 +4,7 @@ set -euo pipefail
 readonly target_package='app.tsuzuki.dev'
 readonly provider_test='eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeIsolationTest#providerRuntime_isIsolatedAndInterruptible'
 readonly host_bridge_test='eu.kanade.tachiyomi.provider.runtime.ProviderHostBridgeTest#providerRuntime_routesHttpAndBrowserCallsThroughHostBridge'
+readonly real_broker_test='eu.kanade.tachiyomi.provider.runtime.ProviderRealHostBrokerTest#providerRuntime_usesRealHostBrokersAndIsolatesBrowserProfiles'
 readonly extension_test='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.MangaFireFixtureInstrumentedTest#loadsRealExtensionAndRegistersInternalSources'
 readonly fixture='test-fixtures/extensions/mangafire-v1.6.34.apk'
 
@@ -58,4 +59,5 @@ run_test() {
 
 run_test "$provider_test"
 run_test "$host_bridge_test"
+run_test "$real_broker_test"
 run_test "$extension_test"
