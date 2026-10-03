@@ -133,6 +133,9 @@ object ProviderRuntimeProtocol {
         ignoreUnknownKeys = false
     }
 
+    fun encodeRequest(request: ProviderRuntimeInvocationRequest): String =
+        json.encodeToString(request)
+
     fun decodeRequest(value: String): ProviderRuntimeInvocationRequest {
         if (value.length > MAX_REQUEST_JSON_CHARS) {
             throw ProviderRuntimeProtocolException("Provider runtime request exceeds size limit")
