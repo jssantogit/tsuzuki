@@ -11,6 +11,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import tachiyomi.core.provider.packageformat.ProviderPackageException
+import tachiyomi.core.provider.packageformat.ProviderPackageParser
+import tachiyomi.core.provider.packageformat.ParsedProviderPackage
 import tachiyomi.core.provider.runtime.ProviderBinaryHostService
 import tachiyomi.core.provider.runtime.ProviderBrowserHostService
 import tachiyomi.core.provider.runtime.ProviderCryptoHostService
@@ -21,14 +24,20 @@ import tachiyomi.core.provider.runtime.ProviderHttpHostService
 import tachiyomi.core.provider.runtime.ProviderImageHostService
 import tachiyomi.core.provider.runtime.ProviderInvocationLimiter
 import tachiyomi.core.provider.runtime.ProviderLogHostService
+import tachiyomi.core.provider.runtime.ProviderPackageContract
+import tachiyomi.core.provider.runtime.ProviderPackageExecution
+import tachiyomi.core.provider.runtime.ProviderPackageFailure
+import tachiyomi.core.provider.runtime.ProviderPackageValidationRequest
 import tachiyomi.core.provider.runtime.ProviderQuickJsRuntime
 import tachiyomi.core.provider.runtime.ProviderResourceHandle
 import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
+import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocolException
 import tachiyomi.core.provider.runtime.ProviderScriptExecution
 import tachiyomi.core.provider.runtime.ProviderScriptFailure
+import tachiyomi.core.provider.runtime.ProviderScriptPackageRuntime
 import tachiyomi.core.provider.runtime.ProviderSecretsHostService
 import tachiyomi.core.provider.runtime.ProviderStorageHostService
 import java.io.ByteArrayOutputStream
@@ -51,63 +60,136 @@ class ProviderRuntimeService : Service() {
             val request = try {
                 ProviderRuntimeProtocol.decodeRequest(requestJson.orEmpty())
             } catch (_: ProviderRuntimeProtocolException) {
-                runCatching { sourceFd?.close() }
+                closeQuietly(sourceFd)
                 return failure(ProviderRuntimeFailureCode.MALFORMED_REQUEST)
             }
 
-            val invocationJob = SupervisorJob()
-            if (activeInvocations.putIfAbsent(request.invocationId, invocationJob) != null) {
-                runCatching { sourceFd?.close() }
-                invocationJob.cancel()
-                return failure(ProviderRuntimeFailureCode.INVOCATION_CONFLICT)
-            }
-
-            val concurrencyLease = invocationLimiter.tryAcquire(request.providerId)
-            if (concurrencyLease == null) {
-                activeInvocations.remove(request.invocationId, invocationJob)
-                runCatching { sourceFd?.close() }
-                invocationJob.cancel()
-                return failure(ProviderRuntimeFailureCode.RESOURCE_LIMIT)
-            }
-
-            try {
+            return executeInSlot(
+                providerId = request.providerId,
+                invocationId = request.invocationId,
+                onRejected = { closeQuietly(sourceFd) },
+            ) {
                 val source = try {
-                    readSource(sourceFd)
-                } catch (_: SourceTooLargeException) {
-                    return failure(ProviderRuntimeFailureCode.SOURCE_TOO_LARGE)
+                    readDescriptor(
+                        descriptor = sourceFd,
+                        maxBytes = ProviderRuntimeProtocol.MAX_SOURCE_BYTES,
+                    ).decodeToString()
+                } catch (_: DescriptorTooLargeException) {
+                    return@executeInSlot ProviderRuntimeInvocationResponse.failure(
+                        ProviderRuntimeFailureCode.SOURCE_TOO_LARGE,
+                    )
                 } catch (_: Exception) {
-                    return failure(ProviderRuntimeFailureCode.SOURCE_READ_ERROR)
+                    return@executeInSlot ProviderRuntimeInvocationResponse.failure(
+                        ProviderRuntimeFailureCode.SOURCE_READ_ERROR,
+                    )
                 }
 
-                val result = try {
-                    runBlocking(Dispatchers.Default + invocationJob) {
-                        ProviderQuickJsRuntime(
-                            dispatcher = Dispatchers.Default,
-                            limits = request.limits.toRuntimeLimits(),
-                        ).evaluate(
-                            source = source,
-                            fileName = request.fileName,
-                            hostServices = hostBridge.toHostServices(request.hostModules),
-                        )
-                    }
-                } catch (_: CancellationException) {
-                    return failure(ProviderRuntimeFailureCode.CANCELLED)
-                }
-
-                return when (result) {
+                when (
+                    val result = ProviderQuickJsRuntime(
+                        dispatcher = Dispatchers.Default,
+                        limits = request.limits.toRuntimeLimits(),
+                    ).evaluate(
+                        source = source,
+                        fileName = request.fileName,
+                        hostServices = hostBridge.toHostServices(request.hostModules),
+                    )
+                ) {
                     is ProviderScriptExecution.Success ->
-                        ProviderRuntimeProtocol.encodeResponse(
-                            ProviderRuntimeInvocationResponse.success(result.value),
-                        )
+                        ProviderRuntimeInvocationResponse.success(result.value)
                     is ProviderScriptExecution.Failure ->
-                        ProviderRuntimeProtocol.encodeResponse(
-                            ProviderRuntimeInvocationResponse.failure(result.reason.toFailureCode()),
+                        ProviderRuntimeInvocationResponse.failure(result.reason.toFailureCode())
+                }
+            }
+        }
+
+        override fun validatePackage(
+            requestJson: String?,
+            packageFd: ParcelFileDescriptor?,
+        ): String {
+            val request = try {
+                ProviderRuntimeProtocol.decodeValidationRequest(requestJson.orEmpty())
+            } catch (_: ProviderRuntimeProtocolException) {
+                closeQuietly(packageFd)
+                return failure(ProviderRuntimeFailureCode.MALFORMED_REQUEST)
+            }
+
+            return executeInSlot(
+                providerId = request.providerId,
+                invocationId = request.invocationId,
+                onRejected = { closeQuietly(packageFd) },
+            ) {
+                val providerPackage = readAndParsePackage(
+                    descriptor = packageFd,
+                    providerId = request.providerId,
+                    artifactVersionCode = request.artifactVersionCode,
+                ) ?: return@executeInSlot ProviderRuntimeInvocationResponse.failure(
+                    ProviderRuntimeFailureCode.PACKAGE_INVALID,
+                )
+
+                val runtime = ProviderScriptPackageRuntime(
+                    dispatcher = Dispatchers.Default,
+                    limits = request.limits.toRuntimeLimits(),
+                )
+                when (runtime.validateContract(providerPackage)) {
+                    ProviderPackageContract.Valid ->
+                        ProviderRuntimeInvocationResponse.success("valid")
+                    is ProviderPackageContract.Invalid ->
+                        ProviderRuntimeInvocationResponse.failure(
+                            ProviderRuntimeFailureCode.PACKAGE_INVALID,
                         )
                 }
-            } finally {
-                activeInvocations.remove(request.invocationId, invocationJob)
-                invocationJob.cancel()
-                concurrencyLease.close()
+            }
+        }
+
+        override fun invokePackage(
+            requestJson: String?,
+            packageFd: ParcelFileDescriptor?,
+            inputJson: String?,
+            hostBridge: IProviderHostBridge?,
+        ): String {
+            val request = try {
+                ProviderRuntimeProtocol.decodeRequest(requestJson.orEmpty())
+            } catch (_: ProviderRuntimeProtocolException) {
+                closeQuietly(packageFd)
+                return failure(ProviderRuntimeFailureCode.MALFORMED_REQUEST)
+            }
+            val input = inputJson.orEmpty()
+            if (input.length > ProviderRuntimeProtocol.MAX_INPUT_JSON_CHARS) {
+                closeQuietly(packageFd)
+                return failure(ProviderRuntimeFailureCode.MALFORMED_REQUEST)
+            }
+
+            return executeInSlot(
+                providerId = request.providerId,
+                invocationId = request.invocationId,
+                onRejected = { closeQuietly(packageFd) },
+            ) {
+                val providerPackage = readAndParsePackage(
+                    descriptor = packageFd,
+                    providerId = request.providerId,
+                    artifactVersionCode = request.artifactVersionCode,
+                ) ?: return@executeInSlot ProviderRuntimeInvocationResponse.failure(
+                    ProviderRuntimeFailureCode.PACKAGE_INVALID,
+                )
+
+                val runtime = ProviderScriptPackageRuntime(
+                    dispatcher = Dispatchers.Default,
+                    limits = request.limits.toRuntimeLimits(),
+                )
+                when (
+                    val result = runtime.invoke(
+                        providerPackage = providerPackage,
+                        capabilityId = request.capabilityId,
+                        capabilityVersion = request.capabilityVersion,
+                        inputJson = input,
+                        hostServices = hostBridge.toHostServices(request.hostModules),
+                    )
+                ) {
+                    is ProviderPackageExecution.Success ->
+                        ProviderRuntimeInvocationResponse.success(result.json)
+                    is ProviderPackageExecution.Failure ->
+                        ProviderRuntimeInvocationResponse.failure(result.reason.toFailureCode())
+                }
             }
         }
 
@@ -133,11 +215,81 @@ class ProviderRuntimeService : Service() {
         super.onDestroy()
     }
 
-    private fun readSource(sourceFd: ParcelFileDescriptor?): String {
-        val descriptor = sourceFd
-            ?: throw IOException("Provider source descriptor is missing")
+    private fun executeInSlot(
+        providerId: String,
+        invocationId: String,
+        onRejected: () -> Unit,
+        block: suspend () -> ProviderRuntimeInvocationResponse,
+    ): String {
+        val invocationJob = SupervisorJob()
+        if (activeInvocations.putIfAbsent(invocationId, invocationJob) != null) {
+            onRejected()
+            invocationJob.cancel()
+            return failure(ProviderRuntimeFailureCode.INVOCATION_CONFLICT)
+        }
 
-        descriptor.use {
+        val concurrencyLease = invocationLimiter.tryAcquire(providerId)
+        if (concurrencyLease == null) {
+            activeInvocations.remove(invocationId, invocationJob)
+            onRejected()
+            invocationJob.cancel()
+            return failure(ProviderRuntimeFailureCode.RESOURCE_LIMIT)
+        }
+
+        return try {
+            try {
+                ProviderRuntimeProtocol.encodeResponse(
+                    runBlocking(Dispatchers.Default + invocationJob) {
+                        block()
+                    },
+                )
+            } catch (_: CancellationException) {
+                failure(ProviderRuntimeFailureCode.CANCELLED)
+            }
+        } finally {
+            activeInvocations.remove(invocationId, invocationJob)
+            invocationJob.cancel()
+            concurrencyLease.close()
+        }
+    }
+
+    private fun readAndParsePackage(
+        descriptor: ParcelFileDescriptor?,
+        providerId: String,
+        artifactVersionCode: Long,
+    ): ParsedProviderPackage? {
+        val bytes = try {
+            readDescriptor(
+                descriptor = descriptor,
+                maxBytes = ProviderRuntimeProtocol.MAX_PACKAGE_BYTES,
+            )
+        } catch (_: Exception) {
+            return null
+        }
+
+        val parsed = try {
+            ProviderPackageParser().parse(bytes)
+        } catch (_: ProviderPackageException) {
+            return null
+        }
+
+        if (
+            parsed.manifest.id != providerId ||
+            parsed.manifest.version.code != artifactVersionCode
+        ) {
+            return null
+        }
+        return parsed
+    }
+
+    private fun readDescriptor(
+        descriptor: ParcelFileDescriptor?,
+        maxBytes: Int,
+    ): ByteArray {
+        val value = descriptor
+            ?: throw IOException("Provider descriptor is missing")
+
+        value.use {
             FileInputStream(it.fileDescriptor).use { input ->
                 val output = ByteArrayOutputStream()
                 val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -149,13 +301,13 @@ class ProviderRuntimeService : Service() {
                     if (read == 0) continue
 
                     total += read
-                    if (total > ProviderRuntimeProtocol.MAX_SOURCE_BYTES) {
-                        throw SourceTooLargeException()
+                    if (total > maxBytes) {
+                        throw DescriptorTooLargeException()
                     }
                     output.write(buffer, 0, read)
                 }
 
-                return output.toByteArray().decodeToString()
+                return output.toByteArray()
             }
         }
     }
@@ -164,12 +316,33 @@ class ProviderRuntimeService : Service() {
         ProviderRuntimeProtocol.encodeResponse(
             ProviderRuntimeInvocationResponse.failure(code),
         )
+
+    private fun closeQuietly(descriptor: ParcelFileDescriptor?) {
+        runCatching { descriptor?.close() }
+    }
 }
 
 private fun ProviderScriptFailure.toFailureCode(): ProviderRuntimeFailureCode = when (this) {
     ProviderScriptFailure.TIMEOUT -> ProviderRuntimeFailureCode.TIMEOUT
     ProviderScriptFailure.SCRIPT_ERROR -> ProviderRuntimeFailureCode.SCRIPT_ERROR
     ProviderScriptFailure.HOST_ERROR -> ProviderRuntimeFailureCode.HOST_ERROR
+}
+
+private fun ProviderPackageFailure.toFailureCode(): ProviderRuntimeFailureCode = when (this) {
+    ProviderPackageFailure.UNDECLARED_CAPABILITY ->
+        ProviderRuntimeFailureCode.MALFORMED_REQUEST
+    ProviderPackageFailure.MISSING_CAPABILITY_EXPORT ->
+        ProviderRuntimeFailureCode.PACKAGE_INVALID
+    ProviderPackageFailure.MODULE_ERROR ->
+        ProviderRuntimeFailureCode.SCRIPT_ERROR
+    ProviderPackageFailure.MALFORMED_INPUT ->
+        ProviderRuntimeFailureCode.MALFORMED_REQUEST
+    ProviderPackageFailure.MALFORMED_RESULT ->
+        ProviderRuntimeFailureCode.MALFORMED_RESULT
+    ProviderPackageFailure.TIMEOUT ->
+        ProviderRuntimeFailureCode.TIMEOUT
+    ProviderPackageFailure.HOST_ERROR ->
+        ProviderRuntimeFailureCode.HOST_ERROR
 }
 
 private fun IProviderHostBridge?.toHostServices(
@@ -296,4 +469,4 @@ private fun IProviderHostBridge?.toHostServices(
     )
 }
 
-private class SourceTooLargeException : IOException()
+private class DescriptorTooLargeException : IOException()
