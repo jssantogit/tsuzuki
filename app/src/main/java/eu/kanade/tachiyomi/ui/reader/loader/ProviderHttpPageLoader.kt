@@ -16,6 +16,7 @@ import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 import java.io.File
 import java.io.FileOutputStream
@@ -127,6 +128,14 @@ internal class ProviderHttpPageLoader(
         target: File,
     ) {
         suspendCancellableCoroutine<Unit> { continuation ->
+            val policy = ProviderNetworkPolicy(
+                allowedOrigins = request.allowedOrigins,
+                allowLocalNetwork = request.allowLocalNetwork,
+            )
+            policy.validate(request.url, resolveAddress = false)
+            val requestClient = client.newBuilder()
+                .dns { hostname -> policy.resolvePublicAddresses(hostname) }
+                .build()
             val httpRequest = Request.Builder()
                 .url(request.url)
                 .apply {
@@ -136,7 +145,7 @@ internal class ProviderHttpPageLoader(
                 }
                 .get()
                 .build()
-            val call = client.newCall(httpRequest)
+            val call = requestClient.newCall(httpRequest)
             activeCalls += call
 
             continuation.invokeOnCancellation {
