@@ -7,12 +7,14 @@ on:
       - tsuzuki/provider-platform-host-brokers-spike
       - tsuzuki/provider-platform-real-host-brokers-spike
       - tsuzuki/provider-platform-complex-reading-spike
+      - tsuzuki/provider-platform-supply-chain-spike
   pull_request:
     branches:
       - main
       - tsuzuki/provider-platform-foundation-spike
       - tsuzuki/provider-platform-host-brokers-spike
       - tsuzuki/provider-platform-real-host-brokers-spike
+      - tsuzuki/provider-platform-complex-reading-spike
 
 permissions:
   contents: read
@@ -37,12 +39,13 @@ jobs:
           cache-read-only: true
       - name: Verify formatting
         run: ./gradlew spotlessCheck
-      - name: Run focused QuickJS/provider runtime unit tests
+      - name: Run focused Provider Platform unit tests
         run: >
           ./gradlew :core:common:testDebugUnitTest --rerun-tasks
           --tests 'app.cash.quickjs.QuickJsAbiTest'
           --tests 'tachiyomi.core.provider.runtime.ProviderQuickJsRuntimeTest'
           --tests 'tachiyomi.core.provider.runtime.ProviderHostBridgeRuntimeTest'
+          --tests 'tachiyomi.core.provider.supplychain.ProviderSupplyChainTest'
       - name: Run app unit tests and compile Android instrumentation
         run: ./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin
 
