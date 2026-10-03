@@ -8,18 +8,19 @@ interface ProviderHostBridge {
         cssSelector: String,
     ): String
 
-    suspend fun binaryFetch(url: String): String
+    suspend fun binaryFetch(url: String): String =
+        throw UnsupportedOperationException("Binary host service is unavailable")
 
     suspend fun binaryZipEntry(
         resourceHandle: String,
         entryName: String,
-    ): String
+    ): String = throw UnsupportedOperationException("Binary host service is unavailable")
 
     suspend fun binaryAesCbcDecrypt(
         resourceHandle: String,
         keyHex: String,
         ivHex: String,
-    ): String
+    ): String = throw UnsupportedOperationException("Binary host service is unavailable")
 
     suspend fun binaryImageCrop(
         resourceHandle: String,
@@ -27,11 +28,11 @@ interface ProviderHostBridge {
         y: Int,
         width: Int,
         height: Int,
-    ): String
+    ): String = throw UnsupportedOperationException("Binary host service is unavailable")
 
     suspend fun binaryImagePixel(
         resourceHandle: String,
         x: Int,
         y: Int,
-    ): String
+    ): String = throw UnsupportedOperationException("Binary host service is unavailable")
 }
