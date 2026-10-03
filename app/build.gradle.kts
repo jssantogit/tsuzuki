@@ -338,6 +338,7 @@ dependencies {
 
     // Preferences
     implementation(libs.androidx.preference)
+    implementation(libs.androidx.webkit)
 
     // Dependency injection
     implementation(libs.injekt)
