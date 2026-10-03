@@ -50,7 +50,7 @@ class ProviderReadingContractTest {
 
         evidence.canonicalTitleId shouldBe "canonical-title"
         evidence.producerKind shouldBe ProducerKind.PROVIDER
-        evidence.producerId shouldBe providerId.value
+        evidence.producerId shouldBe binding.evidenceProducerId()
         evidence.externalChapterKey shouldBe "chapter-12"
         evidence.rawLabel shouldBe "Vol. 3 Ch. 12.5 — Bonus"
         evidence.rawNumber shouldBe 12.5
@@ -76,6 +76,16 @@ class ProviderReadingContractTest {
 
         evidence.map { it.observedAt } shouldBe listOf(100L, 100L)
         clock shouldBe 101L
+    }
+
+    @Test
+    fun `provider evidence producer identity is scoped to the exact binding`() {
+        val same = binding.evidenceProducerId()
+        binding.copy(facetId = "pt-br").evidenceProducerId() shouldBe
+            binding.copy(facetId = "pt-br").evidenceProducerId()
+        (binding.copy(facetId = "pt-br").evidenceProducerId() != same) shouldBe true
+        (binding.copy(externalWorkId = "work-99").evidenceProducerId() != same) shouldBe true
+        (binding.copy(providerId = ProviderId("org.example.other")).evidenceProducerId() != same) shouldBe true
     }
 
     @Test
