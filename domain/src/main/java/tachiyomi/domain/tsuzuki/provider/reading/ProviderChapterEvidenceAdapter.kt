@@ -26,7 +26,7 @@ class ProviderChapterEvidenceAdapter(
                 ),
                 canonicalTitleId = canonicalTitleId,
                 producerKind = ProducerKind.PROVIDER,
-                producerId = binding.providerId.value,
+                producerId = binding.evidenceProducerId(),
                 externalChapterKey = observation.providerChapterId,
                 rawLabel = observation.rawLabel,
                 rawNumber = observation.rawNumber,
