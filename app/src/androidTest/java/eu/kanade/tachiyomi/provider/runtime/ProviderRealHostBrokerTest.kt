@@ -123,7 +123,6 @@ class ProviderRealHostBrokerTest {
         }
     }
 
-
     @Test
     fun browserBroker_blocksSubresourcesOutsideAllowedOrigins() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
