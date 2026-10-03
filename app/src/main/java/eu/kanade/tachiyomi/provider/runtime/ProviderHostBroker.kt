@@ -302,7 +302,7 @@ class ProviderHostBroker(
     }
 
     private fun resolvesToLocalNetwork(host: String): Boolean =
-        InetAddress.getAllByName(host).any(InetAddress::isLocalNetworkAddress)
+        InetAddress.getAllByName(host).any { it.isLocalNetworkAddress() }
 
     private fun InetAddress.isLocalNetworkAddress(): Boolean {
         if (isAnyLocalAddress || isLoopbackAddress || isLinkLocalAddress || isSiteLocalAddress) {
