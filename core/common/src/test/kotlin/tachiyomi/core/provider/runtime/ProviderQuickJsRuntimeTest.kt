@@ -39,6 +39,23 @@ class ProviderQuickJsRuntimeTest {
     }
 
     @Test
+    fun `distinguishes host service failures from provider script failures`() = runBlocking {
+        val runtime = ProviderQuickJsRuntime()
+        val services = ProviderHostServices(
+            http = object : ProviderHttpHostService {
+                override suspend fun getText(url: String): String {
+                    throw IllegalStateException("host-only detail")
+                }
+            },
+        )
+
+        runtime.evaluate(
+            source = "await tsuzuki.http.get('https://allowed.example/data')",
+            hostServices = services,
+        ) shouldBe ProviderScriptExecution.Failure(ProviderScriptFailure.HOST_ERROR)
+    }
+
+    @Test
     fun `exposes only configured host service modules`() = runBlocking {
         val services = ProviderHostServices(
             http = object : ProviderHttpHostService {
