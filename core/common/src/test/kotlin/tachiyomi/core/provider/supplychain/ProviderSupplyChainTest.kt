@@ -175,6 +175,28 @@ class ProviderSupplyChainTest {
             )
         }
 
+        val downgrade = trust.verifyAndAccept(
+            signedIndex(
+                keyId = "root-1",
+                keyPair = rootKey,
+                index = index(
+                    sequence = 6,
+                    artifact = descriptor(
+                        versionCode = 4,
+                        sha256 = digest,
+                    ),
+                ),
+            ),
+        )
+        shouldThrow<ProviderSupplyChainException> {
+            trust.verifyArtifact(
+                repository = downgrade,
+                providerId = "reader.example",
+                artifactBytes = artifact,
+                installedVersionCode = 5,
+            )
+        }
+
         val incompatibleTrust = ProviderRepositoryTrust(
             repositoryId = "repo.example",
             hostApiVersion = 2,
