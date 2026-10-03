@@ -21,6 +21,8 @@ import tachiyomi.core.provider.runtime.ProviderHostServiceException
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
 import java.io.ByteArrayInputStream
 import java.io.IOException
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -32,10 +34,11 @@ class AndroidProviderBrowserHostService(
     private val providerProfileName: String,
     private val timeoutSeconds: Long = 15L,
     private val maxTextChars: Int = 64 * 1024,
-) : ProviderBrowserHostService {
+) : ProviderBrowserHostService, AutoCloseable {
 
     private val context = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val activeCancellations = ConcurrentHashMap<String, () -> Unit>()
 
     init {
         require(providerProfileName.isNotBlank()) { "Provider browser profile must not be blank" }
@@ -55,6 +58,7 @@ class AndroidProviderBrowserHostService(
         }
 
         val initialUrl = policy.validate(url)
+        val operationId = UUID.randomUUID().toString()
         val result = AtomicReference<Result<String>?>(null)
         val finished = AtomicBoolean(false)
         val latch = CountDownLatch(1)
@@ -63,6 +67,7 @@ class AndroidProviderBrowserHostService(
         fun complete(outcome: Result<String>) {
             if (!finished.compareAndSet(false, true)) return
 
+            activeCancellations.remove(operationId)
             result.set(outcome)
             val destroy = {
                 webView.getAndSet(null)?.let { view ->
@@ -76,6 +81,14 @@ class AndroidProviderBrowserHostService(
                 mainHandler.post { destroy() }
             }
             latch.countDown()
+        }
+
+        activeCancellations[operationId] = {
+            complete(
+                Result.failure(
+                    ProviderHostServiceException("Provider browser operation was cancelled"),
+                ),
+            )
         }
 
         mainHandler.post {
@@ -207,6 +220,13 @@ class AndroidProviderBrowserHostService(
             if (error is ProviderHostServiceException) throw error
             throw ProviderHostServiceException("Provider browser operation failed", error)
         }
+    }
+
+    override fun close() {
+        activeCancellations.values.toList().forEach { cancel ->
+            cancel()
+        }
+        activeCancellations.clear()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
