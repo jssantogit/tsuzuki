@@ -1,6 +1,5 @@
 package tachiyomi.core.provider.runtime
 
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
@@ -65,9 +64,7 @@ class ProviderStateHostServicesTest {
 
         secrets.get("session") shouldBe "token"
         observedProvider shouldBe "org.example.reader"
-        shouldThrow<ProviderHostServiceException> {
-            runBlocking { secrets.get("other") }
-        }
+        (runCatching { secrets.get("other") }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
     }
 
     @Test
