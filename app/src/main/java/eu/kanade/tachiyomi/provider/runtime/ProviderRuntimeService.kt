@@ -7,6 +7,7 @@ import android.os.ParcelFileDescriptor
 import android.os.Process
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
@@ -35,7 +36,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 class ProviderRuntimeService : Service() {
 
-    private val activeInvocations = ConcurrentHashMap<String, SupervisorJob>()
+    private val activeInvocations = ConcurrentHashMap<String, Job>()
 
     private val binder = object : IProviderRuntimeService.Stub() {
 
