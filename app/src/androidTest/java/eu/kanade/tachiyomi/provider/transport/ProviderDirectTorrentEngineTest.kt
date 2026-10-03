@@ -94,8 +94,14 @@ class ProviderDirectTorrentEngineTest {
                 ignoredPath.isFile && ignoredPath.length() == ignoredBytes.size.toLong(),
             )
         } finally {
-            Thread { leecher.stop() }.apply { start(); join(10_000) }
-            Thread { seeder.stop() }.apply { start(); join(10_000) }
+            Thread { leecher.stop() }.apply {
+                start()
+                join(10_000)
+            }
+            Thread { seeder.stop() }.apply {
+                start()
+                join(10_000)
+            }
             root.deleteRecursively()
         }
     }
