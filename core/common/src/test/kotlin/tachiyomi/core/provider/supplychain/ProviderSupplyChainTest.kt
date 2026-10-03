@@ -214,7 +214,11 @@ class ProviderSupplyChainTest {
         store.current("reader.example")?.versionCode shouldBe 1L
         store.readCurrentArtifact("reader.example") shouldBe "provider-v1".encodeToByteArray()
 
-        val corruptV2 = VerifiedProviderArtifact(v2.descriptor, "different".encodeToByteArray())
+        val corruptV2 = VerifiedProviderArtifact(
+            repositoryId = v2.repositoryId,
+            descriptor = v2.descriptor,
+            bytes = "different".encodeToByteArray(),
+        )
         shouldThrow<ProviderSupplyChainException> { store.activate(corruptV2) }
         store.current("reader.example")?.versionCode shouldBe 1L
     }
