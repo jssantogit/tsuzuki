@@ -36,4 +36,34 @@ class ProviderQuickJsRuntimeTest {
         runtime.evaluate("throw new Error('boom')") shouldBe
             ProviderScriptExecution.Failure(ProviderScriptFailure.SCRIPT_ERROR)
     }
+
+    @Test
+    fun `routes provider host calls through async bindings`() = runBlocking {
+        val runtime = ProviderQuickJsRuntime()
+        val hostBridge = object : ProviderHostBridge {
+            override suspend fun httpGet(url: String): String {
+                url shouldBe "https://allowed.example/data"
+                return "http-ok"
+            }
+
+            override suspend fun browserReadText(
+                url: String,
+                cssSelector: String,
+            ): String {
+                url shouldBe "https://allowed.example/browser"
+                cssSelector shouldBe "#probe"
+                return "browser-ok"
+            }
+        }
+
+        runtime.evaluate(
+            source = "await tsuzuki.http.get('https://allowed.example/data')",
+            hostBridge = hostBridge,
+        ) shouldBe ProviderScriptExecution.Success("http-ok")
+
+        runtime.evaluate(
+            source = "await tsuzuki.browser.readText('https://allowed.example/browser', '#probe')",
+            hostBridge = hostBridge,
+        ) shouldBe ProviderScriptExecution.Success("browser-ok")
+    }
 }

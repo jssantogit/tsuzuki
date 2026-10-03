@@ -3,6 +3,7 @@ package tachiyomi.core.provider.runtime
 import com.dokar.quickjs.QuickJs
 import com.dokar.quickjs.QuickJsException
 import com.dokar.quickjs.QuickJsInterruptedException
+import com.dokar.quickjs.binding.define
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -42,12 +43,16 @@ class ProviderQuickJsRuntime(
     suspend fun evaluate(
         source: String,
         fileName: String = "provider.js",
+        hostBridge: ProviderHostBridge? = null,
     ): ProviderScriptExecution {
         val runtime = QuickJs.create(dispatcher)
         return try {
             runtime.memoryLimit = limits.memoryLimitBytes
             runtime.maxStackSize = limits.stackLimitBytes
             runtime.evaluationTimeoutMillis = limits.jsExecutionTimeoutMs
+            if (hostBridge != null) {
+                runtime.installHostBridge(hostBridge)
+            }
 
             val value = withTimeout(limits.wallClockTimeoutMs) {
                 runtime.evaluate<Any?>(
@@ -70,6 +75,24 @@ class ProviderQuickJsRuntime(
             ProviderScriptExecution.Failure(ProviderScriptFailure.HOST_ERROR)
         } finally {
             runtime.close()
+        }
+    }
+}
+
+private fun QuickJs.installHostBridge(hostBridge: ProviderHostBridge) {
+    define("tsuzuki") {
+        define("http") {
+            asyncFunction("get") { args ->
+                hostBridge.httpGet(args.getOrNull(0)?.toString().orEmpty())
+            }
+        }
+        define("browser") {
+            asyncFunction("readText") { args ->
+                hostBridge.browserReadText(
+                    url = args.getOrNull(0)?.toString().orEmpty(),
+                    cssSelector = args.getOrNull(1)?.toString().orEmpty(),
+                )
+            }
         }
     }
 }
