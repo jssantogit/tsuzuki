@@ -25,6 +25,10 @@ class ProviderRuntimeProtocolTest {
             capabilityVersion = 1,
             configurationFingerprint = "config-v2",
             fileName = "main.js",
+            hostModules = setOf(
+                ProviderHostModule.HTTP,
+                ProviderHostModule.DOM,
+            ),
             limits = ProviderRuntimeLimitsDto(
                 wallClockTimeoutMs = 5_000,
                 jsExecutionTimeoutMs = 3_000,
@@ -37,6 +41,10 @@ class ProviderRuntimeProtocolTest {
         val decoded = ProviderRuntimeProtocol.decodeRequest(encoded)
 
         decoded shouldBe request
+        decoded.hostModules shouldBe setOf(
+            ProviderHostModule.HTTP,
+            ProviderHostModule.DOM,
+        )
         decoded.toRuntimeLimits() shouldBe ProviderRuntimeLimits(
             wallClockTimeoutMs = 5_000,
             jsExecutionTimeoutMs = 3_000,
@@ -78,6 +86,19 @@ class ProviderRuntimeProtocolTest {
             ProviderRuntimeProtocol.decodeRequest(
                 "x".repeat(ProviderRuntimeProtocol.MAX_REQUEST_JSON_CHARS + 1),
             )
+        }
+    }
+
+    @Test
+    fun `host module snapshot rejects unknown protocol values`() {
+        val payload = json.encodeToString(validRequest())
+            .replace(
+                "\"hostModules\":[],",
+                "\"hostModules\":[\"UNSUPPORTED\"],",
+            )
+
+        shouldThrow<ProviderRuntimeProtocolException> {
+            ProviderRuntimeProtocol.decodeRequest(payload)
         }
     }
 
