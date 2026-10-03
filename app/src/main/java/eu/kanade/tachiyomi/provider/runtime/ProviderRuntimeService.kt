@@ -11,9 +11,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import tachiyomi.core.provider.packageformat.ParsedProviderPackage
 import tachiyomi.core.provider.packageformat.ProviderPackageException
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
-import tachiyomi.core.provider.packageformat.ParsedProviderPackage
 import tachiyomi.core.provider.runtime.ProviderBinaryHostService
 import tachiyomi.core.provider.runtime.ProviderBrowserHostService
 import tachiyomi.core.provider.runtime.ProviderCryptoHostService
