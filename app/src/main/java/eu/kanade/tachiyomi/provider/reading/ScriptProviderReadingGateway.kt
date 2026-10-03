@@ -203,12 +203,19 @@ class ScriptProviderReadingGateway internal constructor(
                     if (decoded.pages.isEmpty()) {
                         error("Provider page list is empty")
                     }
+                    val network = active.parsed.manifest.permissions.network
+                        ?: error("Provider returned page URLs without network permission authority")
+                    if (network.origins.isEmpty()) {
+                        error("Provider returned page URLs without allowed network origins")
+                    }
                     ProviderReadingDelivery.PageList(
                         pages = decoded.pages.map { page ->
                             validateResultUrl(active, page.url, browserAllowed = false)
                             ProviderPageRequest(
                                 url = page.url,
                                 headers = page.headers,
+                                allowedOrigins = network.origins,
+                                allowLocalNetwork = network.localNetwork,
                             )
                         },
                     )
