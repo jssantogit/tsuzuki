@@ -172,6 +172,70 @@ Facets are not separate Providers and do not become canonical work identity.
 
 This replaces the Mihon-specific assumption that internal `CatalogueSource` long IDs are the universal execution identity.
 
+### 1.6 Capability invocation contract
+
+Capabilities use typed request/result envelopes. Script JSON is an external boundary and is validated before it becomes a domain object.
+
+Conceptually:
+
+```kotlin
+data class ProviderPage<T>(
+    val items: List<T>,
+    val nextCursor: String?,
+)
+
+sealed interface ProviderCallResult<out T> {
+    data class Success<T>(val value: T) : ProviderCallResult<T>
+    data class Failure(val error: ProviderError) : ProviderCallResult<Nothing>
+}
+
+data class ProviderError(
+    val code: ProviderErrorCode,
+    val retryable: Boolean,
+)
+```
+
+Rules:
+
+- capability inputs and outputs have versioned schemas;
+- required fields, enum values, collection sizes, identifiers, URLs and numeric ranges are validated at the runtime boundary;
+- unknown additive output fields may be ignored when the capability version allows forward-compatible additions;
+- malformed results never flow into canonical reconciliation;
+- Provider exceptions/stack traces never become the public error contract;
+- a Provider may not return Android/framework objects across the boundary.
+
+List-style capabilities use opaque cursor pagination rather than exposing page/offset assumptions:
+
+```text
+catalog.search@1      -> ProviderPage<ProviderWorkCandidate>
+catalog.discover@1    -> ProviderPage<ProviderWorkCandidate>
+reading.lookup@1      -> ProviderPage<ProviderWorkCandidate>
+reading.chapters@1    -> ProviderPage<ProviderChapterObservation>
+torrent.search@1      -> ProviderPage<TorrentCandidate>
+```
+
+The opaque cursor is scoped to Provider ID + capability version + request fingerprint. It is bounded in size, is never interpreted as canonical identity, and must not be reused after a configuration/artifact change unless that capability explicitly guarantees compatibility.
+
+Remote/provider ordering is preserved unless the calling Tsuzuki domain contract explicitly asks for a different sort.
+
+### 1.7 Read-only calls, side effects and idempotency
+
+Capabilities declare whether an operation is read-only or side-effecting.
+
+Read-only operations may be retried within normal bounded network/runtime policy.
+
+Side-effecting operations — for example account tracking writes or Debrid torrent submission — receive a host-generated stable `operationId` representing the user's intent.
+
+Rules:
+
+- the executor does not blindly retry a side effect after an unknown outcome;
+- retries of one intent reuse the same `operationId`;
+- reusing an `operationId` with a different normalized request payload fails closed;
+- adapters persist/reconcile enough operation state to determine whether the remote effect already exists before repeating it when the upstream API lacks native idempotency keys;
+- long-running effects expose a stable job/reference ID and typed `PENDING / SUCCEEDED / FAILED / UNKNOWN` state rather than forcing callers to infer success from timeouts.
+
+This requirement applies equally to BUILTIN and future SCRIPT implementations of side-effecting capabilities.
+
 ## 2. Provider registry
 
 Tsuzuki converges on one `ProviderRegistry`.
@@ -302,6 +366,18 @@ export default {
 Only declared capabilities are callable. During activation Tsuzuki verifies that every declared script capability has the required export shape. Missing exports fail activation and the previous valid version remains active.
 
 Undeclared exports have no authority.
+
+### 3.4 Boundary validation
+
+Provider artifacts and all script-returned DTOs are untrusted input.
+
+Activation validates manifest identity, entrypoint path, capability/export agreement, permission schema and package bounds before any Provider code is callable.
+
+Every invocation then validates its returned schema again before producing a domain result.
+
+Validation is concentrated at these external boundaries; internal Tsuzuki code may trust successfully decoded Provider-domain types.
+
+Provider-supplied labels/descriptions may be displayed only as escaped text. Provider output never injects Compose/UI code, HTML UI, Android Intents or executable callbacks into product surfaces.
 
 ## 4. Provider Host API
 
