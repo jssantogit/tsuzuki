@@ -6,11 +6,13 @@ on:
       - tsuzuki/provider-platform-foundation-spike
       - tsuzuki/provider-platform-host-brokers-spike
       - tsuzuki/provider-platform-real-host-brokers-spike
+      - tsuzuki/provider-platform-complex-reading-spike
   pull_request:
     branches:
       - main
       - tsuzuki/provider-platform-foundation-spike
       - tsuzuki/provider-platform-host-brokers-spike
+      - tsuzuki/provider-platform-real-host-brokers-spike
 
 permissions:
   contents: read
