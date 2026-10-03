@@ -135,6 +135,8 @@ data class ProviderPage<T>(
 data class ProviderPageRequest(
     val url: String,
     val headers: Map<String, String> = emptyMap(),
+    val allowedOrigins: Set<String>,
+    val allowLocalNetwork: Boolean = false,
 ) {
     init {
         val uri = runCatching { URI(url) }.getOrNull()
@@ -147,6 +149,11 @@ data class ProviderPageRequest(
             "Provider page URL must be an absolute HTTP(S) URL without credentials"
         }
         require(headers.size <= MAX_HEADERS) { "Provider page request has too many headers" }
+        require(allowedOrigins.isNotEmpty()) { "Provider page request requires network authority" }
+        require(allowedOrigins.size <= MAX_ORIGINS) { "Provider page request has too many allowed origins" }
+        require(allowedOrigins.all { it.isNotBlank() && it.length <= MAX_ORIGIN_CHARS }) {
+            "Provider page request origin authority is invalid"
+        }
         require(
             headers.all { (name, value) ->
                 HEADER_NAME.matches(name) &&
@@ -162,6 +169,8 @@ data class ProviderPageRequest(
     private companion object {
         const val MAX_HEADERS = 32
         const val MAX_HEADER_VALUE_CHARS = 8192
+        const val MAX_ORIGINS = 64
+        const val MAX_ORIGIN_CHARS = 2048
         val HEADER_NAME = Regex("[A-Za-z0-9!#$%&'*+.^_`|~-]+")
     }
 }
