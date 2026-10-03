@@ -42,6 +42,7 @@ class ProviderQuickJsRuntime(
     suspend fun evaluate(
         source: String,
         fileName: String = "provider.js",
+        @Suppress("UNUSED_PARAMETER") hostBridge: ProviderHostBridge? = null,
     ): ProviderScriptExecution {
         val runtime = QuickJs.create(dispatcher)
         return try {
