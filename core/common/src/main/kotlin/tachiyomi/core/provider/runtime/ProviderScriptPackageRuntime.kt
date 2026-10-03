@@ -190,8 +190,11 @@ class ProviderScriptPackageRuntime(
             ModuleEvaluation.Failure(ProviderPackageFailure.MODULE_ERROR)
         } catch (_: Throwable) {
             ModuleEvaluation.Failure(
-                if (hostFailures.failed) ProviderPackageFailure.HOST_ERROR
-                else ProviderPackageFailure.MODULE_ERROR,
+                if (hostFailures.failed) {
+                    ProviderPackageFailure.HOST_ERROR
+                } else {
+                    ProviderPackageFailure.MODULE_ERROR
+                },
             )
         } finally {
             runtime.close()
