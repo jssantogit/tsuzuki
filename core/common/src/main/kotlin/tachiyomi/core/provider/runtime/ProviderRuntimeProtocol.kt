@@ -86,11 +86,11 @@ data class ProviderRuntimeInvocationRequest(
         require(FILE_NAME.matches(fileName)) { "Provider entrypoint file name is invalid" }
     }
 
-    private companion object {
-        val INVOCATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
-        val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
-        val CAPABILITY_ID = Regex("[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
-        val FILE_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._/-]{0,255}")
+    companion object {
+        private val INVOCATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
+        private val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+        private val CAPABILITY_ID = Regex("[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
+        private val FILE_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._/-]{0,255}")
     }
 }
 
@@ -111,9 +111,9 @@ data class ProviderPackageValidationRequest(
         require(artifactVersionCode > 0L) { "Provider artifact version code must be positive" }
     }
 
-    private companion object {
-        val INVOCATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
-        val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+    companion object {
+        private val INVOCATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
+        private val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
     }
 }
 
