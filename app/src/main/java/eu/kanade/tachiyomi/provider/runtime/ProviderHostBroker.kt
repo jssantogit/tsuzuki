@@ -8,6 +8,7 @@ import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewCompat
@@ -19,6 +20,7 @@ import okhttp3.Request
 import okhttp3.ResponseBody
 import org.json.JSONObject
 import org.json.JSONTokener
+import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.net.Inet6Address
 import java.net.InetAddress
@@ -151,6 +153,23 @@ class ProviderHostBroker(
                         }
                     }
 
+                    override fun shouldInterceptRequest(
+                        view: WebView?,
+                        request: WebResourceRequest?,
+                    ): WebResourceResponse? {
+                        if (request == null) return null
+
+                        return runCatching {
+                            validateUrl(request.url.toString(), resolveAddress = false)
+                            null
+                        }.getOrElse { error ->
+                            if (request.isForMainFrame) {
+                                complete(Result.failure(error))
+                            }
+                            blockedWebResourceResponse()
+                        }
+                    }
+
                     override fun onPageFinished(
                         view: WebView?,
                         url: String?,
@@ -243,6 +262,16 @@ class ProviderHostBroker(
             setSupportMultipleWindows(false)
         }
     }
+
+    private fun blockedWebResourceResponse(): WebResourceResponse =
+        WebResourceResponse(
+            "text/plain",
+            "utf-8",
+            403,
+            "Blocked by ProviderHostPolicy",
+            emptyMap(),
+            ByteArrayInputStream(ByteArray(0)),
+        )
 
     private fun validateUrl(
         rawUrl: String,
