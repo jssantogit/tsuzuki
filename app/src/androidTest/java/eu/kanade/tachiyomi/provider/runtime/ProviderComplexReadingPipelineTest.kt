@@ -123,6 +123,51 @@ class ProviderComplexReadingPipelineTest {
             url = url.orEmpty(),
             cssSelector = cssSelector.orEmpty(),
         )
+
+        override fun binaryFetch(url: String?): String =
+            broker.binaryFetch(url.orEmpty())
+
+        override fun binaryZipEntry(
+            resourceHandle: String?,
+            entryName: String?,
+        ): String = broker.binaryZipEntry(
+            resourceHandle = resourceHandle.orEmpty(),
+            entryName = entryName.orEmpty(),
+        )
+
+        override fun binaryAesCbcDecrypt(
+            resourceHandle: String?,
+            keyHex: String?,
+            ivHex: String?,
+        ): String = broker.binaryAesCbcDecrypt(
+            resourceHandle = resourceHandle.orEmpty(),
+            keyHex = keyHex.orEmpty(),
+            ivHex = ivHex.orEmpty(),
+        )
+
+        override fun binaryImageCrop(
+            resourceHandle: String?,
+            x: Int,
+            y: Int,
+            width: Int,
+            height: Int,
+        ): String = broker.binaryImageCrop(
+            resourceHandle = resourceHandle.orEmpty(),
+            x = x,
+            y = y,
+            width = width,
+            height = height,
+        )
+
+        override fun binaryImagePixel(
+            resourceHandle: String?,
+            x: Int,
+            y: Int,
+        ): String = broker.binaryImagePixel(
+            resourceHandle = resourceHandle.orEmpty(),
+            x = x,
+            y = y,
+        )
     }
 
     private fun encryptedImageZip(
