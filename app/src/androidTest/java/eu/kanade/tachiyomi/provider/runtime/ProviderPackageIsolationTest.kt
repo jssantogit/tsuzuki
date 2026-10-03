@@ -3,6 +3,8 @@ package eu.kanade.tachiyomi.provider.runtime
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -17,11 +19,18 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
 import tachiyomi.core.provider.supplychain.ProviderArtifactDescriptor
+import tachiyomi.core.provider.supplychain.FileProviderRepositoryTrustStore
 import tachiyomi.core.provider.supplychain.ProviderArtifactStore
-import tachiyomi.core.provider.supplychain.VerifiedProviderArtifact
+import tachiyomi.core.provider.supplychain.ProviderRepositoryIndex
+import tachiyomi.core.provider.supplychain.ProviderRepositoryTrust
+import tachiyomi.core.provider.supplychain.SignedProviderRepositoryIndex
 import tachiyomi.core.provider.supplychain.sha256Hex
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.security.KeyPair
+import java.security.KeyPairGenerator
+import java.security.Signature
+import java.security.spec.ECGenParameterSpec
 import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -114,6 +123,13 @@ class ProviderPackageIsolationTest {
             ),
         )
         val store = ProviderArtifactStore(File(root, "artifacts"))
+        val signingKey = ecKeyPair()
+        val trust = ProviderRepositoryTrust(
+            repositoryId = "repo.example",
+            hostApiVersion = 1,
+            trustedKeys = mapOf("root-1" to signingKey.public.encoded),
+            stateStore = FileProviderRepositoryTrustStore(File(root, "trust")),
+        )
         val activator = ProviderPackageActivator(
             hostApiVersion = 1,
             parser = ProviderPackageParser(),
@@ -129,7 +145,16 @@ class ProviderPackageIsolationTest {
                 };
             """.trimIndent(),
         )
-        activator.activate(verified(versionCode = 1, bytes = v1))
+        activator.activate(
+            verified(
+                trust = trust,
+                signingKey = signingKey,
+                sequence = 1,
+                versionCode = 1,
+                bytes = v1,
+                installedVersionCode = null,
+            ),
+        )
         assertEquals(1L, store.current(PROVIDER_ID)?.versionCode)
 
         val invalidV2 = tsz(
@@ -137,7 +162,16 @@ class ProviderPackageIsolationTest {
             main = "export default { reading: {} };",
         )
         val error = runCatching {
-            activator.activate(verified(versionCode = 2, bytes = invalidV2))
+            activator.activate(
+                verified(
+                    trust = trust,
+                    signingKey = signingKey,
+                    sequence = 2,
+                    versionCode = 2,
+                    bytes = invalidV2,
+                    installedVersionCode = 1,
+                ),
+            )
         }.exceptionOrNull()
 
         assertTrue(error is ProviderPackageException)
@@ -177,20 +211,63 @@ class ProviderPackageIsolationTest {
     }
 
     private fun verified(
+        trust: ProviderRepositoryTrust,
+        signingKey: KeyPair,
+        sequence: Long,
         versionCode: Long,
         bytes: ByteArray,
-    ) = VerifiedProviderArtifact(
-        repositoryId = "repo.example",
-        descriptor = ProviderArtifactDescriptor(
-            providerId = PROVIDER_ID,
-            versionName = "1.0.$versionCode",
-            versionCode = versionCode,
-            artifactUrl = "https://repo.example/provider-$versionCode.tsz",
-            sha256 = sha256Hex(bytes),
-            minHostApi = 1,
+        installedVersionCode: Long?,
+    ) = trust.verifyArtifact(
+        repository = trust.verifyAndAccept(
+            signedIndex(
+                signingKey = signingKey,
+                index = ProviderRepositoryIndex(
+                    schemaVersion = 1,
+                    repositoryId = "repo.example",
+                    sequence = sequence,
+                    providers = listOf(
+                        ProviderArtifactDescriptor(
+                            providerId = PROVIDER_ID,
+                            versionName = "1.0.$versionCode",
+                            versionCode = versionCode,
+                            artifactUrl = "https://repo.example/provider-$versionCode.tsz",
+                            sha256 = sha256Hex(bytes),
+                            minHostApi = 1,
+                        ),
+                    ),
+                ),
+            ),
         ),
-        bytes = bytes,
+        providerId = PROVIDER_ID,
+        artifactBytes = bytes,
+        installedVersionCode = installedVersionCode,
     )
+
+    private fun signedIndex(
+        signingKey: KeyPair,
+        index: ProviderRepositoryIndex,
+    ): SignedProviderRepositoryIndex {
+        val payload = Json {
+            encodeDefaults = true
+            explicitNulls = false
+        }.encodeToString(index).encodeToByteArray()
+        val signer = Signature.getInstance("SHA256withECDSA").run {
+            initSign(signingKey.private)
+            update(payload)
+            sign()
+        }
+        return SignedProviderRepositoryIndex(
+            keyId = "root-1",
+            payload = payload,
+            signature = signer,
+        )
+    }
+
+    private fun ecKeyPair(): KeyPair =
+        KeyPairGenerator.getInstance("EC").run {
+            initialize(ECGenParameterSpec("secp256r1"))
+            generateKeyPair()
+        }
 
     private fun tsz(
         versionCode: Long = 1,
