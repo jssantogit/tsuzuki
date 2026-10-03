@@ -7,11 +7,17 @@ import android.content.ServiceConnection
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import kotlinx.coroutines.suspendCancellableCoroutine
+import tachiyomi.core.provider.packageformat.ParsedProviderPackage
+import tachiyomi.core.provider.packageformat.ProviderPackageContractValidator
+import tachiyomi.core.provider.runtime.ProviderPackageValidationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
+import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
+import tachiyomi.core.provider.supplychain.VerifiedProviderArtifact
 import java.io.File
 import java.io.FileOutputStream
+import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
@@ -32,44 +38,94 @@ class ProviderRuntimeClient(
     ): ProviderRuntimeInvocationResponse {
         validateInvocation(request, source, hostPolicy)
 
-        val boundRuntime = bindRuntime()
         val hostInvocation = hostInvocationFactory.create(hostPolicy)
-        val sourceFile = File.createTempFile(
-            ".provider-source-",
-            ".js",
-            context.cacheDir,
-        )
-
-        try {
-            FileOutputStream(sourceFile).use { output ->
-                output.write(source)
-                output.flush()
-                output.fd.sync()
-            }
-
-            val sourceFd = ParcelFileDescriptor.open(
-                sourceFile,
-                ParcelFileDescriptor.MODE_READ_ONLY,
-            )
-            return sourceFd.use { descriptor ->
-                invokeRemote(
-                    remote = boundRuntime.remote,
-                    request = request,
-                    sourceFd = descriptor,
-                    hostBridge = hostInvocation.bridge,
-                )
+        return try {
+            withRuntimeFile(
+                bytes = source,
+                suffix = ".js",
+                invocationId = request.invocationId,
+            ) { remote, descriptor ->
+                callRemote(
+                    remote = remote,
+                    invocationId = request.invocationId,
+                ) {
+                    remote.invoke(
+                        ProviderRuntimeProtocol.encodeRequest(request),
+                        descriptor,
+                        hostInvocation.bridge,
+                    )
+                }
             }
         } finally {
             hostInvocation.close()
-            boundRuntime.close()
-            sourceFile.delete()
+        }
+    }
+
+    suspend fun invokePackage(
+        request: ProviderRuntimeInvocationRequest,
+        packageBytes: ByteArray,
+        inputJson: String,
+        hostPolicy: ProviderHostInvocationPolicy,
+    ): ProviderRuntimeInvocationResponse {
+        validateInvocation(request, packageBytes, hostPolicy, isPackage = true)
+        require(inputJson.length <= ProviderRuntimeProtocol.MAX_INPUT_JSON_CHARS) {
+            "Provider capability input exceeds the runtime input-size limit"
+        }
+
+        val hostInvocation = hostInvocationFactory.create(hostPolicy)
+        return try {
+            withRuntimeFile(
+                bytes = packageBytes,
+                suffix = ".tsz",
+                invocationId = request.invocationId,
+            ) { remote, descriptor ->
+                callRemote(
+                    remote = remote,
+                    invocationId = request.invocationId,
+                ) {
+                    remote.invokePackage(
+                        ProviderRuntimeProtocol.encodeRequest(request),
+                        descriptor,
+                        inputJson,
+                        hostInvocation.bridge,
+                    )
+                }
+            }
+        } finally {
+            hostInvocation.close()
+        }
+    }
+
+    suspend fun validatePackage(
+        request: ProviderPackageValidationRequest,
+        packageBytes: ByteArray,
+    ): ProviderRuntimeInvocationResponse {
+        require(packageBytes.size <= ProviderRuntimeProtocol.MAX_PACKAGE_BYTES) {
+            "Provider package exceeds the runtime package-size limit"
+        }
+
+        return withRuntimeFile(
+            bytes = packageBytes,
+            suffix = ".tsz",
+            invocationId = request.invocationId,
+        ) { remote, descriptor ->
+            callRemote(
+                remote = remote,
+                invocationId = request.invocationId,
+            ) {
+                remote.validatePackage(
+                    ProviderRuntimeProtocol.encodeValidationRequest(request),
+                    descriptor,
+                )
+            }
         }
     }
 
     private fun validateInvocation(
         request: ProviderRuntimeInvocationRequest,
-        source: ByteArray,
+        bytes: ByteArray,
         hostPolicy: ProviderHostInvocationPolicy,
+        isPackage: Boolean = false,
     ) {
         require(request.providerId == hostPolicy.providerId) {
             "Provider runtime request and Host Service policy must use the same Provider ID"
@@ -77,8 +133,13 @@ class ProviderRuntimeClient(
         require(request.invocationId == hostPolicy.invocationId) {
             "Provider runtime request and Host Service policy must use the same invocation ID"
         }
-        require(source.size <= ProviderRuntimeProtocol.MAX_SOURCE_BYTES) {
-            "Provider JavaScript source exceeds the runtime source-size limit"
+        val maxBytes = if (isPackage) {
+            ProviderRuntimeProtocol.MAX_PACKAGE_BYTES
+        } else {
+            ProviderRuntimeProtocol.MAX_SOURCE_BYTES
+        }
+        require(bytes.size <= maxBytes) {
+            "Provider runtime payload exceeds the configured size limit"
         }
         val allowedModules = hostPolicy.allowedHostModules()
         require(request.hostModules.all { it in allowedModules }) {
@@ -86,20 +147,52 @@ class ProviderRuntimeClient(
         }
     }
 
-    private suspend fun invokeRemote(
+    private suspend fun <T> withRuntimeFile(
+        bytes: ByteArray,
+        suffix: String,
+        invocationId: String,
+        block: suspend (
+            remote: IProviderRuntimeService,
+            descriptor: ParcelFileDescriptor,
+        ) -> T,
+    ): T {
+        val boundRuntime = bindRuntime()
+        val file = File.createTempFile(
+            ".provider-runtime-",
+            suffix,
+            context.cacheDir,
+        )
+
+        try {
+            FileOutputStream(file).use { output ->
+                output.write(bytes)
+                output.flush()
+                output.fd.sync()
+            }
+
+            val descriptor = ParcelFileDescriptor.open(
+                file,
+                ParcelFileDescriptor.MODE_READ_ONLY,
+            )
+            return descriptor.use {
+                block(boundRuntime.remote, it)
+            }
+        } finally {
+            runCatching { boundRuntime.remote.cancel(invocationId) }
+            boundRuntime.close()
+            file.delete()
+        }
+    }
+
+    private suspend fun callRemote(
         remote: IProviderRuntimeService,
-        request: ProviderRuntimeInvocationRequest,
-        sourceFd: ParcelFileDescriptor,
-        hostBridge: IProviderHostBridge,
+        invocationId: String,
+        call: () -> String,
     ): ProviderRuntimeInvocationResponse =
         suspendCancellableCoroutine { continuation ->
             val future: Future<*> = BINDER_EXECUTOR.submit {
                 try {
-                    val raw = remote.invoke(
-                        ProviderRuntimeProtocol.encodeRequest(request),
-                        sourceFd,
-                        hostBridge,
-                    )
+                    val raw = call()
                     if (continuation.isActive) {
                         continuation.resume(
                             ProviderRuntimeProtocol.decodeResponse(raw),
@@ -113,7 +206,7 @@ class ProviderRuntimeClient(
             }
 
             continuation.invokeOnCancellation {
-                runCatching { remote.cancel(request.invocationId) }
+                runCatching { remote.cancel(invocationId) }
                 future.cancel(true)
             }
         }
@@ -204,6 +297,11 @@ class ProviderRuntimeClient(
             }
             isBound.set(true)
 
+            if (!continuation.isActive) {
+                unbindOnce()
+                return@suspendCancellableCoroutine
+            }
+
             continuation.invokeOnCancellation {
                 unbindOnce()
             }
@@ -229,5 +327,30 @@ class ProviderRuntimeClient(
                 isDaemon = true
             }
         }
+    }
+}
+
+class IsolatedProviderPackageContractValidator(
+    private val runtimeClient: ProviderRuntimeClient,
+    private val limits: ProviderRuntimeLimitsDto = ProviderRuntimeLimitsDto(),
+) : ProviderPackageContractValidator {
+
+    override suspend fun validate(
+        artifact: VerifiedProviderArtifact,
+        providerPackage: ParsedProviderPackage,
+    ): Boolean {
+        val request = ProviderPackageValidationRequest(
+            protocolVersion = ProviderRuntimeProtocol.VERSION,
+            invocationId = "activation:${UUID.randomUUID()}",
+            providerId = providerPackage.manifest.id,
+            artifactVersionCode = providerPackage.manifest.version.code,
+            limits = limits,
+        )
+
+        val response = runtimeClient.validatePackage(
+            request = request,
+            packageBytes = artifact.bytes,
+        )
+        return response.failure == null && response.value == "valid"
     }
 }
