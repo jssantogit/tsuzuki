@@ -159,7 +159,9 @@ class RefreshProviderReadingChaptersTest {
     }
 
     private fun gateway(
-        chapters: suspend (ProviderReadingChaptersRequest) -> ProviderCallResult<ProviderPage<ProviderChapterObservation>>,
+        chapters: suspend (
+            ProviderReadingChaptersRequest,
+        ) -> ProviderCallResult<ProviderPage<ProviderChapterObservation>>,
     ) = object : ProviderReadingGateway {
         override suspend fun lookup(
             providerId: ProviderId,
