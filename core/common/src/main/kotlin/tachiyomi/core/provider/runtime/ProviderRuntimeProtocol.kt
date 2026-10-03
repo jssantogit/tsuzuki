@@ -85,6 +85,8 @@ enum class ProviderRuntimeFailureCode {
     TIMEOUT,
     SCRIPT_ERROR,
     HOST_ERROR,
+    CANCELLED,
+    INVOCATION_CONFLICT,
     MALFORMED_REQUEST,
     SOURCE_TOO_LARGE,
     SOURCE_READ_ERROR,
