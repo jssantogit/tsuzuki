@@ -5,12 +5,12 @@ on:
     branches:
       - tsuzuki/provider-platform-foundation-spike
       - tsuzuki/provider-platform-host-brokers-spike
-      - tsuzuki/provider-platform-host-brokers-spike
       - tsuzuki/provider-platform-real-host-brokers-spike
   pull_request:
     branches:
       - main
       - tsuzuki/provider-platform-foundation-spike
+      - tsuzuki/provider-platform-host-brokers-spike
 
 permissions:
   contents: read
