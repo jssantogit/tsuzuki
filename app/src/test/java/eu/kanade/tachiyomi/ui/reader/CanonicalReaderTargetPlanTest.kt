@@ -37,6 +37,7 @@ class CanonicalReaderTargetPlanTest {
             PreparedHttpPage(
                 url = "https://cdn.example/001.jpg",
                 headers = mapOf("Referer" to "https://reader.example/"),
+                allowedOrigins = setOf("https://cdn.example"),
             ),
         )
 
