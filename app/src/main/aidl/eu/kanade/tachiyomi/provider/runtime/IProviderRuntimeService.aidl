@@ -9,6 +9,16 @@ interface IProviderRuntimeService {
         in ParcelFileDescriptor sourceFd,
         IProviderHostBridge hostBridge
     );
+    String validatePackage(
+        String requestJson,
+        in ParcelFileDescriptor packageFd
+    );
+    String invokePackage(
+        String requestJson,
+        in ParcelFileDescriptor packageFd,
+        String inputJson,
+        IProviderHostBridge hostBridge
+    );
     void cancel(String invocationId);
     int processUid();
     int processPid();
