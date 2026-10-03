@@ -17,6 +17,8 @@ import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
+import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 
 class ResolveProviderChapterReadingTest {
 
@@ -128,6 +130,67 @@ class ResolveProviderChapterReadingTest {
             ProviderError(ProviderErrorCode.UNAVAILABLE, retryable = false),
         )
         pagesCalls shouldBe 1
+    }
+
+    @Test
+    fun `maps Provider page delivery into provider-neutral Reader content`() = runBlocking {
+        val gateway = gateway {
+            ProviderCallResult.Success(
+                ProviderReadingDelivery.PageList(
+                    listOf(
+                        ProviderPageRequest(
+                            url = "https://cdn.example/page-1.jpg",
+                            headers = mapOf("Referer" to "https://reader.example/"),
+                        ),
+                        ProviderPageRequest(
+                            url = "https://cdn.example/page-2.jpg",
+                        ),
+                    ),
+                ),
+            )
+        }
+        val resolver = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(evidence(binding, "provider-chapter-1", chapter.id)),
+            gateway = gateway,
+        )
+        val option = resolver.options(chapter.id).single()
+
+        resolver.preparedContent(option) shouldBe ProviderCallResult.Success(
+            PreparedChapterContent.HttpPages(
+                pages = listOf(
+                    PreparedHttpPage(
+                        url = "https://cdn.example/page-1.jpg",
+                        headers = mapOf("Referer" to "https://reader.example/"),
+                    ),
+                    PreparedHttpPage(
+                        url = "https://cdn.example/page-2.jpg",
+                    ),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `managed Provider files remain fail closed before host-owned promotion`() = runBlocking {
+        val gateway = gateway {
+            ProviderCallResult.Success(
+                ProviderReadingDelivery.ManagedFile(
+                    resource = ProviderManagedResourceRef("managed:archive"),
+                    format = ProviderManagedFileFormat.CBZ,
+                ),
+            )
+        }
+        val resolver = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(evidence(binding, "provider-chapter-1", chapter.id)),
+            gateway = gateway,
+        )
+
+        resolver.preparedContent(resolver.options(chapter.id).single()) shouldBe
+            ProviderCallResult.Failure(
+                ProviderError(ProviderErrorCode.MALFORMED_RESULT, retryable = false),
+            )
     }
 
     @Test
