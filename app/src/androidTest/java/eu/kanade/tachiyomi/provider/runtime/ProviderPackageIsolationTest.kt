@@ -106,6 +106,7 @@ class ProviderPackageIsolationTest {
         assertNull(response.failure)
         assertEquals("""{"title":"Tsuzuki isolated","count":3}""", response.value)
         storageRoot.deleteRecursively()
+        Unit
     }
 
     @Test
@@ -178,6 +179,7 @@ class ProviderPackageIsolationTest {
         assertEquals(1L, store.current(PROVIDER_ID)?.versionCode)
         assertEquals(v1.toList(), store.readCurrentArtifact(PROVIDER_ID).toList())
         root.deleteRecursively()
+        Unit
     }
 
     @Test
