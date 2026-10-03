@@ -15,6 +15,7 @@ import tachiyomi.core.provider.runtime.ProviderBinaryHostService
 import tachiyomi.core.provider.runtime.ProviderBrowserHostService
 import tachiyomi.core.provider.runtime.ProviderCryptoHostService
 import tachiyomi.core.provider.runtime.ProviderDomHostService
+import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderHostServices
 import tachiyomi.core.provider.runtime.ProviderHttpHostService
 import tachiyomi.core.provider.runtime.ProviderImageHostService
@@ -73,7 +74,7 @@ class ProviderRuntimeService : Service() {
                         ).evaluate(
                             source = source,
                             fileName = request.fileName,
-                            hostServices = hostBridge.toHostServices(),
+                            hostServices = hostBridge.toHostServices(request.hostModules),
                         )
                     }
                 } catch (_: CancellationException) {
@@ -149,88 +150,126 @@ private fun ProviderScriptFailure.toFailureCode(): ProviderRuntimeFailureCode = 
     ProviderScriptFailure.HOST_ERROR -> ProviderRuntimeFailureCode.HOST_ERROR
 }
 
-private fun IProviderHostBridge?.toHostServices(): ProviderHostServices {
+private fun IProviderHostBridge?.toHostServices(
+    allowedModules: Set<ProviderHostModule>,
+): ProviderHostServices {
     if (this == null) return ProviderHostServices()
     val bridge = this
 
     return ProviderHostServices(
-        http = object : ProviderHttpHostService {
-            override suspend fun getText(url: String): String =
-                bridge.httpGet(url).orEmpty()
+        http = if (ProviderHostModule.HTTP in allowedModules) {
+            object : ProviderHttpHostService {
+                override suspend fun getText(url: String): String =
+                    bridge.httpGet(url).orEmpty()
 
-            override suspend fun getResource(url: String): ProviderResourceHandle =
-                ProviderResourceHandle(bridge.httpGetResource(url).orEmpty())
-        },
-        dom = object : ProviderDomHostService {
-            override suspend fun selectText(
-                resourceHandle: ProviderResourceHandle,
-                cssSelector: String,
-            ): String = bridge.domSelectText(resourceHandle.value, cssSelector).orEmpty()
-        },
-        browser = object : ProviderBrowserHostService {
-            override suspend fun readText(
-                url: String,
-                cssSelector: String,
-            ): String = bridge.browserReadText(url, cssSelector).orEmpty()
-        },
-        storage = object : ProviderStorageHostService {
-            override suspend fun get(key: String): String? = bridge.storageGet(key)
-
-            override suspend fun set(key: String, value: String) {
-                bridge.storageSet(key, value)
+                override suspend fun getResource(url: String): ProviderResourceHandle =
+                    ProviderResourceHandle(bridge.httpGetResource(url).orEmpty())
             }
-
-            override suspend fun remove(key: String) {
-                bridge.storageRemove(key)
+        } else {
+            null
+        },
+        dom = if (ProviderHostModule.DOM in allowedModules) {
+            object : ProviderDomHostService {
+                override suspend fun selectText(
+                    resourceHandle: ProviderResourceHandle,
+                    cssSelector: String,
+                ): String = bridge.domSelectText(resourceHandle.value, cssSelector).orEmpty()
             }
+        } else {
+            null
         },
-        secrets = object : ProviderSecretsHostService {
-            override suspend fun get(key: String): String? = bridge.secretGet(key)
-        },
-        binary = object : ProviderBinaryHostService {
-            override suspend fun fetch(url: String): ProviderResourceHandle =
-                ProviderResourceHandle(bridge.binaryFetch(url).orEmpty())
-
-            override suspend fun zipEntry(
-                resourceHandle: ProviderResourceHandle,
-                entryName: String,
-            ): ProviderResourceHandle =
-                ProviderResourceHandle(
-                    bridge.binaryZipEntry(resourceHandle.value, entryName).orEmpty(),
-                )
-        },
-        crypto = object : ProviderCryptoHostService {
-            override suspend fun aesCbcDecrypt(
-                resourceHandle: ProviderResourceHandle,
-                keyHex: String,
-                ivHex: String,
-            ): ProviderResourceHandle =
-                ProviderResourceHandle(
-                    bridge.cryptoAesCbcDecrypt(resourceHandle.value, keyHex, ivHex).orEmpty(),
-                )
-        },
-        image = object : ProviderImageHostService {
-            override suspend fun crop(
-                resourceHandle: ProviderResourceHandle,
-                x: Int,
-                y: Int,
-                width: Int,
-                height: Int,
-            ): ProviderResourceHandle =
-                ProviderResourceHandle(
-                    bridge.imageCrop(resourceHandle.value, x, y, width, height).orEmpty(),
-                )
-
-            override suspend fun pixel(
-                resourceHandle: ProviderResourceHandle,
-                x: Int,
-                y: Int,
-            ): String = bridge.imagePixel(resourceHandle.value, x, y).orEmpty()
-        },
-        log = object : ProviderLogHostService {
-            override suspend fun info(message: String) {
-                bridge.logInfo(message)
+        browser = if (ProviderHostModule.BROWSER in allowedModules) {
+            object : ProviderBrowserHostService {
+                override suspend fun readText(
+                    url: String,
+                    cssSelector: String,
+                ): String = bridge.browserReadText(url, cssSelector).orEmpty()
             }
+        } else {
+            null
+        },
+        storage = if (ProviderHostModule.STORAGE in allowedModules) {
+            object : ProviderStorageHostService {
+                override suspend fun get(key: String): String? = bridge.storageGet(key)
+
+                override suspend fun set(key: String, value: String) {
+                    bridge.storageSet(key, value)
+                }
+
+                override suspend fun remove(key: String) {
+                    bridge.storageRemove(key)
+                }
+            }
+        } else {
+            null
+        },
+        secrets = if (ProviderHostModule.SECRETS in allowedModules) {
+            object : ProviderSecretsHostService {
+                override suspend fun get(key: String): String? = bridge.secretGet(key)
+            }
+        } else {
+            null
+        },
+        binary = if (ProviderHostModule.BINARY in allowedModules) {
+            object : ProviderBinaryHostService {
+                override suspend fun fetch(url: String): ProviderResourceHandle =
+                    ProviderResourceHandle(bridge.binaryFetch(url).orEmpty())
+
+                override suspend fun zipEntry(
+                    resourceHandle: ProviderResourceHandle,
+                    entryName: String,
+                ): ProviderResourceHandle =
+                    ProviderResourceHandle(
+                        bridge.binaryZipEntry(resourceHandle.value, entryName).orEmpty(),
+                    )
+            }
+        } else {
+            null
+        },
+        crypto = if (ProviderHostModule.CRYPTO in allowedModules) {
+            object : ProviderCryptoHostService {
+                override suspend fun aesCbcDecrypt(
+                    resourceHandle: ProviderResourceHandle,
+                    keyHex: String,
+                    ivHex: String,
+                ): ProviderResourceHandle =
+                    ProviderResourceHandle(
+                        bridge.cryptoAesCbcDecrypt(resourceHandle.value, keyHex, ivHex).orEmpty(),
+                    )
+            }
+        } else {
+            null
+        },
+        image = if (ProviderHostModule.IMAGE in allowedModules) {
+            object : ProviderImageHostService {
+                override suspend fun crop(
+                    resourceHandle: ProviderResourceHandle,
+                    x: Int,
+                    y: Int,
+                    width: Int,
+                    height: Int,
+                ): ProviderResourceHandle =
+                    ProviderResourceHandle(
+                        bridge.imageCrop(resourceHandle.value, x, y, width, height).orEmpty(),
+                    )
+
+                override suspend fun pixel(
+                    resourceHandle: ProviderResourceHandle,
+                    x: Int,
+                    y: Int,
+                ): String = bridge.imagePixel(resourceHandle.value, x, y).orEmpty()
+            }
+        } else {
+            null
+        },
+        log = if (ProviderHostModule.LOG in allowedModules) {
+            object : ProviderLogHostService {
+                override suspend fun info(message: String) {
+                    bridge.logInfo(message)
+                }
+            }
+        } else {
+            null
         },
     )
 }
