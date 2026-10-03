@@ -9,6 +9,7 @@ interface IProviderRuntimeService {
         in ParcelFileDescriptor sourceFd,
         IProviderHostBridge hostBridge
     );
+    void cancel(String invocationId);
     int processUid();
     int processPid();
 }
