@@ -6,6 +6,7 @@ import android.os.IBinder
 import android.os.Process
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import tachiyomi.core.provider.runtime.ProviderHostBridge
 import tachiyomi.core.provider.runtime.ProviderQuickJsRuntime
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimits
 import tachiyomi.core.provider.runtime.ProviderScriptExecution
@@ -31,7 +32,25 @@ class ProviderRuntimeService : Service() {
             wallClockTimeoutMs: Long,
             jsExecutionTimeoutMs: Long,
             hostBridge: IProviderHostBridge?,
-        ): String = "error:HOST_UNAVAILABLE"
+        ): String {
+            if (hostBridge == null) {
+                return "error:HOST_UNAVAILABLE"
+            }
+            val bridge = object : ProviderHostBridge {
+                override suspend fun httpGet(url: String): String = hostBridge.httpGet(url).orEmpty()
+
+                override suspend fun browserReadText(
+                    url: String,
+                    cssSelector: String,
+                ): String = hostBridge.browserReadText(url, cssSelector).orEmpty()
+            }
+            return evaluateInternal(
+                source = source,
+                wallClockTimeoutMs = wallClockTimeoutMs,
+                jsExecutionTimeoutMs = jsExecutionTimeoutMs,
+                hostBridge = bridge,
+            )
+        }
 
         override fun processUid(): Int = Process.myUid()
 
@@ -44,6 +63,7 @@ class ProviderRuntimeService : Service() {
         source: String?,
         wallClockTimeoutMs: Long,
         jsExecutionTimeoutMs: Long,
+        hostBridge: ProviderHostBridge? = null,
     ): String {
         val limits = ProviderRuntimeLimits(
             wallClockTimeoutMs = wallClockTimeoutMs.coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS),
@@ -53,7 +73,10 @@ class ProviderRuntimeService : Service() {
             ProviderQuickJsRuntime(
                 dispatcher = Dispatchers.Default,
                 limits = limits,
-            ).evaluate(source.orEmpty())
+            ).evaluate(
+                source = source.orEmpty(),
+                hostBridge = hostBridge,
+            )
         }
         return when (result) {
             is ProviderScriptExecution.Success -> "ok:${result.value.orEmpty()}"
