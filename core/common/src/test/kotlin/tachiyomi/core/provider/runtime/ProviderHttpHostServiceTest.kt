@@ -1,0 +1,138 @@
+package tachiyomi.core.provider.runtime
+
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.runBlocking
+import mockwebserver3.Dispatcher
+import mockwebserver3.MockResponse
+import mockwebserver3.MockWebServer
+import mockwebserver3.RecordedRequest
+import okhttp3.Headers.Companion.headersOf
+import org.junit.jupiter.api.Test
+
+class ProviderHttpHostServiceTest {
+
+    @Test
+    fun `http broker preserves provider scoped cookies across invocations`() = runBlocking {
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse =
+                when (request.url.encodedPath) {
+                    "/set" -> MockResponse(
+                        headers = headersOf("Set-Cookie", "session=alpha; Path=/"),
+                        body = "set",
+                    )
+                    "/read" -> MockResponse(body = request.headers["Cookie"] ?: "empty")
+                    else -> MockResponse(code = 404)
+                }
+        }
+        server.start()
+
+        try {
+            val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+            val sessions = ProviderHttpSessionStore()
+            val resources = ProviderResourceStore()
+            val policy = ProviderNetworkPolicy(
+                allowedOrigins = setOf(origin),
+                allowLocalNetwork = true,
+            )
+
+            val first = DefaultProviderHttpHostService(
+                owner = ProviderResourceOwner("org.example.a", "invocation-1"),
+                resources = resources,
+                policy = policy,
+                cookieJar = sessions.cookieJar("org.example.a"),
+            )
+            first.getText(server.url("/set").toString()) shouldBe "set"
+
+            val second = DefaultProviderHttpHostService(
+                owner = ProviderResourceOwner("org.example.a", "invocation-2"),
+                resources = resources,
+                policy = policy,
+                cookieJar = sessions.cookieJar("org.example.a"),
+            )
+            second.getText(server.url("/read").toString()) shouldBe "session=alpha"
+
+            val otherProvider = DefaultProviderHttpHostService(
+                owner = ProviderResourceOwner("org.example.b", "invocation-1"),
+                resources = resources,
+                policy = policy,
+                cookieJar = sessions.cookieJar("org.example.b"),
+            )
+            otherProvider.getText(server.url("/read").toString()) shouldBe "empty"
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun `http resource responses remain host side for DOM processing`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse(
+                headers = headersOf("Content-Type", "text/html; charset=utf-8"),
+                body = "<html><body><div id=\"probe\">host-side</div></body></html>",
+            ),
+        )
+        server.start()
+
+        try {
+            val owner = ProviderResourceOwner("org.example.reader", "invocation-1")
+            val resources = ProviderResourceStore()
+            val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+            val http = DefaultProviderHttpHostService(
+                owner = owner,
+                resources = resources,
+                policy = ProviderNetworkPolicy(
+                    allowedOrigins = setOf(origin),
+                    allowLocalNetwork = true,
+                ),
+                cookieJar = ProviderHttpSessionStore().cookieJar(owner.providerId),
+            )
+            val dom = DefaultProviderDomHostService(owner, resources)
+
+            val handle = http.getResource(server.url("/page").toString())
+
+            dom.selectText(handle, "#probe") shouldBe "host-side"
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun `redirect targets are revalidated before any blocked origin request`() = runBlocking {
+        val allowed = MockWebServer()
+        val blocked = MockWebServer()
+        blocked.enqueue(MockResponse(body = "leak"))
+        allowed.start()
+        blocked.start()
+        allowed.enqueue(
+            MockResponse(
+                code = 302,
+                headers = headersOf("Location", blocked.url("/leak").toString()),
+            ),
+        )
+
+        try {
+            val owner = ProviderResourceOwner("org.example.reader", "invocation-1")
+            val origin = allowed.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+            val http = DefaultProviderHttpHostService(
+                owner = owner,
+                resources = ProviderResourceStore(),
+                policy = ProviderNetworkPolicy(
+                    allowedOrigins = setOf(origin),
+                    allowLocalNetwork = true,
+                ),
+                cookieJar = ProviderHttpSessionStore().cookieJar(owner.providerId),
+            )
+
+            shouldThrow<ProviderNetworkPolicyException> {
+                http.getText(allowed.url("/redirect").toString())
+            }
+            blocked.requestCount shouldBe 0
+        } finally {
+            allowed.close()
+            blocked.close()
+        }
+    }
+}
