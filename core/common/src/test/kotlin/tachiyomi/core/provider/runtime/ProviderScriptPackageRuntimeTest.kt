@@ -41,6 +41,54 @@ class ProviderScriptPackageRuntimeTest {
     }
 
     @Test
+    fun `package capability uses only injected Host Services and preserves host failure semantics`() = runBlocking {
+        val pkg = providerPackage(
+            main = """
+                export default {
+                  reading: {
+                    chapters: async () => ({
+                      value: await tsuzuki.storage.get("key")
+                    })
+                  }
+                };
+            """.trimIndent(),
+        )
+        val runtime = ProviderScriptPackageRuntime()
+        val storage = object : ProviderStorageHostService {
+            override suspend fun get(key: String): String? = "stored"
+
+            override suspend fun set(key: String, value: String) = Unit
+
+            override suspend fun remove(key: String) = Unit
+        }
+
+        runtime.invoke(
+            providerPackage = pkg,
+            capabilityId = "reading.chapters",
+            capabilityVersion = 1,
+            inputJson = "{}",
+            hostServices = ProviderHostServices(storage = storage),
+        ) shouldBe ProviderPackageExecution.Success("""{"value":"stored"}""")
+
+        val failingStorage = object : ProviderStorageHostService {
+            override suspend fun get(key: String): String? {
+                throw IllegalStateException("host-only detail")
+            }
+
+            override suspend fun set(key: String, value: String) = Unit
+
+            override suspend fun remove(key: String) = Unit
+        }
+        runtime.invoke(
+            providerPackage = pkg,
+            capabilityId = "reading.chapters",
+            capabilityVersion = 1,
+            inputJson = "{}",
+            hostServices = ProviderHostServices(storage = failingStorage),
+        ) shouldBe ProviderPackageExecution.Failure(ProviderPackageFailure.HOST_ERROR)
+    }
+
+    @Test
     fun `fresh module VM does not retain provider global state between invocations`() = runBlocking {
         val pkg = providerPackage(
             main = """
