@@ -19,21 +19,19 @@ class ProviderRuntimeService : Service() {
             wallClockTimeoutMs: Long,
             jsExecutionTimeoutMs: Long,
         ): String {
-            val limits = ProviderRuntimeLimits(
-                wallClockTimeoutMs = wallClockTimeoutMs.coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS),
-                jsExecutionTimeoutMs = jsExecutionTimeoutMs.coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS),
+            return evaluateInternal(
+                source = source,
+                wallClockTimeoutMs = wallClockTimeoutMs,
+                jsExecutionTimeoutMs = jsExecutionTimeoutMs,
             )
-            val result = runBlocking {
-                ProviderQuickJsRuntime(
-                    dispatcher = Dispatchers.Default,
-                    limits = limits,
-                ).evaluate(source.orEmpty())
-            }
-            return when (result) {
-                is ProviderScriptExecution.Success -> "ok:${result.value.orEmpty()}"
-                is ProviderScriptExecution.Failure -> "error:${result.reason.name}"
-            }
         }
+
+        override fun evaluateWithHost(
+            source: String?,
+            wallClockTimeoutMs: Long,
+            jsExecutionTimeoutMs: Long,
+            hostBridge: IProviderHostBridge?,
+        ): String = "error:HOST_UNAVAILABLE"
 
         override fun processUid(): Int = Process.myUid()
 
@@ -41,6 +39,27 @@ class ProviderRuntimeService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
+
+    private fun evaluateInternal(
+        source: String?,
+        wallClockTimeoutMs: Long,
+        jsExecutionTimeoutMs: Long,
+    ): String {
+        val limits = ProviderRuntimeLimits(
+            wallClockTimeoutMs = wallClockTimeoutMs.coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS),
+            jsExecutionTimeoutMs = jsExecutionTimeoutMs.coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS),
+        )
+        val result = runBlocking {
+            ProviderQuickJsRuntime(
+                dispatcher = Dispatchers.Default,
+                limits = limits,
+            ).evaluate(source.orEmpty())
+        }
+        return when (result) {
+            is ProviderScriptExecution.Success -> "ok:${result.value.orEmpty()}"
+            is ProviderScriptExecution.Failure -> "error:${result.reason.name}"
+        }
+    }
 
     private companion object {
         const val MIN_TIMEOUT_MS = 25L
