@@ -118,17 +118,19 @@ data class ProviderPageRequest(
             uri != null &&
                 (uri.scheme == "http" || uri.scheme == "https") &&
                 !uri.host.isNullOrBlank() &&
-                uri.userInfo == null
+                uri.userInfo == null,
         ) {
             "Provider page URL must be an absolute HTTP(S) URL without credentials"
         }
         require(headers.size <= MAX_HEADERS) { "Provider page request has too many headers" }
-        require(headers.all { (name, value) ->
-            HEADER_NAME.matches(name) &&
-                value.length <= MAX_HEADER_VALUE_CHARS &&
-                !value.contains('\r') &&
-                !value.contains('\n')
-        }) {
+        require(
+            headers.all { (name, value) ->
+                HEADER_NAME.matches(name) &&
+                    value.length <= MAX_HEADER_VALUE_CHARS &&
+                    !value.contains('\r') &&
+                    !value.contains('\n')
+            },
+        ) {
             "Provider page request header is invalid"
         }
     }
