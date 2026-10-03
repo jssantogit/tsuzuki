@@ -11,6 +11,7 @@ import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
+import okhttp3.Headers.Companion.headersOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -30,7 +31,7 @@ class ProviderRealHostBrokerTest {
                 return when (request.url.encodedPath) {
                     "/data" -> MockResponse(body = "http-real")
                     "/browser" -> MockResponse(
-                        headers = okhttp3.Headers.headersOf("Content-Type", "text/html; charset=utf-8"),
+                        headers = headersOf("Content-Type", "text/html; charset=utf-8"),
                         body = BROWSER_HTML,
                     )
                     else -> MockResponse(code = 404)
