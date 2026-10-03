@@ -1,6 +1,5 @@
 package tachiyomi.core.provider.runtime
 
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.Dispatcher
@@ -126,9 +125,10 @@ class ProviderHttpHostServiceTest {
                 cookieJar = ProviderHttpSessionStore().cookieJar(owner.providerId),
             )
 
-            shouldThrow<ProviderNetworkPolicyException> {
-                http.getText(allowed.url("/redirect").toString())
-            }
+            (
+                runCatching { http.getText(allowed.url("/redirect").toString()) }.exceptionOrNull()
+                    is ProviderNetworkPolicyException
+            ) shouldBe true
             blocked.requestCount shouldBe 0
         } finally {
             allowed.close()
