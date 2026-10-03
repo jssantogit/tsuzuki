@@ -47,25 +47,27 @@ class ProviderRuntimeProtocolTest {
 
     @Test
     fun `rejects malformed invocation identity capability and protocol`() {
+        val validJson = json.encodeToString(validRequest())
+
         shouldThrow<ProviderRuntimeProtocolException> {
             ProviderRuntimeProtocol.decodeRequest(
-                json.encodeToString(
-                    validRequest().copy(providerId = "../escape"),
+                validJson.replace(
+                    "\"providerId\":\"org.example.reader\"",
+                    "\"providerId\":\"../escape\"",
                 ),
             )
         }
         shouldThrow<ProviderRuntimeProtocolException> {
             ProviderRuntimeProtocol.decodeRequest(
-                json.encodeToString(
-                    validRequest().copy(capabilityId = "Reading Chapters"),
+                validJson.replace(
+                    "\"capabilityId\":\"reading.chapters\"",
+                    "\"capabilityId\":\"Reading Chapters\"",
                 ),
             )
         }
         shouldThrow<ProviderRuntimeProtocolException> {
             ProviderRuntimeProtocol.decodeRequest(
-                json.encodeToString(
-                    validRequest().copy(protocolVersion = 2),
-                ),
+                validJson.replace("\"protocolVersion\":1", "\"protocolVersion\":2"),
             )
         }
     }
