@@ -125,6 +125,8 @@ enum class ProviderRuntimeFailureCode {
     CANCELLED,
     INVOCATION_CONFLICT,
     RESOURCE_LIMIT,
+    PACKAGE_INVALID,
+    MALFORMED_RESULT,
     MALFORMED_REQUEST,
     SOURCE_TOO_LARGE,
     SOURCE_READ_ERROR,
@@ -166,6 +168,8 @@ object ProviderRuntimeProtocol {
     const val VERSION = 1
     const val MAX_REQUEST_JSON_CHARS = 16 * 1024
     const val MAX_SOURCE_BYTES = 2 * 1024 * 1024
+    const val MAX_PACKAGE_BYTES = 16 * 1024 * 1024
+    const val MAX_INPUT_JSON_CHARS = 64 * 1024
 
     private val json = Json {
         encodeDefaults = true
