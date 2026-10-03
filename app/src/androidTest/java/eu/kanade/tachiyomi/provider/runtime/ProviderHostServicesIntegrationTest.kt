@@ -67,6 +67,28 @@ class ProviderHostServicesIntegrationTest {
     }
 
     @Test
+    fun providerHostPolicy_rejectsInvalidOperationBudget() {
+        assertTrue(
+            runCatching {
+                ProviderHostInvocationPolicy(
+                    providerId = "org.example.reader",
+                    invocationId = "invalid-budget",
+                    maxHostOperations = 0,
+                )
+            }.isFailure,
+        )
+        assertTrue(
+            runCatching {
+                ProviderHostInvocationPolicy(
+                    providerId = "org.example.reader",
+                    invocationId = "invalid-budget",
+                    maxHostOperations = 4097,
+                )
+            }.isFailure,
+        )
+    }
+
+    @Test
     fun providerRuntime_keepsComplexReadingBytesInsideHostServices() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val key = ByteArray(16) { index -> (index + 1).toByte() }
