@@ -45,7 +45,7 @@ class ProviderRuntimeProtocolTest {
             ProviderHostModule.HTTP,
             ProviderHostModule.DOM,
         )
-        decoded.toRuntimeLimits() shouldBe ProviderRuntimeLimits(
+        decoded.limits.toRuntimeLimits() shouldBe ProviderRuntimeLimits(
             wallClockTimeoutMs = 5_000,
             jsExecutionTimeoutMs = 3_000,
             memoryLimitBytes = 32L * 1024L * 1024L,
