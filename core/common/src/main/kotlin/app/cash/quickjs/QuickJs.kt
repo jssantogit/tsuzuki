@@ -1,5 +1,7 @@
 package app.cash.quickjs
 
+import com.dokar.quickjs.QuickJs as DokarQuickJs
+import com.dokar.quickjs.QuickJsException as DokarQuickJsException
 import com.dokar.quickjs.binding.define
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
@@ -7,8 +9,6 @@ import kotlinx.coroutines.withContext
 import java.io.Closeable
 import java.lang.reflect.Method
 import java.util.concurrent.Executors
-import com.dokar.quickjs.QuickJs as DokarQuickJs
-import com.dokar.quickjs.QuickJsException as DokarQuickJsException
 
 class QuickJs private constructor() : Closeable {
 
