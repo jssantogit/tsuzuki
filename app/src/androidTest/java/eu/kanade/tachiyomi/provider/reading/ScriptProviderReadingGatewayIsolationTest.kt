@@ -2,15 +2,13 @@ package eu.kanade.tachiyomi.provider.reading
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
-import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
-import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
-import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpChapterLoader
-import eu.kanade.tachiyomi.ui.reader.CanonicalReaderTargetPlan
-import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.data.database.models.ChapterImpl
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
+import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.ui.reader.CanonicalReaderTargetPlan
+import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpChapterLoader
+import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -36,6 +34,8 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingDelivery
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
+import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
+import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.zip.ZipEntry
