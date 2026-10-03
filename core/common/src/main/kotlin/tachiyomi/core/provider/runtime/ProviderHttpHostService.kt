@@ -21,14 +21,6 @@ class ProviderHttpSessionStore {
         return sessions.computeIfAbsent(providerId) { InMemoryProviderCookieJar() }
     }
 
-    override fun close() {
-        closed.set(true)
-        activeCalls.toList().forEach { call ->
-            call.cancel()
-        }
-        activeCalls.clear()
-    }
-
     private companion object {
         val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
     }
@@ -141,6 +133,14 @@ class DefaultProviderHttpHostService(
                 response.close()
             }
         }
+    }
+
+    override fun close() {
+        closed.set(true)
+        activeCalls.toList().forEach { call ->
+            call.cancel()
+        }
+        activeCalls.clear()
     }
 
     private companion object {
