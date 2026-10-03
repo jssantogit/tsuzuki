@@ -2,6 +2,7 @@ package tachiyomi.domain.tsuzuki.provider.reading
 
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import java.net.URI
+import java.security.MessageDigest
 
 data class ProviderBindingRef(
     val providerId: ProviderId,
@@ -22,6 +23,29 @@ data class ProviderBindingRef(
         const val MAX_EXTERNAL_ID_CHARS = 1024
         const val MAX_FACET_ID_CHARS = 128
     }
+}
+
+
+/**
+ * Stable operational producer identity for chapter evidence emitted by one exact Provider binding.
+ *
+ * Provider chapter IDs are not guaranteed to be globally unique across facets/works, so evidence
+ * persistence must not scope them only by [ProviderId]. The opaque digest keeps canonical evidence
+ * independent from Provider internals while allowing callers with the binding to recover the same
+ * producer identity deterministically.
+ */
+fun ProviderBindingRef.evidenceProducerId(): String {
+    val identity = buildString {
+        append(providerId.value)
+        append('\u0000')
+        append(facetId.orEmpty())
+        append('\u0000')
+        append(externalWorkId)
+    }
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest(identity.encodeToByteArray())
+        .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xFF) }
+    return "provider-binding:$digest"
 }
 
 data class ProviderWorkCandidate(
