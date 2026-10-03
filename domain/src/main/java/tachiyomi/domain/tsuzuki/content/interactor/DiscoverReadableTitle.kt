@@ -93,11 +93,25 @@ class DiscoverReadableTitle internal constructor(
     ): Result<List<ContentBinding>> {
         require(canonicalTitleId.isNotBlank())
         return try {
-            val currentBindings = existingBindings(canonicalTitleId)
-
             val installed = installedAddons()
                 .filter { it.enabled && it.mihonSourceIds.isNotEmpty() }
             if (installed.isEmpty()) return Result.success(emptyList())
+
+            // Persisted bindings outlive extension package changes. Only bindings that still
+            // belong to an installed Add-on and one of its currently enabled Mihon Sources
+            // may suppress discovery. Otherwise a package migration such as
+            // en.mangaball -> all.mangaball can leave the replacement source permanently
+            // "already attempted" even though no executable binding exists for it.
+            val installedById = installed.associateBy(InstalledAddon::id)
+            val currentBindings = existingBindings(canonicalTitleId)
+                .filter { binding ->
+                    val sourceId = binding.providerTitleKey.substringBefore(':').toLongOrNull()
+                    val addon = installedById[binding.addonId]
+                    binding.availability != ContentBindingAvailability.UNAVAILABLE &&
+                        sourceId != null &&
+                        addon != null &&
+                        sourceId in addon.mihonSourceIds
+                }
 
             val languages = preferredLanguages(canonicalTitleId)
             val configuredSourceIds = try {
