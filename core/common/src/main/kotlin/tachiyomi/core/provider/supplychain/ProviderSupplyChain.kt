@@ -193,8 +193,11 @@ class ProviderRepositoryTrust(
             fail("Repository sequence is not newer than the last accepted index")
         }
 
-        persistState(index.sequence, trustedKeyBytes)
+        val nextKeys = trustedKeysWithRotation(index.nextSigningKey)
+        persistState(index.sequence, nextKeys)
         highestAcceptedSequence = index.sequence
+        trustedKeyBytes.clear()
+        trustedKeyBytes.putAll(nextKeys)
 
         return VerifiedProviderRepository(
             index = index,
@@ -209,24 +212,10 @@ class ProviderRepositoryTrust(
         if (repository.index.sequence != highestAcceptedSequence) {
             fail("Signing-key rotation must come from the latest accepted repository index")
         }
-
         val rotation = repository.index.nextSigningKey
             ?: fail("Verified repository index does not introduce a signing key")
-        val encodedKey = decodeBase64(
-            rotation.publicKeyBase64,
-            "Rotated signing key",
-        )
-        parseP256PublicKey(encodedKey)
 
-        val nextKeys = trustedKeyBytes
-            .mapValues { (_, bytes) -> bytes.copyOf() }
-            .toMutableMap()
-        val existing = nextKeys[rotation.keyId]
-        if (existing != null && !MessageDigest.isEqual(existing, encodedKey)) {
-            fail("Rotated signing key ID already belongs to different key material")
-        }
-        nextKeys[rotation.keyId] = encodedKey.copyOf()
-
+        val nextKeys = trustedKeysWithRotation(rotation)
         persistState(highestAcceptedSequence, nextKeys)
         trustedKeyBytes.clear()
         trustedKeyBytes.putAll(nextKeys)
@@ -303,6 +292,28 @@ class ProviderRepositoryTrust(
             }
             parseP256PublicKey(decodeBase64(rotation.publicKeyBase64, "Rotated signing key"))
         }
+    }
+
+    private fun trustedKeysWithRotation(
+        rotation: ProviderRepositorySigningKey?,
+    ): MutableMap<String, ByteArray> {
+        val nextKeys = trustedKeyBytes
+            .mapValues { (_, bytes) -> bytes.copyOf() }
+            .toMutableMap()
+        if (rotation == null) return nextKeys
+
+        val encodedKey = decodeBase64(
+            rotation.publicKeyBase64,
+            "Rotated signing key",
+        )
+        parseP256PublicKey(encodedKey)
+
+        val existing = nextKeys[rotation.keyId]
+        if (existing != null && !MessageDigest.isEqual(existing, encodedKey)) {
+            fail("Rotated signing key ID already belongs to different key material")
+        }
+        nextKeys[rotation.keyId] = encodedKey.copyOf()
+        return nextKeys
     }
 
     private fun registerTrustedKey(
