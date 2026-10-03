@@ -103,7 +103,10 @@ class ProviderScriptPackageRuntime(
             is ModuleEvaluation.Success -> {
                 val value = result.value
                     ?: return ProviderPackageExecution.Failure(ProviderPackageFailure.MALFORMED_RESULT)
-                if (!isValidJson(value)) {
+                if (
+                    value.length > ProviderRuntimeProtocol.MAX_RESULT_JSON_CHARS ||
+                    !isValidJson(value)
+                ) {
                     ProviderPackageExecution.Failure(ProviderPackageFailure.MALFORMED_RESULT)
                 } else {
                     ProviderPackageExecution.Success(value)
