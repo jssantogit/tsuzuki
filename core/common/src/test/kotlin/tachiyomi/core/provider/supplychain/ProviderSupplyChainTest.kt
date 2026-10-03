@@ -294,6 +294,65 @@ class ProviderSupplyChainTest {
         }
     }
 
+    @Test
+    fun `repository revocation cannot disable artifact from another repository`() {
+        val sourceKey = ecKeyPair()
+        val sourceTrust = ProviderRepositoryTrust(
+            repositoryId = "repo.example",
+            hostApiVersion = 3,
+            trustedKeys = mapOf("source-root" to sourceKey.public.encoded),
+            stateStore = FileProviderRepositoryTrustStore(tempDir.resolve("trust-source-repo").toFile()),
+        )
+        val store = ProviderArtifactStore(tempDir.resolve("artifacts-repository-scope").toFile())
+
+        val artifactBytes = "provider-v1".encodeToByteArray()
+        val artifactDigest = sha256Hex(artifactBytes)
+        val sourceRepository = sourceTrust.verifyAndAccept(
+            signedIndex(
+                keyId = "source-root",
+                keyPair = sourceKey,
+                index = index(
+                    sequence = 1,
+                    artifact = descriptor(1, artifactDigest),
+                ),
+            ),
+        )
+        store.activate(
+            sourceTrust.verifyArtifact(
+                repository = sourceRepository,
+                providerId = "reader.example",
+                artifactBytes = artifactBytes,
+                installedVersionCode = null,
+            ),
+        )
+
+        val otherKey = ecKeyPair()
+        val otherTrust = ProviderRepositoryTrust(
+            repositoryId = "repo.other",
+            hostApiVersion = 3,
+            trustedKeys = mapOf("other-root" to otherKey.public.encoded),
+            stateStore = FileProviderRepositoryTrustStore(tempDir.resolve("trust-other-repo").toFile()),
+        )
+        val otherIndex = ProviderRepositoryIndex(
+            schemaVersion = 1,
+            repositoryId = "repo.other",
+            sequence = 1,
+            providers = listOf(descriptor(2, sha256Hex("other-v2".encodeToByteArray()))),
+            revokedArtifactSha256 = setOf(artifactDigest),
+        )
+        val otherRepository = otherTrust.verifyAndAccept(
+            signedIndex(
+                keyId = "other-root",
+                keyPair = otherKey,
+                index = otherIndex,
+            ),
+        )
+
+        otherTrust.applyRevocations(otherRepository, store) shouldBe emptySet()
+        store.current("reader.example")?.revoked shouldBe false
+        store.readCurrentArtifact("reader.example") shouldBe artifactBytes
+    }
+
     private fun index(
         sequence: Long,
         artifact: ProviderArtifactDescriptor,
