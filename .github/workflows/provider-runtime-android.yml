@@ -7,7 +7,9 @@ on:
     paths:
       - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/**'
       - 'app/src/main/aidl/eu/kanade/tachiyomi/provider/runtime/**'
-      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/**'
+      # The compile step builds the whole androidTest source set, so fixture-only
+      # repairs must be able to retrigger this gate as well.
+      - 'app/src/androidTest/**'
       - 'core/common/src/main/kotlin/tachiyomi/core/provider/**'
       - 'core/common/src/test/kotlin/tachiyomi/core/provider/**'
       - 'gradle/libs.versions.toml'
