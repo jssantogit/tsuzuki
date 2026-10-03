@@ -8,6 +8,7 @@ import tachiyomi.core.provider.runtime.DefaultProviderCryptoHostService
 import tachiyomi.core.provider.runtime.DefaultProviderDomHostService
 import tachiyomi.core.provider.runtime.DefaultProviderHttpHostService
 import tachiyomi.core.provider.runtime.FileProviderStorageHostService
+import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderHostServices
 import tachiyomi.core.provider.runtime.ProviderHttpSessionStore
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
@@ -26,7 +27,30 @@ data class ProviderHostInvocationPolicy(
     val allowLocalNetwork: Boolean = false,
     val storageEnabled: Boolean = false,
     val allowedSecrets: Set<String> = emptySet(),
-)
+) {
+    init {
+        require(PROVIDER_ID.matches(providerId)) { "Provider ID is invalid" }
+        require(INVOCATION_ID.matches(invocationId)) { "Provider invocation ID is invalid" }
+    }
+
+    fun allowedHostModules(): Set<ProviderHostModule> = buildSet {
+        add(ProviderHostModule.DOM)
+        add(ProviderHostModule.BINARY)
+        add(ProviderHostModule.CRYPTO)
+        add(ProviderHostModule.IMAGE)
+        add(ProviderHostModule.LOG)
+
+        if (networkOrigins.isNotEmpty()) add(ProviderHostModule.HTTP)
+        if (browserOrigins.isNotEmpty()) add(ProviderHostModule.BROWSER)
+        if (storageEnabled) add(ProviderHostModule.STORAGE)
+        if (allowedSecrets.isNotEmpty()) add(ProviderHostModule.SECRETS)
+    }
+
+    private companion object {
+        val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+        val INVOCATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
+    }
+}
 
 class ProviderHostInvocationFactory(
     context: Context,
@@ -46,7 +70,7 @@ class ProviderHostInvocationFactory(
         val resources = ProviderResourceStore()
 
         val http = policy.networkOrigins
-            .takeIf(Set<String>::isNotEmpty)
+            .takeIf { it.isNotEmpty() }
             ?.let { origins ->
                 DefaultProviderHttpHostService(
                     owner = owner,
@@ -63,7 +87,7 @@ class ProviderHostInvocationFactory(
             http = http,
             dom = DefaultProviderDomHostService(owner, resources),
             browser = policy.browserOrigins
-                .takeIf(Set<String>::isNotEmpty)
+                .takeIf { it.isNotEmpty() }
                 ?.let { origins ->
                     AndroidProviderBrowserHostService(
                         context = context,
@@ -83,7 +107,7 @@ class ProviderHostInvocationFactory(
                 null
             },
             secrets = policy.allowedSecrets
-                .takeIf(Set<String>::isNotEmpty)
+                .takeIf { it.isNotEmpty() }
                 ?.let { keys ->
                     ScopedProviderSecretsHostService(
                         providerId = policy.providerId,
