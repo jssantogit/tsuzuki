@@ -19,6 +19,7 @@ import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderHostServices
 import tachiyomi.core.provider.runtime.ProviderHttpHostService
 import tachiyomi.core.provider.runtime.ProviderImageHostService
+import tachiyomi.core.provider.runtime.ProviderInvocationLimiter
 import tachiyomi.core.provider.runtime.ProviderLogHostService
 import tachiyomi.core.provider.runtime.ProviderQuickJsRuntime
 import tachiyomi.core.provider.runtime.ProviderResourceHandle
@@ -38,6 +39,7 @@ import java.util.concurrent.ConcurrentHashMap
 class ProviderRuntimeService : Service() {
 
     private val activeInvocations = ConcurrentHashMap<String, Job>()
+    private val invocationLimiter = ProviderInvocationLimiter()
 
     private val binder = object : IProviderRuntimeService.Stub() {
 
@@ -58,6 +60,14 @@ class ProviderRuntimeService : Service() {
                 runCatching { sourceFd?.close() }
                 invocationJob.cancel()
                 return failure(ProviderRuntimeFailureCode.INVOCATION_CONFLICT)
+            }
+
+            val concurrencyLease = invocationLimiter.tryAcquire(request.providerId)
+            if (concurrencyLease == null) {
+                activeInvocations.remove(request.invocationId, invocationJob)
+                runCatching { sourceFd?.close() }
+                invocationJob.cancel()
+                return failure(ProviderRuntimeFailureCode.RESOURCE_LIMIT)
             }
 
             try {
@@ -97,6 +107,7 @@ class ProviderRuntimeService : Service() {
             } finally {
                 activeInvocations.remove(request.invocationId, invocationJob)
                 invocationJob.cancel()
+                concurrencyLease.close()
             }
         }
 
