@@ -2,6 +2,7 @@ package tachiyomi.core.provider.packageformat
 
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import tachiyomi.core.provider.supplychain.ProviderArtifactDescriptor
@@ -27,7 +28,7 @@ class ProviderPackageActivatorTest {
     )
 
     @Test
-    fun `activation validates signed descriptor against manifest before switching current version`() {
+    fun `activation validates signed descriptor against manifest before switching current version`() = runBlocking {
         val store = ProviderArtifactStore(tempDir.resolve("artifacts").toFile())
         val activator = ProviderPackageActivator(
             hostApiVersion = 3,
@@ -53,7 +54,7 @@ class ProviderPackageActivatorTest {
     }
 
     @Test
-    fun `failed package validation preserves the previously active artifact`() {
+    fun `failed package validation preserves the previously active artifact`() = runBlocking {
         val store = ProviderArtifactStore(tempDir.resolve("failed-update").toFile())
         val activator = ProviderPackageActivator(
             hostApiVersion = 3,
@@ -77,7 +78,7 @@ class ProviderPackageActivatorTest {
     }
 
     @Test
-    fun `manifest host api must agree with the signed repository descriptor and local host`() {
+    fun `manifest host api must agree with the signed repository descriptor and local host`() = runBlocking {
         val store = ProviderArtifactStore(tempDir.resolve("host-api").toFile())
         val activator = ProviderPackageActivator(
             hostApiVersion = 2,
@@ -97,6 +98,33 @@ class ProviderPackageActivatorTest {
             activator.activate(verified("reader.example", "1.0.1", 1, 2, mismatch))
         }
         store.current("reader.example") shouldBe null
+    }
+
+    @Test
+    fun `missing declared capability export preserves previous active artifact`() = runBlocking {
+        val store = ProviderArtifactStore(tempDir.resolve("missing-export").toFile())
+        val activator = ProviderPackageActivator(
+            hostApiVersion = 3,
+            parser = parser,
+            artifactStore = store,
+        )
+
+        val v1Bytes = tsz(manifest(id = "reader.example", versionName = "1.0.1", versionCode = 1))
+        activator.activate(verified("reader.example", "1.0.1", 1, 1, v1Bytes))
+
+        val invalidV2 = tsz(
+            manifest(id = "reader.example", versionName = "1.0.2", versionCode = 2),
+            entrypointSource = "export default { reading: {} };",
+        )
+
+        shouldThrow<ProviderPackageException> {
+            runBlocking {
+                activator.activate(verified("reader.example", "1.0.2", 2, 1, invalidV2))
+            }
+        }
+
+        store.current("reader.example")?.versionCode shouldBe 1L
+        store.readCurrentArtifact("reader.example") shouldBe v1Bytes
     }
 
     private fun verified(
@@ -141,6 +169,7 @@ class ProviderPackageActivatorTest {
     private fun tsz(
         manifest: String,
         includeEntrypoint: Boolean = true,
+        entrypointSource: String = "export default { reading: { chapters: async () => [] } };",
     ): ByteArray {
         val output = ByteArrayOutputStream()
         ZipOutputStream(output).use { zip ->
@@ -149,7 +178,7 @@ class ProviderPackageActivatorTest {
             zip.closeEntry()
             if (includeEntrypoint) {
                 zip.putNextEntry(ZipEntry("main.js"))
-                zip.write("export default {}".encodeToByteArray())
+                zip.write(entrypointSource.encodeToByteArray())
                 zip.closeEntry()
             }
         }
