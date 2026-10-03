@@ -157,6 +157,42 @@ class ProviderHostServicesIntegrationTest {
     }
 
     @Test
+    fun providerBrowser_closedBrokerRejectsNewWork() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val server = MockWebServer()
+        server.start()
+
+        val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+        val browser = AndroidProviderBrowserHostService(
+            context = context,
+            policy = tachiyomi.core.provider.runtime.ProviderNetworkPolicy(
+                allowedOrigins = setOf(origin),
+                allowLocalNetwork = true,
+            ),
+            providerProfileName = "tsuzuki-provider-closed-test",
+        )
+
+        try {
+            browser.close()
+
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    browser.readText(
+                        server.url("/after-close").toString(),
+                        "#probe",
+                    )
+                }
+            }
+
+            assertTrue(result.isFailure)
+            assertEquals(0, server.requestCount)
+        } finally {
+            browser.close()
+            server.close()
+        }
+    }
+
+    @Test
     fun providerBrowserProfiles_areIsolatedByProviderAndPersistentAcrossInvocations() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val server = MockWebServer()
