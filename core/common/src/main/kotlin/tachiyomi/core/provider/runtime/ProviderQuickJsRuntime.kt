@@ -94,5 +94,44 @@ private fun QuickJs.installHostBridge(hostBridge: ProviderHostBridge) {
                 )
             }
         }
+        define("binary") {
+            asyncFunction("fetch") { args ->
+                hostBridge.binaryFetch(args.getOrNull(0)?.toString().orEmpty())
+            }
+            asyncFunction("zipEntry") { args ->
+                hostBridge.binaryZipEntry(
+                    resourceHandle = args.getOrNull(0)?.toString().orEmpty(),
+                    entryName = args.getOrNull(1)?.toString().orEmpty(),
+                )
+            }
+            asyncFunction("aesCbcDecrypt") { args ->
+                hostBridge.binaryAesCbcDecrypt(
+                    resourceHandle = args.getOrNull(0)?.toString().orEmpty(),
+                    keyHex = args.getOrNull(1)?.toString().orEmpty(),
+                    ivHex = args.getOrNull(2)?.toString().orEmpty(),
+                )
+            }
+            asyncFunction("imageCrop") { args ->
+                hostBridge.binaryImageCrop(
+                    resourceHandle = args.getOrNull(0)?.toString().orEmpty(),
+                    x = args.intArgument(1),
+                    y = args.intArgument(2),
+                    width = args.intArgument(3),
+                    height = args.intArgument(4),
+                )
+            }
+            asyncFunction("imagePixel") { args ->
+                hostBridge.binaryImagePixel(
+                    resourceHandle = args.getOrNull(0)?.toString().orEmpty(),
+                    x = args.intArgument(1),
+                    y = args.intArgument(2),
+                )
+            }
+        }
     }
 }
+
+private fun List<Any?>.intArgument(index: Int): Int =
+    (getOrNull(index) as? Number)?.toInt()
+        ?: getOrNull(index)?.toString()?.toIntOrNull()
+        ?: throw IllegalArgumentException("Provider host argument $index must be an integer")
