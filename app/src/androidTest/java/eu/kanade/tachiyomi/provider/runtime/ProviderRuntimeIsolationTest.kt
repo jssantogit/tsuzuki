@@ -171,14 +171,25 @@ class ProviderRuntimeIsolationTest {
                 override fun logInfo(message: String?) = Unit
             }
 
-            val response = invoke(
-                runtime = requireNotNull(remote),
+            val runtime = requireNotNull(remote)
+            val allowed = invoke(
+                runtime = runtime,
+                source = "await tsuzuki.storage.set('key', 'x'.repeat(65536)); 'ok'",
+                hostBridge = host,
+                hostModules = setOf(ProviderHostModule.STORAGE),
+            )
+            assertEquals(null, allowed.failure)
+            assertEquals(true, storageSetCalled.get())
+
+            storageSetCalled.set(false)
+            val oversized = invoke(
+                runtime = runtime,
                 source = "await tsuzuki.storage.set('key', 'x'.repeat(65537))",
                 hostBridge = host,
                 hostModules = setOf(ProviderHostModule.STORAGE),
             )
 
-            assertEquals(ProviderRuntimeFailureCode.HOST_ERROR, response.failure)
+            assertEquals(ProviderRuntimeFailureCode.HOST_ERROR, oversized.failure)
             assertEquals(false, storageSetCalled.get())
         } finally {
             if (bound) {
