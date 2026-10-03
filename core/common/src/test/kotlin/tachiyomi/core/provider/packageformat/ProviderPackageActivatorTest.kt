@@ -106,6 +106,7 @@ class ProviderPackageActivatorTest {
         minHostApi: Int,
         bytes: ByteArray,
     ) = VerifiedProviderArtifact(
+        repositoryId = "repo.example",
         descriptor = ProviderArtifactDescriptor(
             providerId = providerId,
             versionName = versionName,
