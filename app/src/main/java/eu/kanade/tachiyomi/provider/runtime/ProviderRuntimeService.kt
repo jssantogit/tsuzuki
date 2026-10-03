@@ -129,6 +129,9 @@ private fun IProviderHostBridge?.toHostServices(): ProviderHostServices {
         http = object : ProviderHttpHostService {
             override suspend fun getText(url: String): String =
                 bridge.httpGet(url).orEmpty()
+
+            override suspend fun getResource(url: String): ProviderResourceHandle =
+                ProviderResourceHandle(bridge.httpGetResource(url).orEmpty())
         },
         dom = object : ProviderDomHostService {
             override suspend fun selectText(
