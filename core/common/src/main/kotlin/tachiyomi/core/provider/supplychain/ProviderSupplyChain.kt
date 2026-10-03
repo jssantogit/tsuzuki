@@ -72,6 +72,7 @@ class VerifiedProviderRepository internal constructor(
 )
 
 class VerifiedProviderArtifact internal constructor(
+    val repositoryId: String,
     val descriptor: ProviderArtifactDescriptor,
     val bytes: ByteArray,
 ) {
@@ -251,8 +252,24 @@ class ProviderRepositoryTrust(
         }
 
         return VerifiedProviderArtifact(
+            repositoryId = repository.index.repositoryId,
             descriptor = descriptor,
             bytes = artifactBytes.copyOf(),
+        )
+    }
+
+    @Synchronized
+    fun applyRevocations(
+        repository: VerifiedProviderRepository,
+        artifactStore: ProviderArtifactStore,
+    ): Set<String> {
+        requireVerifiedRepository(repository)
+        if (repository.index.sequence != highestAcceptedSequence) {
+            fail("Artifact revocations must come from the latest accepted repository index")
+        }
+        return artifactStore.applyRevocations(
+            repositoryId = repository.index.repositoryId,
+            revokedArtifactSha256 = repository.index.revokedArtifactSha256,
         )
     }
 
@@ -428,9 +445,11 @@ class ProviderRepositoryTrust(
 }
 
 data class StoredProviderArtifact(
+    val repositoryId: String,
     val providerId: String,
     val versionCode: Long,
     val sha256: String,
+    val revoked: Boolean,
 )
 
 class ProviderArtifactStore(
@@ -449,6 +468,7 @@ class ProviderArtifactStore(
     fun activate(artifact: VerifiedProviderArtifact) {
         val providerId = artifact.providerId
         validateIdentifier(providerId, "Provider ID")
+        validateIdentifier(artifact.repositoryId, "Repository ID")
 
         val expectedDigest = normalizeSha256(artifact.descriptor.sha256)
         val actualDigest = sha256Hex(artifact.bytes)
@@ -468,7 +488,10 @@ class ProviderArtifactStore(
 
         val previousState = readState(providerId)
         if (previousState?.current?.versionCode == artifact.versionCode) {
-            if (previousState.current.sha256 != expectedDigest) {
+            if (
+                previousState.current.repositoryId != artifact.repositoryId ||
+                previousState.current.sha256 != expectedDigest
+            ) {
                 throw ProviderSupplyChainException("Active Provider version has conflicting immutable identity")
             }
             return
@@ -476,8 +499,10 @@ class ProviderArtifactStore(
 
         val nextState = ArtifactStoreState(
             current = StoredArtifactState(
+                repositoryId = artifact.repositoryId,
                 versionCode = artifact.versionCode,
                 sha256 = expectedDigest,
+                revoked = false,
             ),
             previous = previousState?.current,
         )
@@ -511,6 +536,9 @@ class ProviderArtifactStore(
 
         validateStoredArtifact(providerId, state.current)
         validateStoredArtifact(providerId, rollback)
+        if (rollback.revoked) {
+            throw ProviderSupplyChainException("Provider previous version has been revoked")
+        }
 
         atomicWrite(
             stateFile(providerId),
@@ -527,7 +555,55 @@ class ProviderArtifactStore(
     fun readCurrentArtifact(providerId: String): ByteArray {
         val active = current(providerId)
             ?: throw ProviderSupplyChainException("Provider has no active artifact")
+        if (active.revoked) {
+            throw ProviderSupplyChainException("Provider active artifact has been revoked")
+        }
         return artifactFile(providerId, active.versionCode).readBytes()
+    }
+
+    internal fun applyRevocations(
+        repositoryId: String,
+        revokedArtifactSha256: Set<String>,
+    ): Set<String> {
+        validateIdentifier(repositoryId, "Repository ID")
+        val revokedHashes = revokedArtifactSha256.map(::normalizeSha256).toSet()
+        if (revokedHashes.isEmpty()) return emptySet()
+
+        val affectedProviders = linkedSetOf<String>()
+        root.listFiles()
+            .orEmpty()
+            .asSequence()
+            .filter { it.isDirectory && PROVIDER_ID.matches(it.name) }
+            .forEach { providerDirectory ->
+                val providerId = providerDirectory.name
+                val state = readState(providerId) ?: return@forEach
+
+                fun revokeIfMatched(artifact: StoredArtifactState): StoredArtifactState {
+                    if (
+                        artifact.repositoryId == repositoryId &&
+                        artifact.sha256 in revokedHashes &&
+                        !artifact.revoked
+                    ) {
+                        affectedProviders += providerId
+                        return artifact.copy(revoked = true)
+                    }
+                    return artifact
+                }
+
+                val nextState = ArtifactStoreState(
+                    current = revokeIfMatched(state.current),
+                    previous = state.previous?.let(::revokeIfMatched),
+                )
+                if (nextState != state) {
+                    atomicWrite(
+                        stateFile(providerId),
+                        json.encodeToString(nextState).encodeToByteArray(),
+                        "Provider revocation state",
+                    )
+                }
+            }
+
+        return affectedProviders
     }
 
     private fun readState(providerId: String): ArtifactStoreState? {
@@ -544,6 +620,12 @@ class ProviderArtifactStore(
         providerId: String,
         artifact: StoredArtifactState,
     ) {
+        validateIdentifier(artifact.repositoryId, "Stored repository ID")
+        if (artifact.versionCode <= 0L) {
+            throw ProviderSupplyChainException("Stored Provider version code must be positive")
+        }
+        normalizeSha256(artifact.sha256)
+
         val file = artifactFile(providerId, artifact.versionCode)
         if (!file.isFile) {
             throw ProviderSupplyChainException("Provider activation state points to a missing artifact")
@@ -583,13 +665,17 @@ class ProviderArtifactStore(
 
     @Serializable
     private data class StoredArtifactState(
+        val repositoryId: String,
         val versionCode: Long,
         val sha256: String,
+        val revoked: Boolean = false,
     ) {
         fun toPublic(providerId: String) = StoredProviderArtifact(
+            repositoryId = repositoryId,
             providerId = providerId,
             versionCode = versionCode,
             sha256 = sha256,
+            revoked = revoked,
         )
     }
 }
