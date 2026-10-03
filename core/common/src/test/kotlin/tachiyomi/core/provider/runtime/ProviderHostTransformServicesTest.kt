@@ -2,6 +2,7 @@ package tachiyomi.core.provider.runtime
 
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayOutputStream
 import java.util.zip.ZipEntry
@@ -19,7 +20,7 @@ class ProviderHostTransformServicesTest {
     private val store = ProviderResourceStore()
 
     @Test
-    fun `dom selectors operate on host side html handles`() {
+    fun `dom selectors operate on host side html handles`() = runBlocking {
         val handle = store.put(
             owner = owner,
             kind = ProviderResourceKind.HTML,
@@ -27,14 +28,14 @@ class ProviderHostTransformServicesTest {
         )
         val dom = DefaultProviderDomHostService(owner, store)
 
-        dom.selectTextBlocking(handle, "#title") shouldBe "Tsuzuki"
+        dom.selectText(handle, "#title") shouldBe "Tsuzuki"
         shouldThrow<ProviderHostServiceException> {
-            dom.selectTextBlocking(handle, "#missing")
+            dom.selectText(handle, "#missing")
         }
     }
 
     @Test
-    fun `zip extraction keeps archive and entry bytes behind opaque handles`() {
+    fun `zip extraction keeps archive and entry bytes behind opaque handles`() = runBlocking {
         val archive = store.put(
             owner = owner,
             kind = ProviderResourceKind.ARCHIVE,
@@ -42,13 +43,13 @@ class ProviderHostTransformServicesTest {
         )
         val binary = DefaultProviderBinaryTransformHostService(owner, store)
 
-        val entry = binary.zipEntryBlocking(archive, "chapter/page.txt")
+        val entry = binary.zipEntry(archive, "chapter/page.txt")
 
         store.read(owner, entry, ProviderResourceKind.BINARY).decodeToString() shouldBe "page-data"
     }
 
     @Test
-    fun `aes cbc decrypt returns a new host resource without exposing bytes to script`() {
+    fun `aes cbc decrypt returns a new host resource without exposing bytes to script`() = runBlocking {
         val key = ByteArray(16) { it.toByte() }
         val iv = ByteArray(16) { (it + 16).toByte() }
         val encrypted = aesEncrypt(
@@ -59,7 +60,7 @@ class ProviderHostTransformServicesTest {
         val encryptedHandle = store.put(owner, ProviderResourceKind.BINARY, encrypted)
         val crypto = DefaultProviderCryptoHostService(owner, store)
 
-        val decrypted = crypto.aesCbcDecryptBlocking(
+        val decrypted = crypto.aesCbcDecrypt(
             encryptedHandle,
             key.toHex(),
             iv.toHex(),
