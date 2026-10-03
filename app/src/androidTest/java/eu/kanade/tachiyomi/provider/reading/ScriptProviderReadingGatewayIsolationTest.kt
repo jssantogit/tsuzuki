@@ -2,6 +2,13 @@ package eu.kanade.tachiyomi.provider.reading
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
+import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
+import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
+import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpChapterLoader
+import eu.kanade.tachiyomi.ui.reader.CanonicalReaderTargetPlan
+import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.data.database.models.ChapterImpl
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
 import kotlinx.coroutines.runBlocking
@@ -81,6 +88,11 @@ class ScriptProviderReadingGatewayIsolationTest {
                 )
                 .build(),
         )
+        server.enqueue(
+            MockResponse.Builder()
+                .body("reader-image-bytes")
+                .build(),
+        )
 
         val gateway = gateway(
             networkOrigins = setOf(origin),
@@ -124,8 +136,47 @@ class ScriptProviderReadingGatewayIsolationTest {
             val pageList = pages.value as ProviderReadingDelivery.PageList
             assertEquals("$origin/pages/001.jpg", pageList.pages.single().url)
 
+            val prepared = PreparedChapterContent.HttpPages(
+                pageList.pages.map { page ->
+                    PreparedHttpPage(
+                        url = page.url,
+                        headers = page.headers,
+                        allowedOrigins = page.allowedOrigins,
+                        allowLocalNetwork = page.allowLocalNetwork,
+                    )
+                },
+            )
+            val plan = CanonicalReaderTargetPlan.HttpPages(
+                canonicalChapterId = "canonical-chapter-1",
+                pages = prepared.pages,
+            )
+            val readerLoader = ProviderHttpChapterLoader.from(
+                InstrumentationRegistry.getInstrumentation().targetContext,
+                plan,
+            )
+            val readerChapter = ReaderChapter(
+                ChapterImpl().apply {
+                    id = Long.MIN_VALUE
+                    url = "provider-pages:canonical-chapter-1"
+                    name = "Chapter 1"
+                },
+            )
+            try {
+                readerLoader.loadChapter(readerChapter)
+                val readerPage = readerChapter.pages!!.single()
+                readerChapter.pageLoader!!.loadPage(readerPage)
+                assertEquals(Page.State.Ready, readerPage.status)
+                assertEquals(
+                    "reader-image-bytes",
+                    readerPage.stream!!.invoke().use { it.readBytes().decodeToString() },
+                )
+            } finally {
+                readerChapter.pageLoader?.recycle()
+            }
+
             assertEquals("/lookup", server.takeRequest().url.encodedPath)
             assertEquals("/chapters", server.takeRequest().url.encodedPath)
+            assertEquals("/pages/001.jpg", server.takeRequest().url.encodedPath)
         } finally {
             server.close()
         }
