@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader
 
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
+import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 
 enum class CanonicalLocalReaderFormat {
     ARCHIVE,
@@ -23,6 +24,11 @@ sealed interface CanonicalReaderTargetPlan {
         val uri: String,
         val format: CanonicalLocalReaderFormat,
     ) : CanonicalReaderTargetPlan
+
+    data class HttpPages(
+        override val canonicalChapterId: String,
+        val pages: List<PreparedHttpPage>,
+    ) : CanonicalReaderTargetPlan
 }
 
 fun planCanonicalReaderTarget(
@@ -30,6 +36,10 @@ fun planCanonicalReaderTarget(
     target: PreparedChapterContent,
 ): CanonicalReaderTargetPlan {
     return when (target) {
+        is PreparedChapterContent.HttpPages -> CanonicalReaderTargetPlan.HttpPages(
+            canonicalChapterId = canonicalChapterId,
+            pages = target.pages,
+        )
         is PreparedChapterContent.MihonOperational -> CanonicalReaderTargetPlan.Mihon(
             canonicalChapterId = canonicalChapterId,
             mangaId = target.mangaId,
