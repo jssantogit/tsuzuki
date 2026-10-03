@@ -29,6 +29,8 @@ class ProviderHttpPageLoaderTest {
         val request = PreparedHttpPage(
             url = server.url("/001.jpg").toString(),
             headers = mapOf("Referer" to "https://reader.example/"),
+            allowedOrigins = setOf(server.origin()),
+            allowLocalNetwork = true,
         )
         val loader = ProviderHttpPageLoader(
             requests = listOf(request),
@@ -65,7 +67,13 @@ class ProviderHttpPageLoaderTest {
                 .build(),
         )
         val loader = ProviderHttpPageLoader(
-            requests = listOf(PreparedHttpPage(server.url("/redirect").toString())),
+            requests = listOf(
+                PreparedHttpPage(
+                    url = server.url("/redirect").toString(),
+                    allowedOrigins = setOf(server.origin()),
+                    allowLocalNetwork = true,
+                ),
+            ),
             cacheRoot = tempDir.toFile(),
             client = OkHttpClient.Builder()
                 .followRedirects(false)
@@ -87,6 +95,33 @@ class ProviderHttpPageLoaderTest {
     }
 
     @Test
+    fun `private-network address is rejected at Reader fetch time when local access is not allowed`() = runTest {
+        val server = MockWebServer()
+        server.start()
+        val loader = ProviderHttpPageLoader(
+            requests = listOf(
+                PreparedHttpPage(
+                    url = server.url("/private.jpg").toString(),
+                    allowedOrigins = setOf(server.origin()),
+                    allowLocalNetwork = false,
+                ),
+            ),
+            cacheRoot = tempDir.toFile(),
+        )
+
+        try {
+            val page = loader.getPages().single()
+            shouldThrow<ProviderHttpPageException> {
+                loader.loadPage(page)
+            }
+            server.requestCount shouldBe 0
+        } finally {
+            loader.recycle()
+            server.close()
+        }
+    }
+
+    @Test
     fun `oversized Provider page is rejected and temporary bytes are removed`() = runTest {
         val server = MockWebServer()
         server.start()
@@ -96,7 +131,13 @@ class ProviderHttpPageLoaderTest {
                 .build(),
         )
         val loader = ProviderHttpPageLoader(
-            requests = listOf(PreparedHttpPage(server.url("/large").toString())),
+            requests = listOf(
+                PreparedHttpPage(
+                    url = server.url("/large").toString(),
+                    allowedOrigins = setOf(server.origin()),
+                    allowLocalNetwork = true,
+                ),
+            ),
             cacheRoot = tempDir.toFile(),
             maxImageBytes = 4,
         )
@@ -115,4 +156,7 @@ class ProviderHttpPageLoaderTest {
             server.close()
         }
     }
+
+    private fun MockWebServer.origin(): String =
+        url("/").let { "${it.scheme}://${it.host}:${it.port}" }
 }
