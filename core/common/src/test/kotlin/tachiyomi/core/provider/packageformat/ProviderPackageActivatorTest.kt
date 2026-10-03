@@ -127,9 +127,7 @@ class ProviderPackageActivatorTest {
         )
 
         shouldThrow<ProviderPackageException> {
-            runBlocking {
-                activator.activate(verified("reader.example", "1.0.2", 2, 1, invalidV2))
-            }
+            activator.activate(verified("reader.example", "1.0.2", 2, 1, invalidV2))
         }
 
         store.current("reader.example")?.versionCode shouldBe 1L
