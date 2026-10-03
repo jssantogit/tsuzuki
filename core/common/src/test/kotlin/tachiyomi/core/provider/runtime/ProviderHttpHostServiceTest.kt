@@ -105,6 +105,34 @@ class ProviderHttpHostServiceTest {
     }
 
     @Test
+    fun `closed http broker rejects new work`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse(body = "must-not-run"))
+        server.start()
+
+        try {
+            val owner = ProviderResourceOwner("org.example.reader", "invocation-closed")
+            val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+            val http = DefaultProviderHttpHostService(
+                owner = owner,
+                resources = ProviderResourceStore(),
+                policy = ProviderNetworkPolicy(
+                    allowedOrigins = setOf(origin),
+                    allowLocalNetwork = true,
+                ),
+                cookieJar = ProviderHttpSessionStore().cookieJar(owner.providerId),
+            )
+
+            http.close()
+
+            runCatching { http.getText(server.url("/after-close").toString()) }.isFailure shouldBe true
+            server.requestCount shouldBe 0
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
     fun `http resource responses remain host side for DOM processing`() = runBlocking {
         val server = MockWebServer()
         server.enqueue(
