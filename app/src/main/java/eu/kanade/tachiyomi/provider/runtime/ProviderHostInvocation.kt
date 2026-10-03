@@ -151,7 +151,7 @@ class ProviderHostInvocationFactory(
         return ProviderHostInvocation(
             owner = owner,
             resources = resources,
-            closeables = listOfNotNull(http, browser),
+            closeables = listOfNotNull<AutoCloseable>(http, browser),
             bridge = ProviderHostBridgeAdapter(services),
         )
     }
