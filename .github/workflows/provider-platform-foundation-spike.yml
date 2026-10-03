@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - tsuzuki/provider-platform-foundation-spike
+      - tsuzuki/provider-platform-host-brokers-spike
   pull_request:
     branches:
       - main
