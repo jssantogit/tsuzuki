@@ -123,6 +123,61 @@ class ProviderRealHostBrokerTest {
         }
     }
 
+
+    @Test
+    fun browserBroker_blocksSubresourcesOutsideAllowedOrigins() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val allowedServer = MockWebServer()
+        val blockedServer = MockWebServer()
+        allowedServer.start()
+        blockedServer.start()
+
+        blockedServer.enqueue(
+            MockResponse(
+                headers = headersOf("Content-Type", "application/javascript; charset=utf-8"),
+                body = "document.getElementById('probe').textContent = 'leaked';",
+            ),
+        )
+        allowedServer.enqueue(
+            MockResponse(
+                headers = headersOf("Content-Type", "text/html; charset=utf-8"),
+                body = """
+                    <!doctype html>
+                    <html>
+                    <body>
+                      <div id="probe">safe</div>
+                      <script src="${blockedServer.url("/leak.js")}"></script>
+                    </body>
+                    </html>
+                """.trimIndent(),
+            ),
+        )
+
+        val origin = allowedServer.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+        val broker = ProviderHostBroker(
+            context = context,
+            policy = ProviderHostPolicy(
+                allowedOrigins = setOf(origin),
+                allowLocalNetwork = true,
+            ),
+            providerProfileName = "tsuzuki-spike-policy",
+        )
+
+        try {
+            assertEquals(
+                "safe",
+                broker.browserReadText(
+                    url = allowedServer.url("/browser").toString(),
+                    cssSelector = "#probe",
+                ),
+            )
+            assertEquals(0, blockedServer.requestCount)
+        } finally {
+            allowedServer.close()
+            blockedServer.close()
+        }
+    }
+
     private fun hostBridgeFor(broker: ProviderHostBroker) = object : IProviderHostBridge.Stub() {
         override fun httpGet(url: String?): String = broker.httpGet(url.orEmpty())
 
