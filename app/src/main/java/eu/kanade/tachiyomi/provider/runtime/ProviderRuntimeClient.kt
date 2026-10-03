@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.os.DeadObjectException
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -196,6 +197,14 @@ class ProviderRuntimeClient(
                     if (continuation.isActive) {
                         continuation.resume(
                             ProviderRuntimeProtocol.decodeResponse(raw),
+                        )
+                    }
+                } catch (_: DeadObjectException) {
+                    if (continuation.isActive) {
+                        continuation.resume(
+                            ProviderRuntimeInvocationResponse.failure(
+                                tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode.RUNTIME_DIED,
+                            ),
                         )
                     }
                 } catch (error: Throwable) {
