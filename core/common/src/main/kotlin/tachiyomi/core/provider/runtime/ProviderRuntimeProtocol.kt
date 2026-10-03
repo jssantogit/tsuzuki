@@ -46,6 +46,19 @@ data class ProviderRuntimeLimitsDto(
 }
 
 @Serializable
+enum class ProviderHostModule {
+    HTTP,
+    DOM,
+    BROWSER,
+    STORAGE,
+    SECRETS,
+    BINARY,
+    CRYPTO,
+    IMAGE,
+    LOG,
+}
+
+@Serializable
 data class ProviderRuntimeInvocationRequest(
     val protocolVersion: Int,
     val invocationId: String,
@@ -55,6 +68,7 @@ data class ProviderRuntimeInvocationRequest(
     val capabilityVersion: Int,
     val configurationFingerprint: String,
     val fileName: String,
+    val hostModules: Set<ProviderHostModule> = emptySet(),
     val limits: ProviderRuntimeLimitsDto,
 ) {
     init {
