@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.provider.runtime
 
 import android.annotation.SuppressLint
-import android.graphics.RenderNode
 import android.net.http.SslError
 import android.os.Handler
 import android.os.Looper
@@ -295,9 +294,11 @@ class ProviderHostBroker(
         val normalized = host.lowercase()
         if (normalized == "localhost" || normalized.endsWith(".localhost")) return true
 
+        val looksLikeIpLiteral = host.any { it == ':' } || host.all { it.isDigit() || it == '.' }
+        if (!looksLikeIpLiteral) return false
+
         val literal = runCatching { InetAddress.getByName(host) }.getOrNull() ?: return false
-        return host.any { it == ':' } || host.all { it.isDigit() || it == '.' }
-            && literal.isLocalNetworkAddress()
+        return literal.isLocalNetworkAddress()
     }
 
     private fun resolvesToLocalNetwork(host: String): Boolean =
