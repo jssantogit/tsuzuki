@@ -95,6 +95,29 @@ data class ProviderRuntimeInvocationRequest(
 }
 
 @Serializable
+data class ProviderPackageValidationRequest(
+    val protocolVersion: Int,
+    val invocationId: String,
+    val providerId: String,
+    val artifactVersionCode: Long,
+    val limits: ProviderRuntimeLimitsDto,
+) {
+    init {
+        require(protocolVersion == ProviderRuntimeProtocol.VERSION) {
+            "Unsupported Provider runtime protocol version"
+        }
+        require(INVOCATION_ID.matches(invocationId)) { "Provider invocation ID is invalid" }
+        require(PROVIDER_ID.matches(providerId)) { "Provider ID is invalid" }
+        require(artifactVersionCode > 0L) { "Provider artifact version code must be positive" }
+    }
+
+    private companion object {
+        val INVOCATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
+        val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+    }
+}
+
+@Serializable
 enum class ProviderRuntimeFailureCode {
     TIMEOUT,
     SCRIPT_ERROR,
@@ -152,6 +175,20 @@ object ProviderRuntimeProtocol {
 
     fun encodeRequest(request: ProviderRuntimeInvocationRequest): String =
         json.encodeToString(request)
+
+    fun encodeValidationRequest(request: ProviderPackageValidationRequest): String =
+        json.encodeToString(request)
+
+    fun decodeValidationRequest(value: String): ProviderPackageValidationRequest {
+        if (value.length > MAX_REQUEST_JSON_CHARS) {
+            throw ProviderRuntimeProtocolException("Provider validation request exceeds size limit")
+        }
+        return try {
+            json.decodeFromString(value)
+        } catch (error: Exception) {
+            throw ProviderRuntimeProtocolException("Provider validation request is malformed", error)
+        }
+    }
 
     fun decodeRequest(value: String): ProviderRuntimeInvocationRequest {
         if (value.length > MAX_REQUEST_JSON_CHARS) {
