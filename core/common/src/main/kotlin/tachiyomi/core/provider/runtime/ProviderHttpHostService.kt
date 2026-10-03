@@ -20,6 +20,13 @@ class ProviderHttpSessionStore {
         return sessions.computeIfAbsent(providerId) { InMemoryProviderCookieJar() }
     }
 
+    override fun close() {
+        activeCalls.toList().forEach { call ->
+            call.cancel()
+        }
+        activeCalls.clear()
+    }
+
     private companion object {
         val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
     }
@@ -34,7 +41,9 @@ class DefaultProviderHttpHostService(
     private val maxRedirects: Int = 5,
     private val maxTextChars: Int = 64 * 1024,
     private val maxResponseBytes: Int = 16 * 1024 * 1024,
-) : ProviderHttpHostService {
+) : ProviderHttpHostService, AutoCloseable {
+
+    private val activeCalls = ConcurrentHashMap.newKeySet<okhttp3.Call>()
 
     private val client = baseClient.newBuilder()
         .followRedirects(false)
@@ -80,16 +89,20 @@ class DefaultProviderHttpHostService(
         var redirects = 0
 
         while (true) {
+            val call = client.newCall(
+                Request.Builder()
+                    .url(currentUrl)
+                    .get()
+                    .build(),
+            )
+            activeCalls += call
             val response = try {
-                client.newCall(
-                    Request.Builder()
-                        .url(currentUrl)
-                        .get()
-                        .build(),
-                ).execute()
+                call.execute()
             } catch (error: ProviderNetworkPolicyException) {
+                activeCalls -= call
                 throw error
             } catch (error: Exception) {
+                activeCalls -= call
                 throw ProviderHostServiceException("Provider HTTP request failed", error)
             }
 
@@ -113,6 +126,7 @@ class DefaultProviderHttpHostService(
                 }
                 return consume(response.body)
             } finally {
+                activeCalls -= call
                 response.close()
             }
         }
