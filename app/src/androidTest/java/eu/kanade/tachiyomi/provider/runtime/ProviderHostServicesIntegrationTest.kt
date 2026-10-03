@@ -42,6 +42,31 @@ import javax.crypto.spec.SecretKeySpec
 class ProviderHostServicesIntegrationTest {
 
     @Test
+    fun providerHostBridge_enforcesPerInvocationOperationBudget() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val invocation = ProviderHostInvocationFactory(context).create(
+            ProviderHostInvocationPolicy(
+                providerId = "org.example.reader",
+                invocationId = "budget-test",
+                maxHostOperations = 2,
+            ),
+        )
+
+        try {
+            invocation.bridge.logInfo("one")
+            invocation.bridge.logInfo("two")
+
+            val failure = runCatching {
+                invocation.bridge.logInfo("three")
+            }.exceptionOrNull()
+
+            assertTrue(failure is SecurityException || failure is IllegalStateException)
+        } finally {
+            invocation.close()
+        }
+    }
+
+    @Test
     fun providerRuntime_keepsComplexReadingBytesInsideHostServices() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val key = ByteArray(16) { index -> (index + 1).toByte() }
