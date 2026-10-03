@@ -151,6 +151,9 @@ class ProviderRuntimeIsolationTest {
             return httpResult
         }
 
+        override fun httpGetResource(url: String?): String =
+            throw UnsupportedOperationException()
+
         override fun domSelectText(resourceHandle: String?, cssSelector: String?): String =
             throw UnsupportedOperationException()
 
