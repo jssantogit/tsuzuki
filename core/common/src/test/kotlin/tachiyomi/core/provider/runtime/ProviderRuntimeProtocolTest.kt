@@ -118,6 +118,16 @@ class ProviderRuntimeProtocolTest {
     }
 
     @Test
+    fun `isolated runtime death is a typed sanitized failure`() {
+        ProviderRuntimeInvocationResponse.failure(ProviderRuntimeFailureCode.RUNTIME_DIED) shouldBe
+            ProviderRuntimeInvocationResponse(
+                protocolVersion = ProviderRuntimeProtocol.VERSION,
+                value = null,
+                failure = ProviderRuntimeFailureCode.RUNTIME_DIED,
+            )
+    }
+
+    @Test
     fun `runtime responses never carry provider exception text`() {
         ProviderRuntimeInvocationResponse.failure(ProviderRuntimeFailureCode.SCRIPT_ERROR) shouldBe
             ProviderRuntimeInvocationResponse(
