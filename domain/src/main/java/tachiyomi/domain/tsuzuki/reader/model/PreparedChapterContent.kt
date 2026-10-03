@@ -5,6 +5,8 @@ import java.net.URI
 data class PreparedHttpPage(
     val url: String,
     val headers: Map<String, String> = emptyMap(),
+    val allowedOrigins: Set<String>,
+    val allowLocalNetwork: Boolean = false,
 ) {
     init {
         val uri = runCatching { URI(url) }.getOrNull()
@@ -17,6 +19,11 @@ data class PreparedHttpPage(
             "Prepared Reader page URL must be absolute HTTP(S) without credentials"
         }
         require(headers.size <= MAX_HEADERS) { "Prepared Reader page has too many headers" }
+        require(allowedOrigins.isNotEmpty()) { "Prepared Reader page requires network authority" }
+        require(allowedOrigins.size <= MAX_ORIGINS) { "Prepared Reader page has too many allowed origins" }
+        require(allowedOrigins.all { it.isNotBlank() && it.length <= MAX_ORIGIN_CHARS }) {
+            "Prepared Reader page origin authority is invalid"
+        }
         require(
             headers.all { (name, value) ->
                 HEADER_NAME.matches(name) &&
@@ -32,6 +39,8 @@ data class PreparedHttpPage(
     private companion object {
         const val MAX_HEADERS = 32
         const val MAX_HEADER_VALUE_CHARS = 8192
+        const val MAX_ORIGINS = 64
+        const val MAX_ORIGIN_CHARS = 2048
         val HEADER_NAME = Regex("[A-Za-z0-9!#$%&'*+.^_`|~-]+")
     }
 }
