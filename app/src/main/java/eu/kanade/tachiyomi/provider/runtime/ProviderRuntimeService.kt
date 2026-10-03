@@ -43,6 +43,34 @@ class ProviderRuntimeService : Service() {
                     url: String,
                     cssSelector: String,
                 ): String = hostBridge.browserReadText(url, cssSelector).orEmpty()
+
+                override suspend fun binaryFetch(url: String): String =
+                    hostBridge.binaryFetch(url).orEmpty()
+
+                override suspend fun binaryZipEntry(
+                    resourceHandle: String,
+                    entryName: String,
+                ): String = hostBridge.binaryZipEntry(resourceHandle, entryName).orEmpty()
+
+                override suspend fun binaryAesCbcDecrypt(
+                    resourceHandle: String,
+                    keyHex: String,
+                    ivHex: String,
+                ): String = hostBridge.binaryAesCbcDecrypt(resourceHandle, keyHex, ivHex).orEmpty()
+
+                override suspend fun binaryImageCrop(
+                    resourceHandle: String,
+                    x: Int,
+                    y: Int,
+                    width: Int,
+                    height: Int,
+                ): String = hostBridge.binaryImageCrop(resourceHandle, x, y, width, height).orEmpty()
+
+                override suspend fun binaryImagePixel(
+                    resourceHandle: String,
+                    x: Int,
+                    y: Int,
+                ): String = hostBridge.binaryImagePixel(resourceHandle, x, y).orEmpty()
             }
             return evaluateInternal(
                 source = source,
