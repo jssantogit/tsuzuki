@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
@@ -188,7 +187,7 @@ class ProviderRuntimeClient(
                 if (continuation.isActive) {
                     continuation.resumeWithException(error)
                 }
-                false
+                return@suspendCancellableCoroutine
             }
 
             if (!bound) {
