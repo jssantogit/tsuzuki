@@ -118,7 +118,7 @@ class ProviderHostBroker(
             if (Looper.myLooper() == Looper.getMainLooper()) {
                 destroy()
             } else {
-                mainHandler.post(destroy)
+                mainHandler.post { destroy() }
             }
             latch.countDown()
         }
