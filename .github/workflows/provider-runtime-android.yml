@@ -6,6 +6,7 @@ on:
       - 'tsuzuki/provider-platform-*'
     paths:
       - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/**'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/reading/**'
       - 'app/src/main/aidl/eu/kanade/tachiyomi/provider/runtime/**'
       # The compile step builds the whole androidTest source set, so fixture-only
       # repairs must be able to retrigger this gate as well.
