@@ -42,6 +42,53 @@ class ProviderPackageParserTest {
     }
 
     @Test
+    fun `accepts explicit local http origins when local network permission is declared`() {
+        val parsed = parser.parse(
+            tsz(
+                "manifest.json" to manifest(
+                    networkOrigin = "http://192.168.1.20:5000",
+                    localNetwork = true,
+                ),
+                "main.js" to "export default {}",
+            ),
+        )
+
+        parsed.manifest.permissions.network?.origins shouldBe setOf("http://192.168.1.20:5000")
+        parsed.manifest.permissions.network?.localNetwork shouldBe true
+    }
+
+    @Test
+    fun `safe directory entries are accepted and count toward package entry limits`() {
+        val limitedParser = ProviderPackageParser(
+            limits = ProviderPackageLimits(
+                maxEntries = 3,
+                maxEntryBytes = 64 * 1024,
+                maxTotalUncompressedBytes = 256 * 1024,
+            ),
+        )
+
+        val parsed = limitedParser.parse(
+            tsz(
+                "modules/" to "",
+                "manifest.json" to manifest(),
+                "main.js" to "export default {}",
+            ),
+        )
+        parsed.entries.keys shouldBe setOf("manifest.json", "main.js")
+
+        shouldThrow<ProviderPackageException> {
+            limitedParser.parse(
+                tsz(
+                    "modules/" to "",
+                    "assets/" to "",
+                    "manifest.json" to manifest(),
+                    "main.js" to "export default {}",
+                ),
+            )
+        }
+    }
+
+    @Test
     fun `rejects traversal absolute paths and executable payloads`() {
         listOf(
             "../escape.js" to "x",
@@ -107,6 +154,8 @@ class ProviderPackageParserTest {
 
     private fun manifest(
         capabilities: String = """[{"id":"reading.chapters","version":1}]""",
+        networkOrigin: String = "https://reader.example",
+        localNetwork: Boolean = false,
     ): String = """
         {
           "manifestVersion": 1,
@@ -118,8 +167,8 @@ class ProviderPackageParserTest {
           "capabilities": $capabilities,
           "permissions": {
             "network": {
-              "origins": ["https://reader.example"],
-              "localNetwork": false
+              "origins": ["$networkOrigin"],
+              "localNetwork": $localNetwork
             },
             "browser": {"origins": []},
             "storage": {"enabled": true},
