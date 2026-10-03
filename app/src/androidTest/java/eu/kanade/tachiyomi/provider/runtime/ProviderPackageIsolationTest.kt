@@ -18,8 +18,8 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
-import tachiyomi.core.provider.supplychain.ProviderArtifactDescriptor
 import tachiyomi.core.provider.supplychain.FileProviderRepositoryTrustStore
+import tachiyomi.core.provider.supplychain.ProviderArtifactDescriptor
 import tachiyomi.core.provider.supplychain.ProviderArtifactStore
 import tachiyomi.core.provider.supplychain.ProviderRepositoryIndex
 import tachiyomi.core.provider.supplychain.ProviderRepositoryTrust
