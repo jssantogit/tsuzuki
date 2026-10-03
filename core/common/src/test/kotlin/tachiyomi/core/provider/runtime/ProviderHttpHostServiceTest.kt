@@ -9,8 +9,8 @@ import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
 import okhttp3.Headers.Companion.headersOf
-import java.util.concurrent.TimeUnit
 import org.junit.jupiter.api.Test
+import java.util.concurrent.TimeUnit
 
 class ProviderHttpHostServiceTest {
 
@@ -196,7 +196,7 @@ class ProviderHttpHostServiceTest {
             (
                 runCatching { http.getText(allowed.url("/redirect").toString()) }
                     .exceptionOrNull() is ProviderNetworkPolicyException
-            ) shouldBe true
+                ) shouldBe true
             blocked.requestCount shouldBe 0
         } finally {
             allowed.close()
