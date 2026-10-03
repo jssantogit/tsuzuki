@@ -10,10 +10,13 @@ import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.security.AlgorithmParameters
 import java.security.KeyFactory
 import java.security.MessageDigest
 import java.security.Signature
 import java.security.interfaces.ECPublicKey
+import java.security.spec.ECGenParameterSpec
+import java.security.spec.ECParameterSpec
 import java.security.spec.X509EncodedKeySpec
 import java.util.Base64
 
@@ -257,11 +260,20 @@ class ProviderRepositoryTrust(
             throw ProviderSupplyChainException("Repository signing key cannot be decoded", error)
         }
 
-        if (key.params.curve.field.fieldSize != 256) {
-            fail("Repository signing key must use a 256-bit EC curve")
+        if (!sameCurve(key.params, p256Parameters)) {
+            fail("Repository signing key must use secp256r1 (P-256)")
         }
         return key
     }
+
+    private fun sameCurve(
+        actual: ECParameterSpec,
+        expected: ECParameterSpec,
+    ): Boolean =
+        actual.curve == expected.curve &&
+            actual.generator == expected.generator &&
+            actual.order == expected.order &&
+            actual.cofactor == expected.cofactor
 
     private fun normalizeSha256(value: String): String {
         val normalized = value.lowercase()
@@ -277,6 +289,12 @@ class ProviderRepositoryTrust(
     private companion object {
         const val SUPPORTED_SCHEMA_VERSION = 1
         const val SIGNATURE_ALGORITHM = "SHA256withECDSA"
+        val p256Parameters: ECParameterSpec by lazy {
+            AlgorithmParameters.getInstance("EC").run {
+                init(ECGenParameterSpec("secp256r1"))
+                getParameterSpec(ECParameterSpec::class.java)
+            }
+        }
         val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
         val SHA256_HEX = Regex("[0-9a-f]{64}")
     }
