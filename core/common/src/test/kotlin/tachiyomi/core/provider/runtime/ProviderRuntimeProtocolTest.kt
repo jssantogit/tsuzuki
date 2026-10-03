@@ -103,6 +103,21 @@ class ProviderRuntimeProtocolTest {
     }
 
     @Test
+    fun `round trips package validation request without capability authority`() {
+        val request = ProviderPackageValidationRequest(
+            protocolVersion = ProviderRuntimeProtocol.VERSION,
+            invocationId = "validate-1",
+            providerId = "org.example.reader",
+            artifactVersionCode = 7,
+            limits = ProviderRuntimeLimitsDto(),
+        )
+
+        ProviderRuntimeProtocol.decodeValidationRequest(
+            ProviderRuntimeProtocol.encodeValidationRequest(request),
+        ) shouldBe request
+    }
+
+    @Test
     fun `runtime responses never carry provider exception text`() {
         ProviderRuntimeInvocationResponse.failure(ProviderRuntimeFailureCode.SCRIPT_ERROR) shouldBe
             ProviderRuntimeInvocationResponse(
