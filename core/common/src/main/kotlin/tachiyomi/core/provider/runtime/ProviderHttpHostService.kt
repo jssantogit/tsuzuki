@@ -10,6 +10,7 @@ import okhttp3.Request
 import okhttp3.ResponseBody
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ProviderHttpSessionStore {
 
@@ -21,6 +22,7 @@ class ProviderHttpSessionStore {
     }
 
     override fun close() {
+        closed.set(true)
         activeCalls.toList().forEach { call ->
             call.cancel()
         }
@@ -44,6 +46,7 @@ class DefaultProviderHttpHostService(
 ) : ProviderHttpHostService, AutoCloseable {
 
     private val activeCalls = ConcurrentHashMap.newKeySet<okhttp3.Call>()
+    private val closed = AtomicBoolean(false)
 
     private val client = baseClient.newBuilder()
         .followRedirects(false)
@@ -85,6 +88,9 @@ class DefaultProviderHttpHostService(
         rawUrl: String,
         consume: (ResponseBody?) -> T,
     ): T {
+        if (closed.get()) {
+            throw ProviderHostServiceException("Provider HTTP broker is closed")
+        }
         var currentUrl = policy.validate(rawUrl, resolveAddress = false)
         var redirects = 0
 
@@ -96,6 +102,11 @@ class DefaultProviderHttpHostService(
                     .build(),
             )
             activeCalls += call
+            if (closed.get()) {
+                activeCalls -= call
+                call.cancel()
+                throw ProviderHostServiceException("Provider HTTP broker is closed")
+            }
             val response = try {
                 call.execute()
             } catch (error: ProviderNetworkPolicyException) {
