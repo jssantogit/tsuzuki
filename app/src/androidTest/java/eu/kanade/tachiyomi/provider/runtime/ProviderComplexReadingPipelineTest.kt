@@ -11,7 +11,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
-import okhttp3.Headers.Companion.headersOf
+import okio.Buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -37,10 +37,9 @@ class ProviderComplexReadingPipelineTest {
 
         val server = MockWebServer()
         server.enqueue(
-            MockResponse(
-                headers = headersOf("Content-Type", "application/zip"),
-                body = fixture,
-            ),
+            MockResponse.Builder()
+                .body(Buffer().write(fixture))
+                .build(),
         )
         server.start()
 
