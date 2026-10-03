@@ -122,6 +122,7 @@ enum class ProviderRuntimeFailureCode {
     TIMEOUT,
     SCRIPT_ERROR,
     HOST_ERROR,
+    RUNTIME_DIED,
     CANCELLED,
     INVOCATION_CONFLICT,
     RESOURCE_LIMIT,
