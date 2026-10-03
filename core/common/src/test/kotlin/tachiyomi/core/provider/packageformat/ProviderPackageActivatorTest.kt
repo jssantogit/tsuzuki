@@ -5,6 +5,8 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import tachiyomi.core.provider.runtime.ProviderPackageContract
+import tachiyomi.core.provider.runtime.ProviderScriptPackageRuntime
 import tachiyomi.core.provider.supplychain.ProviderArtifactDescriptor
 import tachiyomi.core.provider.supplychain.ProviderArtifactStore
 import tachiyomi.core.provider.supplychain.VerifiedProviderArtifact
@@ -34,6 +36,7 @@ class ProviderPackageActivatorTest {
             hostApiVersion = 3,
             parser = parser,
             artifactStore = store,
+            contractValidator = ProviderPackageContractValidator { _, _ -> true },
         )
 
         val v1Bytes = tsz(manifest(id = "reader.example", versionName = "1.0.1", versionCode = 1))
@@ -60,6 +63,7 @@ class ProviderPackageActivatorTest {
             hostApiVersion = 3,
             parser = parser,
             artifactStore = store,
+            contractValidator = ProviderPackageContractValidator { _, _ -> true },
         )
 
         val v1Bytes = tsz(manifest(id = "reader.example", versionName = "1.0.1", versionCode = 1))
@@ -84,6 +88,7 @@ class ProviderPackageActivatorTest {
             hostApiVersion = 2,
             parser = parser,
             artifactStore = store,
+            contractValidator = ProviderPackageContractValidator { _, _ -> true },
         )
 
         val mismatch = tsz(
@@ -103,10 +108,14 @@ class ProviderPackageActivatorTest {
     @Test
     fun `missing declared capability export preserves previous active artifact`() = runBlocking {
         val store = ProviderArtifactStore(tempDir.resolve("missing-export").toFile())
+        val packageRuntime = ProviderScriptPackageRuntime()
         val activator = ProviderPackageActivator(
             hostApiVersion = 3,
             parser = parser,
             artifactStore = store,
+            contractValidator = ProviderPackageContractValidator { _, providerPackage ->
+                packageRuntime.validateContract(providerPackage) == ProviderPackageContract.Valid
+            },
         )
 
         val v1Bytes = tsz(manifest(id = "reader.example", versionName = "1.0.1", versionCode = 1))
