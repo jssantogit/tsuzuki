@@ -106,7 +106,10 @@ class ResolveProviderChapterReadingTest {
             request.providerChapterId shouldBe "provider-chapter-1"
             ProviderCallResult.Success(
                 ProviderReadingDelivery.PageList(
-                    listOf(ProviderPageRequest("https://cdn.example/page.jpg")),
+                    listOf(ProviderPageRequest(
+                        url = "https://cdn.example/page.jpg",
+                        allowedOrigins = setOf("https://cdn.example"),
+                    )),
                 ),
             )
         }
@@ -119,7 +122,10 @@ class ResolveProviderChapterReadingTest {
 
         resolver.delivery(option) shouldBe ProviderCallResult.Success(
             ProviderReadingDelivery.PageList(
-                listOf(ProviderPageRequest("https://cdn.example/page.jpg")),
+                listOf(ProviderPageRequest(
+                        url = "https://cdn.example/page.jpg",
+                        allowedOrigins = setOf("https://cdn.example"),
+                    )),
             ),
         )
         pagesCalls shouldBe 1
@@ -141,9 +147,11 @@ class ResolveProviderChapterReadingTest {
                         ProviderPageRequest(
                             url = "https://cdn.example/page-1.jpg",
                             headers = mapOf("Referer" to "https://reader.example/"),
+                            allowedOrigins = setOf("https://cdn.example"),
                         ),
                         ProviderPageRequest(
                             url = "https://cdn.example/page-2.jpg",
+                            allowedOrigins = setOf("https://cdn.example"),
                         ),
                     ),
                 ),
@@ -162,9 +170,11 @@ class ResolveProviderChapterReadingTest {
                     PreparedHttpPage(
                         url = "https://cdn.example/page-1.jpg",
                         headers = mapOf("Referer" to "https://reader.example/"),
+                        allowedOrigins = setOf("https://cdn.example"),
                     ),
                     PreparedHttpPage(
                         url = "https://cdn.example/page-2.jpg",
+                        allowedOrigins = setOf("https://cdn.example"),
                     ),
                 ),
             ),
