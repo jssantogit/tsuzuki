@@ -393,6 +393,9 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.uiautomator)
     androidTestImplementation(libs.okhttp.mockwebserver)
+    // Provider Platform spike only: real loopback BitTorrent proof on the API 35 x86_64 emulator.
+    androidTestImplementation(libs.jlibtorrent.core)
+    androidTestImplementation(libs.jlibtorrent.native.x8664)
 
     // For detecting memory leaks; see https://square.github.io/leakcanary/
     // debugImplementation(libs.leakCanary.android)
