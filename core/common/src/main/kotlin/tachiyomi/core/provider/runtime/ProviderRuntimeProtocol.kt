@@ -146,11 +146,17 @@ data class ProviderRuntimeInvocationResponse(
     }
 
     companion object {
-        fun success(value: String?) = ProviderRuntimeInvocationResponse(
-            protocolVersion = ProviderRuntimeProtocol.VERSION,
-            value = value ?: "",
-            failure = null,
-        )
+        fun success(value: String?): ProviderRuntimeInvocationResponse {
+            val bounded = value ?: ""
+            if (bounded.length > ProviderRuntimeProtocol.MAX_RESULT_JSON_CHARS) {
+                return failure(ProviderRuntimeFailureCode.MALFORMED_RESULT)
+            }
+            return ProviderRuntimeInvocationResponse(
+                protocolVersion = ProviderRuntimeProtocol.VERSION,
+                value = bounded,
+                failure = null,
+            )
+        }
 
         fun failure(code: ProviderRuntimeFailureCode) = ProviderRuntimeInvocationResponse(
             protocolVersion = ProviderRuntimeProtocol.VERSION,
