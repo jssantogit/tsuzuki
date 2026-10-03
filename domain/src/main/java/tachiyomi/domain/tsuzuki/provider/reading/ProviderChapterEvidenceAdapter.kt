@@ -15,6 +15,7 @@ class ProviderChapterEvidenceAdapter(
         observations: List<ProviderChapterObservation>,
     ): List<ChapterEvidence> {
         require(canonicalTitleId.isNotBlank()) { "Canonical title ID must not be blank" }
+        val observedAt = clock()
 
         return observations.map { observation ->
             ChapterEvidence(
@@ -31,7 +32,7 @@ class ProviderChapterEvidenceAdapter(
                 rawNumber = observation.rawNumber,
                 volume = observation.volume,
                 title = observation.title,
-                observedAt = clock(),
+                observedAt = observedAt,
                 confidence = PROVIDER_OBSERVATION_CONFIDENCE,
                 authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
             )
