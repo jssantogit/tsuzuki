@@ -171,6 +171,7 @@ object ProviderRuntimeProtocol {
     const val MAX_SOURCE_BYTES = 2 * 1024 * 1024
     const val MAX_PACKAGE_BYTES = 16 * 1024 * 1024
     const val MAX_INPUT_JSON_CHARS = 64 * 1024
+    const val MAX_RESULT_JSON_CHARS = 64 * 1024
 
     private val json = Json {
         encodeDefaults = true
