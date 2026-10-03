@@ -37,6 +37,99 @@ class ReconcileChapterEvidenceTest {
     }
 
     @Test
+    fun `provider evidence creates provisional chapter under the same canonical safety rules`() = runTest {
+        val fixture = fixture()
+        val observation = ChapterEvidence(
+            id = "provider-211",
+            canonicalTitleId = "title",
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "org.example.reader",
+            externalChapterKey = "chapter-211",
+            rawLabel = "Chapter 211",
+            rawNumber = 211.0,
+            volume = null,
+            title = null,
+            observedAt = 10L,
+            confidence = 0.95,
+            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+        )
+
+        fixture.reconciler.execute("title", listOf(observation))
+
+        val chapter = fixture.chapterRepository.getByCanonicalTitleId("title").single()
+        chapter.displayNumber shouldBe "211"
+        chapter.confirmation shouldBe CanonicalChapterConfirmation.PROVISIONAL
+    }
+
+    @Test
+    fun `provider bare volume zero placeholder cannot create canonical structure`() = runTest {
+        val fixture = fixture()
+        val observation = ChapterEvidence(
+            id = "provider-volume-zero",
+            canonicalTitleId = "title",
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "org.example.reader",
+            externalChapterKey = "volume-one-zero",
+            rawLabel = "Vol. 1 Ch. 0",
+            rawNumber = 0.0,
+            volume = 1,
+            title = null,
+            observedAt = 10L,
+            confidence = 0.95,
+            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+        )
+
+        fixture.reconciler.execute("title", listOf(observation))
+
+        fixture.chapterRepository.getByCanonicalTitleId("title") shouldBe emptyList()
+        fixture.evidenceRepository.getByProducerExternalKey(
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "org.example.reader",
+            externalChapterKey = "volume-one-zero",
+        )?.mappedCanonicalChapterId shouldBe null
+    }
+
+    @Test
+    fun `stale same provider native observation is discarded without remapping chapter`() = runTest {
+        val fixture = fixture()
+        val current = ChapterEvidence(
+            id = "provider-current",
+            canonicalTitleId = "title",
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "org.example.reader",
+            externalChapterKey = "chapter-1",
+            rawLabel = "Chapter 1",
+            rawNumber = 1.0,
+            volume = null,
+            title = null,
+            observedAt = 20L,
+            confidence = 0.95,
+            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+        )
+        fixture.reconciler.execute("title", listOf(current))
+        val chapterId = fixture.chapterRepository.getByCanonicalTitleId("title").single().id
+
+        fixture.reconciler.execute(
+            "title",
+            listOf(
+                current.copy(
+                    id = "provider-stale",
+                    rawLabel = "Chapter 826",
+                    rawNumber = 826.0,
+                    observedAt = 10L,
+                ),
+            ),
+        )
+
+        fixture.chapterRepository.getByCanonicalTitleId("title").single().id shouldBe chapterId
+        fixture.evidenceRepository.getByProducerExternalKey(
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "org.example.reader",
+            externalChapterKey = "chapter-1",
+        )?.mappedCanonicalChapterId shouldBe chapterId
+    }
+
+    @Test
     fun `editorial evidence promotes matching provisional chapter without changing its id`() = runTest {
         val fixture = fixture()
 
