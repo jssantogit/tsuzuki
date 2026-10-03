@@ -28,7 +28,8 @@ class ProviderHostTransformServicesTest {
         val dom = DefaultProviderDomHostService(owner, store)
 
         dom.selectText(handle, "#title") shouldBe "Tsuzuki"
-        (runCatching { dom.selectText(handle, "#missing") }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
+        (runCatching { dom.selectText(handle, "#missing") }.exceptionOrNull() is ProviderHostServiceException) shouldBe
+            true
     }
 
     @Test
