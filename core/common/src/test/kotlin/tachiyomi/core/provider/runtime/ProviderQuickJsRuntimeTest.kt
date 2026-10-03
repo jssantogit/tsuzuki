@@ -46,6 +46,10 @@ class ProviderQuickJsRuntimeTest {
                 override suspend fun getText(url: String): String {
                     throw IllegalStateException("host-only detail")
                 }
+
+                override suspend fun getResource(url: String): ProviderResourceHandle {
+                    throw IllegalStateException("host-only detail")
+                }
             },
         )
 
@@ -63,6 +67,9 @@ class ProviderQuickJsRuntimeTest {
                     url shouldBe "https://allowed.example/data"
                     return "http-ok"
                 }
+
+                override suspend fun getResource(url: String): ProviderResourceHandle =
+                    ProviderResourceHandle("res:test")
             },
             storage = object : ProviderStorageHostService {
                 private val values = mutableMapOf<String, String>()
