@@ -63,6 +63,32 @@ class ProviderHostBridgeTest {
                     assertEquals("#probe", cssSelector)
                     return "browser-ok"
                 }
+
+                override fun binaryFetch(url: String?): String =
+                    throw UnsupportedOperationException()
+
+                override fun binaryZipEntry(resourceHandle: String?, entryName: String?): String =
+                    throw UnsupportedOperationException()
+
+                override fun binaryAesCbcDecrypt(
+                    resourceHandle: String?,
+                    keyHex: String?,
+                    ivHex: String?,
+                ): String = throw UnsupportedOperationException()
+
+                override fun binaryImageCrop(
+                    resourceHandle: String?,
+                    x: Int,
+                    y: Int,
+                    width: Int,
+                    height: Int,
+                ): String = throw UnsupportedOperationException()
+
+                override fun binaryImagePixel(
+                    resourceHandle: String?,
+                    x: Int,
+                    y: Int,
+                ): String = throw UnsupportedOperationException()
             }
 
             val runtime = requireNotNull(remote)
