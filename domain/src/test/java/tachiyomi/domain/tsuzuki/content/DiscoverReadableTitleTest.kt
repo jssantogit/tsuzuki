@@ -365,6 +365,78 @@ class DiscoverReadableTitleTest {
     }
 
     @Test
+    fun `binding from removed package does not suppress replacement package with same source id`() = runTest {
+        val removed = AddonId("eu.kanade.tachiyomi.extension.en.mangaball")
+        val replacement = installed("eu.kanade.tachiyomi.extension.all.mangaball", 42L)
+        val staleBinding = binding(removed, 42L)
+        val searched = mutableListOf<AddonId>()
+        val discover = DiscoverReadableTitle(
+            existingBindings = { listOf(staleBinding) },
+            installedAddons = { listOf(replacement) },
+            sourceEligibility = { listOf(source(42L, "en")) },
+            preferredLanguages = { listOf("en") },
+            preferredSourceIds = { listOf(42L) },
+            sourceSearch = { request ->
+                searched += request.addonId
+                flow {
+                    val sourceId = requireNotNull(request.allowedSourceIds).single()
+                    emit(
+                        ContentBindingSearchProgress.SourceCompleted(
+                            sourceId = sourceId,
+                            language = "en",
+                            outcome = ContentBindingSourceOutcome.BOUND,
+                            bindings = listOf(binding(replacement.id, sourceId)),
+                        ),
+                    )
+                    emit(ContentBindingSearchProgress.Completed(listOf(sourceId), 0))
+                }
+            },
+            planner = PlanFastReadingDiscovery(),
+        )
+
+        val bindings = discover.execute("title").getOrThrow()
+
+        searched shouldBe listOf(replacement.id)
+        bindings.map(ContentBinding::addonId) shouldBe listOf(replacement.id)
+        bindings.map(ContentBinding::providerTitleKey) shouldBe listOf("42:/title")
+    }
+
+    @Test
+    fun `binding for source no longer enabled does not suppress current source discovery`() = runTest {
+        val addon = installed("current-package", 2L)
+        val staleBinding = binding(addon.id, 1L)
+        val searched = mutableListOf<Long>()
+        val discover = DiscoverReadableTitle(
+            existingBindings = { listOf(staleBinding) },
+            installedAddons = { listOf(addon) },
+            sourceEligibility = { listOf(source(2L, "en")) },
+            preferredLanguages = { listOf("en") },
+            preferredSourceIds = { listOf(2L) },
+            sourceSearch = { request ->
+                flow {
+                    val sourceId = requireNotNull(request.allowedSourceIds).single()
+                    searched += sourceId
+                    emit(
+                        ContentBindingSearchProgress.SourceCompleted(
+                            sourceId = sourceId,
+                            language = "en",
+                            outcome = ContentBindingSourceOutcome.BOUND,
+                            bindings = listOf(binding(addon.id, sourceId)),
+                        ),
+                    )
+                    emit(ContentBindingSearchProgress.Completed(listOf(sourceId), 0))
+                }
+            },
+            planner = PlanFastReadingDiscovery(),
+        )
+
+        val bindings = discover.execute("title").getOrThrow()
+
+        searched shouldBe listOf(2L)
+        bindings.map(ContentBinding::providerTitleKey) shouldBe listOf("2:/title")
+    }
+
+    @Test
     fun `existing usable reading binding stops title discovery immediately`() = runTest {
         var searches = 0
         val addon = installed("preferred", 42L)
