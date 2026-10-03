@@ -98,21 +98,23 @@ class ProviderHostInvocationFactory(
                 )
             }
 
+        val browser = policy.browserOrigins
+            .takeIf { it.isNotEmpty() }
+            ?.let { origins ->
+                AndroidProviderBrowserHostService(
+                    context = context,
+                    policy = ProviderNetworkPolicy(
+                        allowedOrigins = origins,
+                        allowLocalNetwork = policy.allowLocalNetwork,
+                    ),
+                    providerProfileName = providerProfileName(policy.providerId),
+                )
+            }
+
         val services = ProviderHostServices(
             http = http,
             dom = DefaultProviderDomHostService(owner, resources),
-            browser = policy.browserOrigins
-                .takeIf { it.isNotEmpty() }
-                ?.let { origins ->
-                    AndroidProviderBrowserHostService(
-                        context = context,
-                        policy = ProviderNetworkPolicy(
-                            allowedOrigins = origins,
-                            allowLocalNetwork = policy.allowLocalNetwork,
-                        ),
-                        providerProfileName = providerProfileName(policy.providerId),
-                    )
-                },
+            browser = browser,
             storage = if (policy.storageEnabled) {
                 FileProviderStorageHostService(
                     root = storageRoot,
@@ -149,6 +151,7 @@ class ProviderHostInvocationFactory(
         return ProviderHostInvocation(
             owner = owner,
             resources = resources,
+            closeables = listOfNotNull(http, browser),
             bridge = ProviderHostBridgeAdapter(services),
         )
     }
@@ -164,10 +167,14 @@ class ProviderHostInvocationFactory(
 class ProviderHostInvocation internal constructor(
     private val owner: ProviderResourceOwner,
     private val resources: ProviderResourceStore,
+    private val closeables: List<AutoCloseable>,
     val bridge: IProviderHostBridge,
 ) : AutoCloseable {
 
     override fun close() {
+        closeables.forEach { closeable ->
+            runCatching { closeable.close() }
+        }
         resources.releaseInvocation(owner)
     }
 }
