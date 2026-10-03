@@ -193,6 +193,61 @@ class ProviderHostServicesIntegrationTest {
         }
     }
 
+    @Test
+    fun providerBrowser_blocks_cross_origin_subresources_before_network_fetch() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val allowed = MockWebServer()
+        val blocked = MockWebServer()
+        allowed.start()
+        blocked.start()
+        allowed.enqueue(
+            MockResponse(
+                headers = headersOf("Content-Type", "text/html; charset=utf-8"),
+                body = """
+                    <!doctype html>
+                    <html>
+                    <body>
+                      <img src="${blocked.url("/leak.png")}" />
+                      <div id="probe">safe</div>
+                    </body>
+                    </html>
+                """.trimIndent(),
+            ),
+        )
+        blocked.enqueue(MockResponse(body = "should-not-be-fetched"))
+
+        val runtime = bindRuntime(context)
+        val factory = ProviderHostInvocationFactory(context)
+        val origin = allowed.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+        val invocation = factory.create(
+            ProviderHostInvocationPolicy(
+                providerId = "org.example.reader",
+                invocationId = "browser-subresource",
+                browserOrigins = setOf(origin),
+                allowLocalNetwork = true,
+            ),
+        )
+
+        try {
+            val response = invoke(
+                runtime = runtime.remote,
+                source = "await tsuzuki.browser.readText('${allowed.url("/page")}', '#probe')",
+                invocationId = "browser-subresource",
+                hostBridge = invocation.bridge,
+                hostModules = setOf(ProviderHostModule.BROWSER),
+            )
+
+            assertEquals(null, response.failure)
+            assertEquals("safe", response.value)
+            assertEquals(0, blocked.requestCount)
+        } finally {
+            invocation.close()
+            runtime.close()
+            allowed.close()
+            blocked.close()
+        }
+    }
+
     private fun invoke(
         runtime: IProviderRuntimeService,
         source: String,
