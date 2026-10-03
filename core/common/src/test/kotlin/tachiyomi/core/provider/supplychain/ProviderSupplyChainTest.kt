@@ -219,6 +219,77 @@ class ProviderSupplyChainTest {
         store.current("reader.example")?.versionCode shouldBe 1L
     }
 
+    @Test
+    fun `later repository revocation disables active artifact and blocks rollback to it`() {
+        val rootKey = ecKeyPair()
+        val stateStore = FileProviderRepositoryTrustStore(tempDir.resolve("trust-active-revocation").toFile())
+        val trust = ProviderRepositoryTrust(
+            repositoryId = "repo.example",
+            hostApiVersion = 3,
+            trustedKeys = mapOf("root-1" to rootKey.public.encoded),
+            stateStore = stateStore,
+        )
+        val store = ProviderArtifactStore(tempDir.resolve("artifacts-active-revocation").toFile())
+
+        val v1Bytes = "provider-v1".encodeToByteArray()
+        val v1Digest = sha256Hex(v1Bytes)
+        val v1Repository = trust.verifyAndAccept(
+            signedIndex(
+                keyId = "root-1",
+                keyPair = rootKey,
+                index = index(
+                    sequence = 1,
+                    artifact = descriptor(1, v1Digest),
+                ),
+            ),
+        )
+        store.activate(
+            trust.verifyArtifact(
+                repository = v1Repository,
+                providerId = "reader.example",
+                artifactBytes = v1Bytes,
+                installedVersionCode = null,
+            ),
+        )
+
+        val v2Bytes = "provider-v2".encodeToByteArray()
+        val v2Repository = trust.verifyAndAccept(
+            signedIndex(
+                keyId = "root-1",
+                keyPair = rootKey,
+                index = index(
+                    sequence = 2,
+                    artifact = descriptor(2, sha256Hex(v2Bytes)),
+                    revokedArtifactSha256 = setOf(v1Digest),
+                ),
+            ),
+        )
+
+        trust.applyRevocations(v2Repository, store)
+
+        store.current("reader.example")?.revoked shouldBe true
+        shouldThrow<ProviderSupplyChainException> {
+            store.readCurrentArtifact("reader.example")
+        }
+
+        store.activate(
+            trust.verifyArtifact(
+                repository = v2Repository,
+                providerId = "reader.example",
+                artifactBytes = v2Bytes,
+                installedVersionCode = store.current("reader.example")?.versionCode,
+            ),
+        )
+
+        store.current("reader.example")?.versionCode shouldBe 2L
+        store.current("reader.example")?.revoked shouldBe false
+        store.previous("reader.example")?.versionCode shouldBe 1L
+        store.previous("reader.example")?.revoked shouldBe true
+        shouldThrow<ProviderSupplyChainException> {
+            store.rollback("reader.example")
+        }
+    }
+
     private fun index(
         sequence: Long,
         artifact: ProviderArtifactDescriptor,
