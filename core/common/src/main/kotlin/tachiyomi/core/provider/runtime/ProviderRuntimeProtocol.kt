@@ -146,4 +146,11 @@ object ProviderRuntimeProtocol {
 
     fun encodeResponse(response: ProviderRuntimeInvocationResponse): String =
         json.encodeToString(response)
+
+    fun decodeResponse(value: String): ProviderRuntimeInvocationResponse =
+        try {
+            json.decodeFromString(value)
+        } catch (error: Exception) {
+            throw ProviderRuntimeProtocolException("Provider runtime response is malformed", error)
+        }
 }
