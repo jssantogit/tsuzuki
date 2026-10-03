@@ -112,16 +112,20 @@ class ProviderPackageParser(
             ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
                 while (true) {
                     val entry = zip.nextEntry ?: break
-                    val path = validatePath(entry.name)
+                    entryCount += 1
+                    if (entryCount > limits.maxEntries) {
+                        fail("Provider package contains too many entries")
+                    }
+
+                    val path = validatePath(
+                        raw = entry.name,
+                        isDirectory = entry.isDirectory,
+                    )
                     if (entry.isDirectory) {
                         zip.closeEntry()
                         continue
                     }
 
-                    entryCount += 1
-                    if (entryCount > limits.maxEntries) {
-                        fail("Provider package contains too many files")
-                    }
                     if (path in entries) {
                         fail("Provider package contains a duplicate file path")
                     }
@@ -259,18 +263,22 @@ class ProviderPackageParser(
         }
     }
 
-    private fun validatePath(raw: String): String {
+    private fun validatePath(
+        raw: String,
+        isDirectory: Boolean = false,
+    ): String {
+        val candidate = if (isDirectory) raw.removeSuffix("/") else raw
         if (
-            raw.isBlank() ||
-            raw.startsWith("/") ||
-            raw.startsWith("\\") ||
-            '\\' in raw ||
-            ':' in raw
+            candidate.isBlank() ||
+            candidate.startsWith("/") ||
+            candidate.startsWith("\\") ||
+            '\\' in candidate ||
+            ':' in candidate
         ) {
             fail("Provider package path is unsafe")
         }
 
-        val segments = raw.split('/')
+        val segments = candidate.split('/')
         if (segments.any { it.isBlank() || it == "." || it == ".." }) {
             fail("Provider package path is unsafe")
         }
@@ -300,7 +308,7 @@ class ProviderPackageParser(
         val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
         val CAPABILITY_ID = Regex("[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
         val SETTING_KEY = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
-        val ORIGIN = Regex("https://(\\*\\.)?([A-Za-z0-9.-]+)(?::[0-9]{1,5})?")
+        val ORIGIN = Regex("https?://(\\*\\.)?([A-Za-z0-9.-]+)(?::[0-9]{1,5})?")
         val FORBIDDEN_SUFFIXES = setOf(".apk", ".dex", ".jar", ".so", ".wasm")
         val SETTING_TYPES = setOf("string", "boolean", "select", "secret")
     }
