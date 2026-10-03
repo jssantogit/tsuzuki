@@ -14,6 +14,7 @@ on:
       - 'core/common/src/test/kotlin/tachiyomi/core/provider/**'
       - 'gradle/libs.versions.toml'
       - '.github/workflows/provider-runtime-android.yml'
+      - '.github/scripts/provider-runtime-android-gate.sh'
   workflow_dispatch:
 
 permissions:
@@ -52,15 +53,4 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: |
-            set +e
-            ./gradlew :app:connectedDebugAndroidTest \
-              -Pandroid.testInstrumentationRunnerArguments.package=eu.kanade.tachiyomi.provider.runtime
-            status=$?
-            if [ "$status" -ne 0 ]; then
-              echo "::group::Provider runtime instrumentation failures"
-              find app/build/outputs/androidTest-results/connected/debug \
-                -type f -name '*.xml' -print -exec cat {} \; 2>/dev/null || true
-              echo "::endgroup::"
-            fi
-            exit "$status"
+          script: bash .github/scripts/provider-runtime-android-gate.sh
