@@ -128,12 +128,19 @@ class ProviderRuntimeProtocolTest {
     }
 
     @Test
-    fun `oversized runtime success becomes a bounded malformed result failure`() {
-        ProviderRuntimeInvocationResponse.success(
-            "x".repeat(ProviderRuntimeProtocol.MAX_RESULT_JSON_CHARS + 1),
-        ) shouldBe ProviderRuntimeInvocationResponse.failure(
-            ProviderRuntimeFailureCode.MALFORMED_RESULT,
-        )
+    fun `runtime success accepts the result limit and rejects one character beyond it`() {
+        val maximum = "x".repeat(ProviderRuntimeProtocol.MAX_RESULT_JSON_CHARS)
+        ProviderRuntimeInvocationResponse.success(maximum) shouldBe
+            ProviderRuntimeInvocationResponse(
+                protocolVersion = ProviderRuntimeProtocol.VERSION,
+                value = maximum,
+                failure = null,
+            )
+
+        ProviderRuntimeInvocationResponse.success("$maximum!") shouldBe
+            ProviderRuntimeInvocationResponse.failure(
+                ProviderRuntimeFailureCode.MALFORMED_RESULT,
+            )
     }
 
     @Test
