@@ -83,7 +83,7 @@ class ProviderQuickJsRuntime(
     }
 }
 
-private fun QuickJs.installHostServices(
+internal fun QuickJs.installHostServices(
     services: ProviderHostServices,
     hostFailures: ProviderHostFailureTracker,
 ) {
@@ -212,7 +212,7 @@ private fun QuickJs.installHostServices(
     }
 }
 
-private class ProviderHostFailureTracker {
+internal class ProviderHostFailureTracker {
     private val didFail = AtomicBoolean(false)
 
     val failed: Boolean
