@@ -68,6 +68,18 @@ class ProviderStateHostServicesTest {
     }
 
     @Test
+    fun `secret service bounds values before IPC`() = runBlocking {
+        val secrets = ScopedProviderSecretsHostService(
+            providerId = "org.example.reader",
+            allowedKeys = setOf("session"),
+            maxValueChars = 4,
+            resolver = { _, _ -> "12345" },
+        )
+
+        (runCatching { secrets.get("session") }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
+    }
+
+    @Test
     fun `provider logging is bounded and strips control characters`() = runBlocking {
         var logged = ""
         val service = BoundedProviderLogHostService(
