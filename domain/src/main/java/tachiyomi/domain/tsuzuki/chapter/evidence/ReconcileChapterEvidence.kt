@@ -237,14 +237,14 @@ class ReconcileChapterEvidence internal constructor(
                 // Equal starts do not establish ordering, so only exact replays are safe.
                 // Editorial Integration evidence can use caller timestamps and is not
                 // subject to this source-inventory rule.
-                val hasStableAddonSourceIdentity =
-                    observation.producerKind == ProducerKind.ADDON &&
+                val hasStableProviderSourceIdentity =
+                    observation.isStableReadingProviderObservation() &&
                         !observation.externalChapterKey.isNullOrBlank()
-                if (hasStableAddonSourceIdentity) {
+                if (hasStableProviderSourceIdentity) {
                     require(
                         observation.observedAt != previousObservation.observedAt ||
                             observation.copy(id = previousObservation.id) == previousObservation,
-                    ) { "Conflicting Add-on evidence shares the same provider fetch timestamp" }
+                    ) { "Conflicting reading-provider evidence shares the same provider fetch timestamp" }
                 }
             }
             val stableId = existing?.evidence?.id ?: observation.id
@@ -309,8 +309,7 @@ class ReconcileChapterEvidence internal constructor(
             }
             ChapterInventoryDiagnosticLabels.fromIdentity(parsed.identity)?.let(diagnosticLabels::add)
             val numericHintConflicts = hasConflictingIntegerChapterHint(parsed, observation.rawNumber)
-            val unsafeProvisionalEvidence = observation.producerKind == ProducerKind.ADDON &&
-                observation.authority == ChapterEvidenceAuthority.ADDON_PROVISIONAL &&
+            val unsafeProvisionalEvidence = observation.isProvisionalReadingEvidence() &&
                 isUnsafeProvisionalChapterEvidence(
                     parsed,
                     observation.rawLabel,
@@ -347,7 +346,7 @@ class ReconcileChapterEvidence internal constructor(
             }
 
             if (
-                observation.authority == ChapterEvidenceAuthority.ADDON_PROVISIONAL &&
+                observation.isProvisionalReadingEvidence() &&
                 !parsedIdentityIsReliable
             ) {
                 provisionalCount++
@@ -425,8 +424,7 @@ class ReconcileChapterEvidence internal constructor(
                     hasExplicitVolumePrefix = observation.volume == null &&
                         volumeParser.hasExplicitVolumePrefix(observation.rawLabel),
                     allowUnqualifiedCandidateCreation =
-                    observation.producerKind == ProducerKind.ADDON &&
-                        observation.authority == ChapterEvidenceAuthority.ADDON_PROVISIONAL,
+                    observation.isProvisionalReadingEvidence(),
                 )
             } else {
                 CanonicalChapterCandidateResolution.NoMatch
@@ -616,8 +614,7 @@ class ReconcileChapterEvidence internal constructor(
         parseCache: ChapterEvidenceParseCache,
     ): Boolean {
         val parsed = parseCache.parse(evidence)
-        val unsafeSourceEvidence = evidence.producerKind == ProducerKind.ADDON &&
-            evidence.authority == ChapterEvidenceAuthority.ADDON_PROVISIONAL &&
+        val unsafeSourceEvidence = evidence.isProvisionalReadingEvidence() &&
             isUnsafeProvisionalChapterEvidence(
                 parsed,
                 evidence.rawLabel,
@@ -643,7 +640,7 @@ class ReconcileChapterEvidence internal constructor(
         persistedEvidenceByExternalKey: Map<EvidenceExternalKey, PersistedChapterEvidence>,
     ): Boolean {
         if (
-            observation.producerKind != ProducerKind.ADDON ||
+            !observation.isStableReadingProviderObservation() ||
             observation.externalChapterKey.isNullOrBlank()
         ) {
             return false
@@ -751,7 +748,9 @@ class ReconcileChapterEvidence internal constructor(
             updatedAt = now,
             confirmation = when (observation.authority) {
                 ChapterEvidenceAuthority.EDITORIAL -> CanonicalChapterConfirmation.CONFIRMED
-                ChapterEvidenceAuthority.ADDON_PROVISIONAL -> CanonicalChapterConfirmation.PROVISIONAL
+                ChapterEvidenceAuthority.ADDON_PROVISIONAL,
+                ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+                -> CanonicalChapterConfirmation.PROVISIONAL
             },
         )
     }
@@ -764,6 +763,15 @@ class ReconcileChapterEvidence internal constructor(
         authority == ChapterEvidenceAuthority.EDITORIAL -> CanonicalChapterConfirmation.CONFIRMED
         current == CanonicalChapterConfirmation.CONFIRMED -> CanonicalChapterConfirmation.CONFIRMED
         else -> CanonicalChapterConfirmation.PROVISIONAL
+    }
+
+    private fun ChapterEvidence.isStableReadingProviderObservation(): Boolean =
+        producerKind == ProducerKind.ADDON || producerKind == ProducerKind.PROVIDER
+
+    private fun ChapterEvidence.isProvisionalReadingEvidence(): Boolean = when (producerKind) {
+        ProducerKind.ADDON -> authority == ChapterEvidenceAuthority.ADDON_PROVISIONAL
+        ProducerKind.PROVIDER -> authority == ChapterEvidenceAuthority.PROVIDER_PROVISIONAL
+        ProducerKind.INTEGRATION -> false
     }
 
     private companion object {
