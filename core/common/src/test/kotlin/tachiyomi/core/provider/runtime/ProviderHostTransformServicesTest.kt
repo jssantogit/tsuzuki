@@ -1,6 +1,5 @@
 package tachiyomi.core.provider.runtime
 
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
@@ -29,9 +28,7 @@ class ProviderHostTransformServicesTest {
         val dom = DefaultProviderDomHostService(owner, store)
 
         dom.selectText(handle, "#title") shouldBe "Tsuzuki"
-        shouldThrow<ProviderHostServiceException> {
-            dom.selectText(handle, "#missing")
-        }
+        (runCatching { dom.selectText(handle, "#missing") }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
     }
 
     @Test
