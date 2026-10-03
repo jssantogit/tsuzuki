@@ -66,6 +66,7 @@ class ProviderRuntimeClientTest {
         assertEquals(null, response.failure)
         assertEquals("42", response.value)
         storageRoot.deleteRecursively()
+        Unit
     }
 
     private fun request(
