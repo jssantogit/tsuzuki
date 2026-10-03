@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.provider.runtime
 
 import android.content.Context
 import kotlinx.coroutines.runBlocking
+import tachiyomi.core.provider.packageformat.ProviderScriptManifest
 import tachiyomi.core.provider.runtime.BoundedProviderLogHostService
 import tachiyomi.core.provider.runtime.DefaultProviderBinaryTransformHostService
 import tachiyomi.core.provider.runtime.DefaultProviderCryptoHostService
@@ -46,9 +47,23 @@ data class ProviderHostInvocationPolicy(
         if (allowedSecrets.isNotEmpty()) add(ProviderHostModule.SECRETS)
     }
 
-    private companion object {
-        val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
-        val INVOCATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
+    companion object {
+        fun fromManifest(
+            manifest: ProviderScriptManifest,
+            invocationId: String,
+        ): ProviderHostInvocationPolicy =
+            ProviderHostInvocationPolicy(
+                providerId = manifest.id,
+                invocationId = invocationId,
+                networkOrigins = manifest.permissions.network?.origins.orEmpty(),
+                browserOrigins = manifest.permissions.browser?.origins.orEmpty(),
+                allowLocalNetwork = manifest.permissions.network?.localNetwork == true,
+                storageEnabled = manifest.permissions.storage.enabled,
+                allowedSecrets = manifest.permissions.secrets,
+            )
+
+        private val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+        private val INVOCATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
     }
 }
 
