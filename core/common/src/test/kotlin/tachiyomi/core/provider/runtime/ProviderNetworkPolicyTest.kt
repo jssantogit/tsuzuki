@@ -36,8 +36,8 @@ class ProviderNetworkPolicyTest {
             addressResolver = publicResolver(),
         )
 
-        policy.validate("http://reader.example:8080/api") shouldBe
-            requireNotNull(okhttp3.HttpUrl.Companion.toHttpUrlOrNull("http://reader.example:8080/api"))
+        policy.validate("http://reader.example:8080/api").toString() shouldBe
+            "http://reader.example:8080/api"
 
         shouldThrow<ProviderNetworkPolicyException> {
             policy.validate("https://reader.example:8080/api")
