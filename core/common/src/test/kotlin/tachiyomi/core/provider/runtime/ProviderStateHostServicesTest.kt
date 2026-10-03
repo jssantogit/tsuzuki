@@ -68,15 +68,22 @@ class ProviderStateHostServicesTest {
     }
 
     @Test
-    fun `secret service bounds values before IPC`() = runBlocking {
-        val secrets = ScopedProviderSecretsHostService(
+    fun `secret service accepts the configured limit and rejects one character beyond it`() = runBlocking {
+        val allowed = ScopedProviderSecretsHostService(
+            providerId = "org.example.reader",
+            allowedKeys = setOf("session"),
+            maxValueChars = 4,
+            resolver = { _, _ -> "1234" },
+        )
+        allowed.get("session") shouldBe "1234"
+
+        val oversized = ScopedProviderSecretsHostService(
             providerId = "org.example.reader",
             allowedKeys = setOf("session"),
             maxValueChars = 4,
             resolver = { _, _ -> "12345" },
         )
-
-        (runCatching { secrets.get("session") }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
+        (runCatching { oversized.get("session") }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
     }
 
     @Test
