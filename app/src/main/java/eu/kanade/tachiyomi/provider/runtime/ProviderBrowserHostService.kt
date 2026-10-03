@@ -96,7 +96,7 @@ class AndroidProviderBrowserHostService(
                     ): Boolean {
                         if (request == null || !request.isForMainFrame) return false
                         return runCatching {
-                            policy.validate(request.url.toString())
+                            policy.validate(request.url.toString(), resolveAddress = false)
                             false
                         }.getOrElse { error ->
                             complete(Result.failure(error))
@@ -126,7 +126,7 @@ class AndroidProviderBrowserHostService(
                     ) {
                         if (finished.get() || view == null || url == null) return
                         runCatching {
-                            policy.validate(url)
+                            policy.validate(url, resolveAddress = false)
                         }.onFailure { error ->
                             complete(Result.failure(error))
                             return
