@@ -194,10 +194,9 @@ class ProviderHttpHostServiceTest {
             )
 
             (
-                runCatching { http.getText(allowed.url("/redirect").toString()) }.exceptionOrNull()
-                    is ProviderNetworkPolicyException
-            ) shouldBe
-                true
+                runCatching { http.getText(allowed.url("/redirect").toString()) }
+                    .exceptionOrNull() is ProviderNetworkPolicyException
+            ) shouldBe true
             blocked.requestCount shouldBe 0
         } finally {
             allowed.close()
