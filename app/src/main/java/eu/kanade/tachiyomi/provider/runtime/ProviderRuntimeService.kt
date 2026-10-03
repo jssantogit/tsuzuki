@@ -49,11 +49,14 @@ class ProviderRuntimeService : Service() {
             val request = try {
                 ProviderRuntimeProtocol.decodeRequest(requestJson.orEmpty())
             } catch (_: ProviderRuntimeProtocolException) {
+                runCatching { sourceFd?.close() }
                 return failure(ProviderRuntimeFailureCode.MALFORMED_REQUEST)
             }
 
             val invocationJob = SupervisorJob()
             if (activeInvocations.putIfAbsent(request.invocationId, invocationJob) != null) {
+                runCatching { sourceFd?.close() }
+                invocationJob.cancel()
                 return failure(ProviderRuntimeFailureCode.INVOCATION_CONFLICT)
             }
 
@@ -110,6 +113,14 @@ class ProviderRuntimeService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
+
+    override fun onDestroy() {
+        activeInvocations.values.forEach { job ->
+            job.cancel(CancellationException("Provider runtime service is shutting down"))
+        }
+        activeInvocations.clear()
+        super.onDestroy()
+    }
 
     private fun readSource(sourceFd: ParcelFileDescriptor?): String {
         val descriptor = sourceFd
