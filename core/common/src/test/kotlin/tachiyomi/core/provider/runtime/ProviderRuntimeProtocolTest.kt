@@ -128,6 +128,22 @@ class ProviderRuntimeProtocolTest {
     }
 
     @Test
+    fun `runtime success accepts the result limit and rejects one character beyond it`() {
+        val maximum = "x".repeat(ProviderRuntimeProtocol.MAX_RESULT_JSON_CHARS)
+        ProviderRuntimeInvocationResponse.success(maximum) shouldBe
+            ProviderRuntimeInvocationResponse(
+                protocolVersion = ProviderRuntimeProtocol.VERSION,
+                value = maximum,
+                failure = null,
+            )
+
+        ProviderRuntimeInvocationResponse.success("$maximum!") shouldBe
+            ProviderRuntimeInvocationResponse.failure(
+                ProviderRuntimeFailureCode.MALFORMED_RESULT,
+            )
+    }
+
+    @Test
     fun `runtime responses never carry provider exception text`() {
         ProviderRuntimeInvocationResponse.failure(ProviderRuntimeFailureCode.SCRIPT_ERROR) shouldBe
             ProviderRuntimeInvocationResponse(

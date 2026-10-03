@@ -10,6 +10,7 @@ import okhttp3.Request
 import okhttp3.ResponseBody
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ProviderHttpSessionStore {
 
@@ -34,7 +35,10 @@ class DefaultProviderHttpHostService(
     private val maxRedirects: Int = 5,
     private val maxTextChars: Int = 64 * 1024,
     private val maxResponseBytes: Int = 16 * 1024 * 1024,
-) : ProviderHttpHostService {
+) : ProviderHttpHostService, AutoCloseable {
+
+    private val activeCalls = ConcurrentHashMap.newKeySet<okhttp3.Call>()
+    private val closed = AtomicBoolean(false)
 
     private val client = baseClient.newBuilder()
         .followRedirects(false)
@@ -76,20 +80,32 @@ class DefaultProviderHttpHostService(
         rawUrl: String,
         consume: (ResponseBody?) -> T,
     ): T {
+        if (closed.get()) {
+            throw ProviderHostServiceException("Provider HTTP broker is closed")
+        }
         var currentUrl = policy.validate(rawUrl, resolveAddress = false)
         var redirects = 0
 
         while (true) {
+            val call = client.newCall(
+                Request.Builder()
+                    .url(currentUrl)
+                    .get()
+                    .build(),
+            )
+            activeCalls += call
+            if (closed.get()) {
+                activeCalls -= call
+                call.cancel()
+                throw ProviderHostServiceException("Provider HTTP broker is closed")
+            }
             val response = try {
-                client.newCall(
-                    Request.Builder()
-                        .url(currentUrl)
-                        .get()
-                        .build(),
-                ).execute()
+                call.execute()
             } catch (error: ProviderNetworkPolicyException) {
+                activeCalls -= call
                 throw error
             } catch (error: Exception) {
+                activeCalls -= call
                 throw ProviderHostServiceException("Provider HTTP request failed", error)
             }
 
@@ -113,9 +129,18 @@ class DefaultProviderHttpHostService(
                 }
                 return consume(response.body)
             } finally {
+                activeCalls -= call
                 response.close()
             }
         }
+    }
+
+    override fun close() {
+        closed.set(true)
+        activeCalls.toList().forEach { call ->
+            call.cancel()
+        }
+        activeCalls.clear()
     }
 
     private companion object {

@@ -18,8 +18,8 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
-import tachiyomi.core.provider.supplychain.ProviderArtifactDescriptor
 import tachiyomi.core.provider.supplychain.FileProviderRepositoryTrustStore
+import tachiyomi.core.provider.supplychain.ProviderArtifactDescriptor
 import tachiyomi.core.provider.supplychain.ProviderArtifactStore
 import tachiyomi.core.provider.supplychain.ProviderRepositoryIndex
 import tachiyomi.core.provider.supplychain.ProviderRepositoryTrust
@@ -106,6 +106,7 @@ class ProviderPackageIsolationTest {
         assertNull(response.failure)
         assertEquals("""{"title":"Tsuzuki isolated","count":3}""", response.value)
         storageRoot.deleteRecursively()
+        Unit
     }
 
     @Test
@@ -178,6 +179,7 @@ class ProviderPackageIsolationTest {
         assertEquals(1L, store.current(PROVIDER_ID)?.versionCode)
         assertEquals(v1.toList(), store.readCurrentArtifact(PROVIDER_ID).toList())
         root.deleteRecursively()
+        Unit
     }
 
     @Test

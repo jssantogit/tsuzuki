@@ -11,9 +11,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import tachiyomi.core.provider.packageformat.ParsedProviderPackage
 import tachiyomi.core.provider.packageformat.ProviderPackageException
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
-import tachiyomi.core.provider.packageformat.ParsedProviderPackage
 import tachiyomi.core.provider.runtime.ProviderBinaryHostService
 import tachiyomi.core.provider.runtime.ProviderBrowserHostService
 import tachiyomi.core.provider.runtime.ProviderCryptoHostService
@@ -355,10 +355,14 @@ private fun IProviderHostBridge?.toHostServices(
         http = if (ProviderHostModule.HTTP in allowedModules) {
             object : ProviderHttpHostService {
                 override suspend fun getText(url: String): String =
-                    bridge.httpGet(url).orEmpty()
+                    bridge.httpGet(url.boundedHostArg(MAX_HOST_URL_CHARS, "HTTP URL")).orEmpty()
 
                 override suspend fun getResource(url: String): ProviderResourceHandle =
-                    ProviderResourceHandle(bridge.httpGetResource(url).orEmpty())
+                    ProviderResourceHandle(
+                        bridge.httpGetResource(
+                            url.boundedHostArg(MAX_HOST_URL_CHARS, "HTTP URL"),
+                        ).orEmpty(),
+                    )
             }
         } else {
             null
@@ -368,7 +372,10 @@ private fun IProviderHostBridge?.toHostServices(
                 override suspend fun selectText(
                     resourceHandle: ProviderResourceHandle,
                     cssSelector: String,
-                ): String = bridge.domSelectText(resourceHandle.value, cssSelector).orEmpty()
+                ): String = bridge.domSelectText(
+                    resourceHandle.value.boundedHostArg(MAX_HOST_HANDLE_CHARS, "resource handle"),
+                    cssSelector.boundedHostArg(MAX_HOST_SELECTOR_CHARS, "DOM selector"),
+                ).orEmpty()
             }
         } else {
             null
@@ -378,21 +385,28 @@ private fun IProviderHostBridge?.toHostServices(
                 override suspend fun readText(
                     url: String,
                     cssSelector: String,
-                ): String = bridge.browserReadText(url, cssSelector).orEmpty()
+                ): String = bridge.browserReadText(
+                    url.boundedHostArg(MAX_HOST_URL_CHARS, "browser URL"),
+                    cssSelector.boundedHostArg(MAX_HOST_SELECTOR_CHARS, "browser selector"),
+                ).orEmpty()
             }
         } else {
             null
         },
         storage = if (ProviderHostModule.STORAGE in allowedModules) {
             object : ProviderStorageHostService {
-                override suspend fun get(key: String): String? = bridge.storageGet(key)
+                override suspend fun get(key: String): String? =
+                    bridge.storageGet(key.boundedHostArg(MAX_HOST_KEY_CHARS, "storage key"))
 
                 override suspend fun set(key: String, value: String) {
-                    bridge.storageSet(key, value)
+                    bridge.storageSet(
+                        key.boundedHostArg(MAX_HOST_KEY_CHARS, "storage key"),
+                        value.boundedHostArg(MAX_HOST_VALUE_CHARS, "storage value"),
+                    )
                 }
 
                 override suspend fun remove(key: String) {
-                    bridge.storageRemove(key)
+                    bridge.storageRemove(key.boundedHostArg(MAX_HOST_KEY_CHARS, "storage key"))
                 }
             }
         } else {
@@ -400,7 +414,8 @@ private fun IProviderHostBridge?.toHostServices(
         },
         secrets = if (ProviderHostModule.SECRETS in allowedModules) {
             object : ProviderSecretsHostService {
-                override suspend fun get(key: String): String? = bridge.secretGet(key)
+                override suspend fun get(key: String): String? =
+                    bridge.secretGet(key.boundedHostArg(MAX_HOST_KEY_CHARS, "secret key"))
             }
         } else {
             null
@@ -408,14 +423,21 @@ private fun IProviderHostBridge?.toHostServices(
         binary = if (ProviderHostModule.BINARY in allowedModules) {
             object : ProviderBinaryHostService {
                 override suspend fun fetch(url: String): ProviderResourceHandle =
-                    ProviderResourceHandle(bridge.binaryFetch(url).orEmpty())
+                    ProviderResourceHandle(
+                        bridge.binaryFetch(
+                            url.boundedHostArg(MAX_HOST_URL_CHARS, "binary URL"),
+                        ).orEmpty(),
+                    )
 
                 override suspend fun zipEntry(
                     resourceHandle: ProviderResourceHandle,
                     entryName: String,
                 ): ProviderResourceHandle =
                     ProviderResourceHandle(
-                        bridge.binaryZipEntry(resourceHandle.value, entryName).orEmpty(),
+                        bridge.binaryZipEntry(
+                            resourceHandle.value.boundedHostArg(MAX_HOST_HANDLE_CHARS, "resource handle"),
+                            entryName.boundedHostArg(MAX_HOST_ENTRY_NAME_CHARS, "archive entry"),
+                        ).orEmpty(),
                     )
             }
         } else {
@@ -429,7 +451,11 @@ private fun IProviderHostBridge?.toHostServices(
                     ivHex: String,
                 ): ProviderResourceHandle =
                     ProviderResourceHandle(
-                        bridge.cryptoAesCbcDecrypt(resourceHandle.value, keyHex, ivHex).orEmpty(),
+                        bridge.cryptoAesCbcDecrypt(
+                            resourceHandle.value.boundedHostArg(MAX_HOST_HANDLE_CHARS, "resource handle"),
+                            keyHex.boundedHostArg(MAX_HOST_HEX_CHARS, "crypto key"),
+                            ivHex.boundedHostArg(MAX_HOST_HEX_CHARS, "crypto IV"),
+                        ).orEmpty(),
                     )
             }
         } else {
@@ -445,14 +471,24 @@ private fun IProviderHostBridge?.toHostServices(
                     height: Int,
                 ): ProviderResourceHandle =
                     ProviderResourceHandle(
-                        bridge.imageCrop(resourceHandle.value, x, y, width, height).orEmpty(),
+                        bridge.imageCrop(
+                            resourceHandle.value.boundedHostArg(MAX_HOST_HANDLE_CHARS, "resource handle"),
+                            x,
+                            y,
+                            width,
+                            height,
+                        ).orEmpty(),
                     )
 
                 override suspend fun pixel(
                     resourceHandle: ProviderResourceHandle,
                     x: Int,
                     y: Int,
-                ): String = bridge.imagePixel(resourceHandle.value, x, y).orEmpty()
+                ): String = bridge.imagePixel(
+                    resourceHandle.value.boundedHostArg(MAX_HOST_HANDLE_CHARS, "resource handle"),
+                    x,
+                    y,
+                ).orEmpty()
             }
         } else {
             null
@@ -460,7 +496,7 @@ private fun IProviderHostBridge?.toHostServices(
         log = if (ProviderHostModule.LOG in allowedModules) {
             object : ProviderLogHostService {
                 override suspend fun info(message: String) {
-                    bridge.logInfo(message)
+                    bridge.logInfo(message.boundedHostArg(MAX_HOST_LOG_CHARS, "log message"))
                 }
             }
         } else {
@@ -468,5 +504,26 @@ private fun IProviderHostBridge?.toHostServices(
         },
     )
 }
+
+private fun String.boundedHostArg(
+    maxChars: Int,
+    label: String,
+): String {
+    if (length > maxChars) {
+        throw tachiyomi.core.provider.runtime.ProviderHostServiceException(
+            "Provider $label exceeds the IPC size limit",
+        )
+    }
+    return this
+}
+
+private const val MAX_HOST_URL_CHARS = 8 * 1024
+private const val MAX_HOST_SELECTOR_CHARS = 2 * 1024
+private const val MAX_HOST_KEY_CHARS = 128
+private const val MAX_HOST_VALUE_CHARS = 64 * 1024
+private const val MAX_HOST_LOG_CHARS = 1024
+private const val MAX_HOST_ENTRY_NAME_CHARS = 4 * 1024
+private const val MAX_HOST_HANDLE_CHARS = 256
+private const val MAX_HOST_HEX_CHARS = 128
 
 private class DescriptorTooLargeException : IOException()

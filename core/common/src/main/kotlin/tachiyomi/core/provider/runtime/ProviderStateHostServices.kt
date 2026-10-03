@@ -113,6 +113,7 @@ class FileProviderStorageHostService(
 class ScopedProviderSecretsHostService(
     private val providerId: String,
     allowedKeys: Set<String>,
+    private val maxValueChars: Int = 64 * 1024,
     private val resolver: suspend (providerId: String, key: String) -> String?,
 ) : ProviderSecretsHostService {
 
@@ -121,6 +122,7 @@ class ScopedProviderSecretsHostService(
     init {
         require(PROVIDER_ID.matches(providerId)) { "Provider ID is invalid" }
         require(this.allowedKeys.all(SECRET_KEY::matches)) { "Provider secret key is invalid" }
+        require(maxValueChars > 0) { "Provider secret value limit must be positive" }
     }
 
     override suspend fun get(key: String): String? {
@@ -128,7 +130,11 @@ class ScopedProviderSecretsHostService(
             throw ProviderHostServiceException("Provider secret access is not allowed")
         }
         return try {
-            resolver(providerId, key)
+            resolver(providerId, key)?.also { value ->
+                if (value.length > maxValueChars) {
+                    throw ProviderHostServiceException("Provider secret value exceeds the size limit")
+                }
+            }
         } catch (error: ProviderHostServiceException) {
             throw error
         } catch (error: Exception) {

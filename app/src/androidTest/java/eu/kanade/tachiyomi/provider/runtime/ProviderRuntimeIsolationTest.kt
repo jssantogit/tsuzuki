@@ -24,6 +24,7 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 @RunWith(AndroidJUnit4::class)
 class ProviderRuntimeIsolationTest {
@@ -102,6 +103,94 @@ class ProviderRuntimeIsolationTest {
                 hostBridge = host,
                 hostModules = setOf(ProviderHostModule.HTTP),
             ) shouldBeSuccess "broker-ok"
+        } finally {
+            if (bound) {
+                context.unbindService(connection)
+            }
+        }
+    }
+
+    @Test
+    fun providerRuntime_rejectsOversizedHostArgumentsBeforeBinder() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val connected = CountDownLatch(1)
+        var remote: IProviderRuntimeService? = null
+
+        val connection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                remote = IProviderRuntimeService.Stub.asInterface(service)
+                connected.countDown()
+            }
+
+            override fun onServiceDisconnected(name: ComponentName?) {
+                remote = null
+            }
+        }
+
+        val bound = context.bindService(
+            Intent(context, ProviderRuntimeService::class.java),
+            connection,
+            Context.BIND_AUTO_CREATE,
+        )
+
+        try {
+            assertTrue(bound)
+            assertTrue(connected.await(SERVICE_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+
+            val storageSetCalled = AtomicBoolean(false)
+            val host = object : IProviderHostBridge.Stub() {
+                override fun httpGet(url: String?): String = throw UnsupportedOperationException()
+                override fun httpGetResource(url: String?): String = throw UnsupportedOperationException()
+                override fun domSelectText(resourceHandle: String?, cssSelector: String?): String =
+                    throw UnsupportedOperationException()
+                override fun browserReadText(url: String?, cssSelector: String?): String =
+                    throw UnsupportedOperationException()
+                override fun storageGet(key: String?): String? = null
+                override fun storageSet(key: String?, value: String?) {
+                    storageSetCalled.set(true)
+                }
+                override fun storageRemove(key: String?) = Unit
+                override fun secretGet(key: String?): String? = null
+                override fun binaryFetch(url: String?): String = throw UnsupportedOperationException()
+                override fun binaryZipEntry(resourceHandle: String?, entryName: String?): String =
+                    throw UnsupportedOperationException()
+                override fun cryptoAesCbcDecrypt(
+                    resourceHandle: String?,
+                    keyHex: String?,
+                    ivHex: String?,
+                ): String = throw UnsupportedOperationException()
+                override fun imageCrop(
+                    resourceHandle: String?,
+                    x: Int,
+                    y: Int,
+                    width: Int,
+                    height: Int,
+                ): String = throw UnsupportedOperationException()
+                override fun imagePixel(resourceHandle: String?, x: Int, y: Int): String =
+                    throw UnsupportedOperationException()
+                override fun logInfo(message: String?) = Unit
+            }
+
+            val runtime = requireNotNull(remote)
+            val allowed = invoke(
+                runtime = runtime,
+                source = "await tsuzuki.storage.set('key', 'x'.repeat(65536)); 'ok'",
+                hostBridge = host,
+                hostModules = setOf(ProviderHostModule.STORAGE),
+            )
+            assertEquals(null, allowed.failure)
+            assertEquals(true, storageSetCalled.get())
+
+            storageSetCalled.set(false)
+            val oversized = invoke(
+                runtime = runtime,
+                source = "await tsuzuki.storage.set('key', 'x'.repeat(65537))",
+                hostBridge = host,
+                hostModules = setOf(ProviderHostModule.STORAGE),
+            )
+
+            assertEquals(ProviderRuntimeFailureCode.HOST_ERROR, oversized.failure)
+            assertEquals(false, storageSetCalled.get())
         } finally {
             if (bound) {
                 context.unbindService(connection)

@@ -10,6 +10,11 @@ import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.Headers.Companion.headersOf
@@ -35,6 +40,53 @@ import javax.crypto.spec.SecretKeySpec
 
 @RunWith(AndroidJUnit4::class)
 class ProviderHostServicesIntegrationTest {
+
+    @Test
+    fun providerHostBridge_enforcesPerInvocationOperationBudget() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val invocation = ProviderHostInvocationFactory(context).create(
+            ProviderHostInvocationPolicy(
+                providerId = "org.example.reader",
+                invocationId = "budget-test",
+                maxHostOperations = 2,
+            ),
+        )
+
+        try {
+            invocation.bridge.logInfo("one")
+            invocation.bridge.logInfo("two")
+
+            val failure = runCatching {
+                invocation.bridge.logInfo("three")
+            }.exceptionOrNull()
+
+            assertTrue(failure is SecurityException || failure is IllegalStateException)
+        } finally {
+            invocation.close()
+        }
+    }
+
+    @Test
+    fun providerHostPolicy_rejectsInvalidOperationBudget() {
+        assertTrue(
+            runCatching {
+                ProviderHostInvocationPolicy(
+                    providerId = "org.example.reader",
+                    invocationId = "invalid-budget",
+                    maxHostOperations = 0,
+                )
+            }.isFailure,
+        )
+        assertTrue(
+            runCatching {
+                ProviderHostInvocationPolicy(
+                    providerId = "org.example.reader",
+                    invocationId = "invalid-budget",
+                    maxHostOperations = 4097,
+                )
+            }.isFailure,
+        )
+    }
 
     @Test
     fun providerRuntime_keepsComplexReadingBytesInsideHostServices() {
@@ -102,6 +154,88 @@ class ProviderHostServicesIntegrationTest {
             runtime.close()
             server.close()
             storageRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun providerBrowser_closeCancelsInFlightHostWork() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse.Builder()
+                .body("<html><body><div id=\"probe\">late</div></body></html>")
+                .bodyDelay(30, TimeUnit.SECONDS)
+                .build(),
+        )
+        server.start()
+
+        val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+        val browser = AndroidProviderBrowserHostService(
+            context = context,
+            policy = tachiyomi.core.provider.runtime.ProviderNetworkPolicy(
+                allowedOrigins = setOf(origin),
+                allowLocalNetwork = true,
+            ),
+            providerProfileName = "tsuzuki-provider-cancel-test",
+        )
+
+        try {
+            val pending = async(Dispatchers.IO) {
+                runCatching {
+                    browser.readText(
+                        server.url("/slow").toString(),
+                        "#probe",
+                    )
+                }
+            }
+
+            withContext(Dispatchers.IO) {
+                server.takeRequest()
+            }
+            browser.close()
+
+            withTimeout(2_000) {
+                assertTrue(pending.await().isFailure)
+            }
+        } finally {
+            browser.close()
+            server.close()
+        }
+    }
+
+    @Test
+    fun providerBrowser_closedBrokerRejectsNewWork() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val server = MockWebServer()
+        server.start()
+
+        val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+        val browser = AndroidProviderBrowserHostService(
+            context = context,
+            policy = tachiyomi.core.provider.runtime.ProviderNetworkPolicy(
+                allowedOrigins = setOf(origin),
+                allowLocalNetwork = true,
+            ),
+            providerProfileName = "tsuzuki-provider-closed-test",
+        )
+
+        try {
+            browser.close()
+
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    browser.readText(
+                        server.url("/after-close").toString(),
+                        "#probe",
+                    )
+                }
+            }
+
+            assertTrue(result.isFailure)
+            assertEquals(0, server.requestCount)
+        } finally {
+            browser.close()
+            server.close()
         }
     }
 

@@ -86,11 +86,11 @@ data class ProviderRuntimeInvocationRequest(
         require(FILE_NAME.matches(fileName)) { "Provider entrypoint file name is invalid" }
     }
 
-    private companion object {
-        val INVOCATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
-        val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
-        val CAPABILITY_ID = Regex("[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
-        val FILE_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._/-]{0,255}")
+    companion object {
+        private val INVOCATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
+        private val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+        private val CAPABILITY_ID = Regex("[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
+        private val FILE_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._/-]{0,255}")
     }
 }
 
@@ -111,9 +111,9 @@ data class ProviderPackageValidationRequest(
         require(artifactVersionCode > 0L) { "Provider artifact version code must be positive" }
     }
 
-    private companion object {
-        val INVOCATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
-        val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+    companion object {
+        private val INVOCATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
+        private val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
     }
 }
 
@@ -146,11 +146,17 @@ data class ProviderRuntimeInvocationResponse(
     }
 
     companion object {
-        fun success(value: String?) = ProviderRuntimeInvocationResponse(
-            protocolVersion = ProviderRuntimeProtocol.VERSION,
-            value = value ?: "",
-            failure = null,
-        )
+        fun success(value: String?): ProviderRuntimeInvocationResponse {
+            val bounded = value ?: ""
+            if (bounded.length > ProviderRuntimeProtocol.MAX_RESULT_JSON_CHARS) {
+                return failure(ProviderRuntimeFailureCode.MALFORMED_RESULT)
+            }
+            return ProviderRuntimeInvocationResponse(
+                protocolVersion = ProviderRuntimeProtocol.VERSION,
+                value = bounded,
+                failure = null,
+            )
+        }
 
         fun failure(code: ProviderRuntimeFailureCode) = ProviderRuntimeInvocationResponse(
             protocolVersion = ProviderRuntimeProtocol.VERSION,
@@ -171,6 +177,7 @@ object ProviderRuntimeProtocol {
     const val MAX_SOURCE_BYTES = 2 * 1024 * 1024
     const val MAX_PACKAGE_BYTES = 16 * 1024 * 1024
     const val MAX_INPUT_JSON_CHARS = 64 * 1024
+    const val MAX_RESULT_JSON_CHARS = 64 * 1024
 
     private val json = Json {
         encodeDefaults = true

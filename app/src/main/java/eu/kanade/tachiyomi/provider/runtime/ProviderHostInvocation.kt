@@ -19,6 +19,7 @@ import tachiyomi.core.provider.runtime.ProviderResourceStore
 import tachiyomi.core.provider.runtime.ScopedProviderSecretsHostService
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicInteger
 
 data class ProviderHostInvocationPolicy(
     val providerId: String,
@@ -28,10 +29,14 @@ data class ProviderHostInvocationPolicy(
     val allowLocalNetwork: Boolean = false,
     val storageEnabled: Boolean = false,
     val allowedSecrets: Set<String> = emptySet(),
+    val maxHostOperations: Int = 256,
 ) {
     init {
         require(PROVIDER_ID.matches(providerId)) { "Provider ID is invalid" }
         require(INVOCATION_ID.matches(invocationId)) { "Provider invocation ID is invalid" }
+        require(maxHostOperations in 1..4096) {
+            "Provider Host Service operation budget is outside supported bounds"
+        }
     }
 
     fun allowedHostModules(): Set<ProviderHostModule> = buildSet {
@@ -98,21 +103,23 @@ class ProviderHostInvocationFactory(
                 )
             }
 
+        val browser = policy.browserOrigins
+            .takeIf { it.isNotEmpty() }
+            ?.let { origins ->
+                AndroidProviderBrowserHostService(
+                    context = context,
+                    policy = ProviderNetworkPolicy(
+                        allowedOrigins = origins,
+                        allowLocalNetwork = policy.allowLocalNetwork,
+                    ),
+                    providerProfileName = providerProfileName(policy.providerId),
+                )
+            }
+
         val services = ProviderHostServices(
             http = http,
             dom = DefaultProviderDomHostService(owner, resources),
-            browser = policy.browserOrigins
-                .takeIf { it.isNotEmpty() }
-                ?.let { origins ->
-                    AndroidProviderBrowserHostService(
-                        context = context,
-                        policy = ProviderNetworkPolicy(
-                            allowedOrigins = origins,
-                            allowLocalNetwork = policy.allowLocalNetwork,
-                        ),
-                        providerProfileName = providerProfileName(policy.providerId),
-                    )
-                },
+            browser = browser,
             storage = if (policy.storageEnabled) {
                 FileProviderStorageHostService(
                     root = storageRoot,
@@ -149,7 +156,11 @@ class ProviderHostInvocationFactory(
         return ProviderHostInvocation(
             owner = owner,
             resources = resources,
-            bridge = ProviderHostBridgeAdapter(services),
+            closeables = listOfNotNull<AutoCloseable>(http, browser),
+            bridge = ProviderHostBridgeAdapter(
+                services = services,
+                operationBudget = ProviderHostOperationBudget(policy.maxHostOperations),
+            ),
         )
     }
 
@@ -164,16 +175,21 @@ class ProviderHostInvocationFactory(
 class ProviderHostInvocation internal constructor(
     private val owner: ProviderResourceOwner,
     private val resources: ProviderResourceStore,
+    private val closeables: List<AutoCloseable>,
     val bridge: IProviderHostBridge,
 ) : AutoCloseable {
 
     override fun close() {
+        closeables.forEach { closeable ->
+            runCatching { closeable.close() }
+        }
         resources.releaseInvocation(owner)
     }
 }
 
 private class ProviderHostBridgeAdapter(
     private val services: ProviderHostServices,
+    private val operationBudget: ProviderHostOperationBudget,
 ) : IProviderHostBridge.Stub() {
 
     override fun httpGet(url: String?): String =
@@ -274,5 +290,22 @@ private class ProviderHostBridgeAdapter(
     private fun <T : Any> requireService(
         service: T?,
         name: String,
-    ): T = service ?: throw SecurityException("Provider Host Service '$name' is not permitted")
+    ): T {
+        operationBudget.consume()
+        return service ?: throw SecurityException("Provider Host Service '$name' is not permitted")
+    }
+}
+
+private class ProviderHostOperationBudget(
+    maxOperations: Int,
+) {
+    private val remaining = AtomicInteger(maxOperations)
+
+    fun consume() {
+        val previous = remaining.getAndDecrement()
+        if (previous <= 0) {
+            remaining.incrementAndGet()
+            throw IllegalStateException("Provider Host Service operation budget exhausted")
+        }
+    }
 }
