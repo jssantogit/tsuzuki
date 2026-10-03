@@ -73,6 +73,15 @@ class ProviderRuntimeProtocolTest {
     }
 
     @Test
+    fun `rejects oversized runtime request envelopes`() {
+        shouldThrow<ProviderRuntimeProtocolException> {
+            ProviderRuntimeProtocol.decodeRequest(
+                "x".repeat(ProviderRuntimeProtocol.MAX_REQUEST_JSON_CHARS + 1),
+            )
+        }
+    }
+
+    @Test
     fun `runtime responses never carry provider exception text`() {
         ProviderRuntimeInvocationResponse.failure(ProviderRuntimeFailureCode.SCRIPT_ERROR) shouldBe
             ProviderRuntimeInvocationResponse(
