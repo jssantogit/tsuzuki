@@ -131,7 +131,7 @@ private fun QuickJs.installHostBridge(hostBridge: ProviderHostBridge) {
     }
 }
 
-private fun List<Any?>.intArgument(index: Int): Int =
+private fun Array<Any?>.intArgument(index: Int): Int =
     (getOrNull(index) as? Number)?.toInt()
         ?: getOrNull(index)?.toString()?.toIntOrNull()
         ?: throw IllegalArgumentException("Provider host argument $index must be an integer")
