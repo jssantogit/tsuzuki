@@ -104,6 +104,8 @@ class ResolveProviderChapterReading(
                             PreparedHttpPage(
                                 url = page.url,
                                 headers = page.headers,
+                                allowedOrigins = page.allowedOrigins,
+                                allowLocalNetwork = page.allowLocalNetwork,
                             )
                         },
                     ),
