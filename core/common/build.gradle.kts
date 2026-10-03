@@ -19,6 +19,13 @@ kotlin {
     }
 }
 
+configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
+    resolutionStrategy.dependencySubstitution {
+        substitute(module("io.github.dokar3:quickjs-kt-android"))
+            .using(module("io.github.dokar3:quickjs-kt-jvm:${libs.versions.quickJs.get()}"))
+    }
+}
+
 dependencies {
     implementation(projects.core.metro)
     implementation(projects.i18n)
@@ -54,6 +61,7 @@ dependencies {
     implementation(libs.quickJs)
 
     testImplementation(libs.bundles.test)
+    testImplementation(libs.okhttp.mockwebserver)
     testRuntimeOnly(libs.junit.platform.launcher)
 
     implementation(libs.metro.runtime)

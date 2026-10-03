@@ -1,0 +1,56 @@
+name: Provider runtime Android gate
+
+on:
+  push:
+    branches:
+      - 'tsuzuki/provider-platform-*'
+    paths:
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/**'
+      - 'app/src/main/aidl/eu/kanade/tachiyomi/provider/runtime/**'
+      # The compile step builds the whole androidTest source set, so fixture-only
+      # repairs must be able to retrigger this gate as well.
+      - 'app/src/androidTest/**'
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/**'
+      - 'core/common/src/test/kotlin/tachiyomi/core/provider/**'
+      - 'gradle/libs.versions.toml'
+      - '.github/workflows/provider-runtime-android.yml'
+      - '.github/scripts/provider-runtime-android-gate.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provider-runtime-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  instrumentation:
+    name: Provider runtime instrumentation
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[ci-full]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - name: Compile Provider runtime instrumentation
+        run: ./gradlew :app:compileDebugAndroidTestKotlin
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # Run only the Provider runtime instrumentation package.
+      - name: Run Provider runtime instrumentation
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/provider-runtime-android-gate.sh
