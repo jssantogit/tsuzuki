@@ -350,7 +350,6 @@ object TorrentAcquisitionPolicy {
     }
 }
 
-
 enum class TorrentArchiveFormat {
     CBZ,
     ZIP,
