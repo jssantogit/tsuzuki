@@ -27,8 +27,8 @@ class AndroidProviderRepositoryTransportTest {
             val payload = """{"repositoryId":"repo.example","sequence":1}""".encodeToByteArray()
             val signature = byteArrayOf(1, 2, 3)
             server.enqueue(
-                MockResponse().setBody(
-                    json.encodeToString(
+                MockResponse(
+                    body = json.encodeToString(
                         ProviderSignedIndexEnvelope(
                             keyId = "root-1",
                             payloadBase64 = Base64.getEncoder().encodeToString(payload),
@@ -37,7 +37,7 @@ class AndroidProviderRepositoryTransportTest {
                     ),
                 ),
             )
-            server.enqueue(MockResponse().setBody("tsz-bytes"))
+            server.enqueue(MockResponse(body = "tsz-bytes"))
 
             val transport = AndroidProviderRepositoryTransport(
                 client = okhttp3.OkHttpClient(),
@@ -76,8 +76,8 @@ class AndroidProviderRepositoryTransportTest {
         try {
             val payload = """{"repositoryId":"repo.example","sequence":1}""".encodeToByteArray()
             server.enqueue(
-                MockResponse().setBody(
-                    json.encodeToString(
+                MockResponse(
+                    body = json.encodeToString(
                         ProviderSignedIndexEnvelope(
                             keyId = "root-1",
                             payloadBase64 = Base64.getEncoder().encodeToString(payload),
@@ -114,7 +114,7 @@ class AndroidProviderRepositoryTransportTest {
         val server = MockWebServer()
         server.start()
         try {
-            server.enqueue(MockResponse().setBody("12345"))
+            server.enqueue(MockResponse(body = "12345"))
             val transport = AndroidProviderRepositoryTransport(
                 client = okhttp3.OkHttpClient(),
                 allowInsecureHttp = true,
