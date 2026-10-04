@@ -220,7 +220,7 @@ class ScriptProviderReadingGatewayTest {
         val gateway = gateway(
             managedResources = ProviderManagedResourceResolver { providerId, resource, format ->
                 if (
-                    providerId == this.providerId &&
+                    providerId == this@ScriptProviderReadingGatewayTest.providerId &&
                     resource.value == "managed:verified" &&
                     format == tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedFileFormat.CBZ
                 ) {
