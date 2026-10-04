@@ -17,6 +17,8 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticTrace
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticWorkflow
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
+import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalReaderPreparation
 import tachiyomi.domain.tsuzuki.reader.repository.CanonicalReadingRepository
 import tachiyomi.domain.tsuzuki.reader.service.ChapterContentPreparer
@@ -31,6 +33,7 @@ class PrepareCanonicalChapterForReader(
     private val canonicalDownloadRepository: CanonicalDownloadRepository,
     private val chapterContentPreparer: ChapterContentPreparer,
     private val structuredDiagnostics: StructuredDiagnosticRecorder,
+    private val resolveProviderChapterReading: ResolveProviderChapterReading? = null,
 ) {
 
     suspend fun execute(
@@ -112,7 +115,7 @@ class PrepareCanonicalChapterForReader(
                     preferredUnavailable = resolution.preferredUnavailable,
                 )
 
-                ContentResolution.Unavailable -> CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+                ContentResolution.Unavailable -> prepareProviderFallback(canonicalChapterId)
             }
         } catch (error: CancellationException) {
             throw error
@@ -121,6 +124,27 @@ class PrepareCanonicalChapterForReader(
         }
 
         return complete(trace, started, result)
+    }
+
+    private suspend fun prepareProviderFallback(
+        canonicalChapterId: String,
+    ): CanonicalReaderPreparation {
+        val resolver = resolveProviderChapterReading
+            ?: return CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+        val options = resolver.options(canonicalChapterId)
+        // Provider-native selection will become a first-class UI model later. Until then, never
+        // choose silently when more than one independent Provider/facet can serve the chapter.
+        val option = options.singleOrNull()
+            ?: return CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+        return when (val prepared = resolver.preparedContent(option)) {
+            is ProviderCallResult.Failure -> CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+            is ProviderCallResult.Success -> CanonicalReaderPreparation.Ready(
+                canonicalChapterId = canonicalChapterId,
+                target = prepared.value,
+                usedFallback = true,
+                selectedOption = null,
+            )
+        }
     }
 
     private fun complete(
