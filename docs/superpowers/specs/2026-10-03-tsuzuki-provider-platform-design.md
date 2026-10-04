@@ -1177,7 +1177,7 @@ Adapt them through current canonical reading contracts and physically verify cha
 - direct P2P Host Service implementation with privileged native transport remaining host-owned;
 - acquisition policy;
 - CBZ/ZIP Reader convergence;
-- user-visible privacy/storage/lifecycle controls.
+- user-visible privacy/storage/lifecycle controls: acquisition route selection, explicit direct-P2P consent with network-address warning, stop-active-transfer action and managed temporary-file cleanup.
 
 ### Wave 7 — Tsuzuki-native Provider ecosystem tooling
 
