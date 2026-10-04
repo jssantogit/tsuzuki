@@ -67,6 +67,8 @@ class ProviderManagedFileStore internal constructor(
         if (bytes.isEmpty() || bytes.size > maxFileBytes) {
             throw IllegalStateException("Provider managed resource exceeds the file byte limit")
         }
+        // Managed files outlive the invocation resource store and enter the inherited Reader,
+        // so archive structure/expansion must be bounded before an opaque token is issued.
         validateArchive(bytes)
 
         val directory = providerDirectory(provider)
