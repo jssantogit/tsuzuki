@@ -43,7 +43,7 @@ data class ProviderP2pAcquireRequest(
             magnetUri == null || (
                 magnetUri.length <= MAX_URI_CHARS &&
                     magnetUri.startsWith("magnet:?", ignoreCase = true)
-                )
+                ),
         ) {
             "Provider P2P magnet URI is invalid"
         }
