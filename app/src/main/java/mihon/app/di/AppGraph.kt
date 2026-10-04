@@ -69,6 +69,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.library.interactor.RefreshUserLibraries
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
+import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalReaderPreferences
 import tachiyomi.domain.tsuzuki.source.service.ReadingSourceGateway
 
@@ -131,6 +132,12 @@ interface AppGraph : ViewModelGraph {
     val installedScriptProviderRegistry: InstalledScriptProviderRegistry
     val providerRegistry: ProviderRegistry
     val providerReadingGateway: ProviderReadingGateway
+
+    @Provides
+    fun providesNullableProviderChapterReading(
+        resolver: ResolveProviderChapterReading,
+    ): ResolveProviderChapterReading? = resolver
+
     val providerTorrentPreferences: ProviderTorrentPreferences
     val providerManagedFileStore: ProviderManagedFileStore
     val providerP2pJobManager: ProviderP2pJobManager
