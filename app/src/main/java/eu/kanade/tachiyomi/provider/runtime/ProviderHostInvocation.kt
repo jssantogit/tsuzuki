@@ -15,6 +15,8 @@ import tachiyomi.core.provider.runtime.ProviderHttpProtocol
 import tachiyomi.core.provider.runtime.ProviderHttpSessionStore
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
+import tachiyomi.core.provider.runtime.ProviderP2pHostService
+import tachiyomi.core.provider.runtime.ProviderP2pProtocol
 import tachiyomi.core.provider.runtime.ProviderResourceHandle
 import tachiyomi.core.provider.runtime.ProviderResourceOwner
 import tachiyomi.core.provider.runtime.ProviderResourceStore
@@ -82,6 +84,7 @@ class ProviderHostInvocationFactory(
     private val secretResolver: suspend (providerId: String, key: String) -> String? = { _, _ -> null },
     private val logSink: (providerId: String, message: String) -> Unit = { _, _ -> },
     private val httpSessions: ProviderHttpSessionStore = ProviderHttpSessionStore(),
+    private val p2pServiceFactory: (String) -> ProviderP2pHostService? = { null },
     val managedFiles: ProviderManagedFileStore = ProviderManagedFileStore(context.applicationContext),
 ) {
 
@@ -123,6 +126,11 @@ class ProviderHostInvocationFactory(
 
         val services = ProviderHostServices(
             http = http,
+            p2p = if (policy.directP2pEnabled) {
+                p2pServiceFactory(policy.providerId)
+            } else {
+                null
+            },
             dom = DefaultProviderDomHostService(owner, resources),
             browser = browser,
             storage = if (policy.storageEnabled) {
@@ -215,6 +223,15 @@ private class ProviderHostBridgeAdapter(
             ProviderHttpProtocol.encodeResponse(
                 requireService(services.http, "http").request(
                     ProviderHttpProtocol.decodeRequest(requestJson.orEmpty()),
+                ),
+            )
+        }
+
+    override fun p2pAcquire(requestJson: String?): String =
+        runBlocking {
+            ProviderP2pProtocol.encodeResponse(
+                requireService(services.p2p, "p2p").acquire(
+                    ProviderP2pProtocol.decodeRequest(requestJson.orEmpty()),
                 ),
             )
         }
