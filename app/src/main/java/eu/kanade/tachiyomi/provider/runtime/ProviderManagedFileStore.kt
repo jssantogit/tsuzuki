@@ -180,6 +180,14 @@ class ProviderManagedFileStore internal constructor(
     }
 
     @Synchronized
+    fun clearAll() {
+        if (root.exists() && !root.deleteRecursively()) {
+            throw IllegalStateException("Provider managed resource cache could not be cleared")
+        }
+        ensureDirectory(root)
+    }
+
+    @Synchronized
     override fun resolve(
         providerId: ProviderId,
         resource: ProviderManagedResourceRef,
