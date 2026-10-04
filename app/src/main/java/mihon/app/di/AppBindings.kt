@@ -11,6 +11,11 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
+import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.provider.repository.AndroidProviderRepositoryTransport
+import eu.kanade.tachiyomi.provider.runtime.IsolatedProviderPackageContractValidator
+import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
+import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
 import nl.adaptivity.xmlutil.XmlDeclMode
@@ -24,6 +29,17 @@ import tachiyomi.data.Mangas
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
+import tachiyomi.core.provider.packageformat.ProviderPackageActivator
+import tachiyomi.core.provider.packageformat.ProviderPackageContractValidator
+import tachiyomi.core.provider.packageformat.ProviderPackageParser
+import tachiyomi.core.provider.supplychain.FileProviderRepositoryEnrollmentStore
+import tachiyomi.core.provider.supplychain.FileProviderRepositoryTrustStore
+import tachiyomi.core.provider.supplychain.ProviderArtifactStore
+import tachiyomi.core.provider.supplychain.ProviderRepositoryEnrollmentStore
+import tachiyomi.core.provider.supplychain.ProviderRepositoryManager
+import tachiyomi.core.provider.supplychain.ProviderRepositoryTransport
+import tachiyomi.core.provider.supplychain.ProviderRepositoryTrustStore
+import java.io.File
 
 @BindingContainer
 object AppBindings {
@@ -82,4 +98,84 @@ object AppBindings {
     @Provides
     @SingleIn(AppScope::class)
     fun providesProtoBuf(): ProtoBuf = ProtoBuf
+
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderRepositoryEnrollmentStore(
+        context: Context,
+    ): ProviderRepositoryEnrollmentStore =
+        FileProviderRepositoryEnrollmentStore(
+            File(context.filesDir, "provider-platform/repositories"),
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderRepositoryTrustStore(
+        context: Context,
+    ): ProviderRepositoryTrustStore =
+        FileProviderRepositoryTrustStore(
+            File(context.filesDir, "provider-platform/trust"),
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderArtifactStore(
+        context: Context,
+    ): ProviderArtifactStore =
+        ProviderArtifactStore(
+            File(context.filesDir, "provider-platform/artifacts"),
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderRepositoryTransport(
+        networkHelper: NetworkHelper,
+    ): ProviderRepositoryTransport =
+        AndroidProviderRepositoryTransport(networkHelper.client)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderPackageContractValidator(
+        context: Context,
+    ): ProviderPackageContractValidator =
+        IsolatedProviderPackageContractValidator(
+            ProviderRuntimeClient(
+                context = context,
+                hostInvocationFactory = ProviderHostInvocationFactory(context),
+            ),
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderPackageActivator(
+        artifactStore: ProviderArtifactStore,
+        contractValidator: ProviderPackageContractValidator,
+    ): ProviderPackageActivator =
+        ProviderPackageActivator(
+            hostApiVersion = PROVIDER_HOST_API_VERSION,
+            parser = ProviderPackageParser(),
+            artifactStore = artifactStore,
+            contractValidator = contractValidator,
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderRepositoryManager(
+        enrollmentStore: ProviderRepositoryEnrollmentStore,
+        trustStore: ProviderRepositoryTrustStore,
+        artifactStore: ProviderArtifactStore,
+        packageActivator: ProviderPackageActivator,
+        transport: ProviderRepositoryTransport,
+    ): ProviderRepositoryManager =
+        ProviderRepositoryManager(
+            hostApiVersion = PROVIDER_HOST_API_VERSION,
+            enrollmentStore = enrollmentStore,
+            trustStore = trustStore,
+            artifactStore = artifactStore,
+            packageActivator = packageActivator,
+            transport = transport,
+        )
 }
+
+private const val PROVIDER_HOST_API_VERSION = 1
