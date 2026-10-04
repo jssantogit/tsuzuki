@@ -12,6 +12,8 @@ import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
+import tachiyomi.domain.tsuzuki.provider.ProviderError
+import tachiyomi.domain.tsuzuki.provider.ProviderErrorCode
 import tachiyomi.domain.tsuzuki.provider.ProviderFacetRef
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
@@ -37,41 +39,42 @@ class CollectProviderReadingEvidenceTest {
     fun `unique exact lookup creates binding and returns provider chapter evidence`() = runBlocking {
         val bindings = MemoryBindingRepository()
         var lookupCalls = 0
-        val gateway = gateway(
-            lookup = {
-                lookupCalls++
-                ProviderCallResult.Success(
-                    ProviderPage(
-                        items = listOf(
-                            ProviderWorkCandidate(
-                                externalWorkId = "dandadan-1",
-                                title = "Dandadan",
-                                aliases = listOf("Dan Da Dan"),
-                                language = "en",
-                            ),
-                        ),
-                    ),
-                )
-            },
-            chapters = {
-                ProviderCallResult.Success(
-                    ProviderPage(
-                        items = listOf(
-                            ProviderChapterObservation(
-                                providerChapterId = "chapter-1",
-                                rawLabel = "Chapter 1",
-                                rawNumber = 1.0,
-                                language = "en",
-                            ),
-                        ),
-                    ),
-                )
-            },
-        )
         val bridge = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
             providerRegistry = registry(),
-            gateway = gateway,
+            gateway = gateway(
+                lookupHandler = {
+                    lookupCalls++
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    externalWorkId = "dandadan-1",
+                                    title = "Dandadan",
+                                    aliases = listOf("Dan Da Dan"),
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderChapterObservation(
+                                    providerChapterId = "chapter-1",
+                                    rawLabel = "Chapter 1",
+                                    rawNumber = 1.0,
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
             bindingRepository = bindings,
             evidenceAdapter = ProviderChapterEvidenceAdapter(),
             clock = { 42L },
@@ -108,14 +111,15 @@ class CollectProviderReadingEvidenceTest {
             canonicalTitleRepository = titleRepository(canonicalTitle),
             providerRegistry = registry(),
             gateway = gateway(
-                lookup = {
+                lookupHandler = {
                     lookupCalls++
                     error("existing binding must be reused")
                 },
-                chapters = {
+                chaptersHandler = {
                     ProviderCallResult.Success(
                         ProviderPage(
                             items = listOf(ProviderChapterObservation("chapter-2", "Chapter 2")),
+                            nextCursor = null,
                         ),
                     )
                 },
@@ -140,17 +144,18 @@ class CollectProviderReadingEvidenceTest {
             canonicalTitleRepository = titleRepository(canonicalTitle),
             providerRegistry = registry(),
             gateway = gateway(
-                lookup = {
+                lookupHandler = {
                     ProviderCallResult.Success(
                         ProviderPage(
                             items = listOf(
                                 ProviderWorkCandidate("work-1", "Dandadan", language = "en"),
                                 ProviderWorkCandidate("work-2", "DANDADAN", language = "en"),
                             ),
+                            nextCursor = null,
                         ),
                     )
                 },
-                chapters = { error("ambiguous lookup must not request chapters") },
+                chaptersHandler = { error("ambiguous lookup must not request chapters") },
             ),
             bindingRepository = bindings,
             evidenceAdapter = ProviderChapterEvidenceAdapter(),
@@ -163,6 +168,34 @@ class CollectProviderReadingEvidenceTest {
         result.bindingCount shouldBe 0
         result.evidence shouldBe emptyList()
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+    }
+
+    @Test
+    fun `lookup failure marks collection incomplete`() = runBlocking {
+        val bridge = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Failure(
+                        ProviderError(
+                            code = ProviderErrorCode.NETWORK_ERROR,
+                            retryable = true,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("failed lookup must not request chapters") },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 4L },
+        )
+
+        val result = bridge.execute(canonicalTitle.id)
+
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
     }
 
     private fun registry() = DefaultProviderRegistry(
@@ -192,15 +225,15 @@ class CollectProviderReadingEvidenceTest {
     )
 
     private fun gateway(
-        lookup: suspend (ProviderReadingLookupRequest) -> ProviderCallResult<ProviderPage<ProviderWorkCandidate>>,
-        chapters: suspend (ProviderReadingChaptersRequest) -> ProviderCallResult<ProviderPage<ProviderChapterObservation>>,
+        lookupHandler: suspend (ProviderReadingLookupRequest) -> ProviderCallResult<ProviderPage<ProviderWorkCandidate>>,
+        chaptersHandler: suspend (ProviderReadingChaptersRequest) -> ProviderCallResult<ProviderPage<ProviderChapterObservation>>,
     ) = object : ProviderReadingGateway {
         override suspend fun lookup(
             providerId: ProviderId,
             request: ProviderReadingLookupRequest,
         ): ProviderCallResult<ProviderPage<ProviderWorkCandidate>> {
             providerId shouldBe this@CollectProviderReadingEvidenceTest.providerId
-            return lookup(request)
+            return lookupHandler(request)
         }
 
         override suspend fun chapters(
@@ -208,7 +241,7 @@ class CollectProviderReadingEvidenceTest {
             request: ProviderReadingChaptersRequest,
         ): ProviderCallResult<ProviderPage<ProviderChapterObservation>> {
             providerId shouldBe this@CollectProviderReadingEvidenceTest.providerId
-            return chapters(request)
+            return chaptersHandler(request)
         }
 
         override suspend fun pages(
