@@ -67,6 +67,31 @@ class ProviderRepositoryEnrollmentStoreTest {
     }
 
     @Test
+    fun `enrollment rejects signing keys outside P-256`() {
+        val keyPair = KeyPairGenerator.getInstance("EC").run {
+            initialize(ECGenParameterSpec("secp384r1"))
+            generateKeyPair()
+        }
+        val store = FileProviderRepositoryEnrollmentStore(tempDir.resolve("wrong-curve").toFile())
+
+        shouldThrow<ProviderSupplyChainException> {
+            store.save(
+                EnrolledProviderRepository(
+                    displayName = "Wrong curve",
+                    enrollment = ProviderRepositoryEnrollment(
+                        repositoryId = "repo.example",
+                        indexUrl = "https://repo.example/index.json",
+                        signingKey = ProviderRepositorySigningKey(
+                            keyId = "root-1",
+                            publicKeyBase64 = Base64.getEncoder().encodeToString(keyPair.public.encoded),
+                        ),
+                    ),
+                ),
+            )
+        }
+    }
+
+    @Test
     fun `repository removal is explicit and idempotent`() {
         val store = FileProviderRepositoryEnrollmentStore(tempDir.resolve("remove").toFile())
         store.save(EnrolledProviderRepository("Example", enrollment("repo.example")))
