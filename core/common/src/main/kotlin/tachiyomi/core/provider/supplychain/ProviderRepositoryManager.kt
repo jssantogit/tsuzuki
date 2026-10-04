@@ -48,6 +48,18 @@ class ProviderRepositoryManager(
         require(hostApiVersion > 0) { "Host API version must be positive" }
     }
 
+    fun repositories(): List<EnrolledProviderRepository> =
+        enrollmentStore.list()
+
+    fun enroll(repository: EnrolledProviderRepository) {
+        enrollmentStore.save(repository)
+    }
+
+    fun removeRepository(repositoryId: String): Boolean {
+        sessions.remove(repositoryId)
+        return enrollmentStore.remove(repositoryId)
+    }
+
     suspend fun refresh(repositoryId: String): ProviderRepositorySnapshot {
         val repository = enrollmentStore.get(repositoryId)
             ?: throw ProviderSupplyChainException("Provider repository is not enrolled")
