@@ -171,13 +171,11 @@ class ProviderRepositoryTrustAtomicRotationTest {
             ),
         )
 
-        val restarted = ProviderRepositoryTrust(
-            repositoryId = "repo.example",
-            hostApiVersion = 3,
-            trustedKeys = mapOf("root-1" to rootKey.public.encoded),
-            stateStore = stateStore,
-        )
-        val verified = restarted.verifyAndAccept(
+        stateStore.load("repo.example")
+            ?.trustedKeysBase64
+            ?.containsKey("root-2") shouldBe true
+
+        val verified = stale.verifyAndAccept(
             signedIndex(
                 keyId = "root-2",
                 keyPair = nextKey,
