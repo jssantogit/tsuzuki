@@ -12,6 +12,7 @@ import tachiyomi.core.provider.runtime.FileProviderStorageHostService
 import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderHostServices
 import tachiyomi.core.provider.runtime.ProviderHttpSessionStore
+import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
 import tachiyomi.core.provider.runtime.ProviderResourceHandle
 import tachiyomi.core.provider.runtime.ProviderResourceOwner
@@ -78,6 +79,7 @@ class ProviderHostInvocationFactory(
     private val secretResolver: suspend (providerId: String, key: String) -> String? = { _, _ -> null },
     private val logSink: (providerId: String, message: String) -> Unit = { _, _ -> },
     private val httpSessions: ProviderHttpSessionStore = ProviderHttpSessionStore(),
+    val managedFiles: ProviderManagedFileStore = ProviderManagedFileStore(context.applicationContext),
 ) {
 
     private val context = context.applicationContext
@@ -144,6 +146,13 @@ class ProviderHostInvocationFactory(
                     val service = http
                         ?: throw SecurityException("Provider HTTP permission is required for binary fetch")
                     service.getBinaryBytes(url)
+                },
+                promoter = { bytes, format ->
+                    managedFiles.promote(
+                        providerId = policy.providerId,
+                        bytes = bytes,
+                        format = format,
+                    )
                 },
             ),
             crypto = DefaultProviderCryptoHostService(owner, resources),
@@ -242,6 +251,14 @@ private class ProviderHostBridgeAdapter(
                 ProviderResourceHandle(resourceHandle.orEmpty()),
                 entryName.orEmpty(),
             ).value
+        }
+
+    override fun binaryPromote(resourceHandle: String?, format: String?): String =
+        runBlocking {
+            requireService(services.binary, "binary").promote(
+                resourceHandle = ProviderResourceHandle(resourceHandle.orEmpty()),
+                format = ProviderManagedResourceFormat.valueOf(format.orEmpty().uppercase()),
+            )
         }
 
     override fun cryptoAesCbcDecrypt(
