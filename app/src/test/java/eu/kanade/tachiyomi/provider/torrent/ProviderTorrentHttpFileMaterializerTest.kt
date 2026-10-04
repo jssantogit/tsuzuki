@@ -4,6 +4,7 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
+import okhttp3.Headers.Companion.headersOf
 import okhttp3.OkHttpClient
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -70,7 +71,7 @@ class ProviderTorrentHttpFileMaterializerTest {
         allowed.enqueue(
             MockResponse(
                 code = 302,
-                headers = okhttp3.Headers.headersOf(
+                headers = headersOf(
                     "Location",
                     blocked.url("/leak.cbz").toString(),
                 ),
@@ -162,7 +163,7 @@ class ProviderTorrentHttpFileMaterializerTest {
         eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore(
             root = tempDir.resolve("managed").toFile(),
             uriFactory = { file ->
-                "managed-uri:managed:${file.name.substringBefore('.') }.${file.extension}"
+                "managed-uri:managed:${file.name.substringBefore('.')}.${file.extension}"
             },
             maxFileBytes = 1024 * 1024L,
             maxTotalBytesPerProvider = 2 * 1024 * 1024L,
