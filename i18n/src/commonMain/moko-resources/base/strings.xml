@@ -982,6 +982,8 @@
     <string name="tsuzuki_providers_direct_p2p">Allow Direct P2P</string>
     <string name="tsuzuki_providers_direct_p2p_privacy">Direct P2P exposes your network address to peers. Tsuzuki never enables it silently as fallback.</string>
     <string name="tsuzuki_providers_acquisition_lifecycle">Direct P2P runs only for user-requested acquisition and stops after the required archive completes. Tsuzuki does not run an always-on torrent daemon or seed indefinitely.</string>
+    <string name="tsuzuki_providers_p2p_stop">Stop active P2P transfers</string>
+    <string name="tsuzuki_providers_p2p_stopped">Active Direct P2P transfers stopped</string>
     <string name="tsuzuki_providers_managed_cache">Managed Provider cache</string>
     <string name="tsuzuki_providers_managed_cache_summary">Downloaded Provider archives are kept in bounded app-managed temporary storage and expire automatically.</string>
     <string name="tsuzuki_providers_managed_cache_clear">Clear managed cache</string>
