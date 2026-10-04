@@ -234,11 +234,6 @@ object SettingsMainScreen : Screen() {
                     screen = SettingsTsuzukiProvidersScreen(),
                 ),
                 Item(
-                    titleRes = MR.strings.tsuzuki_integrations_title,
-                    icon = MaterialSymbols.Rounded.Explore,
-                    screen = SettingsTsuzukiIntegrationsScreen(),
-                ),
-                Item(
                     titleRes = MR.strings.tsuzuki_addons_title,
                     icon = MaterialSymbols.Rounded.Code,
                     screen = SettingsTsuzukiAddonsScreen,
