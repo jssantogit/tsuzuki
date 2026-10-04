@@ -76,6 +76,7 @@ class ProviderRepositoryManagerTest {
             ProviderRepositoryEntryStatus.AVAILABLE
         manager.install(repositoryId, "reader.example")
         manager.installed().single().versionCode shouldBe 1L
+        manager.canRollback("reader.example") shouldBe false
         manager.snapshot(repositoryId)!!.entries.single().status shouldBe
             ProviderRepositoryEntryStatus.INSTALLED
 
@@ -94,6 +95,7 @@ class ProviderRepositoryManagerTest {
             ProviderRepositoryEntryStatus.UPDATE_AVAILABLE
         manager.install(repositoryId, "reader.example")
         manager.installed().single().versionCode shouldBe 2L
+        manager.canRollback("reader.example") shouldBe true
 
         manager.rollback("reader.example")
         manager.installed().single().versionCode shouldBe 1L
