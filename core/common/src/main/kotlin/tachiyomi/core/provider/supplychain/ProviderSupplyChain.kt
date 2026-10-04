@@ -152,13 +152,14 @@ class FileProviderRepositoryEnrollmentStore(
 
 fun providerRepositoryKeyFingerprint(
     signingKey: ProviderRepositorySigningKey,
-): String =
-    sha256Hex(
-        decodeBase64(
-            signingKey.publicKeyBase64,
-            "Repository signing key",
-        ),
+): String {
+    val encodedKey = decodeBase64(
+        signingKey.publicKeyBase64,
+        "Repository signing key",
     )
+    parseProviderP256PublicKey(encodedKey)
+    return sha256Hex(encodedKey)
+}
 
 @Serializable
 data class ProviderArtifactDescriptor(
@@ -568,31 +569,8 @@ class ProviderRepositoryTrust(
         }
     }
 
-    private fun parseP256PublicKey(encodedKey: ByteArray): ECPublicKey {
-        val key = try {
-            KeyFactory.getInstance("EC")
-                .generatePublic(X509EncodedKeySpec(encodedKey)) as? ECPublicKey
-                ?: fail("Repository signing key is not an EC public key")
-        } catch (error: ProviderSupplyChainException) {
-            throw error
-        } catch (error: Exception) {
-            throw ProviderSupplyChainException("Repository signing key cannot be decoded", error)
-        }
-
-        if (!sameCurve(key.params, p256Parameters)) {
-            fail("Repository signing key must use secp256r1 (P-256)")
-        }
-        return key
-    }
-
-    private fun sameCurve(
-        actual: ECParameterSpec,
-        expected: ECParameterSpec,
-    ): Boolean =
-        actual.curve == expected.curve &&
-            actual.generator == expected.generator &&
-            actual.order == expected.order &&
-            actual.cofactor == expected.cofactor
+    private fun parseP256PublicKey(encodedKey: ByteArray): ECPublicKey =
+        parseProviderP256PublicKey(encodedKey)
 
     private fun fail(message: String): Nothing =
         throw ProviderSupplyChainException(message)
@@ -600,13 +578,6 @@ class ProviderRepositoryTrust(
     companion object {
         private const val SUPPORTED_SCHEMA_VERSION = 1
         private const val SIGNATURE_ALGORITHM = "SHA256withECDSA"
-
-        private val p256Parameters: ECParameterSpec by lazy {
-            AlgorithmParameters.getInstance("EC").run {
-                init(ECGenParameterSpec("secp256r1"))
-                getParameterSpec(ECParameterSpec::class.java)
-            }
-        }
 
         fun fromEnrollment(
             enrollment: ProviderRepositoryEnrollment,
@@ -888,6 +859,39 @@ class ProviderArtifactStore(
             revoked = revoked,
         )
     }
+}
+
+private val providerP256Parameters: ECParameterSpec by lazy {
+    AlgorithmParameters.getInstance("EC").run {
+        init(ECGenParameterSpec("secp256r1"))
+        getParameterSpec(ECParameterSpec::class.java)
+    }
+}
+
+private fun parseProviderP256PublicKey(encodedKey: ByteArray): ECPublicKey {
+    val key = try {
+        KeyFactory.getInstance("EC")
+            .generatePublic(X509EncodedKeySpec(encodedKey)) as? ECPublicKey
+            ?: throw ProviderSupplyChainException("Repository signing key is not an EC public key")
+    } catch (error: ProviderSupplyChainException) {
+        throw error
+    } catch (error: Exception) {
+        throw ProviderSupplyChainException("Repository signing key cannot be decoded", error)
+    }
+
+    val expected = providerP256Parameters
+    val actual = key.params
+    val sameCurve =
+        actual.curve == expected.curve &&
+            actual.generator == expected.generator &&
+            actual.order == expected.order &&
+            actual.cofactor == expected.cofactor
+    if (!sameCurve) {
+        throw ProviderSupplyChainException(
+            "Repository signing key must use secp256r1 (P-256)",
+        )
+    }
+    return key
 }
 
 fun sha256Hex(bytes: ByteArray): String =
