@@ -12,8 +12,6 @@ import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
-import tachiyomi.domain.tsuzuki.provider.ProviderError
-import tachiyomi.domain.tsuzuki.provider.ProviderErrorCode
 import tachiyomi.domain.tsuzuki.provider.ProviderFacetRef
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
