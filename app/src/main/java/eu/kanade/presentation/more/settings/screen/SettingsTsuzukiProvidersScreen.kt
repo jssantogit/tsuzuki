@@ -395,7 +395,7 @@ class SettingsTsuzukiProviderDetailScreen(
         val scope = rememberCoroutineScope()
         val registry = remember { context.appGraph.installedScriptProviderRegistry }
         val providerId = remember(providerIdValue) { ProviderId(providerIdValue) }
-        var registration by remember { mutableStateOf(registry.registration(providerId)) }
+        var registration by remember { mutableStateOf<ProviderRegistration?>(null) }
         var errorMessage by remember { mutableStateOf<String?>(null) }
 
         suspend fun reload() {
