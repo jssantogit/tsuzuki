@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.provider.runtime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -91,11 +92,22 @@ class ProviderP2pJobManager internal constructor(
             entry
         }
 
-        scope.launch {
+        val worker = scope.launch {
             runJob(
                 key = key,
                 entry = start,
             )
+        }
+        val accepted = synchronized(lock) {
+            if (jobs[key] === start) {
+                start.worker = worker
+                true
+            } else {
+                false
+            }
+        }
+        if (!accepted) {
+            worker.cancel()
         }
         return start.response
     }
@@ -176,11 +188,20 @@ class ProviderP2pJobManager internal constructor(
         }
     }
 
-    override fun close() {
-        scope.cancel()
-        synchronized(lock) {
+    fun cancelAll(): Int {
+        val workers = synchronized(lock) {
+            val active = jobs.values
+                .mapNotNull { entry -> entry.worker?.takeIf(Job::isActive) }
             jobs.clear()
+            active
         }
+        workers.forEach(Job::cancel)
+        return workers.size
+    }
+
+    override fun close() {
+        cancelAll()
+        scope.cancel()
         root.deleteRecursively()
     }
 
@@ -204,6 +225,7 @@ class ProviderP2pJobManager internal constructor(
         val request: ProviderP2pAcquireRequest,
         var response: ProviderP2pAcquireResponse,
         var completedAtMillis: Long? = null,
+        var worker: Job? = null,
     ) {
         val jobId: String
             get() = (response as? ProviderP2pAcquireResponse.Pending)?.jobId
