@@ -6,7 +6,13 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
 class RefreshProviderReadingChapters internal constructor(
     private val gateway: ProviderReadingGateway,
     private val evidenceAdapter: ProviderChapterEvidenceAdapter,
-    private val publishEvidence: suspend (canonicalTitleId: String, evidence: List<ChapterEvidence>) -> Unit,
+    private val publishSnapshot: suspend (
+        canonicalTitleId: String,
+        producerId: String,
+        snapshotObservedAt: Long,
+        evidence: List<ChapterEvidence>,
+    ) -> Unit,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
 
     constructor(
@@ -16,7 +22,7 @@ class RefreshProviderReadingChapters internal constructor(
     ) : this(
         gateway = gateway,
         evidenceAdapter = evidenceAdapter,
-        publishEvidence = reconcileChapterEvidence::execute,
+        publishSnapshot = reconcileChapterEvidence::executeProviderSnapshot,
     )
 
     suspend fun execute(
@@ -25,6 +31,9 @@ class RefreshProviderReadingChapters internal constructor(
         if (binding.availability != ProviderBindingAvailability.AVAILABLE) {
             return failure(ProviderErrorCode.UNAVAILABLE)
         }
+
+        val snapshotObservedAt = clock()
+        require(snapshotObservedAt >= 0L) { "Provider snapshot timestamp must not be negative" }
 
         val observations = ArrayList<ProviderChapterObservation>()
         val seenChapterIds = hashSetOf<String>()
@@ -60,8 +69,14 @@ class RefreshProviderReadingChapters internal constructor(
                     canonicalTitleId = binding.canonicalTitleId,
                     binding = binding.ref,
                     observations = observations,
+                    observedAt = snapshotObservedAt,
                 )
-                publishEvidence(binding.canonicalTitleId, evidence)
+                publishSnapshot(
+                    binding.canonicalTitleId,
+                    binding.ref.evidenceProducerId(),
+                    snapshotObservedAt,
+                    evidence,
+                )
                 return ProviderCallResult.Success(observations.size)
             }
             if (!seenCursors.add(next.value)) {
