@@ -229,6 +229,11 @@ object SettingsMainScreen : Screen() {
             title = "Conteúdo",
             items = listOf(
                 Item(
+                    titleRes = MR.strings.tsuzuki_providers_title,
+                    icon = MaterialSymbols.Rounded.Explore,
+                    screen = SettingsTsuzukiProvidersScreen(),
+                ),
+                Item(
                     titleRes = MR.strings.tsuzuki_integrations_title,
                     icon = MaterialSymbols.Rounded.Explore,
                     screen = SettingsTsuzukiIntegrationsScreen(),

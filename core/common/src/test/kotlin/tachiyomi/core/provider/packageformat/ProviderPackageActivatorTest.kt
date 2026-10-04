@@ -142,6 +142,7 @@ class ProviderPackageActivatorTest {
         bytes: ByteArray,
     ) = VerifiedProviderArtifact(
         repositoryId = "repo.example",
+        repositoryTrustAnchorSha256 = sha256Hex("repo.example-root".encodeToByteArray()),
         descriptor = ProviderArtifactDescriptor(
             providerId = providerId,
             versionName = versionName,

@@ -213,9 +213,13 @@ class ProviderSupplyChainTest {
         store.rollback("reader.example")
         store.current("reader.example")?.versionCode shouldBe 1L
         store.readCurrentArtifact("reader.example") shouldBe "provider-v1".encodeToByteArray()
+        shouldThrow<ProviderSupplyChainException> {
+            store.rollback("reader.example")
+        }
 
         val corruptV2 = VerifiedProviderArtifact(
             repositoryId = v2.repositoryId,
+            repositoryTrustAnchorSha256 = v2.repositoryTrustAnchorSha256,
             descriptor = v2.descriptor,
             bytes = "different".encodeToByteArray(),
         )
@@ -275,6 +279,7 @@ class ProviderSupplyChainTest {
         shouldThrow<ProviderSupplyChainException> {
             store.readCurrentArtifact("reader.example")
         }
+        store.readCurrentArtifactForInspection("reader.example") shouldBe v1Bytes
 
         store.activate(
             trust.verifyArtifact(

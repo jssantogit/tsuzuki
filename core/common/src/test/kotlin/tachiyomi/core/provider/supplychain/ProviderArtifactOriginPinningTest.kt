@@ -1,0 +1,118 @@
+package tachiyomi.core.provider.supplychain
+
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.lang.reflect.Modifier
+import java.nio.file.Path
+
+class ProviderArtifactOriginPinningTest {
+
+    @TempDir
+    lateinit var tempDir: Path
+
+    @Test
+    fun `installed Provider cannot silently switch repository origin`() {
+        val store = ProviderArtifactStore(tempDir.resolve("artifacts").toFile())
+        store.activate(artifact(repositoryId = "repo.a", versionCode = 1))
+
+        shouldThrow<ProviderSupplyChainException> {
+            store.activate(artifact(repositoryId = "repo.b", versionCode = 2))
+        }
+
+        store.current("reader.example")?.repositoryId shouldBe "repo.a"
+        store.current("reader.example")?.versionCode shouldBe 1L
+    }
+
+    @Test
+    fun `same repository id with a different trust root cannot inherit installed origin`() {
+        val store = ProviderArtifactStore(tempDir.resolve("trust-root-origin").toFile())
+        store.activate(
+            artifact(
+                repositoryId = "repo.a",
+                versionCode = 1,
+                trustAnchor = "root-a",
+            ),
+        )
+
+        shouldThrow<ProviderSupplyChainException> {
+            store.activate(
+                artifact(
+                    repositoryId = "repo.a",
+                    versionCode = 2,
+                    trustAnchor = "root-b",
+                ),
+            )
+        }
+
+        store.current("reader.example")?.versionCode shouldBe 1L
+        store.current("reader.example")?.repositoryTrustAnchorSha256 shouldBe
+            sha256Hex("root-a".encodeToByteArray())
+    }
+
+    @Test
+    fun `artifact state mutation boundaries are synchronized so origin pinning is atomic`() {
+        val activate = ProviderArtifactStore::class.java.getDeclaredMethod(
+            "activate",
+            VerifiedProviderArtifact::class.java,
+        )
+        val rollback = ProviderArtifactStore::class.java.getDeclaredMethod(
+            "rollback",
+            String::class.java,
+        )
+
+        Modifier.isSynchronized(activate.modifiers) shouldBe true
+        Modifier.isSynchronized(rollback.modifiers) shouldBe true
+    }
+
+    @Test
+    fun `rejected foreign origin cannot poison a later same version update`() {
+        val store = ProviderArtifactStore(tempDir.resolve("foreign-poisoning").toFile())
+        store.activate(artifact(repositoryId = "repo.a", versionCode = 1))
+
+        shouldThrow<ProviderSupplyChainException> {
+            store.activate(artifact(repositoryId = "repo.b", versionCode = 2))
+        }
+        store.current("reader.example")?.repositoryId shouldBe "repo.a"
+        store.current("reader.example")?.versionCode shouldBe 1L
+
+        store.activate(artifact(repositoryId = "repo.a", versionCode = 2))
+
+        store.current("reader.example")?.repositoryId shouldBe "repo.a"
+        store.current("reader.example")?.versionCode shouldBe 2L
+        store.previous("reader.example")?.versionCode shouldBe 1L
+    }
+
+    @Test
+    fun `installed Provider may update within its pinned repository origin`() {
+        val store = ProviderArtifactStore(tempDir.resolve("same-origin").toFile())
+        store.activate(artifact(repositoryId = "repo.a", versionCode = 1))
+        store.activate(artifact(repositoryId = "repo.a", versionCode = 2))
+
+        store.current("reader.example")?.repositoryId shouldBe "repo.a"
+        store.current("reader.example")?.versionCode shouldBe 2L
+        store.previous("reader.example")?.versionCode shouldBe 1L
+    }
+
+    private fun artifact(
+        repositoryId: String,
+        versionCode: Long,
+        trustAnchor: String = "$repositoryId-root",
+    ): VerifiedProviderArtifact {
+        val bytes = "$repositoryId-v$versionCode".encodeToByteArray()
+        return VerifiedProviderArtifact(
+            repositoryId = repositoryId,
+            repositoryTrustAnchorSha256 = sha256Hex(trustAnchor.encodeToByteArray()),
+            descriptor = ProviderArtifactDescriptor(
+                providerId = "reader.example",
+                versionName = "1.0.$versionCode",
+                versionCode = versionCode,
+                artifactUrl = "https://$repositoryId/reader-$versionCode.tsz",
+                sha256 = sha256Hex(bytes),
+                minHostApi = 1,
+            ),
+            bytes = bytes,
+        )
+    }
+}

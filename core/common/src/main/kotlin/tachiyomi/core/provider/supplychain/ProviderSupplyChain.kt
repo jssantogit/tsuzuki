@@ -35,6 +35,133 @@ data class ProviderRepositoryEnrollment(
 )
 
 @Serializable
+data class EnrolledProviderRepository(
+    val displayName: String,
+    val enrollment: ProviderRepositoryEnrollment,
+) {
+    val keyFingerprintSha256: String
+        get() = providerRepositoryKeyFingerprint(enrollment.signingKey)
+}
+
+interface ProviderRepositoryEnrollmentStore {
+    fun list(): List<EnrolledProviderRepository>
+
+    fun get(repositoryId: String): EnrolledProviderRepository?
+
+    fun save(repository: EnrolledProviderRepository)
+
+    fun remove(repositoryId: String): Boolean
+}
+
+class FileProviderRepositoryEnrollmentStore(
+    private val root: File,
+) : ProviderRepositoryEnrollmentStore {
+    private val json = Json {
+        encodeDefaults = true
+        explicitNulls = false
+        ignoreUnknownKeys = false
+    }
+
+    init {
+        ensureDirectory(root, "Provider repository enrollment store")
+    }
+
+    override fun list(): List<EnrolledProviderRepository> =
+        root.listFiles()
+            .orEmpty()
+            .asSequence()
+            .filter { file -> file.isFile && file.extension == "json" }
+            .map { file -> readEnrollment(file) }
+            .sortedBy { repository -> repository.enrollment.repositoryId }
+            .toList()
+
+    override fun get(repositoryId: String): EnrolledProviderRepository? {
+        validateIdentifier(repositoryId, "Repository ID")
+        val file = enrollmentFile(repositoryId)
+        if (!file.exists()) return null
+        return readEnrollment(file)
+    }
+
+    @Synchronized
+    override fun save(repository: EnrolledProviderRepository) {
+        validateEnrollment(repository)
+
+        val repositoryId = repository.enrollment.repositoryId
+        val existing = get(repositoryId)
+        if (existing != null) {
+            val existingKey = existing.enrollment.signingKey
+            val incomingKey = repository.enrollment.signingKey
+            if (
+                existingKey.keyId != incomingKey.keyId ||
+                existing.keyFingerprintSha256 != repository.keyFingerprintSha256
+            ) {
+                throw ProviderSupplyChainException(
+                    "Repository signing key cannot be silently repinned",
+                )
+            }
+        }
+
+        atomicWrite(
+            enrollmentFile(repositoryId),
+            json.encodeToString(repository).encodeToByteArray(),
+            "Provider repository enrollment",
+        )
+    }
+
+    @Synchronized
+    override fun remove(repositoryId: String): Boolean {
+        validateIdentifier(repositoryId, "Repository ID")
+        val file = enrollmentFile(repositoryId)
+        if (!file.exists()) return false
+        if (!file.delete()) {
+            throw ProviderSupplyChainException("Provider repository enrollment could not be removed")
+        }
+        return true
+    }
+
+    private fun readEnrollment(file: File): EnrolledProviderRepository {
+        val repository = try {
+            json.decodeFromString<EnrolledProviderRepository>(file.readText())
+        } catch (error: Exception) {
+            throw ProviderSupplyChainException("Repository enrollment state is malformed", error)
+        }
+        validateEnrollment(repository)
+        if (file.nameWithoutExtension != repository.enrollment.repositoryId) {
+            throw ProviderSupplyChainException("Repository enrollment state does not match its file identity")
+        }
+        return repository
+    }
+
+    private fun validateEnrollment(repository: EnrolledProviderRepository) {
+        if (repository.displayName.isBlank()) {
+            throw ProviderSupplyChainException("Repository display name must not be blank")
+        }
+        validateIdentifier(repository.enrollment.repositoryId, "Repository ID")
+        validateHttpsUrl(repository.enrollment.indexUrl, "Repository index URL")
+
+        val signingKey = repository.enrollment.signingKey
+        if (signingKey.keyId.isBlank()) {
+            throw ProviderSupplyChainException("Repository signing key ID must not be blank")
+        }
+        providerRepositoryKeyFingerprint(signingKey)
+    }
+
+    private fun enrollmentFile(repositoryId: String): File =
+        File(root, "$repositoryId.json")
+}
+
+fun providerRepositoryKeyFingerprint(
+    signingKey: ProviderRepositorySigningKey,
+): String {
+    val encodedKey = decodeBase64(
+        signingKey.publicKeyBase64,
+        "Repository signing key",
+    )
+    parseProviderP256PublicKey(encodedKey)
+    return sha256Hex(encodedKey)
+}
+
+@Serializable
 data class ProviderArtifactDescriptor(
     val providerId: String,
     val versionName: String,
@@ -73,6 +200,7 @@ class VerifiedProviderRepository internal constructor(
 
 class VerifiedProviderArtifact internal constructor(
     val repositoryId: String,
+    val repositoryTrustAnchorSha256: String,
     val descriptor: ProviderArtifactDescriptor,
     val bytes: ByteArray,
 ) {
@@ -86,14 +214,18 @@ class VerifiedProviderArtifact internal constructor(
 @Serializable
 data class ProviderRepositoryTrustState(
     val repositoryId: String,
+    val trustAnchorSha256: String,
     val highestAcceptedSequence: Long,
     val trustedKeysBase64: Map<String, String>,
+    val acceptedPayloadSha256: String? = null,
 )
 
 interface ProviderRepositoryTrustStore {
     fun load(repositoryId: String): ProviderRepositoryTrustState?
 
     fun save(state: ProviderRepositoryTrustState)
+
+    fun remove(repositoryId: String): Boolean
 }
 
 class FileProviderRepositoryTrustStore(
@@ -109,6 +241,7 @@ class FileProviderRepositoryTrustStore(
         ensureDirectory(root, "Provider repository trust store")
     }
 
+    @Synchronized
     override fun load(repositoryId: String): ProviderRepositoryTrustState? {
         validateIdentifier(repositoryId, "Repository ID")
         val file = stateFile(repositoryId)
@@ -122,19 +255,81 @@ class FileProviderRepositoryTrustStore(
         if (state.repositoryId != repositoryId || state.highestAcceptedSequence < 0L) {
             throw ProviderSupplyChainException("Repository trust state does not match enrollment")
         }
+        normalizeSha256(state.trustAnchorSha256)
+        state.acceptedPayloadSha256?.let(::normalizeSha256)
         return state
     }
 
+    @Synchronized
     override fun save(state: ProviderRepositoryTrustState) {
         validateIdentifier(state.repositoryId, "Repository ID")
         if (state.highestAcceptedSequence < 0L) {
             throw ProviderSupplyChainException("Repository sequence state cannot be negative")
         }
+        val incomingTrustAnchor = normalizeSha256(state.trustAnchorSha256)
+        state.acceptedPayloadSha256?.let(::normalizeSha256)
+
+        val existing = load(state.repositoryId)
+        if (
+            existing != null &&
+            normalizeSha256(existing.trustAnchorSha256) != incomingTrustAnchor
+        ) {
+            throw ProviderSupplyChainException(
+                "Repository trust state belongs to a different bootstrap trust root",
+            )
+        }
+        if (
+            existing != null &&
+            state.highestAcceptedSequence < existing.highestAcceptedSequence
+        ) {
+            throw ProviderSupplyChainException(
+                "Repository trust state cannot move to an older sequence",
+            )
+        }
+        if (
+            existing != null &&
+            state.highestAcceptedSequence == existing.highestAcceptedSequence &&
+            existing.acceptedPayloadSha256 != null &&
+            state.acceptedPayloadSha256 != existing.acceptedPayloadSha256
+        ) {
+            throw ProviderSupplyChainException(
+                "Repository trust state cannot replace the accepted payload at the same sequence",
+            )
+        }
+
+        val mergedKeys = existing
+            ?.trustedKeysBase64
+            .orEmpty()
+            .toMutableMap()
+        state.trustedKeysBase64.forEach { (keyId, encodedKey) ->
+            val persistedKey = mergedKeys[keyId]
+            if (persistedKey != null && persistedKey != encodedKey) {
+                throw ProviderSupplyChainException(
+                    "Repository trust state contains conflicting signing-key identity",
+                )
+            }
+            mergedKeys[keyId] = encodedKey
+        }
+
+        val persistedState = state.copy(
+            trustedKeysBase64 = mergedKeys.toSortedMap(),
+        )
         atomicWrite(
             stateFile(state.repositoryId),
-            json.encodeToString(state).encodeToByteArray(),
+            json.encodeToString(persistedState).encodeToByteArray(),
             "Repository trust state",
         )
+    }
+
+    @Synchronized
+    override fun remove(repositoryId: String): Boolean {
+        validateIdentifier(repositoryId, "Repository ID")
+        val file = stateFile(repositoryId)
+        if (!file.exists()) return false
+        if (!file.delete()) {
+            throw ProviderSupplyChainException("Repository trust state could not be removed")
+        }
+        return true
     }
 
     private fun stateFile(repositoryId: String): File = File(root, "$repositoryId.json")
@@ -151,8 +346,10 @@ class ProviderRepositoryTrust(
         explicitNulls = false
     }
     private val verificationToken = Any()
+    private val trustAnchorSha256 = bootstrapTrustAnchorFingerprint(trustedKeys)
     private val trustedKeyBytes = linkedMapOf<String, ByteArray>()
     private var highestAcceptedSequence = 0L
+    private var acceptedPayloadSha256: String? = null
 
     init {
         validateIdentifier(repositoryId, "Repository ID")
@@ -161,7 +358,11 @@ class ProviderRepositoryTrust(
 
         val persisted = stateStore.load(repositoryId)
         persisted?.let { state ->
+            if (normalizeSha256(state.trustAnchorSha256) != trustAnchorSha256) {
+                fail("Persisted repository trust state belongs to a different bootstrap trust root")
+            }
             highestAcceptedSequence = state.highestAcceptedSequence
+            acceptedPayloadSha256 = state.acceptedPayloadSha256
             state.trustedKeysBase64.forEach { (keyId, encoded) ->
                 val bytes = decodeBase64(encoded, "Persisted repository signing key")
                 registerTrustedKey(keyId, bytes)
@@ -194,11 +395,54 @@ class ProviderRepositoryTrust(
             fail("Repository sequence is not newer than the last accepted index")
         }
 
+        val payloadSha256 = sha256Hex(signed.payload)
         val nextKeys = trustedKeysWithRotation(index.nextSigningKey)
-        persistState(index.sequence, nextKeys)
-        highestAcceptedSequence = index.sequence
-        trustedKeyBytes.clear()
-        trustedKeyBytes.putAll(nextKeys)
+        applyPersistedState(
+            persistState(
+                sequence = index.sequence,
+                keys = nextKeys,
+                acceptedPayloadSha256 = payloadSha256,
+            ),
+        )
+
+        return VerifiedProviderRepository(
+            index = index,
+            verifiedKeyId = signed.keyId,
+            verificationToken = verificationToken,
+        )
+    }
+
+    @Synchronized
+    fun verifyCurrent(signed: SignedProviderRepositoryIndex): VerifiedProviderRepository {
+        val publicKeyBytes = trustedKeyBytes[signed.keyId]
+            ?: fail("Repository index is signed by an untrusted key")
+
+        verifySignature(
+            publicKeyBytes = publicKeyBytes,
+            payload = signed.payload,
+            signatureBytes = signed.signature,
+        )
+
+        val index = try {
+            json.decodeFromString<ProviderRepositoryIndex>(signed.payload.decodeToString())
+        } catch (error: Exception) {
+            throw ProviderSupplyChainException("Repository payload is malformed", error)
+        }
+        validateIndex(index)
+
+        if (index.sequence != highestAcceptedSequence) {
+            fail("Repository index is not the currently accepted sequence")
+        }
+        val expectedPayloadSha256 = acceptedPayloadSha256
+            ?: fail("Repository current index fingerprint is unavailable")
+        val actualPayloadSha256 = sha256Hex(signed.payload)
+        if (!MessageDigest.isEqual(
+                expectedPayloadSha256.encodeToByteArray(),
+                actualPayloadSha256.encodeToByteArray(),
+            )
+        ) {
+            fail("Repository current index payload does not match the accepted index")
+        }
 
         return VerifiedProviderRepository(
             index = index,
@@ -217,9 +461,13 @@ class ProviderRepositoryTrust(
             ?: fail("Verified repository index does not introduce a signing key")
 
         val nextKeys = trustedKeysWithRotation(rotation)
-        persistState(highestAcceptedSequence, nextKeys)
-        trustedKeyBytes.clear()
-        trustedKeyBytes.putAll(nextKeys)
+        applyPersistedState(
+            persistState(
+                sequence = highestAcceptedSequence,
+                keys = nextKeys,
+                acceptedPayloadSha256 = acceptedPayloadSha256,
+            ),
+        )
     }
 
     fun verifyArtifact(
@@ -253,6 +501,7 @@ class ProviderRepositoryTrust(
 
         return VerifiedProviderArtifact(
             repositoryId = repository.index.repositoryId,
+            repositoryTrustAnchorSha256 = trustAnchorSha256,
             descriptor = descriptor,
             bytes = artifactBytes.copyOf(),
         )
@@ -269,6 +518,7 @@ class ProviderRepositoryTrust(
         }
         return artifactStore.applyRevocations(
             repositoryId = repository.index.repositoryId,
+            repositoryTrustAnchorSha256 = trustAnchorSha256,
             revokedArtifactSha256 = repository.index.revokedArtifactSha256,
         )
     }
@@ -351,16 +601,40 @@ class ProviderRepositoryTrust(
     private fun persistState(
         sequence: Long,
         keys: Map<String, ByteArray>,
-    ) {
+        acceptedPayloadSha256: String?,
+    ): ProviderRepositoryTrustState {
         stateStore.save(
             ProviderRepositoryTrustState(
                 repositoryId = repositoryId,
+                trustAnchorSha256 = trustAnchorSha256,
                 highestAcceptedSequence = sequence,
                 trustedKeysBase64 = keys.mapValues { (_, bytes) ->
                     Base64.getEncoder().encodeToString(bytes)
                 },
+                acceptedPayloadSha256 = acceptedPayloadSha256,
             ),
         )
+        return stateStore.load(repositoryId)
+            ?: fail("Repository trust state disappeared after persistence")
+    }
+
+    private fun applyPersistedState(state: ProviderRepositoryTrustState) {
+        if (state.repositoryId != repositoryId) {
+            fail("Persisted repository trust state belongs to another repository")
+        }
+        if (normalizeSha256(state.trustAnchorSha256) != trustAnchorSha256) {
+            fail("Persisted repository trust state belongs to a different bootstrap trust root")
+        }
+
+        highestAcceptedSequence = state.highestAcceptedSequence
+        acceptedPayloadSha256 = state.acceptedPayloadSha256
+        trustedKeyBytes.clear()
+        state.trustedKeysBase64.forEach { (keyId, encoded) ->
+            registerTrustedKey(
+                keyId = keyId,
+                encodedKey = decodeBase64(encoded, "Persisted repository signing key"),
+            )
+        }
     }
 
     private fun requireVerifiedRepository(repository: VerifiedProviderRepository) {
@@ -386,31 +660,8 @@ class ProviderRepositoryTrust(
         }
     }
 
-    private fun parseP256PublicKey(encodedKey: ByteArray): ECPublicKey {
-        val key = try {
-            KeyFactory.getInstance("EC")
-                .generatePublic(X509EncodedKeySpec(encodedKey)) as? ECPublicKey
-                ?: fail("Repository signing key is not an EC public key")
-        } catch (error: ProviderSupplyChainException) {
-            throw error
-        } catch (error: Exception) {
-            throw ProviderSupplyChainException("Repository signing key cannot be decoded", error)
-        }
-
-        if (!sameCurve(key.params, p256Parameters)) {
-            fail("Repository signing key must use secp256r1 (P-256)")
-        }
-        return key
-    }
-
-    private fun sameCurve(
-        actual: ECParameterSpec,
-        expected: ECParameterSpec,
-    ): Boolean =
-        actual.curve == expected.curve &&
-            actual.generator == expected.generator &&
-            actual.order == expected.order &&
-            actual.cofactor == expected.cofactor
+    private fun parseP256PublicKey(encodedKey: ByteArray): ECPublicKey =
+        parseProviderP256PublicKey(encodedKey)
 
     private fun fail(message: String): Nothing =
         throw ProviderSupplyChainException(message)
@@ -418,13 +669,6 @@ class ProviderRepositoryTrust(
     companion object {
         private const val SUPPORTED_SCHEMA_VERSION = 1
         private const val SIGNATURE_ALGORITHM = "SHA256withECDSA"
-
-        private val p256Parameters: ECParameterSpec by lazy {
-            AlgorithmParameters.getInstance("EC").run {
-                init(ECGenParameterSpec("secp256r1"))
-                getParameterSpec(ECParameterSpec::class.java)
-            }
-        }
 
         fun fromEnrollment(
             enrollment: ProviderRepositoryEnrollment,
@@ -446,6 +690,7 @@ class ProviderRepositoryTrust(
 
 data class StoredProviderArtifact(
     val repositoryId: String,
+    val repositoryTrustAnchorSha256: String,
     val providerId: String,
     val versionCode: Long,
     val sha256: String,
@@ -465,15 +710,37 @@ class ProviderArtifactStore(
         ensureDirectory(root, "Provider artifact store")
     }
 
+    @Synchronized
     fun activate(artifact: VerifiedProviderArtifact) {
         val providerId = artifact.providerId
         validateIdentifier(providerId, "Provider ID")
         validateIdentifier(artifact.repositoryId, "Repository ID")
+        val artifactTrustAnchor = normalizeSha256(artifact.repositoryTrustAnchorSha256)
 
         val expectedDigest = normalizeSha256(artifact.descriptor.sha256)
         val actualDigest = sha256Hex(artifact.bytes)
         if (!MessageDigest.isEqual(expectedDigest.encodeToByteArray(), actualDigest.encodeToByteArray())) {
             throw ProviderSupplyChainException("Verified Provider artifact bytes no longer match their descriptor")
+        }
+
+        val previousState = readState(providerId)
+        if (
+            previousState != null &&
+            (
+                previousState.current.repositoryId != artifact.repositoryId ||
+                    previousState.current.repositoryTrustAnchorSha256 != artifactTrustAnchor
+                )
+        ) {
+            throw ProviderSupplyChainException(
+                "Installed Provider repository trust origin cannot change implicitly",
+            )
+        }
+        if (previousState?.current?.versionCode == artifact.versionCode) {
+            if (previousState.current.sha256 != expectedDigest) {
+                throw ProviderSupplyChainException("Active Provider version has conflicting immutable identity")
+            }
+            validateStoredArtifact(providerId, previousState.current)
+            return
         }
 
         val versions = versionsDirectory(providerId)
@@ -486,20 +753,10 @@ class ProviderArtifactStore(
             atomicWrite(target, artifact.bytes, "Provider artifact")
         }
 
-        val previousState = readState(providerId)
-        if (previousState?.current?.versionCode == artifact.versionCode) {
-            if (
-                previousState.current.repositoryId != artifact.repositoryId ||
-                previousState.current.sha256 != expectedDigest
-            ) {
-                throw ProviderSupplyChainException("Active Provider version has conflicting immutable identity")
-            }
-            return
-        }
-
         val nextState = ArtifactStoreState(
             current = StoredArtifactState(
                 repositoryId = artifact.repositoryId,
+                repositoryTrustAnchorSha256 = artifactTrustAnchor,
                 versionCode = artifact.versionCode,
                 sha256 = expectedDigest,
                 revoked = false,
@@ -512,6 +769,20 @@ class ProviderArtifactStore(
             "Provider activation state",
         )
     }
+
+    fun listInstalled(): List<StoredProviderArtifact> =
+        root.listFiles()
+            .orEmpty()
+            .asSequence()
+            .filter { directory -> directory.isDirectory && PROVIDER_ID.matches(directory.name) }
+            .mapNotNull { directory ->
+                val providerId = directory.name
+                val state = readState(providerId) ?: return@mapNotNull null
+                validateStoredArtifact(providerId, state.current)
+                state.current.toPublic(providerId)
+            }
+            .sortedBy { artifact -> artifact.providerId }
+            .toList()
 
     fun current(providerId: String): StoredProviderArtifact? {
         validateIdentifier(providerId, "Provider ID")
@@ -527,6 +798,7 @@ class ProviderArtifactStore(
         return artifact.toPublic(providerId)
     }
 
+    @Synchronized
     fun rollback(providerId: String) {
         validateIdentifier(providerId, "Provider ID")
         val state = readState(providerId)
@@ -538,6 +810,11 @@ class ProviderArtifactStore(
         validateStoredArtifact(providerId, rollback)
         if (rollback.revoked) {
             throw ProviderSupplyChainException("Provider previous version has been revoked")
+        }
+        if (rollback.versionCode >= state.current.versionCode) {
+            throw ProviderSupplyChainException(
+                "Provider rollback target must be older than the active version",
+            )
         }
 
         atomicWrite(
@@ -561,11 +838,20 @@ class ProviderArtifactStore(
         return artifactFile(providerId, active.versionCode).readBytes()
     }
 
+    fun readCurrentArtifactForInspection(providerId: String): ByteArray {
+        val active = current(providerId)
+            ?: throw ProviderSupplyChainException("Provider has no active artifact")
+        return artifactFile(providerId, active.versionCode).readBytes()
+    }
+
+    @Synchronized
     internal fun applyRevocations(
         repositoryId: String,
+        repositoryTrustAnchorSha256: String,
         revokedArtifactSha256: Set<String>,
     ): Set<String> {
         validateIdentifier(repositoryId, "Repository ID")
+        val trustAnchor = normalizeSha256(repositoryTrustAnchorSha256)
         val revokedHashes = revokedArtifactSha256.map(::normalizeSha256).toSet()
         if (revokedHashes.isEmpty()) return emptySet()
 
@@ -581,6 +867,7 @@ class ProviderArtifactStore(
                 fun revokeIfMatched(artifact: StoredArtifactState): StoredArtifactState {
                     if (
                         artifact.repositoryId == repositoryId &&
+                        artifact.repositoryTrustAnchorSha256 == trustAnchor &&
                         artifact.sha256 in revokedHashes &&
                         !artifact.revoked
                     ) {
@@ -621,6 +908,7 @@ class ProviderArtifactStore(
         artifact: StoredArtifactState,
     ) {
         validateIdentifier(artifact.repositoryId, "Stored repository ID")
+        normalizeSha256(artifact.repositoryTrustAnchorSha256)
         if (artifact.versionCode <= 0L) {
             throw ProviderSupplyChainException("Stored Provider version code must be positive")
         }
@@ -666,18 +954,69 @@ class ProviderArtifactStore(
     @Serializable
     private data class StoredArtifactState(
         val repositoryId: String,
+        val repositoryTrustAnchorSha256: String,
         val versionCode: Long,
         val sha256: String,
         val revoked: Boolean = false,
     ) {
         fun toPublic(providerId: String) = StoredProviderArtifact(
             repositoryId = repositoryId,
+            repositoryTrustAnchorSha256 = repositoryTrustAnchorSha256,
             providerId = providerId,
             versionCode = versionCode,
             sha256 = sha256,
             revoked = revoked,
         )
     }
+}
+
+private fun bootstrapTrustAnchorFingerprint(
+    trustedKeys: Map<String, ByteArray>,
+): String {
+    if (trustedKeys.size != 1) {
+        throw ProviderSupplyChainException(
+            "Repository bootstrap trust must contain exactly one pinned signing key",
+        )
+    }
+    val (keyId, encodedKey) = trustedKeys.entries.single()
+    if (keyId.isBlank()) {
+        throw ProviderSupplyChainException("Repository signing key ID must not be blank")
+    }
+    parseProviderP256PublicKey(encodedKey)
+    return sha256Hex(encodedKey)
+}
+
+private val providerP256Parameters: ECParameterSpec by lazy {
+    AlgorithmParameters.getInstance("EC").run {
+        init(ECGenParameterSpec("secp256r1"))
+        getParameterSpec(ECParameterSpec::class.java)
+    }
+}
+
+private fun parseProviderP256PublicKey(encodedKey: ByteArray): ECPublicKey {
+    val key = try {
+        KeyFactory.getInstance("EC")
+            .generatePublic(X509EncodedKeySpec(encodedKey)) as? ECPublicKey
+            ?: throw ProviderSupplyChainException("Repository signing key is not an EC public key")
+    } catch (error: ProviderSupplyChainException) {
+        throw error
+    } catch (error: Exception) {
+        throw ProviderSupplyChainException("Repository signing key cannot be decoded", error)
+    }
+
+    val expected = providerP256Parameters
+    val actual = key.params
+    val sameCurve =
+        actual.curve == expected.curve &&
+            actual.generator == expected.generator &&
+            actual.order == expected.order &&
+            actual.cofactor == expected.cofactor
+    if (!sameCurve) {
+        throw ProviderSupplyChainException(
+            "Repository signing key must use secp256r1 (P-256)",
+        )
+    }
+    return key
 }
 
 fun sha256Hex(bytes: ByteArray): String =
@@ -695,7 +1034,7 @@ private fun normalizeSha256(value: String): String {
     return normalized
 }
 
-private fun validateIdentifier(
+internal fun validateIdentifier(
     value: String,
     label: String,
 ) {
@@ -728,7 +1067,7 @@ private fun decodeBase64(
         throw ProviderSupplyChainException("$label is not valid Base64", error)
     }
 
-private fun ensureDirectory(
+internal fun ensureDirectory(
     directory: File,
     label: String,
 ) {
@@ -740,7 +1079,7 @@ private fun ensureDirectory(
     }
 }
 
-private fun atomicWrite(
+internal fun atomicWrite(
     target: File,
     bytes: ByteArray,
     label: String,

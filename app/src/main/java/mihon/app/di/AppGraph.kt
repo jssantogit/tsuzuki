@@ -35,6 +35,7 @@ import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.util.ExtensionInstallActivity
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
+import eu.kanade.tachiyomi.provider.repository.InstalledScriptProviderRegistry
 import eu.kanade.tachiyomi.ui.base.delegate.SecureActivityDelegateImpl
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
@@ -45,6 +46,7 @@ import eu.kanade.tachiyomi.util.CrashLogUtil
 import kotlinx.serialization.json.Json
 import mihon.core.metro.IsDebugBuild
 import mihon.domain.extension.interactor.GetExtensionStoreCountAsFlow
+import tachiyomi.core.provider.supplychain.ProviderRepositoryManager
 import tachiyomi.data.Database
 import tachiyomi.domain.backup.service.BackupPreferences
 import tachiyomi.domain.category.interactor.GetCategories
@@ -61,6 +63,8 @@ import tachiyomi.domain.tsuzuki.addon.repository.AddonRepository
 import tachiyomi.domain.tsuzuki.addon.repository.AddonSyncIntentRepository
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.library.interactor.RefreshUserLibraries
+import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalReaderPreferences
 import tachiyomi.domain.tsuzuki.source.service.ReadingSourceGateway
 
@@ -118,6 +122,10 @@ interface AppGraph : ViewModelGraph {
     val trustExtension: TrustExtension
 
     val sourceManager: SourceManager
+    val providerRepositoryManager: ProviderRepositoryManager
+    val installedScriptProviderRegistry: InstalledScriptProviderRegistry
+    val providerRegistry: ProviderRegistry
+    val providerReadingGateway: ProviderReadingGateway
     val addonRepository: AddonRepository
     val readingSourceGateway: ReadingSourceGateway
     val addonSyncIntentRepository: AddonSyncIntentRepository
