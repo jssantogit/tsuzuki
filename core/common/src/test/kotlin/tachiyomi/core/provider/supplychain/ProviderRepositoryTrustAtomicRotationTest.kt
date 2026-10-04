@@ -73,6 +73,8 @@ class ProviderRepositoryTrustAtomicRotationTest {
 
         rotated.verifiedKeyId shouldBe "root-2"
         rotated.index.sequence shouldBe 2L
+        stateStore.load("repo.example")?.trustAnchorSha256 shouldBe
+            sha256Hex(rootKey.public.encoded)
 
         val rotatedArtifact = restarted.verifyArtifact(
             repository = rotated,
