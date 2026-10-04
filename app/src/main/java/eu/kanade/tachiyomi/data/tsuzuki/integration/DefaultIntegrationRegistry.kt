@@ -187,7 +187,6 @@ class DefaultIntegrationRegistry(
         IntegrationSettingsConfig.decode(configJson).capabilityEnabled(capability)
 }
 
-
 class BuiltinIntegrationProviderRegistry(
     private val integrationRegistry: IntegrationRegistry,
     private val settingsRepository: IntegrationSettingsRepository,
