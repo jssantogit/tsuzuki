@@ -71,6 +71,70 @@ class ReconcileChapterEvidence internal constructor(
     }
 
     /**
+     * Reconciles one complete native Provider chapter inventory.
+     *
+     * Evidence that belonged to the same exact Provider binding but disappeared from a newer
+     * complete snapshot is detached from canonical chapters rather than deleted. Historical
+     * observations remain available for audit/recovery, while stale Provider reading options stop
+     * being offered. A delayed older snapshot may never detach evidence observed by a newer one.
+     */
+    suspend fun executeProviderSnapshot(
+        canonicalTitleId: String,
+        producerId: String,
+        snapshotObservedAt: Long,
+        evidence: List<ChapterEvidence>,
+    ) {
+        require(canonicalTitleId.isNotBlank()) { "Canonical title id is required" }
+        require(producerId.isNotBlank()) { "Provider evidence producer id is required" }
+        require(snapshotObservedAt >= 0L) { "Provider snapshot timestamp must not be negative" }
+        require(
+            evidence.all { observation ->
+                observation.canonicalTitleId == canonicalTitleId &&
+                    observation.producerKind == ProducerKind.PROVIDER &&
+                    observation.producerId == producerId &&
+                    observation.authority == ChapterEvidenceAuthority.PROVIDER_PROVISIONAL &&
+                    !observation.externalChapterKey.isNullOrBlank() &&
+                    observation.observedAt == snapshotObservedAt
+            },
+        ) {
+            "Provider snapshot evidence must belong to one exact Provider binding and timestamp"
+        }
+
+        val retainedExternalKeys = evidence.map { requireNotNull(it.externalChapterKey) }
+        require(retainedExternalKeys.distinct().size == retainedExternalKeys.size) {
+            "Provider snapshot contains duplicate external chapter keys"
+        }
+        val retainedKeySet = retainedExternalKeys.toHashSet()
+
+        mutationGate.withLock {
+            evidenceRepository.withTransaction {
+                if (evidence.isNotEmpty()) {
+                    reconcileUncontended(canonicalTitleId, evidence)
+                }
+
+                val detached = evidenceRepository.getByCanonicalTitleId(canonicalTitleId)
+                    .asSequence()
+                    .filter { persisted ->
+                        val observation = persisted.evidence
+                        observation.producerKind == ProducerKind.PROVIDER &&
+                            observation.producerId == producerId &&
+                            persisted.mappedCanonicalChapterId != null &&
+                            observation.observedAt < snapshotObservedAt &&
+                            observation.externalChapterKey !in retainedKeySet
+                    }
+                    .map { persisted ->
+                        persisted.copy(mappedCanonicalChapterId = null)
+                    }
+                    .toList()
+
+                if (detached.isNotEmpty()) {
+                    evidenceRepository.upsertResolvedBatch(detached)
+                }
+            }
+        }
+    }
+
+    /**
      * Runs an optional operational projection after the canonical/evidence writes
      * but before the same persistence transaction commits. A projection failure
      * rolls back all three kinds of rows. The projection may only use the
