@@ -205,8 +205,9 @@ class CollectProviderReadingEvidence private constructor(
                 )
             ) {
                 is ProviderCallResult.Failure -> return ProviderReadingEvidenceCollection(complete = false)
-                is ProviderCallResult.Success -> discovery.value
-                    ?: return ProviderReadingEvidenceCollection()
+                is ProviderCallResult.Success ->
+                    discovery.value
+                        ?: return ProviderReadingEvidenceCollection()
             }
 
             var published: ProviderReadingEvidenceSnapshot? = null
