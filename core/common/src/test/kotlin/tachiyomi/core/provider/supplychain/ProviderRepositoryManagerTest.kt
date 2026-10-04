@@ -228,6 +228,8 @@ class ProviderRepositoryManagerTest {
             "https://mirror.example/index.json",
         )
         manager.snapshot("repo.example")!!.repository.displayName shouldBe "Moved"
+        manager.snapshot("repo.example")!!.repository.enrollment.indexUrl shouldBe
+            "https://mirror.example/index.json"
     }
 
     @Test
