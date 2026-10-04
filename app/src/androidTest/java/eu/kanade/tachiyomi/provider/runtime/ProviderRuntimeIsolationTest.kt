@@ -17,6 +17,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.core.provider.runtime.ProviderHostModule
+import tachiyomi.core.provider.runtime.ProviderHttpProtocol
+import tachiyomi.core.provider.runtime.ProviderHttpResponse
 import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
@@ -138,9 +140,19 @@ class ProviderRuntimeIsolationTest {
             assertTrue(connected.await(SERVICE_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS))
 
             val storageSetCalled = AtomicBoolean(false)
+            val httpRequestCalled = AtomicBoolean(false)
             val host = object : IProviderHostBridge.Stub() {
                 override fun httpGet(url: String?): String = throw UnsupportedOperationException()
                 override fun httpGetResource(url: String?): String = throw UnsupportedOperationException()
+                override fun httpRequest(requestJson: String?): String {
+                    httpRequestCalled.set(true)
+                    return ProviderHttpProtocol.encodeResponse(
+                        ProviderHttpResponse(
+                            statusCode = 200,
+                            body = "ok",
+                        ),
+                    )
+                }
                 override fun domSelectText(resourceHandle: String?, cssSelector: String?): String =
                     throw UnsupportedOperationException()
                 override fun browserReadText(url: String?, cssSelector: String?): String =
@@ -193,6 +205,40 @@ class ProviderRuntimeIsolationTest {
 
             assertEquals(ProviderRuntimeFailureCode.HOST_ERROR, oversized.failure)
             assertEquals(false, storageSetCalled.get())
+
+            val httpAllowed = invoke(
+                runtime = runtime,
+                source = """
+                    await tsuzuki.http.request(
+                      'POST',
+                      'https://allowed.example/data',
+                      '{}',
+                      'x'.repeat(65536)
+                    );
+                    'ok'
+                """.trimIndent(),
+                hostBridge = host,
+                hostModules = setOf(ProviderHostModule.HTTP),
+            )
+            assertEquals(null, httpAllowed.failure)
+            assertEquals(true, httpRequestCalled.get())
+
+            httpRequestCalled.set(false)
+            val httpOversized = invoke(
+                runtime = runtime,
+                source = """
+                    await tsuzuki.http.request(
+                      'POST',
+                      'https://allowed.example/data',
+                      '{}',
+                      'x'.repeat(65537)
+                    )
+                """.trimIndent(),
+                hostBridge = host,
+                hostModules = setOf(ProviderHostModule.HTTP),
+            )
+            assertEquals(ProviderRuntimeFailureCode.HOST_ERROR, httpOversized.failure)
+            assertEquals(false, httpRequestCalled.get())
         } finally {
             if (bound) {
                 context.unbindService(connection)
@@ -247,6 +293,9 @@ class ProviderRuntimeIsolationTest {
         }
 
         override fun httpGetResource(url: String?): String =
+            throw UnsupportedOperationException()
+
+        override fun httpRequest(requestJson: String?): String =
             throw UnsupportedOperationException()
 
         override fun domSelectText(resourceHandle: String?, cssSelector: String?): String =
