@@ -57,7 +57,9 @@ class ProviderRepositoryManager(
 
     fun removeRepository(repositoryId: String): Boolean {
         sessions.remove(repositoryId)
-        return enrollmentStore.remove(repositoryId)
+        val enrollmentRemoved = enrollmentStore.remove(repositoryId)
+        val trustRemoved = trustStore.remove(repositoryId)
+        return enrollmentRemoved || trustRemoved
     }
 
     suspend fun refresh(repositoryId: String): ProviderRepositorySnapshot {
