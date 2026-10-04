@@ -191,7 +191,7 @@ class ProviderP2pJobManager internal constructor(
     fun cancelAll(): Int {
         val workers = synchronized(lock) {
             val active = jobs.values
-                .mapNotNull { entry -> entry.worker?.takeIf(Job::isActive) }
+                .mapNotNull { entry -> entry.worker?.takeIf { worker -> worker.isActive } }
             jobs.clear()
             active
         }
