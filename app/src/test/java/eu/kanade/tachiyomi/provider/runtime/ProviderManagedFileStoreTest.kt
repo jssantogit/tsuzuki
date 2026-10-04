@@ -118,6 +118,35 @@ class ProviderManagedFileStoreTest {
     }
 
     @Test
+    fun `clear all removes managed provider files without exposing raw paths`() {
+        val store = store()
+        val first = store.promote(
+            providerId = "org.example.reader",
+            bytes = zip("page-1.jpg", "first"),
+            format = ProviderManagedResourceFormat.CBZ,
+        )
+        val second = store.promote(
+            providerId = "org.example.other",
+            bytes = zip("page-2.jpg", "second"),
+            format = ProviderManagedResourceFormat.ZIP,
+        )
+
+        store.clearAll()
+
+        store.resolve(
+            providerId = ProviderId("org.example.reader"),
+            resource = ProviderManagedResourceRef(first),
+            format = ProviderManagedFileFormat.CBZ,
+        ) shouldBe null
+        store.resolve(
+            providerId = ProviderId("org.example.other"),
+            resource = ProviderManagedResourceRef(second),
+            format = ProviderManagedFileFormat.ZIP,
+        ) shouldBe null
+        tempDir.toFile().walkTopDown().filter { it.isFile }.toList() shouldBe emptyList()
+    }
+
+    @Test
     fun `promotion rejects non archive bytes and bounded archive expansion`() {
         val store = store(
             maxFileBytes = 1024,
