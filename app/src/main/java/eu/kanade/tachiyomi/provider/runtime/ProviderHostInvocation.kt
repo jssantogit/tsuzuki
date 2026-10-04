@@ -11,6 +11,7 @@ import tachiyomi.core.provider.runtime.DefaultProviderHttpHostService
 import tachiyomi.core.provider.runtime.FileProviderStorageHostService
 import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderHostServices
+import tachiyomi.core.provider.runtime.ProviderHttpProtocol
 import tachiyomi.core.provider.runtime.ProviderHttpSessionStore
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
@@ -206,6 +207,15 @@ private class ProviderHostBridgeAdapter(
 
     override fun httpGetResource(url: String?): String =
         runBlocking { requireService(services.http, "http").getResource(url.orEmpty()).value }
+
+    override fun httpRequest(requestJson: String?): String =
+        runBlocking {
+            ProviderHttpProtocol.encodeResponse(
+                requireService(services.http, "http").request(
+                    ProviderHttpProtocol.decodeRequest(requestJson.orEmpty()),
+                ),
+            )
+        }
 
     override fun domSelectText(resourceHandle: String?, cssSelector: String?): String =
         runBlocking {
