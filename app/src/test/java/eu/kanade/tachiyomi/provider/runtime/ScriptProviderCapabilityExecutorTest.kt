@@ -1,8 +1,5 @@
 package eu.kanade.tachiyomi.provider.runtime
 
-import eu.kanade.tachiyomi.provider.reading.ActiveProviderScriptPackage
-import eu.kanade.tachiyomi.provider.reading.ActiveProviderScriptPackageSource
-import eu.kanade.tachiyomi.provider.reading.ProviderPackageCapabilityInvoker
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
@@ -41,7 +38,7 @@ class ScriptProviderCapabilityExecutorTest {
         ),
         permissions = ProviderManifestPermissions(),
     )
-    private val activePackage = ActiveProviderScriptPackage(
+    private val activePackage = ScriptProviderPackage(
         repositoryId = "repo.example",
         versionCode = 1,
         bytes = "package".encodeToByteArray(),
@@ -115,12 +112,12 @@ class ScriptProviderCapabilityExecutorTest {
                     ),
                 )
             },
-            packageSource = ActiveProviderScriptPackageSource { activePackage },
-            invokePackage = ProviderPackageCapabilityInvoker { _, _, _, _ ->
+            packageSource = ScriptProviderPackageSource { activePackage },
+            invokePackage = ScriptProviderRuntimeInvoker { _, _, _, _ ->
                 invoked = true
                 error("must not execute")
             },
-            invocationIdFactory = { "torrent-test" },
+            invocationIdFactory = { _ -> "torrent-test" },
         )
 
         builtin.invoke(
@@ -161,13 +158,13 @@ class ScriptProviderCapabilityExecutorTest {
                     ),
                 )
             },
-            packageSource = ActiveProviderScriptPackageSource { requested ->
+            packageSource = ScriptProviderPackageSource { requested ->
                 activePackage.takeIf { requested == providerId }
             },
-            invokePackage = ProviderPackageCapabilityInvoker { request, bytes, input, policy ->
+            invokePackage = ScriptProviderRuntimeInvoker { request, bytes, input, policy ->
                 invoke(request, bytes, input, policy)
             },
-            invocationIdFactory = { "torrent-test" },
+            invocationIdFactory = { _ -> "torrent-test" },
         )
     }
 
