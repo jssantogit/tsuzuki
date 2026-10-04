@@ -222,6 +222,8 @@ interface ProviderRepositoryTrustStore {
     fun load(repositoryId: String): ProviderRepositoryTrustState?
 
     fun save(state: ProviderRepositoryTrustState)
+
+    fun remove(repositoryId: String): Boolean
 }
 
 class FileProviderRepositoryTrustStore(
