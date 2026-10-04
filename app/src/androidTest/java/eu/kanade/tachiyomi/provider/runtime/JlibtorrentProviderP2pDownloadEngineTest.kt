@@ -104,6 +104,10 @@ class JlibtorrentProviderP2pDownloadEngineTest {
                 result.file.canonicalPath.startsWith(work.canonicalPath + File.separator),
             )
             assertArrayEquals(selectedBytes, result.file.readBytes())
+            assertTrue(
+                "selected archive size must match the torrent metadata",
+                result.file.length() == selectedBytes.size.toLong(),
+            )
 
             val ignoredPath = File(
                 File(work, JlibtorrentProviderP2pDownloadEngine.DOWNLOAD_DIRECTORY),
