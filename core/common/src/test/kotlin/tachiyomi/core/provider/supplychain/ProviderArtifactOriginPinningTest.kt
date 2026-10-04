@@ -26,6 +26,32 @@ class ProviderArtifactOriginPinningTest {
     }
 
     @Test
+    fun `same repository id with a different trust root cannot inherit installed origin`() {
+        val store = ProviderArtifactStore(tempDir.resolve("trust-root-origin").toFile())
+        store.activate(
+            artifact(
+                repositoryId = "repo.a",
+                versionCode = 1,
+                trustAnchor = "root-a",
+            ),
+        )
+
+        shouldThrow<ProviderSupplyChainException> {
+            store.activate(
+                artifact(
+                    repositoryId = "repo.a",
+                    versionCode = 2,
+                    trustAnchor = "root-b",
+                ),
+            )
+        }
+
+        store.current("reader.example")?.versionCode shouldBe 1L
+        store.current("reader.example")?.repositoryTrustAnchorSha256 shouldBe
+            sha256Hex("root-a".encodeToByteArray())
+    }
+
+    @Test
     fun `artifact state mutation boundaries are synchronized so origin pinning is atomic`() {
         val activate = ProviderArtifactStore::class.java.getDeclaredMethod(
             "activate",
@@ -72,11 +98,12 @@ class ProviderArtifactOriginPinningTest {
     private fun artifact(
         repositoryId: String,
         versionCode: Long,
+        trustAnchor: String = "$repositoryId-root",
     ): VerifiedProviderArtifact {
         val bytes = "$repositoryId-v$versionCode".encodeToByteArray()
         return VerifiedProviderArtifact(
             repositoryId = repositoryId,
-            repositoryTrustAnchorSha256 = sha256Hex("$repositoryId-root".encodeToByteArray()),
+            repositoryTrustAnchorSha256 = sha256Hex(trustAnchor.encodeToByteArray()),
             descriptor = ProviderArtifactDescriptor(
                 providerId = "reader.example",
                 versionName = "1.0.$versionCode",
