@@ -103,7 +103,6 @@ object AppBindings {
     @SingleIn(AppScope::class)
     fun providesProtoBuf(): ProtoBuf = ProtoBuf
 
-
     @Provides
     @SingleIn(AppScope::class)
     fun providesProviderLocalConfigurationStore(
