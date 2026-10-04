@@ -255,6 +255,183 @@ object TorrentAcquisitionPolicy {
     }
 }
 
+
+enum class TorrentArchiveFormat {
+    CBZ,
+    ZIP,
+}
+
+sealed interface TorrentReadableResource {
+    data class HttpFile(
+        val url: String,
+        val headers: Map<String, String> = emptyMap(),
+        val allowedOrigins: Set<String>,
+        val allowLocalNetwork: Boolean = false,
+    ) : TorrentReadableResource {
+        init {
+            validateHttpUrl(url)
+            require(headers.size <= MAX_HEADERS) {
+                "Torrent HTTP resource has too many headers"
+            }
+            require(allowedOrigins.isNotEmpty()) {
+                "Torrent HTTP resource requires network authority"
+            }
+            require(allowedOrigins.size <= MAX_ORIGINS) {
+                "Torrent HTTP resource has too many allowed origins"
+            }
+            require(
+                allowedOrigins.all { origin ->
+                    origin.isNotBlank() && origin.length <= MAX_ORIGIN_CHARS
+                },
+            ) {
+                "Torrent HTTP resource origin authority is invalid"
+            }
+            require(
+                headers.all { (name, value) ->
+                    HEADER_NAME.matches(name) &&
+                        name.lowercase() !in FORBIDDEN_REQUEST_HEADERS &&
+                        value.length <= MAX_HEADER_VALUE_CHARS &&
+                        !value.contains('\r') &&
+                        !value.contains('\n')
+                },
+            ) {
+                "Torrent HTTP resource header is invalid"
+            }
+        }
+
+        private companion object {
+            const val MAX_HEADERS = 32
+            const val MAX_HEADER_VALUE_CHARS = 8192
+            const val MAX_ORIGINS = 64
+            const val MAX_ORIGIN_CHARS = 2048
+            val HEADER_NAME = Regex("[A-Za-z0-9!#$%&'*+.^_`|~-]+")
+            val FORBIDDEN_REQUEST_HEADERS = setOf(
+                "connection",
+                "content-length",
+                "host",
+                "keep-alive",
+                "proxy-authenticate",
+                "proxy-authorization",
+                "proxy-connection",
+                "te",
+                "trailer",
+                "transfer-encoding",
+                "upgrade",
+            )
+        }
+    }
+
+    data class LocalArchive(
+        val uri: String,
+        val format: TorrentArchiveFormat,
+    ) : TorrentReadableResource {
+        init {
+            require(uri.length <= MAX_URI_CHARS) {
+                "Torrent local archive URI is too long"
+            }
+            val parsed = runCatching { URI(uri) }.getOrNull()
+            require(
+                parsed != null &&
+                    parsed.scheme == "content" &&
+                    !parsed.host.isNullOrBlank() &&
+                    parsed.userInfo == null,
+            ) {
+                "Torrent local archive must use managed content URI authority"
+            }
+        }
+
+        private companion object {
+            const val MAX_URI_CHARS = 8192
+        }
+    }
+}
+
+enum class TorrentAcquisitionFailure {
+    UNAVAILABLE,
+    AUTH_REQUIRED,
+    PERMISSION_DENIED,
+    NETWORK_ERROR,
+    ACQUISITION_FAILED,
+    P2P_CONSENT_REQUIRED,
+}
+
+sealed interface TorrentBackendResult {
+    data class Success(
+        val resource: TorrentReadableResource,
+    ) : TorrentBackendResult
+
+    data class Failure(
+        val reason: TorrentAcquisitionFailure,
+    ) : TorrentBackendResult
+}
+
+fun interface TorrentAcquisitionBackend {
+    suspend fun acquire(
+        candidate: TorrentCandidate,
+        file: TorrentCandidateFile,
+    ): TorrentBackendResult
+}
+
+sealed interface TorrentAcquisitionResult {
+    data class Success(
+        val route: TorrentAcquisitionRoute,
+        val file: TorrentCandidateFile,
+        val resource: TorrentReadableResource,
+    ) : TorrentAcquisitionResult
+
+    data class Failure(
+        val reason: TorrentAcquisitionFailure,
+    ) : TorrentAcquisitionResult
+}
+
+class TorrentAcquisitionRouter(
+    private val debrid: TorrentAcquisitionBackend,
+    private val directP2p: TorrentAcquisitionBackend,
+) {
+
+    suspend fun acquire(
+        candidate: TorrentCandidate,
+        selectedFile: TorrentCandidateFile,
+        decision: TorrentAcquisitionDecision,
+    ): TorrentAcquisitionResult {
+        require(candidate.files.orEmpty().any { it == selectedFile }) {
+            "Selected torrent file does not belong to the candidate"
+        }
+
+        val routes = when (decision) {
+            is TorrentAcquisitionDecision.Routes -> decision.ordered
+            TorrentAcquisitionDecision.DirectP2pConsentRequired ->
+                return TorrentAcquisitionResult.Failure(
+                    TorrentAcquisitionFailure.P2P_CONSENT_REQUIRED,
+                )
+            TorrentAcquisitionDecision.Unavailable ->
+                return TorrentAcquisitionResult.Failure(
+                    TorrentAcquisitionFailure.UNAVAILABLE,
+                )
+        }
+
+        var lastFailure = TorrentAcquisitionFailure.UNAVAILABLE
+        for (route in routes) {
+            val backend = when (route) {
+                TorrentAcquisitionRoute.DEBRID -> debrid
+                TorrentAcquisitionRoute.DIRECT_P2P -> directP2p
+            }
+            when (val result = backend.acquire(candidate, selectedFile)) {
+                is TorrentBackendResult.Success ->
+                    return TorrentAcquisitionResult.Success(
+                        route = route,
+                        file = selectedFile,
+                        resource = result.resource,
+                    )
+                is TorrentBackendResult.Failure ->
+                    lastFailure = result.reason
+            }
+        }
+
+        return TorrentAcquisitionResult.Failure(lastFailure)
+    }
+}
+
 private fun validateHttpUrl(value: String) {
     require(value.length <= 8192) { "Torrent URL is too long" }
     val uri = runCatching { URI(value) }.getOrNull()
