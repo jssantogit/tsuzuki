@@ -23,6 +23,16 @@ class ApkLaneTest(unittest.TestCase):
         self.assertEqual(resolve_lane("tsuzuki/runtime-v2-dev-b-fix")["task"], "assembleDevb")
         self.assertEqual(resolve_lane("tsuzuki/runtime-v2-dev-c")["task"], "assembleDevc")
 
+    def test_provider_platform_branches_use_signed_release_lane(self):
+        lane = resolve_lane("tsuzuki/provider-platform-wave6")
+        self.assertEqual(lane["lane"], "release")
+        self.assertEqual(lane["task"], "assembleRelease")
+        self.assertEqual(
+            lane["apk"],
+            "app/build/outputs/apk/release/app-arm64-v8a-release.apk",
+        )
+        self.assertEqual(lane["flags"], "-Penable-updater")
+
     def test_runtime_v2_integration_and_torrent_use_release(self):
         self.assertEqual(resolve_lane("tsuzuki/runtime-v2-integration")["task"], "assembleRelease")
         self.assertEqual(resolve_lane("tsuzuki/runtime-v2-torrent-jni")["task"], "assembleRelease")
