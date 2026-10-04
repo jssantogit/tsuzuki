@@ -113,6 +113,7 @@ class ProviderTorrentContractTest {
         TorrentAcquisitionPolicy.resolve(
             preference = TorrentAcquisitionPreference.DEBRID_THEN_P2P,
             hasUsableDebrid = true,
+            hasUsableP2p = true,
             directP2pAllowed = true,
         ) shouldBe TorrentAcquisitionDecision.Routes(
             listOf(
@@ -124,6 +125,7 @@ class ProviderTorrentContractTest {
         TorrentAcquisitionPolicy.resolve(
             preference = TorrentAcquisitionPreference.DEBRID_THEN_P2P,
             hasUsableDebrid = true,
+            hasUsableP2p = true,
             directP2pAllowed = false,
         ) shouldBe TorrentAcquisitionDecision.Routes(
             listOf(TorrentAcquisitionRoute.DEBRID),
@@ -132,13 +134,32 @@ class ProviderTorrentContractTest {
         TorrentAcquisitionPolicy.resolve(
             preference = TorrentAcquisitionPreference.DEBRID_THEN_P2P,
             hasUsableDebrid = false,
+            hasUsableP2p = true,
             directP2pAllowed = false,
         ) shouldBe TorrentAcquisitionDecision.DirectP2pConsentRequired
 
         TorrentAcquisitionPolicy.resolve(
             preference = TorrentAcquisitionPreference.DEBRID_ONLY,
             hasUsableDebrid = false,
+            hasUsableP2p = false,
             directP2pAllowed = true,
+        ) shouldBe TorrentAcquisitionDecision.Unavailable
+    }
+
+    @Test
+    fun `p2p consent is never requested when no usable p2p route exists`() {
+        TorrentAcquisitionPolicy.resolve(
+            preference = TorrentAcquisitionPreference.P2P_ONLY,
+            hasUsableDebrid = false,
+            hasUsableP2p = false,
+            directP2pAllowed = false,
+        ) shouldBe TorrentAcquisitionDecision.Unavailable
+
+        TorrentAcquisitionPolicy.resolve(
+            preference = TorrentAcquisitionPreference.DEBRID_THEN_P2P,
+            hasUsableDebrid = false,
+            hasUsableP2p = false,
+            directP2pAllowed = false,
         ) shouldBe TorrentAcquisitionDecision.Unavailable
     }
 
@@ -147,12 +168,14 @@ class ProviderTorrentContractTest {
         TorrentAcquisitionPolicy.resolve(
             preference = TorrentAcquisitionPreference.P2P_ONLY,
             hasUsableDebrid = true,
+            hasUsableP2p = true,
             directP2pAllowed = false,
         ) shouldBe TorrentAcquisitionDecision.DirectP2pConsentRequired
 
         TorrentAcquisitionPolicy.resolve(
             preference = TorrentAcquisitionPreference.P2P_ONLY,
             hasUsableDebrid = false,
+            hasUsableP2p = true,
             directP2pAllowed = true,
         ) shouldBe TorrentAcquisitionDecision.Routes(
             listOf(TorrentAcquisitionRoute.DIRECT_P2P),
