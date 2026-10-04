@@ -64,6 +64,7 @@ import tachiyomi.domain.tsuzuki.addon.repository.AddonSyncIntentRepository
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.library.interactor.RefreshUserLibraries
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalReaderPreferences
 import tachiyomi.domain.tsuzuki.source.service.ReadingSourceGateway
 
@@ -124,6 +125,7 @@ interface AppGraph : ViewModelGraph {
     val providerRepositoryManager: ProviderRepositoryManager
     val installedScriptProviderRegistry: InstalledScriptProviderRegistry
     val providerRegistry: ProviderRegistry
+    val providerReadingGateway: ProviderReadingGateway
     val addonRepository: AddonRepository
     val readingSourceGateway: ReadingSourceGateway
     val addonSyncIntentRepository: AddonSyncIntentRepository
