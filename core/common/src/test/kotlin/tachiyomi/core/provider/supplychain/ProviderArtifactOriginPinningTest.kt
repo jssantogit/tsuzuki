@@ -48,6 +48,8 @@ class ProviderArtifactOriginPinningTest {
         shouldThrow<ProviderSupplyChainException> {
             store.activate(artifact(repositoryId = "repo.b", versionCode = 2))
         }
+        store.current("reader.example")?.repositoryId shouldBe "repo.a"
+        store.current("reader.example")?.versionCode shouldBe 1L
 
         store.activate(artifact(repositoryId = "repo.a", versionCode = 2))
 
