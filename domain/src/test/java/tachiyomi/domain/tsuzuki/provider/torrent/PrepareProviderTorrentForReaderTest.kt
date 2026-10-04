@@ -139,7 +139,7 @@ class PrepareProviderTorrentForReaderTest {
             registration("org.example.p2p", ProviderCapabilities.AcquisitionP2pV1),
         )
         return ProviderTorrentAcquisitionCoordinator(
-            registry = DefaultProviderRegistry { registrations },
+            registry = DefaultProviderRegistry(registrations = { registrations }),
             debrid = debrid,
             p2p = p2p,
         )
