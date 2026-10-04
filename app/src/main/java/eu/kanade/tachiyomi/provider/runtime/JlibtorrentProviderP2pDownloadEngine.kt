@@ -122,6 +122,8 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             // operations must remain statically bound to jlibtorrent's TorrentHandle API.
             val handle: TorrentHandle = try {
                 withTimeout(HANDLE_TIMEOUT_MS) {
+                    // Keep polling state explicit: labeled returns here make Kotlin widen the
+                    // timeout result to Unit/Any and break TorrentHandle calls at compile time.
                     var resolved: TorrentHandle? = null
                     while (resolved == null) {
                         coroutineContext.ensureActive()
