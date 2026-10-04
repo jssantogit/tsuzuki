@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.data.database.models.ChapterImpl
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
+import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.CanonicalReaderTargetPlan
@@ -360,6 +361,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         networkOrigins: Set<String>,
         browserOrigins: Set<String> = emptySet(),
         localNetwork: Boolean,
+        managedFiles: ProviderManagedFileStore? = null,
     ): ScriptProviderReadingGateway {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val storageRoot = File(context.cacheDir, "provider-reading-gateway").apply {
@@ -405,11 +407,13 @@ class ScriptProviderReadingGatewayIsolationTest {
                 )
             },
         )
+        val managedFileStore = managedFiles ?: ProviderManagedFileStore(context)
         val runtimeClient = ProviderRuntimeClient(
             context = context,
             hostInvocationFactory = ProviderHostInvocationFactory(
                 context = context,
                 storageRoot = storageRoot,
+                managedFiles = managedFileStore,
             ),
         )
 
@@ -424,6 +428,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 )
             },
             runtimeClient = runtimeClient,
+            managedResources = managedFileStore,
         )
     }
 
