@@ -326,6 +326,13 @@ dependencies {
     implementation(libs.okio)
     implementation(libs.conscrypt) // TLS 1.3 support for Android < 10
 
+    // Privileged host-owned BitTorrent engine for Provider acquisition.p2p@1.
+    implementation(libs.jlibtorrent.core)
+    implementation(libs.jlibtorrent.native.arm)
+    implementation(libs.jlibtorrent.native.arm64)
+    implementation(libs.jlibtorrent.native.x86)
+    implementation(libs.jlibtorrent.native.x8664)
+
     // Data serialization (JSON, protobuf, xml)
     implementation(libs.bundles.serialization)
 
