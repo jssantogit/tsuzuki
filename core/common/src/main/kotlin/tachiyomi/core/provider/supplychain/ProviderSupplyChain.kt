@@ -669,6 +669,14 @@ class ProviderArtifactStore(
         }
 
         val previousState = readState(providerId)
+        if (
+            previousState != null &&
+            previousState.current.repositoryId != artifact.repositoryId
+        ) {
+            throw ProviderSupplyChainException(
+                "Installed Provider repository origin cannot change implicitly",
+            )
+        }
         if (previousState?.current?.versionCode == artifact.versionCode) {
             if (
                 previousState.current.repositoryId != artifact.repositoryId ||
