@@ -961,6 +961,10 @@ class SettingsTsuzukiTorrentAcquisitionScreen : Screen() {
         var directP2pAllowed by remember {
             mutableStateOf(preferences.directP2pAllowed.get())
         }
+        val temporaryStorageClearedMessage =
+            stringResource(MR.strings.tsuzuki_provider_temporary_storage_cleared)
+        val p2pStoppedMessage =
+            stringResource(MR.strings.tsuzuki_provider_p2p_stopped)
         var statusMessage by remember { mutableStateOf<String?>(null) }
 
         fun setPreference(value: TorrentAcquisitionPreference) {
@@ -1082,10 +1086,7 @@ class SettingsTsuzukiTorrentAcquisitionScreen : Screen() {
                                         withContext(Dispatchers.IO) {
                                             managedFiles.clearAll()
                                         }
-                                        statusMessage = context.getString(
-                                            MR.strings
-                                                .tsuzuki_provider_temporary_storage_cleared.resourceId,
-                                        )
+                                        statusMessage = temporaryStorageClearedMessage
                                     }
                                 },
                             ) {
@@ -1111,9 +1112,7 @@ class SettingsTsuzukiTorrentAcquisitionScreen : Screen() {
                             TextButton(
                                 onClick = {
                                     p2pJobs.cancelAll()
-                                    statusMessage = context.getString(
-                                        MR.strings.tsuzuki_provider_p2p_stopped.resourceId,
-                                    )
+                                    statusMessage = p2pStoppedMessage
                                 },
                             ) {
                                 Text(stringResource(MR.strings.tsuzuki_provider_stop_p2p))
