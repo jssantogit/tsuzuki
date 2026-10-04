@@ -331,7 +331,10 @@ dependencies {
     implementation(libs.jlibtorrent.native.arm)
     implementation(libs.jlibtorrent.native.arm64)
     implementation(libs.jlibtorrent.native.x86)
-    implementation(libs.jlibtorrent.native.x8664)
+    // The upstream 2.0.12.9 x86_64 ELF has a GNU_RELRO range that is not
+    // 16 KiB aligned. Keep it in debug only for the API 35 emulator native
+    // transport gate; release Direct P2P fails closed on x86_64.
+    debugImplementation(libs.jlibtorrent.native.x8664)
 
     // Data serialization (JSON, protobuf, xml)
     implementation(libs.bundles.serialization)
