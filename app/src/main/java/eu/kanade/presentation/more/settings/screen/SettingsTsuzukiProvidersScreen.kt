@@ -38,6 +38,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.provider.repository.InstalledScriptProviderRegistry
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -93,7 +94,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
             var lastError: String? = null
             repositories.forEach { repository ->
                 val repositoryId = repository.enrollment.repositoryId
-                runCatching {
+                runProviderUiCatching {
                     manager.refresh(repositoryId)
                 }.onSuccess { snapshot ->
                     next[repositoryId] = snapshot
@@ -135,6 +136,8 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                         val id = repository.enrollment.repositoryId
                         manager.snapshot(id)?.let { id to it }
                     }.toMap()
+                } catch (error: CancellationException) {
+                    throw error
                 } catch (error: Throwable) {
                     errorMessage = error.message ?: "Provider operation failed"
                 } finally {
@@ -221,7 +224,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                         },
                         onEnabledChange = { providerId, enabled ->
                             scope.launch {
-                                runCatching {
+                                runProviderUiCatching {
                                     withContext(Dispatchers.IO) {
                                         registry.setEnabled(ProviderId(providerId), enabled)
                                     }
@@ -266,7 +269,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                     scope.launch {
                         refreshing = true
                         errorMessage = null
-                        runCatching {
+                        runProviderUiCatching {
                             manager.refresh(repositoryId)
                         }.onSuccess { snapshot ->
                             snapshots = snapshots + (repositoryId to snapshot)
@@ -294,7 +297,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                         repositories = manager.repositories()
                         showAddRepository = false
                         scope.launch {
-                            runCatching {
+                            runProviderUiCatching {
                                 manager.refresh(repository.enrollment.repositoryId)
                             }.onSuccess { snapshot ->
                                 snapshots = snapshots +
@@ -434,7 +437,7 @@ class SettingsTsuzukiProviderDetailScreen(
                                         current.lifecycleStatus != ProviderLifecycleStatus.INVALID,
                                     onCheckedChange = { enabled ->
                                         scope.launch {
-                                            runCatching {
+                                            runProviderUiCatching {
                                                 withContext(Dispatchers.IO) {
                                                     registry.setEnabled(providerId, enabled)
                                                 }
@@ -531,7 +534,7 @@ class SettingsTsuzukiProviderDetailScreen(
                                                 next.toSet()
                                             }
                                             scope.launch {
-                                                runCatching {
+                                                runProviderUiCatching {
                                                     withContext(Dispatchers.IO) {
                                                         registry.setEnabledContentLanguages(
                                                             providerId = providerId,
@@ -978,3 +981,14 @@ internal fun providerRepositoryTrustConfirmationToken(
     keyId.trim(),
     keyFingerprint.lowercase(),
 ).joinToString(separator = "|")
+
+
+internal suspend fun <T> runProviderUiCatching(
+    block: suspend () -> T,
+): Result<T> = try {
+    Result.success(block())
+} catch (error: CancellationException) {
+    throw error
+} catch (error: Throwable) {
+    Result.failure(error)
+}
