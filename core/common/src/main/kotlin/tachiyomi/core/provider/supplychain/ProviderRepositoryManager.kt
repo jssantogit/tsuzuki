@@ -97,6 +97,9 @@ class ProviderRepositoryManager(
     fun installed(): List<StoredProviderArtifact> =
         artifactStore.listInstalled()
 
+    fun canRollback(providerId: String): Boolean =
+        artifactStore.previous(providerId)?.revoked == false
+
     fun previous(providerId: String): StoredProviderArtifact? =
         artifactStore.previous(providerId)
 
