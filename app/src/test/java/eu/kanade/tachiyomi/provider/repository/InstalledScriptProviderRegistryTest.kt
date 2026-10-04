@@ -309,6 +309,35 @@ class InstalledScriptProviderRegistryTest {
     }
 
     @Test
+    fun `reserved builtin id suppresses a preexisting script artifact`() {
+        val artifactStore = ProviderArtifactStore(
+            tempDir.resolve("reserved-script-artifacts").toFile(),
+        )
+        artifactStore.activate(
+            artifact(
+                versionCode = 1,
+                providerId = "kitsu",
+            ),
+        )
+        val configurationStore = FileProviderLocalConfigurationStore(
+            tempDir.resolve("reserved-script-config").toFile(),
+        )
+        val registry = InstalledScriptProviderRegistry(
+            artifactStore = artifactStore,
+            configurationStore = configurationStore,
+            reservedProviderIds = setOf("kitsu"),
+        )
+
+        registry.providers() shouldBe emptyList()
+        registry.registration(ProviderId("kitsu")) shouldBe null
+        registry.enabled(ProviderCapabilities.ReadingChaptersV1) shouldBe emptyList()
+        shouldThrow<IllegalArgumentException> {
+            registry.setEnabled(ProviderId("kitsu"), true)
+        }
+        configurationStore.get("kitsu") shouldBe null
+    }
+
+    @Test
     fun `language selection cannot grant undeclared Provider facet`() {
         val artifactStore = ProviderArtifactStore(tempDir.resolve("invalid-artifacts").toFile())
         artifactStore.activate(artifact(versionCode = 1))
@@ -327,10 +356,16 @@ class InstalledScriptProviderRegistryTest {
         }
     }
 
-    private fun artifact(versionCode: Long): VerifiedProviderArtifact {
-        val bytes = tsz(versionCode)
+    private fun artifact(
+        versionCode: Long,
+        providerId: String = "reader.example",
+    ): VerifiedProviderArtifact {
+        val bytes = tsz(
+            versionCode = versionCode,
+            providerId = providerId,
+        )
         return verifiedArtifact(
-            providerId = "reader.example",
+            providerId = providerId,
             versionName = "1.0." + versionCode,
             versionCode = versionCode,
             bytes = bytes,
@@ -396,11 +431,14 @@ class InstalledScriptProviderRegistryTest {
         )
     }
 
-    private fun tsz(versionCode: Long): ByteArray {
+    private fun tsz(
+        versionCode: Long,
+        providerId: String = "reader.example",
+    ): ByteArray {
         val manifest = """
             {
               "manifestVersion": 1,
-              "id": "reader.example",
+              "id": "$providerId",
               "name": "Reader Example",
               "version": {"name": "1.0.$versionCode", "code": $versionCode},
               "minHostApi": 1,
