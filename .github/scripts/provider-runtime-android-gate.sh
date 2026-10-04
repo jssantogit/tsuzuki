@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# Keep runtime and reading instrumentation on the same physical gate.
+# Keep runtime and reading instrumentation on the same physical gate and branch head.
 ./gradlew :app:connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.package=eu.kanade.tachiyomi.provider.runtime
 status=$?
