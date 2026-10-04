@@ -30,7 +30,11 @@ class ProviderTorrentHttpFileMaterializerTest {
     fun `debrid HTTP archive streams into provider scoped managed Reader content`() = runTest {
         val server = MockWebServer()
         val archive = zip("page-1.jpg", "chapter")
-        server.enqueue(MockResponse(body = okio.Buffer().write(archive)))
+        server.enqueue(
+            MockResponse.Builder()
+                .body(okio.Buffer().write(archive))
+                .build(),
+        )
         server.start()
 
         try {
@@ -77,7 +81,11 @@ class ProviderTorrentHttpFileMaterializerTest {
                 ),
             ),
         )
-        blocked.enqueue(MockResponse(body = okio.Buffer().write(zip("page.jpg", "leak"))))
+        blocked.enqueue(
+            MockResponse.Builder()
+                .body(okio.Buffer().write(zip("page.jpg", "leak")))
+                .build(),
+        )
 
         try {
             val origin = allowed.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
@@ -109,9 +117,9 @@ class ProviderTorrentHttpFileMaterializerTest {
     fun `debrid archive streaming fails closed at byte quota`() = runTest {
         val server = MockWebServer()
         server.enqueue(
-            MockResponse(
-                body = okio.Buffer().write(ByteArray(4096) { 1 }),
-            ),
+            MockResponse.Builder()
+                .body(okio.Buffer().write(ByteArray(4096) { 1 }))
+                .build(),
         )
         server.start()
 
