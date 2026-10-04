@@ -22,6 +22,7 @@ import tachiyomi.core.provider.supplychain.sha256Hex
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
+import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
 import tachiyomi.domain.tsuzuki.provider.ProviderSettingType
 import java.io.ByteArrayOutputStream
 import java.nio.file.Path
@@ -50,6 +51,7 @@ class InstalledScriptProviderRegistryTest {
         val registration = registry.registration(ProviderId("reader.example"))!!
 
         registration.lifecycleStatus shouldBe ProviderLifecycleStatus.ENABLED
+        registration.descriptor.origin shouldBe ProviderOrigin.Repository("repo.example")
         registration.descriptor.capabilities shouldBe setOf(
             ProviderCapabilities.ReadingChaptersV1,
             ProviderCapabilities.ReadingPagesV1,
