@@ -106,6 +106,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
             }
             errorMessage = lastError
             refreshing = false
+            registry.invalidate()
             reloadInstalled()
         }
 
@@ -518,6 +519,8 @@ class SettingsTsuzukiProviderDetailScreen(
                                 trailingContent = {
                                     Switch(
                                         checked = selected,
+                                        enabled = current.lifecycleStatus != ProviderLifecycleStatus.BLOCKED &&
+                                            current.lifecycleStatus != ProviderLifecycleStatus.INVALID,
                                         onCheckedChange = { enabled ->
                                             val next = activeLanguages.toMutableSet().apply {
                                                 if (enabled) add(language) else remove(language)
