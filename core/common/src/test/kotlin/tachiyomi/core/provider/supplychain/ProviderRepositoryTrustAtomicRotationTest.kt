@@ -73,6 +73,14 @@ class ProviderRepositoryTrustAtomicRotationTest {
 
         rotated.verifiedKeyId shouldBe "root-2"
         rotated.index.sequence shouldBe 2L
+
+        val rotatedArtifact = restarted.verifyArtifact(
+            repository = rotated,
+            providerId = "reader.example",
+            artifactBytes = "v2".encodeToByteArray(),
+            installedVersionCode = null,
+        )
+        rotatedArtifact.repositoryTrustAnchorSha256 shouldBe sha256Hex(rootKey.public.encoded)
     }
 
     @Test
