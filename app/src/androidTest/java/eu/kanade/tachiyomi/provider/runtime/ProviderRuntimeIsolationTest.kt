@@ -249,7 +249,6 @@ class ProviderRuntimeIsolationTest {
             assertEquals(ProviderRuntimeFailureCode.HOST_ERROR, httpOversized.failure)
             assertEquals(false, httpRequestCalled.get())
 
-
             val p2pAllowed = invoke(
                 runtime = runtime,
                 source = """
