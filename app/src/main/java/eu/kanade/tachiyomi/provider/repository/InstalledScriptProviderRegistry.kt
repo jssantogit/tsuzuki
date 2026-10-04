@@ -78,7 +78,7 @@ class InstalledScriptProviderRegistry(
     ): ProviderRegistration {
         val providerId = ProviderId(stored.providerId)
         val parsed = runCatching {
-            parser.parse(artifactStore.readCurrentArtifact(stored.providerId))
+            parser.parse(artifactStore.readCurrentArtifactForInspection(stored.providerId))
         }.getOrNull()
 
         if (
@@ -183,7 +183,11 @@ class InstalledScriptProviderRegistry(
             settings = emptyList(),
             contentLanguages = emptySet(),
         ),
-        lifecycleStatus = ProviderLifecycleStatus.INVALID,
+        lifecycleStatus = if (artifactStore.current(providerId.value)?.revoked == true) {
+            ProviderLifecycleStatus.BLOCKED
+        } else {
+            ProviderLifecycleStatus.INVALID
+        },
         configurationFingerprint = configurationFingerprint(
             providerId = providerId,
             enabled = false,
