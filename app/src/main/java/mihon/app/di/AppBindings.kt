@@ -20,8 +20,15 @@ import eu.kanade.tachiyomi.provider.reading.StoredProviderScriptPackageSource
 import eu.kanade.tachiyomi.provider.repository.AndroidProviderRepositoryTransport
 import eu.kanade.tachiyomi.provider.repository.InstalledScriptProviderRegistry
 import eu.kanade.tachiyomi.provider.runtime.IsolatedProviderPackageContractValidator
+import eu.kanade.tachiyomi.provider.runtime.JlibtorrentProviderP2pDownloadEngine
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
+import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
+import eu.kanade.tachiyomi.provider.runtime.ProviderP2pJobManager
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
+import eu.kanade.tachiyomi.provider.runtime.ScriptProviderCapabilityExecutor
+import eu.kanade.tachiyomi.provider.runtime.ScriptProviderPackageSource
+import eu.kanade.tachiyomi.provider.runtime.StoredScriptProviderPackageSource
+import eu.kanade.tachiyomi.provider.torrent.ScriptProviderTorrentGateway
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
 import nl.adaptivity.xmlutil.XmlDeclMode
@@ -53,6 +60,9 @@ import tachiyomi.domain.tsuzuki.provider.CompositeProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
+import tachiyomi.domain.tsuzuki.provider.torrent.DebridResolveGateway
+import tachiyomi.domain.tsuzuki.provider.torrent.P2pAcquireGateway
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchGateway
 import java.io.File
 
 @BindingContainer
@@ -201,10 +211,35 @@ object AppBindings {
 
     @Provides
     @SingleIn(AppScope::class)
+    fun providesProviderManagedFileStore(
+        context: Context,
+    ): ProviderManagedFileStore =
+        ProviderManagedFileStore(context)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderP2pJobManager(
+        context: Context,
+        managedFiles: ProviderManagedFileStore,
+    ): ProviderP2pJobManager =
+        ProviderP2pJobManager(
+            root = File(context.cacheDir, "provider-platform/p2p-jobs"),
+            managedFiles = managedFiles,
+            engine = JlibtorrentProviderP2pDownloadEngine(),
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
     fun providesProviderHostInvocationFactory(
         context: Context,
+        managedFiles: ProviderManagedFileStore,
+        p2pJobs: ProviderP2pJobManager,
     ): ProviderHostInvocationFactory =
-        ProviderHostInvocationFactory(context)
+        ProviderHostInvocationFactory(
+            context = context,
+            p2pServiceFactory = p2pJobs::service,
+            managedFiles = managedFiles,
+        )
 
     @Provides
     @SingleIn(AppScope::class)
@@ -230,6 +265,52 @@ object AppBindings {
         artifactStore: ProviderArtifactStore,
     ): ActiveProviderScriptPackageSource =
         StoredProviderScriptPackageSource(artifactStore)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesScriptProviderPackageSource(
+        artifactStore: ProviderArtifactStore,
+    ): ScriptProviderPackageSource =
+        StoredScriptProviderPackageSource(artifactStore)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesScriptProviderCapabilityExecutor(
+        registry: ProviderRegistry,
+        packageSource: ScriptProviderPackageSource,
+        runtimeClient: ProviderRuntimeClient,
+    ): ScriptProviderCapabilityExecutor =
+        ScriptProviderCapabilityExecutor(
+            registry = registry,
+            packageSource = packageSource,
+            runtimeClient = runtimeClient,
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesScriptProviderTorrentGateway(
+        executor: ScriptProviderCapabilityExecutor,
+        managedFiles: ProviderManagedFileStore,
+    ): ScriptProviderTorrentGateway =
+        ScriptProviderTorrentGateway(
+            executor = executor,
+            managedResources = managedFiles,
+        )
+
+    @Provides
+    fun providesTorrentSearchGateway(
+        gateway: ScriptProviderTorrentGateway,
+    ): TorrentSearchGateway = gateway
+
+    @Provides
+    fun providesDebridResolveGateway(
+        gateway: ScriptProviderTorrentGateway,
+    ): DebridResolveGateway = gateway
+
+    @Provides
+    fun providesP2pAcquireGateway(
+        gateway: ScriptProviderTorrentGateway,
+    ): P2pAcquireGateway = gateway
 
     @Provides
     @SingleIn(AppScope::class)
