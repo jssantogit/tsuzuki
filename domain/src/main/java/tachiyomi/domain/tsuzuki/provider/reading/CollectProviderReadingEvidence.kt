@@ -8,6 +8,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
+import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
@@ -17,6 +19,43 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import java.security.MessageDigest
 
+/** One complete chapter inventory emitted by one exact Provider binding. */
+data class ProviderReadingEvidenceSnapshot(
+    val producerId: String,
+    val observedAt: Long,
+    val evidence: List<ChapterEvidence>,
+) {
+    init {
+        require(producerId.isNotBlank()) { "Provider evidence producer ID must not be blank" }
+        require(observedAt >= 0L) { "Provider evidence timestamp must not be negative" }
+        require(
+            evidence.all { observation ->
+                observation.producerKind == ProducerKind.PROVIDER &&
+                    observation.producerId == producerId &&
+                    observation.authority == ChapterEvidenceAuthority.PROVIDER_PROVISIONAL &&
+                    observation.observedAt == observedAt
+            },
+        ) {
+            "Provider evidence snapshot must contain one exact Provider binding and timestamp"
+        }
+    }
+}
+
+/**
+ * Result of collecting every enabled SCRIPT reading Provider for one canonical title.
+ *
+ * Snapshots stay separated by exact Provider binding so reconciliation can detach stale support
+ * when a later complete inventory becomes empty or drops chapters.
+ */
+data class ProviderReadingEvidenceCollection(
+    val snapshots: List<ProviderReadingEvidenceSnapshot> = emptyList(),
+    val bindingCount: Int = 0,
+    val complete: Boolean = true,
+) {
+    val evidence: List<ChapterEvidence>
+        get() = snapshots.flatMap(ProviderReadingEvidenceSnapshot::evidence)
+}
+
 /**
  * Connects enabled SCRIPT reading Providers to Tsuzuki's canonical chapter-evidence pipeline.
  *
@@ -24,12 +63,6 @@ import java.security.MessageDigest
  * candidate is an exact normalized title/alias match for the canonical title and active facet.
  * Ambiguous results remain unbound rather than leaking fuzzy Provider identity into canonical state.
  */
-data class ProviderReadingEvidenceCollection(
-    val evidence: List<ChapterEvidence> = emptyList(),
-    val bindingCount: Int = 0,
-    val complete: Boolean = true,
-)
-
 class CollectProviderReadingEvidence private constructor(
     private val canonicalTitleRepository: CanonicalTitleRepository,
     private val providerRegistry: ProviderRegistry,
@@ -96,18 +129,10 @@ class CollectProviderReadingEvidence private constructor(
             }.awaitAll()
         }
 
-        val evidenceById = linkedMapOf<String, ChapterEvidence>()
-        var bindingCount = 0
-        var complete = true
-        results.forEach { result ->
-            result.evidence.forEach { evidence -> evidenceById.putIfAbsent(evidence.id, evidence) }
-            bindingCount += result.bindingCount
-            complete = complete && result.complete
-        }
         return ProviderReadingEvidenceCollection(
-            evidence = evidenceById.values.toList(),
-            bindingCount = bindingCount,
-            complete = complete,
+            snapshots = results.flatMap(ProviderReadingEvidenceCollection::snapshots),
+            bindingCount = results.sumOf(ProviderReadingEvidenceCollection::bindingCount),
+            complete = results.all(ProviderReadingEvidenceCollection::complete),
         )
     }
 
@@ -138,28 +163,50 @@ class CollectProviderReadingEvidence private constructor(
                 providerId = target.registration.descriptor.id,
                 facetId = target.facetId,
             )?.takeIf { it.availability == ProviderBindingAvailability.AVAILABLE }
-            val binding = existing ?: discoverBinding(
-                canonicalTitleId = canonicalTitleId,
-                title = title,
-                target = target,
-            ) ?: return ProviderReadingEvidenceCollection()
+            val binding = existing ?: when (
+                val discovery = discoverBinding(
+                    canonicalTitleId = canonicalTitleId,
+                    title = title,
+                    target = target,
+                )
+            ) {
+                is ProviderCallResult.Failure -> return ProviderReadingEvidenceCollection(complete = false)
+                is ProviderCallResult.Success -> discovery.value
+                    ?: return ProviderReadingEvidenceCollection()
+            }
 
-            val observedAt = clock()
-            when (val observations = collectChapters(binding)) {
+            var published: ProviderReadingEvidenceSnapshot? = null
+            val refresher = RefreshProviderReadingChapters(
+                gateway = gateway,
+                evidenceAdapter = evidenceAdapter,
+                publishSnapshot = { titleId, producerId, observedAt, evidence ->
+                    require(titleId == canonicalTitleId) {
+                        "Provider reading snapshot belongs to another canonical title"
+                    }
+                    published = ProviderReadingEvidenceSnapshot(
+                        producerId = producerId,
+                        observedAt = observedAt,
+                        evidence = evidence,
+                    )
+                },
+                clock = clock,
+            )
+            when (refresher.execute(binding)) {
                 is ProviderCallResult.Failure -> ProviderReadingEvidenceCollection(
                     bindingCount = 1,
                     complete = false,
                 )
-                is ProviderCallResult.Success -> ProviderReadingEvidenceCollection(
-                    evidence = evidenceAdapter.toEvidence(
-                        canonicalTitleId = canonicalTitleId,
-                        binding = binding.ref,
-                        observations = observations.value,
-                        observedAt = observedAt,
-                    ),
-                    bindingCount = 1,
-                    complete = true,
-                )
+                is ProviderCallResult.Success -> {
+                    val snapshot = published ?: return ProviderReadingEvidenceCollection(
+                        bindingCount = 1,
+                        complete = false,
+                    )
+                    ProviderReadingEvidenceCollection(
+                        snapshots = listOf(snapshot),
+                        bindingCount = 1,
+                        complete = true,
+                    )
+                }
             }
         } catch (error: CancellationException) {
             throw error
@@ -172,9 +219,9 @@ class CollectProviderReadingEvidence private constructor(
         canonicalTitleId: String,
         title: String,
         target: ReadingTarget,
-    ): ProviderReadingBinding? {
+    ): ProviderCallResult<ProviderReadingBinding?> {
         val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
-            is ProviderCallResult.Failure -> return null
+            is ProviderCallResult.Failure -> return result
             is ProviderCallResult.Success -> result.value
         }
         val normalizedTitle = normalize(title)
@@ -192,11 +239,11 @@ class CollectProviderReadingEvidence private constructor(
             }
             .distinctBy(ProviderWorkCandidate::externalWorkId)
             .toList()
-        if (matches.size != 1) return null
+        if (matches.size != 1) return ProviderCallResult.Success(null)
 
         val now = clock()
         val candidate = matches.single()
-        return ProviderReadingBinding(
+        val binding = ProviderReadingBinding(
             id = bindingId(
                 canonicalTitleId = canonicalTitleId,
                 providerId = target.registration.descriptor.id,
@@ -213,7 +260,9 @@ class CollectProviderReadingEvidence private constructor(
             availability = ProviderBindingAvailability.AVAILABLE,
             createdAt = now,
             updatedAt = now,
-        ).also { bindingRepository.upsert(it) }
+        )
+        bindingRepository.upsert(binding)
+        return ProviderCallResult.Success(binding)
     }
 
     private suspend fun collectLookup(
@@ -240,40 +289,6 @@ class CollectProviderReadingEvidence private constructor(
             }
             items += page.items
             if (items.size > MAX_LOOKUP_ITEMS) return malformed()
-            val next = page.nextCursor ?: break
-            if (!seenCursors.add(next.value)) return malformed()
-            cursor = next
-        }
-        return ProviderCallResult.Success(items)
-    }
-
-    private suspend fun collectChapters(
-        binding: ProviderReadingBinding,
-    ): ProviderCallResult<List<ProviderChapterObservation>> {
-        val items = mutableListOf<ProviderChapterObservation>()
-        val chapterIds = mutableSetOf<String>()
-        val seenCursors = mutableSetOf<String>()
-        var cursor: ProviderCursor? = null
-        var pageCount = 0
-        while (true) {
-            if (++pageCount > MAX_CHAPTER_PAGES) return malformed()
-            val page = when (
-                val result = gateway.chapters(
-                    providerId = binding.ref.providerId,
-                    request = ProviderReadingChaptersRequest(
-                        binding = binding.ref,
-                        cursor = cursor,
-                    ),
-                )
-            ) {
-                is ProviderCallResult.Failure -> return result
-                is ProviderCallResult.Success -> result.value
-            }
-            for (observation in page.items) {
-                if (!chapterIds.add(observation.providerChapterId)) return malformed()
-                items += observation
-            }
-            if (items.size > MAX_CHAPTER_ITEMS) return malformed()
             val next = page.nextCursor ?: break
             if (!seenCursors.add(next.value)) return malformed()
             cursor = next
@@ -343,7 +358,5 @@ class CollectProviderReadingEvidence private constructor(
         const val MAX_CONCURRENT_PROVIDERS = 4
         const val MAX_LOOKUP_PAGES = 8
         const val MAX_LOOKUP_ITEMS = 2_000
-        const val MAX_CHAPTER_PAGES = 64
-        const val MAX_CHAPTER_ITEMS = 20_000
     }
 }
