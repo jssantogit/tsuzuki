@@ -274,6 +274,53 @@ class ScriptProviderReadingGatewayTest {
     }
 
     @Test
+    fun `builtin registration cannot execute a colliding legacy script package`() = runBlocking {
+        var invoked = false
+        val builtin = ProviderDescriptor(
+            id = providerId,
+            name = "Builtin Reader",
+            version = ProviderVersion("1.0.0", 1),
+            origin = ProviderOrigin.Builtin,
+            runtime = ProviderRuntimeKind.BUILTIN,
+            capabilities = setOf(ProviderCapabilities.ReadingLookupV1),
+            permissions = ProviderPermissionSet(),
+            settings = emptyList(),
+            contentLanguages = emptySet(),
+        )
+        val registry = DefaultProviderRegistry(
+            registrations = {
+                listOf(
+                    ProviderRegistration(
+                        descriptor = builtin,
+                        lifecycleStatus = ProviderLifecycleStatus.ENABLED,
+                        configurationFingerprint = "builtin-v1",
+                    ),
+                )
+            },
+        )
+        val gateway = ScriptProviderReadingGateway(
+            registry = registry,
+            packageSource = ActiveProviderScriptPackageSource { activePackage },
+            invokePackage = ProviderPackageCapabilityInvoker { _, _, _, _ ->
+                invoked = true
+                error("colliding script must never execute")
+            },
+            invocationIdFactory = { "reading-collision-test" },
+        )
+
+        gateway.lookup(
+            providerId,
+            ProviderReadingLookupRequest(listOf("Title")),
+        ) shouldBe ProviderCallResult.Failure(
+            tachiyomi.domain.tsuzuki.provider.reading.ProviderError(
+                ProviderErrorCode.UNAVAILABLE,
+                retryable = false,
+            ),
+        )
+        invoked shouldBe false
+    }
+
+    @Test
     fun `disabled stale or runtime-failed providers fail closed with typed domain errors`() = runBlocking {
         var invoked = false
         val disabled = gateway(
