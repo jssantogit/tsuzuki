@@ -1,11 +1,13 @@
 package eu.kanade.tachiyomi.provider.torrent
 
+import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.ResponseBody
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicyException
@@ -17,10 +19,10 @@ import tachiyomi.domain.tsuzuki.provider.ProviderManagedFileFormat
 import tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceRef
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentAcquisitionRequest
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentArchiveFormat
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateFile
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentHttpFileMaterializer
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentReadableResource
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
-import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
@@ -62,190 +64,20 @@ class ProviderTorrentHttpFileMaterializer internal constructor(
             )
 
             try {
-                val policy = ProviderNetworkPolicy(
-                    allowedOrigins = resource.allowedOrigins,
-                    allowLocalNetwork = resource.allowLocalNetwork,
+                materializeInternal(
+                    providerId = providerId,
+                    request = request,
+                    resource = resource,
+                    format = format,
+                    temp = temp,
                 )
-                val client = baseClient.newBuilder()
-                    .dns { host -> policy.resolvePublicAddresses(host) }
-                    .build()
-
-                var current = policy.validate(resource.url, resolveAddress = false)
-                var headers = resource.headers
-                var redirects = 0
-
-                while (true) {
-                    val response = try {
-                        client.newCall(
-                            Request.Builder()
-                                .url(current)
-                                .apply {
-                                    headers.forEach { (name, value) ->
-                                        header(name, value)
-                                    }
-                                }
-                                .get()
-                                .build(),
-                        ).execute()
-                    } catch (error: ProviderNetworkPolicyException) {
-                        return@withContext failure(
-                            ProviderErrorCode.NETWORK_POLICY,
-                            retryable = false,
-                        )
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (_: Throwable) {
-                        return@withContext failure(
-                            ProviderErrorCode.NETWORK_ERROR,
-                            retryable = true,
-                        )
-                    }
-
-                    response.use { value ->
-                        if (value.code in REDIRECT_CODES) {
-                            if (redirects >= maxRedirects) {
-                                return@withContext failure(
-                                    ProviderErrorCode.NETWORK_ERROR,
-                                    retryable = false,
-                                )
-                            }
-                            redirects += 1
-
-                            val location = value.header("Location")
-                                ?: return@withContext malformed()
-                            val redirected = current.resolve(location)
-                                ?: return@withContext malformed()
-                            val validated = try {
-                                policy.validate(
-                                    redirected.toString(),
-                                    resolveAddress = false,
-                                )
-                            } catch (_: ProviderNetworkPolicyException) {
-                                return@withContext failure(
-                                    ProviderErrorCode.NETWORK_POLICY,
-                                    retryable = false,
-                                )
-                            }
-                            if (!sameOrigin(current, validated)) {
-                                headers = emptyMap()
-                            }
-                            current = validated
-                            continue
-                        }
-
-                        if (value.code == 401 || value.code == 403) {
-                            return@withContext failure(
-                                ProviderErrorCode.AUTH_REQUIRED,
-                                retryable = false,
-                            )
-                        }
-                        if (!value.isSuccessful) {
-                            return@withContext failure(
-                                ProviderErrorCode.NETWORK_ERROR,
-                                retryable = value.code >= 500,
-                            )
-                        }
-
-                        val body = value.body
-                            ?: return@withContext malformed()
-                        val declared = body.contentLength()
-                        if (declared > maxFileBytes) {
-                            return@withContext failure(
-                                ProviderErrorCode.RESOURCE_LIMIT,
-                                retryable = false,
-                            )
-                        }
-
-                        val copied = try {
-                            body.byteStream().use { input ->
-                                FileOutputStream(temp).use { output ->
-                                    var total = 0L
-                                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                                    while (true) {
-                                        val read = input.read(buffer)
-                                        if (read < 0) break
-                                        if (read == 0) continue
-
-                                        total += read
-                                        if (total > maxFileBytes) {
-                                            throw MaterializationLimitExceeded()
-                                        }
-                                        output.write(buffer, 0, read)
-                                    }
-                                    output.flush()
-                                    output.fd.sync()
-                                    total
-                                }
-                            }
-                        } catch (_: MaterializationLimitExceeded) {
-                            return@withContext failure(
-                                ProviderErrorCode.RESOURCE_LIMIT,
-                                retryable = false,
-                            )
-                        } catch (error: CancellationException) {
-                            throw error
-                        } catch (_: Throwable) {
-                            return@withContext failure(
-                                ProviderErrorCode.NETWORK_ERROR,
-                                retryable = true,
-                            )
-                        }
-
-                        if (
-                            copied <= 0L ||
-                            (
-                                request.selectedFile.sizeBytes != null &&
-                                    copied != request.selectedFile.sizeBytes
-                                )
-                        ) {
-                            return@withContext malformed()
-                        }
-
-                        val managedFormat = when (format) {
-                            TorrentArchiveFormat.CBZ -> ProviderManagedResourceFormat.CBZ
-                            TorrentArchiveFormat.ZIP -> ProviderManagedResourceFormat.ZIP
-                        }
-                        val token = try {
-                            managedFiles.adoptFile(
-                                providerId = providerId.value,
-                                source = temp,
-                                format = managedFormat,
-                            )
-                        } catch (_: Throwable) {
-                            return@withContext failure(
-                                ProviderErrorCode.ACQUISITION_FAILED,
-                                retryable = false,
-                            )
-                        }
-
-                        val domainFormat = when (format) {
-                            TorrentArchiveFormat.CBZ -> ProviderManagedFileFormat.CBZ
-                            TorrentArchiveFormat.ZIP -> ProviderManagedFileFormat.ZIP
-                        }
-                        val uri = managedFiles.resolve(
-                            providerId = providerId,
-                            resource = ProviderManagedResourceRef(token),
-                            format = domainFormat,
-                        ) ?: return@withContext malformed()
-
-                        return@withContext ProviderCallResult.Success(
-                            PreparedChapterContent.CanonicalDownload(
-                                uri = uri,
-                                format = format.name,
-                            ),
-                        )
-                    }
-                }
-
-                @Suppress("UNREACHABLE_CODE")
-                malformed()
-            } catch (error: ProviderNetworkPolicyException) {
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: ProviderNetworkPolicyException) {
                 failure(
                     ProviderErrorCode.NETWORK_POLICY,
                     retryable = false,
                 )
-            } catch (error: CancellationException) {
-                throw error
             } catch (_: Throwable) {
                 failure(
                     ProviderErrorCode.ACQUISITION_FAILED,
@@ -256,8 +88,181 @@ class ProviderTorrentHttpFileMaterializer internal constructor(
             }
         }
 
-    private fun tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateFile.archiveFormat():
-        TorrentArchiveFormat? =
+    private fun materializeInternal(
+        providerId: ProviderId,
+        request: TorrentAcquisitionRequest,
+        resource: TorrentReadableResource.HttpFile,
+        format: TorrentArchiveFormat,
+        temp: File,
+    ): ProviderCallResult<PreparedChapterContent.CanonicalDownload> {
+        val policy = ProviderNetworkPolicy(
+            allowedOrigins = resource.allowedOrigins,
+            allowLocalNetwork = resource.allowLocalNetwork,
+        )
+        val client = baseClient.newBuilder()
+            .dns { host -> policy.resolvePublicAddresses(host) }
+            .build()
+
+        var current = policy.validate(resource.url, resolveAddress = false)
+        var headers = resource.headers
+        var redirects = 0
+
+        while (true) {
+            // Resolve immediately before the request and keep the same resolver on OkHttp so
+            // redirects/DNS rebinding cannot silently escape the Provider network authority.
+            policy.validate(current.toString(), resolveAddress = true)
+
+            val response = try {
+                client.newCall(
+                    Request.Builder()
+                        .url(current)
+                        .apply {
+                            headers.forEach { (name, value) ->
+                                header(name, value)
+                            }
+                        }
+                        .get()
+                        .build(),
+                ).execute()
+            } catch (error: Throwable) {
+                error.findNetworkPolicyException()?.let { throw it }
+                throw ProviderHttpArchiveNetworkException(error)
+            }
+
+            try {
+                if (response.code in REDIRECT_CODES) {
+                    if (redirects >= maxRedirects) {
+                        return failure(
+                            ProviderErrorCode.NETWORK_ERROR,
+                            retryable = false,
+                        )
+                    }
+                    redirects += 1
+
+                    val location = response.header("Location")
+                        ?: return malformed()
+                    val redirected = current.resolve(location)
+                        ?: return malformed()
+                    val validated = policy.validate(
+                        redirected.toString(),
+                        resolveAddress = false,
+                    )
+                    if (!sameOrigin(current, validated)) {
+                        // Never forward Provider secrets/custom headers across origins. A Provider
+                        // that needs the target origin can resolve a final URL itself.
+                        headers = emptyMap()
+                    }
+                    current = validated
+                    continue
+                }
+
+                if (response.code == 401 || response.code == 403) {
+                    return failure(
+                        ProviderErrorCode.AUTH_REQUIRED,
+                        retryable = false,
+                    )
+                }
+                if (!response.isSuccessful) {
+                    return failure(
+                        ProviderErrorCode.NETWORK_ERROR,
+                        retryable = response.code >= 500,
+                    )
+                }
+
+                val body = response.body
+                val declared = body.contentLength()
+                if (declared > maxFileBytes) {
+                    return failure(
+                        ProviderErrorCode.RESOURCE_LIMIT,
+                        retryable = false,
+                    )
+                }
+
+                val copied = try {
+                    body.streamTo(temp)
+                } catch (_: MaterializationLimitExceeded) {
+                    return failure(
+                        ProviderErrorCode.RESOURCE_LIMIT,
+                        retryable = false,
+                    )
+                } catch (error: Throwable) {
+                    error.findNetworkPolicyException()?.let { throw it }
+                    throw ProviderHttpArchiveNetworkException(error)
+                }
+
+                if (
+                    copied <= 0L ||
+                    (
+                        request.selectedFile.sizeBytes != null &&
+                            copied != request.selectedFile.sizeBytes
+                        )
+                ) {
+                    return malformed()
+                }
+
+                val managedFormat = when (format) {
+                    TorrentArchiveFormat.CBZ -> ProviderManagedResourceFormat.CBZ
+                    TorrentArchiveFormat.ZIP -> ProviderManagedResourceFormat.ZIP
+                }
+                val token = try {
+                    managedFiles.adoptFile(
+                        providerId = providerId.value,
+                        source = temp,
+                        format = managedFormat,
+                    )
+                } catch (_: Throwable) {
+                    return failure(
+                        ProviderErrorCode.ACQUISITION_FAILED,
+                        retryable = false,
+                    )
+                }
+
+                val domainFormat = when (format) {
+                    TorrentArchiveFormat.CBZ -> ProviderManagedFileFormat.CBZ
+                    TorrentArchiveFormat.ZIP -> ProviderManagedFileFormat.ZIP
+                }
+                val uri = managedFiles.resolve(
+                    providerId = providerId,
+                    resource = ProviderManagedResourceRef(token),
+                    format = domainFormat,
+                ) ?: return malformed()
+
+                return ProviderCallResult.Success(
+                    PreparedChapterContent.CanonicalDownload(
+                        uri = uri,
+                        format = format.name,
+                    ),
+                )
+            } finally {
+                response.close()
+            }
+        }
+    }
+
+    private fun ResponseBody.streamTo(target: File): Long {
+        return byteStream().use { input ->
+            FileOutputStream(target).use { output ->
+                var total = 0L
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    if (read == 0) continue
+
+                    total += read
+                    if (total > maxFileBytes) {
+                        throw MaterializationLimitExceeded()
+                    }
+                    output.write(buffer, 0, read)
+                }
+                output.flush()
+                output.fd.sync()
+                total
+            }
+        }
+    }
+
+    private fun TorrentCandidateFile.archiveFormat(): TorrentArchiveFormat? =
         when {
             path.endsWith(".cbz", ignoreCase = true) -> TorrentArchiveFormat.CBZ
             path.endsWith(".zip", ignoreCase = true) -> TorrentArchiveFormat.ZIP
@@ -271,6 +276,15 @@ class ProviderTorrentHttpFileMaterializer internal constructor(
         first.scheme == second.scheme &&
             first.host == second.host &&
             first.port == second.port
+
+    private fun Throwable.findNetworkPolicyException(): ProviderNetworkPolicyException? {
+        var current: Throwable? = this
+        while (current != null) {
+            if (current is ProviderNetworkPolicyException) return current
+            current = current.cause
+        }
+        return null
+    }
 
     private fun malformed() =
         failure(
@@ -298,6 +312,10 @@ class ProviderTorrentHttpFileMaterializer internal constructor(
     }
 
     private class MaterializationLimitExceeded : RuntimeException()
+
+    private class ProviderHttpArchiveNetworkException(
+        cause: Throwable,
+    ) : RuntimeException(cause)
 
     private companion object {
         const val DEFAULT_MAX_FILE_BYTES = 512L * 1024L * 1024L
