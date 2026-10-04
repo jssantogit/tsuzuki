@@ -264,7 +264,10 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                 snapshots = snapshots,
                 refreshing = refreshing,
                 onDismiss = { showRepositories = false },
-                onAdd = { showAddRepository = true },
+                onAdd = {
+                    showRepositories = false
+                    showAddRepository = true
+                },
                 onRefresh = { repositoryId ->
                     scope.launch {
                         refreshing = true
@@ -282,6 +285,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                     }
                 },
                 onRemove = { repository ->
+                    showRepositories = false
                     repositoryToRemove = repository
                 },
             )
@@ -302,6 +306,8 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                             }.onSuccess { snapshot ->
                                 snapshots = snapshots +
                                     (repository.enrollment.repositoryId to snapshot)
+                                registry.invalidate()
+                                reloadInstalled()
                             }.onFailure { error ->
                                 errorMessage = error.message
                             }
@@ -967,7 +973,6 @@ private fun providerRepositoryStatusLabel(status: ProviderRepositoryEntryStatus)
         },
     )
 
-
 internal fun providerRepositoryTrustConfirmationToken(
     displayName: String,
     repositoryId: String,
@@ -981,7 +986,6 @@ internal fun providerRepositoryTrustConfirmationToken(
     keyId.trim(),
     keyFingerprint.lowercase(),
 ).joinToString(separator = "|")
-
 
 internal suspend fun <T> runProviderUiCatching(
     block: suspend () -> T,
