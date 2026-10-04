@@ -239,6 +239,7 @@ class FileProviderRepositoryTrustStore(
         ensureDirectory(root, "Provider repository trust store")
     }
 
+    @Synchronized
     override fun load(repositoryId: String): ProviderRepositoryTrustState? {
         validateIdentifier(repositoryId, "Repository ID")
         val file = stateFile(repositoryId)
@@ -256,15 +257,54 @@ class FileProviderRepositoryTrustStore(
         return state
     }
 
+    @Synchronized
     override fun save(state: ProviderRepositoryTrustState) {
         validateIdentifier(state.repositoryId, "Repository ID")
         if (state.highestAcceptedSequence < 0L) {
             throw ProviderSupplyChainException("Repository sequence state cannot be negative")
         }
         state.acceptedPayloadSha256?.let(::normalizeSha256)
+
+        val existing = load(state.repositoryId)
+        if (
+            existing != null &&
+            state.highestAcceptedSequence < existing.highestAcceptedSequence
+        ) {
+            throw ProviderSupplyChainException(
+                "Repository trust state cannot move to an older sequence",
+            )
+        }
+        if (
+            existing != null &&
+            state.highestAcceptedSequence == existing.highestAcceptedSequence &&
+            existing.acceptedPayloadSha256 != null &&
+            state.acceptedPayloadSha256 != existing.acceptedPayloadSha256
+        ) {
+            throw ProviderSupplyChainException(
+                "Repository trust state cannot replace the accepted payload at the same sequence",
+            )
+        }
+
+        val mergedKeys = existing
+            ?.trustedKeysBase64
+            .orEmpty()
+            .toMutableMap()
+        state.trustedKeysBase64.forEach { (keyId, encodedKey) ->
+            val persistedKey = mergedKeys[keyId]
+            if (persistedKey != null && persistedKey != encodedKey) {
+                throw ProviderSupplyChainException(
+                    "Repository trust state contains conflicting signing-key identity",
+                )
+            }
+            mergedKeys[keyId] = encodedKey
+        }
+
+        val persistedState = state.copy(
+            trustedKeysBase64 = mergedKeys.toSortedMap(),
+        )
         atomicWrite(
             stateFile(state.repositoryId),
-            json.encodeToString(state).encodeToByteArray(),
+            json.encodeToString(persistedState).encodeToByteArray(),
             "Repository trust state",
         )
     }
