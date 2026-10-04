@@ -193,6 +193,18 @@ enum class ProviderManagedFileFormat {
     ZIP,
 }
 
+fun interface ProviderManagedResourceResolver {
+    fun resolve(
+        providerId: ProviderId,
+        resource: ProviderManagedResourceRef,
+        format: ProviderManagedFileFormat,
+    ): String?
+
+    companion object {
+        val DenyAll = ProviderManagedResourceResolver { _, _, _ -> null }
+    }
+}
+
 sealed interface ProviderReadingDelivery {
     data class PageList(
         val pages: List<ProviderPageRequest>,
