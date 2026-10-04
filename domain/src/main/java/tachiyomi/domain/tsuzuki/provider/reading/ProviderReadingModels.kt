@@ -6,10 +6,6 @@ import java.security.MessageDigest
 
 typealias ProviderCursor = tachiyomi.domain.tsuzuki.provider.ProviderCursor
 typealias ProviderPage<T> = tachiyomi.domain.tsuzuki.provider.ProviderPage<T>
-typealias ProviderErrorCode = tachiyomi.domain.tsuzuki.provider.ProviderErrorCode
-typealias ProviderError = tachiyomi.domain.tsuzuki.provider.ProviderError
-typealias ProviderCallResult<T> = tachiyomi.domain.tsuzuki.provider.ProviderCallResult<T>
-
 typealias ProviderManagedResourceRef = tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceRef
 typealias ProviderManagedFileFormat = tachiyomi.domain.tsuzuki.provider.ProviderManagedFileFormat
 typealias ProviderManagedResourceResolver = tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceResolver
@@ -225,6 +221,33 @@ data class ProviderReadingPagesRequest(
         require(providerChapterId.isNotBlank()) { "Provider chapter ID must not be blank" }
         require(providerChapterId.length <= 1024) { "Provider chapter ID is too long" }
     }
+}
+
+enum class ProviderErrorCode {
+    UNAVAILABLE,
+    PERMISSION_DENIED,
+    HOST_API_UNSUPPORTED,
+    SCRIPT_ERROR,
+    TIMEOUT,
+    RUNTIME_DIED,
+    NETWORK_POLICY,
+    NETWORK_ERROR,
+    BROWSER_ERROR,
+    RESOURCE_LIMIT,
+    MALFORMED_RESULT,
+    AUTH_REQUIRED,
+    ACQUISITION_FAILED,
+}
+
+data class ProviderError(
+    val code: ProviderErrorCode,
+    val retryable: Boolean,
+)
+
+sealed interface ProviderCallResult<out T> {
+    data class Success<T>(val value: T) : ProviderCallResult<T>
+
+    data class Failure(val error: ProviderError) : ProviderCallResult<Nothing>
 }
 
 interface ProviderReadingGateway {
