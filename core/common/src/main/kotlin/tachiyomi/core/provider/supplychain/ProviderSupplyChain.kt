@@ -214,6 +214,7 @@ class VerifiedProviderArtifact internal constructor(
 @Serializable
 data class ProviderRepositoryTrustState(
     val repositoryId: String,
+    val trustAnchorSha256: String,
     val highestAcceptedSequence: Long,
     val trustedKeysBase64: Map<String, String>,
     val acceptedPayloadSha256: String? = null,
@@ -254,6 +255,7 @@ class FileProviderRepositoryTrustStore(
         if (state.repositoryId != repositoryId || state.highestAcceptedSequence < 0L) {
             throw ProviderSupplyChainException("Repository trust state does not match enrollment")
         }
+        normalizeSha256(state.trustAnchorSha256)
         state.acceptedPayloadSha256?.let(::normalizeSha256)
         return state
     }
@@ -264,9 +266,18 @@ class FileProviderRepositoryTrustStore(
         if (state.highestAcceptedSequence < 0L) {
             throw ProviderSupplyChainException("Repository sequence state cannot be negative")
         }
+        val incomingTrustAnchor = normalizeSha256(state.trustAnchorSha256)
         state.acceptedPayloadSha256?.let(::normalizeSha256)
 
         val existing = load(state.repositoryId)
+        if (
+            existing != null &&
+            normalizeSha256(existing.trustAnchorSha256) != incomingTrustAnchor
+        ) {
+            throw ProviderSupplyChainException(
+                "Repository trust state belongs to a different bootstrap trust root",
+            )
+        }
         if (
             existing != null &&
             state.highestAcceptedSequence < existing.highestAcceptedSequence
@@ -347,6 +358,9 @@ class ProviderRepositoryTrust(
 
         val persisted = stateStore.load(repositoryId)
         persisted?.let { state ->
+            if (normalizeSha256(state.trustAnchorSha256) != trustAnchorSha256) {
+                fail("Persisted repository trust state belongs to a different bootstrap trust root")
+            }
             highestAcceptedSequence = state.highestAcceptedSequence
             acceptedPayloadSha256 = state.acceptedPayloadSha256
             state.trustedKeysBase64.forEach { (keyId, encoded) ->
@@ -592,6 +606,7 @@ class ProviderRepositoryTrust(
         stateStore.save(
             ProviderRepositoryTrustState(
                 repositoryId = repositoryId,
+                trustAnchorSha256 = trustAnchorSha256,
                 highestAcceptedSequence = sequence,
                 trustedKeysBase64 = keys.mapValues { (_, bytes) ->
                     Base64.getEncoder().encodeToString(bytes)
@@ -606,6 +621,9 @@ class ProviderRepositoryTrust(
     private fun applyPersistedState(state: ProviderRepositoryTrustState) {
         if (state.repositoryId != repositoryId) {
             fail("Persisted repository trust state belongs to another repository")
+        }
+        if (normalizeSha256(state.trustAnchorSha256) != trustAnchorSha256) {
+            fail("Persisted repository trust state belongs to a different bootstrap trust root")
         }
 
         highestAcceptedSequence = state.highestAcceptedSequence
