@@ -178,10 +178,14 @@ data class ProviderRegistration(
     val lifecycleStatus: ProviderLifecycleStatus,
     val facets: List<ProviderFacetRef> = emptyList(),
     val configurationFingerprint: String = "",
+    val enabledCapabilities: Set<ProviderCapabilityRef> = descriptor.capabilities,
 ) {
     init {
         require(facets.all { it.providerId == descriptor.id }) {
             "Provider facets must belong to their registered Provider"
+        }
+        require(enabledCapabilities.all { it in descriptor.capabilities }) {
+            "Enabled Provider capabilities must be declared by the Provider descriptor"
         }
     }
 }
