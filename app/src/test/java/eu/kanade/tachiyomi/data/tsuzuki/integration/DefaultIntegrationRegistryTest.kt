@@ -443,10 +443,10 @@ class DefaultIntegrationRegistryTest {
 
         providers.awaitReady()
         val kitsu = providers.providers().single { it.descriptor.id.value == "kitsu" }
-        ProviderCapabilities.CatalogSearchV1 in kitsu.descriptor.capabilities shouldBe true
-        ProviderCapabilities.CatalogDiscoverV1 in kitsu.descriptor.capabilities shouldBe true
-        ProviderCapabilities.CatalogSearchV1 in kitsu.enabledCapabilities shouldBe false
-        ProviderCapabilities.CatalogDiscoverV1 in kitsu.enabledCapabilities shouldBe true
+        (ProviderCapabilities.CatalogSearchV1 in kitsu.descriptor.capabilities) shouldBe true
+        (ProviderCapabilities.CatalogDiscoverV1 in kitsu.descriptor.capabilities) shouldBe true
+        (ProviderCapabilities.CatalogSearchV1 in kitsu.enabledCapabilities) shouldBe false
+        (ProviderCapabilities.CatalogDiscoverV1 in kitsu.enabledCapabilities) shouldBe true
         providers.enabled(ProviderCapabilities.CatalogSearchV1)
             .none { it.id.value == "kitsu" } shouldBe true
         providers.enabled(ProviderCapabilities.CatalogDiscoverV1)
@@ -471,12 +471,12 @@ class DefaultIntegrationRegistryTest {
 
         providers.awaitReady()
         val komga = providers.providers().single { it.descriptor.id.value == "komga" }
-        ProviderCapabilities.MetadataBasicV1 in komga.descriptor.capabilities shouldBe true
-        ProviderCapabilities.MetadataArtworkV1 in komga.descriptor.capabilities shouldBe true
-        ProviderCapabilities.LibraryRemoteV1 in komga.descriptor.capabilities shouldBe true
-        ProviderCapabilities.MetadataBasicV1 in komga.enabledCapabilities shouldBe false
-        ProviderCapabilities.MetadataArtworkV1 in komga.enabledCapabilities shouldBe false
-        ProviderCapabilities.LibraryRemoteV1 in komga.enabledCapabilities shouldBe true
+        (ProviderCapabilities.MetadataBasicV1 in komga.descriptor.capabilities) shouldBe true
+        (ProviderCapabilities.MetadataArtworkV1 in komga.descriptor.capabilities) shouldBe true
+        (ProviderCapabilities.LibraryRemoteV1 in komga.descriptor.capabilities) shouldBe true
+        (ProviderCapabilities.MetadataBasicV1 in komga.enabledCapabilities) shouldBe false
+        (ProviderCapabilities.MetadataArtworkV1 in komga.enabledCapabilities) shouldBe false
+        (ProviderCapabilities.LibraryRemoteV1 in komga.enabledCapabilities) shouldBe true
         providers.enabled(ProviderCapabilities.MetadataBasicV1)
             .none { it.id.value == "komga" } shouldBe true
     }
