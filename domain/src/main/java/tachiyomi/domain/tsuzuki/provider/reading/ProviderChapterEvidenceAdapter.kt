@@ -13,9 +13,10 @@ class ProviderChapterEvidenceAdapter(
         canonicalTitleId: String,
         binding: ProviderBindingRef,
         observations: List<ProviderChapterObservation>,
+        observedAt: Long = clock(),
     ): List<ChapterEvidence> {
         require(canonicalTitleId.isNotBlank()) { "Canonical title ID must not be blank" }
-        val observedAt = clock()
+        require(observedAt >= 0L) { "Provider evidence timestamp must not be negative" }
 
         return observations.map { observation ->
             ChapterEvidence(
