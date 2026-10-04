@@ -105,7 +105,7 @@ class ProviderHttpHostServiceTest {
             val recorded = server.takeRequest()
             recorded.method shouldBe "POST"
             recorded.headers["Authorization"] shouldBe "Bearer provider-secret"
-            recorded.body?.utf8() shouldBe """{"magnet":"magnet:?xt=urn:btih:abc"}"""
+            recorded.body?.readUtf8() shouldBe """{"magnet":"magnet:?xt=urn:btih:abc"}"""
         } finally {
             server.close()
         }
