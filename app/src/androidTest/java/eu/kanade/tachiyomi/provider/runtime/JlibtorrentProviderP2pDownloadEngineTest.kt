@@ -84,6 +84,7 @@ class JlibtorrentProviderP2pDownloadEngineTest {
                     localOnlyParams(leecherPort)
                 },
                 downloadTimeoutMs = 30_000L,
+                nativeSupport = { true },
             )
             val work = File(root, "work").apply { mkdirs() }
             val result = engine.download(
