@@ -2,11 +2,17 @@ package eu.kanade.tachiyomi.provider.repository
 
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import tachiyomi.core.provider.supplychain.FileProviderLocalConfigurationStore
+import tachiyomi.core.provider.supplychain.FileProviderRepositoryTrustStore
 import tachiyomi.core.provider.supplychain.ProviderArtifactDescriptor
 import tachiyomi.core.provider.supplychain.ProviderArtifactStore
+import tachiyomi.core.provider.supplychain.ProviderRepositoryIndex
+import tachiyomi.core.provider.supplychain.ProviderRepositoryTrust
+import tachiyomi.core.provider.supplychain.SignedProviderRepositoryIndex
 import tachiyomi.core.provider.supplychain.VerifiedProviderArtifact
 import tachiyomi.core.provider.supplychain.sha256Hex
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
@@ -15,6 +21,9 @@ import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderSettingType
 import java.io.ByteArrayOutputStream
 import java.nio.file.Path
+import java.security.KeyPairGenerator
+import java.security.Signature
+import java.security.spec.ECGenParameterSpec
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -70,6 +79,66 @@ class InstalledScriptProviderRegistryTest {
 
         registry.setEnabled(providerId, false)
         registry.registration(providerId)!!.lifecycleStatus shouldBe ProviderLifecycleStatus.DISABLED
+    }
+
+    @Test
+    fun `revoked installed package remains visible as blocked with manifest metadata`() {
+        val artifactStore = ProviderArtifactStore(tempDir.resolve("revoked-artifacts").toFile())
+        val installed = artifact(versionCode = 1)
+        artifactStore.activate(installed)
+
+        val keyPair = KeyPairGenerator.getInstance("EC").run {
+            initialize(ECGenParameterSpec("secp256r1"))
+            generateKeyPair()
+        }
+        val trust = ProviderRepositoryTrust(
+            repositoryId = "repo.example",
+            hostApiVersion = 1,
+            trustedKeys = mapOf("root-1" to keyPair.public.encoded),
+            stateStore = FileProviderRepositoryTrustStore(
+                tempDir.resolve("revoked-trust").toFile(),
+            ),
+        )
+        val index = ProviderRepositoryIndex(
+            schemaVersion = 1,
+            repositoryId = "repo.example",
+            sequence = 1,
+            providers = listOf(installed.descriptor),
+            revokedArtifactSha256 = setOf(installed.descriptor.sha256),
+        )
+        val payload = Json {
+            encodeDefaults = true
+            explicitNulls = false
+        }.encodeToString(index).encodeToByteArray()
+        val signature = Signature.getInstance("SHA256withECDSA").run {
+            initSign(keyPair.private)
+            update(payload)
+            sign()
+        }
+        val verified = trust.verifyAndAccept(
+            SignedProviderRepositoryIndex(
+                keyId = "root-1",
+                payload = payload,
+                signature = signature,
+            ),
+        )
+        trust.applyRevocations(verified, artifactStore)
+
+        val registry = InstalledScriptProviderRegistry(
+            artifactStore = artifactStore,
+            configurationStore = FileProviderLocalConfigurationStore(
+                tempDir.resolve("revoked-config").toFile(),
+            ),
+        )
+        val registration = registry.registration(ProviderId("reader.example"))!!
+
+        registration.lifecycleStatus shouldBe ProviderLifecycleStatus.BLOCKED
+        registration.descriptor.name shouldBe "Reader Example"
+        registration.descriptor.capabilities shouldBe setOf(
+            ProviderCapabilities.ReadingChaptersV1,
+            ProviderCapabilities.ReadingPagesV1,
+        )
+        registry.enabled(ProviderCapabilities.ReadingChaptersV1) shouldBe emptyList()
     }
 
     @Test
