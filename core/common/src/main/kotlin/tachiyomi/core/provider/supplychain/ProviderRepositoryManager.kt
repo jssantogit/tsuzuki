@@ -43,7 +43,10 @@ class ProviderRepositoryManager(
     private val artifactStore: ProviderArtifactStore,
     private val packageActivator: ProviderPackageActivator,
     private val transport: ProviderRepositoryTransport,
+    reservedProviderIds: Set<String> = emptySet(),
 ) {
+
+    private val reservedProviderIds = reservedProviderIds.toSet()
 
     private val sessions = ConcurrentHashMap<String, RepositorySession>()
     private val repositoryLocks = ConcurrentHashMap<String, Mutex>()
@@ -150,6 +153,11 @@ class ProviderRepositoryManager(
                 .singleOrNull { it.providerId == providerId }
                 ?: throw ProviderSupplyChainException("Provider is not available from this repository")
 
+            if (providerId in reservedProviderIds) {
+                throw ProviderSupplyChainException(
+                    "Provider ID is reserved by a built-in Provider",
+                )
+            }
             if (descriptor.minHostApi > hostApiVersion) {
                 throw ProviderSupplyChainException("Provider requires a newer Host API")
             }
@@ -203,13 +211,17 @@ class ProviderRepositoryManager(
                     repositoryId = repository.enrollment.repositoryId,
                     descriptor = descriptor,
                     installedVersionCode = installed?.versionCode,
-                    status = entryStatus(
-                        repositoryId = repository.enrollment.repositoryId,
-                        repositoryTrustAnchorSha256 = repository.keyFingerprintSha256,
-                        descriptor = descriptor,
-                        installed = installed,
-                        revokedArtifactSha256 = revoked,
-                    ),
+                    status = if (descriptor.providerId in reservedProviderIds) {
+                        ProviderRepositoryEntryStatus.ORIGIN_CONFLICT
+                    } else {
+                        entryStatus(
+                            repositoryId = repository.enrollment.repositoryId,
+                            repositoryTrustAnchorSha256 = repository.keyFingerprintSha256,
+                            descriptor = descriptor,
+                            installed = installed,
+                            revokedArtifactSha256 = revoked,
+                        )
+                    },
                 )
             }
             .sortedBy { entry -> entry.descriptor.providerId }
