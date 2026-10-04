@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.provider.runtime
 
+import android.os.Build
 import com.frostwire.jlibtorrent.Priority
 import com.frostwire.jlibtorrent.SessionManager
 import com.frostwire.jlibtorrent.SessionParams
@@ -30,6 +31,8 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
     private val initialPeers: (ProviderP2pAcquireRequest) -> List<TcpEndpoint> = { emptyList() },
     private val sessionParamsFactory: () -> SessionParams = DEFAULT_SESSION_PARAMS_FACTORY,
     private val downloadTimeoutMs: Long = DEFAULT_DOWNLOAD_TIMEOUT_MS,
+    private val nativeSupport: () -> Boolean = JlibtorrentNativeSupport::isCurrentRuntimeSupported,
+    private val sessionManagerFactory: () -> SessionManager = ::SessionManager,
 ) : ProviderP2pDownloadEngine {
 
     constructor() : this(
@@ -37,6 +40,8 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
         initialPeers = { emptyList() },
         sessionParamsFactory = DEFAULT_SESSION_PARAMS_FACTORY,
         downloadTimeoutMs = DEFAULT_DOWNLOAD_TIMEOUT_MS,
+        nativeSupport = JlibtorrentNativeSupport::isCurrentRuntimeSupported,
+        sessionManagerFactory = ::SessionManager,
     )
 
     init {
@@ -49,9 +54,15 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
         request: ProviderP2pAcquireRequest,
         workingDirectory: File,
     ): ProviderP2pDownloadResult = withContext(Dispatchers.IO) {
+        if (!nativeSupport()) {
+            return@withContext ProviderP2pDownloadResult.Failure(
+                ProviderP2pFailureCode.UNAVAILABLE,
+            )
+        }
+
         ensureDirectory(workingDirectory)
 
-        val session = SessionManager()
+        val session = sessionManagerFactory()
         var started = false
         try {
             session.start(sessionParamsFactory())
@@ -270,4 +281,20 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 }
             }
     }
+}
+
+
+internal object JlibtorrentNativeSupport {
+
+    private val RELEASE_SUPPORTED_ABIS = setOf(
+        "armeabi-v7a",
+        "arm64-v8a",
+        "x86",
+    )
+
+    fun isReleaseAbiSupported(abi: String?): Boolean =
+        abi != null && abi in RELEASE_SUPPORTED_ABIS
+
+    fun isCurrentRuntimeSupported(): Boolean =
+        isReleaseAbiSupported(Build.SUPPORTED_ABIS.firstOrNull())
 }
