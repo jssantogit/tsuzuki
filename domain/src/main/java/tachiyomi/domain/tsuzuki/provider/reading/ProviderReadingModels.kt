@@ -25,7 +25,6 @@ data class ProviderBindingRef(
     }
 }
 
-
 /**
  * Stable operational producer identity for chapter evidence emitted by one exact Provider binding.
  *
