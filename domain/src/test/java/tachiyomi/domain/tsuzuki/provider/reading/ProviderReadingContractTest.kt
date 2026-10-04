@@ -147,6 +147,36 @@ class ProviderReadingContractTest {
     }
 
     @Test
+    fun `provider page requests reject routing and hop by hop headers`() {
+        listOf(
+            "Host",
+            "Connection",
+            "Content-Length",
+            "Transfer-Encoding",
+            "Upgrade",
+            "Proxy-Connection",
+        ).forEach { header ->
+            shouldThrow<IllegalArgumentException> {
+                ProviderPageRequest(
+                    url = "https://cdn.example/001.jpg",
+                    headers = mapOf(header to "unsafe"),
+                    allowedOrigins = setOf("https://cdn.example"),
+                )
+            }
+        }
+
+        ProviderPageRequest(
+            url = "https://cdn.example/001.jpg",
+            headers = mapOf(
+                "Referer" to "https://reader.example/",
+                "User-Agent" to "Tsuzuki",
+                "Authorization" to "Bearer token",
+            ),
+            allowedOrigins = setOf("https://cdn.example"),
+        ).headers.keys shouldBe setOf("Referer", "User-Agent", "Authorization")
+    }
+
+    @Test
     fun `provider page cursors are opaque bounded values scoped by caller context`() {
         ProviderPage(
             items = listOf("one"),
