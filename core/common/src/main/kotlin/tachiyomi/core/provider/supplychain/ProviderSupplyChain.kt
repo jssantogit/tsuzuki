@@ -699,16 +699,6 @@ class ProviderArtifactStore(
             throw ProviderSupplyChainException("Verified Provider artifact bytes no longer match their descriptor")
         }
 
-        val versions = versionsDirectory(providerId)
-        ensureDirectory(versions, "Provider version directory")
-
-        val target = artifactFile(providerId, artifact.versionCode)
-        if (target.exists()) {
-            validateArtifactFile(target, expectedDigest)
-        } else {
-            atomicWrite(target, artifact.bytes, "Provider artifact")
-        }
-
         val previousState = readState(providerId)
         if (
             previousState != null &&
@@ -719,13 +709,21 @@ class ProviderArtifactStore(
             )
         }
         if (previousState?.current?.versionCode == artifact.versionCode) {
-            if (
-                previousState.current.repositoryId != artifact.repositoryId ||
-                previousState.current.sha256 != expectedDigest
-            ) {
+            if (previousState.current.sha256 != expectedDigest) {
                 throw ProviderSupplyChainException("Active Provider version has conflicting immutable identity")
             }
+            validateStoredArtifact(providerId, previousState.current)
             return
+        }
+
+        val versions = versionsDirectory(providerId)
+        ensureDirectory(versions, "Provider version directory")
+
+        val target = artifactFile(providerId, artifact.versionCode)
+        if (target.exists()) {
+            validateArtifactFile(target, expectedDigest)
+        } else {
+            atomicWrite(target, artifact.bytes, "Provider artifact")
         }
 
         val nextState = ArtifactStoreState(
