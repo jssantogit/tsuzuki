@@ -50,17 +50,24 @@ class RefreshProviderReadingChaptersTest {
                 else -> error("unexpected cursor")
             }
         }
+        var publishedProducerId: String? = null
+        var publishedSnapshotObservedAt: Long? = null
         val interactor = RefreshProviderReadingChapters(
             gateway = gateway,
-            evidenceAdapter = ProviderChapterEvidenceAdapter(clock = { 42L }),
-            publishEvidence = { titleId, evidence ->
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            publishSnapshot = { titleId, producerId, snapshotObservedAt, evidence ->
                 titleId shouldBe "title-1"
+                publishedProducerId = producerId
+                publishedSnapshotObservedAt = snapshotObservedAt
                 published = evidence
             },
+            clock = { 42L },
         )
 
         interactor.execute(binding) shouldBe ProviderCallResult.Success(3)
         cursors shouldBe listOf(null, "next")
+        publishedProducerId shouldBe binding.ref.evidenceProducerId()
+        publishedSnapshotObservedAt shouldBe 42L
         published!!.map { it.externalChapterKey } shouldBe listOf("c1", "c2", "c3")
         published!!.map { it.observedAt }.distinct() shouldBe listOf(42L)
     }
@@ -85,8 +92,9 @@ class RefreshProviderReadingChaptersTest {
                     )
                 }
             },
-            evidenceAdapter = ProviderChapterEvidenceAdapter(clock = { 1L }),
-            publishEvidence = { _, _ -> published = true },
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            publishSnapshot = { _, _, _, _ -> published = true },
+            clock = { 1L },
         )
 
         interactor.execute(binding) shouldBe ProviderCallResult.Failure(
@@ -108,8 +116,9 @@ class RefreshProviderReadingChaptersTest {
                     ),
                 )
             },
-            evidenceAdapter = ProviderChapterEvidenceAdapter(clock = { 1L }),
-            publishEvidence = { _, _ -> published = true },
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            publishSnapshot = { _, _, _, _ -> published = true },
+            clock = { 1L },
         )
 
         looping.execute(binding) shouldBe ProviderCallResult.Failure(
@@ -128,14 +137,42 @@ class RefreshProviderReadingChaptersTest {
                     ),
                 )
             },
-            evidenceAdapter = ProviderChapterEvidenceAdapter(clock = { 1L }),
-            publishEvidence = { _, _ -> published = true },
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            publishSnapshot = { _, _, _, _ -> published = true },
+            clock = { 1L },
         )
 
         duplicate.execute(binding) shouldBe ProviderCallResult.Failure(
             ProviderError(ProviderErrorCode.MALFORMED_RESULT, retryable = false),
         )
         published shouldBe false
+    }
+
+    @Test
+    fun `complete empty provider inventory still publishes a snapshot to detach stale support`() = runBlocking {
+        var published = false
+        val interactor = RefreshProviderReadingChapters(
+            gateway = gateway {
+                ProviderCallResult.Success(
+                    ProviderPage(
+                        items = emptyList(),
+                        nextCursor = null,
+                    ),
+                )
+            },
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            publishSnapshot = { titleId, producerId, snapshotObservedAt, evidence ->
+                titleId shouldBe "title-1"
+                producerId shouldBe binding.ref.evidenceProducerId()
+                snapshotObservedAt shouldBe 77L
+                evidence shouldBe emptyList()
+                published = true
+            },
+            clock = { 77L },
+        )
+
+        interactor.execute(binding) shouldBe ProviderCallResult.Success(0)
+        published shouldBe true
     }
 
     @Test
@@ -146,8 +183,9 @@ class RefreshProviderReadingChaptersTest {
                 invoked = true
                 error("must not invoke")
             },
-            evidenceAdapter = ProviderChapterEvidenceAdapter(clock = { 1L }),
-            publishEvidence = { _, _ -> error("must not publish") },
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            publishSnapshot = { _, _, _, _ -> error("must not publish") },
+            clock = { 1L },
         )
 
         interactor.execute(
