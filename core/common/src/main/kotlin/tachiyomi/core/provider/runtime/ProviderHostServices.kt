@@ -84,6 +84,7 @@ interface ProviderLogHostService {
 
 data class ProviderHostServices(
     val http: ProviderHttpHostService? = null,
+    val p2p: ProviderP2pHostService? = null,
     val dom: ProviderDomHostService? = null,
     val browser: ProviderBrowserHostService? = null,
     val storage: ProviderStorageHostService? = null,
