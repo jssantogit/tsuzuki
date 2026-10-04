@@ -22,7 +22,7 @@ class ProviderManagedFileStoreTest {
         val store = store()
         val token = store.promote(
             providerId = "org.example.reader",
-            bytes = "chapter".encodeToByteArray(),
+            bytes = zip("page-1.jpg", "chapter"),
             format = ProviderManagedResourceFormat.CBZ,
         )
 
@@ -57,7 +57,7 @@ class ProviderManagedFileStoreTest {
         )
         val token = store.promote(
             providerId = "org.example.reader",
-            bytes = "chapter".encodeToByteArray(),
+            bytes = zip("page-1.jpg", "chapter"),
             format = ProviderManagedResourceFormat.ZIP,
         )
 
@@ -101,27 +101,27 @@ class ProviderManagedFileStoreTest {
     @Test
     fun `promotion quotas fail closed without deleting existing managed files`() {
         val store = store(
-            maxFileBytes = 4,
+            maxFileBytes = 1024,
             maxFilesPerProvider = 1,
-            maxTotalBytesPerProvider = 4,
+            maxTotalBytesPerProvider = 2048,
         )
         val first = store.promote(
             providerId = "org.example.reader",
-            bytes = byteArrayOf(1, 2, 3, 4),
+            bytes = zip("page-1.jpg", "first"),
             format = ProviderManagedResourceFormat.CBZ,
         )
 
         runCatching {
             store.promote(
                 providerId = "org.example.reader",
-                bytes = byteArrayOf(1),
+                bytes = zip("page-2.jpg", "second"),
                 format = ProviderManagedResourceFormat.CBZ,
             )
         }.isFailure shouldBe true
         runCatching {
             store.promote(
                 providerId = "org.example.other",
-                bytes = byteArrayOf(1, 2, 3, 4, 5),
+                bytes = ByteArray(1025),
                 format = ProviderManagedResourceFormat.ZIP,
             )
         }.isFailure shouldBe true
@@ -136,12 +136,12 @@ class ProviderManagedFileStoreTest {
     private fun store(
         clock: () -> Long = { 1_000L },
         ttlMs: Long = 10_000L,
-        maxFileBytes: Int = 16,
+        maxFileBytes: Int = 1024,
         maxFilesPerProvider: Int = 8,
-        maxTotalBytesPerProvider: Long = 64,
+        maxTotalBytesPerProvider: Long = 4096,
         maxArchiveEntries: Int = 32,
-        maxArchiveEntryBytes: Int = 16,
-        maxArchiveUncompressedBytes: Long = 64,
+        maxArchiveEntryBytes: Int = 1024,
+        maxArchiveUncompressedBytes: Long = 4096,
     ) = ProviderManagedFileStore(
         root = tempDir.toFile(),
         uriFactory = { file ->
