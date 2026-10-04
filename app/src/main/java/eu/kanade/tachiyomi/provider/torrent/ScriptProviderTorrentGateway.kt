@@ -117,6 +117,9 @@ class ScriptProviderTorrentGateway(
             providerId = providerId,
             capability = ProviderCapabilities.AcquisitionP2pV1,
             inputJson = json.encodeToString(request.toDto()),
+            privilegedHostGrants = ScriptProviderPrivilegedHostGrants(
+                directP2p = true,
+            ),
         ) { value, _ ->
             val decoded = json.decodeFromString<P2pResultDto>(value)
             when (decoded.status) {
