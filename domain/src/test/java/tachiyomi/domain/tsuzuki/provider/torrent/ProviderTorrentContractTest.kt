@@ -6,8 +6,10 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
+import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCursor
 import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.ProviderPage
 
 class ProviderTorrentContractTest {
 
@@ -332,19 +334,24 @@ class ProviderTorrentContractTest {
     }
 
     @Test
-    fun `provider acquisition gateways remain selected by capability rather than vendor type`() {
+    fun `provider acquisition gateways remain selected by capability rather than vendor type`() = runTest {
         val providerId = ProviderId("org.example.provider")
-        val search: TorrentSearchGateway = TorrentSearchGateway { requestedProviderId, request ->
+        val expected = ProviderCallResult.Success(
+            ProviderPage<TorrentCandidate>(
+                items = emptyList(),
+                nextCursor = null,
+            ),
+        )
+        val search = TorrentSearchGateway { requestedProviderId, request ->
             requestedProviderId shouldBe providerId
             request.titles shouldBe listOf("Example")
-            tachiyomi.domain.tsuzuki.provider.ProviderCallResult.Success(
-                tachiyomi.domain.tsuzuki.provider.ProviderPage(
-                    items = emptyList(),
-                    nextCursor = null,
-                ),
-            )
+            expected
         }
-        search::class shouldBe search::class
+
+        search.search(
+            providerId = providerId,
+            request = TorrentSearchRequest(titles = listOf("Example")),
+        ) shouldBe expected
     }
 
     private class RecordingAcquisitionBackend(
