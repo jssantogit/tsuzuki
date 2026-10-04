@@ -900,7 +900,9 @@ V1 host behavior:
 
 The loopback spike proved selective file download with jlibtorrent 2.0.12.9 on Android API 35.
 
-Production packaging must include only supported Android ABIs and preserve current 16 KiB-page compatibility.
+Production packaging must include only native artifacts that satisfy the current Android page-size requirements. Host P2P availability is therefore runtime/ABI-dependent and participates in acquisition-policy routing separately from user consent. A Provider with `acquisition.p2p@1` is not by itself proof that Direct P2P is executable on the current device/build.
+
+For jlibtorrent 2.0.12.9, the published x86_64 artifact fails Tsuzuki's Android 16 KiB GNU_RELRO boundary gate. V1 keeps that artifact debug-only for emulator instrumentation; release Direct P2P fails closed on x86_64 until a compliant upstream/rebuilt artifact is available. This packaging limitation does not alter the Provider capability contract.
 
 Background transfers must use an Android lifecycle appropriate to user-initiated transfers. Long-running jobs must not assume an unlimited background `dataSync` foreground service.
 
