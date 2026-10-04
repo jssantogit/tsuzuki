@@ -277,6 +277,7 @@ class ResolveProviderChapterReadingTest {
         gateway: ProviderReadingGateway = gateway {
             error("pages not expected")
         },
+        managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
     ) = ResolveProviderChapterReading(
         canonicalChapterRepository = canonicalChapterRepository(chapter),
         evidenceRepository = evidenceRepository(evidence),
