@@ -334,6 +334,12 @@ class InstalledScriptProviderRegistryTest {
         shouldThrow<IllegalArgumentException> {
             registry.setEnabled(ProviderId("kitsu"), true)
         }
+        shouldThrow<IllegalArgumentException> {
+            registry.setEnabledContentLanguages(
+                providerId = ProviderId("kitsu"),
+                languages = setOf("en"),
+            )
+        }
         configurationStore.get("kitsu") shouldBe null
     }
 
