@@ -57,9 +57,14 @@ class CanonicalReaderTargetPlanTest {
             "Host",
             "Connection",
             "Content-Length",
+            "Keep-Alive",
+            "Proxy-Authenticate",
+            "Proxy-Authorization",
+            "Proxy-Connection",
+            "TE",
+            "Trailer",
             "Transfer-Encoding",
             "Upgrade",
-            "Proxy-Connection",
         ).forEach { header ->
             shouldThrow<IllegalArgumentException> {
                 PreparedHttpPage(
