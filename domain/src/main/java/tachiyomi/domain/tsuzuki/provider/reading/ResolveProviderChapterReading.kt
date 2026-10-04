@@ -35,6 +35,7 @@ class ResolveProviderChapterReading(
     private val evidenceRepository: ChapterEvidenceRepository,
     private val bindingRepository: ProviderReadingBindingRepository,
     private val gateway: ProviderReadingGateway,
+    private val managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
 ) {
 
     suspend fun options(canonicalChapterId: String): List<ProviderChapterReadingOption> {
@@ -110,12 +111,28 @@ class ResolveProviderChapterReading(
                         },
                     ),
                 )
-                is ProviderReadingDelivery.ManagedFile -> ProviderCallResult.Failure(
-                    ProviderError(
-                        code = ProviderErrorCode.MALFORMED_RESULT,
-                        retryable = false,
-                    ),
-                )
+                is ProviderReadingDelivery.ManagedFile -> {
+                    val uri = managedResources.resolve(
+                        providerId = option.providerId,
+                        resource = delivery.resource,
+                        format = delivery.format,
+                    )
+                    if (uri == null) {
+                        ProviderCallResult.Failure(
+                            ProviderError(
+                                code = ProviderErrorCode.MALFORMED_RESULT,
+                                retryable = false,
+                            ),
+                        )
+                    } else {
+                        ProviderCallResult.Success(
+                            PreparedChapterContent.CanonicalDownload(
+                                uri = uri,
+                                format = delivery.format.name,
+                            ),
+                        )
+                    }
+                }
             }
         }
     }
