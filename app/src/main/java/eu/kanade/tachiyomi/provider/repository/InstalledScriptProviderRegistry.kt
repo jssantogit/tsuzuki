@@ -73,6 +73,10 @@ class InstalledScriptProviderRegistry(
         configurationStore.get(providerId.value)
             ?: ProviderLocalConfiguration(providerId = providerId.value)
 
+    fun invalidate() {
+        changes.tryEmit(Unit)
+    }
+
     private fun registrationFor(
         stored: tachiyomi.core.provider.supplychain.StoredProviderArtifact,
     ): ProviderRegistration {
