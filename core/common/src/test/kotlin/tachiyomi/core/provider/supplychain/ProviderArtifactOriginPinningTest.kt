@@ -41,6 +41,22 @@ class ProviderArtifactOriginPinningTest {
     }
 
     @Test
+    fun `rejected foreign origin cannot poison a later same version update`() {
+        val store = ProviderArtifactStore(tempDir.resolve("foreign-poisoning").toFile())
+        store.activate(artifact(repositoryId = "repo.a", versionCode = 1))
+
+        shouldThrow<ProviderSupplyChainException> {
+            store.activate(artifact(repositoryId = "repo.b", versionCode = 2))
+        }
+
+        store.activate(artifact(repositoryId = "repo.a", versionCode = 2))
+
+        store.current("reader.example")?.repositoryId shouldBe "repo.a"
+        store.current("reader.example")?.versionCode shouldBe 2L
+        store.previous("reader.example")?.versionCode shouldBe 1L
+    }
+
+    @Test
     fun `installed Provider may update within its pinned repository origin`() {
         val store = ProviderArtifactStore(tempDir.resolve("same-origin").toFile())
         store.activate(artifact(repositoryId = "repo.a", versionCode = 1))
