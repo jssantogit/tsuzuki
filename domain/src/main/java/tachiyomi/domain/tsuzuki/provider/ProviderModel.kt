@@ -57,6 +57,7 @@ object ProviderCapabilities {
     val MetadataArtworkV1 = ProviderCapabilityRef("metadata.artwork", 1)
     val MetadataEditorialV1 = ProviderCapabilityRef("metadata.editorial", 1)
     val MetadataStaffV1 = ProviderCapabilityRef("metadata.staff", 1)
+    val MetadataCrosswalkV1 = ProviderCapabilityRef("metadata.crosswalk", 1)
     val RatingsReadV1 = ProviderCapabilityRef("ratings.read", 1)
     val RelationsReadV1 = ProviderCapabilityRef("relations.read", 1)
     val AccountTrackingV1 = ProviderCapabilityRef("account.tracking", 1)
@@ -68,6 +69,7 @@ object ProviderCapabilities {
     val TorrentSearchV1 = ProviderCapabilityRef("torrent.search", 1)
     val DebridResolveV1 = ProviderCapabilityRef("debrid.resolve", 1)
     val AcquisitionP2pV1 = ProviderCapabilityRef("acquisition.p2p", 1)
+    val DownloadsManageV1 = ProviderCapabilityRef("downloads.manage", 1)
 }
 
 data class ProviderNetworkPermission(
