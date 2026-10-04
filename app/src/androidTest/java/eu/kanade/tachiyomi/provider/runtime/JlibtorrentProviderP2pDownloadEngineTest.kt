@@ -99,6 +99,10 @@ class JlibtorrentProviderP2pDownloadEngineTest {
             ) as ProviderP2pDownloadResult.Ready
 
             result.format shouldBeFormat ProviderManagedResourceFormat.CBZ
+            assertTrue(
+                "selected archive must remain inside the engine working directory",
+                result.file.canonicalPath.startsWith(work.canonicalPath + File.separator),
+            )
             assertArrayEquals(selectedBytes, result.file.readBytes())
 
             val ignoredPath = File(
