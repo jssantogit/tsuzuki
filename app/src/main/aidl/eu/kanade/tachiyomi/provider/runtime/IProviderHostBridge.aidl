@@ -4,6 +4,7 @@ interface IProviderHostBridge {
     String httpGet(String url);
     String httpGetResource(String url);
     String httpRequest(String requestJson);
+    String p2pAcquire(String requestJson);
     String domSelectText(String resourceHandle, String cssSelector);
     String browserReadText(String url, String cssSelector);
     String storageGet(String key);
