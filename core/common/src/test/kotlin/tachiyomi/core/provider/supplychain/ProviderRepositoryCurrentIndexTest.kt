@@ -42,6 +42,26 @@ class ProviderRepositoryCurrentIndexTest {
     }
 
     @Test
+    fun `explicit trust reset is idempotent and removes persisted anti replay state`() {
+        val keyPair = ecKeyPair()
+        val stateStore = FileProviderRepositoryTrustStore(
+            tempDir.resolve("trust-reset").toFile(),
+        )
+        val trust = trust(keyPair, stateStore)
+        trust.verifyAndAccept(
+            signedIndex(
+                keyPair = keyPair,
+                index = index(sequence = 3, versionCode = 1),
+            ),
+        )
+
+        stateStore.load("repo.example")!!.highestAcceptedSequence shouldBe 3L
+        stateStore.remove("repo.example") shouldBe true
+        stateStore.load("repo.example") shouldBe null
+        stateStore.remove("repo.example") shouldBe false
+    }
+
+    @Test
     fun `same sequence with different signed payload is not the accepted current index`() {
         val keyPair = ecKeyPair()
         val stateStore = FileProviderRepositoryTrustStore(tempDir.resolve("mismatch").toFile())
