@@ -381,15 +381,13 @@ class ProviderRepositoryTrust(
 
         val payloadSha256 = sha256Hex(signed.payload)
         val nextKeys = trustedKeysWithRotation(index.nextSigningKey)
-        persistState(
-            sequence = index.sequence,
-            keys = nextKeys,
-            acceptedPayloadSha256 = payloadSha256,
+        applyPersistedState(
+            persistState(
+                sequence = index.sequence,
+                keys = nextKeys,
+                acceptedPayloadSha256 = payloadSha256,
+            ),
         )
-        highestAcceptedSequence = index.sequence
-        acceptedPayloadSha256 = payloadSha256
-        trustedKeyBytes.clear()
-        trustedKeyBytes.putAll(nextKeys)
 
         return VerifiedProviderRepository(
             index = index,
@@ -447,13 +445,13 @@ class ProviderRepositoryTrust(
             ?: fail("Verified repository index does not introduce a signing key")
 
         val nextKeys = trustedKeysWithRotation(rotation)
-        persistState(
-            sequence = highestAcceptedSequence,
-            keys = nextKeys,
-            acceptedPayloadSha256 = acceptedPayloadSha256,
+        applyPersistedState(
+            persistState(
+                sequence = highestAcceptedSequence,
+                keys = nextKeys,
+                acceptedPayloadSha256 = acceptedPayloadSha256,
+            ),
         )
-        trustedKeyBytes.clear()
-        trustedKeyBytes.putAll(nextKeys)
     }
 
     fun verifyArtifact(
@@ -586,7 +584,7 @@ class ProviderRepositoryTrust(
         sequence: Long,
         keys: Map<String, ByteArray>,
         acceptedPayloadSha256: String?,
-    ) {
+    ): ProviderRepositoryTrustState {
         stateStore.save(
             ProviderRepositoryTrustState(
                 repositoryId = repositoryId,
@@ -597,6 +595,24 @@ class ProviderRepositoryTrust(
                 acceptedPayloadSha256 = acceptedPayloadSha256,
             ),
         )
+        return stateStore.load(repositoryId)
+            ?: fail("Repository trust state disappeared after persistence")
+    }
+
+    private fun applyPersistedState(state: ProviderRepositoryTrustState) {
+        if (state.repositoryId != repositoryId) {
+            fail("Persisted repository trust state belongs to another repository")
+        }
+
+        highestAcceptedSequence = state.highestAcceptedSequence
+        acceptedPayloadSha256 = state.acceptedPayloadSha256
+        trustedKeyBytes.clear()
+        state.trustedKeysBase64.forEach { (keyId, encoded) ->
+            registerTrustedKey(
+                keyId = keyId,
+                encodedKey = decodeBase64(encoded, "Persisted repository signing key"),
+            )
+        }
     }
 
     private fun requireVerifiedRepository(repository: VerifiedProviderRepository) {
