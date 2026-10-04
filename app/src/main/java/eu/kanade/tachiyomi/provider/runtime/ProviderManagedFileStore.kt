@@ -7,13 +7,16 @@ import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedFileFormat
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceResolver
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.zip.ZipInputStream
 
 class ProviderManagedFileStore internal constructor(
     private val root: File,
@@ -23,6 +26,9 @@ class ProviderManagedFileStore internal constructor(
     private val maxFileBytes: Int = DEFAULT_MAX_FILE_BYTES,
     private val maxFilesPerProvider: Int = DEFAULT_MAX_FILES_PER_PROVIDER,
     private val maxTotalBytesPerProvider: Long = DEFAULT_MAX_TOTAL_BYTES_PER_PROVIDER,
+    private val maxArchiveEntries: Int = DEFAULT_MAX_ARCHIVE_ENTRIES,
+    private val maxArchiveEntryBytes: Int = DEFAULT_MAX_ARCHIVE_ENTRY_BYTES,
+    private val maxArchiveUncompressedBytes: Long = DEFAULT_MAX_ARCHIVE_UNCOMPRESSED_BYTES,
 ) : ProviderManagedResourceResolver {
 
     constructor(context: Context) : this(
@@ -43,6 +49,11 @@ class ProviderManagedFileStore internal constructor(
         require(maxTotalBytesPerProvider >= maxFileBytes) {
             "Provider managed resource total byte limit must cover one maximum-sized file"
         }
+        require(maxArchiveEntries > 0) { "Provider managed archive entry limit must be positive" }
+        require(maxArchiveEntryBytes > 0) { "Provider managed archive entry byte limit must be positive" }
+        require(maxArchiveUncompressedBytes >= maxArchiveEntryBytes) {
+            "Provider managed archive expansion limit must cover one maximum-sized entry"
+        }
         ensureDirectory(root)
     }
 
@@ -56,6 +67,7 @@ class ProviderManagedFileStore internal constructor(
         if (bytes.isEmpty() || bytes.size > maxFileBytes) {
             throw IllegalStateException("Provider managed resource exceeds the file byte limit")
         }
+        validateArchive(bytes)
 
         val directory = providerDirectory(provider)
         ensureDirectory(directory)
@@ -131,6 +143,88 @@ class ProviderManagedFileStore internal constructor(
         val age = clock() - file.lastModified()
         return age < 0L || age > ttlMs
     }
+
+    private fun validateArchive(bytes: ByteArray) {
+        if (!hasZipLocalFileHeader(bytes)) {
+            throw IllegalStateException("Provider managed resource is not a ZIP archive")
+        }
+
+        var entryCount = 0
+        var fileCount = 0
+        var totalUncompressedBytes = 0L
+
+        try {
+            ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    entryCount += 1
+                    if (entryCount > maxArchiveEntries) {
+                        throw IllegalStateException("Provider managed archive contains too many entries")
+                    }
+                    validateArchivePath(entry.name, entry.isDirectory)
+
+                    if (!entry.isDirectory) {
+                        fileCount += 1
+                        var entryBytes = 0L
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (true) {
+                            val read = zip.read(buffer)
+                            if (read < 0) break
+                            if (read == 0) continue
+
+                            entryBytes += read
+                            totalUncompressedBytes += read
+                            if (entryBytes > maxArchiveEntryBytes) {
+                                throw IllegalStateException(
+                                    "Provider managed archive entry exceeds the byte limit",
+                                )
+                            }
+                            if (totalUncompressedBytes > maxArchiveUncompressedBytes) {
+                                throw IllegalStateException(
+                                    "Provider managed archive exceeds the expansion limit",
+                                )
+                            }
+                        }
+                    }
+                    zip.closeEntry()
+                }
+            }
+        } catch (error: IllegalStateException) {
+            throw error
+        } catch (error: IOException) {
+            throw IllegalStateException("Provider managed archive could not be validated", error)
+        }
+
+        if (fileCount == 0) {
+            throw IllegalStateException("Provider managed archive contains no files")
+        }
+    }
+
+    private fun validateArchivePath(
+        raw: String,
+        isDirectory: Boolean,
+    ) {
+        val candidate = if (isDirectory) raw.removeSuffix("/") else raw
+        if (
+            candidate.isBlank() ||
+            candidate.startsWith("/") ||
+            candidate.startsWith("\\") ||
+            '\\' in candidate ||
+            ':' in candidate
+        ) {
+            throw IllegalStateException("Provider managed archive contains an unsafe path")
+        }
+        if (candidate.split('/').any { it.isBlank() || it == "." || it == ".." }) {
+            throw IllegalStateException("Provider managed archive contains an unsafe path")
+        }
+    }
+
+    private fun hasZipLocalFileHeader(bytes: ByteArray): Boolean =
+        bytes.size >= 4 &&
+            bytes[0] == 'P'.code.toByte() &&
+            bytes[1] == 'K'.code.toByte() &&
+            bytes[2] == 3.toByte() &&
+            bytes[3] == 4.toByte()
 
     private fun moveAtomically(source: File, target: File) {
         try {
