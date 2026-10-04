@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import org.junit.jupiter.api.Test
@@ -48,6 +49,37 @@ class CanonicalReaderTargetPlanTest {
 
         plan.canonicalChapterId shouldBe "chapter-http"
         plan.pages shouldBe pages
+    }
+
+    @Test
+    fun `prepared Reader HTTP boundary rejects routing headers`() {
+        listOf(
+            "Host",
+            "Connection",
+            "Content-Length",
+            "Transfer-Encoding",
+            "Upgrade",
+            "Proxy-Connection",
+        ).forEach { header ->
+            shouldThrow<IllegalArgumentException> {
+                PreparedHttpPage(
+                    url = "https://cdn.example/001.jpg",
+                    headers = mapOf(header to "unsafe"),
+                    allowedOrigins = setOf("https://cdn.example"),
+                )
+            }
+        }
+
+        PreparedHttpPage(
+            url = "https://cdn.example/001.jpg",
+            headers = mapOf(
+                "Referer" to "https://reader.example/",
+                "User-Agent" to "Tsuzuki",
+                "Cookie" to "session=value",
+                "Authorization" to "Bearer token",
+            ),
+            allowedOrigins = setOf("https://cdn.example"),
+        ).headers.keys shouldBe setOf("Referer", "User-Agent", "Cookie", "Authorization")
     }
 
     @Test
