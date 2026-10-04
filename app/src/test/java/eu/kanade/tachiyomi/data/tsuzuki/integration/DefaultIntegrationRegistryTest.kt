@@ -598,7 +598,7 @@ class DefaultIntegrationRegistryTest {
             providers.configurationFingerprint(
                 tachiyomi.domain.tsuzuki.provider.ProviderId("kitsu"),
             ) != kitsuBefore
-        ) shouldBe true
+            ) shouldBe true
         providers.configurationFingerprint(
             tachiyomi.domain.tsuzuki.provider.ProviderId("mal"),
         ) shouldBe malBefore
