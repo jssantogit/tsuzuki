@@ -146,7 +146,7 @@ class ProviderP2pJobManagerTest {
     private fun managedStore() = ProviderManagedFileStore(
         root = tempDir.resolve("managed").toFile(),
         uriFactory = { file ->
-            "managed-uri:managed:${file.name.substringBefore('.') }.${file.extension}"
+            "managed-uri:managed:${file.name.substringBefore('.')}.${file.extension}"
         },
         maxFileBytes = 4L * 1024L * 1024L,
         maxTotalBytesPerProvider = 8L * 1024L * 1024L,
