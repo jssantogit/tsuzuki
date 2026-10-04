@@ -102,6 +102,68 @@ class ProviderRepositoryManagerTest {
     }
 
     @Test
+    fun `changing enrolled repository metadata invalidates stale verified session`() = runBlocking {
+        val keyPair = ecKeyPair()
+        val signingKey = ProviderRepositorySigningKey(
+            keyId = "root-1",
+            publicKeyBase64 = Base64.getEncoder().encodeToString(keyPair.public.encoded),
+        )
+        val enrollmentStore = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("reenroll-enrollments").toFile(),
+        )
+        val trustStore = FileProviderRepositoryTrustStore(
+            tempDir.resolve("reenroll-trust").toFile(),
+        )
+        val artifactStore = ProviderArtifactStore(
+            tempDir.resolve("reenroll-artifacts").toFile(),
+        )
+        val transport = FakeTransport()
+        val manager = manager(enrollmentStore, trustStore, artifactStore, transport)
+        manager.enroll(
+            EnrolledProviderRepository(
+                "Original",
+                ProviderRepositoryEnrollment(
+                    repositoryId = "repo.example",
+                    indexUrl = "https://repo.example/index.json",
+                    signingKey = signingKey,
+                ),
+            ),
+        )
+
+        val bytes = tsz(versionCode = 1)
+        transport.publish(
+            signed = signedIndex(
+                keyPair = keyPair,
+                sequence = 1,
+                artifactBytes = bytes,
+                versionCode = 1,
+            ),
+            artifactBytes = bytes,
+        )
+        manager.refresh("repo.example")
+        manager.snapshot("repo.example")!!.repository.displayName shouldBe "Original"
+
+        manager.enroll(
+            EnrolledProviderRepository(
+                "Moved",
+                ProviderRepositoryEnrollment(
+                    repositoryId = "repo.example",
+                    indexUrl = "https://mirror.example/index.json",
+                    signingKey = signingKey,
+                ),
+            ),
+        )
+
+        manager.snapshot("repo.example") shouldBe null
+        manager.install("repo.example", "reader.example")
+        transport.requestedIndexUrls shouldBe listOf(
+            "https://repo.example/index.json",
+            "https://mirror.example/index.json",
+        )
+        manager.installed().single().versionCode shouldBe 1L
+    }
+
+    @Test
     fun `removing repository clears persisted trust state before explicit re-enrollment`() = runBlocking {
         val keyPair = ecKeyPair()
         val enrollmentStore = FileProviderRepositoryEnrollmentStore(
@@ -272,6 +334,7 @@ class ProviderRepositoryManagerTest {
     private class FakeTransport : ProviderRepositoryTransport {
         private lateinit var signed: SignedProviderRepositoryIndex
         private val artifacts = mutableMapOf<String, ByteArray>()
+        val requestedIndexUrls = mutableListOf<String>()
 
         fun publish(
             signed: SignedProviderRepositoryIndex,
@@ -285,8 +348,10 @@ class ProviderRepositoryManagerTest {
             artifacts[descriptor.artifactUrl] = artifactBytes
         }
 
-        override suspend fun fetchIndex(indexUrl: String): SignedProviderRepositoryIndex =
-            signed
+        override suspend fun fetchIndex(indexUrl: String): SignedProviderRepositoryIndex {
+            requestedIndexUrls += indexUrl
+            return signed
+        }
 
         override suspend fun fetchArtifact(artifactUrl: String): ByteArray =
             artifacts.getValue(artifactUrl)
