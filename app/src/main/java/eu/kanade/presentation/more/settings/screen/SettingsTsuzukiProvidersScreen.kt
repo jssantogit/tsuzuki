@@ -433,7 +433,8 @@ class SettingsTsuzukiProviderAcquisitionScreen : Screen() {
         var directP2pAllowed by remember {
             mutableStateOf(preferences.directP2pAllowed.get())
         }
-        var cacheStatus by remember { mutableStateOf<String?>(null) }
+        var cacheCleared by remember { mutableStateOf(false) }
+        var cacheError by remember { mutableStateOf<String?>(null) }
 
         Scaffold(
             topBar = {
@@ -560,22 +561,18 @@ class SettingsTsuzukiProviderAcquisitionScreen : Screen() {
                             TextButton(
                                 onClick = {
                                     scope.launch {
-                                        cacheStatus = runProviderUiCatching {
+                                        cacheCleared = false
+                                        cacheError = null
+                                        runProviderUiCatching {
                                             withContext(Dispatchers.IO) {
                                                 managedFiles.clearAll()
                                             }
-                                        }.fold(
-                                            onSuccess = {
-                                                context.getString(
-                                                    MR.strings
-                                                        .tsuzuki_providers_managed_cache_cleared
-                                                        .resourceId,
-                                                )
-                                            },
-                                            onFailure = { error ->
+                                        }.onSuccess {
+                                            cacheCleared = true
+                                        }.onFailure { error ->
+                                            cacheError =
                                                 error.message ?: "Managed Provider cache cleanup failed"
-                                            },
-                                        )
+                                        }
                                     }
                                 },
                             ) {
@@ -588,9 +585,22 @@ class SettingsTsuzukiProviderAcquisitionScreen : Screen() {
                         },
                     )
                 }
-                cacheStatus?.let { status ->
-                    item(key = "cache_status") {
-                        ListItem(headlineContent = { Text(status) })
+                if (cacheCleared) {
+                    item(key = "cache_cleared") {
+                        ListItem(
+                            headlineContent = {
+                                Text(
+                                    stringResource(
+                                        MR.strings.tsuzuki_providers_managed_cache_cleared,
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                }
+                cacheError?.let { error ->
+                    item(key = "cache_error") {
+                        ListItem(headlineContent = { Text(error) })
                     }
                 }
             }
