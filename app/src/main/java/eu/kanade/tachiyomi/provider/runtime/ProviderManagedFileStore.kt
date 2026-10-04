@@ -188,14 +188,6 @@ class ProviderManagedFileStore internal constructor(
     }
 
     @Synchronized
-    fun clearAll() {
-        root.listFiles()
-            .orEmpty()
-            .forEach { file -> file.deleteRecursively() }
-        ensureDirectory(root)
-    }
-
-    @Synchronized
     override fun resolve(
         providerId: ProviderId,
         resource: ProviderManagedResourceRef,
