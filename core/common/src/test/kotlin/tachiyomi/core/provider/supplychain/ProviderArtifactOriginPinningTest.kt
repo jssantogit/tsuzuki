@@ -76,6 +76,7 @@ class ProviderArtifactOriginPinningTest {
         val bytes = "$repositoryId-v$versionCode".encodeToByteArray()
         return VerifiedProviderArtifact(
             repositoryId = repositoryId,
+            repositoryTrustAnchorSha256 = sha256Hex("$repositoryId-root".encodeToByteArray()),
             descriptor = ProviderArtifactDescriptor(
                 providerId = "reader.example",
                 versionName = "1.0.$versionCode",
