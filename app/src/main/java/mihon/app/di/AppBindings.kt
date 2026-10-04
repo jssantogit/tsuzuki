@@ -127,10 +127,14 @@ object AppBindings {
     fun providesInstalledScriptProviderRegistry(
         artifactStore: ProviderArtifactStore,
         configurationStore: ProviderLocalConfigurationStore,
+        integrationRegistry: IntegrationRegistry,
     ): InstalledScriptProviderRegistry =
         InstalledScriptProviderRegistry(
             artifactStore = artifactStore,
             configurationStore = configurationStore,
+            reservedProviderIds = integrationRegistry.manifests()
+                .map { it.integrationId.value }
+                .toSet(),
         )
 
     @Provides
