@@ -9,8 +9,8 @@ import zipfile
 from pathlib import Path
 from typing import Iterable
 
-EXPECTED_ABIS = ("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-ELF_16K_ABIS = ("arm64-v8a", "x86_64")
+EXPECTED_ABIS = ("armeabi-v7a", "arm64-v8a", "x86")
+ELF_16K_ABIS = ("arm64-v8a",)
 MIN_PAGE_ALIGNMENT = 16 * 1024
 JLIBTORRENT_PREFIX = "libjlibtorrent"
 
@@ -50,7 +50,7 @@ def validate_jlibtorrent_abi_coverage(apks: Iterable[Path]) -> set[str]:
         missing_text = ", ".join(sorted(missing))
         observed_text = ", ".join(sorted(observed)) or "none"
         raise RuntimeError(
-            "Native package gate is missing jlibtorrent for supported ABIs; "
+            "Native package gate is missing jlibtorrent for release-supported P2P ABIs; "
             f"missing: {missing_text}; observed: {observed_text}"
         )
     return observed
