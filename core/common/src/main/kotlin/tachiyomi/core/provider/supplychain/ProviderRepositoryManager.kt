@@ -129,6 +129,8 @@ class ProviderRepositoryManager(
         providerId: String,
     ): ParsedProviderPackage =
         repositoryLock(repositoryId).withLock {
+            val repository = enrollmentStore.get(repositoryId)
+                ?: throw ProviderSupplyChainException("Provider repository is not enrolled")
             val session = sessions[repositoryId] ?: run {
                 refreshLocked(repositoryId)
                 sessions.getValue(repositoryId)
@@ -149,9 +151,15 @@ class ProviderRepositoryManager(
             }
 
             val installed = artifactStore.current(providerId)
-            if (installed != null && installed.repositoryId != repositoryId) {
+            if (
+                installed != null &&
+                (
+                    installed.repositoryId != repositoryId ||
+                        installed.repositoryTrustAnchorSha256 != repository.keyFingerprintSha256
+                    )
+            ) {
                 throw ProviderSupplyChainException(
-                    "Installed Provider belongs to a different repository",
+                    "Installed Provider belongs to a different repository trust origin",
                 )
             }
 
@@ -186,6 +194,7 @@ class ProviderRepositoryManager(
                     installedVersionCode = installed?.versionCode,
                     status = entryStatus(
                         repositoryId = repository.enrollment.repositoryId,
+                        repositoryTrustAnchorSha256 = repository.keyFingerprintSha256,
                         descriptor = descriptor,
                         installed = installed,
                         revokedArtifactSha256 = revoked,
@@ -204,6 +213,7 @@ class ProviderRepositoryManager(
 
     private fun entryStatus(
         repositoryId: String,
+        repositoryTrustAnchorSha256: String,
         descriptor: ProviderArtifactDescriptor,
         installed: StoredProviderArtifact?,
         revokedArtifactSha256: Set<String>,
@@ -217,7 +227,10 @@ class ProviderRepositoryManager(
         if (installed == null) {
             return ProviderRepositoryEntryStatus.AVAILABLE
         }
-        if (installed.repositoryId != repositoryId) {
+        if (
+            installed.repositoryId != repositoryId ||
+            installed.repositoryTrustAnchorSha256 != repositoryTrustAnchorSha256
+        ) {
             return ProviderRepositoryEntryStatus.ORIGIN_CONFLICT
         }
         if (installed.revoked && descriptor.versionCode <= installed.versionCode) {
