@@ -452,6 +452,91 @@ class ProviderRepositoryManagerTest {
     }
 
     @Test
+    fun `signed key rotation can revoke artifacts from the original trust root`() = runBlocking {
+        val rootKey = ecKeyPair()
+        val rotatedKey = ecKeyPair()
+        val enrollmentStore = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("rotation-revocation-enrollments").toFile(),
+        )
+        val trustStore = FileProviderRepositoryTrustStore(
+            tempDir.resolve("rotation-revocation-trust").toFile(),
+        )
+        val artifactStore = ProviderArtifactStore(
+            tempDir.resolve("rotation-revocation-artifacts").toFile(),
+        )
+        val transport = FakeTransport()
+        val manager = manager(enrollmentStore, trustStore, artifactStore, transport)
+
+        manager.enroll(
+            EnrolledProviderRepository(
+                "Example",
+                ProviderRepositoryEnrollment(
+                    repositoryId = "repo.example",
+                    indexUrl = "https://repo.example/index.json",
+                    signingKey = ProviderRepositorySigningKey(
+                        keyId = "root-1",
+                        publicKeyBase64 = Base64.getEncoder()
+                            .encodeToString(rootKey.public.encoded),
+                    ),
+                ),
+            ),
+        )
+
+        val v1 = tsz(versionCode = 1)
+        val firstIndex = ProviderRepositoryIndex(
+            schemaVersion = 1,
+            repositoryId = "repo.example",
+            sequence = 1,
+            providers = listOf(
+                ProviderArtifactDescriptor(
+                    providerId = "reader.example",
+                    versionName = "1.0.1",
+                    versionCode = 1,
+                    artifactUrl = "https://repo.example/reader-1.tsz",
+                    sha256 = sha256Hex(v1),
+                    minHostApi = 1,
+                ),
+            ),
+            nextSigningKey = ProviderRepositorySigningKey(
+                keyId = "root-2",
+                publicKeyBase64 = Base64.getEncoder()
+                    .encodeToString(rotatedKey.public.encoded),
+            ),
+        )
+        transport.publish(
+            signed = signedIndex(
+                keyPair = rootKey,
+                index = firstIndex,
+                keyId = "root-1",
+            ),
+            artifactBytes = v1,
+        )
+        manager.refresh("repo.example")
+        manager.install("repo.example", "reader.example")
+        manager.installed().single().revoked shouldBe false
+
+        val secondIndex = firstIndex.copy(
+            sequence = 2,
+            nextSigningKey = null,
+            revokedArtifactSha256 = setOf(sha256Hex(v1)),
+        )
+        transport.publish(
+            signed = signedIndex(
+                keyPair = rotatedKey,
+                index = secondIndex,
+                keyId = "root-2",
+            ),
+            artifactBytes = v1,
+        )
+
+        manager.refresh("repo.example")
+
+        manager.installed().single().revoked shouldBe true
+        manager.installed().single().repositoryTrustAnchorSha256 shouldBe
+            sha256Hex(rootKey.public.encoded)
+    }
+
+    @Test
     fun `removing repository waits for in flight refresh before clearing trust`() = runBlocking {
         val keyPair = ecKeyPair()
         val enrollmentStore = FileProviderRepositoryEnrollmentStore(
@@ -566,6 +651,7 @@ class ProviderRepositoryManagerTest {
     private fun signedIndex(
         keyPair: KeyPair,
         index: ProviderRepositoryIndex,
+        keyId: String = "root-1",
     ): SignedProviderRepositoryIndex {
         val payload = json.encodeToString(index).encodeToByteArray()
         val signature = Signature.getInstance("SHA256withECDSA").run {
@@ -574,7 +660,7 @@ class ProviderRepositoryManagerTest {
             sign()
         }
         return SignedProviderRepositoryIndex(
-            keyId = "root-1",
+            keyId = keyId,
             payload = payload,
             signature = signature,
         )
