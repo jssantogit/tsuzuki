@@ -84,6 +84,41 @@ class ProviderRepositoryTrustAtomicRotationTest {
     }
 
     @Test
+    fun `stale trust state from a different bootstrap root fails closed on reenrollment`() {
+        val originalRoot = ecKeyPair()
+        val replacementRoot = ecKeyPair()
+        val stateStore = FileProviderRepositoryTrustStore(tempDir.resolve("stale-root").toFile())
+        val original = ProviderRepositoryTrust(
+            repositoryId = "repo.example",
+            hostApiVersion = 3,
+            trustedKeys = mapOf("root-original" to originalRoot.public.encoded),
+            stateStore = stateStore,
+        )
+
+        original.verifyAndAccept(
+            signedIndex(
+                keyId = "root-original",
+                keyPair = originalRoot,
+                index = ProviderRepositoryIndex(
+                    schemaVersion = 1,
+                    repositoryId = "repo.example",
+                    sequence = 1,
+                    providers = listOf(descriptor(1, "v1")),
+                ),
+            ),
+        )
+
+        shouldThrow<ProviderSupplyChainException> {
+            ProviderRepositoryTrust(
+                repositoryId = "repo.example",
+                hostApiVersion = 3,
+                trustedKeys = mapOf("root-replacement" to replacementRoot.public.encoded),
+                stateStore = stateStore,
+            )
+        }
+    }
+
+    @Test
     fun `stale trust writer cannot lower persisted repository sequence`() {
         val rootKey = ecKeyPair()
         val stateStore = FileProviderRepositoryTrustStore(tempDir.resolve("monotonic-trust").toFile())
