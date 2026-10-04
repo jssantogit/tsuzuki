@@ -291,6 +291,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
  */
 internal object JlibtorrentNativeSupport {
 
+    // Debug instrumentation may opt into additional ABIs explicitly; production never does.
     private val RELEASE_SUPPORTED_ABIS = setOf(
         "armeabi-v7a",
         "arm64-v8a",
