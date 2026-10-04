@@ -504,6 +504,7 @@ class ProviderRepositoryTrust(
         }
         return artifactStore.applyRevocations(
             repositoryId = repository.index.repositoryId,
+            repositoryTrustAnchorSha256 = trustAnchorSha256,
             revokedArtifactSha256 = repository.index.revokedArtifactSha256,
         )
     }
@@ -828,9 +829,11 @@ class ProviderArtifactStore(
     @Synchronized
     internal fun applyRevocations(
         repositoryId: String,
+        repositoryTrustAnchorSha256: String,
         revokedArtifactSha256: Set<String>,
     ): Set<String> {
         validateIdentifier(repositoryId, "Repository ID")
+        val trustAnchor = normalizeSha256(repositoryTrustAnchorSha256)
         val revokedHashes = revokedArtifactSha256.map(::normalizeSha256).toSet()
         if (revokedHashes.isEmpty()) return emptySet()
 
@@ -846,6 +849,7 @@ class ProviderArtifactStore(
                 fun revokeIfMatched(artifact: StoredArtifactState): StoredArtifactState {
                     if (
                         artifact.repositoryId == repositoryId &&
+                        artifact.repositoryTrustAnchorSha256 == trustAnchor &&
                         artifact.sha256 in revokedHashes &&
                         !artifact.revoked
                     ) {
