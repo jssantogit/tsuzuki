@@ -316,6 +316,7 @@ object TorrentAcquisitionPolicy {
     fun resolve(
         preference: TorrentAcquisitionPreference,
         hasUsableDebrid: Boolean,
+        hasUsableP2p: Boolean,
         directP2pAllowed: Boolean,
     ): TorrentAcquisitionDecision = when (preference) {
         TorrentAcquisitionPreference.DEBRID_ONLY -> {
@@ -325,15 +326,14 @@ object TorrentAcquisitionPolicy {
                 TorrentAcquisitionDecision.Unavailable
             }
         }
-        TorrentAcquisitionPreference.P2P_ONLY -> {
-            if (directP2pAllowed) {
+        TorrentAcquisitionPreference.P2P_ONLY -> when {
+            !hasUsableP2p -> TorrentAcquisitionDecision.Unavailable
+            directP2pAllowed ->
                 TorrentAcquisitionDecision.Routes(listOf(TorrentAcquisitionRoute.DIRECT_P2P))
-            } else {
-                TorrentAcquisitionDecision.DirectP2pConsentRequired
-            }
+            else -> TorrentAcquisitionDecision.DirectP2pConsentRequired
         }
         TorrentAcquisitionPreference.DEBRID_THEN_P2P -> when {
-            hasUsableDebrid && directP2pAllowed ->
+            hasUsableDebrid && hasUsableP2p && directP2pAllowed ->
                 TorrentAcquisitionDecision.Routes(
                     listOf(
                         TorrentAcquisitionRoute.DEBRID,
@@ -342,10 +342,12 @@ object TorrentAcquisitionPolicy {
                 )
             hasUsableDebrid ->
                 TorrentAcquisitionDecision.Routes(listOf(TorrentAcquisitionRoute.DEBRID))
-            directP2pAllowed ->
+            hasUsableP2p && directP2pAllowed ->
                 TorrentAcquisitionDecision.Routes(listOf(TorrentAcquisitionRoute.DIRECT_P2P))
-            else ->
+            hasUsableP2p ->
                 TorrentAcquisitionDecision.DirectP2pConsentRequired
+            else ->
+                TorrentAcquisitionDecision.Unavailable
         }
     }
 }
