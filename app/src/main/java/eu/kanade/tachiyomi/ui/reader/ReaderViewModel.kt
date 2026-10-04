@@ -43,6 +43,7 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.reader.loader.ChapterLoader
 import eu.kanade.tachiyomi.ui.reader.loader.DownloadPageLoader
 import eu.kanade.tachiyomi.ui.reader.loader.LocalChapterLoader
+import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpChapterLoader
 import eu.kanade.tachiyomi.ui.reader.loader.ReaderChapterLoader
 import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
@@ -609,6 +610,70 @@ class ReaderViewModel(
                             nextSource = source,
                             nextMangaId = plan.mangaId,
                             nextInitialChapterId = plan.chapterId,
+                            nextIncognitoMode = nextIncognitoMode,
+                            selectedOption = selectedOption,
+                            previous = navigation.first,
+                            next = navigation.second,
+                            recordPreviousHistory = recordPreviousHistory,
+                        )
+                    },
+                )
+            }
+
+            is CanonicalReaderTargetPlan.HttpPages -> {
+                val canonicalChapter = canonicalChapterRepository.getById(plan.canonicalChapterId)
+                    ?: error("Canonical chapter ${plan.canonicalChapterId} not found")
+                val progress = canonicalReadingRepository.getProgress(plan.canonicalChapterId)
+                val readerChapterId = localReaderChapterId(plan.canonicalChapterId)
+                val nextIncognitoMode = getIncognitoState.await(null)
+                val requestedPage = resolveCanonicalLocalRequestedPage(
+                    resetPage = resetPage,
+                    savedPageIndex = chapterPageIndex,
+                    progress = progress,
+                )
+                val nextChapter = ReaderChapter(
+                    ChapterImpl().apply {
+                        id = readerChapterId
+                        manga_id = null
+                        url = "provider-pages:${plan.canonicalChapterId}"
+                        name = canonicalChapter.title
+                            ?.takeIf(String::isNotBlank)
+                            ?: "Chapter ${canonicalChapter.displayNumber}"
+                        read = progress?.read == true
+                        last_page_read = requestedPage
+                        chapter_number = canonicalChapter.baseNumber?.toFloat() ?: -1f
+                        date_upload = canonicalChapter.updatedAt
+                    },
+                )
+                val nextLoader = ProviderHttpChapterLoader.from(context, plan)
+                prepareAndPublishCanonicalReaderChapter(
+                    loader = nextLoader,
+                    chapter = nextChapter,
+                    preflight = {
+                        val previous = getAdjacentCanonicalChapter.execute(
+                            canonicalChapterId = plan.canonicalChapterId,
+                            direction = CanonicalChapterDirection.PREVIOUS,
+                        )
+                        val next = getAdjacentCanonicalChapter.execute(
+                            canonicalChapterId = plan.canonicalChapterId,
+                            direction = CanonicalChapterDirection.NEXT,
+                        )
+                        previous to next
+                    },
+                    publish = { stagedChapter, navigation ->
+                        publishCanonicalReaderChapter(
+                            session = CanonicalReaderSession(
+                                canonicalChapterId = plan.canonicalChapterId,
+                                variantId = null,
+                                readerChapterId = readerChapterId,
+                                mihonChapterId = null,
+                            ),
+                            nextLoader = nextLoader,
+                            nextChapter = stagedChapter,
+                            nextManga = null,
+                            nextSource = null,
+                            nextMangaId = -1L,
+                            nextInitialChapterId = -1L,
                             nextIncognitoMode = nextIncognitoMode,
                             selectedOption = selectedOption,
                             previous = navigation.first,

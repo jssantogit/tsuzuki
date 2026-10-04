@@ -3,11 +3,13 @@ package tachiyomi.domain.tsuzuki.chapter.evidence
 enum class ProducerKind {
     INTEGRATION,
     ADDON,
+    PROVIDER,
 }
 
 enum class ChapterEvidenceAuthority {
     EDITORIAL,
     ADDON_PROVISIONAL,
+    PROVIDER_PROVISIONAL,
 }
 
 enum class CanonicalChapterConfirmation {

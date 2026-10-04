@@ -2,6 +2,7 @@ package tachiyomi.domain.tsuzuki.chapter.evidence
 
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
@@ -34,6 +35,192 @@ class ReconcileChapterEvidenceTest {
         val chapter = fixture.chapterRepository.getByCanonicalTitleId("title").single()
         chapter.displayNumber shouldBe "211"
         chapter.confirmation shouldBe CanonicalChapterConfirmation.PROVISIONAL
+    }
+
+    @Test
+    fun `provider evidence creates provisional chapter under the same canonical safety rules`() = runTest {
+        val fixture = fixture()
+        val observation = ChapterEvidence(
+            id = "provider-211",
+            canonicalTitleId = "title",
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "org.example.reader",
+            externalChapterKey = "chapter-211",
+            rawLabel = "Chapter 211",
+            rawNumber = 211.0,
+            volume = null,
+            title = null,
+            observedAt = 10L,
+            confidence = 0.95,
+            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+        )
+
+        fixture.reconciler.execute("title", listOf(observation))
+
+        val chapter = fixture.chapterRepository.getByCanonicalTitleId("title").single()
+        chapter.displayNumber shouldBe "211"
+        chapter.confirmation shouldBe CanonicalChapterConfirmation.PROVISIONAL
+    }
+
+    @Test
+    fun `provider bare volume zero placeholder cannot create canonical structure`() = runTest {
+        val fixture = fixture()
+        val observation = ChapterEvidence(
+            id = "provider-volume-zero",
+            canonicalTitleId = "title",
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "org.example.reader",
+            externalChapterKey = "volume-one-zero",
+            rawLabel = "Vol. 1 Ch. 0",
+            rawNumber = 0.0,
+            volume = 1,
+            title = null,
+            observedAt = 10L,
+            confidence = 0.95,
+            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+        )
+
+        fixture.reconciler.execute("title", listOf(observation))
+
+        fixture.chapterRepository.getByCanonicalTitleId("title") shouldBe emptyList()
+        fixture.evidenceRepository.getByProducerExternalKey(
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "org.example.reader",
+            externalChapterKey = "volume-one-zero",
+        )?.mappedCanonicalChapterId shouldBe null
+    }
+
+    @Test
+    fun `stale same provider native observation is discarded without remapping chapter`() = runTest {
+        val fixture = fixture()
+        val current = ChapterEvidence(
+            id = "provider-current",
+            canonicalTitleId = "title",
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "org.example.reader",
+            externalChapterKey = "chapter-1",
+            rawLabel = "Chapter 1",
+            rawNumber = 1.0,
+            volume = null,
+            title = null,
+            observedAt = 20L,
+            confidence = 0.95,
+            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+        )
+        fixture.reconciler.execute("title", listOf(current))
+        val chapterId = fixture.chapterRepository.getByCanonicalTitleId("title").single().id
+
+        fixture.reconciler.execute(
+            "title",
+            listOf(
+                current.copy(
+                    id = "provider-stale",
+                    rawLabel = "Chapter 826",
+                    rawNumber = 826.0,
+                    observedAt = 10L,
+                ),
+            ),
+        )
+
+        fixture.chapterRepository.getByCanonicalTitleId("title").single().id shouldBe chapterId
+        fixture.evidenceRepository.getByProducerExternalKey(
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "org.example.reader",
+            externalChapterKey = "chapter-1",
+        )?.mappedCanonicalChapterId shouldBe chapterId
+    }
+
+    @Test
+    fun `complete provider snapshot detaches older mapped evidence missing from the new inventory`() = runTest {
+        val fixture = fixture()
+        val first = ChapterEvidence(
+            id = "provider-first",
+            canonicalTitleId = "title",
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "provider-binding:test",
+            externalChapterKey = "chapter-1",
+            rawLabel = "Chapter 1",
+            rawNumber = 1.0,
+            volume = null,
+            title = null,
+            observedAt = 10L,
+            confidence = 0.95,
+            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+        )
+        val second = first.copy(
+            id = "provider-second",
+            externalChapterKey = "chapter-2",
+            rawLabel = "Chapter 2",
+            rawNumber = 2.0,
+        )
+
+        fixture.reconciler.executeProviderSnapshot(
+            canonicalTitleId = "title",
+            producerId = "provider-binding:test",
+            snapshotObservedAt = 10L,
+            evidence = listOf(first, second),
+        )
+        fixture.reconciler.executeProviderSnapshot(
+            canonicalTitleId = "title",
+            producerId = "provider-binding:test",
+            snapshotObservedAt = 20L,
+            evidence = listOf(second.copy(observedAt = 20L)),
+        )
+
+        fixture.evidenceRepository.getByProducerExternalKey(
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "provider-binding:test",
+            externalChapterKey = "chapter-1",
+        )?.mappedCanonicalChapterId shouldBe null
+        fixture.evidenceRepository.getByProducerExternalKey(
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "provider-binding:test",
+            externalChapterKey = "chapter-2",
+        )?.mappedCanonicalChapterId shouldNotBe null
+    }
+
+    @Test
+    fun `stale complete provider snapshot cannot detach evidence from a newer snapshot`() = runTest {
+        val fixture = fixture()
+        val first = ChapterEvidence(
+            id = "provider-first",
+            canonicalTitleId = "title",
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "provider-binding:test",
+            externalChapterKey = "chapter-1",
+            rawLabel = "Chapter 1",
+            rawNumber = 1.0,
+            volume = null,
+            title = null,
+            observedAt = 20L,
+            confidence = 0.95,
+            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+        )
+        val second = first.copy(
+            id = "provider-second",
+            externalChapterKey = "chapter-2",
+            rawLabel = "Chapter 2",
+            rawNumber = 2.0,
+        )
+
+        fixture.reconciler.executeProviderSnapshot(
+            canonicalTitleId = "title",
+            producerId = "provider-binding:test",
+            snapshotObservedAt = 20L,
+            evidence = listOf(first, second),
+        )
+        fixture.reconciler.executeProviderSnapshot(
+            canonicalTitleId = "title",
+            producerId = "provider-binding:test",
+            snapshotObservedAt = 10L,
+            evidence = listOf(first.copy(observedAt = 10L)),
+        )
+
+        fixture.evidenceRepository.getByProducerExternalKey(
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "provider-binding:test",
+            externalChapterKey = "chapter-2",
+        )?.mappedCanonicalChapterId shouldNotBe null
     }
 
     @Test

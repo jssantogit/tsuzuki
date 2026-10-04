@@ -162,6 +162,16 @@ internal fun QuickJs.installHostServices(
                         ).value
                     }
                 }
+                asyncFunction("promote") { args ->
+                    hostFailures.call {
+                        binary.promote(
+                            resourceHandle = ProviderResourceHandle(args.stringArgument(0)),
+                            format = ProviderManagedResourceFormat.valueOf(
+                                args.stringArgument(1).uppercase(),
+                            ),
+                        )
+                    }
+                }
             }
         }
         services.crypto?.let { crypto ->

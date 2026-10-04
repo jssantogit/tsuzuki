@@ -11,6 +11,7 @@ interface IProviderHostBridge {
     String secretGet(String key);
     String binaryFetch(String url);
     String binaryZipEntry(String resourceHandle, String entryName);
+    String binaryPromote(String resourceHandle, String format);
     String cryptoAesCbcDecrypt(String resourceHandle, String keyHex, String ivHex);
     String imageCrop(String resourceHandle, int x, int y, int width, int height);
     String imagePixel(String resourceHandle, int x, int y);

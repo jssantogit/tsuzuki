@@ -55,6 +55,9 @@ class DefaultProviderBinaryTransformHostService(
     private val fetcher: suspend (String) -> ByteArray = {
         throw ProviderHostServiceException("Provider binary fetch service is unavailable")
     },
+    private val promoter: suspend (ByteArray, ProviderManagedResourceFormat) -> String = { _, _ ->
+        throw ProviderHostServiceException("Provider managed resource promotion is unavailable")
+    },
     private val maxTransformBytes: Int = 16 * 1024 * 1024,
 ) : ProviderBinaryHostService {
 
@@ -105,6 +108,27 @@ class DefaultProviderBinaryTransformHostService(
         throw ProviderHostServiceException("Provider archive entry was not found")
     }
 
+    override suspend fun promote(
+        resourceHandle: ProviderResourceHandle,
+        format: ProviderManagedResourceFormat,
+    ): String {
+        val bytes = resources.read(owner, resourceHandle)
+        if (bytes.size > maxTransformBytes) {
+            throw ProviderHostServiceException("Provider managed resource exceeds the byte limit")
+        }
+        val token = try {
+            promoter(bytes, format)
+        } catch (error: ProviderHostServiceException) {
+            throw error
+        } catch (error: Exception) {
+            throw ProviderHostServiceException("Provider managed resource promotion failed", error)
+        }
+        if (!MANAGED_RESOURCE_TOKEN.matches(token)) {
+            throw ProviderHostServiceException("Provider managed resource promoter returned an invalid token")
+        }
+        return token
+    }
+
     private fun validateArchiveEntryName(value: String) {
         if (value.isBlank() || value.length > MAX_ENTRY_NAME_CHARS) {
             throw ProviderHostServiceException("Provider archive entry name is invalid")
@@ -132,6 +156,7 @@ class DefaultProviderBinaryTransformHostService(
 
     private companion object {
         const val MAX_ENTRY_NAME_CHARS = 4 * 1024
+        val MANAGED_RESOURCE_TOKEN = Regex("managed:[A-Za-z0-9_-]{1,256}")
     }
 }
 

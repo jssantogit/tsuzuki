@@ -47,6 +47,30 @@ class ProviderHostTransformServicesTest {
     }
 
     @Test
+    fun `binary resource promotion stays host owned and returns only opaque managed token`() = runBlocking {
+        val handle = store.put(
+            owner = owner,
+            kind = ProviderResourceKind.BINARY,
+            bytes = "chapter-cbz".encodeToByteArray(),
+        )
+        var promotedBytes: ByteArray? = null
+        var promotedFormat: ProviderManagedResourceFormat? = null
+        val binary = DefaultProviderBinaryTransformHostService(
+            owner = owner,
+            resources = store,
+            promoter = { bytes, format ->
+                promotedBytes = bytes
+                promotedFormat = format
+                "managed:chapter-token"
+            },
+        )
+
+        binary.promote(handle, ProviderManagedResourceFormat.CBZ) shouldBe "managed:chapter-token"
+        promotedBytes?.decodeToString() shouldBe "chapter-cbz"
+        promotedFormat shouldBe ProviderManagedResourceFormat.CBZ
+    }
+
+    @Test
     fun `aes cbc decrypt returns a new host resource without exposing bytes to script`() = runBlocking {
         val key = ByteArray(16) { it.toByte() }
         val iv = ByteArray(16) { (it + 16).toByte() }

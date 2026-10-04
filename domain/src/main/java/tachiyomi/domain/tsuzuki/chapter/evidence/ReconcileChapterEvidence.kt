@@ -71,6 +71,70 @@ class ReconcileChapterEvidence internal constructor(
     }
 
     /**
+     * Reconciles one complete native Provider chapter inventory.
+     *
+     * Evidence that belonged to the same exact Provider binding but disappeared from a newer
+     * complete snapshot is detached from canonical chapters rather than deleted. Historical
+     * observations remain available for audit/recovery, while stale Provider reading options stop
+     * being offered. A delayed older snapshot may never detach evidence observed by a newer one.
+     */
+    suspend fun executeProviderSnapshot(
+        canonicalTitleId: String,
+        producerId: String,
+        snapshotObservedAt: Long,
+        evidence: List<ChapterEvidence>,
+    ) {
+        require(canonicalTitleId.isNotBlank()) { "Canonical title id is required" }
+        require(producerId.isNotBlank()) { "Provider evidence producer id is required" }
+        require(snapshotObservedAt >= 0L) { "Provider snapshot timestamp must not be negative" }
+        require(
+            evidence.all { observation ->
+                observation.canonicalTitleId == canonicalTitleId &&
+                    observation.producerKind == ProducerKind.PROVIDER &&
+                    observation.producerId == producerId &&
+                    observation.authority == ChapterEvidenceAuthority.PROVIDER_PROVISIONAL &&
+                    !observation.externalChapterKey.isNullOrBlank() &&
+                    observation.observedAt == snapshotObservedAt
+            },
+        ) {
+            "Provider snapshot evidence must belong to one exact Provider binding and timestamp"
+        }
+
+        val retainedExternalKeys = evidence.map { requireNotNull(it.externalChapterKey) }
+        require(retainedExternalKeys.distinct().size == retainedExternalKeys.size) {
+            "Provider snapshot contains duplicate external chapter keys"
+        }
+        val retainedKeySet = retainedExternalKeys.toHashSet()
+
+        mutationGate.withLock {
+            evidenceRepository.withTransaction {
+                if (evidence.isNotEmpty()) {
+                    reconcileUncontended(canonicalTitleId, evidence)
+                }
+
+                val detached = evidenceRepository.getByCanonicalTitleId(canonicalTitleId)
+                    .asSequence()
+                    .filter { persisted ->
+                        val observation = persisted.evidence
+                        observation.producerKind == ProducerKind.PROVIDER &&
+                            observation.producerId == producerId &&
+                            persisted.mappedCanonicalChapterId != null &&
+                            observation.observedAt < snapshotObservedAt &&
+                            observation.externalChapterKey !in retainedKeySet
+                    }
+                    .map { persisted ->
+                        persisted.copy(mappedCanonicalChapterId = null)
+                    }
+                    .toList()
+
+                if (detached.isNotEmpty()) {
+                    evidenceRepository.upsertResolvedBatch(detached)
+                }
+            }
+        }
+    }
+
+    /**
      * Runs an optional operational projection after the canonical/evidence writes
      * but before the same persistence transaction commits. A projection failure
      * rolls back all three kinds of rows. The projection may only use the
@@ -237,14 +301,14 @@ class ReconcileChapterEvidence internal constructor(
                 // Equal starts do not establish ordering, so only exact replays are safe.
                 // Editorial Integration evidence can use caller timestamps and is not
                 // subject to this source-inventory rule.
-                val hasStableAddonSourceIdentity =
-                    observation.producerKind == ProducerKind.ADDON &&
+                val hasStableProviderSourceIdentity =
+                    observation.isStableReadingProviderObservation() &&
                         !observation.externalChapterKey.isNullOrBlank()
-                if (hasStableAddonSourceIdentity) {
+                if (hasStableProviderSourceIdentity) {
                     require(
                         observation.observedAt != previousObservation.observedAt ||
                             observation.copy(id = previousObservation.id) == previousObservation,
-                    ) { "Conflicting Add-on evidence shares the same provider fetch timestamp" }
+                    ) { "Conflicting reading-provider evidence shares the same provider fetch timestamp" }
                 }
             }
             val stableId = existing?.evidence?.id ?: observation.id
@@ -309,8 +373,7 @@ class ReconcileChapterEvidence internal constructor(
             }
             ChapterInventoryDiagnosticLabels.fromIdentity(parsed.identity)?.let(diagnosticLabels::add)
             val numericHintConflicts = hasConflictingIntegerChapterHint(parsed, observation.rawNumber)
-            val unsafeProvisionalEvidence = observation.producerKind == ProducerKind.ADDON &&
-                observation.authority == ChapterEvidenceAuthority.ADDON_PROVISIONAL &&
+            val unsafeProvisionalEvidence = observation.isProvisionalReadingEvidence() &&
                 isUnsafeProvisionalChapterEvidence(
                     parsed,
                     observation.rawLabel,
@@ -347,7 +410,7 @@ class ReconcileChapterEvidence internal constructor(
             }
 
             if (
-                observation.authority == ChapterEvidenceAuthority.ADDON_PROVISIONAL &&
+                observation.isProvisionalReadingEvidence() &&
                 !parsedIdentityIsReliable
             ) {
                 provisionalCount++
@@ -425,8 +488,7 @@ class ReconcileChapterEvidence internal constructor(
                     hasExplicitVolumePrefix = observation.volume == null &&
                         volumeParser.hasExplicitVolumePrefix(observation.rawLabel),
                     allowUnqualifiedCandidateCreation =
-                    observation.producerKind == ProducerKind.ADDON &&
-                        observation.authority == ChapterEvidenceAuthority.ADDON_PROVISIONAL,
+                    observation.isProvisionalReadingEvidence(),
                 )
             } else {
                 CanonicalChapterCandidateResolution.NoMatch
@@ -616,8 +678,7 @@ class ReconcileChapterEvidence internal constructor(
         parseCache: ChapterEvidenceParseCache,
     ): Boolean {
         val parsed = parseCache.parse(evidence)
-        val unsafeSourceEvidence = evidence.producerKind == ProducerKind.ADDON &&
-            evidence.authority == ChapterEvidenceAuthority.ADDON_PROVISIONAL &&
+        val unsafeSourceEvidence = evidence.isProvisionalReadingEvidence() &&
             isUnsafeProvisionalChapterEvidence(
                 parsed,
                 evidence.rawLabel,
@@ -643,7 +704,7 @@ class ReconcileChapterEvidence internal constructor(
         persistedEvidenceByExternalKey: Map<EvidenceExternalKey, PersistedChapterEvidence>,
     ): Boolean {
         if (
-            observation.producerKind != ProducerKind.ADDON ||
+            !observation.isStableReadingProviderObservation() ||
             observation.externalChapterKey.isNullOrBlank()
         ) {
             return false
@@ -751,7 +812,9 @@ class ReconcileChapterEvidence internal constructor(
             updatedAt = now,
             confirmation = when (observation.authority) {
                 ChapterEvidenceAuthority.EDITORIAL -> CanonicalChapterConfirmation.CONFIRMED
-                ChapterEvidenceAuthority.ADDON_PROVISIONAL -> CanonicalChapterConfirmation.PROVISIONAL
+                ChapterEvidenceAuthority.ADDON_PROVISIONAL,
+                ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+                -> CanonicalChapterConfirmation.PROVISIONAL
             },
         )
     }
@@ -764,6 +827,15 @@ class ReconcileChapterEvidence internal constructor(
         authority == ChapterEvidenceAuthority.EDITORIAL -> CanonicalChapterConfirmation.CONFIRMED
         current == CanonicalChapterConfirmation.CONFIRMED -> CanonicalChapterConfirmation.CONFIRMED
         else -> CanonicalChapterConfirmation.PROVISIONAL
+    }
+
+    private fun ChapterEvidence.isStableReadingProviderObservation(): Boolean =
+        producerKind == ProducerKind.ADDON || producerKind == ProducerKind.PROVIDER
+
+    private fun ChapterEvidence.isProvisionalReadingEvidence(): Boolean = when (producerKind) {
+        ProducerKind.ADDON -> authority == ChapterEvidenceAuthority.ADDON_PROVISIONAL
+        ProducerKind.PROVIDER -> authority == ChapterEvidenceAuthority.PROVIDER_PROVISIONAL
+        ProducerKind.INTEGRATION -> false
     }
 
     private companion object {
