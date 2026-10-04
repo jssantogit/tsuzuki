@@ -35,6 +35,132 @@ data class ProviderRepositoryEnrollment(
 )
 
 @Serializable
+data class EnrolledProviderRepository(
+    val displayName: String,
+    val enrollment: ProviderRepositoryEnrollment,
+) {
+    val keyFingerprintSha256: String
+        get() = providerRepositoryKeyFingerprint(enrollment.signingKey)
+}
+
+interface ProviderRepositoryEnrollmentStore {
+    fun list(): List<EnrolledProviderRepository>
+
+    fun get(repositoryId: String): EnrolledProviderRepository?
+
+    fun save(repository: EnrolledProviderRepository)
+
+    fun remove(repositoryId: String): Boolean
+}
+
+class FileProviderRepositoryEnrollmentStore(
+    private val root: File,
+) : ProviderRepositoryEnrollmentStore {
+    private val json = Json {
+        encodeDefaults = true
+        explicitNulls = false
+        ignoreUnknownKeys = false
+    }
+
+    init {
+        ensureDirectory(root, "Provider repository enrollment store")
+    }
+
+    override fun list(): List<EnrolledProviderRepository> =
+        root.listFiles()
+            .orEmpty()
+            .asSequence()
+            .filter { file -> file.isFile && file.extension == "json" }
+            .map { file -> readEnrollment(file) }
+            .sortedBy { repository -> repository.enrollment.repositoryId }
+            .toList()
+
+    override fun get(repositoryId: String): EnrolledProviderRepository? {
+        validateIdentifier(repositoryId, "Repository ID")
+        val file = enrollmentFile(repositoryId)
+        if (!file.exists()) return null
+        return readEnrollment(file)
+    }
+
+    @Synchronized
+    override fun save(repository: EnrolledProviderRepository) {
+        validateEnrollment(repository)
+
+        val repositoryId = repository.enrollment.repositoryId
+        val existing = get(repositoryId)
+        if (existing != null) {
+            val existingKey = existing.enrollment.signingKey
+            val incomingKey = repository.enrollment.signingKey
+            if (
+                existingKey.keyId != incomingKey.keyId ||
+                existing.keyFingerprintSha256 != repository.keyFingerprintSha256
+            ) {
+                throw ProviderSupplyChainException(
+                    "Repository signing key cannot be silently repinned",
+                )
+            }
+        }
+
+        atomicWrite(
+            enrollmentFile(repositoryId),
+            json.encodeToString(repository).encodeToByteArray(),
+            "Provider repository enrollment",
+        )
+    }
+
+    @Synchronized
+    override fun remove(repositoryId: String): Boolean {
+        validateIdentifier(repositoryId, "Repository ID")
+        val file = enrollmentFile(repositoryId)
+        if (!file.exists()) return false
+        if (!file.delete()) {
+            throw ProviderSupplyChainException("Provider repository enrollment could not be removed")
+        }
+        return true
+    }
+
+    private fun readEnrollment(file: File): EnrolledProviderRepository {
+        val repository = try {
+            json.decodeFromString<EnrolledProviderRepository>(file.readText())
+        } catch (error: Exception) {
+            throw ProviderSupplyChainException("Repository enrollment state is malformed", error)
+        }
+        validateEnrollment(repository)
+        if (file.nameWithoutExtension != repository.enrollment.repositoryId) {
+            throw ProviderSupplyChainException("Repository enrollment state does not match its file identity")
+        }
+        return repository
+    }
+
+    private fun validateEnrollment(repository: EnrolledProviderRepository) {
+        if (repository.displayName.isBlank()) {
+            throw ProviderSupplyChainException("Repository display name must not be blank")
+        }
+        validateIdentifier(repository.enrollment.repositoryId, "Repository ID")
+        validateHttpsUrl(repository.enrollment.indexUrl, "Repository index URL")
+
+        val signingKey = repository.enrollment.signingKey
+        if (signingKey.keyId.isBlank()) {
+            throw ProviderSupplyChainException("Repository signing key ID must not be blank")
+        }
+        providerRepositoryKeyFingerprint(signingKey)
+    }
+
+    private fun enrollmentFile(repositoryId: String): File =
+        File(root, "$repositoryId.json")
+}
+
+fun providerRepositoryKeyFingerprint(
+    signingKey: ProviderRepositorySigningKey,
+): String =
+    sha256Hex(
+        decodeBase64(
+            signingKey.publicKeyBase64,
+            "Repository signing key",
+        ),
+    )
+
+@Serializable
 data class ProviderArtifactDescriptor(
     val providerId: String,
     val versionName: String,
