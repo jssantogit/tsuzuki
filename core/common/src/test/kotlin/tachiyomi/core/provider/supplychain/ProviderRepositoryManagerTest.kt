@@ -267,6 +267,7 @@ class ProviderRepositoryManagerTest {
 
         refresh.await()
         removal.await() shouldBe true
+        manager.repositories() shouldBe emptyList()
         enrollmentStore.get("repo.example") shouldBe null
         trustStore.load("repo.example") shouldBe null
         manager.snapshot("repo.example") shouldBe null
