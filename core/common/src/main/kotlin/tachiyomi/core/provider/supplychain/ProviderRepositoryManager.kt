@@ -1,7 +1,10 @@
 package tachiyomi.core.provider.supplychain
 
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import tachiyomi.core.provider.packageformat.ParsedProviderPackage
 import tachiyomi.core.provider.packageformat.ProviderPackageActivator
+import java.util.concurrent.ConcurrentHashMap
 
 interface ProviderRepositoryTransport {
     suspend fun fetchIndex(indexUrl: String): SignedProviderRepositoryIndex
@@ -42,7 +45,8 @@ class ProviderRepositoryManager(
     private val transport: ProviderRepositoryTransport,
 ) {
 
-    private val sessions = linkedMapOf<String, RepositorySession>()
+    private val sessions = ConcurrentHashMap<String, RepositorySession>()
+    private val repositoryLocks = ConcurrentHashMap<String, Mutex>()
 
     init {
         require(hostApiVersion > 0) { "Host API version must be positive" }
@@ -51,19 +55,28 @@ class ProviderRepositoryManager(
     fun repositories(): List<EnrolledProviderRepository> =
         enrollmentStore.list()
 
-    fun enroll(repository: EnrolledProviderRepository) {
-        enrollmentStore.save(repository)
-        sessions.remove(repository.enrollment.repositoryId)
+    suspend fun enroll(repository: EnrolledProviderRepository) {
+        val repositoryId = repository.enrollment.repositoryId
+        repositoryLock(repositoryId).withLock {
+            enrollmentStore.save(repository)
+            sessions.remove(repositoryId)
+        }
     }
 
-    fun removeRepository(repositoryId: String): Boolean {
-        sessions.remove(repositoryId)
-        val enrollmentRemoved = enrollmentStore.remove(repositoryId)
-        val trustRemoved = trustStore.remove(repositoryId)
-        return enrollmentRemoved || trustRemoved
-    }
+    suspend fun removeRepository(repositoryId: String): Boolean =
+        repositoryLock(repositoryId).withLock {
+            sessions.remove(repositoryId)
+            val enrollmentRemoved = enrollmentStore.remove(repositoryId)
+            val trustRemoved = trustStore.remove(repositoryId)
+            enrollmentRemoved || trustRemoved
+        }
 
-    suspend fun refresh(repositoryId: String): ProviderRepositorySnapshot {
+    suspend fun refresh(repositoryId: String): ProviderRepositorySnapshot =
+        repositoryLock(repositoryId).withLock {
+            refreshLocked(repositoryId)
+        }
+
+    private suspend fun refreshLocked(repositoryId: String): ProviderRepositorySnapshot {
         val repository = enrollmentStore.get(repositoryId)
             ?: throw ProviderSupplyChainException("Provider repository is not enrolled")
 
@@ -109,42 +122,43 @@ class ProviderRepositoryManager(
     suspend fun install(
         repositoryId: String,
         providerId: String,
-    ): ParsedProviderPackage {
-        val session = sessions[repositoryId] ?: run {
-            refresh(repositoryId)
-            sessions.getValue(repositoryId)
-        }
-        val descriptor = session.verified.index.providers
-            .singleOrNull { it.providerId == providerId }
-            ?: throw ProviderSupplyChainException("Provider is not available from this repository")
-
-        if (descriptor.minHostApi > hostApiVersion) {
-            throw ProviderSupplyChainException("Provider requires a newer Host API")
-        }
-        if (
-            session.verified.index.revokedArtifactSha256.any {
-                it.equals(descriptor.sha256, ignoreCase = true)
+    ): ParsedProviderPackage =
+        repositoryLock(repositoryId).withLock {
+            val session = sessions[repositoryId] ?: run {
+                refreshLocked(repositoryId)
+                sessions.getValue(repositoryId)
             }
-        ) {
-            throw ProviderSupplyChainException("Provider artifact has been revoked by the repository")
-        }
+            val descriptor = session.verified.index.providers
+                .singleOrNull { it.providerId == providerId }
+                ?: throw ProviderSupplyChainException("Provider is not available from this repository")
 
-        val installed = artifactStore.current(providerId)
-        if (installed != null && installed.repositoryId != repositoryId) {
-            throw ProviderSupplyChainException(
-                "Installed Provider belongs to a different repository",
+            if (descriptor.minHostApi > hostApiVersion) {
+                throw ProviderSupplyChainException("Provider requires a newer Host API")
+            }
+            if (
+                session.verified.index.revokedArtifactSha256.any {
+                    it.equals(descriptor.sha256, ignoreCase = true)
+                }
+            ) {
+                throw ProviderSupplyChainException("Provider artifact has been revoked by the repository")
+            }
+
+            val installed = artifactStore.current(providerId)
+            if (installed != null && installed.repositoryId != repositoryId) {
+                throw ProviderSupplyChainException(
+                    "Installed Provider belongs to a different repository",
+                )
+            }
+
+            val artifactBytes = transport.fetchArtifact(descriptor.artifactUrl)
+            val verifiedArtifact = session.trust.verifyArtifact(
+                repository = session.verified,
+                providerId = providerId,
+                artifactBytes = artifactBytes,
+                installedVersionCode = installed?.versionCode,
             )
+            packageActivator.activate(verifiedArtifact)
         }
-
-        val artifactBytes = transport.fetchArtifact(descriptor.artifactUrl)
-        val verifiedArtifact = session.trust.verifyArtifact(
-            repository = session.verified,
-            providerId = providerId,
-            artifactBytes = artifactBytes,
-            installedVersionCode = installed?.versionCode,
-        )
-        return packageActivator.activate(verifiedArtifact)
-    }
 
     fun rollback(providerId: String) {
         artifactStore.rollback(providerId)
@@ -214,6 +228,9 @@ class ProviderRepositoryManager(
                 ProviderRepositoryEntryStatus.INSTALLED_NEWER
         }
     }
+
+    private fun repositoryLock(repositoryId: String): Mutex =
+        repositoryLocks.computeIfAbsent(repositoryId) { Mutex() }
 
     private data class RepositorySession(
         val trust: ProviderRepositoryTrust,
