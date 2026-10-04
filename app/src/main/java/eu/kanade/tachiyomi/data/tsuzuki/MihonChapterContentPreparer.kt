@@ -8,7 +8,7 @@ import kotlinx.coroutines.CancellationException
 import tachiyomi.domain.tsuzuki.content.ContentDelivery
 import tachiyomi.domain.tsuzuki.content.ContentOption
 import tachiyomi.domain.tsuzuki.content.TorrentArtifactEngine
-import tachiyomi.domain.tsuzuki.content.interactor.PrepareTorrentArtifact
+import tachiyomi.domain.tsuzuki.content.PrepareTorrentArtifact
 import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterProgress
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
