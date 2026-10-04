@@ -359,6 +359,99 @@ class ProviderRepositoryManagerTest {
     }
 
     @Test
+    fun `replacement trust root cannot revoke Provider installed by prior root`() = runBlocking {
+        val originalKey = ecKeyPair()
+        val replacementKey = ecKeyPair()
+        val enrollmentStore = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("revocation-origin-enrollments").toFile(),
+        )
+        val trustStore = FileProviderRepositoryTrustStore(
+            tempDir.resolve("revocation-origin-trust").toFile(),
+        )
+        val artifactStore = ProviderArtifactStore(
+            tempDir.resolve("revocation-origin-artifacts").toFile(),
+        )
+        val transport = FakeTransport()
+        val manager = manager(enrollmentStore, trustStore, artifactStore, transport)
+
+        manager.enroll(
+            EnrolledProviderRepository(
+                "Original",
+                ProviderRepositoryEnrollment(
+                    repositoryId = "repo.example",
+                    indexUrl = "https://repo.example/index.json",
+                    signingKey = ProviderRepositorySigningKey(
+                        keyId = "root-1",
+                        publicKeyBase64 = Base64.getEncoder()
+                            .encodeToString(originalKey.public.encoded),
+                    ),
+                ),
+            ),
+        )
+        val v1 = tsz(versionCode = 1)
+        val originalSigned = signedIndex(
+            keyPair = originalKey,
+            sequence = 1,
+            artifactBytes = v1,
+            versionCode = 1,
+        )
+        transport.publish(
+            signed = originalSigned,
+            artifactBytes = v1,
+        )
+        manager.refresh("repo.example")
+        manager.install("repo.example", "reader.example")
+        val installedBefore = manager.installed().single()
+        installedBefore.revoked shouldBe false
+
+        manager.removeRepository("repo.example")
+        manager.enroll(
+            EnrolledProviderRepository(
+                "Replacement",
+                ProviderRepositoryEnrollment(
+                    repositoryId = "repo.example",
+                    indexUrl = "https://replacement.example/index.json",
+                    signingKey = ProviderRepositorySigningKey(
+                        keyId = "root-1",
+                        publicKeyBase64 = Base64.getEncoder()
+                            .encodeToString(replacementKey.public.encoded),
+                    ),
+                ),
+            ),
+        )
+
+        val replacementIndex = ProviderRepositoryIndex(
+            schemaVersion = 1,
+            repositoryId = "repo.example",
+            sequence = 1,
+            providers = listOf(
+                ProviderArtifactDescriptor(
+                    providerId = "reader.example",
+                    versionName = "2.0.0",
+                    versionCode = 2,
+                    artifactUrl = "https://replacement.example/reader-2.tsz",
+                    sha256 = sha256Hex(tsz(versionCode = 2)),
+                    minHostApi = 1,
+                ),
+            ),
+            revokedArtifactSha256 = setOf(installedBefore.sha256),
+        )
+        transport.publish(
+            signed = signedIndex(
+                keyPair = replacementKey,
+                index = replacementIndex,
+            ),
+            artifactBytes = tsz(versionCode = 2),
+        )
+
+        manager.refresh("repo.example")
+
+        manager.installed().single().revoked shouldBe false
+        manager.installed().single().repositoryTrustAnchorSha256 shouldBe
+            installedBefore.repositoryTrustAnchorSha256
+    }
+
+    @Test
     fun `removing repository waits for in flight refresh before clearing trust`() = runBlocking {
         val keyPair = ecKeyPair()
         val enrollmentStore = FileProviderRepositoryEnrollmentStore(
@@ -469,6 +562,23 @@ class ProviderRepositoryManagerTest {
         ),
         transport = transport,
     )
+
+    private fun signedIndex(
+        keyPair: KeyPair,
+        index: ProviderRepositoryIndex,
+    ): SignedProviderRepositoryIndex {
+        val payload = json.encodeToString(index).encodeToByteArray()
+        val signature = Signature.getInstance("SHA256withECDSA").run {
+            initSign(keyPair.private)
+            update(payload)
+            sign()
+        }
+        return SignedProviderRepositoryIndex(
+            keyId = "root-1",
+            payload = payload,
+            signature = signature,
+        )
+    }
 
     private fun signedIndex(
         keyPair: KeyPair,
