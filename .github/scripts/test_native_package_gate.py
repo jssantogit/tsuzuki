@@ -69,6 +69,23 @@ class NativePackageGateTest(unittest.TestCase):
                 set(release_abis),
             )
 
+    def test_release_rejects_unsafe_upstream_x86_64_jlibtorrent(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            universal = root / "app-universal-release.apk"
+            entries = {
+                f"lib/{abi}/libjlibtorrent-2.0.12.9.so": abi.encode()
+                for abi in EXPECTED_ABIS
+            }
+            entries["lib/x86_64/libjlibtorrent-2.0.12.9.so"] = b"unsafe-x86_64"
+            self._write_apk(universal, entries)
+
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"unsupported release jlibtorrent ABI.*x86_64",
+            ):
+                validate_jlibtorrent_abi_coverage([universal])
+
     def test_missing_jlibtorrent_abi_fails_with_observed_coverage(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
