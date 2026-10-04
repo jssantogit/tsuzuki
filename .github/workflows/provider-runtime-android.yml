@@ -5,14 +5,27 @@ on:
     branches:
       - 'tsuzuki/provider-platform-*'
     paths:
-      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/**'
-      - 'app/src/main/java/eu/kanade/tachiyomi/provider/reading/**'
+      # Runtime + Host Service boundary.
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/**'
       - 'app/src/main/aidl/eu/kanade/tachiyomi/provider/runtime/**'
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/**'
+      - 'core/common/src/test/kotlin/tachiyomi/core/provider/**'
+      # Wave 3 reading/canonical integration must invalidate the same physical gate.
+      - 'app/src/main/java/eu/kanade/tachiyomi/ui/reader/**'
+      - 'app/src/test/java/eu/kanade/tachiyomi/ui/reader/**'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/**'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/provider/**'
+      - 'domain/src/test/java/tachiyomi/domain/tsuzuki/provider/**'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/chapter/**'
+      - 'domain/src/test/java/tachiyomi/domain/tsuzuki/chapter/**'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/reader/**'
+      - 'data/src/main/java/tachiyomi/data/tsuzuki/provider/**'
+      - 'data/src/test/java/tachiyomi/data/tsuzuki/provider/**'
+      - 'data/src/main/sqldelight/tachiyomi/data/tsuzuki_provider_bindings.sq'
+      - 'data/src/main/sqldelight/tachiyomi/migrations/**'
       # The compile step builds the whole androidTest source set, so fixture-only
       # repairs must be able to retrigger this gate as well.
       - 'app/src/androidTest/**'
-      - 'core/common/src/main/kotlin/tachiyomi/core/provider/**'
-      - 'core/common/src/test/kotlin/tachiyomi/core/provider/**'
       - 'gradle/libs.versions.toml'
       - '.github/workflows/provider-runtime-android.yml'
       - '.github/scripts/provider-runtime-android-gate.sh'
