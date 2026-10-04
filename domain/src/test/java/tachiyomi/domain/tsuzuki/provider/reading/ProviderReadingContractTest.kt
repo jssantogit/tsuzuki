@@ -79,6 +79,20 @@ class ProviderReadingContractTest {
     }
 
     @Test
+    fun `caller supplied snapshot timestamp overrides adapter clock`() {
+        val evidence = ProviderChapterEvidenceAdapter(
+            clock = { error("snapshot caller owns the timestamp") },
+        ).toEvidence(
+            canonicalTitleId = "title",
+            binding = binding,
+            observations = listOf(ProviderChapterObservation("c1", "Chapter 1")),
+            observedAt = 1234L,
+        )
+
+        evidence.single().observedAt shouldBe 1234L
+    }
+
+    @Test
     fun `provider evidence producer identity is scoped to the exact binding`() {
         val same = binding.evidenceProducerId()
         binding.copy(facetId = "pt-br").evidenceProducerId() shouldBe
