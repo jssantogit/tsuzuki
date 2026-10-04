@@ -151,12 +151,12 @@ class ScriptProviderCapabilityExecutorTest {
             registry = DefaultProviderRegistry(
                 registrations = {
                     listOf(
-                    ProviderRegistration(
+                        ProviderRegistration(
                         descriptor = builtinDescriptor.first,
                         lifecycleStatus = ProviderLifecycleStatus.ENABLED,
                         configurationFingerprint = "config-v1",
                         enabledCapabilities = builtinDescriptor.second,
-                    ),
+                        ),
                     )
                 },
             ),
@@ -199,12 +199,12 @@ class ScriptProviderCapabilityExecutorTest {
             registry = DefaultProviderRegistry(
                 registrations = {
                     listOf(
-                    ProviderRegistration(
+                        ProviderRegistration(
                         descriptor = descriptor.first,
                         lifecycleStatus = ProviderLifecycleStatus.ENABLED,
                         configurationFingerprint = "config-v1",
                         enabledCapabilities = descriptor.second,
-                    ),
+                        ),
                     )
                 },
             ),
