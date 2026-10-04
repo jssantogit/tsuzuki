@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.provider.torrent
 
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderCapabilityExecutor
+import eu.kanade.tachiyomi.provider.runtime.ScriptProviderPrivilegedHostGrants
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
