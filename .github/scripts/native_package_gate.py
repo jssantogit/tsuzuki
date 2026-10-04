@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import zipfile
 from pathlib import Path
+from typing import Iterable
 
 EXPECTED_ABIS = ("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
 ELF_16K_ABIS = ("arm64-v8a", "x86_64")
@@ -19,31 +20,36 @@ def _apk_entries(path: Path) -> set[str]:
         return {name for name in archive.namelist() if not name.endswith("/")}
 
 
-def _has_expected_jlibtorrent_abis(entries: set[str]) -> bool:
-    return all(f"lib/{abi}/{JLIBTORRENT_NAME}" in entries for abi in EXPECTED_ABIS)
-
-
-def find_universal_apk(root: Path) -> Path:
+def discover_apks(root: Path) -> list[Path]:
     candidates = sorted(root.rglob("*.apk"))
     if not candidates:
         raise RuntimeError(f"No APK was produced under {root}")
 
-    matching = []
     for apk in candidates:
         try:
-            entries = _apk_entries(apk)
+            _apk_entries(apk)
         except zipfile.BadZipFile as error:
             raise RuntimeError(f"Invalid APK archive: {apk}") from error
-        if _has_expected_jlibtorrent_abis(entries):
-            matching.append(apk)
+    return candidates
 
-    if len(matching) != 1:
+
+def validate_jlibtorrent_abi_coverage(apks: Iterable[Path]) -> set[str]:
+    observed: set[str] = set()
+    for apk in apks:
+        entries = _apk_entries(apk)
+        for abi in EXPECTED_ABIS:
+            if f"lib/{abi}/{JLIBTORRENT_NAME}" in entries:
+                observed.add(abi)
+
+    missing = set(EXPECTED_ABIS) - observed
+    if missing:
+        missing_text = ", ".join(sorted(missing))
+        observed_text = ", ".join(sorted(observed)) or "none"
         raise RuntimeError(
-            "Native package gate requires exactly one APK containing libjlibtorrent.so "
-            "for all four supported ABIs "
-            f"({', '.join(EXPECTED_ABIS)}); found {len(matching)}"
+            "Native package gate is missing jlibtorrent for supported ABIs; "
+            f"missing: {missing_text}; observed: {observed_text}"
         )
-    return matching[0]
+    return observed
 
 
 def validate_program_headers(output: str, label: str) -> None:
@@ -86,35 +92,44 @@ def validate_program_headers(output: str, label: str) -> None:
             )
 
 
-def verify_zip_alignment(apk: Path, zipalign: Path) -> None:
-    subprocess.run(
-        [str(zipalign), "-c", "-P", "16", "-v", "4", str(apk)],
-        check=True,
-    )
-
-
-def verify_elf_alignment(apk: Path, readelf: str) -> int:
+def verify_zip_alignment(apks: Iterable[Path], zipalign: Path) -> int:
     checked = 0
-    with zipfile.ZipFile(apk) as archive, tempfile.TemporaryDirectory() as temp:
+    for apk in apks:
+        subprocess.run(
+            [str(zipalign), "-c", "-P", "16", "-v", "4", str(apk)],
+            check=True,
+        )
+        checked += 1
+    return checked
+
+
+def verify_elf_alignment(apks: Iterable[Path], readelf: str) -> int:
+    checked = 0
+    with tempfile.TemporaryDirectory() as temp:
         temp_root = Path(temp)
-        for name in archive.namelist():
-            if not name.endswith(".so"):
-                continue
-            if not any(name.startswith(f"lib/{abi}/") for abi in ELF_16K_ABIS):
-                continue
+        for apk_index, apk in enumerate(apks):
+            with zipfile.ZipFile(apk) as archive:
+                for name in archive.namelist():
+                    if not name.endswith(".so"):
+                        continue
+                    if not any(name.startswith(f"lib/{abi}/") for abi in ELF_16K_ABIS):
+                        continue
 
-            destination = temp_root / name
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(archive.read(name))
+                    destination = temp_root / str(apk_index) / name
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    destination.write_bytes(archive.read(name))
 
-            result = subprocess.run(
-                [readelf, "-lW", str(destination)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            validate_program_headers(result.stdout, name)
-            checked += 1
+                    result = subprocess.run(
+                        [readelf, "-lW", str(destination)],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                    validate_program_headers(
+                        result.stdout,
+                        f"{apk.name}:{name}",
+                    )
+                    checked += 1
 
     if checked == 0:
         raise RuntimeError("No 64-bit native libraries were found for ELF alignment validation")
@@ -133,12 +148,14 @@ def main() -> None:
     if not os.access(args.zipalign, os.X_OK):
         raise RuntimeError(f"zipalign is not executable: {args.zipalign}")
 
-    apk = find_universal_apk(args.apk_root)
-    verify_zip_alignment(apk, args.zipalign)
-    elf_count = verify_elf_alignment(apk, args.readelf)
+    apks = discover_apks(args.apk_root)
+    observed_abis = validate_jlibtorrent_abi_coverage(apks)
+    zip_count = verify_zip_alignment(apks, args.zipalign)
+    elf_count = verify_elf_alignment(apks, args.readelf)
 
-    print(f"Native package gate passed: {apk}")
-    print(f"jlibtorrent ABIs: {', '.join(EXPECTED_ABIS)}")
+    print(f"Native package gate passed for {len(apks)} APK(s)")
+    print(f"jlibtorrent ABIs: {', '.join(sorted(observed_abis))}")
+    print(f"16 KiB APK alignments checked: {zip_count}")
     print(f"16 KiB ELF libraries checked: {elf_count}")
 
 
