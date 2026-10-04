@@ -260,6 +260,8 @@ class ProviderRepositoryManagerTest {
         )
         manager.refresh("repo.example")
         manager.install("repo.example", "reader.example")
+        val originalTrustAnchor = sha256Hex(originalKey.public.encoded)
+        manager.installed().single().repositoryTrustAnchorSha256 shouldBe originalTrustAnchor
 
         manager.removeRepository("repo.example") shouldBe true
         manager.enroll(
@@ -293,6 +295,7 @@ class ProviderRepositoryManagerTest {
             manager.install("repo.example", "reader.example")
         }
         manager.installed().single().versionCode shouldBe 1L
+        manager.installed().single().repositoryTrustAnchorSha256 shouldBe originalTrustAnchor
     }
 
     @Test
