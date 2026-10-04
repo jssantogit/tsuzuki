@@ -1,8 +1,11 @@
 package eu.kanade.tachiyomi.provider.repository
 
 import eu.kanade.presentation.more.settings.screen.providerRepositoryTrustConfirmationToken
+import eu.kanade.presentation.more.settings.screen.runProviderUiCatching
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
@@ -206,6 +209,15 @@ class InstalledScriptProviderRegistryTest {
             keyId = "root-2",
             keyFingerprint = "def456",
         ) == confirmed shouldBe false
+    }
+
+    @Test
+    fun `Provider UI async helper never swallows coroutine cancellation`() = runBlocking {
+        shouldThrow<CancellationException> {
+            runProviderUiCatching<Unit> {
+                throw CancellationException("cancelled")
+            }
+        }
     }
 
     @Test
