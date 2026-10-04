@@ -32,6 +32,8 @@ class RefreshProviderReadingChapters internal constructor(
             return failure(ProviderErrorCode.UNAVAILABLE)
         }
 
+        // Snapshot age starts before the first page so delayed refreshes cannot overwrite or
+        // detach evidence from a newer complete inventory that finished first.
         val snapshotObservedAt = clock()
         require(snapshotObservedAt >= 0L) { "Provider snapshot timestamp must not be negative" }
 
