@@ -97,6 +97,9 @@ class ProviderRepositoryManager(
     fun installed(): List<StoredProviderArtifact> =
         artifactStore.listInstalled()
 
+    fun previous(providerId: String): StoredProviderArtifact? =
+        artifactStore.previous(providerId)
+
     suspend fun install(
         repositoryId: String,
         providerId: String,
