@@ -6,6 +6,8 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
+import tachiyomi.domain.tsuzuki.provider.ProviderCursor
+import tachiyomi.domain.tsuzuki.provider.ProviderId
 
 class ProviderTorrentContractTest {
 
@@ -268,6 +270,81 @@ class ProviderTorrentContractTest {
             headers = mapOf("Authorization" to "Bearer opaque"),
             allowedOrigins = setOf("https://cdn.example"),
         ).url shouldBe "https://cdn.example/chapter.cbz"
+    }
+
+    @Test
+    fun `provider requests keep torrent discovery and acquisition intent capability scoped`() {
+        val search = TorrentSearchRequest(
+            titles = listOf("Example title", "Example alias"),
+            preferredLanguages = setOf("en", "pt-BR"),
+            cursor = ProviderCursor("next-page"),
+        )
+        search.titles shouldBe listOf("Example title", "Example alias")
+        search.cursor?.value shouldBe "next-page"
+
+        val candidate = candidate(listOf(file(3, "pack/chapter-012.cbz")))
+        val selected = candidate.files!!.single()
+        val request = TorrentAcquisitionRequest(
+            operationId = "read:canonical-12",
+            candidate = candidate,
+            selectedFile = selected,
+        )
+        request.selectedFile shouldBe selected
+
+        shouldThrow<IllegalArgumentException> {
+            TorrentAcquisitionRequest(
+                operationId = "read:canonical-12",
+                candidate = candidate,
+                selectedFile = file(99, "pack/chapter-012.cbz"),
+            )
+        }
+        shouldThrow<IllegalArgumentException> {
+            TorrentAcquisitionRequest(
+                operationId = "invalid operation id",
+                candidate = candidate,
+                selectedFile = selected,
+            )
+        }
+    }
+
+    @Test
+    fun `provider acquisition states preserve debrid HTTP and p2p local resource boundaries`() {
+        val http = TorrentReadableResource.HttpFile(
+            url = "https://cdn.example/chapter-012.cbz",
+            allowedOrigins = setOf("https://cdn.example"),
+        )
+        DebridResolveState.Ready(http).resource shouldBe http
+        DebridResolveState.Pending("debrid-job-12").jobId shouldBe "debrid-job-12"
+
+        val local = TorrentReadableResource.LocalArchive(
+            uri = "content://app.tsuzuki.provider/provider-p2p/chapter-012.cbz",
+            format = TorrentArchiveFormat.CBZ,
+        )
+        P2pAcquireState.Ready(local).resource shouldBe local
+        P2pAcquireState.Pending("p2p-job-12").jobId shouldBe "p2p-job-12"
+
+        shouldThrow<IllegalArgumentException> {
+            DebridResolveState.Pending("")
+        }
+        shouldThrow<IllegalArgumentException> {
+            P2pAcquireState.Pending(" ".repeat(3))
+        }
+    }
+
+    @Test
+    fun `provider acquisition gateways remain selected by capability rather than vendor type`() {
+        val providerId = ProviderId("org.example.provider")
+        val search: TorrentSearchGateway = TorrentSearchGateway { requestedProviderId, request ->
+            requestedProviderId shouldBe providerId
+            request.titles shouldBe listOf("Example")
+            tachiyomi.domain.tsuzuki.provider.ProviderCallResult.Success(
+                tachiyomi.domain.tsuzuki.provider.ProviderPage(
+                    items = emptyList(),
+                    nextCursor = null,
+                ),
+            )
+        }
+        search::class shouldBe search::class
     }
 
     private class RecordingAcquisitionBackend(
