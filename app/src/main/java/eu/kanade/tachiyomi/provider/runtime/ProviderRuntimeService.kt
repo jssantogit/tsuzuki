@@ -24,6 +24,7 @@ import tachiyomi.core.provider.runtime.ProviderHttpHostService
 import tachiyomi.core.provider.runtime.ProviderImageHostService
 import tachiyomi.core.provider.runtime.ProviderInvocationLimiter
 import tachiyomi.core.provider.runtime.ProviderLogHostService
+import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.core.provider.runtime.ProviderPackageContract
 import tachiyomi.core.provider.runtime.ProviderPackageExecution
 import tachiyomi.core.provider.runtime.ProviderPackageFailure
@@ -439,6 +440,15 @@ private fun IProviderHostBridge?.toHostServices(
                             entryName.boundedHostArg(MAX_HOST_ENTRY_NAME_CHARS, "archive entry"),
                         ).orEmpty(),
                     )
+
+                override suspend fun promote(
+                    resourceHandle: ProviderResourceHandle,
+                    format: ProviderManagedResourceFormat,
+                ): String =
+                    bridge.binaryPromote(
+                        resourceHandle.value.boundedHostArg(MAX_HOST_HANDLE_CHARS, "resource handle"),
+                        format.name,
+                    ).orEmpty()
             }
         } else {
             null
