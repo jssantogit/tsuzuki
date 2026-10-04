@@ -1,6 +1,9 @@
 package tachiyomi.core.provider.runtime
 
 interface ProviderHttpHostService {
+    suspend fun request(request: ProviderHttpRequest): ProviderHttpResponse =
+        throw ProviderHostServiceException("Provider HTTP request API is unavailable")
+
     suspend fun getText(url: String): String
 
     suspend fun getResource(url: String): ProviderResourceHandle
