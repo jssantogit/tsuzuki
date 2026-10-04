@@ -144,6 +144,21 @@ object ProviderP2pProtocol {
         ignoreUnknownKeys = false
     }
 
+    fun encodeRequest(request: ProviderP2pAcquireRequest): String =
+        json.encodeToString(
+            RequestDto(
+                operationId = request.operationId,
+                magnetUri = request.magnetUri,
+                torrentUrl = request.torrentUrl,
+                infoHash = request.infoHash,
+                selectedFileIndex = request.selectedFileIndex,
+                selectedFilePath = request.selectedFilePath,
+                selectedFileSizeBytes = request.selectedFileSizeBytes,
+            ),
+        ).also {
+            requireBound(it, MAX_REQUEST_JSON_CHARS, "request")
+        }
+
     fun decodeRequest(value: String): ProviderP2pAcquireRequest {
         requireBound(value, MAX_REQUEST_JSON_CHARS, "request")
         return try {
