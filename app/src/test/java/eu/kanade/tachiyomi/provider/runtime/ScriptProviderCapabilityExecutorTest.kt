@@ -148,16 +148,18 @@ class ScriptProviderCapabilityExecutorTest {
             enabledCapabilities = setOf(ProviderCapabilities.TorrentSearchV1),
         )
         val builtin = ScriptProviderCapabilityExecutor(
-            registry = DefaultProviderRegistry {
-                listOf(
+            registry = DefaultProviderRegistry(
+                registrations = {
+                    listOf(
                     ProviderRegistration(
                         descriptor = builtinDescriptor.first,
                         lifecycleStatus = ProviderLifecycleStatus.ENABLED,
                         configurationFingerprint = "config-v1",
                         enabledCapabilities = builtinDescriptor.second,
                     ),
-                )
-            },
+                    )
+                },
+            ),
             packageSource = ScriptProviderPackageSource { activePackage },
             invokePackage = ScriptProviderRuntimeInvoker { _, _, _, _ ->
                 invoked = true
@@ -194,16 +196,18 @@ class ScriptProviderCapabilityExecutorTest {
             enabledCapabilities = enabledCapabilities,
         )
         return ScriptProviderCapabilityExecutor(
-            registry = DefaultProviderRegistry {
-                listOf(
+            registry = DefaultProviderRegistry(
+                registrations = {
+                    listOf(
                     ProviderRegistration(
                         descriptor = descriptor.first,
                         lifecycleStatus = ProviderLifecycleStatus.ENABLED,
                         configurationFingerprint = "config-v1",
                         enabledCapabilities = descriptor.second,
                     ),
-                )
-            },
+                    )
+                },
+            ),
             packageSource = ScriptProviderPackageSource { requested ->
                 activePackage.takeIf { requested == providerId }
             },
