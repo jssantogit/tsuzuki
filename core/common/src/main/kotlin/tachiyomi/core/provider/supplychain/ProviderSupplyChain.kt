@@ -687,6 +687,7 @@ class ProviderArtifactStore(
         ensureDirectory(root, "Provider artifact store")
     }
 
+    @Synchronized
     fun activate(artifact: VerifiedProviderArtifact) {
         val providerId = artifact.providerId
         validateIdentifier(providerId, "Provider ID")
@@ -771,6 +772,7 @@ class ProviderArtifactStore(
         return artifact.toPublic(providerId)
     }
 
+    @Synchronized
     fun rollback(providerId: String) {
         validateIdentifier(providerId, "Provider ID")
         val state = readState(providerId)
@@ -811,6 +813,7 @@ class ProviderArtifactStore(
         return artifactFile(providerId, active.versionCode).readBytes()
     }
 
+    @Synchronized
     internal fun applyRevocations(
         repositoryId: String,
         revokedArtifactSha256: Set<String>,
