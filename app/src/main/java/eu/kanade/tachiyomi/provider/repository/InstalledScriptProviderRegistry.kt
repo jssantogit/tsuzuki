@@ -44,6 +44,9 @@ class InstalledScriptProviderRegistry(
         providerId: ProviderId,
         enabled: Boolean,
     ) {
+        if (registration(providerId) == null) {
+            throw IllegalArgumentException("Provider is not installed")
+        }
         val current = configurationStore.get(providerId.value)
             ?: ProviderLocalConfiguration(providerId = providerId.value)
         configurationStore.save(current.copy(enabled = enabled))
@@ -90,11 +93,7 @@ class InstalledScriptProviderRegistry(
             parsed.manifest.id != stored.providerId ||
             parsed.manifest.version.code != stored.versionCode
         ) {
-            return invalidRegistration(
-                providerId = providerId,
-                repositoryId = stored.repositoryId,
-                versionCode = stored.versionCode,
-            )
+            return invalidRegistration(stored)
         }
 
         val manifest = parsed.manifest
@@ -161,7 +160,7 @@ class InstalledScriptProviderRegistry(
                 .sorted()
                 .map { language -> ProviderFacetRef(providerId, language) },
             configurationFingerprint = configurationFingerprint(
-                providerId = providerId,
+                stored = stored,
                 enabled = configuration.enabled,
                 activeLanguages = activeLanguages,
             ),
@@ -169,43 +168,52 @@ class InstalledScriptProviderRegistry(
     }
 
     private fun invalidRegistration(
-        providerId: ProviderId,
-        repositoryId: String,
-        versionCode: Long,
-    ) = ProviderRegistration(
+        stored: tachiyomi.core.provider.supplychain.StoredProviderArtifact,
+    ): ProviderRegistration {
+        val providerId = ProviderId(stored.providerId)
+        return ProviderRegistration(
         descriptor = ProviderDescriptor(
             id = providerId,
             name = providerId.value,
             version = ProviderVersion(
-                name = versionCode.toString(),
-                code = versionCode,
+                name = stored.versionCode.toString(),
+                code = stored.versionCode,
             ),
-            origin = ProviderOrigin.Repository(repositoryId),
+            origin = ProviderOrigin.Repository(stored.repositoryId),
             runtime = ProviderRuntimeKind.SCRIPT,
             capabilities = emptySet(),
             permissions = ProviderPermissionSet(),
             settings = emptyList(),
             contentLanguages = emptySet(),
         ),
-        lifecycleStatus = if (artifactStore.current(providerId.value)?.revoked == true) {
+        lifecycleStatus = if (stored.revoked) {
             ProviderLifecycleStatus.BLOCKED
         } else {
             ProviderLifecycleStatus.INVALID
         },
         configurationFingerprint = configurationFingerprint(
-            providerId = providerId,
+            stored = stored,
             enabled = false,
             activeLanguages = emptySet(),
         ),
     )
+    }
 
     private fun configurationFingerprint(
-        providerId: ProviderId,
+        stored: tachiyomi.core.provider.supplychain.StoredProviderArtifact,
         enabled: Boolean,
         activeLanguages: Set<String>,
     ): String {
         val material = buildString {
-            append(providerId.value)
+            append(stored.providerId)
+            append('|')
+            append(stored.repositoryId)
+            append('|')
+            append(stored.versionCode)
+            append('|')
+            append(stored.sha256)
+            append('|')
+            append(if (stored.revoked) '1' else '0')
             append('|')
             append(if (enabled) '1' else '0')
             append('|')
