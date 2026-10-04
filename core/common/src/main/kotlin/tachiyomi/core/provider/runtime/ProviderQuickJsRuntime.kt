@@ -123,6 +123,21 @@ internal fun QuickJs.installHostServices(
                 }
             }
         }
+        services.p2p?.let { p2p ->
+            define("p2p") {
+                asyncFunction("acquire") { args ->
+                    hostFailures.call {
+                        ProviderP2pProtocol.encodeResponse(
+                            p2p.acquire(
+                                ProviderP2pProtocol.decodeRequest(
+                                    args.stringArgument(0),
+                                ),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
         services.dom?.let { dom ->
             define("dom") {
                 asyncFunction("selectText") { args ->
