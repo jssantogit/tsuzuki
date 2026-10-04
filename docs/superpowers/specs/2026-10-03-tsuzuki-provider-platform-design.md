@@ -101,12 +101,12 @@ Examples:
 
 - MyAnimeList: BUILTIN.
 - Kitsu: BUILTIN.
-- TorBox/another first-party Debrid implementation: initially BUILTIN.
-- Direct BitTorrent acquisition: BUILTIN/native.
-- MangaFire port: SCRIPT.
-- A torrent indexer port: SCRIPT.
+- a manga website port: SCRIPT.
+- a torrent indexer port: SCRIPT.
+- a Debrid service adapter: normally a separately distributed Provider.
+- a P2P acquisition Provider: separately distributed, while privileged BitTorrent transport remains host-owned.
 
-The user sees all of them as Providers.
+The user sees all of them as Providers. Runtime kind does not define a product category and must not force a concrete service into the application core.
 
 ### 1.3 Capabilities
 
@@ -865,7 +865,7 @@ Torrent labels are never treated as canonical work identity evidence by themselv
 
 ## 17. Debrid
 
-Debrid is represented by Provider capabilities, with first implementations expected to be host/built-in because they own credentials, account state and long-running torrent jobs.
+Debrid is represented by Provider capabilities. Wave 6 defines the contract and execution infrastructure; it does **not** hard-code TorBox, AllDebrid, Real-Debrid or another vendor into the Tsuzuki core. Concrete Debrid services are expected to be implemented and distributed as independent Providers, including community-authored SCRIPT Providers when their API can be expressed through the bounded Host Services.
 
 A Debrid contract needs to cover:
 
@@ -881,15 +881,13 @@ resolve final HTTP download
 
 The output converges on a validated HTTP file resource.
 
-No Tsuzuki-hosted backend is required where the service supports direct device/user authentication and API use.
-
-The Provider model does not permanently forbid future SCRIPT Debrid implementations, but V1 does not require them.
+No Tsuzuki-hosted backend is required where the service supports direct device/user authentication and API use. Credentials/settings remain scoped to the concrete Provider and are never shared across Providers.
 
 ## 18. Direct P2P acquisition
 
-Direct BitTorrent is a host-native BUILTIN acquisition Provider/service backed by a maintained libtorrent binding.
+Direct BitTorrent is exposed through the versioned `acquisition.p2p@1` Provider capability. Concrete P2P Providers may be distributed separately, including SCRIPT Providers, but the privileged BitTorrent engine remains a Tsuzuki Host Service backed by a maintained libtorrent binding. Provider code never receives JNI/native-library, raw socket or unrestricted filesystem authority.
 
-V1 behavior:
+V1 host behavior:
 
 - obtain metadata;
 - select only the file(s) required for the requested chapter;
@@ -1189,10 +1187,10 @@ Adapt them through current canonical reading contracts and physically verify cha
 
 ### Wave 6 — torrent/debrid/P2P
 
-- torrent-search capability;
+- `torrent.search@1`, `debrid.resolve@1` and `acquisition.p2p@1` contracts executable by independently distributed Providers;
 - torrent metadata/file mapper;
-- at least one Debrid Provider;
-- direct P2P host implementation;
+- conformance/reference Provider fixtures rather than a vendor-specific Debrid integration in core;
+- direct P2P Host Service implementation with privileged native transport remaining host-owned;
 - acquisition policy;
 - CBZ/ZIP Reader convergence;
 - user-visible privacy/storage/lifecycle controls.
@@ -1252,8 +1250,8 @@ The Provider Platform is not complete until all of the following are proven.
 
 ### Torrent/debrid
 
-- one torrent candidate can resolve through Debrid to HTTP.
-- the same candidate/file can resolve through direct P2P to a local resource.
+- one torrent candidate can resolve through a conforming Debrid Provider to HTTP without vendor-specific core code.
+- the same candidate/file can resolve through a conforming P2P Provider to a local resource while native transport remains host-owned.
 - unrelated pack files remain unselected for selected-file acquisition.
 - ambiguous chapter/file mapping fails closed.
 - CBZ/ZIP output opens through the same Reader abstraction.
