@@ -4,6 +4,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.lang.reflect.Modifier
 import java.nio.file.Path
 
 class ProviderArtifactOriginPinningTest {
@@ -22,6 +23,16 @@ class ProviderArtifactOriginPinningTest {
 
         store.current("reader.example")?.repositoryId shouldBe "repo.a"
         store.current("reader.example")?.versionCode shouldBe 1L
+    }
+
+    @Test
+    fun `artifact activation boundary is synchronized so origin pinning is atomic`() {
+        val activate = ProviderArtifactStore::class.java.getDeclaredMethod(
+            "activate",
+            VerifiedProviderArtifact::class.java,
+        )
+
+        Modifier.isSynchronized(activate.modifiers) shouldBe true
     }
 
     @Test
