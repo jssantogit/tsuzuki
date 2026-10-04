@@ -1,4 +1,4 @@
-name: Provider runtime Android gate
+name: Provider Platform Android gate
 
 on:
   push:
@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   instrumentation:
-    name: Provider runtime instrumentation
+    name: Provider Platform instrumentation
     if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[ci-full]')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -45,8 +45,8 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      # Run only the Provider runtime instrumentation package.
-      - name: Run Provider runtime instrumentation
+      # Run the complete Provider Platform instrumentation package (runtime + reading verticals).
+      - name: Run Provider Platform instrumentation
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 35
