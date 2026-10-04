@@ -1,7 +1,10 @@
 package eu.kanade.tachiyomi.provider.repository
 
+import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Authenticator
+import okhttp3.CookieJar
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
@@ -11,7 +14,6 @@ import tachiyomi.core.provider.supplychain.ProviderRepositoryTransport
 import tachiyomi.core.provider.supplychain.ProviderSupplyChainException
 import tachiyomi.core.provider.supplychain.SignedProviderRepositoryIndex
 import tachiyomi.core.provider.supplychain.decodeProviderSignedIndexEnvelope
-import java.io.ByteArrayOutputStream
 
 class AndroidProviderRepositoryTransport(
     client: OkHttpClient,
@@ -22,6 +24,13 @@ class AndroidProviderRepositoryTransport(
 ) : ProviderRepositoryTransport {
 
     private val client = client.newBuilder()
+        .apply {
+            interceptors().clear()
+            networkInterceptors().clear()
+        }
+        .cookieJar(CookieJar.NO_COOKIES)
+        .authenticator(Authenticator.NONE)
+        .proxyAuthenticator(Authenticator.NONE)
         .followRedirects(false)
         .followSslRedirects(false)
         .build()
