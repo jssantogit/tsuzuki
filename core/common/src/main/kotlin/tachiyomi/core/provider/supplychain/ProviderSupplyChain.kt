@@ -765,6 +765,12 @@ class ProviderArtifactStore(
         return artifactFile(providerId, active.versionCode).readBytes()
     }
 
+    fun readCurrentArtifactForInspection(providerId: String): ByteArray {
+        val active = current(providerId)
+            ?: throw ProviderSupplyChainException("Provider has no active artifact")
+        return artifactFile(providerId, active.versionCode).readBytes()
+    }
+
     internal fun applyRevocations(
         repositoryId: String,
         revokedArtifactSha256: Set<String>,
