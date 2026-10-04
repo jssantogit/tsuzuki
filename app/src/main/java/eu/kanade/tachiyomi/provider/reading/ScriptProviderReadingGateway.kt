@@ -29,9 +29,9 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterObservation
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCursor
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderError
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
-import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceResolver
-import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedFileFormat
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceRef
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceResolver
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderPage
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderPageRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
