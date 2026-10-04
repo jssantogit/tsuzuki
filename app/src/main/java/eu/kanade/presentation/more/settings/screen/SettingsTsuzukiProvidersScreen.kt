@@ -629,7 +629,7 @@ private fun InstalledProvidersList(
             val descriptor = registration.descriptor
             val providerId = descriptor.id.value
             val canRollback = remember(providerId, registration.configurationFingerprint) {
-                runCatching { manager.previous(providerId) }.getOrNull() != null
+                runCatching { manager.canRollback(providerId) }.getOrDefault(false)
             }
             ListItem(
                 headlineContent = { Text(descriptor.name) },
