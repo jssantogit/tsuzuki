@@ -26,13 +26,18 @@ class ProviderArtifactOriginPinningTest {
     }
 
     @Test
-    fun `artifact activation boundary is synchronized so origin pinning is atomic`() {
+    fun `artifact state mutation boundaries are synchronized so origin pinning is atomic`() {
         val activate = ProviderArtifactStore::class.java.getDeclaredMethod(
             "activate",
             VerifiedProviderArtifact::class.java,
         )
+        val rollback = ProviderArtifactStore::class.java.getDeclaredMethod(
+            "rollback",
+            String::class.java,
+        )
 
         Modifier.isSynchronized(activate.modifiers) shouldBe true
+        Modifier.isSynchronized(rollback.modifiers) shouldBe true
     }
 
     @Test
