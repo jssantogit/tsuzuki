@@ -207,16 +207,10 @@ class InstalledScriptProviderRegistryTest {
         )
         val invalidBytes = "not-a-tsz".encodeToByteArray()
         invalidArtifacts.activate(
-            VerifiedProviderArtifact(
-                repositoryId = "repo.example",
-                descriptor = ProviderArtifactDescriptor(
-                    providerId = "invalid.example",
-                    versionName = "1.0.0",
-                    versionCode = 1,
-                    artifactUrl = "https://repo.example/invalid-1.tsz",
-                    sha256 = sha256Hex(invalidBytes),
-                    minHostApi = 1,
-                ),
+            verifiedArtifact(
+                providerId = "invalid.example",
+                versionName = "1.0.0",
+                versionCode = 1,
                 bytes = invalidBytes,
             ),
         )
@@ -331,17 +325,73 @@ class InstalledScriptProviderRegistryTest {
 
     private fun artifact(versionCode: Long): VerifiedProviderArtifact {
         val bytes = tsz(versionCode)
-        return VerifiedProviderArtifact(
-            repositoryId = "repo.example",
-            descriptor = ProviderArtifactDescriptor(
-                providerId = "reader.example",
-                versionName = "1.0.$versionCode",
-                versionCode = versionCode,
-                artifactUrl = "https://repo.example/reader-$versionCode.tsz",
-                sha256 = sha256Hex(bytes),
-                minHostApi = 1,
-            ),
+        return verifiedArtifact(
+            providerId = "reader.example",
+            versionName = "1.0." + versionCode,
+            versionCode = versionCode,
             bytes = bytes,
+        )
+    }
+
+    private fun verifiedArtifact(
+        providerId: String,
+        versionName: String,
+        versionCode: Long,
+        bytes: ByteArray,
+    ): VerifiedProviderArtifact {
+        val descriptor = ProviderArtifactDescriptor(
+            providerId = providerId,
+            versionName = versionName,
+            versionCode = versionCode,
+            artifactUrl = "https://repo.example/" + providerId + "-" + versionCode + ".tsz",
+            sha256 = sha256Hex(bytes),
+            minHostApi = 1,
+        )
+        val keyPair = KeyPairGenerator.getInstance("EC").run {
+            initialize(ECGenParameterSpec("secp256r1"))
+            generateKeyPair()
+        }
+        val trustStateName = "fixture-trust-" +
+            providerId.replace('.', '-') +
+            "-" +
+            versionCode +
+            "-" +
+            sha256Hex(bytes).take(8)
+        val trust = ProviderRepositoryTrust(
+            repositoryId = "repo.example",
+            hostApiVersion = 1,
+            trustedKeys = mapOf("fixture-root" to keyPair.public.encoded),
+            stateStore = FileProviderRepositoryTrustStore(
+                tempDir.resolve(trustStateName).toFile(),
+            ),
+        )
+        val index = ProviderRepositoryIndex(
+            schemaVersion = 1,
+            repositoryId = "repo.example",
+            sequence = 1,
+            providers = listOf(descriptor),
+        )
+        val payload = Json {
+            encodeDefaults = true
+            explicitNulls = false
+        }.encodeToString(index).encodeToByteArray()
+        val signature = Signature.getInstance("SHA256withECDSA").run {
+            initSign(keyPair.private)
+            update(payload)
+            sign()
+        }
+        val repository = trust.verifyAndAccept(
+            SignedProviderRepositoryIndex(
+                keyId = "fixture-root",
+                payload = payload,
+                signature = signature,
+            ),
+        )
+        return trust.verifyArtifact(
+            repository = repository,
+            providerId = providerId,
+            artifactBytes = bytes,
+            installedVersionCode = null,
         )
     }
 
