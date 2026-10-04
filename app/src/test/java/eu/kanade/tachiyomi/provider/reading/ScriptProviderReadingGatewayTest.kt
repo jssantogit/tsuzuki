@@ -29,10 +29,10 @@ import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceResolver
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingDelivery
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
-import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceResolver
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
 
 class ScriptProviderReadingGatewayTest {
