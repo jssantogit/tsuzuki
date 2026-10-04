@@ -53,6 +53,22 @@ class NativePackageGateTest(unittest.TestCase):
                 set(EXPECTED_ABIS),
             )
 
+    def test_release_jlibtorrent_does_not_require_upstream_x86_64_until_relro_is_fixed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            release_abis = ("armeabi-v7a", "arm64-v8a", "x86")
+            for abi in release_abis:
+                self._write_apk(
+                    root / f"app-{abi}-release.apk",
+                    {f"lib/{abi}/libjlibtorrent-2.0.12.9.so": abi.encode()},
+                )
+
+            apks = discover_apks(root)
+            self.assertEqual(
+                validate_jlibtorrent_abi_coverage(apks),
+                set(release_abis),
+            )
+
     def test_missing_jlibtorrent_abi_fails_with_observed_coverage(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
