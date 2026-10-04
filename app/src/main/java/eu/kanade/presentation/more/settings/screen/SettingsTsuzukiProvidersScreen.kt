@@ -923,19 +923,27 @@ private fun ProviderSectionHeader(text: String) {
     )
 }
 
-private fun providerLifecycleLabel(status: ProviderLifecycleStatus): String = when (status) {
-    ProviderLifecycleStatus.ENABLED -> "Enabled"
-    ProviderLifecycleStatus.DISABLED -> "Disabled"
-    ProviderLifecycleStatus.BLOCKED -> "Blocked"
-    ProviderLifecycleStatus.INVALID -> "Invalid"
-}
+@Composable
+private fun providerLifecycleLabel(status: ProviderLifecycleStatus): String =
+    stringResource(
+        when (status) {
+            ProviderLifecycleStatus.ENABLED -> MR.strings.tsuzuki_providers_enabled
+            ProviderLifecycleStatus.DISABLED -> MR.strings.tsuzuki_providers_disabled
+            ProviderLifecycleStatus.BLOCKED -> MR.strings.tsuzuki_providers_blocked
+            ProviderLifecycleStatus.INVALID -> MR.strings.tsuzuki_providers_invalid
+        },
+    )
 
-private fun providerRepositoryStatusLabel(status: ProviderRepositoryEntryStatus): String = when (status) {
-    ProviderRepositoryEntryStatus.AVAILABLE -> "Available"
-    ProviderRepositoryEntryStatus.INSTALLED -> "Installed"
-    ProviderRepositoryEntryStatus.UPDATE_AVAILABLE -> "Update available"
-    ProviderRepositoryEntryStatus.INSTALLED_NEWER -> "Installed version is newer"
-    ProviderRepositoryEntryStatus.REVOKED -> "Revoked"
-    ProviderRepositoryEntryStatus.INCOMPATIBLE -> "Incompatible"
-    ProviderRepositoryEntryStatus.ORIGIN_CONFLICT -> "Origin conflict"
-}
+@Composable
+private fun providerRepositoryStatusLabel(status: ProviderRepositoryEntryStatus): String =
+    stringResource(
+        when (status) {
+            ProviderRepositoryEntryStatus.AVAILABLE -> MR.strings.tsuzuki_providers_available
+            ProviderRepositoryEntryStatus.INSTALLED -> MR.strings.tsuzuki_providers_installed
+            ProviderRepositoryEntryStatus.UPDATE_AVAILABLE -> MR.strings.tsuzuki_providers_update_available
+            ProviderRepositoryEntryStatus.INSTALLED_NEWER -> MR.strings.tsuzuki_providers_installed_newer
+            ProviderRepositoryEntryStatus.REVOKED -> MR.strings.tsuzuki_providers_revoked
+            ProviderRepositoryEntryStatus.INCOMPATIBLE -> MR.strings.tsuzuki_providers_incompatible
+            ProviderRepositoryEntryStatus.ORIGIN_CONFLICT -> MR.strings.tsuzuki_providers_origin_conflict
+        },
+    )
