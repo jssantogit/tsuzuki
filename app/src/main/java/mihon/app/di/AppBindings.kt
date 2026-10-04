@@ -12,6 +12,9 @@ import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.provider.reading.ActiveProviderScriptPackageSource
+import eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGateway
+import eu.kanade.tachiyomi.provider.reading.StoredProviderScriptPackageSource
 import eu.kanade.tachiyomi.provider.repository.AndroidProviderRepositoryTransport
 import eu.kanade.tachiyomi.provider.repository.InstalledScriptProviderRegistry
 import eu.kanade.tachiyomi.provider.runtime.IsolatedProviderPackageContractValidator
@@ -44,6 +47,7 @@ import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
 
 @BindingContainer
 object AppBindings {
@@ -165,14 +169,49 @@ object AppBindings {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun providesProviderPackageContractValidator(
+    fun providesProviderHostInvocationFactory(
         context: Context,
+    ): ProviderHostInvocationFactory =
+        ProviderHostInvocationFactory(context)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderRuntimeClient(
+        context: Context,
+        hostInvocationFactory: ProviderHostInvocationFactory,
+    ): ProviderRuntimeClient =
+        ProviderRuntimeClient(
+            context = context,
+            hostInvocationFactory = hostInvocationFactory,
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderPackageContractValidator(
+        runtimeClient: ProviderRuntimeClient,
     ): ProviderPackageContractValidator =
-        IsolatedProviderPackageContractValidator(
-            ProviderRuntimeClient(
-                context = context,
-                hostInvocationFactory = ProviderHostInvocationFactory(context),
-            ),
+        IsolatedProviderPackageContractValidator(runtimeClient)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesActiveProviderScriptPackageSource(
+        artifactStore: ProviderArtifactStore,
+    ): ActiveProviderScriptPackageSource =
+        StoredProviderScriptPackageSource(artifactStore)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderReadingGateway(
+        registry: ProviderRegistry,
+        packageSource: ActiveProviderScriptPackageSource,
+        runtimeClient: ProviderRuntimeClient,
+        hostInvocationFactory: ProviderHostInvocationFactory,
+    ): ProviderReadingGateway =
+        ScriptProviderReadingGateway(
+            registry = registry,
+            packageSource = packageSource,
+            runtimeClient = runtimeClient,
+            managedResources = hostInvocationFactory.managedFiles,
         )
 
     @Provides
