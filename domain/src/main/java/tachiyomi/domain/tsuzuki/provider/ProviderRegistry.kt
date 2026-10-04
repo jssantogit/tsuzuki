@@ -17,8 +17,8 @@ interface ProviderRegistry {
         providers()
             .asSequence()
             .filter { it.lifecycleStatus == ProviderLifecycleStatus.ENABLED }
+            .filter { capability in it.enabledCapabilities }
             .map { it.descriptor }
-            .filter { capability in it.capabilities }
             .toList()
 
     fun facets(providerId: ProviderId): List<ProviderFacetRef> =
@@ -39,6 +39,29 @@ class DefaultProviderRegistry(
         val snapshot = registrations()
         val ids = snapshot.map { it.descriptor.id }
         check(ids.distinct().size == ids.size) { "Provider registry contains duplicate Provider IDs" }
+        return snapshot
+    }
+}
+
+class CompositeProviderRegistry(
+    private val registries: List<ProviderRegistry>,
+) : ProviderRegistry {
+
+    override suspend fun awaitReady() {
+        registries.forEach { it.awaitReady() }
+    }
+
+    override fun observeChanges(): Flow<Unit> =
+        kotlinx.coroutines.flow.merge(
+            *registries.map { it.observeChanges() }.toTypedArray(),
+        )
+
+    override fun providers(): List<ProviderRegistration> {
+        val snapshot = registries.flatMap { it.providers() }
+        val ids = snapshot.map { it.descriptor.id }
+        check(ids.distinct().size == ids.size) {
+            "Composite Provider registry contains duplicate Provider IDs"
+        }
         return snapshot
     }
 }

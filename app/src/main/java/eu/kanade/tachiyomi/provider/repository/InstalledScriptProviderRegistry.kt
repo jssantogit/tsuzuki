@@ -28,17 +28,22 @@ import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 class InstalledScriptProviderRegistry(
     private val artifactStore: ProviderArtifactStore,
     private val configurationStore: ProviderLocalConfigurationStore,
+    reservedProviderIds: Set<String> = emptySet(),
     private val parser: ProviderPackageParser = ProviderPackageParser(),
 ) : ProviderRegistry {
 
+    private val reservedProviderIds = reservedProviderIds.toSet()
     private val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     override fun observeChanges(): Flow<Unit> = changes.asSharedFlow()
 
     override fun providers(): List<ProviderRegistration> =
         artifactStore.listInstalled()
+            .asSequence()
+            .filterNot { stored -> stored.providerId in reservedProviderIds }
             .map(::registrationFor)
             .sortedBy { registration -> registration.descriptor.name.lowercase() }
+            .toList()
 
     fun setEnabled(
         providerId: ProviderId,

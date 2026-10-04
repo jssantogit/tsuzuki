@@ -26,6 +26,11 @@ import tachiyomi.domain.tsuzuki.integration.model.IntegrationSettings
 import tachiyomi.domain.tsuzuki.integration.model.TrackingUpdate
 import tachiyomi.domain.tsuzuki.integration.model.UserLibrarySnapshot
 import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
+import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
+import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
+import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
+import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
+import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 
 class DefaultIntegrationRegistryTest {
 
@@ -320,6 +325,283 @@ class DefaultIntegrationRegistryTest {
 
         registry.searchProviders() shouldContainExactly listOf(kitsuSearch)
         registry.discoveryProviders() shouldBe emptyList()
+    }
+
+    @Test
+    fun `builtin Provider registry preserves integration identities and capabilities`() = runTest {
+        val settings = MutableStateFlow(
+            fakeSettings(
+                "tsuzuki" to true,
+                "kitsu" to true,
+                "mal" to true,
+                "mangaupdates" to true,
+                "bangumi" to true,
+                "shikimori" to true,
+                "hikka" to true,
+                "komga" to true,
+                "kavita" to true,
+                "suwayomi" to true,
+            ),
+        )
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val repository = FakeIntegrationSettingsRepository(settings)
+        val integrations = DefaultIntegrationRegistry(
+            settingsRepository = repository,
+            scope = scope,
+        )
+        val providers = BuiltinIntegrationProviderRegistry(
+            integrationRegistry = integrations,
+            settingsRepository = repository,
+            providerVersion = ProviderVersion("test-app", 42),
+            scope = scope,
+        )
+
+        providers.awaitReady()
+        val registrations = providers.providers()
+        registrations.map { it.descriptor.id.value }.toSet() shouldBe setOf(
+            "tsuzuki",
+            "kitsu",
+            "mal",
+            "mangaupdates",
+            "bangumi",
+            "shikimori",
+            "hikka",
+            "komga",
+            "kavita",
+            "suwayomi",
+        )
+        registrations.forEach { registration ->
+            registration.descriptor.origin shouldBe ProviderOrigin.Builtin
+            registration.descriptor.runtime shouldBe ProviderRuntimeKind.BUILTIN
+            registration.descriptor.version shouldBe ProviderVersion("test-app", 42)
+            registration.lifecycleStatus shouldBe ProviderLifecycleStatus.ENABLED
+        }
+
+        registrations.single { it.descriptor.id.value == "kitsu" }
+            .descriptor.capabilities shouldBe setOf(
+            ProviderCapabilities.CatalogSearchV1,
+            ProviderCapabilities.CatalogDiscoverV1,
+            ProviderCapabilities.MetadataBasicV1,
+            ProviderCapabilities.MetadataArtworkV1,
+            ProviderCapabilities.MetadataEditorialV1,
+            ProviderCapabilities.RatingsReadV1,
+            ProviderCapabilities.AccountTrackingV1,
+            ProviderCapabilities.AccountListsV1,
+        )
+    }
+
+    @Test
+    fun `builtin Provider without persisted settings remains disabled after convergence`() = runTest {
+        val settings = MutableStateFlow<List<IntegrationSettings>>(emptyList())
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val repository = FakeIntegrationSettingsRepository(settings)
+        val integrations = DefaultIntegrationRegistry(
+            settingsRepository = repository,
+            scope = scope,
+        )
+        val providers = BuiltinIntegrationProviderRegistry(
+            integrationRegistry = integrations,
+            settingsRepository = repository,
+            providerVersion = ProviderVersion("test-app", 42),
+            scope = scope,
+        )
+
+        providers.awaitReady()
+        val kitsu = providers.providers().single { it.descriptor.id.value == "kitsu" }
+
+        kitsu.lifecycleStatus shouldBe ProviderLifecycleStatus.DISABLED
+        kitsu.enabledCapabilities shouldBe emptySet()
+        providers.enabled(ProviderCapabilities.CatalogSearchV1)
+            .none { it.id.value == "kitsu" } shouldBe true
+        repository.get(IntegrationId("kitsu")) shouldBe null
+    }
+
+    @Test
+    fun `builtin capability switches do not erase declared capabilities`() = runTest {
+        val settings = MutableStateFlow(
+            listOf(
+                IntegrationSettings(
+                    integrationId = IntegrationId("kitsu"),
+                    enabled = true,
+                    configJson = """{"search":false,"discovery":true}""",
+                    updatedAt = 10,
+                ),
+            ),
+        )
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val repository = FakeIntegrationSettingsRepository(settings)
+        val integrations = DefaultIntegrationRegistry(
+            settingsRepository = repository,
+            scope = scope,
+        )
+        val providers = BuiltinIntegrationProviderRegistry(
+            integrationRegistry = integrations,
+            settingsRepository = repository,
+            providerVersion = ProviderVersion("test-app", 42),
+            scope = scope,
+        )
+
+        providers.awaitReady()
+        val kitsu = providers.providers().single { it.descriptor.id.value == "kitsu" }
+        (ProviderCapabilities.CatalogSearchV1 in kitsu.descriptor.capabilities) shouldBe true
+        (ProviderCapabilities.CatalogDiscoverV1 in kitsu.descriptor.capabilities) shouldBe true
+        (ProviderCapabilities.CatalogSearchV1 in kitsu.enabledCapabilities) shouldBe false
+        (ProviderCapabilities.CatalogDiscoverV1 in kitsu.enabledCapabilities) shouldBe true
+        providers.enabled(ProviderCapabilities.CatalogSearchV1)
+            .none { it.id.value == "kitsu" } shouldBe true
+        providers.enabled(ProviderCapabilities.CatalogDiscoverV1)
+            .any { it.id.value == "kitsu" } shouldBe true
+    }
+
+    @Test
+    fun `personal server metadata remains declared but server scoped`() = runTest {
+        val settings = MutableStateFlow(fakeSettings("komga" to true))
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val repository = FakeIntegrationSettingsRepository(settings)
+        val integrations = DefaultIntegrationRegistry(
+            settingsRepository = repository,
+            scope = scope,
+        )
+        val providers = BuiltinIntegrationProviderRegistry(
+            integrationRegistry = integrations,
+            settingsRepository = repository,
+            providerVersion = ProviderVersion("test-app", 42),
+            scope = scope,
+        )
+
+        providers.awaitReady()
+        val komga = providers.providers().single { it.descriptor.id.value == "komga" }
+        (ProviderCapabilities.MetadataBasicV1 in komga.descriptor.capabilities) shouldBe true
+        (ProviderCapabilities.MetadataArtworkV1 in komga.descriptor.capabilities) shouldBe true
+        (ProviderCapabilities.LibraryRemoteV1 in komga.descriptor.capabilities) shouldBe true
+        (ProviderCapabilities.MetadataBasicV1 in komga.enabledCapabilities) shouldBe false
+        (ProviderCapabilities.MetadataArtworkV1 in komga.enabledCapabilities) shouldBe false
+        (ProviderCapabilities.LibraryRemoteV1 in komga.enabledCapabilities) shouldBe true
+        providers.enabled(ProviderCapabilities.MetadataBasicV1)
+            .none { it.id.value == "komga" } shouldBe true
+    }
+
+    @Test
+    fun `suwayomi preserves scoped reading and download capabilities`() = runTest {
+        val settings = MutableStateFlow(fakeSettings("suwayomi" to true))
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val repository = FakeIntegrationSettingsRepository(settings)
+        val integrations = DefaultIntegrationRegistry(
+            settingsRepository = repository,
+            scope = scope,
+        )
+        val providers = BuiltinIntegrationProviderRegistry(
+            integrationRegistry = integrations,
+            settingsRepository = repository,
+            providerVersion = ProviderVersion("test-app", 42),
+            scope = scope,
+        )
+
+        providers.awaitReady()
+        val suwayomi = providers.providers().single { it.descriptor.id.value == "suwayomi" }
+        setOf(
+            ProviderCapabilities.ReadingLookupV1,
+            ProviderCapabilities.ReadingChaptersV1,
+            ProviderCapabilities.ReadingPagesV1,
+            ProviderCapabilities.DownloadsManageV1,
+        ).all { it in suwayomi.descriptor.capabilities } shouldBe true
+        setOf(
+            ProviderCapabilities.ReadingLookupV1,
+            ProviderCapabilities.ReadingChaptersV1,
+            ProviderCapabilities.ReadingPagesV1,
+            ProviderCapabilities.DownloadsManageV1,
+        ).all { it in suwayomi.enabledCapabilities } shouldBe true
+    }
+
+    @Test
+    fun `builtin enablement reuses integration settings without erasing capability config`() = runTest {
+        val settings = MutableStateFlow(
+            listOf(
+                IntegrationSettings(
+                    integrationId = IntegrationId("kitsu"),
+                    enabled = true,
+                    configJson = """{"search":false,"ratings":true}""",
+                    updatedAt = 10,
+                ),
+            ),
+        )
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val repository = FakeIntegrationSettingsRepository(settings)
+        val integrations = DefaultIntegrationRegistry(
+            settingsRepository = repository,
+            scope = scope,
+        )
+        val providers = BuiltinIntegrationProviderRegistry(
+            integrationRegistry = integrations,
+            settingsRepository = repository,
+            providerVersion = ProviderVersion("test-app", 42),
+            scope = scope,
+        )
+
+        providers.awaitReady()
+        providers.setEnabled(
+            providerId = tachiyomi.domain.tsuzuki.provider.ProviderId("kitsu"),
+            enabled = false,
+        )
+
+        val persisted = repository.get(IntegrationId("kitsu"))
+        persisted?.enabled shouldBe false
+        persisted?.configJson shouldBe """{"search":false,"ratings":true}"""
+        providers.registration(tachiyomi.domain.tsuzuki.provider.ProviderId("kitsu"))
+            ?.lifecycleStatus shouldBe ProviderLifecycleStatus.DISABLED
+    }
+
+    @Test
+    fun `builtin configuration fingerprint changes only for the edited Provider`() = runTest {
+        val settings = MutableStateFlow(
+            listOf(
+                IntegrationSettings(IntegrationId("kitsu"), true, "{}", 10),
+                IntegrationSettings(IntegrationId("mal"), true, "{}", 10),
+            ),
+        )
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val repository = FakeIntegrationSettingsRepository(settings)
+        val integrations = DefaultIntegrationRegistry(
+            settingsRepository = repository,
+            scope = scope,
+        )
+        val providers = BuiltinIntegrationProviderRegistry(
+            integrationRegistry = integrations,
+            settingsRepository = repository,
+            providerVersion = ProviderVersion("test-app", 42),
+            scope = scope,
+        )
+
+        providers.awaitReady()
+        val kitsuBefore = providers.configurationFingerprint(
+            tachiyomi.domain.tsuzuki.provider.ProviderId("kitsu"),
+        )
+        val malBefore = providers.configurationFingerprint(
+            tachiyomi.domain.tsuzuki.provider.ProviderId("mal"),
+        )
+
+        repository.upsert(
+            IntegrationSettings(
+                integrationId = IntegrationId("kitsu"),
+                enabled = true,
+                configJson = """{"search":false}""",
+                updatedAt = 11,
+            ),
+        )
+
+        providers.configurationFingerprint(
+            tachiyomi.domain.tsuzuki.provider.ProviderId("kitsu"),
+        ) shouldBe providers.registration(
+            tachiyomi.domain.tsuzuki.provider.ProviderId("kitsu"),
+        )?.configurationFingerprint
+        (
+            providers.configurationFingerprint(
+                tachiyomi.domain.tsuzuki.provider.ProviderId("kitsu"),
+            ) != kitsuBefore
+            ) shouldBe true
+        providers.configurationFingerprint(
+            tachiyomi.domain.tsuzuki.provider.ProviderId("mal"),
+        ) shouldBe malBefore
     }
 
     private fun registry(

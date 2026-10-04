@@ -67,6 +67,91 @@ class ProviderCoreTest {
     }
 
     @Test
+    fun `registry honors per capability enablement without disabling provider`() {
+        val provider = descriptor(
+            id = "org.example.multi",
+            capabilities = setOf(searchV1, readingV1),
+        )
+        val registry = DefaultProviderRegistry(
+            registrations = {
+                listOf(
+                    ProviderRegistration(
+                        descriptor = provider,
+                        lifecycleStatus = ProviderLifecycleStatus.ENABLED,
+                        enabledCapabilities = setOf(searchV1),
+                    ),
+                )
+            },
+        )
+
+        registry.enabled(searchV1).map { it.id.value } shouldContainExactly
+            listOf("org.example.multi")
+        registry.enabled(readingV1) shouldBe emptyList()
+        registry.registration(provider.id)?.descriptor?.capabilities shouldBe
+            setOf(searchV1, readingV1)
+    }
+
+    @Test
+    fun `composite registry merges builtin and script registrations and rejects duplicate ids`() {
+        val builtin = descriptor(
+            id = "kitsu",
+            capabilities = setOf(searchV1),
+        ).copy(
+            origin = ProviderOrigin.Builtin,
+            runtime = ProviderRuntimeKind.BUILTIN,
+        )
+        val script = descriptor(
+            id = "org.example.reader",
+            capabilities = setOf(readingV1),
+        )
+        val registry = CompositeProviderRegistry(
+            registries = listOf(
+                DefaultProviderRegistry(
+                    registrations = {
+                        listOf(
+                            ProviderRegistration(
+                                builtin,
+                                ProviderLifecycleStatus.ENABLED,
+                            ),
+                        )
+                    },
+                ),
+                DefaultProviderRegistry(
+                    registrations = {
+                        listOf(
+                            ProviderRegistration(
+                                script,
+                                ProviderLifecycleStatus.ENABLED,
+                            ),
+                        )
+                    },
+                ),
+            ),
+        )
+
+        registry.providers().map { it.descriptor.id.value }.toSet() shouldBe
+            setOf("kitsu", "org.example.reader")
+
+        val duplicate = CompositeProviderRegistry(
+            registries = listOf(
+                DefaultProviderRegistry(
+                    registrations = {
+                        listOf(ProviderRegistration(builtin, ProviderLifecycleStatus.ENABLED))
+                    },
+                ),
+                DefaultProviderRegistry(
+                    registrations = {
+                        listOf(ProviderRegistration(builtin, ProviderLifecycleStatus.DISABLED))
+                    },
+                ),
+            ),
+        )
+        shouldThrow<IllegalStateException> {
+            duplicate.providers()
+        }
+    }
+
+    @Test
     fun `provider identifiers capabilities and versions fail closed on malformed values`() {
         shouldThrow<IllegalArgumentException> { ProviderId("../escape") }
         shouldThrow<IllegalArgumentException> { ProviderId("") }

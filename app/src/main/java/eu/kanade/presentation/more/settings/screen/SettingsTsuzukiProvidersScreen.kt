@@ -66,7 +66,9 @@ class SettingsTsuzukiProvidersScreen : Screen() {
         val navigator = LocalNavigator.currentOrThrow
         val scope = rememberCoroutineScope()
         val manager = remember { context.appGraph.providerRepositoryManager }
-        val registry = remember { context.appGraph.installedScriptProviderRegistry }
+        val providerRegistry = remember { context.appGraph.providerRegistry }
+        val builtinRegistry = remember { context.appGraph.builtinIntegrationProviderRegistry }
+        val scriptRegistry = remember { context.appGraph.installedScriptProviderRegistry }
 
         var selectedTab by rememberSaveable { mutableIntStateOf(0) }
         var repositories by remember { mutableStateOf<List<EnrolledProviderRepository>>(emptyList()) }
@@ -82,9 +84,11 @@ class SettingsTsuzukiProvidersScreen : Screen() {
 
         suspend fun reloadInstalled() {
             val state = withContext(Dispatchers.IO) {
-                val registrations = registry.providers()
+                providerRegistry.awaitReady()
+                val registrations = providerRegistry.providers()
                 val rollbackIds = registrations
                     .asSequence()
+                    .filter { it.descriptor.origin is ProviderOrigin.Repository }
                     .map { registration -> registration.descriptor.id.value }
                     .filter(manager::canRollback)
                     .toSet()
@@ -118,7 +122,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
             }
             errorMessage = lastError
             refreshing = false
-            registry.invalidate()
+            scriptRegistry.invalidate()
             reloadInstalled()
         }
 
@@ -126,8 +130,8 @@ class SettingsTsuzukiProvidersScreen : Screen() {
             reloadInstalled()
             reloadRepositories(refreshRemote = true)
         }
-        LaunchedEffect(registry) {
-            registry.observeChanges().collect {
+        LaunchedEffect(providerRegistry) {
+            providerRegistry.observeChanges().collect {
                 reloadInstalled()
             }
         }
@@ -143,7 +147,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                     withContext(Dispatchers.IO) {
                         action()
                     }
-                    registry.invalidate()
+                    scriptRegistry.invalidate()
                     reloadInstalled()
                     snapshots = withContext(Dispatchers.IO) {
                         repositories.mapNotNull { repository ->
@@ -234,15 +238,34 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                         registrations = installed,
                         rollbackProviderIds = rollbackProviderIds,
                         operationKeys = operations,
-                        onOpen = { providerId ->
-                            navigator.push(SettingsTsuzukiProviderDetailScreen(providerId))
+                        onOpen = { registration ->
+                            val providerId = registration.descriptor.id.value
+                            when (registration.descriptor.origin) {
+                                ProviderOrigin.Builtin ->
+                                    navigator.push(SettingsTsuzukiIntegrationDetailScreen(providerId))
+                                is ProviderOrigin.Repository ->
+                                    navigator.push(SettingsTsuzukiProviderDetailScreen(providerId))
+                            }
                         },
-                        onEnabledChange = { providerId, enabled ->
+                        onEnabledChange = { registration, enabled ->
                             scope.launch {
                                 runProviderUiCatching {
                                     withContext(Dispatchers.IO) {
-                                        registry.setEnabled(ProviderId(providerId), enabled)
+                                        when (registration.descriptor.origin) {
+                                            ProviderOrigin.Builtin ->
+                                                builtinRegistry.setEnabled(
+                                                    registration.descriptor.id,
+                                                    enabled,
+                                                )
+                                            is ProviderOrigin.Repository ->
+                                                scriptRegistry.setEnabled(
+                                                    registration.descriptor.id,
+                                                    enabled,
+                                                )
+                                        }
                                     }
+                                }.onSuccess {
+                                    reloadInstalled()
                                 }.onFailure { error ->
                                     errorMessage = error.message
                                 }
@@ -293,7 +316,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                             }
                         }.onSuccess { snapshot ->
                             snapshots = snapshots + (repositoryId to snapshot)
-                            registry.invalidate()
+                            scriptRegistry.invalidate()
                             reloadInstalled()
                         }.onFailure { error ->
                             errorMessage = error.message
@@ -329,7 +352,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                             }.onSuccess { snapshot ->
                                 snapshots = snapshots +
                                     (repository.enrollment.repositoryId to snapshot)
-                                registry.invalidate()
+                                scriptRegistry.invalidate()
                                 reloadInstalled()
                             }.onFailure { error ->
                                 errorMessage = error.message
@@ -648,8 +671,8 @@ private fun InstalledProvidersList(
     registrations: List<ProviderRegistration>,
     rollbackProviderIds: Set<String>,
     operationKeys: Set<String>,
-    onOpen: (String) -> Unit,
-    onEnabledChange: (String, Boolean) -> Unit,
+    onOpen: (ProviderRegistration) -> Unit,
+    onEnabledChange: (ProviderRegistration, Boolean) -> Unit,
     onRollback: (String) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -678,17 +701,21 @@ private fun InstalledProvidersList(
                             providerLifecycleLabel(registration.lifecycleStatus),
                     )
                 },
-                trailingContent = {
-                    Switch(
-                        checked = registration.lifecycleStatus == ProviderLifecycleStatus.ENABLED,
-                        enabled = registration.lifecycleStatus != ProviderLifecycleStatus.BLOCKED &&
-                            registration.lifecycleStatus != ProviderLifecycleStatus.INVALID,
-                        onCheckedChange = { enabled ->
-                            onEnabledChange(providerId, enabled)
-                        },
-                    )
+                trailingContent = if (descriptor.origin is ProviderOrigin.Repository) {
+                    {
+                        Switch(
+                            checked = registration.lifecycleStatus == ProviderLifecycleStatus.ENABLED,
+                            enabled = registration.lifecycleStatus != ProviderLifecycleStatus.BLOCKED &&
+                                registration.lifecycleStatus != ProviderLifecycleStatus.INVALID,
+                            onCheckedChange = { enabled ->
+                                onEnabledChange(registration, enabled)
+                            },
+                        )
+                    }
+                } else {
+                    null
                 },
-                modifier = Modifier.clickable { onOpen(providerId) },
+                modifier = Modifier.clickable { onOpen(registration) },
             )
             if (canRollback) {
                 Row(

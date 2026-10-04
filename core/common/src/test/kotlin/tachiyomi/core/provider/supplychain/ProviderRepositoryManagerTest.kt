@@ -598,6 +598,71 @@ class ProviderRepositoryManagerTest {
     }
 
     @Test
+    fun `repository cannot install Provider id reserved by a builtin Provider`() = runBlocking {
+        val keyPair = ecKeyPair()
+        val enrollmentStore = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("reserved-enrollments").toFile(),
+        )
+        val trustStore = FileProviderRepositoryTrustStore(
+            tempDir.resolve("reserved-trust").toFile(),
+        )
+        val artifactStore = ProviderArtifactStore(
+            tempDir.resolve("reserved-artifacts").toFile(),
+        )
+        val transport = FakeTransport()
+        val manager = manager(
+            enrollmentStore = enrollmentStore,
+            trustStore = trustStore,
+            artifactStore = artifactStore,
+            transport = transport,
+            reservedProviderIds = setOf("kitsu"),
+        )
+        manager.enroll(
+            EnrolledProviderRepository(
+                "Example",
+                ProviderRepositoryEnrollment(
+                    repositoryId = "repo.example",
+                    indexUrl = "https://repo.example/index.json",
+                    signingKey = ProviderRepositorySigningKey(
+                        keyId = "root-1",
+                        publicKeyBase64 = Base64.getEncoder()
+                            .encodeToString(keyPair.public.encoded),
+                    ),
+                ),
+            ),
+        )
+
+        val artifactBytes = tsz(versionCode = 1)
+        val index = ProviderRepositoryIndex(
+            schemaVersion = 1,
+            repositoryId = "repo.example",
+            sequence = 1,
+            providers = listOf(
+                ProviderArtifactDescriptor(
+                    providerId = "kitsu",
+                    versionName = "1.0.1",
+                    versionCode = 1,
+                    artifactUrl = "https://repo.example/kitsu-1.tsz",
+                    sha256 = sha256Hex(artifactBytes),
+                    minHostApi = 1,
+                ),
+            ),
+        )
+        transport.publish(
+            signed = signedIndex(keyPair = keyPair, index = index),
+            artifactBytes = artifactBytes,
+        )
+
+        manager.refresh("repo.example").entries.single().status shouldBe
+            ProviderRepositoryEntryStatus.ORIGIN_CONFLICT
+        shouldThrow<ProviderSupplyChainException> {
+            manager.install("repo.example", "kitsu")
+        }
+        transport.requestedArtifactUrls shouldBe emptyList()
+        manager.installed() shouldBe emptyList()
+    }
+
+    @Test
     fun `refreshing unchanged accepted index after manager restart remains usable`() = runBlocking {
         val keyPair = ecKeyPair()
         val enrollment = ProviderRepositoryEnrollment(
@@ -634,6 +699,7 @@ class ProviderRepositoryManagerTest {
         trustStore: ProviderRepositoryTrustStore,
         artifactStore: ProviderArtifactStore,
         transport: ProviderRepositoryTransport,
+        reservedProviderIds: Set<String> = emptySet(),
     ) = ProviderRepositoryManager(
         hostApiVersion = 3,
         enrollmentStore = enrollmentStore,
@@ -646,6 +712,7 @@ class ProviderRepositoryManagerTest {
             contractValidator = { _, _ -> true },
         ),
         transport = transport,
+        reservedProviderIds = reservedProviderIds,
     )
 
     private fun signedIndex(
@@ -741,6 +808,7 @@ class ProviderRepositoryManagerTest {
         private lateinit var signed: SignedProviderRepositoryIndex
         private val artifacts = mutableMapOf<String, ByteArray>()
         val requestedIndexUrls = mutableListOf<String>()
+        val requestedArtifactUrls = mutableListOf<String>()
         var beforeFetchIndex: suspend () -> Unit = {}
 
         fun publish(
@@ -761,7 +829,9 @@ class ProviderRepositoryManagerTest {
             return signed
         }
 
-        override suspend fun fetchArtifact(artifactUrl: String): ByteArray =
-            artifacts.getValue(artifactUrl)
+        override suspend fun fetchArtifact(artifactUrl: String): ByteArray {
+            requestedArtifactUrls += artifactUrl
+            return artifacts.getValue(artifactUrl)
+        }
     }
 }
