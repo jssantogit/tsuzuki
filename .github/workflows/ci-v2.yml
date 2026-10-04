@@ -58,6 +58,7 @@ jobs:
       - name: Test CI routing
         run: |
           python3 .github/scripts/test_ci_v2_plan.py
+          python3 .github/scripts/test_native_package_gate.py
           python3 .github/scripts/test_apk_lane.py
           python3 .github/scripts/test_extension_fixture.py
           python3 .github/scripts/test_identity_contract.py
