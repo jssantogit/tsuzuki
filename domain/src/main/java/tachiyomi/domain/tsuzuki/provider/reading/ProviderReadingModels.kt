@@ -156,6 +156,7 @@ data class ProviderPageRequest(
         require(
             headers.all { (name, value) ->
                 HEADER_NAME.matches(name) &&
+                    name.lowercase() !in FORBIDDEN_REQUEST_HEADERS &&
                     value.length <= MAX_HEADER_VALUE_CHARS &&
                     !value.contains('\r') &&
                     !value.contains('\n')
@@ -171,6 +172,19 @@ data class ProviderPageRequest(
         const val MAX_ORIGINS = 64
         const val MAX_ORIGIN_CHARS = 2048
         val HEADER_NAME = Regex("[A-Za-z0-9!#$%&'*+.^_`|~-]+")
+        val FORBIDDEN_REQUEST_HEADERS = setOf(
+            "connection",
+            "content-length",
+            "host",
+            "keep-alive",
+            "proxy-authenticate",
+            "proxy-authorization",
+            "proxy-connection",
+            "te",
+            "trailer",
+            "transfer-encoding",
+            "upgrade",
+        )
     }
 }
 
