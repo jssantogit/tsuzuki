@@ -21,6 +21,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 
+// Reading discovery is eligible only when one SCRIPT Provider can complete the entire Reader path.
 class CollectProviderReadingEvidenceEligibilityTest {
 
     @Test
