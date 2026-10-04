@@ -105,6 +105,43 @@ class ProviderQuickJsRuntimeTest {
     }
 
     @Test
+    fun `provider scripts can use host granted p2p without receiving native authority`() = runBlocking {
+        var captured: ProviderP2pAcquireRequest? = null
+        val services = ProviderHostServices(
+            p2p = ProviderP2pHostService { request ->
+                captured = request
+                ProviderP2pAcquireResponse.Pending("host-job-12")
+            },
+        )
+
+        ProviderQuickJsRuntime().evaluate(
+            source = """
+                const response = JSON.parse(
+                  await tsuzuki.p2p.acquire(
+                    JSON.stringify({
+                      operationId: "read:canonical-12",
+                      magnetUri: "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+                      selectedFileIndex: 1,
+                      selectedFilePath: "pack/chapter-012.cbz"
+                    })
+                  )
+                );
+                response.status + ":" + response.jobId
+            """.trimIndent(),
+            hostServices = services,
+        ) shouldBe ProviderScriptExecution.Success("pending:host-job-12")
+
+        captured shouldBe ProviderP2pAcquireRequest(
+            operationId = "read:canonical-12",
+            magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+            torrentUrl = null,
+            infoHash = null,
+            selectedFileIndex = 1,
+            selectedFilePath = "pack/chapter-012.cbz",
+        )
+    }
+
+    @Test
     fun `exposes only configured host service modules`() = runBlocking {
         val services = ProviderHostServices(
             http = object : ProviderHttpHostService {
