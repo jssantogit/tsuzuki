@@ -6,6 +6,7 @@ import com.frostwire.jlibtorrent.SessionParams
 import com.frostwire.jlibtorrent.SettingsPack
 import com.frostwire.jlibtorrent.TcpEndpoint
 import com.frostwire.jlibtorrent.TorrentFlags
+import com.frostwire.jlibtorrent.TorrentHandle
 import com.frostwire.jlibtorrent.TorrentInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -117,8 +118,8 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 TorrentFlags.PAUSED,
             )
 
-            val handle = try {
-                withTimeout(HANDLE_TIMEOUT_MS) {
+            val handle: TorrentHandle = try {
+                withTimeout<TorrentHandle>(HANDLE_TIMEOUT_MS) {
                     while (true) {
                         coroutineContext.ensureActive()
                         session.find(torrent)?.let { return@withTimeout it }
