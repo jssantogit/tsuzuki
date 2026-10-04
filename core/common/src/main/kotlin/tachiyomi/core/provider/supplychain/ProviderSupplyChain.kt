@@ -703,6 +703,20 @@ class ProviderArtifactStore(
         )
     }
 
+    fun listInstalled(): List<StoredProviderArtifact> =
+        root.listFiles()
+            .orEmpty()
+            .asSequence()
+            .filter { directory -> directory.isDirectory && PROVIDER_ID.matches(directory.name) }
+            .mapNotNull { directory ->
+                val providerId = directory.name
+                val state = readState(providerId) ?: return@mapNotNull null
+                validateStoredArtifact(providerId, state.current)
+                state.current.toPublic(providerId)
+            }
+            .sortedBy { artifact -> artifact.providerId }
+            .toList()
+
     fun current(providerId: String): StoredProviderArtifact? {
         validateIdentifier(providerId, "Provider ID")
         val state = readState(providerId) ?: return null
