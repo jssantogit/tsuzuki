@@ -275,6 +275,7 @@ class ProviderSupplyChainTest {
         shouldThrow<ProviderSupplyChainException> {
             store.readCurrentArtifact("reader.example")
         }
+        store.readCurrentArtifactForInspection("reader.example") shouldBe v1Bytes
 
         store.activate(
             trust.verifyArtifact(
