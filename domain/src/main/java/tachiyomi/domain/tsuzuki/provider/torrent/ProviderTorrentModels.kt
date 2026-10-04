@@ -3,6 +3,10 @@ package tachiyomi.domain.tsuzuki.provider.torrent
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterVolume
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
+import tachiyomi.domain.tsuzuki.provider.ProviderCursor
+import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.ProviderPage
 import java.net.URI
 
 data class TorrentCandidateFile(
@@ -85,6 +89,97 @@ data class TorrentCandidate(
         const val MAX_FILES = 20_000
         val INFO_HASH = Regex("(?i)(?:[0-9a-f]{40}|[0-9a-f]{64})")
     }
+}
+
+data class TorrentSearchRequest(
+    val titles: List<String>,
+    val preferredLanguages: Set<String> = emptySet(),
+    val cursor: ProviderCursor? = null,
+) {
+    init {
+        require(titles.isNotEmpty() && titles.size <= MAX_TITLES) {
+            "Torrent search requires a bounded title set"
+        }
+        require(titles.all { it.isNotBlank() && it.length <= MAX_TITLE_CHARS }) {
+            "Torrent search title is invalid"
+        }
+        require(
+            preferredLanguages.size <= MAX_LANGUAGES &&
+                preferredLanguages.all(::validLanguage),
+        ) {
+            "Torrent search preferred languages are invalid"
+        }
+    }
+
+    private companion object {
+        const val MAX_TITLES = 16
+        const val MAX_TITLE_CHARS = 1024
+        const val MAX_LANGUAGES = 32
+    }
+}
+
+fun interface TorrentSearchGateway {
+    suspend fun search(
+        providerId: ProviderId,
+        request: TorrentSearchRequest,
+    ): ProviderCallResult<ProviderPage<TorrentCandidate>>
+}
+
+data class TorrentAcquisitionRequest(
+    val operationId: String,
+    val candidate: TorrentCandidate,
+    val selectedFile: TorrentCandidateFile,
+) {
+    init {
+        require(OPERATION_ID.matches(operationId)) {
+            "Torrent acquisition operation ID is invalid"
+        }
+        require(candidate.files.orEmpty().any { it == selectedFile }) {
+            "Selected torrent file does not belong to the candidate"
+        }
+    }
+}
+
+sealed interface DebridResolveState {
+    data class Ready(
+        val resource: TorrentReadableResource.HttpFile,
+    ) : DebridResolveState
+
+    data class Pending(
+        val jobId: String,
+    ) : DebridResolveState {
+        init {
+            require(validJobId(jobId)) { "Debrid job ID is invalid" }
+        }
+    }
+}
+
+fun interface DebridResolveGateway {
+    suspend fun resolve(
+        providerId: ProviderId,
+        request: TorrentAcquisitionRequest,
+    ): ProviderCallResult<DebridResolveState>
+}
+
+sealed interface P2pAcquireState {
+    data class Ready(
+        val resource: TorrentReadableResource.LocalArchive,
+    ) : P2pAcquireState
+
+    data class Pending(
+        val jobId: String,
+    ) : P2pAcquireState {
+        init {
+            require(validJobId(jobId)) { "P2P job ID is invalid" }
+        }
+    }
+}
+
+fun interface P2pAcquireGateway {
+    suspend fun acquire(
+        providerId: ProviderId,
+        request: TorrentAcquisitionRequest,
+    ): ProviderCallResult<P2pAcquireState>
 }
 
 data class TorrentChapterRequest(
@@ -450,4 +545,11 @@ private fun validLanguage(value: String): Boolean =
         value.length <= 32 &&
         LANGUAGE.matches(value)
 
+private fun validJobId(value: String): Boolean =
+    value.isNotBlank() &&
+        value.length <= 256 &&
+        JOB_ID.matches(value)
+
+private val OPERATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
+private val JOB_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,255}")
 private val LANGUAGE = Regex("[A-Za-z0-9][A-Za-z0-9_-]{0,31}")
