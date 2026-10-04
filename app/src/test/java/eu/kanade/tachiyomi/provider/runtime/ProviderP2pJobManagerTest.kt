@@ -1,9 +1,11 @@
 package eu.kanade.tachiyomi.provider.runtime
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -108,6 +110,43 @@ class ProviderP2pJobManagerTest {
 
         scope.advanceUntilIdle()
         downloads shouldBe 1
+        manager.close()
+    }
+
+    @Test
+    fun `active transfer cancellation allows a clean retry`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val scope = TestScope(dispatcher)
+        var starts = 0
+        var cancellations = 0
+        val manager = ProviderP2pJobManager(
+            root = tempDir.resolve("jobs").toFile(),
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { _, _ ->
+                starts += 1
+                try {
+                    awaitCancellation()
+                } finally {
+                    cancellations += 1
+                }
+            },
+            scope = scope,
+        )
+        val service = manager.service("org.example.p2p")
+        val request = request()
+
+        (service.acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+        runCurrent()
+        starts shouldBe 1
+
+        manager.cancelAll() shouldBe 1
+        runCurrent()
+        cancellations shouldBe 1
+
+        (service.acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+        runCurrent()
+        starts shouldBe 2
+
         manager.close()
     }
 
