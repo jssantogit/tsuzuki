@@ -51,7 +51,7 @@ class AndroidProviderRepositoryTransportTest {
             transport.fetchArtifact(server.url("/reader.tsz").toString()) shouldBe
                 "tsz-bytes".encodeToByteArray()
         } finally {
-            server.shutdown()
+            server.close()
         }
     }
 
@@ -105,7 +105,7 @@ class AndroidProviderRepositoryTransportTest {
 
             server.takeRequest().headers["Authorization"] shouldBe null
         } finally {
-            server.shutdown()
+            server.close()
         }
     }
 
@@ -125,7 +125,7 @@ class AndroidProviderRepositoryTransportTest {
                 transport.fetchArtifact(server.url("/large.tsz").toString())
             }
         } finally {
-            server.shutdown()
+            server.close()
         }
     }
 }
