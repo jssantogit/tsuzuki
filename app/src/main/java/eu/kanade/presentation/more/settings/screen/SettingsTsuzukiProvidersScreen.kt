@@ -83,7 +83,6 @@ class SettingsTsuzukiProvidersScreen : Screen() {
         var repositoryToRemove by remember { mutableStateOf<EnrolledProviderRepository?>(null) }
 
         suspend fun reloadInstalled() {
-            providerRegistry.awaitReady()
             val state = withContext(Dispatchers.IO) {
                 providerRegistry.awaitReady()
                 val registrations = providerRegistry.providers()
