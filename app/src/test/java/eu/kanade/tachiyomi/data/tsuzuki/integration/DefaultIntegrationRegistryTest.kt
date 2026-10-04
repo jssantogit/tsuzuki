@@ -391,6 +391,32 @@ class DefaultIntegrationRegistryTest {
     }
 
     @Test
+    fun `builtin Provider without persisted settings remains disabled after convergence`() = runTest {
+        val settings = MutableStateFlow<List<IntegrationSettings>>(emptyList())
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val repository = FakeIntegrationSettingsRepository(settings)
+        val integrations = DefaultIntegrationRegistry(
+            settingsRepository = repository,
+            scope = scope,
+        )
+        val providers = BuiltinIntegrationProviderRegistry(
+            integrationRegistry = integrations,
+            settingsRepository = repository,
+            providerVersion = ProviderVersion("test-app", 42),
+            scope = scope,
+        )
+
+        providers.awaitReady()
+        val kitsu = providers.providers().single { it.descriptor.id.value == "kitsu" }
+
+        kitsu.lifecycleStatus shouldBe ProviderLifecycleStatus.DISABLED
+        kitsu.enabledCapabilities shouldBe emptySet()
+        providers.enabled(ProviderCapabilities.CatalogSearchV1)
+            .none { it.id.value == "kitsu" } shouldBe true
+        repository.get(IntegrationId("kitsu")) shouldBe null
+    }
+
+    @Test
     fun `builtin capability switches do not erase declared capabilities`() = runTest {
         val settings = MutableStateFlow(
             listOf(
