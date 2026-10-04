@@ -2,6 +2,7 @@ package tachiyomi.domain.tsuzuki.provider.torrent
 
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
@@ -155,7 +156,7 @@ class ProviderTorrentContractTest {
     }
 
     @Test
-    fun `acquisition router tries debrid first and falls back to p2p only when policy permits`() {
+    fun `acquisition router tries debrid first and falls back to p2p only when policy permits`() = runTest {
         val candidate = candidate(listOf(file(0, "pack/chapter-012.cbz")))
         val selected = candidate.files!!.single()
         val debrid = RecordingAcquisitionBackend(
@@ -196,7 +197,7 @@ class ProviderTorrentContractTest {
     }
 
     @Test
-    fun `acquisition router never touches p2p when policy contains only debrid`() {
+    fun `acquisition router never touches p2p when policy contains only debrid`() = runTest {
         val candidate = candidate(listOf(file(0, "pack/chapter-012.cbz")))
         val selected = candidate.files!!.single()
         val debrid = RecordingAcquisitionBackend(
@@ -221,7 +222,7 @@ class ProviderTorrentContractTest {
     }
 
     @Test
-    fun `acquisition router rejects a selected file that is not part of the candidate`() {
+    fun `acquisition router rejects a selected file that is not part of the candidate`() = runTest {
         val candidate = candidate(listOf(file(0, "pack/chapter-012.cbz")))
         val backend = RecordingAcquisitionBackend(
             TorrentBackendResult.Failure(TorrentAcquisitionFailure.UNAVAILABLE),
@@ -274,7 +275,7 @@ class ProviderTorrentContractTest {
     ) : TorrentAcquisitionBackend {
         val requests = mutableListOf<Pair<TorrentCandidate, TorrentCandidateFile>>()
 
-        override fun acquire(
+        override suspend fun acquire(
             candidate: TorrentCandidate,
             file: TorrentCandidateFile,
         ): TorrentBackendResult {
