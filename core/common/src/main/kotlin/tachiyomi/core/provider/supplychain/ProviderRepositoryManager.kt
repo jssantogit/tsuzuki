@@ -98,6 +98,7 @@ class ProviderRepositoryManager(
 
         trust.applyRevocations(verified, artifactStore)
         sessions[repositoryId] = RepositorySession(
+            repository = repository,
             trust = trust,
             verified = verified,
         )
@@ -107,6 +108,10 @@ class ProviderRepositoryManager(
     fun snapshot(repositoryId: String): ProviderRepositorySnapshot? {
         val repository = enrollmentStore.get(repositoryId) ?: return null
         val session = sessions[repositoryId] ?: return null
+        if (session.repository != repository) {
+            sessions.remove(repositoryId, session)
+            return null
+        }
         return buildSnapshot(repository, session.verified)
     }
 
@@ -131,7 +136,13 @@ class ProviderRepositoryManager(
         repositoryLock(repositoryId).withLock {
             val repository = enrollmentStore.get(repositoryId)
                 ?: throw ProviderSupplyChainException("Provider repository is not enrolled")
-            val session = sessions[repositoryId] ?: run {
+            val existingSession = sessions[repositoryId]
+            val session = if (existingSession != null && existingSession.repository == repository) {
+                existingSession
+            } else {
+                if (existingSession != null) {
+                    sessions.remove(repositoryId, existingSession)
+                }
                 refreshLocked(repositoryId)
                 sessions.getValue(repositoryId)
             }
@@ -251,6 +262,7 @@ class ProviderRepositoryManager(
         repositoryLocks.computeIfAbsent(repositoryId) { Mutex() }
 
     private data class RepositorySession(
+        val repository: EnrolledProviderRepository,
         val trust: ProviderRepositoryTrust,
         val verified: VerifiedProviderRepository,
     )
