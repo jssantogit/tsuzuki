@@ -21,6 +21,9 @@ import tachiyomi.core.provider.runtime.ProviderDomHostService
 import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderHostServices
 import tachiyomi.core.provider.runtime.ProviderHttpHostService
+import tachiyomi.core.provider.runtime.ProviderHttpProtocol
+import tachiyomi.core.provider.runtime.ProviderHttpRequest
+import tachiyomi.core.provider.runtime.ProviderHttpResponse
 import tachiyomi.core.provider.runtime.ProviderImageHostService
 import tachiyomi.core.provider.runtime.ProviderInvocationLimiter
 import tachiyomi.core.provider.runtime.ProviderLogHostService
@@ -355,6 +358,17 @@ private fun IProviderHostBridge?.toHostServices(
     return ProviderHostServices(
         http = if (ProviderHostModule.HTTP in allowedModules) {
             object : ProviderHttpHostService {
+                override suspend fun request(request: ProviderHttpRequest): ProviderHttpResponse {
+                    val encoded = ProviderHttpProtocol.encodeRequest(request)
+                    val response = bridge.httpRequest(
+                        encoded.boundedHostArg(
+                            ProviderHttpProtocol.MAX_REQUEST_JSON_CHARS,
+                            "HTTP request",
+                        ),
+                    ).orEmpty()
+                    return ProviderHttpProtocol.decodeResponse(response)
+                }
+
                 override suspend fun getText(url: String): String =
                     bridge.httpGet(url.boundedHostArg(MAX_HOST_URL_CHARS, "HTTP URL")).orEmpty()
 
