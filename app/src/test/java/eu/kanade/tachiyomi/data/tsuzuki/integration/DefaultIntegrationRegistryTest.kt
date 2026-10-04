@@ -487,6 +487,95 @@ class DefaultIntegrationRegistryTest {
         ).all { it in suwayomi.enabledCapabilities } shouldBe true
     }
 
+    @Test
+    fun `builtin enablement reuses integration settings without erasing capability config`() = runTest {
+        val settings = MutableStateFlow(
+            listOf(
+                IntegrationSettings(
+                    integrationId = IntegrationId("kitsu"),
+                    enabled = true,
+                    configJson = """{"search":false,"ratings":true}""",
+                    updatedAt = 10,
+                ),
+            ),
+        )
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val repository = FakeIntegrationSettingsRepository(settings)
+        val integrations = DefaultIntegrationRegistry(
+            settingsRepository = repository,
+            scope = scope,
+        )
+        val providers = BuiltinIntegrationProviderRegistry(
+            integrationRegistry = integrations,
+            settingsRepository = repository,
+            providerVersion = ProviderVersion("test-app", 42),
+            scope = scope,
+        )
+
+        providers.awaitReady()
+        providers.setEnabled(
+            providerId = tachiyomi.domain.tsuzuki.provider.ProviderId("kitsu"),
+            enabled = false,
+        )
+
+        val persisted = repository.get(IntegrationId("kitsu"))
+        persisted?.enabled shouldBe false
+        persisted?.configJson shouldBe """{"search":false,"ratings":true}"""
+        providers.registration(tachiyomi.domain.tsuzuki.provider.ProviderId("kitsu"))
+            ?.lifecycleStatus shouldBe ProviderLifecycleStatus.DISABLED
+    }
+
+    @Test
+    fun `builtin configuration fingerprint changes only for the edited Provider`() = runTest {
+        val settings = MutableStateFlow(
+            listOf(
+                IntegrationSettings(IntegrationId("kitsu"), true, "{}", 10),
+                IntegrationSettings(IntegrationId("mal"), true, "{}", 10),
+            ),
+        )
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val repository = FakeIntegrationSettingsRepository(settings)
+        val integrations = DefaultIntegrationRegistry(
+            settingsRepository = repository,
+            scope = scope,
+        )
+        val providers = BuiltinIntegrationProviderRegistry(
+            integrationRegistry = integrations,
+            settingsRepository = repository,
+            providerVersion = ProviderVersion("test-app", 42),
+            scope = scope,
+        )
+
+        providers.awaitReady()
+        val kitsuBefore = providers.configurationFingerprint(
+            tachiyomi.domain.tsuzuki.provider.ProviderId("kitsu"),
+        )
+        val malBefore = providers.configurationFingerprint(
+            tachiyomi.domain.tsuzuki.provider.ProviderId("mal"),
+        )
+
+        repository.upsert(
+            IntegrationSettings(
+                integrationId = IntegrationId("kitsu"),
+                enabled = true,
+                configJson = """{"search":false}""",
+                updatedAt = 11,
+            ),
+        )
+
+        providers.configurationFingerprint(
+            tachiyomi.domain.tsuzuki.provider.ProviderId("kitsu"),
+        ) shouldBe providers.registration(
+            tachiyomi.domain.tsuzuki.provider.ProviderId("kitsu"),
+        )?.configurationFingerprint
+        (providers.configurationFingerprint(
+            tachiyomi.domain.tsuzuki.provider.ProviderId("kitsu"),
+        ) != kitsuBefore) shouldBe true
+        providers.configurationFingerprint(
+            tachiyomi.domain.tsuzuki.provider.ProviderId("mal"),
+        ) shouldBe malBefore
+    }
+
     private fun registry(
         scope: CoroutineScope,
         settings: MutableStateFlow<List<IntegrationSettings>>,
