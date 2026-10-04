@@ -267,5 +267,8 @@ class ProviderManagedFileStore internal constructor(
         const val DEFAULT_MAX_FILE_BYTES = 16 * 1024 * 1024
         const val DEFAULT_MAX_FILES_PER_PROVIDER = 32
         const val DEFAULT_MAX_TOTAL_BYTES_PER_PROVIDER = 64L * 1024L * 1024L
+        const val DEFAULT_MAX_ARCHIVE_ENTRIES = 5_000
+        const val DEFAULT_MAX_ARCHIVE_ENTRY_BYTES = 16 * 1024 * 1024
+        const val DEFAULT_MAX_ARCHIVE_UNCOMPRESSED_BYTES = 128L * 1024L * 1024L
     }
 }
