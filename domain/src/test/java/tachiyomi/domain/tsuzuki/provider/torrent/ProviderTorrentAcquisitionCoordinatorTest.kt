@@ -179,7 +179,7 @@ class ProviderTorrentAcquisitionCoordinatorTest {
             }
         }
         return ProviderTorrentAcquisitionCoordinator(
-            registry = DefaultProviderRegistry { registrations },
+            registry = DefaultProviderRegistry(registrations = { registrations }),
             debrid = debrid,
             p2p = p2p,
         )
