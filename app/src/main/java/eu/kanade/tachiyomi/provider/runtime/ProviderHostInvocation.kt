@@ -31,6 +31,7 @@ data class ProviderHostInvocationPolicy(
     val allowLocalNetwork: Boolean = false,
     val storageEnabled: Boolean = false,
     val allowedSecrets: Set<String> = emptySet(),
+    val directP2pEnabled: Boolean = false,
     val maxHostOperations: Int = 256,
 ) {
     init {
@@ -49,6 +50,7 @@ data class ProviderHostInvocationPolicy(
         add(ProviderHostModule.LOG)
 
         if (networkOrigins.isNotEmpty()) add(ProviderHostModule.HTTP)
+        if (directP2pEnabled) add(ProviderHostModule.P2P)
         if (browserOrigins.isNotEmpty()) add(ProviderHostModule.BROWSER)
         if (storageEnabled) add(ProviderHostModule.STORAGE)
         if (allowedSecrets.isNotEmpty()) add(ProviderHostModule.SECRETS)
