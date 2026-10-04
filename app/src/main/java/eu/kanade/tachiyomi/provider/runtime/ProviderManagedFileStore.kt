@@ -191,7 +191,7 @@ class ProviderManagedFileStore internal constructor(
     fun clearAll() {
         root.listFiles()
             .orEmpty()
-            .forEach(File::deleteRecursively)
+            .forEach { file -> file.deleteRecursively() }
         ensureDirectory(root)
     }
 
