@@ -6,6 +6,10 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.net.URI
 
+/**
+ * Selected-file acquisition intent crossing the isolated Provider boundary.
+ * The host remains the sole owner of BitTorrent/native authority.
+ */
 data class ProviderP2pAcquireRequest(
     val operationId: String,
     val magnetUri: String? = null,
