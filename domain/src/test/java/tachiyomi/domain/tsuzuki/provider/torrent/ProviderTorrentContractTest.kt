@@ -154,6 +154,135 @@ class ProviderTorrentContractTest {
         )
     }
 
+    @Test
+    fun `acquisition router tries debrid first and falls back to p2p only when policy permits`() {
+        val candidate = candidate(listOf(file(0, "pack/chapter-012.cbz")))
+        val selected = candidate.files!!.single()
+        val debrid = RecordingAcquisitionBackend(
+            TorrentBackendResult.Failure(TorrentAcquisitionFailure.UNAVAILABLE),
+        )
+        val p2p = RecordingAcquisitionBackend(
+            TorrentBackendResult.Success(
+                TorrentReadableResource.LocalArchive(
+                    uri = "content://app.tsuzuki.provider/provider-p2p/chapter-012.cbz",
+                    format = TorrentArchiveFormat.CBZ,
+                ),
+            ),
+        )
+        val router = TorrentAcquisitionRouter(
+            debrid = debrid,
+            directP2p = p2p,
+        )
+
+        router.acquire(
+            candidate = candidate,
+            selectedFile = selected,
+            decision = TorrentAcquisitionDecision.Routes(
+                listOf(
+                    TorrentAcquisitionRoute.DEBRID,
+                    TorrentAcquisitionRoute.DIRECT_P2P,
+                ),
+            ),
+        ) shouldBe TorrentAcquisitionResult.Success(
+            route = TorrentAcquisitionRoute.DIRECT_P2P,
+            file = selected,
+            resource = TorrentReadableResource.LocalArchive(
+                uri = "content://app.tsuzuki.provider/provider-p2p/chapter-012.cbz",
+                format = TorrentArchiveFormat.CBZ,
+            ),
+        )
+        debrid.requests shouldBe listOf(candidate to selected)
+        p2p.requests shouldBe listOf(candidate to selected)
+    }
+
+    @Test
+    fun `acquisition router never touches p2p when policy contains only debrid`() {
+        val candidate = candidate(listOf(file(0, "pack/chapter-012.cbz")))
+        val selected = candidate.files!!.single()
+        val debrid = RecordingAcquisitionBackend(
+            TorrentBackendResult.Failure(TorrentAcquisitionFailure.AUTH_REQUIRED),
+        )
+        val p2p = RecordingAcquisitionBackend(
+            TorrentBackendResult.Failure(TorrentAcquisitionFailure.UNAVAILABLE),
+        )
+        val router = TorrentAcquisitionRouter(debrid, p2p)
+
+        router.acquire(
+            candidate = candidate,
+            selectedFile = selected,
+            decision = TorrentAcquisitionDecision.Routes(
+                listOf(TorrentAcquisitionRoute.DEBRID),
+            ),
+        ) shouldBe TorrentAcquisitionResult.Failure(
+            TorrentAcquisitionFailure.AUTH_REQUIRED,
+        )
+        debrid.requests.size shouldBe 1
+        p2p.requests shouldBe emptyList()
+    }
+
+    @Test
+    fun `acquisition router rejects a selected file that is not part of the candidate`() {
+        val candidate = candidate(listOf(file(0, "pack/chapter-012.cbz")))
+        val backend = RecordingAcquisitionBackend(
+            TorrentBackendResult.Failure(TorrentAcquisitionFailure.UNAVAILABLE),
+        )
+        val router = TorrentAcquisitionRouter(backend, backend)
+
+        shouldThrow<IllegalArgumentException> {
+            router.acquire(
+                candidate = candidate,
+                selectedFile = file(99, "pack/chapter-012.cbz"),
+                decision = TorrentAcquisitionDecision.Routes(
+                    listOf(TorrentAcquisitionRoute.DIRECT_P2P),
+                ),
+            )
+        }
+        backend.requests shouldBe emptyList()
+    }
+
+    @Test
+    fun `readable resources fail closed on unsafe HTTP and unmanaged local file authority`() {
+        shouldThrow<IllegalArgumentException> {
+            TorrentReadableResource.HttpFile(
+                url = "file:///sdcard/chapter.cbz",
+                allowedOrigins = setOf("https://cdn.example"),
+            )
+        }
+        shouldThrow<IllegalArgumentException> {
+            TorrentReadableResource.HttpFile(
+                url = "https://cdn.example/chapter.cbz",
+                headers = mapOf("Host" to "evil.example"),
+                allowedOrigins = setOf("https://cdn.example"),
+            )
+        }
+        shouldThrow<IllegalArgumentException> {
+            TorrentReadableResource.LocalArchive(
+                uri = "file:///data/user/0/app.tsuzuki/cache/chapter.cbz",
+                format = TorrentArchiveFormat.CBZ,
+            )
+        }
+
+        TorrentReadableResource.HttpFile(
+            url = "https://cdn.example/chapter.cbz",
+            headers = mapOf("Authorization" to "Bearer opaque"),
+            allowedOrigins = setOf("https://cdn.example"),
+        ).url shouldBe "https://cdn.example/chapter.cbz"
+    }
+
+    private class RecordingAcquisitionBackend(
+        private val result: TorrentBackendResult,
+    ) : TorrentAcquisitionBackend {
+        val requests = mutableListOf<Pair<TorrentCandidate, TorrentCandidateFile>>()
+
+        override fun acquire(
+            candidate: TorrentCandidate,
+            file: TorrentCandidateFile,
+        ): TorrentBackendResult {
+            requests += candidate to file
+            return result
+        }
+    }
+
     private fun candidate(files: List<TorrentCandidateFile>) = TorrentCandidate(
         infoHash = "0123456789abcdef0123456789abcdef01234567",
         magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
