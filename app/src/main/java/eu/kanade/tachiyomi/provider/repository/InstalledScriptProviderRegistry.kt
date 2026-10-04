@@ -172,31 +172,31 @@ class InstalledScriptProviderRegistry(
     ): ProviderRegistration {
         val providerId = ProviderId(stored.providerId)
         return ProviderRegistration(
-        descriptor = ProviderDescriptor(
-            id = providerId,
-            name = providerId.value,
-            version = ProviderVersion(
-                name = stored.versionCode.toString(),
-                code = stored.versionCode,
+            descriptor = ProviderDescriptor(
+                id = providerId,
+                name = providerId.value,
+                version = ProviderVersion(
+                    name = stored.versionCode.toString(),
+                    code = stored.versionCode,
+                ),
+                origin = ProviderOrigin.Repository(stored.repositoryId),
+                runtime = ProviderRuntimeKind.SCRIPT,
+                capabilities = emptySet(),
+                permissions = ProviderPermissionSet(),
+                settings = emptyList(),
+                contentLanguages = emptySet(),
             ),
-            origin = ProviderOrigin.Repository(stored.repositoryId),
-            runtime = ProviderRuntimeKind.SCRIPT,
-            capabilities = emptySet(),
-            permissions = ProviderPermissionSet(),
-            settings = emptyList(),
-            contentLanguages = emptySet(),
-        ),
-        lifecycleStatus = if (stored.revoked) {
-            ProviderLifecycleStatus.BLOCKED
-        } else {
-            ProviderLifecycleStatus.INVALID
-        },
-        configurationFingerprint = configurationFingerprint(
-            stored = stored,
-            enabled = false,
-            activeLanguages = emptySet(),
-        ),
-    )
+            lifecycleStatus = if (stored.revoked) {
+                ProviderLifecycleStatus.BLOCKED
+            } else {
+                ProviderLifecycleStatus.INVALID
+            },
+            configurationFingerprint = configurationFingerprint(
+                stored = stored,
+                enabled = false,
+                activeLanguages = emptySet(),
+            ),
+        )
     }
 
     private fun configurationFingerprint(
