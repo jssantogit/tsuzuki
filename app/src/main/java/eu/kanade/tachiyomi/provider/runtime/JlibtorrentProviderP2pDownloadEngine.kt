@@ -121,12 +121,16 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             // Keep the explicit handle type across the generic timeout boundary; later
             // operations must remain statically bound to jlibtorrent's TorrentHandle API.
             val handle: TorrentHandle = try {
-                withTimeout<TorrentHandle>(HANDLE_TIMEOUT_MS) {
-                    while (true) {
+                withTimeout(HANDLE_TIMEOUT_MS) {
+                    var resolved: TorrentHandle? = null
+                    while (resolved == null) {
                         coroutineContext.ensureActive()
-                        session.find(torrent)?.let { return@withTimeout it }
-                        delay(POLL_INTERVAL_MS)
+                        resolved = session.find(torrent)
+                        if (resolved == null) {
+                            delay(POLL_INTERVAL_MS)
+                        }
                     }
+                    requireNotNull(resolved)
                 }
             } catch (_: TimeoutCancellationException) {
                 return@withContext ProviderP2pDownloadResult.Failure(
@@ -137,34 +141,37 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             handle.prioritizeFiles(priorities)
             handle.resume()
 
-            try {
+            val completedWithoutError: Boolean = try {
                 withTimeout(downloadTimeoutMs) {
-                    while (true) {
+                    var completed: Boolean? = null
+                    while (completed == null) {
                         coroutineContext.ensureActive()
                         val status = handle.status(true)
                         if (status.errorCode().value() != 0) {
-                            return@withTimeout false
-                        }
-                        val wanted = status.totalWanted()
-                        val complete =
-                            status.isFinished ||
+                            completed = false
+                        } else {
+                            val wanted = status.totalWanted()
+                            if (
+                                status.isFinished ||
                                 (wanted > 0L && status.totalWantedDone() >= wanted)
-                        if (complete) {
-                            return@withTimeout true
+                            ) {
+                                completed = true
+                            } else {
+                                delay(POLL_INTERVAL_MS)
+                            }
                         }
-                        delay(POLL_INTERVAL_MS)
                     }
+                    requireNotNull(completed)
                 }
             } catch (_: TimeoutCancellationException) {
                 return@withContext ProviderP2pDownloadResult.Failure(
                     ProviderP2pFailureCode.NETWORK_ERROR,
                 )
-            }.let { completedWithoutError ->
-                if (!completedWithoutError) {
-                    return@withContext ProviderP2pDownloadResult.Failure(
-                        ProviderP2pFailureCode.NETWORK_ERROR,
-                    )
-                }
+            }
+            if (!completedWithoutError) {
+                return@withContext ProviderP2pDownloadResult.Failure(
+                    ProviderP2pFailureCode.NETWORK_ERROR,
+                )
             }
 
             handle.pause()
