@@ -33,7 +33,6 @@ import tachiyomi.core.provider.runtime.ProviderPackageExecution
 import tachiyomi.core.provider.runtime.ProviderPackageFailure
 import tachiyomi.core.provider.runtime.ProviderPackageValidationRequest
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
-import tachiyomi.core.provider.runtime.ProviderP2pAcquireResponse
 import tachiyomi.core.provider.runtime.ProviderP2pHostService
 import tachiyomi.core.provider.runtime.ProviderP2pProtocol
 import tachiyomi.core.provider.runtime.ProviderQuickJsRuntime
