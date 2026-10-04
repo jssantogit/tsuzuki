@@ -130,6 +130,99 @@ class ReconcileChapterEvidenceTest {
     }
 
     @Test
+    fun `complete provider snapshot detaches older mapped evidence missing from the new inventory`() = runTest {
+        val fixture = fixture()
+        val first = ChapterEvidence(
+            id = "provider-first",
+            canonicalTitleId = "title",
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "provider-binding:test",
+            externalChapterKey = "chapter-1",
+            rawLabel = "Chapter 1",
+            rawNumber = 1.0,
+            volume = null,
+            title = null,
+            observedAt = 10L,
+            confidence = 0.95,
+            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+        )
+        val second = first.copy(
+            id = "provider-second",
+            externalChapterKey = "chapter-2",
+            rawLabel = "Chapter 2",
+            rawNumber = 2.0,
+        )
+
+        fixture.reconciler.executeProviderSnapshot(
+            canonicalTitleId = "title",
+            producerId = "provider-binding:test",
+            snapshotObservedAt = 10L,
+            evidence = listOf(first, second),
+        )
+        fixture.reconciler.executeProviderSnapshot(
+            canonicalTitleId = "title",
+            producerId = "provider-binding:test",
+            snapshotObservedAt = 20L,
+            evidence = listOf(second.copy(observedAt = 20L)),
+        )
+
+        fixture.evidenceRepository.getByProducerExternalKey(
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "provider-binding:test",
+            externalChapterKey = "chapter-1",
+        )?.mappedCanonicalChapterId shouldBe null
+        fixture.evidenceRepository.getByProducerExternalKey(
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "provider-binding:test",
+            externalChapterKey = "chapter-2",
+        )?.mappedCanonicalChapterId shouldNotBe null
+    }
+
+    @Test
+    fun `stale complete provider snapshot cannot detach evidence from a newer snapshot`() = runTest {
+        val fixture = fixture()
+        val first = ChapterEvidence(
+            id = "provider-first",
+            canonicalTitleId = "title",
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "provider-binding:test",
+            externalChapterKey = "chapter-1",
+            rawLabel = "Chapter 1",
+            rawNumber = 1.0,
+            volume = null,
+            title = null,
+            observedAt = 20L,
+            confidence = 0.95,
+            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+        )
+        val second = first.copy(
+            id = "provider-second",
+            externalChapterKey = "chapter-2",
+            rawLabel = "Chapter 2",
+            rawNumber = 2.0,
+        )
+
+        fixture.reconciler.executeProviderSnapshot(
+            canonicalTitleId = "title",
+            producerId = "provider-binding:test",
+            snapshotObservedAt = 20L,
+            evidence = listOf(first, second),
+        )
+        fixture.reconciler.executeProviderSnapshot(
+            canonicalTitleId = "title",
+            producerId = "provider-binding:test",
+            snapshotObservedAt = 10L,
+            evidence = listOf(first.copy(observedAt = 10L)),
+        )
+
+        fixture.evidenceRepository.getByProducerExternalKey(
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "provider-binding:test",
+            externalChapterKey = "chapter-2",
+        )?.mappedCanonicalChapterId shouldNotBe null
+    }
+
+    @Test
     fun `editorial evidence promotes matching provisional chapter without changing its id`() = runTest {
         val fixture = fixture()
 
