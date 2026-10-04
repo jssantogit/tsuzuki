@@ -29,6 +29,9 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterObservation
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCursor
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderError
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceResolver
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceRef
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedFileFormat
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderPage
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderPageRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
@@ -92,6 +95,7 @@ class ScriptProviderReadingGateway internal constructor(
     private val invokePackage: ProviderPackageCapabilityInvoker,
     private val limits: ProviderRuntimeLimitsDto = ProviderRuntimeLimitsDto(),
     private val invocationIdFactory: () -> String = { "reading:${UUID.randomUUID()}" },
+    private val managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
 ) : ProviderReadingGateway {
 
     constructor(
@@ -99,11 +103,13 @@ class ScriptProviderReadingGateway internal constructor(
         packageSource: ActiveProviderScriptPackageSource,
         runtimeClient: ProviderRuntimeClient,
         limits: ProviderRuntimeLimitsDto = ProviderRuntimeLimitsDto(),
+        managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
     ) : this(
         registry = registry,
         packageSource = packageSource,
         invokePackage = ProviderPackageCapabilityInvoker(runtimeClient::invokePackage),
         limits = limits,
+        managedResources = managedResources,
     )
 
     private val json = Json {
@@ -221,7 +227,20 @@ class ScriptProviderReadingGateway internal constructor(
                     )
                 }
                 MANAGED_FILE_TYPE -> {
-                    error("Managed Provider files require host-owned promotion")
+                    val resource = ProviderManagedResourceRef(
+                        decoded.resource ?: error("Managed Provider file is missing resource token"),
+                    )
+                    val format = ProviderManagedFileFormat.valueOf(
+                        decoded.format?.uppercase()
+                            ?: error("Managed Provider file is missing format"),
+                    )
+                    if (managedResources.resolve(providerId, resource, format) == null) {
+                        error("Managed Provider file is not owned by this Provider")
+                    }
+                    ProviderReadingDelivery.ManagedFile(
+                        resource = resource,
+                        format = format,
+                    )
                 }
                 else -> error("Unknown Provider reading delivery type")
             }
