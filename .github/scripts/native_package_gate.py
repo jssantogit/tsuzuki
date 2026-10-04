@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import os
+import subprocess
+import tempfile
+import zipfile
+from pathlib import Path
+
+EXPECTED_ABIS = ("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+ELF_16K_ABIS = ("arm64-v8a", "x86_64")
+MIN_PAGE_ALIGNMENT = 16 * 1024
+JLIBTORRENT_NAME = "libjlibtorrent.so"
+
+
+def _apk_entries(path: Path) -> set[str]:
+    with zipfile.ZipFile(path) as archive:
+        return {name for name in archive.namelist() if not name.endswith("/")}
+
+
+def _has_expected_jlibtorrent_abis(entries: set[str]) -> bool:
+    return all(f"lib/{abi}/{JLIBTORRENT_NAME}" in entries for abi in EXPECTED_ABIS)
+
+
+def find_universal_apk(root: Path) -> Path:
+    candidates = sorted(root.rglob("*.apk"))
+    if not candidates:
+        raise RuntimeError(f"No APK was produced under {root}")
+
+    matching = []
+    for apk in candidates:
+        try:
+            entries = _apk_entries(apk)
+        except zipfile.BadZipFile as error:
+            raise RuntimeError(f"Invalid APK archive: {apk}") from error
+        if _has_expected_jlibtorrent_abis(entries):
+            matching.append(apk)
+
+    if len(matching) != 1:
+        raise RuntimeError(
+            "Native package gate requires exactly one APK containing libjlibtorrent.so "
+            "for all four supported ABIs "
+            f"({', '.join(EXPECTED_ABIS)}); found {len(matching)}"
+        )
+    return matching[0]
+
+
+def validate_program_headers(output: str, label: str) -> None:
+    load_alignments: list[int] = []
+    relro_ranges: list[tuple[int, int]] = []
+
+    for raw_line in output.splitlines():
+        parts = raw_line.split()
+        if not parts:
+            continue
+
+        if parts[0] == "LOAD":
+            try:
+                load_alignments.append(int(parts[-1], 0))
+            except (ValueError, IndexError) as error:
+                raise RuntimeError(f"Unable to parse PT_LOAD alignment for {label}") from error
+        elif parts[0] == "GNU_RELRO":
+            try:
+                virtual_address = int(parts[2], 0)
+                memory_size = int(parts[5], 0)
+            except (ValueError, IndexError) as error:
+                raise RuntimeError(f"Unable to parse GNU_RELRO segment for {label}") from error
+            relro_ranges.append((virtual_address, memory_size))
+
+    if not load_alignments:
+        raise RuntimeError(f"No PT_LOAD segments found in {label}")
+
+    bad_loads = [alignment for alignment in load_alignments if alignment < MIN_PAGE_ALIGNMENT]
+    if bad_loads:
+        rendered = ", ".join(hex(value) for value in bad_loads)
+        raise RuntimeError(
+            f"{label} has PT_LOAD alignment below 16 KiB: {rendered}"
+        )
+
+    for virtual_address, memory_size in relro_ranges:
+        if (virtual_address + memory_size) % MIN_PAGE_ALIGNMENT != 0:
+            raise RuntimeError(
+                f"{label} has GNU_RELRO end that is not 16 KiB aligned: "
+                f"virt={hex(virtual_address)} memsz={hex(memory_size)}"
+            )
+
+
+def verify_zip_alignment(apk: Path, zipalign: Path) -> None:
+    subprocess.run(
+        [str(zipalign), "-c", "-P", "16", "-v", "4", str(apk)],
+        check=True,
+    )
+
+
+def verify_elf_alignment(apk: Path, readelf: str) -> int:
+    checked = 0
+    with zipfile.ZipFile(apk) as archive, tempfile.TemporaryDirectory() as temp:
+        temp_root = Path(temp)
+        for name in archive.namelist():
+            if not name.endswith(".so"):
+                continue
+            if not any(name.startswith(f"lib/{abi}/") for abi in ELF_16K_ABIS):
+                continue
+
+            destination = temp_root / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(archive.read(name))
+
+            result = subprocess.run(
+                [readelf, "-lW", str(destination)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            validate_program_headers(result.stdout, name)
+            checked += 1
+
+    if checked == 0:
+        raise RuntimeError("No 64-bit native libraries were found for ELF alignment validation")
+    return checked
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--apk-root", type=Path, required=True)
+    parser.add_argument("--zipalign", type=Path, required=True)
+    parser.add_argument("--readelf", default="readelf")
+    args = parser.parse_args()
+
+    if not args.zipalign.is_file():
+        raise RuntimeError(f"zipalign executable not found: {args.zipalign}")
+    if not os.access(args.zipalign, os.X_OK):
+        raise RuntimeError(f"zipalign is not executable: {args.zipalign}")
+
+    apk = find_universal_apk(args.apk_root)
+    verify_zip_alignment(apk, args.zipalign)
+    elf_count = verify_elf_alignment(apk, args.readelf)
+
+    print(f"Native package gate passed: {apk}")
+    print(f"jlibtorrent ABIs: {', '.join(EXPECTED_ABIS)}")
+    print(f"16 KiB ELF libraries checked: {elf_count}")
+
+
+if __name__ == "__main__":
+    main()
