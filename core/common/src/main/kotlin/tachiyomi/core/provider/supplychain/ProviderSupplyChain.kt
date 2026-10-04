@@ -785,6 +785,11 @@ class ProviderArtifactStore(
         if (rollback.revoked) {
             throw ProviderSupplyChainException("Provider previous version has been revoked")
         }
+        if (rollback.versionCode >= state.current.versionCode) {
+            throw ProviderSupplyChainException(
+                "Provider rollback target must be older than the active version",
+            )
+        }
 
         atomicWrite(
             stateFile(providerId),
