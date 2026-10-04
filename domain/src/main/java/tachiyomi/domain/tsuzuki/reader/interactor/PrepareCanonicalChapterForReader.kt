@@ -33,7 +33,7 @@ class PrepareCanonicalChapterForReader(
     private val canonicalDownloadRepository: CanonicalDownloadRepository,
     private val chapterContentPreparer: ChapterContentPreparer,
     private val structuredDiagnostics: StructuredDiagnosticRecorder,
-    private val resolveProviderChapterReading: ResolveProviderChapterReading? = null,
+    private val resolveProviderChapterReading: ResolveProviderChapterReading?,
 ) {
 
     suspend fun execute(
