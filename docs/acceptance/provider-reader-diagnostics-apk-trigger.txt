@@ -1,1 +1,0 @@
-Temporary acceptance-build trigger for Provider Reader diagnostics. Safe to remove after the APK workflow starts.
