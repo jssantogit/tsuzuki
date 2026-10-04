@@ -23,7 +23,7 @@ class NativePackageGateTest(unittest.TestCase):
             for abi in EXPECTED_ABIS:
                 self._write_apk(
                     root / f"app-{abi}-debug.apk",
-                    {f"lib/{abi}/libjlibtorrent.so": abi.encode()},
+                    {f"lib/{abi}/libjlibtorrent-2.0.12.9.so": abi.encode()},
                 )
 
             apks = discover_apks(root)
@@ -60,7 +60,7 @@ class NativePackageGateTest(unittest.TestCase):
                     continue
                 self._write_apk(
                     root / f"app-{abi}-debug.apk",
-                    {f"lib/{abi}/libjlibtorrent.so": abi.encode()},
+                    {f"lib/{abi}/libjlibtorrent-2.0.12.9.so": abi.encode()},
                 )
 
             apks = discover_apks(root)
