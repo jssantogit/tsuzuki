@@ -112,7 +112,7 @@ class CollectProviderReadingEvidence private constructor(
         val canonicalTitle = canonicalTitleRepository.getById(canonicalTitleId)
             ?: return ProviderReadingEvidenceCollection(complete = false)
         val targets = readingTargets()
-        if (targets.isEmpty()) return ProviderReadingEvidenceCollection()
+        val inactiveBindings = detachInactiveBindings(canonicalTitleId, targets)
 
         val results = coroutineScope {
             val gate = Semaphore(MAX_CONCURRENT_PROVIDERS)
@@ -130,9 +130,12 @@ class CollectProviderReadingEvidence private constructor(
         }
 
         return ProviderReadingEvidenceCollection(
-            snapshots = results.flatMap(ProviderReadingEvidenceCollection::snapshots),
-            bindingCount = results.sumOf(ProviderReadingEvidenceCollection::bindingCount),
-            complete = results.all(ProviderReadingEvidenceCollection::complete),
+            snapshots = inactiveBindings.snapshots +
+                results.flatMap(ProviderReadingEvidenceCollection::snapshots),
+            bindingCount = inactiveBindings.bindingCount +
+                results.sumOf(ProviderReadingEvidenceCollection::bindingCount),
+            complete = inactiveBindings.complete &&
+                results.all(ProviderReadingEvidenceCollection::complete),
         )
     }
 
@@ -150,6 +153,37 @@ class CollectProviderReadingEvidence private constructor(
                 append(target.registration.configurationFingerprint)
             }
         }
+    }
+
+    private suspend fun detachInactiveBindings(
+        canonicalTitleId: String,
+        targets: List<ReadingTarget>,
+    ): ProviderReadingEvidenceCollection {
+        val activeTargets = targets.mapTo(hashSetOf()) { target ->
+            target.registration.descriptor.id to target.facetId
+        }
+        val inactive = bindingRepository.getByTitle(canonicalTitleId)
+            .filter { binding ->
+                binding.availability == ProviderBindingAvailability.AVAILABLE &&
+                    (binding.ref.providerId to binding.ref.facetId) !in activeTargets
+            }
+        if (inactive.isEmpty()) return ProviderReadingEvidenceCollection()
+
+        val snapshots = mutableListOf<ProviderReadingEvidenceSnapshot>()
+        for (binding in inactive) {
+            val observedAt = maxOf(clock(), binding.updatedAt)
+            bindingRepository.markUnavailable(binding.id, observedAt)
+            snapshots += ProviderReadingEvidenceSnapshot(
+                producerId = binding.ref.evidenceProducerId(),
+                observedAt = observedAt,
+                evidence = emptyList(),
+            )
+        }
+        return ProviderReadingEvidenceCollection(
+            snapshots = snapshots,
+            bindingCount = inactive.size,
+            complete = true,
+        )
     }
 
     private suspend fun collectTarget(
