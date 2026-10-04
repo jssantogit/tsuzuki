@@ -214,6 +214,7 @@ data class ProviderRepositoryTrustState(
     val repositoryId: String,
     val highestAcceptedSequence: Long,
     val trustedKeysBase64: Map<String, String>,
+    val acceptedPayloadSha256: String? = null,
 )
 
 interface ProviderRepositoryTrustStore {
@@ -248,6 +249,7 @@ class FileProviderRepositoryTrustStore(
         if (state.repositoryId != repositoryId || state.highestAcceptedSequence < 0L) {
             throw ProviderSupplyChainException("Repository trust state does not match enrollment")
         }
+        state.acceptedPayloadSha256?.let(::normalizeSha256)
         return state
     }
 
@@ -256,6 +258,7 @@ class FileProviderRepositoryTrustStore(
         if (state.highestAcceptedSequence < 0L) {
             throw ProviderSupplyChainException("Repository sequence state cannot be negative")
         }
+        state.acceptedPayloadSha256?.let(::normalizeSha256)
         atomicWrite(
             stateFile(state.repositoryId),
             json.encodeToString(state).encodeToByteArray(),
@@ -279,6 +282,7 @@ class ProviderRepositoryTrust(
     private val verificationToken = Any()
     private val trustedKeyBytes = linkedMapOf<String, ByteArray>()
     private var highestAcceptedSequence = 0L
+    private var acceptedPayloadSha256: String? = null
 
     init {
         validateIdentifier(repositoryId, "Repository ID")
@@ -288,6 +292,7 @@ class ProviderRepositoryTrust(
         val persisted = stateStore.load(repositoryId)
         persisted?.let { state ->
             highestAcceptedSequence = state.highestAcceptedSequence
+            acceptedPayloadSha256 = state.acceptedPayloadSha256
             state.trustedKeysBase64.forEach { (keyId, encoded) ->
                 val bytes = decodeBase64(encoded, "Persisted repository signing key")
                 registerTrustedKey(keyId, bytes)
@@ -320,11 +325,56 @@ class ProviderRepositoryTrust(
             fail("Repository sequence is not newer than the last accepted index")
         }
 
+        val payloadSha256 = sha256Hex(signed.payload)
         val nextKeys = trustedKeysWithRotation(index.nextSigningKey)
-        persistState(index.sequence, nextKeys)
+        persistState(
+            sequence = index.sequence,
+            keys = nextKeys,
+            acceptedPayloadSha256 = payloadSha256,
+        )
         highestAcceptedSequence = index.sequence
+        acceptedPayloadSha256 = payloadSha256
         trustedKeyBytes.clear()
         trustedKeyBytes.putAll(nextKeys)
+
+        return VerifiedProviderRepository(
+            index = index,
+            verifiedKeyId = signed.keyId,
+            verificationToken = verificationToken,
+        )
+    }
+
+    @Synchronized
+    fun verifyCurrent(signed: SignedProviderRepositoryIndex): VerifiedProviderRepository {
+        val publicKeyBytes = trustedKeyBytes[signed.keyId]
+            ?: fail("Repository index is signed by an untrusted key")
+
+        verifySignature(
+            publicKeyBytes = publicKeyBytes,
+            payload = signed.payload,
+            signatureBytes = signed.signature,
+        )
+
+        val index = try {
+            json.decodeFromString<ProviderRepositoryIndex>(signed.payload.decodeToString())
+        } catch (error: Exception) {
+            throw ProviderSupplyChainException("Repository payload is malformed", error)
+        }
+        validateIndex(index)
+
+        if (index.sequence != highestAcceptedSequence) {
+            fail("Repository index is not the currently accepted sequence")
+        }
+        val expectedPayloadSha256 = acceptedPayloadSha256
+            ?: fail("Repository current index fingerprint is unavailable")
+        val actualPayloadSha256 = sha256Hex(signed.payload)
+        if (!MessageDigest.isEqual(
+                expectedPayloadSha256.encodeToByteArray(),
+                actualPayloadSha256.encodeToByteArray(),
+            )
+        ) {
+            fail("Repository current index payload does not match the accepted index")
+        }
 
         return VerifiedProviderRepository(
             index = index,
@@ -343,7 +393,11 @@ class ProviderRepositoryTrust(
             ?: fail("Verified repository index does not introduce a signing key")
 
         val nextKeys = trustedKeysWithRotation(rotation)
-        persistState(highestAcceptedSequence, nextKeys)
+        persistState(
+            sequence = highestAcceptedSequence,
+            keys = nextKeys,
+            acceptedPayloadSha256 = acceptedPayloadSha256,
+        )
         trustedKeyBytes.clear()
         trustedKeyBytes.putAll(nextKeys)
     }
@@ -477,6 +531,7 @@ class ProviderRepositoryTrust(
     private fun persistState(
         sequence: Long,
         keys: Map<String, ByteArray>,
+        acceptedPayloadSha256: String?,
     ) {
         stateStore.save(
             ProviderRepositoryTrustState(
@@ -485,6 +540,7 @@ class ProviderRepositoryTrust(
                 trustedKeysBase64 = keys.mapValues { (_, bytes) ->
                     Base64.getEncoder().encodeToString(bytes)
                 },
+                acceptedPayloadSha256 = acceptedPayloadSha256,
             ),
         )
     }
