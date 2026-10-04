@@ -200,6 +200,7 @@ class VerifiedProviderRepository internal constructor(
 
 class VerifiedProviderArtifact internal constructor(
     val repositoryId: String,
+    val repositoryTrustAnchorSha256: String,
     val descriptor: ProviderArtifactDescriptor,
     val bytes: ByteArray,
 ) {
@@ -334,6 +335,7 @@ class ProviderRepositoryTrust(
         explicitNulls = false
     }
     private val verificationToken = Any()
+    private val trustAnchorSha256 = bootstrapTrustAnchorFingerprint(trustedKeys)
     private val trustedKeyBytes = linkedMapOf<String, ByteArray>()
     private var highestAcceptedSequence = 0L
     private var acceptedPayloadSha256: String? = null
@@ -485,6 +487,7 @@ class ProviderRepositoryTrust(
 
         return VerifiedProviderArtifact(
             repositoryId = repository.index.repositoryId,
+            repositoryTrustAnchorSha256 = trustAnchorSha256,
             descriptor = descriptor,
             bytes = artifactBytes.copyOf(),
         )
@@ -668,6 +671,7 @@ class ProviderRepositoryTrust(
 
 data class StoredProviderArtifact(
     val repositoryId: String,
+    val repositoryTrustAnchorSha256: String,
     val providerId: String,
     val versionCode: Long,
     val sha256: String,
@@ -692,6 +696,7 @@ class ProviderArtifactStore(
         val providerId = artifact.providerId
         validateIdentifier(providerId, "Provider ID")
         validateIdentifier(artifact.repositoryId, "Repository ID")
+        val artifactTrustAnchor = normalizeSha256(artifact.repositoryTrustAnchorSha256)
 
         val expectedDigest = normalizeSha256(artifact.descriptor.sha256)
         val actualDigest = sha256Hex(artifact.bytes)
@@ -702,10 +707,13 @@ class ProviderArtifactStore(
         val previousState = readState(providerId)
         if (
             previousState != null &&
-            previousState.current.repositoryId != artifact.repositoryId
+            (
+                previousState.current.repositoryId != artifact.repositoryId ||
+                    previousState.current.repositoryTrustAnchorSha256 != artifactTrustAnchor
+                )
         ) {
             throw ProviderSupplyChainException(
-                "Installed Provider repository origin cannot change implicitly",
+                "Installed Provider repository trust origin cannot change implicitly",
             )
         }
         if (previousState?.current?.versionCode == artifact.versionCode) {
@@ -729,6 +737,7 @@ class ProviderArtifactStore(
         val nextState = ArtifactStoreState(
             current = StoredArtifactState(
                 repositoryId = artifact.repositoryId,
+                repositoryTrustAnchorSha256 = artifactTrustAnchor,
                 versionCode = artifact.versionCode,
                 sha256 = expectedDigest,
                 revoked = false,
@@ -877,6 +886,7 @@ class ProviderArtifactStore(
         artifact: StoredArtifactState,
     ) {
         validateIdentifier(artifact.repositoryId, "Stored repository ID")
+        normalizeSha256(artifact.repositoryTrustAnchorSha256)
         if (artifact.versionCode <= 0L) {
             throw ProviderSupplyChainException("Stored Provider version code must be positive")
         }
@@ -922,18 +932,36 @@ class ProviderArtifactStore(
     @Serializable
     private data class StoredArtifactState(
         val repositoryId: String,
+        val repositoryTrustAnchorSha256: String,
         val versionCode: Long,
         val sha256: String,
         val revoked: Boolean = false,
     ) {
         fun toPublic(providerId: String) = StoredProviderArtifact(
             repositoryId = repositoryId,
+            repositoryTrustAnchorSha256 = repositoryTrustAnchorSha256,
             providerId = providerId,
             versionCode = versionCode,
             sha256 = sha256,
             revoked = revoked,
         )
     }
+}
+
+private fun bootstrapTrustAnchorFingerprint(
+    trustedKeys: Map<String, ByteArray>,
+): String {
+    if (trustedKeys.size != 1) {
+        throw ProviderSupplyChainException(
+            "Repository bootstrap trust must contain exactly one pinned signing key",
+        )
+    }
+    val (keyId, encodedKey) = trustedKeys.entries.single()
+    if (keyId.isBlank()) {
+        throw ProviderSupplyChainException("Repository signing key ID must not be blank")
+    }
+    parseProviderP256PublicKey(encodedKey)
+    return sha256Hex(encodedKey)
 }
 
 private val providerP256Parameters: ECParameterSpec by lazy {
