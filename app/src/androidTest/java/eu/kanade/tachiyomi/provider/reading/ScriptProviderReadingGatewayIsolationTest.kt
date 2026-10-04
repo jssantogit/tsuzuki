@@ -706,7 +706,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                             current.evidence.producerKind == evidence.producerKind &&
                             current.evidence.producerId == evidence.producerId &&
                             current.evidence.externalChapterKey == evidence.externalChapterKey
-                    )
+                        )
             }
             val stableEvidence = if (existingIndex >= 0) {
                 evidence.copy(id = records[existingIndex].evidence.id)
