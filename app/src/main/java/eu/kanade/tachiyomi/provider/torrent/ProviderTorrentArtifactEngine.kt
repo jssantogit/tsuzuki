@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.provider.torrent
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import tachiyomi.domain.tsuzuki.content.PreparedTorrentArtifact
@@ -103,6 +104,12 @@ class ProviderTorrentArtifactEngine(
                     IllegalStateException("Provider torrent acquisition loop terminated unexpectedly"),
                 )
             }
+        } catch (_: TimeoutCancellationException) {
+            Result.failure(
+                ProviderTorrentAcquisitionException(
+                    TorrentAcquisitionFailure.ACQUISITION_FAILED,
+                ),
+            )
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
