@@ -29,6 +29,7 @@ class ProviderArtifactInstalledListTest {
         val bytes = "$repositoryId-$providerId-$versionCode".encodeToByteArray()
         return VerifiedProviderArtifact(
             repositoryId = repositoryId,
+            repositoryTrustAnchorSha256 = sha256Hex("$repositoryId-root".encodeToByteArray()),
             descriptor = ProviderArtifactDescriptor(
                 providerId = providerId,
                 versionName = "1.0.$versionCode",
