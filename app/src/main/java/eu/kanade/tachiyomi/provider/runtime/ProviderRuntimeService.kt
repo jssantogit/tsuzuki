@@ -32,6 +32,10 @@ import tachiyomi.core.provider.runtime.ProviderPackageContract
 import tachiyomi.core.provider.runtime.ProviderPackageExecution
 import tachiyomi.core.provider.runtime.ProviderPackageFailure
 import tachiyomi.core.provider.runtime.ProviderPackageValidationRequest
+import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
+import tachiyomi.core.provider.runtime.ProviderP2pAcquireResponse
+import tachiyomi.core.provider.runtime.ProviderP2pHostService
+import tachiyomi.core.provider.runtime.ProviderP2pProtocol
 import tachiyomi.core.provider.runtime.ProviderQuickJsRuntime
 import tachiyomi.core.provider.runtime.ProviderResourceHandle
 import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
@@ -378,6 +382,20 @@ private fun IProviderHostBridge?.toHostServices(
                             url.boundedHostArg(MAX_HOST_URL_CHARS, "HTTP URL"),
                         ).orEmpty(),
                     )
+            }
+        } else {
+            null
+        },
+        p2p = if (ProviderHostModule.P2P in allowedModules) {
+            ProviderP2pHostService { request: ProviderP2pAcquireRequest ->
+                val encoded = ProviderP2pProtocol.encodeRequest(request)
+                val response = bridge.p2pAcquire(
+                    encoded.boundedHostArg(
+                        ProviderP2pProtocol.MAX_REQUEST_JSON_CHARS,
+                        "P2P request",
+                    ),
+                ).orEmpty()
+                ProviderP2pProtocol.decodeResponse(response)
             }
         } else {
             null
