@@ -32,6 +32,11 @@ interface ProviderSecretsHostService {
     suspend fun get(key: String): String?
 }
 
+enum class ProviderManagedResourceFormat {
+    CBZ,
+    ZIP,
+}
+
 interface ProviderBinaryHostService {
     suspend fun fetch(url: String): ProviderResourceHandle
 
@@ -39,6 +44,11 @@ interface ProviderBinaryHostService {
         resourceHandle: ProviderResourceHandle,
         entryName: String,
     ): ProviderResourceHandle
+
+    suspend fun promote(
+        resourceHandle: ProviderResourceHandle,
+        format: ProviderManagedResourceFormat,
+    ): String
 }
 
 interface ProviderCryptoHostService {
