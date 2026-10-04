@@ -45,8 +45,8 @@ import kotlinx.coroutines.withContext
 import mihon.app.di.appGraph
 import tachiyomi.core.provider.supplychain.EnrolledProviderRepository
 import tachiyomi.core.provider.supplychain.ProviderRepositoryCatalogEntry
-import tachiyomi.core.provider.supplychain.ProviderRepositoryEntryStatus
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEnrollment
+import tachiyomi.core.provider.supplychain.ProviderRepositoryEntryStatus
 import tachiyomi.core.provider.supplychain.ProviderRepositoryManager
 import tachiyomi.core.provider.supplychain.ProviderRepositorySigningKey
 import tachiyomi.core.provider.supplychain.ProviderRepositorySnapshot
