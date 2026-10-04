@@ -436,9 +436,8 @@ class SettingsTsuzukiProviderAcquisitionScreen : Screen() {
         val navigator = LocalNavigator.currentOrThrow
         val scope = rememberCoroutineScope()
         val preferences = remember { context.appGraph.providerTorrentPreferences }
-        val managedFiles = remember {
-            context.appGraph.providerHostInvocationFactory.managedFiles
-        }
+        val managedFiles = remember { context.appGraph.providerManagedFileStore }
+        val p2pJobs = remember { context.appGraph.providerP2pJobManager }
 
         var acquisitionPreference by remember {
             mutableStateOf(preferences.acquisitionPreference.get())
@@ -448,6 +447,8 @@ class SettingsTsuzukiProviderAcquisitionScreen : Screen() {
         }
         var cacheCleared by remember { mutableStateOf(false) }
         var cacheError by remember { mutableStateOf<String?>(null) }
+        var p2pStopped by remember { mutableStateOf(false) }
+        var p2pStopError by remember { mutableStateOf<String?>(null) }
 
         Scaffold(
             topBar = {
@@ -551,6 +552,50 @@ class SettingsTsuzukiProviderAcquisitionScreen : Screen() {
                             )
                         },
                     )
+                }
+
+                item(key = "p2p_stop") {
+                    ListItem(
+                        headlineContent = {
+                            Text(stringResource(MR.strings.tsuzuki_providers_p2p_stop))
+                        },
+                        trailingContent = {
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        p2pStopped = false
+                                        p2pStopError = null
+                                        runProviderUiCatching {
+                                            withContext(Dispatchers.IO) {
+                                                p2pJobs.cancelAll()
+                                            }
+                                        }.onSuccess {
+                                            p2pStopped = true
+                                        }.onFailure { error ->
+                                            p2pStopError =
+                                                error.message ?: "Direct P2P cancellation failed"
+                                        }
+                                    }
+                                },
+                            ) {
+                                Text(stringResource(MR.strings.tsuzuki_providers_p2p_stop))
+                            }
+                        },
+                    )
+                }
+                if (p2pStopped) {
+                    item(key = "p2p_stopped") {
+                        ListItem(
+                            headlineContent = {
+                                Text(stringResource(MR.strings.tsuzuki_providers_p2p_stopped))
+                            },
+                        )
+                    }
+                }
+                p2pStopError?.let { error ->
+                    item(key = "p2p_stop_error") {
+                        ListItem(headlineContent = { Text(error) })
+                    }
                 }
 
                 item(key = "cache_header") {
