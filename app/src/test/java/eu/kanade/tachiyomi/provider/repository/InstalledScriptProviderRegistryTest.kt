@@ -142,6 +142,45 @@ class InstalledScriptProviderRegistryTest {
     }
 
     @Test
+    fun `configuration fingerprint changes when active artifact changes`() {
+        val artifactStore = ProviderArtifactStore(tempDir.resolve("fingerprint-artifacts").toFile())
+        val configurationStore = FileProviderLocalConfigurationStore(
+            tempDir.resolve("fingerprint-config").toFile(),
+        )
+        artifactStore.activate(artifact(versionCode = 1))
+        val registry = InstalledScriptProviderRegistry(
+            artifactStore = artifactStore,
+            configurationStore = configurationStore,
+        )
+        val providerId = ProviderId("reader.example")
+        val v1Fingerprint = registry.configurationFingerprint(providerId)
+
+        artifactStore.activate(artifact(versionCode = 2))
+
+        val v2Fingerprint = registry.configurationFingerprint(providerId)
+        (v2Fingerprint == v1Fingerprint) shouldBe false
+    }
+
+    @Test
+    fun `local configuration cannot be created for an uninstalled Provider`() {
+        val configurationStore = FileProviderLocalConfigurationStore(
+            tempDir.resolve("uninstalled-config").toFile(),
+        )
+        val registry = InstalledScriptProviderRegistry(
+            artifactStore = ProviderArtifactStore(
+                tempDir.resolve("uninstalled-artifacts").toFile(),
+            ),
+            configurationStore = configurationStore,
+        )
+        val providerId = ProviderId("missing.example")
+
+        shouldThrow<IllegalArgumentException> {
+            registry.setEnabled(providerId, false)
+        }
+        configurationStore.get(providerId.value) shouldBe null
+    }
+
+    @Test
     fun `language selection cannot grant undeclared Provider facet`() {
         val artifactStore = ProviderArtifactStore(tempDir.resolve("invalid-artifacts").toFile())
         artifactStore.activate(artifact(versionCode = 1))
