@@ -801,7 +801,7 @@ private fun AddProviderRepositoryDialog(
     var indexUrl by remember { mutableStateOf("") }
     var keyId by remember { mutableStateOf("") }
     var publicKeyBase64 by remember { mutableStateOf("") }
-    var trusted by remember { mutableStateOf(false) }
+    var confirmedTrustToken by remember { mutableStateOf<String?>(null) }
 
     val signingKey = remember(keyId, publicKeyBase64) {
         ProviderRepositorySigningKey(
@@ -812,13 +812,23 @@ private fun AddProviderRepositoryDialog(
     val fingerprint = remember(signingKey) {
         runCatching { providerRepositoryKeyFingerprint(signingKey) }.getOrNull()
     }
+    val trustToken = fingerprint?.let { keyFingerprint ->
+        providerRepositoryTrustConfirmationToken(
+            displayName = displayName,
+            repositoryId = repositoryId,
+            indexUrl = indexUrl,
+            keyId = keyId,
+            keyFingerprint = keyFingerprint,
+        )
+    }
+    val trustConfirmed = trustToken != null && confirmedTrustToken == trustToken
     val canConfirm = displayName.isNotBlank() &&
         repositoryId.isNotBlank() &&
         indexUrl.isNotBlank() &&
         keyId.isNotBlank() &&
         publicKeyBase64.isNotBlank() &&
         fingerprint != null &&
-        trusted
+        trustConfirmed
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -865,8 +875,11 @@ private fun AddProviderRepositoryDialog(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
-                        checked = trusted,
-                        onCheckedChange = { trusted = it },
+                        checked = trustConfirmed,
+                        enabled = trustToken != null,
+                        onCheckedChange = { checked ->
+                            confirmedTrustToken = if (checked) trustToken else null
+                        },
                     )
                     Text(stringResource(MR.strings.tsuzuki_providers_repository_trust_confirm))
                 }
@@ -947,3 +960,18 @@ private fun providerRepositoryStatusLabel(status: ProviderRepositoryEntryStatus)
             ProviderRepositoryEntryStatus.ORIGIN_CONFLICT -> MR.strings.tsuzuki_providers_origin_conflict
         },
     )
+
+
+internal fun providerRepositoryTrustConfirmationToken(
+    displayName: String,
+    repositoryId: String,
+    indexUrl: String,
+    keyId: String,
+    keyFingerprint: String,
+): String = listOf(
+    displayName.trim(),
+    repositoryId.trim(),
+    indexUrl.trim(),
+    keyId.trim(),
+    keyFingerprint.lowercase(),
+).joinToString(separator = "|")
