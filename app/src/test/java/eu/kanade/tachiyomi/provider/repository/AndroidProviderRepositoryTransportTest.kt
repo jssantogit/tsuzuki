@@ -5,8 +5,8 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import okhttp3.mockwebserver.MockResponse
-import okhttp3.mockwebserver.MockWebServer
+import mockwebserver3.MockResponse
+import mockwebserver3.MockWebServer
 import org.junit.jupiter.api.Test
 import tachiyomi.core.provider.supplychain.ProviderSignedIndexEnvelope
 import tachiyomi.core.provider.supplychain.ProviderSupplyChainException
