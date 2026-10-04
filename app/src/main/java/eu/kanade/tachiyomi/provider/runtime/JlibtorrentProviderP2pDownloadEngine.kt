@@ -118,6 +118,8 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 TorrentFlags.PAUSED,
             )
 
+            // Keep the explicit handle type across the generic timeout boundary; later
+            // operations must remain statically bound to jlibtorrent's TorrentHandle API.
             val handle: TorrentHandle = try {
                 withTimeout<TorrentHandle>(HANDLE_TIMEOUT_MS) {
                     while (true) {
