@@ -1,6 +1,13 @@
 package eu.kanade.tachiyomi.provider.reading
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import eu.kanade.tachiyomi.ui.reader.CanonicalLocalReaderFormat
+import eu.kanade.tachiyomi.ui.reader.loader.LocalChapterLoader
+import okio.Buffer
+import org.junit.Assert.assertNotNull
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.data.database.models.ChapterImpl
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
@@ -40,6 +47,9 @@ import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.zip.ZipEntry
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import java.util.zip.ZipOutputStream
 
 @RunWith(AndroidJUnit4::class)
@@ -315,6 +325,111 @@ class ScriptProviderReadingGatewayIsolationTest {
         }
     }
 
+    @Test
+    fun complexArchiveCryptoImageProvider_reachesCanonicalReaderWithHostOwnedBytes() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val managedRoot = File(context.cacheDir, "provider-managed-files").apply {
+            deleteRecursively()
+        }
+        val managedFiles = ProviderManagedFileStore(context)
+        val key = ByteArray(16) { index -> (index + 1).toByte() }
+        val iv = ByteArray(16) { index -> (0x10 + index).toByte() }
+        val fixture = complexReadingBundle(key, iv)
+
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse.Builder()
+                .body(Buffer().write(fixture))
+                .build(),
+        )
+        server.start()
+        val origin = server.origin()
+        val gateway = gateway(
+            networkOrigins = setOf(origin),
+            localNetwork = true,
+            managedFiles = managedFiles,
+            main = """
+                const base = "$origin";
+                export default {
+                  reading: {
+                    lookup: async () => ({items: [], nextCursor: null}),
+                    chapters: async () => ({items: [], nextCursor: null}),
+                    pages: async () => {
+                      const archive = await tsuzuki.binary.fetch(base + "/complex.zip");
+                      const encrypted = await tsuzuki.binary.zipEntry(archive, "probe.enc");
+                      const decrypted = await tsuzuki.crypto.aesCbcDecrypt(
+                        encrypted,
+                        "${key.toHex()}",
+                        "${iv.toHex()}"
+                      );
+                      const cropped = await tsuzuki.image.crop(decrypted, 0, 0, 1, 1);
+                      const pixel = await tsuzuki.image.pixel(cropped, 0, 0);
+                      if (pixel !== "FFFF0000") {
+                        throw new Error("unexpected transformed pixel");
+                      }
+                      const chapter = await tsuzuki.binary.zipEntry(archive, "chapter.cbz");
+                      const managed = await tsuzuki.binary.promote(chapter, "CBZ");
+                      return {
+                        type: "managed_file",
+                        resource: managed,
+                        format: "CBZ"
+                      };
+                    }
+                  }
+                };
+            """.trimIndent(),
+        )
+
+        try {
+            val response = gateway.pages(
+                PROVIDER_ID,
+                ProviderReadingPagesRequest(
+                    binding = ProviderBindingRef(PROVIDER_ID, "en", "complex-work"),
+                    providerChapterId = "complex-chapter-1",
+                ),
+            ) as ProviderCallResult.Success
+            val managed = response.value as ProviderReadingDelivery.ManagedFile
+            val uri = managedFiles.resolve(
+                providerId = PROVIDER_ID,
+                resource = managed.resource,
+                format = managed.format,
+            )
+            assertNotNull(uri)
+
+            val plan = CanonicalReaderTargetPlan.Local(
+                canonicalChapterId = "canonical-complex-chapter-1",
+                uri = requireNotNull(uri),
+                format = CanonicalLocalReaderFormat.ARCHIVE,
+            )
+            val loader = LocalChapterLoader.from(context, plan)
+            val readerChapter = ReaderChapter(
+                ChapterImpl().apply {
+                    id = Long.MIN_VALUE
+                    url = "provider-managed:canonical-complex-chapter-1"
+                    name = "Complex Provider chapter"
+                },
+            )
+            try {
+                loader.loadChapter(readerChapter)
+                val page = readerChapter.pages!!.single()
+                val pageBytes = page.stream!!.invoke().use { it.readBytes() }
+                val bitmap = BitmapFactory.decodeByteArray(pageBytes, 0, pageBytes.size)
+                assertNotNull(bitmap)
+                requireNotNull(bitmap).useBitmap {
+                    assertEquals(Color.RED, it.getPixel(0, 0))
+                }
+            } finally {
+                readerChapter.pageLoader?.recycle()
+            }
+
+            assertEquals(1, server.requestCount)
+            assertEquals("/complex.zip", server.takeRequest().url.encodedPath)
+        } finally {
+            server.close()
+            managedRoot.deleteRecursively()
+        }
+    }
+
     private suspend fun readFirstProviderPage(
         pageList: ProviderReadingDelivery.PageList,
         canonicalChapterId: String,
@@ -431,6 +546,58 @@ class ScriptProviderReadingGatewayIsolationTest {
             managedResources = managedFileStore,
         )
     }
+
+    private fun complexReadingBundle(
+        key: ByteArray,
+        iv: ByteArray,
+    ): ByteArray {
+        val bitmap = Bitmap.createBitmap(2, 1, Bitmap.Config.ARGB_8888)
+        bitmap.setPixel(0, 0, Color.RED)
+        bitmap.setPixel(1, 0, Color.BLUE)
+        val png = ByteArrayOutputStream().use { output ->
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+            bitmap.recycle()
+            output.toByteArray()
+        }
+        val encrypted = Cipher.getInstance("AES/CBC/PKCS5Padding").run {
+            init(
+                Cipher.ENCRYPT_MODE,
+                SecretKeySpec(key, "AES"),
+                IvParameterSpec(iv),
+            )
+            doFinal(png)
+        }
+        val chapter = binaryZip("001.png" to png)
+
+        return binaryZip(
+            "probe.enc" to encrypted,
+            "chapter.cbz" to chapter,
+        )
+    }
+
+    private fun binaryZip(vararg entries: Pair<String, ByteArray>): ByteArray =
+        ByteArrayOutputStream().use { output ->
+            ZipOutputStream(output).use { zip ->
+                entries.forEach { (path, bytes) ->
+                    zip.putNextEntry(ZipEntry(path))
+                    zip.write(bytes)
+                    zip.closeEntry()
+                }
+            }
+            output.toByteArray()
+        }
+
+    private fun ByteArray.toHex(): String =
+        joinToString(separator = "") { byte ->
+            "%02x".format(byte.toInt() and 0xFF)
+        }
+
+    private inline fun <T> Bitmap.useBitmap(block: (Bitmap) -> T): T =
+        try {
+            block(this)
+        } finally {
+            recycle()
+        }
 
     private fun tsz(
         main: String,
