@@ -1,5 +1,6 @@
 package tachiyomi.core.provider.supplychain
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -215,6 +216,83 @@ class ProviderRepositoryManagerTest {
 
         manager.removeRepository("repo.example") shouldBe true
         trustStore.load("repo.example") shouldBe null
+    }
+
+    @Test
+    fun `re-enrolling same repository id with a new trust root cannot inherit installed Providers`() = runBlocking {
+        val originalKey = ecKeyPair()
+        val replacementKey = ecKeyPair()
+        val enrollmentStore = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("repin-enrollments").toFile(),
+        )
+        val trustStore = FileProviderRepositoryTrustStore(
+            tempDir.resolve("repin-trust").toFile(),
+        )
+        val artifactStore = ProviderArtifactStore(
+            tempDir.resolve("repin-artifacts").toFile(),
+        )
+        val transport = FakeTransport()
+        val manager = manager(enrollmentStore, trustStore, artifactStore, transport)
+
+        manager.enroll(
+            EnrolledProviderRepository(
+                "Original",
+                ProviderRepositoryEnrollment(
+                    repositoryId = "repo.example",
+                    indexUrl = "https://repo.example/index.json",
+                    signingKey = ProviderRepositorySigningKey(
+                        keyId = "root-1",
+                        publicKeyBase64 = Base64.getEncoder()
+                            .encodeToString(originalKey.public.encoded),
+                    ),
+                ),
+            ),
+        )
+        val v1 = tsz(versionCode = 1)
+        transport.publish(
+            signed = signedIndex(
+                keyPair = originalKey,
+                sequence = 1,
+                artifactBytes = v1,
+                versionCode = 1,
+            ),
+            artifactBytes = v1,
+        )
+        manager.refresh("repo.example")
+        manager.install("repo.example", "reader.example")
+
+        manager.removeRepository("repo.example") shouldBe true
+        manager.enroll(
+            EnrolledProviderRepository(
+                "Replacement",
+                ProviderRepositoryEnrollment(
+                    repositoryId = "repo.example",
+                    indexUrl = "https://replacement.example/index.json",
+                    signingKey = ProviderRepositorySigningKey(
+                        keyId = "root-1",
+                        publicKeyBase64 = Base64.getEncoder()
+                            .encodeToString(replacementKey.public.encoded),
+                    ),
+                ),
+            ),
+        )
+        val v2 = tsz(versionCode = 2)
+        transport.publish(
+            signed = signedIndex(
+                keyPair = replacementKey,
+                sequence = 1,
+                artifactBytes = v2,
+                versionCode = 2,
+            ),
+            artifactBytes = v2,
+        )
+
+        manager.refresh("repo.example").entries.single().status shouldBe
+            ProviderRepositoryEntryStatus.ORIGIN_CONFLICT
+        shouldThrow<ProviderSupplyChainException> {
+            manager.install("repo.example", "reader.example")
+        }
+        manager.installed().single().versionCode shouldBe 1L
     }
 
     @Test
