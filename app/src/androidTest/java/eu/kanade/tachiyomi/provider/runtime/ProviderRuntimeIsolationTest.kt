@@ -154,6 +154,8 @@ class ProviderRuntimeIsolationTest {
                 override fun binaryFetch(url: String?): String = throw UnsupportedOperationException()
                 override fun binaryZipEntry(resourceHandle: String?, entryName: String?): String =
                     throw UnsupportedOperationException()
+                override fun binaryPromote(resourceHandle: String?, format: String?): String =
+                    throw UnsupportedOperationException()
                 override fun cryptoAesCbcDecrypt(
                     resourceHandle: String?,
                     keyHex: String?,
