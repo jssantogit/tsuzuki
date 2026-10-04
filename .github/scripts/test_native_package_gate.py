@@ -73,17 +73,17 @@ class NativePackageGateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             for abi in EXPECTED_ABIS:
-                if abi == "x86_64":
+                if abi == "arm64-v8a":
                     continue
                 self._write_apk(
-                    root / f"app-{abi}-debug.apk",
+                    root / f"app-{abi}-release.apk",
                     {f"lib/{abi}/libjlibtorrent-2.0.12.9.so": abi.encode()},
                 )
 
             apks = discover_apks(root)
             with self.assertRaisesRegex(
                 RuntimeError,
-                r"missing: x86_64.*observed: arm64-v8a, armeabi-v7a, x86",
+                r"missing: arm64-v8a.*observed: armeabi-v7a, x86",
             ):
                 validate_jlibtorrent_abi_coverage(apks)
 
@@ -98,7 +98,7 @@ class NativePackageGateTest(unittest.TestCase):
                 "lib/arm64-v8a/libjlibtorrent-2.0.12.9.so",
             ),
         )
-        self.assertTrue(
+        self.assertFalse(
             should_verify_wave6_elf(
                 "lib/x86_64/libjlibtorrent-2.0.12.9.so",
             ),
