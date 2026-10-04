@@ -213,6 +213,9 @@ class ProviderSupplyChainTest {
         store.rollback("reader.example")
         store.current("reader.example")?.versionCode shouldBe 1L
         store.readCurrentArtifact("reader.example") shouldBe "provider-v1".encodeToByteArray()
+        shouldThrow<ProviderSupplyChainException> {
+            store.rollback("reader.example")
+        }
 
         val corruptV2 = VerifiedProviderArtifact(
             repositoryId = v2.repositoryId,
