@@ -11,21 +11,32 @@ assert SPEC.loader is not None
 SPEC.loader.exec_module(MODULE)
 
 EXPECTED_ABIS = MODULE.EXPECTED_ABIS
-find_universal_apk = MODULE.find_universal_apk
+discover_apks = MODULE.discover_apks
+validate_jlibtorrent_abi_coverage = MODULE.validate_jlibtorrent_abi_coverage
 validate_program_headers = MODULE.validate_program_headers
 
 
 class NativePackageGateTest(unittest.TestCase):
-    def test_find_universal_apk_requires_all_supported_jlibtorrent_abis(self):
+    def test_split_apks_collectively_cover_all_supported_jlibtorrent_abis(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            split = root / "app-arm64-v8a-debug.apk"
-            universal = root / "app-universal-debug.apk"
+            for abi in EXPECTED_ABIS:
+                self._write_apk(
+                    root / f"app-{abi}-debug.apk",
+                    {f"lib/{abi}/libjlibtorrent.so": abi.encode()},
+                )
 
-            self._write_apk(
-                split,
-                {"lib/arm64-v8a/libjlibtorrent.so": b"arm64"},
+            apks = discover_apks(root)
+            self.assertEqual(len(apks), len(EXPECTED_ABIS))
+            self.assertEqual(
+                validate_jlibtorrent_abi_coverage(apks),
+                set(EXPECTED_ABIS),
             )
+
+    def test_universal_apk_is_valid_but_not_required(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            universal = root / "app-universal-debug.apk"
             self._write_apk(
                 universal,
                 {
@@ -34,21 +45,35 @@ class NativePackageGateTest(unittest.TestCase):
                 },
             )
 
-            self.assertEqual(find_universal_apk(root), universal)
+            apks = discover_apks(root)
+            self.assertEqual(apks, [universal])
+            self.assertEqual(
+                validate_jlibtorrent_abi_coverage(apks),
+                set(EXPECTED_ABIS),
+            )
 
-    def test_find_universal_apk_rejects_missing_jlibtorrent_abi(self):
+    def test_missing_jlibtorrent_abi_fails_with_observed_coverage(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            apk = root / "app-universal-debug.apk"
-            entries = {
-                f"lib/{abi}/libjlibtorrent.so": abi.encode()
-                for abi in EXPECTED_ABIS
-                if abi != "x86_64"
-            }
-            self._write_apk(apk, entries)
+            for abi in EXPECTED_ABIS:
+                if abi == "x86_64":
+                    continue
+                self._write_apk(
+                    root / f"app-{abi}-debug.apk",
+                    {f"lib/{abi}/libjlibtorrent.so": abi.encode()},
+                )
 
-            with self.assertRaisesRegex(RuntimeError, "four supported ABIs"):
-                find_universal_apk(root)
+            apks = discover_apks(root)
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"missing: x86_64.*observed: arm64-v8a, armeabi-v7a, x86",
+            ):
+                validate_jlibtorrent_abi_coverage(apks)
+
+    def test_discover_apks_rejects_empty_output(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(RuntimeError, "No APK was produced"):
+                discover_apks(Path(temp))
 
     def test_program_headers_accept_16k_or_larger_load_alignment_and_relro_boundary(self):
         output = """
