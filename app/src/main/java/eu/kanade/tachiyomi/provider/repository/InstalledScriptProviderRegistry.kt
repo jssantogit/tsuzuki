@@ -218,6 +218,8 @@ class InstalledScriptProviderRegistry(
             append('|')
             append(stored.repositoryId)
             append('|')
+            append(stored.repositoryTrustAnchorSha256)
+            append('|')
             append(stored.versionCode)
             append('|')
             append(stored.sha256)
