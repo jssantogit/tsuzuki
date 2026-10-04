@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.util.Screen
+import eu.kanade.tachiyomi.provider.runtime.JlibtorrentNativeSupport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
@@ -691,6 +692,9 @@ class SettingsTsuzukiTorrentAcquisitionScreen : Screen() {
         val preferences = remember { context.appGraph.providerTorrentPreferences }
         val managedFiles = remember { context.appGraph.providerManagedFileStore }
         val p2pJobs = remember { context.appGraph.providerP2pJobManager }
+        val p2pNativeSupported = remember {
+            JlibtorrentNativeSupport.isCurrentRuntimeSupported()
+        }
 
         var acquisitionPreference by remember {
             mutableStateOf(preferences.acquisitionPreference.get())
@@ -770,6 +774,7 @@ class SettingsTsuzukiTorrentAcquisitionScreen : Screen() {
                     TorrentAcquisitionPreferenceRow(
                         selected = acquisitionPreference ==
                             TorrentAcquisitionPreference.P2P_ONLY,
+                        enabled = p2pNativeSupported,
                         title = stringResource(
                             MR.strings.tsuzuki_provider_acquisition_p2p_only,
                         ),
@@ -789,11 +794,20 @@ class SettingsTsuzukiTorrentAcquisitionScreen : Screen() {
                             Text(stringResource(MR.strings.tsuzuki_provider_direct_p2p))
                         },
                         supportingContent = {
-                            Text(stringResource(MR.strings.tsuzuki_provider_direct_p2p_warning))
+                            Text(
+                                stringResource(
+                                    if (p2pNativeSupported) {
+                                        MR.strings.tsuzuki_provider_direct_p2p_warning
+                                    } else {
+                                        MR.strings.tsuzuki_provider_direct_p2p_unavailable
+                                    },
+                                ),
+                            )
                         },
                         trailingContent = {
                             Switch(
                                 checked = directP2pAllowed,
+                                enabled = p2pNativeSupported,
                                 onCheckedChange = { enabled ->
                                     preferences.directP2pAllowed.set(enabled)
                                     directP2pAllowed = enabled
@@ -875,6 +889,7 @@ private fun TorrentAcquisitionPreferenceRow(
     selected: Boolean,
     title: String,
     summary: String,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     ListItem(
@@ -883,10 +898,14 @@ private fun TorrentAcquisitionPreferenceRow(
         leadingContent = {
             RadioButton(
                 selected = selected,
+                enabled = enabled,
                 onClick = null,
             )
         },
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.clickable(
+            enabled = enabled,
+            onClick = onClick,
+        ),
     )
 }
 
