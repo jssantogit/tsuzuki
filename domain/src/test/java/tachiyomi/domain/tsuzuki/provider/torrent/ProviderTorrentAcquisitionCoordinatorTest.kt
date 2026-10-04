@@ -99,6 +99,28 @@ class ProviderTorrentAcquisitionCoordinatorTest {
     }
 
     @Test
+    fun `p2p provider is unusable when the privileged host engine is unavailable`() = runTest {
+        var p2pCalls = 0
+        val coordinator = coordinator(
+            debridProviders = emptyList(),
+            directP2pHostAvailable = { false },
+            p2p = P2pAcquireGateway { _, _ ->
+                p2pCalls += 1
+                error("P2P must not run without host support")
+            },
+        )
+
+        coordinator.acquire(
+            request = request(),
+            preference = TorrentAcquisitionPreference.P2P_ONLY,
+            directP2pAllowed = true,
+        ) shouldBe ProviderTorrentAcquisitionState.Failure(
+            TorrentAcquisitionFailure.UNAVAILABLE,
+        )
+        p2pCalls shouldBe 0
+    }
+
+    @Test
     fun `multiple providers are tried in stable provider id order after definitive failures`() = runTest {
         val calls = mutableListOf<String>()
         val http = TorrentReadableResource.HttpFile(
@@ -169,6 +191,7 @@ class ProviderTorrentAcquisitionCoordinatorTest {
         p2p: P2pAcquireGateway = P2pAcquireGateway { _, _ ->
             error("unused")
         },
+        directP2pHostAvailable: () -> Boolean = { true },
     ): ProviderTorrentAcquisitionCoordinator {
         val registrations = buildList {
             debridProviders.forEach { id ->
@@ -182,6 +205,7 @@ class ProviderTorrentAcquisitionCoordinatorTest {
             registry = DefaultProviderRegistry(registrations = { registrations }),
             debrid = debrid,
             p2p = p2p,
+            directP2pHostAvailable = directP2pHostAvailable,
         )
     }
 
