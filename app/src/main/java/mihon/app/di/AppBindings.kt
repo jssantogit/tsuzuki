@@ -15,7 +15,6 @@ import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.data.tsuzuki.integration.BuiltinIntegrationProviderRegistry
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.provider.reading.ActiveProviderScriptPackageSource
-import eu.kanade.tachiyomi.provider.reading.FileProviderReadingBindingRepository
 import eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGateway
 import eu.kanade.tachiyomi.provider.reading.StoredProviderScriptPackageSource
 import eu.kanade.tachiyomi.provider.repository.AndroidProviderRepositoryTransport
@@ -66,7 +65,6 @@ import tachiyomi.domain.tsuzuki.provider.CompositeProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceResolver
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
-import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBindingRepository
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.DebridResolveGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.P2pAcquireGateway
@@ -219,15 +217,6 @@ object AppBindings {
         networkHelper: NetworkHelper,
     ): ProviderRepositoryTransport =
         AndroidProviderRepositoryTransport(networkHelper.client)
-
-    @Provides
-    @SingleIn(AppScope::class)
-    fun providesProviderReadingBindingRepository(
-        context: Context,
-    ): ProviderReadingBindingRepository =
-        FileProviderReadingBindingRepository(
-            File(context.filesDir, "provider-platform/reading-bindings"),
-        )
 
     @Provides
     @SingleIn(AppScope::class)
