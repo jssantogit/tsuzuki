@@ -14,6 +14,10 @@ enum class ProviderHttpMethod {
     DELETE,
 }
 
+/**
+ * Bounded host-mediated HTTP request used by SCRIPT Providers for ordinary website/API traffic.
+ * Network authority remains enforced by the host broker.
+ */
 @Serializable
 data class ProviderHttpRequest(
     val method: ProviderHttpMethod,
