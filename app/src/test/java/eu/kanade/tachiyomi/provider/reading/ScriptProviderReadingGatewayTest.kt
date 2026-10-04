@@ -32,6 +32,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingDelivery
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceResolver
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
 
 class ScriptProviderReadingGatewayTest {
@@ -215,6 +216,42 @@ class ScriptProviderReadingGatewayTest {
     }
 
     @Test
+    fun `verified promoted managed file is accepted as Provider delivery`() = runBlocking {
+        val gateway = gateway(
+            managedResources = ProviderManagedResourceResolver { providerId, resource, format ->
+                if (
+                    providerId == this.providerId &&
+                    resource.value == "managed:verified" &&
+                    format == tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedFileFormat.CBZ
+                ) {
+                    "content://provider/verified.cbz"
+                } else {
+                    null
+                }
+            },
+        ) { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success(
+                """{"type":"managed_file","resource":"managed:verified","format":"CBZ"}""",
+            )
+        }
+
+        gateway.pages(
+            providerId,
+            ProviderReadingPagesRequest(
+                binding = ProviderBindingRef(providerId, null, "work-42"),
+                providerChapterId = "chapter-1",
+            ),
+        ) shouldBe ProviderCallResult.Success(
+            ProviderReadingDelivery.ManagedFile(
+                resource = tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceRef(
+                    "managed:verified",
+                ),
+                format = tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedFileFormat.CBZ,
+            ),
+        )
+    }
+
+    @Test
     fun `managed file result fails closed until host-owned promotion exists`() = runBlocking {
         val gateway = gateway { _, _, _, _ ->
             ProviderRuntimeInvocationResponse.success(
@@ -284,6 +321,7 @@ class ScriptProviderReadingGatewayTest {
     private fun gateway(
         lifecycle: ProviderLifecycleStatus = ProviderLifecycleStatus.ENABLED,
         packageOverride: ActiveProviderScriptPackage = activePackage,
+        managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
         invoke: suspend (
             ProviderRuntimeInvocationRequest,
             ByteArray,
@@ -326,6 +364,7 @@ class ScriptProviderReadingGatewayTest {
                 invoke(request, bytes, input, policy)
             },
             invocationIdFactory = { "reading-test" },
+            managedResources = managedResources,
         )
     }
 }
