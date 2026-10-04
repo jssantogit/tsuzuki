@@ -935,6 +935,8 @@
     <string name="tsuzuki_providers_blocked">Blocked</string>
     <string name="tsuzuki_providers_invalid">Invalid</string>
     <string name="tsuzuki_providers_update_available">Update available</string>
+    <string name="tsuzuki_providers_available">Available</string>
+    <string name="tsuzuki_providers_installed_newer">Installed version is newer</string>
     <string name="tsuzuki_providers_incompatible">Requires a newer Host API</string>
     <string name="tsuzuki_providers_revoked">Revoked</string>
     <string name="tsuzuki_providers_origin_conflict">Provider ID belongs to another repository</string>
