@@ -32,7 +32,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
     private val sessionParamsFactory: () -> SessionParams = DEFAULT_SESSION_PARAMS_FACTORY,
     private val downloadTimeoutMs: Long = DEFAULT_DOWNLOAD_TIMEOUT_MS,
     private val nativeSupport: () -> Boolean = JlibtorrentNativeSupport::isCurrentRuntimeSupported,
-    private val sessionManagerFactory: () -> SessionManager = ::SessionManager,
+    private val sessionManagerFactory: () -> SessionManager = { SessionManager() },
 ) : ProviderP2pDownloadEngine {
 
     constructor() : this(
@@ -41,7 +41,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
         sessionParamsFactory = DEFAULT_SESSION_PARAMS_FACTORY,
         downloadTimeoutMs = DEFAULT_DOWNLOAD_TIMEOUT_MS,
         nativeSupport = JlibtorrentNativeSupport::isCurrentRuntimeSupported,
-        sessionManagerFactory = ::SessionManager,
+        sessionManagerFactory = { SessionManager() },
     )
 
     init {
@@ -283,7 +283,12 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
     }
 }
 
-
+/**
+ * Release Direct P2P is limited to native artifacts that pass Tsuzuki's packaging gate.
+ *
+ * FrostWire jlibtorrent 2.0.12.9 x86_64 remains debug-only because its published ELF
+ * currently fails the Android 16 KiB GNU_RELRO boundary requirement.
+ */
 internal object JlibtorrentNativeSupport {
 
     private val RELEASE_SUPPORTED_ABIS = setOf(
