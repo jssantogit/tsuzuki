@@ -53,6 +53,7 @@ class ProviderRepositoryManager(
 
     fun enroll(repository: EnrolledProviderRepository) {
         enrollmentStore.save(repository)
+        sessions.remove(repository.enrollment.repositoryId)
     }
 
     fun removeRepository(repositoryId: String): Boolean {
