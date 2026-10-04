@@ -253,15 +253,17 @@ class ScriptProviderTorrentGatewayTest {
             contentLanguages = emptySet(),
         )
         val executor = ScriptProviderCapabilityExecutor(
-            registry = DefaultProviderRegistry {
-                listOf(
-                    ProviderRegistration(
-                        descriptor = descriptor,
-                        lifecycleStatus = ProviderLifecycleStatus.ENABLED,
-                        configurationFingerprint = "config-v1",
-                    ),
-                )
-            },
+            registry = DefaultProviderRegistry(
+                registrations = {
+                    listOf(
+                        ProviderRegistration(
+                            descriptor = descriptor,
+                            lifecycleStatus = ProviderLifecycleStatus.ENABLED,
+                            configurationFingerprint = "config-v1",
+                        ),
+                    )
+                },
+            ),
             packageSource = ScriptProviderPackageSource { requested ->
                 activePackage.takeIf { requested == providerId }
             },
