@@ -85,6 +85,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
         suspend fun reloadInstalled() {
             providerRegistry.awaitReady()
             val state = withContext(Dispatchers.IO) {
+                providerRegistry.awaitReady()
                 val registrations = providerRegistry.providers()
                 val rollbackIds = registrations
                     .asSequence()
@@ -701,15 +702,19 @@ private fun InstalledProvidersList(
                             providerLifecycleLabel(registration.lifecycleStatus),
                     )
                 },
-                trailingContent = {
-                    Switch(
-                        checked = registration.lifecycleStatus == ProviderLifecycleStatus.ENABLED,
-                        enabled = registration.lifecycleStatus != ProviderLifecycleStatus.BLOCKED &&
-                            registration.lifecycleStatus != ProviderLifecycleStatus.INVALID,
-                        onCheckedChange = { enabled ->
-                            onEnabledChange(registration, enabled)
-                        },
-                    )
+                trailingContent = if (descriptor.origin is ProviderOrigin.Repository) {
+                    {
+                        Switch(
+                            checked = registration.lifecycleStatus == ProviderLifecycleStatus.ENABLED,
+                            enabled = registration.lifecycleStatus != ProviderLifecycleStatus.BLOCKED &&
+                                registration.lifecycleStatus != ProviderLifecycleStatus.INVALID,
+                            onCheckedChange = { enabled ->
+                                onEnabledChange(registration, enabled)
+                            },
+                        )
+                    }
+                } else {
+                    null
                 },
                 modifier = Modifier.clickable { onOpen(registration) },
             )
