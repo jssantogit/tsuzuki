@@ -4,6 +4,7 @@ import eu.kanade.presentation.more.settings.screen.providerRepositoryTrustConfir
 import eu.kanade.presentation.more.settings.screen.runProviderUiCatching
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
@@ -286,7 +287,7 @@ class InstalledScriptProviderRegistryTest {
             indexUrl = "https://repo.example/index-v2.json",
             keyId = "root-1",
             keyFingerprint = "abc123",
-        ) == confirmed shouldBe false
+        ) shouldNotBe confirmed
 
         providerRepositoryTrustConfirmationToken(
             displayName = "Example",
@@ -294,7 +295,7 @@ class InstalledScriptProviderRegistryTest {
             indexUrl = "https://repo.example/index.json",
             keyId = "root-2",
             keyFingerprint = "def456",
-        ) == confirmed shouldBe false
+        ) shouldNotBe confirmed
     }
 
     @Test
