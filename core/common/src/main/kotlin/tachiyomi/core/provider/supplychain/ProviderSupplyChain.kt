@@ -899,7 +899,7 @@ private fun normalizeSha256(value: String): String {
     return normalized
 }
 
-private fun validateIdentifier(
+internal fun validateIdentifier(
     value: String,
     label: String,
 ) {
@@ -932,7 +932,7 @@ private fun decodeBase64(
         throw ProviderSupplyChainException("$label is not valid Base64", error)
     }
 
-private fun ensureDirectory(
+internal fun ensureDirectory(
     directory: File,
     label: String,
 ) {
@@ -944,7 +944,7 @@ private fun ensureDirectory(
     }
 }
 
-private fun atomicWrite(
+internal fun atomicWrite(
     target: File,
     bytes: ByteArray,
     label: String,
