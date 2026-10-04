@@ -223,8 +223,12 @@ class CollectProviderReadingEvidenceTest {
     )
 
     private fun gateway(
-        lookupHandler: suspend (ProviderReadingLookupRequest) -> ProviderCallResult<ProviderPage<ProviderWorkCandidate>>,
-        chaptersHandler: suspend (ProviderReadingChaptersRequest) -> ProviderCallResult<ProviderPage<ProviderChapterObservation>>,
+        lookupHandler: suspend (
+            ProviderReadingLookupRequest,
+        ) -> ProviderCallResult<ProviderPage<ProviderWorkCandidate>>,
+        chaptersHandler: suspend (
+            ProviderReadingChaptersRequest,
+        ) -> ProviderCallResult<ProviderPage<ProviderChapterObservation>>,
     ) = object : ProviderReadingGateway {
         override suspend fun lookup(
             providerId: ProviderId,
