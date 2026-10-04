@@ -55,12 +55,14 @@ class ScriptProviderTorrentGateway(
             val decoded = json.decodeFromString<SearchPageDto>(value)
             ProviderPage(
                 items = decoded.items.map { candidate ->
-                    candidate.toDomain(active.parsed.manifest.permissions.network?.let { network ->
-                        ProviderNetworkPolicy(
-                            allowedOrigins = network.origins,
-                            allowLocalNetwork = network.localNetwork,
-                        )
-                    })
+                    candidate.toDomain(
+                        active.parsed.manifest.permissions.network?.let { network ->
+                            ProviderNetworkPolicy(
+                                allowedOrigins = network.origins,
+                                allowLocalNetwork = network.localNetwork,
+                            )
+                        },
+                    )
                 },
                 nextCursor = decoded.nextCursor?.let(::ProviderCursor),
             )
@@ -167,7 +169,7 @@ class ScriptProviderTorrentGateway(
             seeders = seeders,
             peers = peers,
             languages = languages,
-            files = files?.map(TorrentCandidateFileDto::toDomain),
+            files = files?.map { file -> file.toDomain() },
         )
     }
 
