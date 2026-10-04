@@ -32,6 +32,7 @@ class ProviderTorrentAcquisitionCoordinator(
     private val registry: ProviderRegistry,
     private val debrid: DebridResolveGateway,
     private val p2p: P2pAcquireGateway,
+    private val directP2pHostAvailable: () -> Boolean = { true },
 ) {
 
     suspend fun acquire(
@@ -51,6 +52,7 @@ class ProviderTorrentAcquisitionCoordinator(
         val decision = TorrentAcquisitionPolicy.resolve(
             preference = preference,
             hasUsableDebrid = debridProviders.isNotEmpty(),
+            hasUsableP2p = p2pProviders.isNotEmpty() && directP2pHostAvailable(),
             directP2pAllowed = directP2pAllowed,
         )
 
