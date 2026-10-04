@@ -966,6 +966,7 @@
     <string name="tsuzuki_provider_acquisition_p2p_only_summary">Skip Debrid Providers and acquire selected files directly from the swarm.</string>
     <string name="tsuzuki_provider_direct_p2p">Allow direct P2P</string>
     <string name="tsuzuki_provider_direct_p2p_warning">Direct P2P exposes your network address to torrent peers. It is never enabled silently by fallback.</string>
+    <string name="tsuzuki_provider_direct_p2p_unavailable">Direct P2P is unavailable on this device architecture in the current build. Debrid acquisition remains available.</string>
     <string name="tsuzuki_provider_temporary_storage">Temporary Provider files</string>
     <string name="tsuzuki_provider_temporary_storage_summary">Torrent and Debrid archives are stored in Tsuzuki-managed temporary storage and pruned automatically.</string>
     <string name="tsuzuki_provider_clear_temporary_storage">Clear temporary files</string>
