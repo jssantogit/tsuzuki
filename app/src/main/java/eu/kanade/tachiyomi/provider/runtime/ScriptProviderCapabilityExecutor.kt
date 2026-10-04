@@ -59,6 +59,10 @@ class StoredScriptProviderPackageSource(
     }
 }
 
+data class ScriptProviderPrivilegedHostGrants(
+    val directP2p: Boolean = false,
+)
+
 fun interface ScriptProviderRuntimeInvoker {
     suspend fun invoke(
         request: ProviderRuntimeInvocationRequest,
@@ -94,6 +98,7 @@ class ScriptProviderCapabilityExecutor(
         providerId: ProviderId,
         capability: ProviderCapabilityRef,
         inputJson: String,
+        privilegedHostGrants: ScriptProviderPrivilegedHostGrants = ScriptProviderPrivilegedHostGrants(),
         decode: (String, ScriptProviderPackage) -> T,
     ): ProviderCallResult<T> {
         registry.awaitReady()
@@ -119,11 +124,23 @@ class ScriptProviderCapabilityExecutor(
             return unavailable()
         }
 
+        if (
+            privilegedHostGrants.directP2p &&
+            capability != tachiyomi.domain.tsuzuki.provider.ProviderCapabilities.AcquisitionP2pV1
+        ) {
+            return failure(
+                ProviderErrorCode.PERMISSION_DENIED,
+                retryable = false,
+            )
+        }
+
         val invocationId = invocationIdFactory(capability)
         val hostPolicy = try {
             ProviderHostInvocationPolicy.fromManifest(
                 manifest = active.parsed.manifest,
                 invocationId = invocationId,
+            ).copy(
+                directP2pEnabled = privilegedHostGrants.directP2p,
             )
         } catch (_: Throwable) {
             return malformed()
