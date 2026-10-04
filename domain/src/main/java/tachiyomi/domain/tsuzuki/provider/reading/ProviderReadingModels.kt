@@ -4,6 +4,12 @@ import tachiyomi.domain.tsuzuki.provider.ProviderId
 import java.net.URI
 import java.security.MessageDigest
 
+typealias ProviderCursor = tachiyomi.domain.tsuzuki.provider.ProviderCursor
+typealias ProviderPage<T> = tachiyomi.domain.tsuzuki.provider.ProviderPage<T>
+typealias ProviderErrorCode = tachiyomi.domain.tsuzuki.provider.ProviderErrorCode
+typealias ProviderError = tachiyomi.domain.tsuzuki.provider.ProviderError
+typealias ProviderCallResult<T> = tachiyomi.domain.tsuzuki.provider.ProviderCallResult<T>
+
 data class ProviderBindingRef(
     val providerId: ProviderId,
     val facetId: String?,
@@ -104,30 +110,6 @@ data class ProviderChapterObservation(
     private companion object {
         const val MAX_ID_CHARS = 1024
         const val MAX_LABEL_CHARS = 4096
-    }
-}
-
-data class ProviderCursor(val value: String) {
-    init {
-        require(value.isNotBlank()) { "Provider cursor must not be blank" }
-        require(value.length <= MAX_CURSOR_CHARS) { "Provider cursor is too large" }
-    }
-
-    private companion object {
-        const val MAX_CURSOR_CHARS = 4096
-    }
-}
-
-data class ProviderPage<T>(
-    val items: List<T>,
-    val nextCursor: ProviderCursor?,
-) {
-    init {
-        require(items.size <= MAX_PAGE_ITEMS) { "Provider page contains too many items" }
-    }
-
-    private companion object {
-        const val MAX_PAGE_ITEMS = 500
     }
 }
 
@@ -269,33 +251,6 @@ data class ProviderReadingPagesRequest(
         require(providerChapterId.isNotBlank()) { "Provider chapter ID must not be blank" }
         require(providerChapterId.length <= 1024) { "Provider chapter ID is too long" }
     }
-}
-
-enum class ProviderErrorCode {
-    UNAVAILABLE,
-    PERMISSION_DENIED,
-    HOST_API_UNSUPPORTED,
-    SCRIPT_ERROR,
-    TIMEOUT,
-    RUNTIME_DIED,
-    NETWORK_POLICY,
-    NETWORK_ERROR,
-    BROWSER_ERROR,
-    RESOURCE_LIMIT,
-    MALFORMED_RESULT,
-    AUTH_REQUIRED,
-    ACQUISITION_FAILED,
-}
-
-data class ProviderError(
-    val code: ProviderErrorCode,
-    val retryable: Boolean,
-)
-
-sealed interface ProviderCallResult<out T> {
-    data class Success<T>(val value: T) : ProviderCallResult<T>
-
-    data class Failure(val error: ProviderError) : ProviderCallResult<Nothing>
 }
 
 interface ProviderReadingGateway {
