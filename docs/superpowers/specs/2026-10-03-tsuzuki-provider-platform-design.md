@@ -533,7 +533,7 @@ Providers may create a DOM handle from a bounded HTTP text response/resource and
 - HTML fragment;
 - existence/count.
 
-This covers the common Keiyoushi fetch + Jsoup pattern without moving very large documents through Binder.
+This covers the common website fetch + DOM parsing pattern without moving very large documents through Binder.
 
 ### 8.2 Browser service
 
@@ -612,7 +612,7 @@ Complex reading sources must not force arbitrary JVM execution.
 
 Binary operations stay host-owned and operate on opaque resource handles.
 
-V1 service families should cover the primitives proven common in Keiyoushi and required by representative ports:
+V1 service families should cover primitives proven by the platform spikes and required by concrete Tsuzuki-native Provider implementations:
 
 - bounded binary fetch;
 - ZIP entry listing/extraction/range-oriented archive access;
@@ -1005,7 +1005,7 @@ A Provider receives only its own declared secrets. Built-in Provider credentials
 
 Residual risk: a Provider can send its own accessible data/secrets to network origins that the user trusted for that Provider. Permission review and repository trust remain part of the security model.
 
-## 22. Keiyoushi/Mihon migration
+## 22. Legacy Mihon/Keiyoushi retirement
 
 ### 22.1 No permanent APK compatibility runtime
 
@@ -1013,44 +1013,28 @@ The final platform does not execute Keiyoushi/Mihon APKs.
 
 `index.pb` is therefore **not** treated as a native executable Tsuzuki Provider repository. Its entries point to APK artifacts and cannot safely become script Providers by renaming them.
 
-Keiyoushi remains valuable as:
+Keiyoushi may remain an external implementation reference when useful, but **porting or compatibility with the Keiyoushi repository is not a Provider Platform goal**. Tsuzuki will validate the ecosystem by creating its own Providers from scratch in separate Provider repositories.
 
-- upstream source implementation/reference;
-- shared-pattern/multisrc reference;
-- portability-analysis input;
-- regression fixture source during migration.
+### 22.2 Tsuzuki-native Provider development
 
-### 22.2 Portability analyzer
+Provider SDK/tooling should optimize for authoring a new Provider directly against Tsuzuki contracts:
 
-Build a developer/CI tool that scans `extensions-source` and classifies each source by required features:
+- project/package templates;
+- manifest and capability validation;
+- local/conformance fixtures;
+- shared JavaScript helpers for generic HTTP/DOM/browser/archive patterns;
+- repository signing/publishing tooling;
+- actionable diagnostics for missing Host Service primitives.
 
-```text
-HTTP/JSON/HTML
-Browser/WebView
-Preferences/settings
-Crypto
-Archive/binary
-Image transforms
-WASM
-External JVM/native dependency
-Unsupported/needs manual review
-```
+Host Services expand only when a concrete Tsuzuki-native Provider demonstrates a reusable requirement. There is no source-to-source migration analyzer and no promise of extension-by-extension parity with Mihon/Keiyoushi.
 
-The output should report missing Host Service capabilities instead of guessing percentage coverage.
-
-### 22.3 Shared Provider SDK modules
-
-Common Keiyoushi multisrc patterns should become reusable signed JavaScript modules/helpers in the Provider SDK when that meaningfully reduces per-source code.
-
-Do not mechanically duplicate hundreds of similar source implementations.
-
-### 22.4 Transition
+### 22.3 Transition
 
 Because Tsuzuki currently has one user, no public compatibility migration is required.
 
 During development the old Mihon backend may coexist temporarily so reading remains testable. It is not a supported steady state.
 
-After representative native Providers are physically accepted:
+After representative Tsuzuki-native Providers are physically accepted:
 
 - remove Mihon APK install/update paths;
 - remove dynamic extension Dex/APK loading;
@@ -1195,12 +1179,14 @@ Adapt them through current canonical reading contracts and physically verify cha
 - CBZ/ZIP Reader convergence;
 - user-visible privacy/storage/lifecycle controls.
 
-### Wave 7 — ecosystem port tooling
+### Wave 7 — Tsuzuki-native Provider ecosystem tooling
 
-- Keiyoushi portability analyzer;
-- Provider SDK/shared modules;
-- prioritize the reading sources actually used in Tsuzuki;
-- expand Host Services only from concrete port requirements.
+- Provider SDK, templates and shared JavaScript modules;
+- conformance/test fixtures for independently developed Providers;
+- repository signing/publishing developer tooling;
+- create representative first-party/reference Providers in separate Provider repositories from scratch;
+- expand Host Services only from concrete Provider requirements;
+- no Keiyoushi portability analyzer or extension-by-extension porting program.
 
 ### Wave 8 — Mihon APK removal
 
@@ -1297,14 +1283,14 @@ Rejected because an interpreter alone is not a sufficient security boundary. The
 
 Rejected. Capabilities remain independently versioned so Providers implement only what they actually support.
 
-### Generic JVM/native escape hatch for hard Keiyoushi sources
+### Generic JVM/native escape hatch for difficult Providers
 
-Rejected. Difficult sources are solved through JS ports or reviewed Host Services, not arbitrary classloading.
+Rejected. Difficult Provider requirements are solved through ordinary Provider code or reviewed Host Services, not arbitrary classloading.
 
 ## 30. Non-goals for V1
 
 - Automatic APK/Kotlin-to-JavaScript conversion.
-- Guaranteeing immediate 100% Keiyoushi source compatibility.
+- Keiyoushi/Mihon extension-by-extension porting or compatibility parity.
 - Generic WebAssembly execution.
 - Arbitrary Provider native libraries.
 - A public hosted Tsuzuki marketplace/backend.
