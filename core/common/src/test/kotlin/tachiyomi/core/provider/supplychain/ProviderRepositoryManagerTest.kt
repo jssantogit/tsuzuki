@@ -4,6 +4,7 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
@@ -265,6 +266,8 @@ class ProviderRepositoryManagerTest {
         val refresh = async { manager.refresh("repo.example") }
         fetchStarted.await()
         val removal = async { manager.removeRepository("repo.example") }
+        yield()
+        removal.isCompleted shouldBe false
         releaseFetch.complete(Unit)
 
         refresh.await()
