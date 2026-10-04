@@ -263,6 +263,7 @@ object AppBindings {
         artifactStore: ProviderArtifactStore,
         packageActivator: ProviderPackageActivator,
         transport: ProviderRepositoryTransport,
+        integrationRegistry: IntegrationRegistry,
     ): ProviderRepositoryManager =
         ProviderRepositoryManager(
             hostApiVersion = PROVIDER_HOST_API_VERSION,
@@ -271,6 +272,9 @@ object AppBindings {
             artifactStore = artifactStore,
             packageActivator = packageActivator,
             transport = transport,
+            reservedProviderIds = integrationRegistry.manifests()
+                .map { it.integrationId.value }
+                .toSet(),
         )
 }
 
