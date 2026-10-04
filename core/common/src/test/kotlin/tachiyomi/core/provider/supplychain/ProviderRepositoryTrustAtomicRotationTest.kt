@@ -124,6 +124,42 @@ class ProviderRepositoryTrustAtomicRotationTest {
     }
 
     @Test
+    fun `same repository sequence cannot replace its accepted payload fingerprint`() {
+        val rootKey = ecKeyPair()
+        val stateStore = FileProviderRepositoryTrustStore(tempDir.resolve("same-sequence").toFile())
+        val trust = ProviderRepositoryTrust(
+            repositoryId = "repo.example",
+            hostApiVersion = 3,
+            trustedKeys = mapOf("root-1" to rootKey.public.encoded),
+            stateStore = stateStore,
+        )
+
+        trust.verifyAndAccept(
+            signedIndex(
+                keyId = "root-1",
+                keyPair = rootKey,
+                index = ProviderRepositoryIndex(
+                    schemaVersion = 1,
+                    repositoryId = "repo.example",
+                    sequence = 1,
+                    providers = listOf(descriptor(1, "v1")),
+                ),
+            ),
+        )
+        val accepted = requireNotNull(stateStore.load("repo.example"))
+
+        shouldThrow<ProviderSupplyChainException> {
+            stateStore.save(
+                accepted.copy(
+                    acceptedPayloadSha256 = sha256Hex("different-payload".encodeToByteArray()),
+                ),
+            )
+        }
+
+        stateStore.load("repo.example") shouldBe accepted
+    }
+
+    @Test
     fun `stale trust writer preserves signing keys introduced by a newer session`() {
         val rootKey = ecKeyPair()
         val nextKey = ecKeyPair()
