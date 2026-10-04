@@ -122,20 +122,24 @@ class ProviderP2pJobManager internal constructor(
                             ProviderP2pFailureCode.STORAGE_ERROR,
                         )
                     } else {
-                        val resource = try {
+                        runCatching {
                             managedFiles.adoptFile(
                                 providerId = key.providerId,
                                 source = file,
                                 format = result.format,
                             )
-                        } catch (_: Throwable) {
-                            return@try ProviderP2pAcquireResponse.Failure(
-                                ProviderP2pFailureCode.STORAGE_ERROR,
-                            )
-                        }
-                        ProviderP2pAcquireResponse.Ready(
-                            resource = resource,
-                            format = result.format,
+                        }.fold(
+                            onSuccess = { resource ->
+                                ProviderP2pAcquireResponse.Ready(
+                                    resource = resource,
+                                    format = result.format,
+                                )
+                            },
+                            onFailure = {
+                                ProviderP2pAcquireResponse.Failure(
+                                    ProviderP2pFailureCode.STORAGE_ERROR,
+                                )
+                            },
                         )
                     }
                 }
