@@ -4,17 +4,15 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import eu.kanade.tachiyomi.ui.reader.CanonicalLocalReaderFormat
-import eu.kanade.tachiyomi.ui.reader.loader.LocalChapterLoader
-import okio.Buffer
-import org.junit.Assert.assertNotNull
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.data.database.models.ChapterImpl
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
 import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.ui.reader.CanonicalLocalReaderFormat
 import eu.kanade.tachiyomi.ui.reader.CanonicalReaderTargetPlan
+import eu.kanade.tachiyomi.ui.reader.loader.LocalChapterLoader
 import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpChapterLoader
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import kotlinx.coroutines.flow.Flow
@@ -22,10 +20,21 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
+import okio.Buffer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
+import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
+import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
+import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
+import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
+import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
+import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderBrowserPermission
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
@@ -38,15 +47,6 @@ import tachiyomi.domain.tsuzuki.provider.ProviderPermissionSet
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
-import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
-import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
-import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
-import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
-import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
-import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
-import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
-import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
-import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
@@ -65,10 +65,10 @@ import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
-import java.util.zip.ZipOutputStream
 
 @RunWith(AndroidJUnit4::class)
 class ScriptProviderReadingGatewayIsolationTest {
