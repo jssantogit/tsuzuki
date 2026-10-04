@@ -102,6 +102,52 @@ class ProviderRepositoryManagerTest {
     }
 
     @Test
+    fun `removing repository clears persisted trust state before explicit re-enrollment`() = runBlocking {
+        val keyPair = ecKeyPair()
+        val enrollmentStore = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("remove-enrollments").toFile(),
+        )
+        val trustStore = FileProviderRepositoryTrustStore(
+            tempDir.resolve("remove-trust").toFile(),
+        )
+        val artifactStore = ProviderArtifactStore(
+            tempDir.resolve("remove-artifacts").toFile(),
+        )
+        val transport = FakeTransport()
+        enrollmentStore.save(
+            EnrolledProviderRepository(
+                "Example",
+                ProviderRepositoryEnrollment(
+                    repositoryId = "repo.example",
+                    indexUrl = "https://repo.example/index.json",
+                    signingKey = ProviderRepositorySigningKey(
+                        keyId = "root-1",
+                        publicKeyBase64 = Base64.getEncoder()
+                            .encodeToString(keyPair.public.encoded),
+                    ),
+                ),
+            ),
+        )
+        val bytes = tsz(versionCode = 1)
+        transport.publish(
+            signed = signedIndex(
+                keyPair = keyPair,
+                sequence = 1,
+                artifactBytes = bytes,
+                versionCode = 1,
+            ),
+            artifactBytes = bytes,
+        )
+        val manager = manager(enrollmentStore, trustStore, artifactStore, transport)
+
+        manager.refresh("repo.example")
+        (trustStore.load("repo.example") != null) shouldBe true
+
+        manager.removeRepository("repo.example") shouldBe true
+        trustStore.load("repo.example") shouldBe null
+    }
+
+    @Test
     fun `refreshing unchanged accepted index after manager restart remains usable`() = runBlocking {
         val keyPair = ecKeyPair()
         val enrollment = ProviderRepositoryEnrollment(
