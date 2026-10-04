@@ -1084,6 +1084,7 @@ class SettingsTsuzukiTorrentAcquisitionScreen : Screen() {
                                 onClick = {
                                     scope.launch {
                                         withContext(Dispatchers.IO) {
+                                            p2pJobs.cancelAll()
                                             managedFiles.clearAll()
                                         }
                                         statusMessage = temporaryStorageClearedMessage
