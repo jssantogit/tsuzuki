@@ -60,6 +60,51 @@ class ProviderQuickJsRuntimeTest {
     }
 
     @Test
+    fun `provider scripts can issue typed HTTP API requests through host service`() = runBlocking {
+        var captured: ProviderHttpRequest? = null
+        val services = ProviderHostServices(
+            http = object : ProviderHttpHostService {
+                override suspend fun request(request: ProviderHttpRequest): ProviderHttpResponse {
+                    captured = request
+                    return ProviderHttpResponse(
+                        statusCode = 202,
+                        body = """{"job":"queued"}""",
+                    )
+                }
+
+                override suspend fun getText(url: String): String = error("unused")
+
+                override suspend fun getResource(url: String): ProviderResourceHandle = error("unused")
+            },
+        )
+
+        ProviderQuickJsRuntime().evaluate(
+            source = """
+                const response = JSON.parse(
+                  await tsuzuki.http.request(
+                    "POST",
+                    "https://debrid.example/torrents",
+                    JSON.stringify({"Authorization":"Bearer opaque","Content-Type":"application/json"}),
+                    JSON.stringify({"magnet":"magnet:?xt=urn:btih:abc"})
+                  )
+                );
+                response.statusCode
+            """.trimIndent(),
+            hostServices = services,
+        ) shouldBe ProviderScriptExecution.Success("202")
+
+        captured shouldBe ProviderHttpRequest(
+            method = ProviderHttpMethod.POST,
+            url = "https://debrid.example/torrents",
+            headers = mapOf(
+                "Authorization" to "Bearer opaque",
+                "Content-Type" to "application/json",
+            ),
+            body = """{"magnet":"magnet:?xt=urn:btih:abc"}""",
+        )
+    }
+
+    @Test
     fun `exposes only configured host service modules`() = runBlocking {
         val services = ProviderHostServices(
             http = object : ProviderHttpHostService {
