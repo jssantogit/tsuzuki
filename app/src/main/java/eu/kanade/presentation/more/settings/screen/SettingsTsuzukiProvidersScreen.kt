@@ -16,6 +16,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -55,6 +56,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderSettingType
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentAcquisitionPreference
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -184,6 +186,13 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                             },
                         ) {
                             Text(stringResource(MR.strings.tsuzuki_providers_refresh))
+                        }
+                        TextButton(
+                            onClick = {
+                                navigator.push(SettingsTsuzukiProviderAcquisitionScreen())
+                            },
+                        ) {
+                            Text(stringResource(MR.strings.tsuzuki_providers_acquisition))
                         }
                         TextButton(onClick = { showRepositories = true }) {
                             Text(stringResource(MR.strings.tsuzuki_providers_repositories))
@@ -404,6 +413,207 @@ class SettingsTsuzukiProvidersScreen : Screen() {
             )
         }
     }
+}
+
+class SettingsTsuzukiProviderAcquisitionScreen : Screen() {
+
+    @Composable
+    override fun Content() {
+        val context = LocalContext.current
+        val navigator = LocalNavigator.currentOrThrow
+        val scope = rememberCoroutineScope()
+        val preferences = remember { context.appGraph.providerTorrentPreferences }
+        val managedFiles = remember {
+            context.appGraph.providerHostInvocationFactory.managedFiles
+        }
+
+        var acquisitionPreference by remember {
+            mutableStateOf(preferences.acquisitionPreference.get())
+        }
+        var directP2pAllowed by remember {
+            mutableStateOf(preferences.directP2pAllowed.get())
+        }
+        var cacheStatus by remember { mutableStateOf<String?>(null) }
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(stringResource(MR.strings.tsuzuki_providers_acquisition))
+                    },
+                    navigationIcon = {
+                        TextButton(onClick = navigator::pop) {
+                            Text(stringResource(MR.strings.tsuzuki_navigation_back))
+                        }
+                    },
+                )
+            },
+        ) { contentPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(contentPadding),
+            ) {
+                item(key = "route_header") {
+                    ProviderSectionHeader(
+                        stringResource(MR.strings.tsuzuki_providers_acquisition_mode),
+                    )
+                }
+
+                item(key = "route_debrid_then_p2p") {
+                    ProviderAcquisitionRouteRow(
+                        selected = acquisitionPreference ==
+                            TorrentAcquisitionPreference.DEBRID_THEN_P2P,
+                        title = stringResource(
+                            MR.strings.tsuzuki_providers_acquisition_debrid_then_p2p,
+                        ),
+                        onSelect = {
+                            acquisitionPreference =
+                                TorrentAcquisitionPreference.DEBRID_THEN_P2P
+                            preferences.acquisitionPreference.set(acquisitionPreference)
+                        },
+                    )
+                }
+                item(key = "route_debrid_only") {
+                    ProviderAcquisitionRouteRow(
+                        selected = acquisitionPreference ==
+                            TorrentAcquisitionPreference.DEBRID_ONLY,
+                        title = stringResource(
+                            MR.strings.tsuzuki_providers_acquisition_debrid_only,
+                        ),
+                        onSelect = {
+                            acquisitionPreference = TorrentAcquisitionPreference.DEBRID_ONLY
+                            preferences.acquisitionPreference.set(acquisitionPreference)
+                        },
+                    )
+                }
+                item(key = "route_p2p_only") {
+                    ProviderAcquisitionRouteRow(
+                        selected = acquisitionPreference ==
+                            TorrentAcquisitionPreference.P2P_ONLY,
+                        title = stringResource(
+                            MR.strings.tsuzuki_providers_acquisition_p2p_only,
+                        ),
+                        onSelect = {
+                            acquisitionPreference = TorrentAcquisitionPreference.P2P_ONLY
+                            preferences.acquisitionPreference.set(acquisitionPreference)
+                        },
+                    )
+                }
+
+                item(key = "p2p_toggle") {
+                    ListItem(
+                        headlineContent = {
+                            Text(stringResource(MR.strings.tsuzuki_providers_direct_p2p))
+                        },
+                        supportingContent = {
+                            Text(
+                                stringResource(
+                                    MR.strings.tsuzuki_providers_direct_p2p_privacy,
+                                ),
+                            )
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = directP2pAllowed,
+                                onCheckedChange = { enabled ->
+                                    directP2pAllowed = enabled
+                                    preferences.directP2pAllowed.set(enabled)
+                                },
+                            )
+                        },
+                    )
+                }
+                item(key = "p2p_lifecycle") {
+                    ListItem(
+                        headlineContent = {
+                            Text(stringResource(MR.strings.tsuzuki_providers_acquisition))
+                        },
+                        supportingContent = {
+                            Text(
+                                stringResource(
+                                    MR.strings.tsuzuki_providers_acquisition_lifecycle,
+                                ),
+                            )
+                        },
+                    )
+                }
+
+                item(key = "cache_header") {
+                    ProviderSectionHeader(
+                        stringResource(MR.strings.tsuzuki_providers_managed_cache),
+                    )
+                }
+                item(key = "cache") {
+                    ListItem(
+                        headlineContent = {
+                            Text(stringResource(MR.strings.tsuzuki_providers_managed_cache))
+                        },
+                        supportingContent = {
+                            Text(
+                                stringResource(
+                                    MR.strings.tsuzuki_providers_managed_cache_summary,
+                                ),
+                            )
+                        },
+                        trailingContent = {
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        cacheStatus = runProviderUiCatching {
+                                            withContext(Dispatchers.IO) {
+                                                managedFiles.clearAll()
+                                            }
+                                        }.fold(
+                                            onSuccess = {
+                                                context.getString(
+                                                    MR.strings
+                                                        .tsuzuki_providers_managed_cache_cleared
+                                                        .resourceId,
+                                                )
+                                            },
+                                            onFailure = { error ->
+                                                error.message ?: "Managed Provider cache cleanup failed"
+                                            },
+                                        )
+                                    }
+                                },
+                            ) {
+                                Text(
+                                    stringResource(
+                                        MR.strings.tsuzuki_providers_managed_cache_clear,
+                                    ),
+                                )
+                            }
+                        },
+                    )
+                }
+                cacheStatus?.let { status ->
+                    item(key = "cache_status") {
+                        ListItem(headlineContent = { Text(status) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProviderAcquisitionRouteRow(
+    selected: Boolean,
+    title: String,
+    onSelect: () -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(title) },
+        leadingContent = {
+            RadioButton(
+                selected = selected,
+                onClick = onSelect,
+            )
+        },
+        modifier = Modifier.clickable(onClick = onSelect),
+    )
 }
 
 class SettingsTsuzukiProviderDetailScreen(
