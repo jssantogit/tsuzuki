@@ -186,6 +186,42 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `verified managed Provider archive becomes Reader content`() = runBlocking {
+        val gateway = gateway {
+            ProviderCallResult.Success(
+                ProviderReadingDelivery.ManagedFile(
+                    resource = ProviderManagedResourceRef("managed:archive"),
+                    format = ProviderManagedFileFormat.CBZ,
+                ),
+            )
+        }
+        val resolver = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(evidence(binding, "provider-chapter-1", chapter.id)),
+            gateway = gateway,
+            managedResources = ProviderManagedResourceResolver { providerId, resource, format ->
+                if (
+                    providerId == binding.ref.providerId &&
+                    resource.value == "managed:archive" &&
+                    format == ProviderManagedFileFormat.CBZ
+                ) {
+                    "content://provider/archive.cbz"
+                } else {
+                    null
+                }
+            },
+        )
+
+        resolver.preparedContent(resolver.options(chapter.id).single()) shouldBe
+            ProviderCallResult.Success(
+                PreparedChapterContent.CanonicalDownload(
+                    uri = "content://provider/archive.cbz",
+                    format = "CBZ",
+                ),
+            )
+    }
+
+    @Test
     fun `managed Provider files remain fail closed before host-owned promotion`() = runBlocking {
         val gateway = gateway {
             ProviderCallResult.Success(
@@ -246,6 +282,7 @@ class ResolveProviderChapterReadingTest {
         evidenceRepository = evidenceRepository(evidence),
         bindingRepository = bindingRepository(bindings),
         gateway = gateway,
+        managedResources = managedResources,
     )
 
     private fun evidence(
