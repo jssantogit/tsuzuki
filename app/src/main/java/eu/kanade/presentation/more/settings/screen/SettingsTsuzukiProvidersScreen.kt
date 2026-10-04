@@ -70,9 +70,10 @@ class SettingsTsuzukiProvidersScreen : Screen() {
         val registry = remember { context.appGraph.installedScriptProviderRegistry }
 
         var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-        var repositories by remember { mutableStateOf(manager.repositories()) }
+        var repositories by remember { mutableStateOf<List<EnrolledProviderRepository>>(emptyList()) }
         var snapshots by remember { mutableStateOf<Map<String, ProviderRepositorySnapshot>>(emptyMap()) }
         var installed by remember { mutableStateOf<List<ProviderRegistration>>(emptyList()) }
+        var rollbackProviderIds by remember { mutableStateOf(emptySet<String>()) }
         var refreshing by remember { mutableStateOf(false) }
         var operations by remember { mutableStateOf(emptySet<String>()) }
         var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -81,11 +82,21 @@ class SettingsTsuzukiProvidersScreen : Screen() {
         var repositoryToRemove by remember { mutableStateOf<EnrolledProviderRepository?>(null) }
 
         suspend fun reloadInstalled() {
-            installed = withContext(Dispatchers.Default) { registry.providers() }
+            val state = withContext(Dispatchers.IO) {
+                val registrations = registry.providers()
+                val rollbackIds = registrations
+                    .asSequence()
+                    .map { registration -> registration.descriptor.id.value }
+                    .filter(manager::canRollback)
+                    .toSet()
+                registrations to rollbackIds
+            }
+            installed = state.first
+            rollbackProviderIds = state.second
         }
 
         suspend fun reloadRepositories(refreshRemote: Boolean) {
-            repositories = manager.repositories()
+            repositories = withContext(Dispatchers.IO) { manager.repositories() }
             if (!refreshRemote) return
 
             refreshing = true
@@ -94,7 +105,9 @@ class SettingsTsuzukiProvidersScreen : Screen() {
             repositories.forEach { repository ->
                 val repositoryId = repository.enrollment.repositoryId
                 runProviderUiCatching {
-                    manager.refresh(repositoryId)
+                    withContext(Dispatchers.IO) {
+                        manager.refresh(repositoryId)
+                    }
                 }.onSuccess { snapshot ->
                     next[repositoryId] = snapshot
                 }.onFailure { error ->
@@ -112,7 +125,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
 
         LaunchedEffect(Unit) {
             reloadInstalled()
-            reloadRepositories(refreshRemote = repositories.isNotEmpty())
+            reloadRepositories(refreshRemote = true)
         }
         LaunchedEffect(registry) {
             registry.observeChanges().collect {
@@ -128,13 +141,17 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                 operations += key
                 errorMessage = null
                 try {
-                    action()
+                    withContext(Dispatchers.IO) {
+                        action()
+                    }
                     registry.invalidate()
                     reloadInstalled()
-                    snapshots = repositories.mapNotNull { repository ->
-                        val id = repository.enrollment.repositoryId
-                        manager.snapshot(id)?.let { id to it }
-                    }.toMap()
+                    snapshots = withContext(Dispatchers.IO) {
+                        repositories.mapNotNull { repository ->
+                            val id = repository.enrollment.repositoryId
+                            manager.snapshot(id)?.let { id to it }
+                        }.toMap()
+                    }
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Throwable) {
@@ -216,7 +233,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                 if (selectedTab == 0) {
                     InstalledProvidersList(
                         registrations = installed,
-                        manager = manager,
+                        rollbackProviderIds = rollbackProviderIds,
                         operationKeys = operations,
                         onOpen = { providerId ->
                             navigator.push(SettingsTsuzukiProviderDetailScreen(providerId))
@@ -272,7 +289,9 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                         refreshing = true
                         errorMessage = null
                         runProviderUiCatching {
-                            manager.refresh(repositoryId)
+                            withContext(Dispatchers.IO) {
+                                manager.refresh(repositoryId)
+                            }
                         }.onSuccess { snapshot ->
                             snapshots = snapshots + (repositoryId to snapshot)
                             registry.invalidate()
@@ -296,12 +315,18 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                 onConfirm = { repository ->
                     scope.launch {
                         runProviderUiCatching {
-                            manager.enroll(repository)
+                            withContext(Dispatchers.IO) {
+                                manager.enroll(repository)
+                            }
                         }.onSuccess {
-                            repositories = manager.repositories()
+                            repositories = withContext(Dispatchers.IO) {
+                                manager.repositories()
+                            }
                             showAddRepository = false
                             runProviderUiCatching {
-                                manager.refresh(repository.enrollment.repositoryId)
+                                withContext(Dispatchers.IO) {
+                                    manager.refresh(repository.enrollment.repositoryId)
+                                }
                             }.onSuccess { snapshot ->
                                 snapshots = snapshots +
                                     (repository.enrollment.repositoryId to snapshot)
@@ -331,9 +356,13 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                             val repositoryId = repository.enrollment.repositoryId
                             scope.launch {
                                 runProviderUiCatching {
-                                    manager.removeRepository(repositoryId)
+                                    withContext(Dispatchers.IO) {
+                                        manager.removeRepository(repositoryId)
+                                    }
                                 }.onSuccess {
-                                    repositories = manager.repositories()
+                                    repositories = withContext(Dispatchers.IO) {
+                                        manager.repositories()
+                                    }
                                     snapshots = snapshots - repositoryId
                                     repositoryToRemove = null
                                 }.onFailure { error ->
@@ -370,7 +399,7 @@ class SettingsTsuzukiProviderDetailScreen(
         var errorMessage by remember { mutableStateOf<String?>(null) }
 
         suspend fun reload() {
-            registration = withContext(Dispatchers.Default) {
+            registration = withContext(Dispatchers.IO) {
                 registry.registration(providerId)
             }
         }
@@ -618,7 +647,7 @@ class SettingsTsuzukiProviderDetailScreen(
 @Composable
 private fun InstalledProvidersList(
     registrations: List<ProviderRegistration>,
-    manager: ProviderRepositoryManager,
+    rollbackProviderIds: Set<String>,
     operationKeys: Set<String>,
     onOpen: (String) -> Unit,
     onEnabledChange: (String, Boolean) -> Unit,
@@ -641,9 +670,7 @@ private fun InstalledProvidersList(
         ) { registration ->
             val descriptor = registration.descriptor
             val providerId = descriptor.id.value
-            val canRollback = remember(providerId, registration.configurationFingerprint) {
-                runCatching { manager.canRollback(providerId) }.getOrDefault(false)
-            }
+            val canRollback = providerId in rollbackProviderIds
             ListItem(
                 headlineContent = { Text(descriptor.name) },
                 supportingContent = {
