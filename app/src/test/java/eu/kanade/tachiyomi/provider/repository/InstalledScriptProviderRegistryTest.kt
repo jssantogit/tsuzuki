@@ -146,6 +146,96 @@ class InstalledScriptProviderRegistryTest {
     }
 
     @Test
+    fun `blocked and invalid Providers cannot be enabled through registry boundary`() {
+        val blockedArtifacts = ProviderArtifactStore(
+            tempDir.resolve("enable-blocked-artifacts").toFile(),
+        )
+        val blockedArtifact = artifact(versionCode = 1)
+        blockedArtifacts.activate(blockedArtifact)
+
+        val keyPair = KeyPairGenerator.getInstance("EC").run {
+            initialize(ECGenParameterSpec("secp256r1"))
+            generateKeyPair()
+        }
+        val trust = ProviderRepositoryTrust(
+            repositoryId = "repo.example",
+            hostApiVersion = 1,
+            trustedKeys = mapOf("root-1" to keyPair.public.encoded),
+            stateStore = FileProviderRepositoryTrustStore(
+                tempDir.resolve("enable-blocked-trust").toFile(),
+            ),
+        )
+        val index = ProviderRepositoryIndex(
+            schemaVersion = 1,
+            repositoryId = "repo.example",
+            sequence = 1,
+            providers = listOf(blockedArtifact.descriptor),
+            revokedArtifactSha256 = setOf(blockedArtifact.descriptor.sha256),
+        )
+        val payload = Json {
+            encodeDefaults = true
+            explicitNulls = false
+        }.encodeToString(index).encodeToByteArray()
+        val signature = Signature.getInstance("SHA256withECDSA").run {
+            initSign(keyPair.private)
+            update(payload)
+            sign()
+        }
+        val verified = trust.verifyAndAccept(
+            SignedProviderRepositoryIndex(
+                keyId = "root-1",
+                payload = payload,
+                signature = signature,
+            ),
+        )
+        trust.applyRevocations(verified, blockedArtifacts)
+
+        val blockedConfig = FileProviderLocalConfigurationStore(
+            tempDir.resolve("enable-blocked-config").toFile(),
+        )
+        val blockedRegistry = InstalledScriptProviderRegistry(
+            artifactStore = blockedArtifacts,
+            configurationStore = blockedConfig,
+        )
+        shouldThrow<IllegalStateException> {
+            blockedRegistry.setEnabled(ProviderId("reader.example"), true)
+        }
+        blockedConfig.get("reader.example") shouldBe null
+
+        val invalidArtifacts = ProviderArtifactStore(
+            tempDir.resolve("enable-invalid-artifacts").toFile(),
+        )
+        val invalidBytes = "not-a-tsz".encodeToByteArray()
+        invalidArtifacts.activate(
+            VerifiedProviderArtifact(
+                repositoryId = "repo.example",
+                descriptor = ProviderArtifactDescriptor(
+                    providerId = "invalid.example",
+                    versionName = "1.0.0",
+                    versionCode = 1,
+                    artifactUrl = "https://repo.example/invalid-1.tsz",
+                    sha256 = sha256Hex(invalidBytes),
+                    minHostApi = 1,
+                ),
+                bytes = invalidBytes,
+            ),
+        )
+        val invalidConfig = FileProviderLocalConfigurationStore(
+            tempDir.resolve("enable-invalid-config").toFile(),
+        )
+        val invalidRegistry = InstalledScriptProviderRegistry(
+            artifactStore = invalidArtifacts,
+            configurationStore = invalidConfig,
+        )
+        invalidRegistry.registration(ProviderId("invalid.example"))!!.lifecycleStatus shouldBe
+            ProviderLifecycleStatus.INVALID
+        shouldThrow<IllegalStateException> {
+            invalidRegistry.setEnabled(ProviderId("invalid.example"), true)
+        }
+        invalidConfig.get("invalid.example") shouldBe null
+    }
+
+    @Test
     fun `configuration fingerprint changes when active artifact changes`() {
         val artifactStore = ProviderArtifactStore(tempDir.resolve("fingerprint-artifacts").toFile())
         val configurationStore = FileProviderLocalConfigurationStore(
