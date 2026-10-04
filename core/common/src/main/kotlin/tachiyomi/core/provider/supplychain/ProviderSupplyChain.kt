@@ -269,6 +269,17 @@ class FileProviderRepositoryTrustStore(
         )
     }
 
+    @Synchronized
+    override fun remove(repositoryId: String): Boolean {
+        validateIdentifier(repositoryId, "Repository ID")
+        val file = stateFile(repositoryId)
+        if (!file.exists()) return false
+        if (!file.delete()) {
+            throw ProviderSupplyChainException("Repository trust state could not be removed")
+        }
+        return true
+    }
+
     private fun stateFile(repositoryId: String): File = File(root, "$repositoryId.json")
 }
 
