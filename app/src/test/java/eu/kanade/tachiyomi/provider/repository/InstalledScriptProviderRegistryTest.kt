@@ -38,6 +38,13 @@ class InstalledScriptProviderRegistryTest {
     @TempDir
     lateinit var tempDir: Path
 
+    private val fixtureKeyPair by lazy {
+        KeyPairGenerator.getInstance("EC").run {
+            initialize(ECGenParameterSpec("secp256r1"))
+            generateKeyPair()
+        }
+    }
+
     @Test
     fun `installed package becomes enabled Provider registration with manifest authority`() {
         val artifactStore = ProviderArtifactStore(tempDir.resolve("artifacts").toFile())
@@ -94,10 +101,7 @@ class InstalledScriptProviderRegistryTest {
         val installed = artifact(versionCode = 1)
         artifactStore.activate(installed)
 
-        val keyPair = KeyPairGenerator.getInstance("EC").run {
-            initialize(ECGenParameterSpec("secp256r1"))
-            generateKeyPair()
-        }
+        val keyPair = fixtureKeyPair
         val trust = ProviderRepositoryTrust(
             repositoryId = "repo.example",
             hostApiVersion = 1,
@@ -156,10 +160,7 @@ class InstalledScriptProviderRegistryTest {
         val blockedArtifact = artifact(versionCode = 1)
         blockedArtifacts.activate(blockedArtifact)
 
-        val keyPair = KeyPairGenerator.getInstance("EC").run {
-            initialize(ECGenParameterSpec("secp256r1"))
-            generateKeyPair()
-        }
+        val keyPair = fixtureKeyPair
         val trust = ProviderRepositoryTrust(
             repositoryId = "repo.example",
             hostApiVersion = 1,
@@ -350,10 +351,7 @@ class InstalledScriptProviderRegistryTest {
             sha256 = sha256Hex(bytes),
             minHostApi = 1,
         )
-        val keyPair = KeyPairGenerator.getInstance("EC").run {
-            initialize(ECGenParameterSpec("secp256r1"))
-            generateKeyPair()
-        }
+        val keyPair = fixtureKeyPair
         val trustStateName = "fixture-trust-" +
             providerId.replace('.', '-') +
             "-" +
