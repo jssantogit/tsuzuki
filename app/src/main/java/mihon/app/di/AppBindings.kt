@@ -28,6 +28,9 @@ import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderCapabilityExecutor
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderPackageSource
 import eu.kanade.tachiyomi.provider.runtime.StoredScriptProviderPackageSource
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentArtifactEngine
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentHttpFileMaterializer
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentPreferences
 import eu.kanade.tachiyomi.provider.torrent.ScriptProviderTorrentGateway
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
@@ -60,8 +63,12 @@ import tachiyomi.domain.tsuzuki.provider.CompositeProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
+import tachiyomi.domain.tsuzuki.content.TorrentArtifactEngine
 import tachiyomi.domain.tsuzuki.provider.torrent.DebridResolveGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.P2pAcquireGateway
+import tachiyomi.domain.tsuzuki.provider.torrent.PrepareProviderTorrentForReader
+import tachiyomi.domain.tsuzuki.provider.torrent.ProviderTorrentAcquisitionCoordinator
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentHttpFileMaterializer
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchGateway
 import java.io.File
 
@@ -311,6 +318,54 @@ object AppBindings {
     fun providesP2pAcquireGateway(
         gateway: ScriptProviderTorrentGateway,
     ): P2pAcquireGateway = gateway
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderTorrentAcquisitionCoordinator(
+        registry: ProviderRegistry,
+        debrid: DebridResolveGateway,
+        p2p: P2pAcquireGateway,
+    ): ProviderTorrentAcquisitionCoordinator =
+        ProviderTorrentAcquisitionCoordinator(
+            registry = registry,
+            debrid = debrid,
+            p2p = p2p,
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesTorrentHttpFileMaterializer(
+        context: Context,
+        networkHelper: NetworkHelper,
+        managedFiles: ProviderManagedFileStore,
+    ): TorrentHttpFileMaterializer =
+        ProviderTorrentHttpFileMaterializer(
+            baseClient = networkHelper.client,
+            managedFiles = managedFiles,
+            tempRoot = File(context.cacheDir, "provider-platform/http-artifacts"),
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesPrepareProviderTorrentForReader(
+        coordinator: ProviderTorrentAcquisitionCoordinator,
+        httpMaterializer: TorrentHttpFileMaterializer,
+    ): PrepareProviderTorrentForReader =
+        PrepareProviderTorrentForReader(
+            coordinator = coordinator,
+            httpMaterializer = httpMaterializer,
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesTorrentArtifactEngine(
+        prepareForReader: PrepareProviderTorrentForReader,
+        preferences: ProviderTorrentPreferences,
+    ): TorrentArtifactEngine =
+        ProviderTorrentArtifactEngine(
+            prepareForReader = prepareForReader,
+            preferences = preferences,
+        )
 
     @Provides
     @SingleIn(AppScope::class)
