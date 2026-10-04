@@ -43,7 +43,6 @@ class DefaultProviderRegistry(
     }
 }
 
-
 class CompositeProviderRegistry(
     private val registries: List<ProviderRegistry>,
 ) : ProviderRegistry {
