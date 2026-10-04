@@ -8,11 +8,11 @@ import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentAcquisitionPreference
 
-@Inject
-@SingleIn(AppScope::class)
 /**
  * User-owned acquisition policy. Direct P2P stays disabled until explicit opt-in.
  */
+@Inject
+@SingleIn(AppScope::class)
 class ProviderTorrentPreferences(
     preferenceStore: PreferenceStore,
 ) {
