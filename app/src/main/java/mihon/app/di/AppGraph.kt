@@ -46,6 +46,7 @@ import kotlinx.serialization.json.Json
 import mihon.core.metro.IsDebugBuild
 import mihon.domain.extension.interactor.GetExtensionStoreCountAsFlow
 import tachiyomi.data.Database
+import tachiyomi.core.provider.supplychain.ProviderRepositoryManager
 import tachiyomi.domain.backup.service.BackupPreferences
 import tachiyomi.domain.category.interactor.GetCategories
 import tachiyomi.domain.category.interactor.ResetCategoryFlags
@@ -118,6 +119,7 @@ interface AppGraph : ViewModelGraph {
     val trustExtension: TrustExtension
 
     val sourceManager: SourceManager
+    val providerRepositoryManager: ProviderRepositoryManager
     val addonRepository: AddonRepository
     val readingSourceGateway: ReadingSourceGateway
     val addonSyncIntentRepository: AddonSyncIntentRepository
