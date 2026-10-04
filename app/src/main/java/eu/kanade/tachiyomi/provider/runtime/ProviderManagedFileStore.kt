@@ -146,6 +146,8 @@ class ProviderManagedFileStore internal constructor(
         return age < 0L || age > ttlMs
     }
 
+    // Stream validation stops as soon as any archive quota is exceeded; the expanded bytes are
+    // never retained as a second in-memory copy by the managed-file store.
     private fun validateArchive(bytes: ByteArray) {
         if (!hasZipLocalFileHeader(bytes)) {
             throw IllegalStateException("Provider managed resource is not a ZIP archive")
