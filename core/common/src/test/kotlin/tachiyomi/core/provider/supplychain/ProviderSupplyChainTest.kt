@@ -219,6 +219,7 @@ class ProviderSupplyChainTest {
 
         val corruptV2 = VerifiedProviderArtifact(
             repositoryId = v2.repositoryId,
+            repositoryTrustAnchorSha256 = v2.repositoryTrustAnchorSha256,
             descriptor = v2.descriptor,
             bytes = "different".encodeToByteArray(),
         )
