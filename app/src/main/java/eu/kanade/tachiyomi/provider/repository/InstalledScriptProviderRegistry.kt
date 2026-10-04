@@ -44,9 +44,18 @@ class InstalledScriptProviderRegistry(
         providerId: ProviderId,
         enabled: Boolean,
     ) {
-        if (registration(providerId) == null) {
-            throw IllegalArgumentException("Provider is not installed")
+        val registration = registration(providerId)
+            ?: throw IllegalArgumentException("Provider is not installed")
+        if (
+            enabled &&
+            registration.lifecycleStatus in setOf(
+                ProviderLifecycleStatus.BLOCKED,
+                ProviderLifecycleStatus.INVALID,
+            )
+        ) {
+            throw IllegalStateException("Blocked or invalid Provider cannot be enabled")
         }
+
         val current = configurationStore.get(providerId.value)
             ?: ProviderLocalConfiguration(providerId = providerId.value)
         configurationStore.save(current.copy(enabled = enabled))
