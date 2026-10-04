@@ -218,6 +218,7 @@ object AppBindings {
     ): ProviderRepositoryTransport =
         AndroidProviderRepositoryTransport(networkHelper.client)
 
+    // Provider reading bindings are persisted by the canonical SQLDelight repository in :data.
     @Provides
     @SingleIn(AppScope::class)
     fun providesProviderManagedFileStore(
