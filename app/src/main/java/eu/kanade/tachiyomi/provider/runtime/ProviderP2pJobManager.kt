@@ -195,7 +195,7 @@ class ProviderP2pJobManager internal constructor(
             jobs.clear()
             active
         }
-        workers.forEach(Job::cancel)
+        workers.forEach { worker -> worker.cancel() }
         return workers.size
     }
 
