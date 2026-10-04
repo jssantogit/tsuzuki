@@ -12,7 +12,7 @@ from typing import Iterable
 EXPECTED_ABIS = ("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
 ELF_16K_ABIS = ("arm64-v8a", "x86_64")
 MIN_PAGE_ALIGNMENT = 16 * 1024
-JLIBTORRENT_NAME = "libjlibtorrent.so"
+JLIBTORRENT_PREFIX = "libjlibtorrent"
 
 
 def _apk_entries(path: Path) -> set[str]:
@@ -38,7 +38,11 @@ def validate_jlibtorrent_abi_coverage(apks: Iterable[Path]) -> set[str]:
     for apk in apks:
         entries = _apk_entries(apk)
         for abi in EXPECTED_ABIS:
-            if f"lib/{abi}/{JLIBTORRENT_NAME}" in entries:
+            prefix = f"lib/{abi}/{JLIBTORRENT_PREFIX}"
+            if any(
+                entry.startswith(prefix) and entry.endswith(".so")
+                for entry in entries
+            ):
                 observed.add(abi)
 
     missing = set(EXPECTED_ABIS) - observed
