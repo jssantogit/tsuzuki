@@ -132,6 +132,7 @@ class ProviderManagedFileStoreTest {
         )
 
         store.clearAll()
+        store.clearAll()
 
         store.resolve(
             providerId = ProviderId("org.example.reader"),
