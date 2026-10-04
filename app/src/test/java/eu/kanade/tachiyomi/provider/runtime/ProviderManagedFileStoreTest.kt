@@ -7,7 +7,10 @@ import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedFileFormat
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceRef
+import java.io.ByteArrayOutputStream
 import java.nio.file.Path
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class ProviderManagedFileStoreTest {
 
@@ -69,6 +72,33 @@ class ProviderManagedFileStoreTest {
     }
 
     @Test
+    fun `promotion rejects non archive bytes and bounded archive expansion`() {
+        val store = store(
+            maxFileBytes = 1024,
+            maxArchiveEntryBytes = 4,
+            maxArchiveUncompressedBytes = 4,
+        )
+
+        runCatching {
+            store.promote(
+                providerId = "org.example.reader",
+                bytes = "not-a-zip".encodeToByteArray(),
+                format = ProviderManagedResourceFormat.CBZ,
+            )
+        }.isFailure shouldBe true
+
+        runCatching {
+            store.promote(
+                providerId = "org.example.reader",
+                bytes = zip("page.bin", "12345"),
+                format = ProviderManagedResourceFormat.ZIP,
+            )
+        }.isFailure shouldBe true
+
+        tempDir.toFile().walkTopDown().filter { it.isFile }.toList() shouldBe emptyList()
+    }
+
+    @Test
     fun `promotion quotas fail closed without deleting existing managed files`() {
         val store = store(
             maxFileBytes = 4,
@@ -109,6 +139,9 @@ class ProviderManagedFileStoreTest {
         maxFileBytes: Int = 16,
         maxFilesPerProvider: Int = 8,
         maxTotalBytesPerProvider: Long = 64,
+        maxArchiveEntries: Int = 32,
+        maxArchiveEntryBytes: Int = 16,
+        maxArchiveUncompressedBytes: Long = 64,
     ) = ProviderManagedFileStore(
         root = tempDir.toFile(),
         uriFactory = { file ->
@@ -120,5 +153,18 @@ class ProviderManagedFileStoreTest {
         maxFileBytes = maxFileBytes,
         maxFilesPerProvider = maxFilesPerProvider,
         maxTotalBytesPerProvider = maxTotalBytesPerProvider,
+        maxArchiveEntries = maxArchiveEntries,
+        maxArchiveEntryBytes = maxArchiveEntryBytes,
+        maxArchiveUncompressedBytes = maxArchiveUncompressedBytes,
     )
+
+    private fun zip(path: String, value: String): ByteArray {
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            zip.putNextEntry(ZipEntry(path))
+            zip.write(value.encodeToByteArray())
+            zip.closeEntry()
+        }
+        return output.toByteArray()
+    }
 }
