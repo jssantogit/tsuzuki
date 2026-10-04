@@ -34,6 +34,15 @@ class MihonChapterContentPreparer(
 
     internal constructor(
         canonicalReaderGateway: CanonicalReaderGateway,
+        canonicalDownloadRepository: CanonicalDownloadRepository,
+    ) : this(
+        canonicalReaderGateway = canonicalReaderGateway,
+        canonicalDownloadRepository = canonicalDownloadRepository,
+        prepareTorrentArtifact = PrepareTorrentArtifact(UnsupportedTorrentArtifactEngine),
+    )
+
+    internal constructor(
+        canonicalReaderGateway: CanonicalReaderGateway,
         torrentEngine: TorrentArtifactEngine,
     ) : this(
         canonicalReaderGateway = canonicalReaderGateway,
