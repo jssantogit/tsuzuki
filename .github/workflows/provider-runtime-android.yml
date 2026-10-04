@@ -26,6 +26,7 @@ on:
       # The compile step builds the whole androidTest source set, so fixture-only
       # repairs must be able to retrigger this gate as well.
       - 'app/src/androidTest/**'
+      - 'app/build.gradle.kts'
       - 'gradle/libs.versions.toml'
       - '.github/workflows/provider-runtime-android.yml'
       - '.github/scripts/provider-runtime-android-gate.sh'
