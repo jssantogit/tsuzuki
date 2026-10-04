@@ -1,6 +1,8 @@
 package tachiyomi.core.provider.supplychain
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -213,6 +215,64 @@ class ProviderRepositoryManagerTest {
     }
 
     @Test
+    fun `removing repository waits for in flight refresh before clearing trust`() = runBlocking {
+        val keyPair = ecKeyPair()
+        val enrollmentStore = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("remove-race-enrollments").toFile(),
+        )
+        val trustStore = FileProviderRepositoryTrustStore(
+            tempDir.resolve("remove-race-trust").toFile(),
+        )
+        val artifactStore = ProviderArtifactStore(
+            tempDir.resolve("remove-race-artifacts").toFile(),
+        )
+        val transport = FakeTransport()
+        val manager = manager(enrollmentStore, trustStore, artifactStore, transport)
+        manager.enroll(
+            EnrolledProviderRepository(
+                "Example",
+                ProviderRepositoryEnrollment(
+                    repositoryId = "repo.example",
+                    indexUrl = "https://repo.example/index.json",
+                    signingKey = ProviderRepositorySigningKey(
+                        keyId = "root-1",
+                        publicKeyBase64 = Base64.getEncoder()
+                            .encodeToString(keyPair.public.encoded),
+                    ),
+                ),
+            ),
+        )
+
+        val bytes = tsz(versionCode = 1)
+        transport.publish(
+            signed = signedIndex(
+                keyPair = keyPair,
+                sequence = 1,
+                artifactBytes = bytes,
+                versionCode = 1,
+            ),
+            artifactBytes = bytes,
+        )
+        val fetchStarted = CompletableDeferred<Unit>()
+        val releaseFetch = CompletableDeferred<Unit>()
+        transport.beforeFetchIndex = {
+            fetchStarted.complete(Unit)
+            releaseFetch.await()
+        }
+
+        val refresh = async { manager.refresh("repo.example") }
+        fetchStarted.await()
+        val removal = async { manager.removeRepository("repo.example") }
+        releaseFetch.complete(Unit)
+
+        refresh.await()
+        removal.await() shouldBe true
+        enrollmentStore.get("repo.example") shouldBe null
+        trustStore.load("repo.example") shouldBe null
+        manager.snapshot("repo.example") shouldBe null
+    }
+
+    @Test
     fun `refreshing unchanged accepted index after manager restart remains usable`() = runBlocking {
         val keyPair = ecKeyPair()
         val enrollment = ProviderRepositoryEnrollment(
@@ -338,6 +398,7 @@ class ProviderRepositoryManagerTest {
         private lateinit var signed: SignedProviderRepositoryIndex
         private val artifacts = mutableMapOf<String, ByteArray>()
         val requestedIndexUrls = mutableListOf<String>()
+        var beforeFetchIndex: suspend () -> Unit = {}
 
         fun publish(
             signed: SignedProviderRepositoryIndex,
@@ -353,6 +414,7 @@ class ProviderRepositoryManagerTest {
 
         override suspend fun fetchIndex(indexUrl: String): SignedProviderRepositoryIndex {
             requestedIndexUrls += indexUrl
+            beforeFetchIndex()
             return signed
         }
 
