@@ -13,6 +13,7 @@ import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.provider.repository.AndroidProviderRepositoryTransport
+import eu.kanade.tachiyomi.provider.repository.InstalledScriptProviderRegistry
 import eu.kanade.tachiyomi.provider.runtime.IsolatedProviderPackageContractValidator
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
@@ -29,12 +30,15 @@ import tachiyomi.data.Mangas
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
+import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.core.provider.packageformat.ProviderPackageActivator
 import tachiyomi.core.provider.packageformat.ProviderPackageContractValidator
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
+import tachiyomi.core.provider.supplychain.FileProviderLocalConfigurationStore
 import tachiyomi.core.provider.supplychain.FileProviderRepositoryEnrollmentStore
 import tachiyomi.core.provider.supplychain.FileProviderRepositoryTrustStore
 import tachiyomi.core.provider.supplychain.ProviderArtifactStore
+import tachiyomi.core.provider.supplychain.ProviderLocalConfigurationStore
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEnrollmentStore
 import tachiyomi.core.provider.supplychain.ProviderRepositoryManager
 import tachiyomi.core.provider.supplychain.ProviderRepositoryTransport
@@ -99,6 +103,32 @@ object AppBindings {
     @SingleIn(AppScope::class)
     fun providesProtoBuf(): ProtoBuf = ProtoBuf
 
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderLocalConfigurationStore(
+        context: Context,
+    ): ProviderLocalConfigurationStore =
+        FileProviderLocalConfigurationStore(
+            File(context.filesDir, "provider-platform/configuration"),
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesInstalledScriptProviderRegistry(
+        artifactStore: ProviderArtifactStore,
+        configurationStore: ProviderLocalConfigurationStore,
+    ): InstalledScriptProviderRegistry =
+        InstalledScriptProviderRegistry(
+            artifactStore = artifactStore,
+            configurationStore = configurationStore,
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderRegistry(
+        registry: InstalledScriptProviderRegistry,
+    ): ProviderRegistry = registry
 
     @Provides
     @SingleIn(AppScope::class)
