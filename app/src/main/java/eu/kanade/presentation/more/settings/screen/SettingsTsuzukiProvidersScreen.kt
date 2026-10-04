@@ -421,6 +421,266 @@ class SettingsTsuzukiProvidersScreen : Screen() {
     }
 }
 
+class SettingsTsuzukiProviderDetailScreen(
+    private val providerIdValue: String,
+) : Screen() {
+
+    @Composable
+    override fun Content() {
+        val context = LocalContext.current
+        val navigator = LocalNavigator.currentOrThrow
+        val scope = rememberCoroutineScope()
+        val registry = remember { context.appGraph.installedScriptProviderRegistry }
+        val providerId = remember(providerIdValue) { ProviderId(providerIdValue) }
+        var registration by remember { mutableStateOf<ProviderRegistration?>(null) }
+        var errorMessage by remember { mutableStateOf<String?>(null) }
+
+        suspend fun reload() {
+            registration = withContext(Dispatchers.IO) {
+                registry.registration(providerId)
+            }
+        }
+
+        LaunchedEffect(registry, providerId) {
+            reload()
+            registry.observeChanges().collect {
+                reload()
+            }
+        }
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            registration?.descriptor?.name
+                                ?: stringResource(MR.strings.tsuzuki_providers_title),
+                        )
+                    },
+                    navigationIcon = {
+                        TextButton(onClick = navigator::pop) {
+                            Text(stringResource(MR.strings.tsuzuki_navigation_back))
+                        }
+                    },
+                )
+            },
+        ) { contentPadding ->
+            val current = registration
+            if (current == null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(contentPadding),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(stringResource(MR.strings.tsuzuki_providers_no_installed))
+                }
+            } else {
+                val descriptor = current.descriptor
+                val activeLanguages = current.facets.map { it.facetId }.toSet()
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(contentPadding),
+                ) {
+                    errorMessage?.let { message ->
+                        item(key = "error") {
+                            ListItem(headlineContent = { Text(message) })
+                        }
+                    }
+
+                    item(key = "status") {
+                        ListItem(
+                            headlineContent = { Text(descriptor.name) },
+                            supportingContent = {
+                                val repository = (descriptor.origin as? ProviderOrigin.Repository)
+                                    ?.repositoryId
+                                    .orEmpty()
+                                Text(
+                                    "${descriptor.version.name} · $repository · " +
+                                        providerLifecycleLabel(current.lifecycleStatus),
+                                )
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = current.lifecycleStatus == ProviderLifecycleStatus.ENABLED,
+                                    enabled = current.lifecycleStatus != ProviderLifecycleStatus.BLOCKED &&
+                                        current.lifecycleStatus != ProviderLifecycleStatus.INVALID,
+                                    onCheckedChange = { enabled ->
+                                        scope.launch {
+                                            runProviderUiCatching {
+                                                withContext(Dispatchers.IO) {
+                                                    registry.setEnabled(providerId, enabled)
+                                                }
+                                            }.onFailure { error ->
+                                                errorMessage = error.message
+                                            }
+                                        }
+                                    },
+                                )
+                            },
+                        )
+                    }
+
+                    item(key = "capabilities_header") {
+                        ProviderSectionHeader(stringResource(MR.strings.tsuzuki_providers_capabilities))
+                    }
+                    items(
+                        items = descriptor.capabilities.sortedWith(compareBy({ it.id }, { it.version })),
+                        key = { capability -> "${capability.id}@${capability.version}" },
+                    ) { capability ->
+                        ListItem(
+                            headlineContent = { Text(capability.id) },
+                            supportingContent = { Text("v${capability.version}") },
+                        )
+                    }
+
+                    item(key = "permissions_header") {
+                        ProviderSectionHeader(stringResource(MR.strings.tsuzuki_providers_permissions))
+                    }
+                    descriptor.permissions.network?.let { permission ->
+                        item(key = "permission_network") {
+                            ListItem(
+                                headlineContent = { Text("HTTP") },
+                                supportingContent = {
+                                    Text(
+                                        buildString {
+                                            append(permission.origins.sorted().joinToString())
+                                            if (permission.localNetwork) append(" · local network")
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    descriptor.permissions.browser?.let { permission ->
+                        item(key = "permission_browser") {
+                            ListItem(
+                                headlineContent = { Text("Browser") },
+                                supportingContent = {
+                                    Text(permission.origins.sorted().joinToString())
+                                },
+                            )
+                        }
+                    }
+                    if (descriptor.permissions.storage.enabled) {
+                        item(key = "permission_storage") {
+                            ListItem(headlineContent = { Text("Storage") })
+                        }
+                    }
+                    if (descriptor.permissions.secrets.isNotEmpty()) {
+                        item(key = "permission_secrets") {
+                            ListItem(
+                                headlineContent = { Text("Secrets") },
+                                supportingContent = {
+                                    Text(descriptor.permissions.secrets.sorted().joinToString())
+                                },
+                            )
+                        }
+                    }
+
+                    if (descriptor.contentLanguages.isNotEmpty()) {
+                        item(key = "languages_header") {
+                            ProviderSectionHeader(stringResource(MR.strings.tsuzuki_providers_languages))
+                        }
+                        items(
+                            items = descriptor.contentLanguages.sorted(),
+                            key = { language -> "language:$language" },
+                        ) { language ->
+                            val selected = language in activeLanguages
+                            ListItem(
+                                headlineContent = { Text(language) },
+                                trailingContent = {
+                                    Switch(
+                                        checked = selected,
+                                        enabled = current.lifecycleStatus != ProviderLifecycleStatus.BLOCKED &&
+                                            current.lifecycleStatus != ProviderLifecycleStatus.INVALID,
+                                        onCheckedChange = { enabled ->
+                                            val next = activeLanguages.toMutableSet().apply {
+                                                if (enabled) add(language) else remove(language)
+                                            }
+                                            val selection = if (next == descriptor.contentLanguages) {
+                                                null
+                                            } else {
+                                                next.toSet()
+                                            }
+                                            scope.launch {
+                                                runProviderUiCatching {
+                                                    withContext(Dispatchers.IO) {
+                                                        registry.setEnabledContentLanguages(
+                                                            providerId = providerId,
+                                                            languages = selection,
+                                                        )
+                                                    }
+                                                }.onFailure { error ->
+                                                    errorMessage = error.message
+                                                }
+                                            }
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                    }
+
+                    item(key = "settings_header") {
+                        ProviderSectionHeader(stringResource(MR.strings.tsuzuki_providers_settings))
+                    }
+                    if (descriptor.settings.isEmpty()) {
+                        item(key = "settings_empty") {
+                            ListItem(
+                                headlineContent = {
+                                    Text(stringResource(MR.strings.tsuzuki_providers_no_settings))
+                                },
+                            )
+                        }
+                    } else {
+                        items(
+                            items = descriptor.settings,
+                            key = { setting -> setting.key },
+                        ) { setting ->
+                            ListItem(
+                                headlineContent = { Text(setting.label) },
+                                supportingContent = {
+                                    Text(
+                                        buildString {
+                                            append(setting.type.name.lowercase())
+                                            if (setting.required) append(" · required")
+                                            if (setting.options.isNotEmpty()) {
+                                                append(" · ")
+                                                append(setting.options.joinToString())
+                                            }
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                        if (
+                            descriptor.settings.any { it.type == ProviderSettingType.SECRET } ||
+                            descriptor.permissions.secrets.isNotEmpty()
+                        ) {
+                            item(key = "secret_notice") {
+                                ListItem(
+                                    headlineContent = { Text("Secrets") },
+                                    supportingContent = {
+                                        Text(
+                                            stringResource(
+                                                MR.strings.tsuzuki_providers_secret_notice,
+                                            ),
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 class SettingsTsuzukiTorrentAcquisitionScreen : Screen() {
 
     @Composable
