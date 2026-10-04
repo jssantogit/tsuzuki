@@ -173,6 +173,64 @@ class ProviderRepositoryManagerTest {
     }
 
     @Test
+    fun `stale verified session cannot pair with changed enrollment metadata`() = runBlocking {
+        val keyPair = ecKeyPair()
+        val signingKey = ProviderRepositorySigningKey(
+            keyId = "root-1",
+            publicKeyBase64 = Base64.getEncoder().encodeToString(keyPair.public.encoded),
+        )
+        val enrollmentStore = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("stale-session-enrollments").toFile(),
+        )
+        val trustStore = FileProviderRepositoryTrustStore(
+            tempDir.resolve("stale-session-trust").toFile(),
+        )
+        val artifactStore = ProviderArtifactStore(
+            tempDir.resolve("stale-session-artifacts").toFile(),
+        )
+        val transport = FakeTransport()
+        val manager = manager(enrollmentStore, trustStore, artifactStore, transport)
+        val original = EnrolledProviderRepository(
+            "Original",
+            ProviderRepositoryEnrollment(
+                repositoryId = "repo.example",
+                indexUrl = "https://repo.example/index.json",
+                signingKey = signingKey,
+            ),
+        )
+        manager.enroll(original)
+
+        val bytes = tsz(versionCode = 1)
+        transport.publish(
+            signed = signedIndex(
+                keyPair = keyPair,
+                sequence = 1,
+                artifactBytes = bytes,
+                versionCode = 1,
+            ),
+            artifactBytes = bytes,
+        )
+        manager.refresh("repo.example")
+
+        enrollmentStore.save(
+            original.copy(
+                displayName = "Moved",
+                enrollment = original.enrollment.copy(
+                    indexUrl = "https://mirror.example/index.json",
+                ),
+            ),
+        )
+
+        manager.snapshot("repo.example") shouldBe null
+        manager.install("repo.example", "reader.example")
+        transport.requestedIndexUrls shouldBe listOf(
+            "https://repo.example/index.json",
+            "https://mirror.example/index.json",
+        )
+        manager.snapshot("repo.example")!!.repository.displayName shouldBe "Moved"
+    }
+
+    @Test
     fun `removing repository clears persisted trust state before explicit re-enrollment`() = runBlocking {
         val keyPair = ecKeyPair()
         val enrollmentStore = FileProviderRepositoryEnrollmentStore(
