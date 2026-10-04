@@ -96,6 +96,14 @@ def validate_program_headers(output: str, label: str) -> None:
             )
 
 
+def should_verify_wave6_elf(name: str) -> bool:
+    if not name.endswith(".so"):
+        return False
+    if not any(name.startswith(f"lib/{abi}/") for abi in ELF_16K_ABIS):
+        return False
+    return Path(name).name.startswith(JLIBTORRENT_PREFIX)
+
+
 def verify_zip_alignment(apks: Iterable[Path], zipalign: Path) -> int:
     checked = 0
     for apk in apks:
@@ -114,9 +122,7 @@ def verify_elf_alignment(apks: Iterable[Path], readelf: str) -> int:
         for apk_index, apk in enumerate(apks):
             with zipfile.ZipFile(apk) as archive:
                 for name in archive.namelist():
-                    if not name.endswith(".so"):
-                        continue
-                    if not any(name.startswith(f"lib/{abi}/") for abi in ELF_16K_ABIS):
+                    if not should_verify_wave6_elf(name):
                         continue
 
                     destination = temp_root / str(apk_index) / name
@@ -136,7 +142,7 @@ def verify_elf_alignment(apks: Iterable[Path], readelf: str) -> int:
                     checked += 1
 
     if checked == 0:
-        raise RuntimeError("No 64-bit native libraries were found for ELF alignment validation")
+        raise RuntimeError("No 64-bit jlibtorrent libraries were found for ELF alignment validation")
     return checked
 
 
@@ -160,7 +166,7 @@ def main() -> None:
     print(f"Native package gate passed for {len(apks)} APK(s)")
     print(f"jlibtorrent ABIs: {', '.join(sorted(observed_abis))}")
     print(f"16 KiB APK alignments checked: {zip_count}")
-    print(f"16 KiB ELF libraries checked: {elf_count}")
+    print(f"16 KiB jlibtorrent ELF libraries checked: {elf_count}")
 
 
 if __name__ == "__main__":
