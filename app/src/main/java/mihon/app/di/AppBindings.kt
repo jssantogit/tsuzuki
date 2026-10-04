@@ -11,6 +11,8 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
+import eu.kanade.tachiyomi.BuildConfig
+import eu.kanade.tachiyomi.data.tsuzuki.integration.BuiltinIntegrationProviderRegistry
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.provider.reading.ActiveProviderScriptPackageSource
 import eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGateway
@@ -45,7 +47,11 @@ import tachiyomi.data.Mangas
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
+import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
+import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
+import tachiyomi.domain.tsuzuki.provider.CompositeProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
+import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
 import java.io.File
 
@@ -129,9 +135,31 @@ object AppBindings {
 
     @Provides
     @SingleIn(AppScope::class)
+    fun providesBuiltinIntegrationProviderRegistry(
+        integrationRegistry: IntegrationRegistry,
+        settingsRepository: IntegrationSettingsRepository,
+    ): BuiltinIntegrationProviderRegistry =
+        BuiltinIntegrationProviderRegistry(
+            integrationRegistry = integrationRegistry,
+            settingsRepository = settingsRepository,
+            providerVersion = ProviderVersion(
+                name = BuildConfig.VERSION_NAME,
+                code = BuildConfig.VERSION_CODE.toLong(),
+            ),
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
     fun providesProviderRegistry(
-        registry: InstalledScriptProviderRegistry,
-    ): ProviderRegistry = registry
+        builtinRegistry: BuiltinIntegrationProviderRegistry,
+        scriptRegistry: InstalledScriptProviderRegistry,
+    ): ProviderRegistry =
+        CompositeProviderRegistry(
+            registries = listOf(
+                builtinRegistry,
+                scriptRegistry,
+            ),
+        )
 
     @Provides
     @SingleIn(AppScope::class)
