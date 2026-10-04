@@ -352,8 +352,8 @@ jobs:
         with:
           cache-read-only: true
 
-      - name: Assemble debug package
-        run: ./gradlew :app:assembleDebug
+      - name: Assemble release package
+        run: ./gradlew :app:assembleRelease
 
       - name: Verify native ABI and 16 KiB compatibility
         shell: bash
@@ -362,7 +362,7 @@ jobs:
           test -n "$zipalign"
           command -v readelf
           python3 .github/scripts/native_package_gate.py \
-            --apk-root app/build/outputs/apk/debug \
+            --apk-root app/build/outputs/apk/release \
             --zipalign "$zipalign"
 
   release:
