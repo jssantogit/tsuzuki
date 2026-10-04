@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.provider.repository
 
+import eu.kanade.presentation.more.settings.screen.providerRepositoryTrustConfirmationToken
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.encodeToString
@@ -178,6 +179,33 @@ class InstalledScriptProviderRegistryTest {
             registry.setEnabled(providerId, false)
         }
         configurationStore.get(providerId.value) shouldBe null
+    }
+
+    @Test
+    fun `repository trust confirmation is invalidated by any enrollment edit`() {
+        val confirmed = providerRepositoryTrustConfirmationToken(
+            displayName = "Example",
+            repositoryId = "repo.example",
+            indexUrl = "https://repo.example/index.json",
+            keyId = "root-1",
+            keyFingerprint = "abc123",
+        )
+
+        providerRepositoryTrustConfirmationToken(
+            displayName = "Example",
+            repositoryId = "repo.example",
+            indexUrl = "https://repo.example/index-v2.json",
+            keyId = "root-1",
+            keyFingerprint = "abc123",
+        ) == confirmed shouldBe false
+
+        providerRepositoryTrustConfirmationToken(
+            displayName = "Example",
+            repositoryId = "repo.example",
+            indexUrl = "https://repo.example/index.json",
+            keyId = "root-2",
+            keyFingerprint = "def456",
+        ) == confirmed shouldBe false
     }
 
     @Test
