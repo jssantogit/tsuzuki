@@ -111,7 +111,11 @@ class ProviderReadingBindingRepositoryImplTest {
 
         repository.get("title", ProviderId("org.example.reader"), null) shouldBe root
         repository.get("title", ProviderId("org.example.reader"), "en") shouldBe en
-        repository.getByTitle("title").map { it.id } shouldBe listOf("root", "en")
+        repository.getByTitle("title").associateBy { it.id } shouldBe
+            mapOf(
+                "en" to en,
+                "root" to root,
+            )
     }
 
     private fun binding() = ProviderReadingBinding(
