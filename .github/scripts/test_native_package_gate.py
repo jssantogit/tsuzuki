@@ -14,6 +14,7 @@ EXPECTED_ABIS = MODULE.EXPECTED_ABIS
 discover_apks = MODULE.discover_apks
 validate_jlibtorrent_abi_coverage = MODULE.validate_jlibtorrent_abi_coverage
 validate_program_headers = MODULE.validate_program_headers
+should_verify_wave6_elf = MODULE.should_verify_wave6_elf
 
 
 class NativePackageGateTest(unittest.TestCase):
@@ -74,6 +75,28 @@ class NativePackageGateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             with self.assertRaisesRegex(RuntimeError, "No APK was produced"):
                 discover_apks(Path(temp))
+
+    def test_elf_scope_is_limited_to_wave6_jlibtorrent_64_bit_binaries(self):
+        self.assertTrue(
+            should_verify_wave6_elf(
+                "lib/arm64-v8a/libjlibtorrent-2.0.12.9.so",
+            ),
+        )
+        self.assertTrue(
+            should_verify_wave6_elf(
+                "lib/x86_64/libjlibtorrent-2.0.12.9.so",
+            ),
+        )
+        self.assertFalse(
+            should_verify_wave6_elf(
+                "lib/arm64-v8a/libandroidx.graphics.path.so",
+            ),
+        )
+        self.assertFalse(
+            should_verify_wave6_elf(
+                "lib/armeabi-v7a/libjlibtorrent-2.0.12.9.so",
+            ),
+        )
 
     def test_program_headers_accept_16k_or_larger_load_alignment_and_relro_boundary(self):
         output = """
