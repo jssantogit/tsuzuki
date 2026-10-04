@@ -8,10 +8,10 @@ import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
+import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
-import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
@@ -39,7 +39,7 @@ class ResolveProviderChapterReadingTest {
         volume = null,
         title = null,
         type = CanonicalChapterType.REGULAR,
-        baseNumber = 1.0,
+        baseNumber = 1,
         part = null,
         alphaSuffix = null,
         confidence = 0.95,
