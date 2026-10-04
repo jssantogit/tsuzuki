@@ -94,7 +94,7 @@ class ProviderP2pJobManagerTest {
         )
         val service = manager.service("org.example.p2p")
 
-        service.acquire(request()) is ProviderP2pAcquireResponse.Pending shouldBe true
+        (service.acquire(request()) is ProviderP2pAcquireResponse.Pending) shouldBe true
         val conflicting = service.acquire(
             request().copy(
                 selectedFileIndex = 2,
@@ -126,7 +126,7 @@ class ProviderP2pJobManagerTest {
         val service = manager.service("org.example.p2p")
         val request = request()
 
-        service.acquire(request) is ProviderP2pAcquireResponse.Pending shouldBe true
+        (service.acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
         scope.advanceUntilIdle()
 
         service.acquire(request) shouldBe ProviderP2pAcquireResponse.Failure(
