@@ -9,6 +9,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceResolver
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
@@ -23,7 +24,7 @@ class ProviderManagedFileStore internal constructor(
     private val uriFactory: (File) -> String,
     private val clock: () -> Long = System::currentTimeMillis,
     private val ttlMs: Long = DEFAULT_TTL_MS,
-    private val maxFileBytes: Int = DEFAULT_MAX_FILE_BYTES,
+    private val maxFileBytes: Long = DEFAULT_MAX_FILE_BYTES,
     private val maxFilesPerProvider: Int = DEFAULT_MAX_FILES_PER_PROVIDER,
     private val maxTotalBytesPerProvider: Long = DEFAULT_MAX_TOTAL_BYTES_PER_PROVIDER,
     private val maxArchiveEntries: Int = DEFAULT_MAX_ARCHIVE_ENTRIES,
@@ -64,7 +65,7 @@ class ProviderManagedFileStore internal constructor(
         format: ProviderManagedResourceFormat,
     ): String {
         val provider = ProviderId(providerId)
-        if (bytes.isEmpty() || bytes.size > maxFileBytes) {
+        if (bytes.isEmpty() || bytes.size.toLong() > maxFileBytes) {
             throw IllegalStateException("Provider managed resource exceeds the file byte limit")
         }
         // Managed files outlive the invocation resource store and enter the inherited Reader,
@@ -80,7 +81,7 @@ class ProviderManagedFileStore internal constructor(
             throw IllegalStateException("Provider managed resource count limit exceeded")
         }
         val totalBytes = existing.sumOf(File::length)
-        if (totalBytes + bytes.size > maxTotalBytesPerProvider) {
+        if (totalBytes + bytes.size.toLong() > maxTotalBytesPerProvider) {
             throw IllegalStateException("Provider managed resource total byte limit exceeded")
         }
 
@@ -95,6 +96,80 @@ class ProviderManagedFileStore internal constructor(
             }
             moveAtomically(temp, target)
             target.setLastModified(clock())
+        } catch (error: Throwable) {
+            temp.delete()
+            target.delete()
+            throw error
+        }
+
+        return "managed:$id"
+    }
+
+    @Synchronized
+    fun adoptFile(
+        providerId: String,
+        source: File,
+        format: ProviderManagedResourceFormat,
+    ): String {
+        val provider = ProviderId(providerId)
+        require(source.isFile && !Files.isSymbolicLink(source.toPath())) {
+            "Provider managed source must be a regular host-owned file"
+        }
+
+        val sourceBytes = source.length()
+        if (sourceBytes <= 0L || sourceBytes > maxFileBytes) {
+            throw IllegalStateException("Provider managed resource exceeds the file byte limit")
+        }
+        validateArchive(source)
+
+        val directory = providerDirectory(provider)
+        ensureDirectory(directory)
+        pruneExpired(directory)
+
+        val existing = directory.listFiles().orEmpty().filter(File::isFile)
+        if (existing.size >= maxFilesPerProvider) {
+            throw IllegalStateException("Provider managed resource count limit exceeded")
+        }
+        val totalBytes = existing.sumOf(File::length)
+        if (totalBytes + sourceBytes > maxTotalBytesPerProvider) {
+            throw IllegalStateException("Provider managed resource total byte limit exceeded")
+        }
+
+        val id = UUID.randomUUID().toString()
+        val target = File(directory, "$id.${format.extension}")
+        val temp = File(directory, ".$id.tmp")
+
+        try {
+            FileInputStream(source).use { input ->
+                FileOutputStream(temp).use { output ->
+                    var copied = 0L
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        if (read == 0) continue
+                        copied += read
+                        if (copied > maxFileBytes) {
+                            throw IllegalStateException(
+                                "Provider managed resource exceeds the file byte limit",
+                            )
+                        }
+                        output.write(buffer, 0, read)
+                    }
+                    if (copied != sourceBytes) {
+                        throw IllegalStateException("Provider managed source changed during adoption")
+                    }
+                    output.flush()
+                    output.fd.sync()
+                }
+            }
+            validateArchive(temp)
+            moveAtomically(temp, target)
+            target.setLastModified(clock())
+            if (!source.delete()) {
+                target.delete()
+                throw IllegalStateException("Provider managed source could not be retired after adoption")
+            }
         } catch (error: Throwable) {
             temp.delete()
             target.delete()
@@ -152,13 +227,29 @@ class ProviderManagedFileStore internal constructor(
         if (!hasZipLocalFileHeader(bytes)) {
             throw IllegalStateException("Provider managed resource is not a ZIP archive")
         }
+        ByteArrayInputStream(bytes).use(::validateArchiveStream)
+    }
 
+    private fun validateArchive(file: File) {
+        if (!hasZipLocalFileHeader(file)) {
+            throw IllegalStateException("Provider managed resource is not a ZIP archive")
+        }
+        try {
+            FileInputStream(file).use(::validateArchiveStream)
+        } catch (error: IllegalStateException) {
+            throw error
+        } catch (error: IOException) {
+            throw IllegalStateException("Provider managed archive could not be validated", error)
+        }
+    }
+
+    private fun validateArchiveStream(input: java.io.InputStream) {
         var entryCount = 0
         var fileCount = 0
         var totalUncompressedBytes = 0L
 
         try {
-            ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
+            ZipInputStream(input).use { zip ->
                 while (true) {
                     val entry = zip.nextEntry ?: break
                     entryCount += 1
@@ -230,6 +321,14 @@ class ProviderManagedFileStore internal constructor(
             bytes[2] == 3.toByte() &&
             bytes[3] == 4.toByte()
 
+    private fun hasZipLocalFileHeader(file: File): Boolean =
+        runCatching {
+            FileInputStream(file).use { input ->
+                val header = ByteArray(4)
+                input.read(header) == header.size && hasZipLocalFileHeader(header)
+            }
+        }.getOrDefault(false)
+
     private fun moveAtomically(source: File, target: File) {
         try {
             Files.move(
@@ -266,11 +365,11 @@ class ProviderManagedFileStore internal constructor(
 
     private companion object {
         const val DEFAULT_TTL_MS = 24L * 60L * 60L * 1000L
-        const val DEFAULT_MAX_FILE_BYTES = 16 * 1024 * 1024
+        const val DEFAULT_MAX_FILE_BYTES = 512L * 1024L * 1024L
         const val DEFAULT_MAX_FILES_PER_PROVIDER = 32
-        const val DEFAULT_MAX_TOTAL_BYTES_PER_PROVIDER = 64L * 1024L * 1024L
+        const val DEFAULT_MAX_TOTAL_BYTES_PER_PROVIDER = 2L * 1024L * 1024L * 1024L
         const val DEFAULT_MAX_ARCHIVE_ENTRIES = 5_000
-        const val DEFAULT_MAX_ARCHIVE_ENTRY_BYTES = 16 * 1024 * 1024
-        const val DEFAULT_MAX_ARCHIVE_UNCOMPRESSED_BYTES = 128L * 1024L * 1024L
+        const val DEFAULT_MAX_ARCHIVE_ENTRY_BYTES = 64 * 1024 * 1024
+        const val DEFAULT_MAX_ARCHIVE_UNCOMPRESSED_BYTES = 1024L * 1024L * 1024L
     }
 }
