@@ -78,6 +78,11 @@ class ProviderTorrentHttpFileMaterializer internal constructor(
                     ProviderErrorCode.NETWORK_POLICY,
                     retryable = false,
                 )
+            } catch (_: ProviderHttpArchiveNetworkException) {
+                failure(
+                    ProviderErrorCode.NETWORK_ERROR,
+                    retryable = true,
+                )
             } catch (_: Throwable) {
                 failure(
                     ProviderErrorCode.ACQUISITION_FAILED,
