@@ -10,6 +10,10 @@ typealias ProviderErrorCode = tachiyomi.domain.tsuzuki.provider.ProviderErrorCod
 typealias ProviderError = tachiyomi.domain.tsuzuki.provider.ProviderError
 typealias ProviderCallResult<T> = tachiyomi.domain.tsuzuki.provider.ProviderCallResult<T>
 
+typealias ProviderManagedResourceRef = tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceRef
+typealias ProviderManagedFileFormat = tachiyomi.domain.tsuzuki.provider.ProviderManagedFileFormat
+typealias ProviderManagedResourceResolver = tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceResolver
+
 data class ProviderBindingRef(
     val providerId: ProviderId,
     val facetId: String?,
@@ -167,36 +171,6 @@ data class ProviderPageRequest(
             "transfer-encoding",
             "upgrade",
         )
-    }
-}
-
-@JvmInline
-value class ProviderManagedResourceRef(val value: String) {
-    init {
-        require(MANAGED_RESOURCE.matches(value)) {
-            "Provider managed resource reference is invalid"
-        }
-    }
-
-    private companion object {
-        val MANAGED_RESOURCE = Regex("managed:[A-Za-z0-9_-]{1,256}")
-    }
-}
-
-enum class ProviderManagedFileFormat {
-    CBZ,
-    ZIP,
-}
-
-fun interface ProviderManagedResourceResolver {
-    fun resolve(
-        providerId: ProviderId,
-        resource: ProviderManagedResourceRef,
-        format: ProviderManagedFileFormat,
-    ): String?
-
-    companion object {
-        val DenyAll = ProviderManagedResourceResolver { _, _, _ -> null }
     }
 }
 
