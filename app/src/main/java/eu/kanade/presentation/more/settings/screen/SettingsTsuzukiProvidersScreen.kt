@@ -294,12 +294,12 @@ class SettingsTsuzukiProvidersScreen : Screen() {
             AddProviderRepositoryDialog(
                 onDismiss = { showAddRepository = false },
                 onConfirm = { repository ->
-                    runCatching {
-                        manager.enroll(repository)
-                    }.onSuccess {
-                        repositories = manager.repositories()
-                        showAddRepository = false
-                        scope.launch {
+                    scope.launch {
+                        runProviderUiCatching {
+                            manager.enroll(repository)
+                        }.onSuccess {
+                            repositories = manager.repositories()
+                            showAddRepository = false
                             runProviderUiCatching {
                                 manager.refresh(repository.enrollment.repositoryId)
                             }.onSuccess { snapshot ->
@@ -310,9 +310,9 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                             }.onFailure { error ->
                                 errorMessage = error.message
                             }
+                        }.onFailure { error ->
+                            errorMessage = error.message
                         }
-                    }.onFailure { error ->
-                        errorMessage = error.message
                     }
                 },
             )
@@ -329,14 +329,16 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                     TextButton(
                         onClick = {
                             val repositoryId = repository.enrollment.repositoryId
-                            runCatching {
-                                manager.removeRepository(repositoryId)
-                            }.onSuccess {
-                                repositories = manager.repositories()
-                                snapshots = snapshots - repositoryId
-                                repositoryToRemove = null
-                            }.onFailure { error ->
-                                errorMessage = error.message
+                            scope.launch {
+                                runProviderUiCatching {
+                                    manager.removeRepository(repositoryId)
+                                }.onSuccess {
+                                    repositories = manager.repositories()
+                                    snapshots = snapshots - repositoryId
+                                    repositoryToRemove = null
+                                }.onFailure { error ->
+                                    errorMessage = error.message
+                                }
                             }
                         },
                     ) {
