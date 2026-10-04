@@ -8,6 +8,7 @@ import tachiyomi.core.provider.packageformat.ProviderManifestCapability
 import tachiyomi.core.provider.packageformat.ProviderManifestPermissions
 import tachiyomi.core.provider.packageformat.ProviderManifestVersion
 import tachiyomi.core.provider.packageformat.ProviderScriptManifest
+import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
@@ -35,6 +36,7 @@ class ScriptProviderCapabilityExecutorTest {
         entrypoint = "main.js",
         capabilities = listOf(
             ProviderManifestCapability("torrent.search", 1),
+            ProviderManifestCapability("acquisition.p2p", 1),
         ),
         permissions = ProviderManifestPermissions(),
     )
@@ -72,6 +74,50 @@ class ScriptProviderCapabilityExecutorTest {
             value
         } shouldBe ProviderCallResult.Success("""{"ok":true}""")
         invoked shouldBe true
+    }
+
+    @Test
+    fun `privileged P2P grant is explicit and capability scoped`() = runBlocking {
+        var invocations = 0
+        val executor = executor(
+            enabledCapabilities = setOf(
+                ProviderCapabilities.TorrentSearchV1,
+                ProviderCapabilities.AcquisitionP2pV1,
+            ),
+        ) { request, _, _, policy ->
+            invocations += 1
+            request.capabilityId shouldBe "acquisition.p2p"
+            policy.directP2pEnabled shouldBe true
+            (ProviderHostModule.P2P in policy.allowedHostModules()) shouldBe true
+            ProviderRuntimeInvocationResponse.success("""{"status":"pending","jobId":"host-job"}""")
+        }
+
+        executor.invoke(
+            providerId = providerId,
+            capability = ProviderCapabilities.AcquisitionP2pV1,
+            inputJson = "{}",
+            privilegedHostGrants = ScriptProviderPrivilegedHostGrants(
+                directP2p = true,
+            ),
+        ) { value, _ -> value } shouldBe ProviderCallResult.Success(
+            """{"status":"pending","jobId":"host-job"}""",
+        )
+        invocations shouldBe 1
+
+        executor.invoke(
+            providerId = providerId,
+            capability = ProviderCapabilities.TorrentSearchV1,
+            inputJson = "{}",
+            privilegedHostGrants = ScriptProviderPrivilegedHostGrants(
+                directP2p = true,
+            ),
+        ) { value, _ -> value } shouldBe ProviderCallResult.Failure(
+            ProviderError(
+                code = ProviderErrorCode.PERMISSION_DENIED,
+                retryable = false,
+            ),
+        )
+        invocations shouldBe 1
     }
 
     @Test
@@ -179,7 +225,10 @@ class ScriptProviderCapabilityExecutorTest {
             version = ProviderVersion("1.0.0", 1),
             origin = origin,
             runtime = runtime,
-            capabilities = setOf(ProviderCapabilities.TorrentSearchV1),
+            capabilities = setOf(
+                ProviderCapabilities.TorrentSearchV1,
+                ProviderCapabilities.AcquisitionP2pV1,
+            ),
             permissions = ProviderPermissionSet(),
             settings = emptyList(),
             contentLanguages = emptySet(),
