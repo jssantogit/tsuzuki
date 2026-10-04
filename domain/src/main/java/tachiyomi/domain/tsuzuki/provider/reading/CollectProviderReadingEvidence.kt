@@ -9,7 +9,6 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
-import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
@@ -38,6 +37,7 @@ class CollectProviderReadingEvidence private constructor(
     private val bindingRepository: ProviderReadingBindingRepository,
     private val evidenceAdapter: ProviderChapterEvidenceAdapter,
     private val clock: () -> Long,
+    @Suppress("UNUSED_PARAMETER") constructorMarker: Unit,
 ) {
 
     @Inject
@@ -53,6 +53,7 @@ class CollectProviderReadingEvidence private constructor(
         bindingRepository = bindingRepository,
         evidenceAdapter = ProviderChapterEvidenceAdapter(),
         clock = System::currentTimeMillis,
+        constructorMarker = Unit,
     )
 
     constructor(
@@ -69,6 +70,7 @@ class CollectProviderReadingEvidence private constructor(
         bindingRepository = bindingRepository,
         evidenceAdapter = evidenceAdapter,
         clock = clock,
+        constructorMarker = Unit,
     )
 
     suspend fun execute(canonicalTitleId: String): ProviderReadingEvidenceCollection {
@@ -109,16 +111,19 @@ class CollectProviderReadingEvidence private constructor(
         )
     }
 
-    fun configurationTokens(): List<String> = readingTargets().map { target ->
-        buildString {
-            append("provider:")
-            append(target.registration.descriptor.id.value)
-            append(':')
-            append(target.registration.descriptor.version.code)
-            append(':')
-            append(target.facetId.orEmpty())
-            append(':')
-            append(target.registration.configurationFingerprint)
+    suspend fun configurationTokens(): List<String> {
+        providerRegistry.awaitReady()
+        return readingTargets().map { target ->
+            buildString {
+                append("provider:")
+                append(target.registration.descriptor.id.value)
+                append(':')
+                append(target.registration.descriptor.version.code)
+                append(':')
+                append(target.facetId.orEmpty())
+                append(':')
+                append(target.registration.configurationFingerprint)
+            }
         }
     }
 
