@@ -101,6 +101,7 @@ class ProviderRepositoryManagerTest {
 
         manager.rollback("reader.example")
         manager.installed().single().versionCode shouldBe 1L
+        manager.canRollback("reader.example") shouldBe false
     }
 
     @Test
