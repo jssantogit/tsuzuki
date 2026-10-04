@@ -70,6 +70,46 @@ class AndroidProviderRepositoryTransportTest {
     }
 
     @Test
+    fun `repository transport strips inherited application authority`() = runBlocking {
+        val server = MockWebServer()
+        server.start()
+        try {
+            val payload = """{"repositoryId":"repo.example","sequence":1}""".encodeToByteArray()
+            server.enqueue(
+                MockResponse().setBody(
+                    json.encodeToString(
+                        ProviderSignedIndexEnvelope(
+                            keyId = "root-1",
+                            payloadBase64 = Base64.getEncoder().encodeToString(payload),
+                            signatureBase64 = Base64.getEncoder().encodeToString(byteArrayOf(1)),
+                        ),
+                    ),
+                ),
+            )
+            val inherited = okhttp3.OkHttpClient.Builder()
+                .addInterceptor { chain ->
+                    chain.proceed(
+                        chain.request()
+                            .newBuilder()
+                            .header("Authorization", "ambient-secret")
+                            .build(),
+                    )
+                }
+                .build()
+            val transport = AndroidProviderRepositoryTransport(
+                client = inherited,
+                allowInsecureHttp = true,
+            )
+
+            transport.fetchIndex(server.url("/index.json").toString())
+
+            server.takeRequest().headers["Authorization"] shouldBe null
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun `artifact transport fails closed on body size limit`() = runBlocking {
         val server = MockWebServer()
         server.start()
