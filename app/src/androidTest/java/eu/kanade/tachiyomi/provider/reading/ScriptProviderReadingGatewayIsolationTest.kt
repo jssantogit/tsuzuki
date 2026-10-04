@@ -17,6 +17,8 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.CanonicalReaderTargetPlan
 import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpChapterLoader
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -36,12 +38,28 @@ import tachiyomi.domain.tsuzuki.provider.ProviderPermissionSet
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
+import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
+import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
+import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
+import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
+import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
+import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterEvidenceAdapter
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBinding
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBindingRepository
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingDelivery
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
+import tachiyomi.domain.tsuzuki.provider.reading.RefreshProviderReadingChapters
+import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 import java.io.ByteArrayOutputStream
@@ -158,6 +176,161 @@ class ScriptProviderReadingGatewayIsolationTest {
             assertEquals("/lookup", server.takeRequest().url.encodedPath)
             assertEquals("/chapters", server.takeRequest().url.encodedPath)
             assertEquals("/pages/001.jpg", server.takeRequest().url.encodedPath)
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun apiJsonProvider_reconcilesCanonicalChapterAndReadsThroughProviderResolver() = runBlocking {
+        val server = MockWebServer()
+        server.start()
+        val origin = server.origin()
+        server.enqueue(
+            MockResponse.Builder()
+                .body(
+                    """
+                    {
+                      "items": [
+                        {
+                          "externalWorkId": "work-canonical",
+                          "title": "Canonical API Title",
+                          "aliases": [],
+                          "url": "$origin/title/canonical",
+                          "language": "en"
+                        }
+                      ],
+                      "nextCursor": null
+                    }
+                    """.trimIndent(),
+                )
+                .build(),
+        )
+        server.enqueue(
+            MockResponse.Builder()
+                .body(
+                    """
+                    {
+                      "items": [
+                        {
+                          "providerChapterId": "chapter-canonical-1",
+                          "rawLabel": "Chapter 1",
+                          "rawNumber": 1.0,
+                          "language": "en"
+                        }
+                      ],
+                      "nextCursor": null
+                    }
+                    """.trimIndent(),
+                )
+                .build(),
+        )
+        server.enqueue(
+            MockResponse.Builder()
+                .body("canonical-reader-image")
+                .build(),
+        )
+
+        val gateway = gateway(
+            networkOrigins = setOf(origin),
+            localNetwork = true,
+            main = """
+                const base = "$origin";
+                export default {
+                  reading: {
+                    lookup: async () =>
+                      JSON.parse(await tsuzuki.http.get(base + "/lookup")),
+                    chapters: async () =>
+                      JSON.parse(await tsuzuki.http.get(base + "/chapters")),
+                    pages: async () => ({
+                      type: "page_list",
+                      pages: [{url: base + "/page.jpg", headers: {}}]
+                    })
+                  }
+                };
+            """.trimIndent(),
+        )
+
+        try {
+            val lookup = gateway.lookup(
+                PROVIDER_ID,
+                ProviderReadingLookupRequest(listOf("Canonical API Title")),
+            ) as ProviderCallResult.Success
+            val candidate = lookup.value.items.single()
+            val binding = ProviderReadingBinding(
+                id = "binding-canonical",
+                canonicalTitleId = "canonical-title",
+                ref = ProviderBindingRef(
+                    providerId = PROVIDER_ID,
+                    facetId = candidate.language,
+                    externalWorkId = candidate.externalWorkId,
+                ),
+                verification = ProviderBindingVerification.EXACT,
+                availability = ProviderBindingAvailability.AVAILABLE,
+                createdAt = 1L,
+                updatedAt = 1L,
+            )
+            val chapterRepository = InMemoryCanonicalChapterRepository()
+            val evidenceRepository = InMemoryChapterEvidenceRepository()
+            val bindingRepository = SingleProviderReadingBindingRepository(binding)
+            val refresh = RefreshProviderReadingChapters(
+                gateway = gateway,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(clock = { 10L }),
+                reconcileChapterEvidence = ReconcileChapterEvidence(
+                    parser = ParseCanonicalChapterLabel(),
+                    canonicalChapterRepository = chapterRepository,
+                    evidenceRepository = evidenceRepository,
+                ),
+            )
+
+            val refreshResult = refresh.execute(binding) as ProviderCallResult.Success
+            assertEquals(1, refreshResult.value)
+            val canonicalChapter = chapterRepository
+                .getByCanonicalTitleId("canonical-title")
+                .single()
+
+            val resolver = ResolveProviderChapterReading(
+                canonicalChapterRepository = chapterRepository,
+                evidenceRepository = evidenceRepository,
+                bindingRepository = bindingRepository,
+                gateway = gateway,
+            )
+            val option = resolver.options(canonicalChapter.id).single()
+            assertEquals("chapter-canonical-1", option.providerChapterId)
+
+            val prepared = resolver.preparedContent(option) as ProviderCallResult.Success
+            val content = prepared.value as PreparedChapterContent.HttpPages
+            val plan = CanonicalReaderTargetPlan.HttpPages(
+                canonicalChapterId = canonicalChapter.id,
+                pages = content.pages,
+            )
+            val readerLoader = ProviderHttpChapterLoader.from(
+                InstrumentationRegistry.getInstrumentation().targetContext,
+                plan,
+            )
+            val readerChapter = ReaderChapter(
+                ChapterImpl().apply {
+                    id = Long.MIN_VALUE
+                    url = "provider-pages:${canonicalChapter.id}"
+                    name = "Canonical Provider chapter"
+                },
+            )
+            try {
+                readerLoader.loadChapter(readerChapter)
+                val readerPage = readerChapter.pages!!.single()
+                readerChapter.pageLoader!!.loadPage(readerPage)
+                assertEquals(Page.State.Ready, readerPage.status)
+                assertEquals(
+                    "canonical-reader-image",
+                    readerPage.stream!!.invoke().use { it.readBytes().decodeToString() },
+                )
+            } finally {
+                readerChapter.pageLoader?.recycle()
+            }
+
+            assertEquals("/lookup", server.takeRequest().url.encodedPath)
+            assertEquals("/chapters", server.takeRequest().url.encodedPath)
+            assertEquals("/page.jpg", server.takeRequest().url.encodedPath)
         } finally {
             server.close()
         }
@@ -468,6 +641,131 @@ class ScriptProviderReadingGatewayIsolationTest {
             readerPage.stream!!.invoke().use { it.readBytes().decodeToString() }
         } finally {
             readerChapter.pageLoader?.recycle()
+        }
+    }
+
+    private class SingleProviderReadingBindingRepository(
+        private var binding: ProviderReadingBinding,
+    ) : ProviderReadingBindingRepository {
+
+        override suspend fun get(
+            canonicalTitleId: String,
+            providerId: ProviderId,
+            facetId: String?,
+        ): ProviderReadingBinding? =
+            binding.takeIf {
+                it.canonicalTitleId == canonicalTitleId &&
+                    it.ref.providerId == providerId &&
+                    it.ref.facetId == facetId
+            }
+
+        override suspend fun getByTitle(canonicalTitleId: String): List<ProviderReadingBinding> =
+            listOf(binding).filter { it.canonicalTitleId == canonicalTitleId }
+
+        override suspend fun upsert(binding: ProviderReadingBinding) {
+            this.binding = binding
+        }
+
+        override suspend fun markUnavailable(bindingId: String, updatedAt: Long) {
+            if (binding.id == bindingId) {
+                binding = binding.copy(
+                    availability = ProviderBindingAvailability.UNAVAILABLE,
+                    updatedAt = updatedAt,
+                )
+            }
+        }
+    }
+
+    private class InMemoryChapterEvidenceRepository : ChapterEvidenceRepository {
+        private val records = mutableListOf<PersistedChapterEvidence>()
+
+        override suspend fun getByCanonicalTitleId(
+            canonicalTitleId: String,
+        ): List<PersistedChapterEvidence> =
+            records.filter { it.evidence.canonicalTitleId == canonicalTitleId }
+
+        override suspend fun getByProducerExternalKey(
+            producerKind: ProducerKind,
+            producerId: String,
+            externalChapterKey: String,
+        ): PersistedChapterEvidence? =
+            records.firstOrNull {
+                it.evidence.producerKind == producerKind &&
+                    it.evidence.producerId == producerId &&
+                    it.evidence.externalChapterKey == externalChapterKey
+            }
+
+        override suspend fun upsert(
+            evidence: ChapterEvidence,
+            mappedCanonicalChapterId: String?,
+        ): PersistedChapterEvidence {
+            val existingIndex = records.indexOfFirst { current ->
+                current.evidence.id == evidence.id ||
+                    (
+                        evidence.externalChapterKey != null &&
+                            current.evidence.producerKind == evidence.producerKind &&
+                            current.evidence.producerId == evidence.producerId &&
+                            current.evidence.externalChapterKey == evidence.externalChapterKey
+                    )
+            }
+            val stableEvidence = if (existingIndex >= 0) {
+                evidence.copy(id = records[existingIndex].evidence.id)
+            } else {
+                evidence
+            }
+            val persisted = PersistedChapterEvidence(
+                evidence = stableEvidence,
+                mappedCanonicalChapterId = mappedCanonicalChapterId,
+            )
+            if (existingIndex >= 0) {
+                records[existingIndex] = persisted
+            } else {
+                records += persisted
+            }
+            return persisted
+        }
+    }
+
+    private class InMemoryCanonicalChapterRepository : CanonicalChapterRepository {
+        private val chapters = linkedMapOf<String, CanonicalChapter>()
+        private val state = MutableStateFlow<List<CanonicalChapter>>(emptyList())
+
+        override suspend fun getByCanonicalTitleId(
+            canonicalTitleId: String,
+        ): List<CanonicalChapter> =
+            chapters.values.filter { it.canonicalTitleId == canonicalTitleId }
+
+        override fun observeByCanonicalTitleId(
+            canonicalTitleId: String,
+        ): Flow<List<CanonicalChapter>> = state
+
+        override suspend fun getById(id: String): CanonicalChapter? = chapters[id]
+
+        override suspend fun getVariantBySourceIdentity(
+            sourceId: Long,
+            sourceChapterId: String,
+        ): ChapterVariant? = null
+
+        override suspend fun getVariantsByCanonicalChapterId(
+            canonicalChapterId: String,
+        ): List<ChapterVariant> = emptyList()
+
+        override suspend fun getVariantsBySourceMappingId(
+            sourceMappingId: String,
+        ): List<ChapterVariant> = emptyList()
+
+        override suspend fun upsert(chapter: CanonicalChapter) {
+            chapters[chapter.id] = chapter
+            state.value = chapters.values.toList()
+        }
+
+        override suspend fun upsertVariant(variant: ChapterVariant) = Unit
+
+        override suspend fun upsertBatch(
+            chapters: List<CanonicalChapter>,
+            variants: List<ChapterVariant>,
+        ) {
+            chapters.forEach { upsert(it) }
         }
     }
 
