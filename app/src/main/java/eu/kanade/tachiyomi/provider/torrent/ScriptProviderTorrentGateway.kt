@@ -49,6 +49,8 @@ class ScriptProviderTorrentGateway(
                 SearchRequestDto(
                     titles = request.titles,
                     preferredLanguages = request.preferredLanguages,
+                    chapterNumber = request.chapterNumber,
+                    volume = request.volume,
                     cursor = request.cursor?.value,
                 ),
             ),
@@ -203,6 +205,8 @@ class ScriptProviderTorrentGateway(
     private data class SearchRequestDto(
         val titles: List<String>,
         val preferredLanguages: Set<String> = emptySet(),
+        val chapterNumber: String? = null,
+        val volume: Int? = null,
         val cursor: String? = null,
     )
 
