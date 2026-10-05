@@ -37,7 +37,7 @@ class ResolveProviderChapterReading(
     private val evidenceRepository: ChapterEvidenceRepository,
     private val bindingRepository: ProviderReadingBindingRepository,
     private val gateway: ProviderReadingGateway,
-    private val managedResources: ProviderManagedResourceResolver,
+    private val managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
 ) {
 
     suspend fun options(canonicalChapterId: String): List<ProviderChapterReadingOption> {
