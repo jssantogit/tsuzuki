@@ -55,6 +55,56 @@ class CanonicalTitleNameMaterializationTest {
             )
     }
 
+    @Test
+    fun `catalog materialization preserves a new provider primary title when canonical display stays stable`() = runTest {
+        val canonicalRepository = FakeCanonicalTitleRepository()
+        val existing = CanonicalTitle(
+            id = "title-existing",
+            displayTitle = "Frieren: Beyond Journey's End",
+            identityState = CanonicalIdentityState.RESOLVED,
+            createdAt = 100L,
+            updatedAt = 100L,
+        )
+        canonicalRepository.insert(existing)
+        canonicalRepository.addExternalIdentity(
+            ExternalIdentity(
+                canonicalTitleId = existing.id,
+                provider = "kitsu",
+                externalId = "k1",
+                verified = true,
+                createdAt = 100L,
+            ),
+        )
+        val names = FakeTitleNameObservationRepository()
+        val interactor = MaterializeCanonicalTitleFromCatalog(
+            materializeCanonicalTitle = MaterializeCanonicalTitle(
+                repository = canonicalRepository,
+                idFactory = { "title-new" },
+                clock = { 1_000L },
+            ),
+            reportedChapterCountRepository = null,
+            clock = { 2_000L },
+            titleNameObservationRepository = names,
+        )
+
+        val title = interactor.execute(
+            CatalogItem(
+                provider = "myanimelist",
+                providerId = "52991",
+                title = "Sousou no Frieren",
+                titles = mapOf("english" to "Frieren: Beyond Journey's End"),
+                externalIds = mapOf("kitsu" to "k1"),
+            ),
+        )
+
+        title.id shouldBeTitle existing.id
+        title.displayTitle shouldBeTitle "Frieren: Beyond Journey's End"
+        names.values.map { Triple(it.provider, it.sourceKey, it.value) }
+            .shouldContainExactly(
+                Triple("myanimelist", "primary", "Sousou no Frieren"),
+            )
+    }
+
     private infix fun String.shouldBeTitle(expected: String) {
         check(this == expected) { "Expected title <$expected>, got <$this>" }
     }
