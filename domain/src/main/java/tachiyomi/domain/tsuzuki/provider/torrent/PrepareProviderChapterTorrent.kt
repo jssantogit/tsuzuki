@@ -3,6 +3,7 @@ package tachiyomi.domain.tsuzuki.provider.torrent
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
 import tachiyomi.domain.tsuzuki.content.PrepareTorrentArtifact
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticTrace
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 
@@ -34,8 +35,11 @@ class PrepareProviderChapterTorrent(
     private val prepareTorrentArtifact: PrepareTorrentArtifact,
 ) {
 
-    suspend fun prepare(canonicalChapterId: String): ProviderChapterTorrentPreparation {
-        val options = resolver.options(canonicalChapterId)
+    suspend fun prepare(
+        canonicalChapterId: String,
+        trace: DiagnosticTrace? = null,
+    ): ProviderChapterTorrentPreparation {
+        val options = resolver.options(canonicalChapterId, trace)
         if (options.isEmpty()) return ProviderChapterTorrentPreparation.Unavailable
         if (options.size > 1) {
             return ProviderChapterTorrentPreparation.Ambiguous(options.size)
