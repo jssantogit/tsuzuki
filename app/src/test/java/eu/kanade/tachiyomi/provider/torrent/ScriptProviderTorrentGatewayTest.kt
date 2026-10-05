@@ -112,15 +112,18 @@ class ScriptProviderTorrentGatewayTest {
             TorrentSearchRequest(
                 titles = listOf("Example"),
                 preferredLanguages = setOf("en"),
+                chapterNumber = "12",
+                volume = 2,
             ),
         ) as ProviderCallResult.Success
 
         result.value.items.single().files!!.single().path shouldBe "pack/chapter-012.cbz"
         result.value.nextCursor?.value shouldBe "next"
         captured?.capabilityId shouldBe "torrent.search"
-        Json.parseToJsonElement(requireNotNull(capturedInput))
-            .jsonObject["titles"]
-            .toString() shouldBe """["Example"]"""
+        val input = Json.parseToJsonElement(requireNotNull(capturedInput)).jsonObject
+        input["titles"].toString() shouldBe """["Example"]"""
+        input["chapterNumber"].toString() shouldBe """"12""""
+        input["volume"].toString() shouldBe "2"
     }
 
     @Test
