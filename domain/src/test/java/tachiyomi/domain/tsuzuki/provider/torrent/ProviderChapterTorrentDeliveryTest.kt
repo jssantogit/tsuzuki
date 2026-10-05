@@ -67,81 +67,83 @@ class ProviderChapterTorrentDeliveryTest {
     }
 
     @Test
-    fun `typed discovery failure is not reported as an empty successful search`() = runBlocking {
-        val chapter = CanonicalChapter(
-            id = "chapter-12",
-            canonicalTitleId = "title-1",
-            displayNumber = "12",
-            type = CanonicalChapterType.REGULAR,
-            baseNumber = 12,
-            volume = 2,
-        )
-        val title = CanonicalTitle(
-            id = "title-1",
-            displayTitle = "Example Manga",
-            identityState = CanonicalIdentityState.RESOLVED,
-            createdAt = 1,
-            updatedAt = 1,
-        )
-        val providerId = ProviderId("app.tsuzuki.nyaa")
-        val recorder = RecordingDiagnostics()
-        val resolver = ResolveProviderChapterTorrent(
-            canonicalChapterRepository = chapterRepository(chapter),
-            canonicalTitleRepository = titleRepository(title),
-            providerRegistry = DefaultProviderRegistry(
-                registrations = {
-                    listOf(
-                        ProviderRegistration(
-                            descriptor = ProviderDescriptor(
-                                id = providerId,
-                                name = "Nyaa",
-                                version = ProviderVersion("0.1.2", 3),
-                                origin = ProviderOrigin.Repository("app.tsuzuki.providers"),
-                                runtime = ProviderRuntimeKind.SCRIPT,
-                                capabilities = setOf(ProviderCapabilities.TorrentSearchV1),
-                                permissions = ProviderPermissionSet(),
-                                settings = emptyList(),
-                                contentLanguages = emptySet(),
+    fun `typed discovery failure is not reported as an empty successful search`() {
+        runBlocking {
+            val chapter = CanonicalChapter(
+                id = "chapter-12",
+                canonicalTitleId = "title-1",
+                displayNumber = "12",
+                type = CanonicalChapterType.REGULAR,
+                baseNumber = 12,
+                volume = 2,
+            )
+            val title = CanonicalTitle(
+                id = "title-1",
+                displayTitle = "Example Manga",
+                identityState = CanonicalIdentityState.RESOLVED,
+                createdAt = 1,
+                updatedAt = 1,
+            )
+            val providerId = ProviderId("app.tsuzuki.nyaa")
+            val recorder = RecordingDiagnostics()
+            val resolver = ResolveProviderChapterTorrent(
+                canonicalChapterRepository = chapterRepository(chapter),
+                canonicalTitleRepository = titleRepository(title),
+                providerRegistry = DefaultProviderRegistry(
+                    registrations = {
+                        listOf(
+                            ProviderRegistration(
+                                descriptor = ProviderDescriptor(
+                                    id = providerId,
+                                    name = "Nyaa",
+                                    version = ProviderVersion("0.1.2", 3),
+                                    origin = ProviderOrigin.Repository("app.tsuzuki.providers"),
+                                    runtime = ProviderRuntimeKind.SCRIPT,
+                                    capabilities = setOf(ProviderCapabilities.TorrentSearchV1),
+                                    permissions = ProviderPermissionSet(),
+                                    settings = emptyList(),
+                                    contentLanguages = emptySet(),
+                                ),
+                                lifecycleStatus = ProviderLifecycleStatus.ENABLED,
                             ),
-                            lifecycleStatus = ProviderLifecycleStatus.ENABLED,
+                        )
+                    },
+                ),
+                gateway = TorrentSearchGateway { _, _ ->
+                    ProviderCallResult.Failure(
+                        ProviderError(
+                            code = ProviderErrorCode.SCRIPT_ERROR,
+                            retryable = false,
                         ),
                     )
                 },
-            ),
-            gateway = TorrentSearchGateway { _, _ ->
-                ProviderCallResult.Failure(
-                    ProviderError(
-                        code = ProviderErrorCode.SCRIPT_ERROR,
-                        retryable = false,
-                    ),
-                )
-            },
-        )
-        val trace = DiagnosticTrace.start(
-            recorder = recorder,
-            workflow = DiagnosticWorkflow.READER_OPEN,
-            canonicalTitleId = title.id,
-            subsystem = DiagnosticSubsystem.READER,
-        )
+            )
+            val trace = DiagnosticTrace.start(
+                recorder = recorder,
+                workflow = DiagnosticWorkflow.READER_OPEN,
+                canonicalTitleId = title.id,
+                subsystem = DiagnosticSubsystem.READER,
+            )
 
-        resolver.options(chapter.id, trace) shouldBe emptyList()
+            resolver.options(chapter.id, trace) shouldBe emptyList()
 
-        val search = recorder.events.single {
-            it.name == DiagnosticEventName.CONTENT_BINDING_LOOKUP &&
-                it.stage == DiagnosticStage.SEARCH
+            val search = recorder.events.single {
+                it.name == DiagnosticEventName.CONTENT_BINDING_LOOKUP &&
+                    it.stage == DiagnosticStage.SEARCH
+            }
+            search.outcome shouldBe DiagnosticOutcome.TYPED_FAILURE
+            search.attributes["provider_id"] shouldBe DiagnosticAttributeValue.Text(providerId.value)
+            search.attributes["provider_version_name"] shouldBe DiagnosticAttributeValue.Text("0.1.2")
+            search.attributes["provider_version_code"] shouldBe DiagnosticAttributeValue.Number(3)
+            search.attributes["provider_error_code"] shouldBe DiagnosticAttributeValue.Text("SCRIPT_ERROR")
+            search.attributes["provider_retryable"] shouldBe DiagnosticAttributeValue.Flag(false)
+
+            val match = recorder.events.single {
+                it.name == DiagnosticEventName.CONTENT_BINDING_LOOKUP &&
+                    it.stage == DiagnosticStage.MATCH
+            }
+            match.outcome shouldBe DiagnosticOutcome.SKIPPED
         }
-        search.outcome shouldBe DiagnosticOutcome.TYPED_FAILURE
-        search.attributes["provider_id"] shouldBe DiagnosticAttributeValue.Text(providerId.value)
-        search.attributes["provider_version_name"] shouldBe DiagnosticAttributeValue.Text("0.1.2")
-        search.attributes["provider_version_code"] shouldBe DiagnosticAttributeValue.Number(3)
-        search.attributes["provider_error_code"] shouldBe DiagnosticAttributeValue.Text("SCRIPT_ERROR")
-        search.attributes["provider_retryable"] shouldBe DiagnosticAttributeValue.Flag(false)
-
-        val match = recorder.events.single {
-            it.name == DiagnosticEventName.CONTENT_BINDING_LOOKUP &&
-                it.stage == DiagnosticStage.MATCH
-        }
-        match.outcome shouldBe DiagnosticOutcome.SKIPPED
     }
 
     private fun chapterRepository(chapter: CanonicalChapter) = object : CanonicalChapterRepository {
