@@ -9,7 +9,9 @@ import tachiyomi.domain.tsuzuki.library.model.TitleFormatObservation
 import tachiyomi.domain.tsuzuki.metadata.ReportedChapterCount
 import tachiyomi.domain.tsuzuki.metadata.repository.ReportedChapterCountRepository
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
+import tachiyomi.domain.tsuzuki.model.TitleNameObservation
 import tachiyomi.domain.tsuzuki.repository.TitleFormatObservationRepository
+import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 import kotlin.time.Clock
 
 class MaterializeCanonicalTitleFromCatalog internal constructor(
@@ -18,6 +20,7 @@ class MaterializeCanonicalTitleFromCatalog internal constructor(
     private val clock: () -> Long,
     private val titleFormatObservationRepository: TitleFormatObservationRepository? = null,
     private val titleArtworkRepository: TitleArtworkRepository? = null,
+    private val titleNameObservationRepository: TitleNameObservationRepository? = null,
 ) {
 
     @Inject
@@ -26,12 +29,14 @@ class MaterializeCanonicalTitleFromCatalog internal constructor(
         reportedChapterCountRepository: ReportedChapterCountRepository,
         titleFormatObservationRepository: TitleFormatObservationRepository,
         titleArtworkRepository: TitleArtworkRepository,
+        titleNameObservationRepository: TitleNameObservationRepository,
     ) : this(
         materializeCanonicalTitle = materializeCanonicalTitle,
         reportedChapterCountRepository = reportedChapterCountRepository,
         clock = { Clock.System.now().toEpochMilliseconds() },
         titleFormatObservationRepository = titleFormatObservationRepository,
         titleArtworkRepository = titleArtworkRepository,
+        titleNameObservationRepository = titleNameObservationRepository,
     )
 
     constructor(
@@ -42,6 +47,7 @@ class MaterializeCanonicalTitleFromCatalog internal constructor(
         reportedChapterCountRepository = reportedChapterCountRepository,
         clock = { Clock.System.now().toEpochMilliseconds() },
         titleFormatObservationRepository = null,
+        titleNameObservationRepository = null,
     )
 
     internal constructor(
@@ -51,6 +57,7 @@ class MaterializeCanonicalTitleFromCatalog internal constructor(
         reportedChapterCountRepository = null,
         clock = { Clock.System.now().toEpochMilliseconds() },
         titleFormatObservationRepository = null,
+        titleNameObservationRepository = null,
     )
 
     suspend fun execute(catalogItem: CatalogItem): CanonicalTitle {
@@ -79,6 +86,11 @@ class MaterializeCanonicalTitleFromCatalog internal constructor(
                 ),
             )
         }
+        persistTitleNames(
+            title = title,
+            catalogItem = catalogItem,
+            updatedAt = now,
+        )
         val coverUrl = catalogItem.coverUrl?.takeIf(String::isNotBlank)
         val bannerUrl = catalogItem.bannerUrl?.takeIf(String::isNotBlank)
         if (coverUrl != null || bannerUrl != null) {
@@ -94,4 +106,30 @@ class MaterializeCanonicalTitleFromCatalog internal constructor(
         }
         return title
     }
+
+    private suspend fun persistTitleNames(
+        title: CanonicalTitle,
+        catalogItem: CatalogItem,
+        updatedAt: Long,
+    ) {
+        val repository = titleNameObservationRepository ?: return
+        val displayTitleKey = normalizeForDiscovery(title.displayTitle)
+        catalogItem.titles.forEach { (rawSourceKey, rawValue) ->
+            val sourceKey = rawSourceKey.trim()
+            val value = rawValue.trim()
+            if (sourceKey.isEmpty() || value.isEmpty()) return@forEach
+            if (normalizeForDiscovery(value) == displayTitleKey) return@forEach
+            repository.upsert(
+                TitleNameObservation(
+                    canonicalTitleId = title.id,
+                    provider = catalogItem.provider,
+                    sourceKey = sourceKey,
+                    value = value,
+                    updatedAt = updatedAt,
+                ),
+            )
+        }
+    }
+
+    private fun normalizeForDiscovery(value: String): String = value.trim().lowercase()
 }
