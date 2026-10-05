@@ -76,9 +76,16 @@ class ResolveProviderChapterTorrent(
         val chapter = canonicalChapterRepository.getById(canonicalChapterId) ?: return emptyList()
         if (!chapter.identity.isSpecific || !chapter.identity.isNumbered) return emptyList()
         val title = canonicalTitleRepository.getById(chapter.canonicalTitleId) ?: return emptyList()
+        val observations = try {
+            titleNameObservationRepository.getByTitle(title.id)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            emptyList()
+        }
         val searchTitles = buildSearchTitles(
             displayTitle = title.displayTitle,
-            observations = titleNameObservationRepository.getByTitle(title.id),
+            observations = observations,
         )
 
         providerRegistry.awaitReady()
