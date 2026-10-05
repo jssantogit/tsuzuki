@@ -3,7 +3,7 @@ package tachiyomi.domain.tsuzuki.provider.torrent
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
@@ -48,7 +48,7 @@ class ResolveProviderChapterTorrentTest {
     private val providerId = ProviderId("org.example.torrent")
 
     @Test
-    fun `discovers exact archive mapping from enabled SCRIPT torrent Provider`() = runBlocking {
+    fun `discovers exact archive mapping from enabled SCRIPT torrent Provider`() = runTest {
         error("CI_SENTINEL_RESOLVE_PROVIDER_CHAPTER_TORRENT_TEST")
         val calls = mutableListOf<TorrentSearchRequest>()
         val resolver = resolver(
@@ -74,7 +74,7 @@ class ResolveProviderChapterTorrentTest {
     }
 
     @Test
-    fun `torrent discovery receives bounded deduplicated canonical title aliases`() = runBlocking {
+    fun `torrent discovery receives bounded deduplicated canonical title aliases`() = runTest {
         val calls = mutableListOf<TorrentSearchRequest>()
         val resolver = resolver(
             titleNames = listOf(
@@ -98,7 +98,7 @@ class ResolveProviderChapterTorrentTest {
     }
 
     @Test
-    fun `title alias failure falls back to canonical display title`() = runBlocking {
+    fun `title alias failure falls back to canonical display title`() = runTest {
         val calls = mutableListOf<TorrentSearchRequest>()
         val resolver = ResolveProviderChapterTorrent(
             canonicalChapterRepository = chapterRepository(chapter),
@@ -124,7 +124,7 @@ class ResolveProviderChapterTorrentTest {
     }
 
     @Test
-    fun `ambiguous chapter mapping stays fail closed`() = runBlocking {
+    fun `ambiguous chapter mapping stays fail closed`() = runTest {
         val resolver = resolver(
             gateway = TorrentSearchGateway { _, _ ->
                 ProviderCallResult.Success(
@@ -145,7 +145,7 @@ class ResolveProviderChapterTorrentTest {
     }
 
     @Test
-    fun `disabled and non torrent Providers are never queried`() = runBlocking {
+    fun `disabled and non torrent Providers are never queried`() = runTest {
         var calls = 0
         val registrations = listOf(
             registration(providerId, enabled = false, torrent = true),
