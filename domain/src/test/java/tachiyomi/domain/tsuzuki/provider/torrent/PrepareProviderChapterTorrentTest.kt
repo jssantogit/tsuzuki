@@ -61,9 +61,9 @@ class PrepareProviderChapterTorrentTest {
         val resolver = ResolveProviderChapterTorrent(
             canonicalChapterRepository = chapterRepository(chapter),
             canonicalTitleRepository = titleRepository(title),
-            providerRegistry = DefaultProviderRegistry {
-                listOf(registration(providerId))
-            },
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { listOf(registration(providerId)) },
+            ),
             gateway = TorrentSearchGateway { _, _ ->
                 ProviderCallResult.Success(ProviderPage(listOf(candidate), null))
             },
