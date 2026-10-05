@@ -187,7 +187,7 @@ class PrepareCanonicalChapterForReader(
                     ),
                 )
 
-                return when (val prepared = resolver.preparedContent(option)) {
+                when (val prepared = resolver.preparedContent(option)) {
                     is ProviderCallResult.Failure -> {
                         trace.event(
                             subsystem = DiagnosticSubsystem.READER,
@@ -203,7 +203,6 @@ class PrepareCanonicalChapterForReader(
                                 ),
                             ),
                         )
-                        CanonicalReaderPreparation.Unavailable(canonicalChapterId)
                     }
                     is ProviderCallResult.Success -> {
                         val pageCount = (prepared.value as? PreparedChapterContent.HttpPages)?.pages?.size
@@ -222,7 +221,7 @@ class PrepareCanonicalChapterForReader(
                                 }
                             },
                         )
-                        CanonicalReaderPreparation.Ready(
+                        return CanonicalReaderPreparation.Ready(
                             canonicalChapterId = canonicalChapterId,
                             target = prepared.value,
                             usedFallback = true,
@@ -244,11 +243,35 @@ class PrepareCanonicalChapterForReader(
         trace: DiagnosticTrace,
     ): CanonicalReaderPreparation {
         val preparer = prepareProviderChapterTorrent
-            ?: return CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+        trace.event(
+            subsystem = DiagnosticSubsystem.CONTENT,
+            name = DiagnosticEventName.CONTENT_BINDING_RESOLVE_STARTED,
+            stage = DiagnosticStage.BINDING,
+            outcome = if (preparer == null) DiagnosticOutcome.REJECTED else DiagnosticOutcome.STARTED,
+            attributes = mapOf(
+                DiagnosticAttribute.CANDIDATE_TYPE to
+                    DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
+                DiagnosticAttribute.INITIALIZED to DiagnosticAttributeValue.Flag(preparer != null),
+            ),
+        )
+        if (preparer == null) {
+            return CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+        }
 
         return when (val prepared = preparer.prepare(canonicalChapterId)) {
-            ProviderChapterTorrentPreparation.Unavailable ->
+            ProviderChapterTorrentPreparation.Unavailable -> {
+                trace.event(
+                    subsystem = DiagnosticSubsystem.CONTENT,
+                    name = DiagnosticEventName.CONTENT_BINDING_RESOLVE_COMPLETED,
+                    stage = DiagnosticStage.BINDING,
+                    outcome = DiagnosticOutcome.EMPTY,
+                    attributes = mapOf(
+                        DiagnosticAttribute.CANDIDATE_TYPE to
+                            DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
+                    ),
+                )
                 CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+            }
 
             is ProviderChapterTorrentPreparation.Ambiguous -> {
                 trace.event(
