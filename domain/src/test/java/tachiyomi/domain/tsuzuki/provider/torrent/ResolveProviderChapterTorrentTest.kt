@@ -12,6 +12,7 @@ import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
+import tachiyomi.domain.tsuzuki.model.TitleNameObservation
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
@@ -25,6 +26,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
+import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 
 class ResolveProviderChapterTorrentTest {
 
@@ -71,6 +73,30 @@ class ResolveProviderChapterTorrentTest {
     }
 
     @Test
+    fun `torrent discovery receives bounded deduplicated canonical title aliases`() = runBlocking {
+        val calls = mutableListOf<TorrentSearchRequest>()
+        val resolver = resolver(
+            titleNames = listOf(
+                name("romaji", "Alternate Example", updatedAt = 30),
+                name("native", "例のマンガ", updatedAt = 20),
+                name("duplicate", " example manga ", updatedAt = 10),
+            ),
+            gateway = TorrentSearchGateway { _, request ->
+                calls += request
+                ProviderCallResult.Success(ProviderPage(emptyList(), null))
+            },
+        )
+
+        resolver.options(chapter.id)
+
+        calls.single().titles shouldBe listOf(
+            "Example Manga",
+            "Alternate Example",
+            "例のマンガ",
+        )
+    }
+
+    @Test
     fun `ambiguous chapter mapping stays fail closed`() = runBlocking {
         val resolver = resolver(
             gateway = TorrentSearchGateway { _, _ ->
@@ -112,6 +138,7 @@ class ResolveProviderChapterTorrentTest {
 
     private fun resolver(
         registrations: List<ProviderRegistration> = listOf(registration(providerId)),
+        titleNames: List<TitleNameObservation> = emptyList(),
         gateway: TorrentSearchGateway,
     ) = ResolveProviderChapterTorrent(
         canonicalChapterRepository = chapterRepository(chapter),
@@ -120,7 +147,28 @@ class ResolveProviderChapterTorrentTest {
             registrations = { registrations },
         ),
         gateway = gateway,
+        titleNameObservationRepository = titleNameRepository(titleNames),
     )
+
+    private fun name(
+        sourceKey: String,
+        value: String,
+        updatedAt: Long,
+    ) = TitleNameObservation(
+        canonicalTitleId = title.id,
+        provider = "catalog",
+        sourceKey = sourceKey,
+        value = value,
+        updatedAt = updatedAt,
+    )
+
+    private fun titleNameRepository(values: List<TitleNameObservation>) =
+        object : TitleNameObservationRepository {
+            override suspend fun getByTitle(canonicalTitleId: String) =
+                values.filter { it.canonicalTitleId == canonicalTitleId }
+
+            override suspend fun upsert(observation: TitleNameObservation) = error("not used")
+        }
 
     private fun candidate(vararg paths: String): TorrentCandidate = TorrentCandidate(
         infoHash = "0123456789abcdef0123456789abcdef01234567",
