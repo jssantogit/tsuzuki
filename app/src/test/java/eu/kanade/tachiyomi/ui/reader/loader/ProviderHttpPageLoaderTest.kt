@@ -79,7 +79,9 @@ class ProviderHttpPageLoaderTest {
         val client = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 requestStarted.countDown()
-                check(releaseRequest.await(5, TimeUnit.SECONDS)) { "Timed out waiting to release Provider page request" }
+                check(releaseRequest.await(5, TimeUnit.SECONDS)) {
+                    "Timed out waiting to release Provider page request"
+                }
                 chain.proceed(chain.request())
             }
             .build()
