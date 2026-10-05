@@ -114,7 +114,9 @@ class ResolveProviderChapterTorrentTest {
     ) = ResolveProviderChapterTorrent(
         canonicalChapterRepository = chapterRepository(chapter),
         canonicalTitleRepository = titleRepository(title),
-        providerRegistry = DefaultProviderRegistry { registrations },
+        providerRegistry = DefaultProviderRegistry(
+            registrations = { registrations },
+        ),
         gateway = gateway,
     )
 
