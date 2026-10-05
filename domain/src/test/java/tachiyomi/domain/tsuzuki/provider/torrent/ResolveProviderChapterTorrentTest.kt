@@ -97,6 +97,32 @@ class ResolveProviderChapterTorrentTest {
     }
 
     @Test
+    fun `title alias failure falls back to canonical display title`() = runBlocking {
+        val calls = mutableListOf<TorrentSearchRequest>()
+        val resolver = ResolveProviderChapterTorrent(
+            canonicalChapterRepository = chapterRepository(chapter),
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { listOf(registration(providerId)) },
+            ),
+            gateway = TorrentSearchGateway { _, request ->
+                calls += request
+                ProviderCallResult.Success(ProviderPage(emptyList(), null))
+            },
+            titleNameObservationRepository = object : TitleNameObservationRepository {
+                override suspend fun getByTitle(canonicalTitleId: String): List<TitleNameObservation> =
+                    error("alias storage unavailable")
+
+                override suspend fun upsert(observation: TitleNameObservation) = error("not used")
+            },
+        )
+
+        resolver.options(chapter.id)
+
+        calls.single().titles shouldBe listOf("Example Manga")
+    }
+
+    @Test
     fun `ambiguous chapter mapping stays fail closed`() = runBlocking {
         val resolver = resolver(
             gateway = TorrentSearchGateway { _, _ ->
