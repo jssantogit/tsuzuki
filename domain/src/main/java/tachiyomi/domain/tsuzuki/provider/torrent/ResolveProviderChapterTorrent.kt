@@ -4,6 +4,13 @@ import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.content.ContentDelivery
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticTrace
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderCursor
@@ -52,7 +59,10 @@ class ResolveProviderChapterTorrent(
     private val gateway: TorrentSearchGateway,
 ) {
 
-    suspend fun options(canonicalChapterId: String): List<ProviderChapterTorrentOption> {
+    suspend fun options(
+        canonicalChapterId: String,
+        trace: DiagnosticTrace? = null,
+    ): List<ProviderChapterTorrentOption> {
         val chapter = canonicalChapterRepository.getById(canonicalChapterId) ?: return emptyList()
         if (!chapter.identity.isSpecific || !chapter.identity.isNumbered) return emptyList()
         val title = canonicalTitleRepository.getById(chapter.canonicalTitleId) ?: return emptyList()
@@ -76,12 +86,26 @@ class ResolveProviderChapterTorrent(
 
         return targets
             .flatMap { providerId ->
-                discover(
+                val providerTrace = trace?.child()
+                val candidates = discover(
                     providerId = providerId,
                     title = title.displayTitle,
                     chapterNumber = chapter.displayNumber,
                     volume = chapter.volume,
-                ).mapNotNull { candidate ->
+                )
+                providerTrace?.event(
+                    subsystem = DiagnosticSubsystem.CONTENT,
+                    name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
+                    stage = DiagnosticStage.SEARCH,
+                    outcome = if (candidates.isEmpty()) DiagnosticOutcome.EMPTY else DiagnosticOutcome.CANDIDATES,
+                    attributes = mapOf(
+                        DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text(providerId.value),
+                        DiagnosticAttribute.CANDIDATE_COUNT to
+                            DiagnosticAttributeValue.Number(candidates.size.toLong()),
+                    ),
+                )
+
+                val matches = candidates.mapNotNull { candidate ->
                     if (candidate.infoHash == null) return@mapNotNull null
                     val file = when (val match = mapper.map(request, candidate)) {
                         is TorrentChapterFileMatch.Exact -> match.file
@@ -96,6 +120,18 @@ class ResolveProviderChapterTorrent(
                         selectedFile = file,
                     )
                 }
+                providerTrace?.event(
+                    subsystem = DiagnosticSubsystem.CONTENT,
+                    name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
+                    stage = DiagnosticStage.MATCH,
+                    outcome = if (matches.isEmpty()) DiagnosticOutcome.EMPTY else DiagnosticOutcome.CANDIDATES,
+                    attributes = mapOf(
+                        DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text(providerId.value),
+                        DiagnosticAttribute.CANDIDATE_COUNT to
+                            DiagnosticAttributeValue.Number(matches.size.toLong()),
+                    ),
+                )
+                matches
             }
             .distinct()
             .sortedWith(
