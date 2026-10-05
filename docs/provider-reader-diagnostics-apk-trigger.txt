@@ -1,3 +1,3 @@
 Temporary acceptance-build trigger for Provider Reader diagnostics.
-Acceptance build after Metro Reader resolver wiring fix (d4933cc65392ce06192b49b866ed1d76d1469333).
+Acceptance build after Provider HTTP page cancellation fix (10257156211231e8bea9af7eeab20ca04d7b0b62).
 Keep until APK artifact is published.
