@@ -1,6 +1,7 @@
 package tachiyomi.domain.tsuzuki.provider.torrent
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -56,7 +57,7 @@ class ResolveProviderChapterTorrentTest {
                 calls += request
                 ProviderCallResult.Success(
                     ProviderPage(
-                        items = listOf(candidate("Example Manga - Vol 2 Ch 12.cbz")),
+                        items = listOf(candidate("pack/Vol. 2 Ch. 12.cbz")),
                         nextCursor = null,
                     ),
                 )
@@ -69,7 +70,7 @@ class ResolveProviderChapterTorrentTest {
         calls.single().chapterNumber shouldBe "12"
         calls.single().volume shouldBe 2
         options.map { it.providerId } shouldBe listOf(providerId)
-        options.single().selectedFile.path shouldBe "Example Manga - Vol 2 Ch 12.cbz"
+        options.single().selectedFile.path shouldBe "pack/Vol. 2 Ch. 12.cbz"
     }
 
     @Test
@@ -109,17 +110,39 @@ class ResolveProviderChapterTorrentTest {
                 calls += request
                 ProviderCallResult.Success(ProviderPage(emptyList(), null))
             },
-            titleNameObservationRepository = object : TitleNameObservationRepository {
-                override suspend fun getByTitle(canonicalTitleId: String): List<TitleNameObservation> =
-                    error("alias storage unavailable")
-
-                override suspend fun upsert(observation: TitleNameObservation) = error("not used")
-            },
+            titleNameObservationRepository = failingTitleNameRepository(
+                IllegalStateException("alias storage unavailable"),
+            ),
         )
 
         resolver.options(chapter.id)
 
         calls.single().titles shouldBe listOf("Example Manga")
+    }
+
+    @Test
+    fun `title alias cancellation still propagates`() = runTest {
+        val cancellation = CancellationException("cancel alias lookup")
+        val resolver = ResolveProviderChapterTorrent(
+            canonicalChapterRepository = chapterRepository(chapter),
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { listOf(registration(providerId)) },
+            ),
+            gateway = TorrentSearchGateway { _, _ ->
+                error("gateway must not run after cancellation")
+            },
+            titleNameObservationRepository = failingTitleNameRepository(cancellation),
+        )
+        var thrown: Throwable? = null
+
+        try {
+            resolver.options(chapter.id)
+        } catch (error: Throwable) {
+            thrown = error
+        }
+
+        thrown shouldBe cancellation
     }
 
     @Test
@@ -130,8 +153,8 @@ class ResolveProviderChapterTorrentTest {
                     ProviderPage(
                         items = listOf(
                             candidate(
-                                "Example Manga - Vol 2 Ch 12.cbz",
-                                "Example Manga - Vol 2 Chapter 12.zip",
+                                "pack-a/Vol. 2 Ch. 12.cbz",
+                                "pack-b/Vol. 2 Chapter 12.zip",
                             ),
                         ),
                         nextCursor = null,
@@ -192,6 +215,13 @@ class ResolveProviderChapterTorrentTest {
         object : TitleNameObservationRepository {
             override suspend fun getByTitle(canonicalTitleId: String) =
                 values.filter { it.canonicalTitleId == canonicalTitleId }
+
+            override suspend fun upsert(observation: TitleNameObservation) = error("not used")
+        }
+
+    private fun failingTitleNameRepository(failure: Throwable) =
+        object : TitleNameObservationRepository {
+            override suspend fun getByTitle(canonicalTitleId: String): List<TitleNameObservation> = throw failure
 
             override suspend fun upsert(observation: TitleNameObservation) = error("not used")
         }
