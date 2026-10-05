@@ -184,6 +184,10 @@ enum class DiagnosticAttribute {
     MAPPING_REUSED,
     LANGUAGE,
     PROVIDER_ID,
+    PROVIDER_VERSION_NAME,
+    PROVIDER_VERSION_CODE,
+    PROVIDER_ERROR_CODE,
+    PROVIDER_RETRYABLE,
     ADDON_ID,
     CANONICAL_TITLE_REF,
     MIHON_MANGA_REF,
@@ -317,6 +321,8 @@ object StructuredDiagnosticSanitizer {
     private val languageTagPattern = Regex("^[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]{2,8}){0,3}$")
     private val pseudonymousReferencePattern = Regex("^[0-9a-f]{16,64}$")
     private val providerIdPattern = Regex("^[a-zA-Z0-9._-]{1,64}$")
+    private val providerVersionPattern = Regex("^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$")
+    private val providerErrorCodePattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
 
     fun sanitize(event: StructuredDiagnosticEvent): SanitizedStructuredDiagnosticEvent? {
         if (event.schemaVersion != StructuredDiagnosticEvent.CURRENT_SCHEMA_VERSION) return null
@@ -385,6 +391,9 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.EXPORT_FLUSH_TIMEOUTS,
         -> (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..MAX_COUNT }
 
+        DiagnosticAttribute.PROVIDER_VERSION_CODE -> (value as? DiagnosticAttributeValue.Number)
+            ?.takeIf { it.value in 1..MAX_COUNT }
+
         DiagnosticAttribute.BROADENED,
         DiagnosticAttribute.MAPPING_REUSED,
         DiagnosticAttribute.AUTO_CONFIRM_ATTEMPTED,
@@ -398,6 +407,7 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.IDENTITY_VERIFIED,
         DiagnosticAttribute.RATING_PRESENT,
         DiagnosticAttribute.TSUZUKI_RATING_PRESENT,
+        DiagnosticAttribute.PROVIDER_RETRYABLE,
         -> value as? DiagnosticAttributeValue.Flag
 
         DiagnosticAttribute.LANGUAGE -> (value as? DiagnosticAttributeValue.Text)
@@ -406,6 +416,10 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.ADDON_ID,
         -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { providerIdPattern.matches(it.value) }
+        DiagnosticAttribute.PROVIDER_VERSION_NAME -> (value as? DiagnosticAttributeValue.Text)
+            ?.takeIf { providerVersionPattern.matches(it.value) }
+        DiagnosticAttribute.PROVIDER_ERROR_CODE -> (value as? DiagnosticAttributeValue.Text)
+            ?.takeIf { providerErrorCodePattern.matches(it.value) }
         DiagnosticAttribute.CANONICAL_TITLE_REF,
         DiagnosticAttribute.MIHON_MANGA_REF,
         -> (value as? DiagnosticAttributeValue.Text)
