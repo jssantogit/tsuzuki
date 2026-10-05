@@ -1,0 +1,12 @@
+CREATE TABLE tsuzuki_title_name_observations(
+    canonical_title_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    source_key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(canonical_title_id, provider, source_key, value),
+    FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
+);
+
+CREATE INDEX tsuzuki_title_name_observation_title_index
+ON tsuzuki_title_name_observations(canonical_title_id);

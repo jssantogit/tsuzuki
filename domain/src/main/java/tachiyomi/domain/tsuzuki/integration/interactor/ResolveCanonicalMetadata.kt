@@ -37,7 +37,9 @@ import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshot
 import tachiyomi.domain.tsuzuki.metadata.ReportedChapterCount
 import tachiyomi.domain.tsuzuki.metadata.repository.ReportedChapterCountRepository
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
+import tachiyomi.domain.tsuzuki.model.TitleNameObservation
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
+import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 import kotlin.time.Clock
 import kotlin.time.TimeSource
 
@@ -50,6 +52,7 @@ class ResolveCanonicalMetadata private constructor(
     private val inFlightResolution: InFlightCanonicalMetadataResolution?,
     private val reportedChapterCountRepository: ReportedChapterCountRepository?,
     private val ratingEnrichmentCache: RatingEnrichmentCache?,
+    private val titleNameObservationRepository: TitleNameObservationRepository?,
     private val clock: () -> Long,
     private val metadataTtlMillis: Long,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit,
@@ -65,6 +68,7 @@ class ResolveCanonicalMetadata private constructor(
         inFlightResolution: InFlightCanonicalMetadataResolution,
         reportedChapterCountRepository: ReportedChapterCountRepository,
         ratingEnrichmentCache: RatingEnrichmentCache,
+        titleNameObservationRepository: TitleNameObservationRepository,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         registry = registry,
@@ -74,6 +78,7 @@ class ResolveCanonicalMetadata private constructor(
         inFlightResolution = inFlightResolution,
         reportedChapterCountRepository = reportedChapterCountRepository,
         ratingEnrichmentCache = ratingEnrichmentCache,
+        titleNameObservationRepository = titleNameObservationRepository,
         clock = { Clock.System.now().toEpochMilliseconds() },
         metadataTtlMillis = DEFAULT_METADATA_TTL_MILLIS,
         constructorMarker = Unit,
@@ -84,6 +89,7 @@ class ResolveCanonicalMetadata private constructor(
         registry: IntegrationRegistry,
         titleArtworkRepository: TitleArtworkRepository,
         diagnosticRecorder: StructuredDiagnosticRecorder,
+        titleNameObservationRepository: TitleNameObservationRepository? = null,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         registry = registry,
@@ -93,6 +99,7 @@ class ResolveCanonicalMetadata private constructor(
         inFlightResolution = null,
         reportedChapterCountRepository = null,
         ratingEnrichmentCache = null,
+        titleNameObservationRepository = titleNameObservationRepository,
         clock = { Clock.System.now().toEpochMilliseconds() },
         metadataTtlMillis = DEFAULT_METADATA_TTL_MILLIS,
         constructorMarker = Unit,
@@ -109,6 +116,7 @@ class ResolveCanonicalMetadata private constructor(
         clock: () -> Long,
         metadataTtlMillis: Long,
         ratingEnrichmentCache: RatingEnrichmentCache? = null,
+        titleNameObservationRepository: TitleNameObservationRepository? = null,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         registry = registry,
@@ -118,6 +126,7 @@ class ResolveCanonicalMetadata private constructor(
         inFlightResolution = inFlightResolution,
         reportedChapterCountRepository = reportedChapterCountRepository,
         ratingEnrichmentCache = ratingEnrichmentCache,
+        titleNameObservationRepository = titleNameObservationRepository,
         clock = clock,
         metadataTtlMillis = metadataTtlMillis,
         constructorMarker = Unit,
@@ -229,6 +238,7 @@ class ResolveCanonicalMetadata private constructor(
                 }.awaitAll().filterNotNull()
             }
 
+            persistTitleNames(canonicalTitleId, candidates)
             persistReportedChapterCounts(canonicalTitleId, candidates)
 
             candidates.forEach { candidate ->
@@ -407,6 +417,67 @@ class ResolveCanonicalMetadata private constructor(
                 durationMillis = started.elapsedNow().inWholeMilliseconds.coerceAtLeast(0),
             )
             Result.failure(error)
+        }
+    }
+
+    private suspend fun persistTitleNames(
+        canonicalTitleId: String,
+        candidates: List<Candidate>,
+    ) {
+        val repository = titleNameObservationRepository ?: return
+        val canonicalTitle = try {
+            canonicalTitleRepository.getById(canonicalTitleId)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            null
+        } ?: return
+        val canonicalDisplayName = canonicalTitle.displayTitle.trim().lowercase()
+        val updatedAt = clock()
+
+        candidates.forEach { candidate ->
+            if (
+                !registry.isGlobalCapabilityActive(
+                    candidate.providerId,
+                    IntegrationCapability.METADATA_BASIC,
+                )
+            ) {
+                return@forEach
+            }
+
+            val seen = linkedSetOf<String>()
+            if (canonicalDisplayName.isNotBlank()) {
+                seen += canonicalDisplayName
+            }
+            val observedNames = buildList {
+                add("primary" to candidate.item.title)
+                candidate.item.titles.forEach { (sourceKey, value) ->
+                    add(sourceKey to value)
+                }
+            }
+
+            for ((rawSourceKey, rawValue) in observedNames) {
+                val sourceKey = rawSourceKey.trim()
+                val value = rawValue.trim()
+                if (sourceKey.isBlank() || value.isBlank()) continue
+                if (!seen.add(value.lowercase())) continue
+
+                try {
+                    repository.upsert(
+                        TitleNameObservation(
+                            canonicalTitleId = canonicalTitleId,
+                            provider = candidate.providerId.value,
+                            sourceKey = sourceKey,
+                            value = value,
+                            updatedAt = updatedAt,
+                        ),
+                    )
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Throwable) {
+                    // Name observations enrich future discovery and never block metadata resolution.
+                }
+            }
         }
     }
 

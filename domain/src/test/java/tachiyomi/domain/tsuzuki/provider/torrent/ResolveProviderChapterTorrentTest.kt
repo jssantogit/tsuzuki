@@ -1,9 +1,10 @@
 package tachiyomi.domain.tsuzuki.provider.torrent
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
@@ -12,6 +13,7 @@ import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
+import tachiyomi.domain.tsuzuki.model.TitleNameObservation
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
@@ -25,6 +27,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
+import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 
 class ResolveProviderChapterTorrentTest {
 
@@ -46,7 +49,7 @@ class ResolveProviderChapterTorrentTest {
     private val providerId = ProviderId("org.example.torrent")
 
     @Test
-    fun `discovers exact archive mapping from enabled SCRIPT torrent Provider`() = runBlocking {
+    fun `discovers exact archive mapping from enabled SCRIPT torrent Provider`() = runTest {
         val calls = mutableListOf<TorrentSearchRequest>()
         val resolver = resolver(
             gateway = TorrentSearchGateway { id, request ->
@@ -54,7 +57,7 @@ class ResolveProviderChapterTorrentTest {
                 calls += request
                 ProviderCallResult.Success(
                     ProviderPage(
-                        items = listOf(candidate("Example Manga - Vol 2 Ch 12.cbz")),
+                        items = listOf(candidate("pack/Vol. 2 Ch. 12.cbz")),
                         nextCursor = null,
                     ),
                 )
@@ -67,19 +70,91 @@ class ResolveProviderChapterTorrentTest {
         calls.single().chapterNumber shouldBe "12"
         calls.single().volume shouldBe 2
         options.map { it.providerId } shouldBe listOf(providerId)
-        options.single().selectedFile.path shouldBe "Example Manga - Vol 2 Ch 12.cbz"
+        options.single().selectedFile.path shouldBe "pack/Vol. 2 Ch. 12.cbz"
     }
 
     @Test
-    fun `ambiguous chapter mapping stays fail closed`() = runBlocking {
+    fun `torrent discovery receives bounded deduplicated canonical title aliases`() = runTest {
+        val calls = mutableListOf<TorrentSearchRequest>()
+        val resolver = resolver(
+            titleNames = listOf(
+                name("romaji", "Alternate Example", updatedAt = 30),
+                name("native", "例のマンガ", updatedAt = 20),
+                name("duplicate", " example manga ", updatedAt = 10),
+            ),
+            gateway = TorrentSearchGateway { _, request ->
+                calls += request
+                ProviderCallResult.Success(ProviderPage(emptyList(), null))
+            },
+        )
+
+        resolver.options(chapter.id)
+
+        calls.single().titles shouldBe listOf(
+            "Example Manga",
+            "Alternate Example",
+            "例のマンガ",
+        )
+    }
+
+    @Test
+    fun `title alias failure falls back to canonical display title`() = runTest {
+        val calls = mutableListOf<TorrentSearchRequest>()
+        val resolver = ResolveProviderChapterTorrent(
+            canonicalChapterRepository = chapterRepository(chapter),
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { listOf(registration(providerId)) },
+            ),
+            gateway = TorrentSearchGateway { _, request ->
+                calls += request
+                ProviderCallResult.Success(ProviderPage(emptyList(), null))
+            },
+            titleNameObservationRepository = failingTitleNameRepository(
+                IllegalStateException("alias storage unavailable"),
+            ),
+        )
+
+        resolver.options(chapter.id)
+
+        calls.single().titles shouldBe listOf("Example Manga")
+    }
+
+    @Test
+    fun `title alias cancellation still propagates`() = runTest {
+        val cancellation = CancellationException("cancel alias lookup")
+        val resolver = ResolveProviderChapterTorrent(
+            canonicalChapterRepository = chapterRepository(chapter),
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { listOf(registration(providerId)) },
+            ),
+            gateway = TorrentSearchGateway { _, _ ->
+                error("gateway must not run after cancellation")
+            },
+            titleNameObservationRepository = failingTitleNameRepository(cancellation),
+        )
+        var thrown: Throwable? = null
+
+        try {
+            resolver.options(chapter.id)
+        } catch (error: Throwable) {
+            thrown = error
+        }
+
+        thrown shouldBe cancellation
+    }
+
+    @Test
+    fun `ambiguous chapter mapping stays fail closed`() = runTest {
         val resolver = resolver(
             gateway = TorrentSearchGateway { _, _ ->
                 ProviderCallResult.Success(
                     ProviderPage(
                         items = listOf(
                             candidate(
-                                "Example Manga - Vol 2 Ch 12.cbz",
-                                "Example Manga - Vol 2 Chapter 12.zip",
+                                "pack-a/Vol. 2 Ch. 12.cbz",
+                                "pack-b/Vol. 2 Chapter 12.zip",
                             ),
                         ),
                         nextCursor = null,
@@ -92,7 +167,7 @@ class ResolveProviderChapterTorrentTest {
     }
 
     @Test
-    fun `disabled and non torrent Providers are never queried`() = runBlocking {
+    fun `disabled and non torrent Providers are never queried`() = runTest {
         var calls = 0
         val registrations = listOf(
             registration(providerId, enabled = false, torrent = true),
@@ -112,6 +187,7 @@ class ResolveProviderChapterTorrentTest {
 
     private fun resolver(
         registrations: List<ProviderRegistration> = listOf(registration(providerId)),
+        titleNames: List<TitleNameObservation> = emptyList(),
         gateway: TorrentSearchGateway,
     ) = ResolveProviderChapterTorrent(
         canonicalChapterRepository = chapterRepository(chapter),
@@ -120,7 +196,35 @@ class ResolveProviderChapterTorrentTest {
             registrations = { registrations },
         ),
         gateway = gateway,
+        titleNameObservationRepository = titleNameRepository(titleNames),
     )
+
+    private fun name(
+        sourceKey: String,
+        value: String,
+        updatedAt: Long,
+    ) = TitleNameObservation(
+        canonicalTitleId = title.id,
+        provider = "catalog",
+        sourceKey = sourceKey,
+        value = value,
+        updatedAt = updatedAt,
+    )
+
+    private fun titleNameRepository(values: List<TitleNameObservation>) =
+        object : TitleNameObservationRepository {
+            override suspend fun getByTitle(canonicalTitleId: String) =
+                values.filter { it.canonicalTitleId == canonicalTitleId }
+
+            override suspend fun upsert(observation: TitleNameObservation) = error("not used")
+        }
+
+    private fun failingTitleNameRepository(failure: Throwable) =
+        object : TitleNameObservationRepository {
+            override suspend fun getByTitle(canonicalTitleId: String): List<TitleNameObservation> = throw failure
+
+            override suspend fun upsert(observation: TitleNameObservation) = error("not used")
+        }
 
     private fun candidate(vararg paths: String): TorrentCandidate = TorrentCandidate(
         infoHash = "0123456789abcdef0123456789abcdef01234567",
