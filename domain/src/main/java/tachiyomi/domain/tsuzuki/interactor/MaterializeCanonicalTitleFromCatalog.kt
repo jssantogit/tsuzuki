@@ -114,7 +114,9 @@ class MaterializeCanonicalTitleFromCatalog internal constructor(
     ) {
         val repository = titleNameObservationRepository ?: return
         val seen = linkedSetOf(normalizeForDiscovery(title.displayTitle))
-        catalogItem.titles.forEach { (rawSourceKey, rawValue) ->
+        val observedNames = sequenceOf("primary" to catalogItem.title) +
+            catalogItem.titles.asSequence().map { it.key to it.value }
+        observedNames.forEach { (rawSourceKey, rawValue) ->
             val sourceKey = rawSourceKey.trim()
             val value = rawValue.trim()
             if (sourceKey.isEmpty() || value.isEmpty()) return@forEach
