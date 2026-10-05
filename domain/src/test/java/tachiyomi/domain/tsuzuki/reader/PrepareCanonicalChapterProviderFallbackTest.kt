@@ -31,7 +31,12 @@ import tachiyomi.domain.tsuzuki.content.cache.InFlightContentResolution
 import tachiyomi.domain.tsuzuki.content.interactor.RankContentOptions
 import tachiyomi.domain.tsuzuki.content.interactor.ResolveChapterContent
 import tachiyomi.domain.tsuzuki.content.repository.ContentPreferenceRepository
-import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.download.model.CanonicalDownloadArtifact
 import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
@@ -191,6 +196,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
                 },
             ),
         )
+        val diagnostics = RecordingStructuredDiagnosticRecorder()
 
         val prepare = PrepareCanonicalChapterForReader(
             resolveChapterContent = emptyAddonResolver(),
@@ -203,7 +209,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
                     progress: CanonicalChapterProgress?,
                 ): Result<PreparedChapterContent> = error("unused")
             },
-            structuredDiagnostics = NoOpStructuredDiagnosticRecorder,
+            structuredDiagnostics = diagnostics,
             resolveProviderChapterReading = readingResolver,
             prepareProviderChapterTorrent = torrentPreparer,
         )
@@ -216,6 +222,12 @@ class PrepareCanonicalChapterProviderFallbackTest {
         )
         result.usedFallback shouldBe true
         torrentArtifactCalls shouldBe 1
+        diagnostics.events.any { event ->
+            event.name == DiagnosticEventName.CONTENT_BINDING_LOOKUP &&
+                event.stage == DiagnosticStage.SEARCH &&
+                event.outcome == DiagnosticOutcome.CANDIDATES &&
+                event.attributes["provider_id"] == DiagnosticAttributeValue.Text(torrentProviderId.value)
+        } shouldBe true
     }
 
     private fun emptyAddonResolver() = ResolveChapterContent(
@@ -341,5 +353,18 @@ class PrepareCanonicalChapterProviderFallbackTest {
             progress: CanonicalChapterProgress,
             history: CanonicalChapterHistoryUpdate?,
         ) = Unit
+    }
+
+    private class RecordingStructuredDiagnosticRecorder : StructuredDiagnosticRecorder {
+        override val sessionId: String = "00000000-0000-0000-0000-000000000001"
+        val events = mutableListOf<StructuredDiagnosticEvent>()
+
+        override fun canonicalTitleReference(canonicalTitleId: String): String? = null
+
+        override fun mihonMangaReference(mihonMangaId: Long): String? = null
+
+        override fun record(event: StructuredDiagnosticEvent) {
+            events += event
+        }
     }
 }
