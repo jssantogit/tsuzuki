@@ -35,7 +35,7 @@ class DefaultProviderHttpHostService(
     cookieJar: CookieJar,
     baseClient: OkHttpClient = OkHttpClient(),
     private val maxRedirects: Int = 5,
-    private val maxTextChars: Int = 64 * 1024,
+    private val maxTextChars: Int = ProviderHttpProtocol.MAX_RESPONSE_BODY_CHARS,
     private val maxResponseBytes: Int = 16 * 1024 * 1024,
 ) : ProviderHttpHostService, AutoCloseable {
 
