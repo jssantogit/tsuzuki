@@ -111,7 +111,10 @@ data class TorrentSearchRequest(
         ) {
             "Torrent search preferred languages are invalid"
         }
-        require(chapterNumber == null || chapterNumber.isNotBlank() && chapterNumber.length <= MAX_CHAPTER_NUMBER_CHARS) {
+        require(
+            chapterNumber == null ||
+                (chapterNumber.isNotBlank() && chapterNumber.length <= MAX_CHAPTER_NUMBER_CHARS),
+        ) {
             "Torrent search chapter number is invalid"
         }
         require(volume == null || volume >= 0) {
