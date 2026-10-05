@@ -3,6 +3,7 @@ package tachiyomi.domain.tsuzuki.provider.torrent
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
+import tachiyomi.domain.tsuzuki.content.ContentDelivery
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderCursor
@@ -24,6 +25,16 @@ data class ProviderChapterTorrentOption(
             "Selected torrent file must belong to the candidate"
         }
     }
+}
+
+fun ProviderChapterTorrentOption.toContentDelivery(): ContentDelivery.Torrent? {
+    val infoHash = candidate.infoHash ?: return null
+    return ContentDelivery.Torrent(
+        infoHash = infoHash,
+        magnetUri = candidate.magnetUri,
+        fileIndex = selectedFile.index,
+        filePath = selectedFile.path,
+    )
 }
 
 /**
