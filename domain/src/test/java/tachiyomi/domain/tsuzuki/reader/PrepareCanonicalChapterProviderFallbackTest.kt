@@ -21,6 +21,7 @@ import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
+import tachiyomi.domain.tsuzuki.content.ContentOption
 import tachiyomi.domain.tsuzuki.content.ContentPreference
 import tachiyomi.domain.tsuzuki.content.PrepareTorrentArtifact
 import tachiyomi.domain.tsuzuki.content.PreparedTorrentArtifact
@@ -37,7 +38,6 @@ import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
-import tachiyomi.domain.tsuzuki.provider.ProviderCallResult as TorrentProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
 import tachiyomi.domain.tsuzuki.provider.ProviderId
@@ -51,7 +51,6 @@ import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
-import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult as ReadingProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterObservation
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderError
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
@@ -65,6 +64,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkCandidate
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
+import tachiyomi.domain.tsuzuki.provider.reading.evidenceProducerId
 import tachiyomi.domain.tsuzuki.provider.torrent.PrepareProviderChapterTorrent
 import tachiyomi.domain.tsuzuki.provider.torrent.ResolveProviderChapterTorrent
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
@@ -80,6 +80,8 @@ import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.repository.CanonicalReadingRepository
 import tachiyomi.domain.tsuzuki.reader.service.ChapterContentPreparer
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
+import tachiyomi.domain.tsuzuki.provider.ProviderCallResult as TorrentProviderCallResult
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult as ReadingProviderCallResult
 
 class PrepareCanonicalChapterProviderFallbackTest {
 
@@ -195,7 +197,12 @@ class PrepareCanonicalChapterProviderFallbackTest {
             canonicalChapterRepository = chapterRepository,
             canonicalReadingRepository = readingRepository(),
             canonicalDownloadRepository = emptyDownloadRepository(),
-            chapterContentPreparer = ChapterContentPreparer { _, _ -> error("unused") },
+            chapterContentPreparer = object : ChapterContentPreparer {
+                override suspend fun prepare(
+                    option: ContentOption,
+                    progress: CanonicalChapterProgress?,
+                ): Result<PreparedChapterContent> = error("unused")
+            },
             structuredDiagnostics = NoOpStructuredDiagnosticRecorder,
             resolveProviderChapterReading = readingResolver,
             prepareProviderChapterTorrent = torrentPreparer,
@@ -324,7 +331,9 @@ class PrepareCanonicalChapterProviderFallbackTest {
     private fun readingRepository() = object : CanonicalReadingRepository {
         override suspend fun getProgress(canonicalChapterId: String): CanonicalChapterProgress? = null
         override fun observeProgress(canonicalChapterId: String): Flow<CanonicalChapterProgress?> = flowOf(null)
-        override suspend fun getProgressByCanonicalTitleId(canonicalTitleId: String) = emptyList<CanonicalChapterProgress>()
+        override suspend fun getProgressByCanonicalTitleId(
+            canonicalTitleId: String,
+        ) = emptyList<CanonicalChapterProgress>()
         override suspend fun upsertProgress(progress: CanonicalChapterProgress) = Unit
         override suspend fun getHistory(canonicalChapterId: String): CanonicalChapterHistory? = null
         override suspend fun recordHistory(update: CanonicalChapterHistoryUpdate) = Unit
