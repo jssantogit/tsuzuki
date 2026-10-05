@@ -171,7 +171,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
                                     magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
                                     torrentUrl = null,
                                     displayName = "Example Manga Chapter 1",
-                                    files = listOf(TorrentCandidateFile(0, "Example Manga - Ch 1.cbz")),
+                                    files = listOf(TorrentCandidateFile(0, "chapter-001.cbz")),
                                 ),
                             ),
                             nextCursor = null,
