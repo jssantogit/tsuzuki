@@ -76,22 +76,26 @@ class ResolveProviderChapterTorrent(
 
         return targets
             .flatMap { providerId ->
-                discover(providerId, title.displayTitle)
-                    .mapNotNull { candidate ->
-                        if (candidate.infoHash == null) return@mapNotNull null
-                        val file = when (val match = mapper.map(request, candidate)) {
-                            is TorrentChapterFileMatch.Exact -> match.file
-                            TorrentChapterFileMatch.None,
-                            is TorrentChapterFileMatch.Ambiguous,
-                            -> return@mapNotNull null
-                        }
-                        ProviderChapterTorrentOption(
-                            canonicalChapterId = canonicalChapterId,
-                            providerId = providerId,
-                            candidate = candidate,
-                            selectedFile = file,
-                        )
+                discover(
+                    providerId = providerId,
+                    title = title.displayTitle,
+                    chapterNumber = chapter.displayNumber,
+                    volume = chapter.volume,
+                ).mapNotNull { candidate ->
+                    if (candidate.infoHash == null) return@mapNotNull null
+                    val file = when (val match = mapper.map(request, candidate)) {
+                        is TorrentChapterFileMatch.Exact -> match.file
+                        TorrentChapterFileMatch.None,
+                        is TorrentChapterFileMatch.Ambiguous,
+                        -> return@mapNotNull null
                     }
+                    ProviderChapterTorrentOption(
+                        canonicalChapterId = canonicalChapterId,
+                        providerId = providerId,
+                        candidate = candidate,
+                        selectedFile = file,
+                    )
+                }
             }
             .distinct()
             .sortedWith(
@@ -107,6 +111,8 @@ class ResolveProviderChapterTorrent(
     private suspend fun discover(
         providerId: ProviderId,
         title: String,
+        chapterNumber: String,
+        volume: Int?,
     ): List<TorrentCandidate> {
         return try {
             val items = mutableListOf<TorrentCandidate>()
@@ -120,6 +126,8 @@ class ResolveProviderChapterTorrent(
                         providerId = providerId,
                         request = TorrentSearchRequest(
                             titles = listOf(title),
+                            chapterNumber = chapterNumber,
+                            volume = volume,
                             cursor = cursor,
                         ),
                     )
