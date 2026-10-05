@@ -1,30 +1,30 @@
 package tachiyomi.domain.tsuzuki.integration.interactor
 
 import io.kotest.matchers.collections.shouldContainExactly
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
+import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.MetadataProvider
-import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.model.TitleNameObservation
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
-import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 
 class ResolveCanonicalMetadataTitleNamesTest {
 
     @Test
     fun `verified metadata progressively persists discovery names for existing canonical title`() = runTest {
         val canonicalTitleRepository = mockk<CanonicalTitleRepository>(relaxed = true)
-        every { canonicalTitleRepository.getById(any()) } returns canonicalTitle()
-        every { canonicalTitleRepository.getExternalIdentities(any()) } returns listOf(
+        coEvery { canonicalTitleRepository.getById(any()) } returns canonicalTitle()
+        coEvery { canonicalTitleRepository.getExternalIdentities(any()) } returns listOf(
             ExternalIdentity(
                 canonicalTitleId = TITLE_ID,
                 provider = "kitsu",
