@@ -90,6 +90,8 @@ data class ProviderHttpResponse(
 
 object ProviderHttpProtocol {
     const val MAX_REQUEST_JSON_CHARS = 96 * 1024
+
+    // Keep ordinary feed/API responses bounded while leaving room for full first-page RSS payloads.
     const val MAX_RESPONSE_JSON_CHARS = 256 * 1024
     const val MAX_RESPONSE_BODY_CHARS = 192 * 1024
 
