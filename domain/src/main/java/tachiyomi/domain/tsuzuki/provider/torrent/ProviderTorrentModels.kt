@@ -94,6 +94,8 @@ data class TorrentCandidate(
 data class TorrentSearchRequest(
     val titles: List<String>,
     val preferredLanguages: Set<String> = emptySet(),
+    val chapterNumber: String? = null,
+    val volume: Int? = null,
     val cursor: ProviderCursor? = null,
 ) {
     init {
@@ -109,12 +111,19 @@ data class TorrentSearchRequest(
         ) {
             "Torrent search preferred languages are invalid"
         }
+        require(chapterNumber == null || chapterNumber.isNotBlank() && chapterNumber.length <= MAX_CHAPTER_NUMBER_CHARS) {
+            "Torrent search chapter number is invalid"
+        }
+        require(volume == null || volume >= 0) {
+            "Torrent search volume must not be negative"
+        }
     }
 
     private companion object {
         const val MAX_TITLES = 16
         const val MAX_TITLE_CHARS = 1024
         const val MAX_LANGUAGES = 32
+        const val MAX_CHAPTER_NUMBER_CHARS = 64
     }
 }
 
