@@ -39,6 +39,7 @@ class CanonicalTitleNameMaterializationTest {
                 titles = linkedMapOf(
                     "english" to "Frieren: Beyond Journey's End",
                     "romaji" to "Sousou no Frieren",
+                    "romaji_duplicate" to " sousou NO FRIEREN ",
                     "native" to "葬送のフリーレン",
                     "empty" to "   ",
                 ),
