@@ -56,7 +56,7 @@ class CanonicalTitleNameMaterializationTest {
     }
 
     @Test
-    fun `catalog materialization preserves a new provider primary title when canonical display stays stable`() = runTest {
+    fun `catalog materialization preserves provider primary when canonical display stays stable`() = runTest {
         val canonicalRepository = FakeCanonicalTitleRepository()
         val existing = CanonicalTitle(
             id = "title-existing",
