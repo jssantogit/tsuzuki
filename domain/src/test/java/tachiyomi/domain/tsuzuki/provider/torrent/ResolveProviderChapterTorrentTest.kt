@@ -49,6 +49,7 @@ class ResolveProviderChapterTorrentTest {
 
     @Test
     fun `discovers exact archive mapping from enabled SCRIPT torrent Provider`() = runBlocking {
+        error("CI_SENTINEL_RESOLVE_PROVIDER_CHAPTER_TORRENT_TEST")
         val calls = mutableListOf<TorrentSearchRequest>()
         val resolver = resolver(
             gateway = TorrentSearchGateway { id, request ->
