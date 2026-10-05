@@ -196,7 +196,8 @@ class PrepareCanonicalChapterForReader(
                             outcome = DiagnosticOutcome.TYPED_FAILURE,
                             severity = DiagnosticSeverity.WARN,
                             attributes = mapOf(
-                                DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text(option.providerId.value),
+                                DiagnosticAttribute.PROVIDER_ID to
+                                    DiagnosticAttributeValue.Text(option.providerId.value),
                                 DiagnosticAttribute.ERROR_CATEGORY to DiagnosticAttributeValue.Code(
                                     prepared.error.code.toDiagnosticCategory(),
                                 ),
