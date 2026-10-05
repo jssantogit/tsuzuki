@@ -6,8 +6,9 @@ import tachiyomi.domain.tsuzuki.content.ContentOption
 internal fun canonicalContentLabel(
     sourceName: String?,
     option: ContentOption?,
+    fallbackLabel: String = "Local",
 ): String = listOfNotNull(
-    sourceName ?: option?.addonId?.value ?: "Local",
+    sourceName ?: option?.addonId?.value ?: fallbackLabel,
     option?.language?.takeIf(String::isNotBlank),
     option?.scanlationGroup?.takeIf(String::isNotBlank),
 ).joinToString(" · ")
