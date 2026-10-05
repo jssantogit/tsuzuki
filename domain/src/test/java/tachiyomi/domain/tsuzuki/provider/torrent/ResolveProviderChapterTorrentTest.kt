@@ -64,6 +64,8 @@ class ResolveProviderChapterTorrentTest {
         val options = resolver.options(chapter.id)
 
         calls.single().titles shouldBe listOf("Example Manga")
+        calls.single().chapterNumber shouldBe "12"
+        calls.single().volume shouldBe 2
         options.map { it.providerId } shouldBe listOf(providerId)
         options.single().selectedFile.path shouldBe "Example Manga - Vol 2 Ch 12.cbz"
     }
