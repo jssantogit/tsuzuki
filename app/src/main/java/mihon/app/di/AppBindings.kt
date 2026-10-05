@@ -62,6 +62,7 @@ import tachiyomi.domain.tsuzuki.content.TorrentArtifactEngine
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
 import tachiyomi.domain.tsuzuki.provider.CompositeProviderRegistry
+import tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceResolver
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
@@ -217,12 +218,18 @@ object AppBindings {
     ): ProviderRepositoryTransport =
         AndroidProviderRepositoryTransport(networkHelper.client)
 
+    // Provider reading bindings are persisted by the canonical SQLDelight repository in :data.
     @Provides
     @SingleIn(AppScope::class)
     fun providesProviderManagedFileStore(
         context: Context,
     ): ProviderManagedFileStore =
         ProviderManagedFileStore(context)
+
+    @Provides
+    fun providesProviderManagedResourceResolver(
+        managedFiles: ProviderManagedFileStore,
+    ): ProviderManagedResourceResolver = managedFiles
 
     @Provides
     @SingleIn(AppScope::class)

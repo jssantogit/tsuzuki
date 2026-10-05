@@ -75,6 +75,41 @@ class StructuredDiagnosticEventTest {
     }
 
     @Test
+    fun `sanitizer preserves Provider Reader handoff diagnostics`() {
+        val event = StructuredDiagnosticEvent(
+            timestampMillis = 1_790_755_200_000,
+            severity = DiagnosticSeverity.INFO,
+            subsystem = DiagnosticSubsystem.READER,
+            name = DiagnosticEventName.READER_PAGES_READY,
+            sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+            operationId = "865624e0-50f1-41c9-81eb-9a68fc9e50a4",
+            workflowId = "e1bf2346-14d8-4ef6-9f16-c03551f16013",
+            workflow = DiagnosticWorkflow.READER_OPEN,
+            stage = DiagnosticStage.READER,
+            outcome = DiagnosticOutcome.READY,
+            attributes = mapOf(
+                "provider_id" to DiagnosticAttributeValue.Text("app.tsuzuki.mangafire"),
+                "candidate_type" to DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
+                "candidate_count" to DiagnosticAttributeValue.Number(1),
+                "binding_count" to DiagnosticAttributeValue.Number(1),
+                "page_count" to DiagnosticAttributeValue.Number(24),
+                "initialized" to DiagnosticAttributeValue.Flag(true),
+                "error_category" to DiagnosticAttributeValue.Code(DiagnosticErrorCategory.NETWORK),
+            ),
+        )
+
+        StructuredDiagnosticSanitizer.sanitize(event)?.attributes shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text("app.tsuzuki.mangafire"),
+            DiagnosticAttribute.CANDIDATE_TYPE to DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
+            DiagnosticAttribute.CANDIDATE_COUNT to DiagnosticAttributeValue.Number(1),
+            DiagnosticAttribute.BINDING_COUNT to DiagnosticAttributeValue.Number(1),
+            DiagnosticAttribute.PAGE_COUNT to DiagnosticAttributeValue.Number(24),
+            DiagnosticAttribute.INITIALIZED to DiagnosticAttributeValue.Flag(true),
+            DiagnosticAttribute.ERROR_CATEGORY to DiagnosticAttributeValue.Code(DiagnosticErrorCategory.NETWORK),
+        )
+    }
+
+    @Test
     fun `sanitizer rejects secret shaped correlation ids`() {
         val event = StructuredDiagnosticEvent(
             timestampMillis = 1_790_755_200_000,

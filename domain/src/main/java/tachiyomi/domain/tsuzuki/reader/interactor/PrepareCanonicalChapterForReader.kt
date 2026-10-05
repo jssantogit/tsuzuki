@@ -8,6 +8,8 @@ import tachiyomi.domain.tsuzuki.content.interactor.ResolveChapterContent
 import tachiyomi.domain.tsuzuki.content.model.ContentResolution
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticCandidateType
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticErrorCategory
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
@@ -17,7 +19,11 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticTrace
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticWorkflow
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
+import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalReaderPreparation
+import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.repository.CanonicalReadingRepository
 import tachiyomi.domain.tsuzuki.reader.service.ChapterContentPreparer
 import kotlin.time.TimeMark
@@ -31,6 +37,7 @@ class PrepareCanonicalChapterForReader(
     private val canonicalDownloadRepository: CanonicalDownloadRepository,
     private val chapterContentPreparer: ChapterContentPreparer,
     private val structuredDiagnostics: StructuredDiagnosticRecorder,
+    private val resolveProviderChapterReading: ResolveProviderChapterReading? = null,
 ) {
 
     suspend fun execute(
@@ -72,7 +79,7 @@ class PrepareCanonicalChapterForReader(
                         started,
                         CanonicalReaderPreparation.Ready(
                             canonicalChapterId = canonicalChapterId,
-                            target = tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent.CanonicalDownload(
+                            target = PreparedChapterContent.CanonicalDownload(
                                 uri = artifact.localUri,
                                 format = artifact.format,
                             ),
@@ -112,7 +119,10 @@ class PrepareCanonicalChapterForReader(
                     preferredUnavailable = resolution.preferredUnavailable,
                 )
 
-                ContentResolution.Unavailable -> CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+                ContentResolution.Unavailable -> prepareProviderFallback(
+                    canonicalChapterId = canonicalChapterId,
+                    trace = trace,
+                )
             }
         } catch (error: CancellationException) {
             throw error
@@ -121,6 +131,98 @@ class PrepareCanonicalChapterForReader(
         }
 
         return complete(trace, started, result)
+    }
+
+    private suspend fun prepareProviderFallback(
+        canonicalChapterId: String,
+        trace: DiagnosticTrace,
+    ): CanonicalReaderPreparation {
+        val resolver = resolveProviderChapterReading
+        trace.event(
+            subsystem = DiagnosticSubsystem.CONTENT,
+            name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
+            stage = DiagnosticStage.BINDING,
+            outcome = if (resolver == null) DiagnosticOutcome.REJECTED else DiagnosticOutcome.STARTED,
+            attributes = mapOf(
+                DiagnosticAttribute.CANDIDATE_TYPE to
+                    DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
+                DiagnosticAttribute.INITIALIZED to DiagnosticAttributeValue.Flag(resolver != null),
+            ),
+        )
+        if (resolver == null) return CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+
+        val options = resolver.options(canonicalChapterId)
+        trace.event(
+            subsystem = DiagnosticSubsystem.CONTENT,
+            name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
+            stage = DiagnosticStage.BINDING,
+            outcome = if (options.isEmpty()) DiagnosticOutcome.EMPTY else DiagnosticOutcome.CANDIDATES,
+            attributes = mapOf(
+                DiagnosticAttribute.CANDIDATE_TYPE to
+                    DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
+                DiagnosticAttribute.CANDIDATE_COUNT to DiagnosticAttributeValue.Number(options.size.toLong()),
+            ),
+        )
+
+        // Provider-native selection will become a first-class UI model later. Until then, never
+        // choose silently when more than one independent Provider/facet can serve the chapter.
+        val option = options.singleOrNull()
+            ?: return CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+
+        trace.event(
+            subsystem = DiagnosticSubsystem.READER,
+            name = DiagnosticEventName.READER_SOURCE_SELECTED,
+            stage = DiagnosticStage.READER,
+            outcome = DiagnosticOutcome.SUCCEEDED,
+            attributes = mapOf(
+                DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text(option.providerId.value),
+                DiagnosticAttribute.CANDIDATE_TYPE to
+                    DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
+            ),
+        )
+
+        return when (val prepared = resolver.preparedContent(option)) {
+            is ProviderCallResult.Failure -> {
+                trace.event(
+                    subsystem = DiagnosticSubsystem.READER,
+                    name = DiagnosticEventName.READER_PAGES_READY,
+                    stage = DiagnosticStage.READER,
+                    outcome = DiagnosticOutcome.TYPED_FAILURE,
+                    severity = DiagnosticSeverity.WARN,
+                    attributes = mapOf(
+                        DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text(option.providerId.value),
+                        DiagnosticAttribute.ERROR_CATEGORY to DiagnosticAttributeValue.Code(
+                            prepared.error.code.toDiagnosticCategory(),
+                        ),
+                    ),
+                )
+                CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+            }
+            is ProviderCallResult.Success -> {
+                val pageCount = (prepared.value as? PreparedChapterContent.HttpPages)?.pages?.size
+                trace.event(
+                    subsystem = DiagnosticSubsystem.READER,
+                    name = DiagnosticEventName.READER_PAGES_READY,
+                    stage = DiagnosticStage.READER,
+                    outcome = DiagnosticOutcome.READY,
+                    attributes = buildMap {
+                        put(
+                            DiagnosticAttribute.PROVIDER_ID,
+                            DiagnosticAttributeValue.Text(option.providerId.value),
+                        )
+                        pageCount?.let {
+                            put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(it.toLong()))
+                        }
+                    },
+                )
+                CanonicalReaderPreparation.Ready(
+                    canonicalChapterId = canonicalChapterId,
+                    target = prepared.value,
+                    usedFallback = true,
+                    selectedOption = null,
+                )
+            }
+        }
     }
 
     private fun complete(
@@ -208,4 +310,23 @@ class PrepareCanonicalChapterForReader(
     suspend operator fun invoke(
         canonicalChapterId: String,
     ): CanonicalReaderPreparation = execute(canonicalChapterId)
+}
+
+private fun ProviderErrorCode.toDiagnosticCategory(): DiagnosticErrorCategory = when (this) {
+    ProviderErrorCode.TIMEOUT -> DiagnosticErrorCategory.TIMEOUT
+    ProviderErrorCode.NETWORK_POLICY,
+    ProviderErrorCode.NETWORK_ERROR,
+    ProviderErrorCode.BROWSER_ERROR,
+    -> DiagnosticErrorCategory.NETWORK
+    ProviderErrorCode.MALFORMED_RESULT -> DiagnosticErrorCategory.MALFORMED_RESPONSE
+    ProviderErrorCode.RUNTIME_DIED,
+    ProviderErrorCode.SCRIPT_ERROR,
+    ProviderErrorCode.HOST_API_UNSUPPORTED,
+    ProviderErrorCode.RESOURCE_LIMIT,
+    -> DiagnosticErrorCategory.EXTENSION
+    ProviderErrorCode.UNAVAILABLE,
+    ProviderErrorCode.PERMISSION_DENIED,
+    ProviderErrorCode.AUTH_REQUIRED,
+    ProviderErrorCode.ACQUISITION_FAILED,
+    -> DiagnosticErrorCategory.SOURCE_UNAVAILABLE
 }
