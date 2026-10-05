@@ -11,6 +11,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticTrace
+import tachiyomi.domain.tsuzuki.model.TitleNameObservation
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderCursor
@@ -20,6 +21,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
+import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 
 data class ProviderChapterTorrentOption(
     val canonicalChapterId: String,
@@ -45,6 +47,12 @@ fun ProviderChapterTorrentOption.toContentDelivery(): ContentDelivery.Torrent? {
     )
 }
 
+private object EmptyTitleNameObservationRepository : TitleNameObservationRepository {
+    override suspend fun getByTitle(canonicalTitleId: String): List<TitleNameObservation> = emptyList()
+
+    override suspend fun upsert(observation: TitleNameObservation) = Unit
+}
+
 /**
  * Discovers Provider torrent releases that can be mapped to one canonical chapter without guessing.
  *
@@ -58,6 +66,7 @@ class ResolveProviderChapterTorrent(
     private val canonicalTitleRepository: CanonicalTitleRepository,
     private val providerRegistry: ProviderRegistry,
     private val gateway: TorrentSearchGateway,
+    private val titleNameObservationRepository: TitleNameObservationRepository = EmptyTitleNameObservationRepository,
 ) {
 
     suspend fun options(
@@ -67,6 +76,10 @@ class ResolveProviderChapterTorrent(
         val chapter = canonicalChapterRepository.getById(canonicalChapterId) ?: return emptyList()
         if (!chapter.identity.isSpecific || !chapter.identity.isNumbered) return emptyList()
         val title = canonicalTitleRepository.getById(chapter.canonicalTitleId) ?: return emptyList()
+        val searchTitles = buildSearchTitles(
+            displayTitle = title.displayTitle,
+            observations = titleNameObservationRepository.getByTitle(title.id),
+        )
 
         providerRegistry.awaitReady()
         val targets = providerRegistry.providers()
@@ -100,7 +113,7 @@ class ResolveProviderChapterTorrent(
                 when (
                     val discovery = discover(
                         providerId = providerId,
-                        title = title.displayTitle,
+                        titles = searchTitles,
                         chapterNumber = chapter.displayNumber,
                         volume = chapter.volume,
                     )
@@ -209,7 +222,7 @@ class ResolveProviderChapterTorrent(
 
     private suspend fun discover(
         providerId: ProviderId,
-        title: String,
+        titles: List<String>,
         chapterNumber: String,
         volume: Int?,
     ): TorrentDiscoveryResult {
@@ -226,7 +239,7 @@ class ResolveProviderChapterTorrent(
                     val result = gateway.search(
                         providerId = providerId,
                         request = TorrentSearchRequest(
-                            titles = listOf(title),
+                            titles = titles,
                             chapterNumber = chapterNumber,
                             volume = volume,
                             cursor = cursor,
@@ -254,6 +267,28 @@ class ResolveProviderChapterTorrent(
         }
     }
 
+    private fun buildSearchTitles(
+        displayTitle: String,
+        observations: List<TitleNameObservation>,
+    ): List<String> {
+        val ordered = buildList {
+            add(displayTitle)
+            observations
+                .sortedWith(
+                    compareByDescending<TitleNameObservation> { it.updatedAt }
+                        .thenBy { it.provider }
+                        .thenBy { it.sourceKey }
+                        .thenBy { it.value },
+                )
+                .forEach { add(it.value) }
+        }
+        val seen = mutableSetOf<String>()
+        return ordered.map(String::trim)
+            .filter(String::isNotEmpty)
+            .filter { seen.add(it.lowercase()) }
+            .take(MAX_SEARCH_TITLES)
+    }
+
     private sealed interface TorrentDiscoveryResult {
         data class Success(val candidates: List<TorrentCandidate>) : TorrentDiscoveryResult
 
@@ -265,5 +300,6 @@ class ResolveProviderChapterTorrent(
     private companion object {
         const val MAX_SEARCH_PAGES = 8
         const val MAX_SEARCH_ITEMS = 2_000
+        const val MAX_SEARCH_TITLES = 16
     }
 }
