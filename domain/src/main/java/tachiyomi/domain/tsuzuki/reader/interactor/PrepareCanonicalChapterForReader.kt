@@ -258,7 +258,7 @@ class PrepareCanonicalChapterForReader(
             return CanonicalReaderPreparation.Unavailable(canonicalChapterId)
         }
 
-        return when (val prepared = preparer.prepare(canonicalChapterId)) {
+        return when (val prepared = preparer.prepare(canonicalChapterId, trace)) {
             ProviderChapterTorrentPreparation.Unavailable -> {
                 trace.event(
                     subsystem = DiagnosticSubsystem.CONTENT,
