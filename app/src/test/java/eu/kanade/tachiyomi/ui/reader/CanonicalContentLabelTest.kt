@@ -22,12 +22,12 @@ class CanonicalContentLabelTest {
     }
 
     @Test
-    fun `offline chapters have an explicit local label`() {
-        canonicalContentLabel(null, null) shouldBe "Local"
+    fun `transport without source identity stays source neutral`() {
+        canonicalContentLabel(null, null) shouldBe "Reading source"
     }
 
     @Test
-    fun `provider transport does not masquerade as local content`() {
+    fun `known provider transport can supply an explicit provider fallback`() {
         canonicalContentLabel(null, null, fallbackLabel = "Provider") shouldBe "Provider"
     }
 }
