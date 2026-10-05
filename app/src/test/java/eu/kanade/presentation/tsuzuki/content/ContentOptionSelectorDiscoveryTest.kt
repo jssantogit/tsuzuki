@@ -135,4 +135,17 @@ class ContentOptionSelectorDiscoveryTest {
         state.options shouldBe emptyList()
         state.sourceDiscoveryTitleId() shouldBe "canonical-title"
     }
+
+    @Test
+    fun `empty selector copy acknowledges Provider reading instead of claiming Add-ons are the only source`() {
+        val state = ContentSelectorScreenState.Empty(
+            canonicalTitleId = "canonical-title",
+            canonicalChapterId = "canonical-chapter",
+            noEnabledAddon = true,
+        )
+
+        emptySelectorMessage(state) shouldBe
+            "No selectable reading sources are available here. Enable or install a reading Add-on, " +
+            "or add a compatible Provider."
+    }
 }
