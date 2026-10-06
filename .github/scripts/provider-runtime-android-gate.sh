@@ -1,23 +1,41 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# Keep runtime and reading instrumentation on the same physical gate and branch head.
-./gradlew :app:connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.package=eu.kanade.tachiyomi.provider.runtime
-status=$?
+status=0
 
-if [ "$status" -ne 0 ]; then
-  echo "::group::Provider Platform instrumentation failures"
-  result_root="app/build/outputs/androidTest-results/connected/debug"
-  if [ -d "$result_root" ]; then
-    while IFS= read -r -d '' file; do
-      echo "===== $file ====="
-      cat "$file"
-    done < <(find "$result_root" -type f -name '*.xml' -print0)
-  else
-    echo "No connected-test XML directory found at $result_root"
+run_package() {
+  local package="$1"
+  local label="$2"
+
+  ./gradlew :app:connectedDebugAndroidTest \
+    -Pandroid.testInstrumentationRunnerArguments.package="$package"
+  local package_status=$?
+
+  if [ "$package_status" -ne 0 ]; then
+    status="$package_status"
+    echo "::group::$label instrumentation failures"
+    local result_root="app/build/outputs/androidTest-results/connected/debug"
+    if [ -d "$result_root" ]; then
+      while IFS= read -r -d '' file; do
+        echo "===== $file ====="
+        cat "$file"
+      done < <(find "$result_root" -type f -name '*.xml' -print0)
+    else
+      echo "No connected-test XML directory found at $result_root"
+    fi
+    echo "::endgroup::"
+
+    if command -v adb >/dev/null 2>&1; then
+      echo "::group::$label acceptance diagnostics"
+      adb logcat -d -s ProviderTorrentReaderAcceptance:I '*:S' || true
+      echo "::endgroup::"
+    fi
   fi
-  echo "::endgroup::"
-fi
+}
+
+# Keep runtime/torrent acquisition and Reader archive acceptance on the same
+# physical emulator gate and branch head without broadening to unrelated tests.
+run_package "eu.kanade.tachiyomi.provider.runtime" "Provider Platform runtime"
+run_package "eu.kanade.tachiyomi.ui.reader.loader" "Provider Torrent Reader"
 
 exit "$status"

@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'tsuzuki/provider-platform-*'
+      - 'tsuzuki/provider-torrent-acceptance-harness'
     paths:
       # Runtime + Host Service boundary.
       - 'app/src/main/java/eu/kanade/tachiyomi/provider/**'
@@ -14,6 +15,7 @@ on:
       - 'app/src/main/java/eu/kanade/tachiyomi/ui/reader/**'
       - 'app/src/test/java/eu/kanade/tachiyomi/ui/reader/**'
       - 'app/src/test/java/eu/kanade/tachiyomi/provider/**'
+      - 'core/archive/**'
       - 'domain/src/main/java/tachiyomi/domain/tsuzuki/provider/**'
       - 'domain/src/test/java/tachiyomi/domain/tsuzuki/provider/**'
       - 'domain/src/main/java/tachiyomi/domain/tsuzuki/chapter/**'
@@ -30,6 +32,7 @@ on:
       - 'gradle/libs.versions.toml'
       - '.github/workflows/provider-runtime-android.yml'
       - '.github/scripts/provider-runtime-android-gate.sh'
+      - '.github/scripts/test_provider_runtime_android_gate.py'
   workflow_dispatch:
 
 permissions:
@@ -52,6 +55,8 @@ jobs:
           java-version-file: .github/.java-version
           distribution: temurin
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - name: Validate Provider Android gate routing
+        run: python .github/scripts/test_provider_runtime_android_gate.py
       - name: Compile Provider runtime instrumentation
         run: ./gradlew :app:compileDebugAndroidTestKotlin
       - name: Enable KVM

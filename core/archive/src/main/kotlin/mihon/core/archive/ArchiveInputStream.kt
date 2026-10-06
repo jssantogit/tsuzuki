@@ -36,7 +36,12 @@ internal class ArchiveInputStream(buffer: Long, size: Long) : InputStream() {
     }
 
     override fun read(b: ByteArray, off: Int, len: Int): Int {
-        val buffer = ByteBuffer.wrap(b, off, len)
+        if (len == 0) return 0
+
+        // ByteBuffer.wrap(array, off, len) keeps the full array capacity. read(ByteBuffer)
+        // clears its buffer before passing it to libarchive, so use a slice whose capacity is
+        // exactly the requested window; otherwise reads can overwrite bytes outside off..off+len.
+        val buffer = ByteBuffer.wrap(b, off, len).slice()
         read(buffer)
         return if (buffer.hasRemaining()) buffer.remaining() else -1
     }
