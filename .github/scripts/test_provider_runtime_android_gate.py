@@ -13,11 +13,12 @@ class ProviderRuntimeAndroidGateTest(unittest.TestCase):
         self.assertIn("eu.kanade.tachiyomi.ui.reader.loader", script)
         self.assertIn(":app:connectedDebugAndroidTest", script)
 
-    def test_workflow_selects_acceptance_branch_and_android_test_sources(self):
+    def test_workflow_selects_acceptance_branch_and_reader_dependencies(self):
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
         self.assertIn("tsuzuki/provider-torrent-acceptance-harness", workflow)
         self.assertIn("app/src/androidTest/**", workflow)
+        self.assertIn("core/archive/**", workflow)
         self.assertIn("provider-runtime-android-gate.sh", workflow)
 
 
