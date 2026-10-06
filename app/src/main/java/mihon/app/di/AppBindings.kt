@@ -22,6 +22,7 @@ import eu.kanade.tachiyomi.provider.repository.InstalledScriptProviderRegistry
 import eu.kanade.tachiyomi.provider.runtime.IsolatedProviderPackageContractValidator
 import eu.kanade.tachiyomi.provider.runtime.JlibtorrentNativeSupport
 import eu.kanade.tachiyomi.provider.runtime.JlibtorrentProviderP2pDownloadEngine
+import eu.kanade.tachiyomi.provider.runtime.ProviderDiscoveryDiagnosticLogSink
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import eu.kanade.tachiyomi.provider.runtime.ProviderP2pJobManager
@@ -59,6 +60,7 @@ import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
 import tachiyomi.domain.tsuzuki.content.TorrentArtifactEngine
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
 import tachiyomi.domain.tsuzuki.provider.CompositeProviderRegistry
@@ -249,12 +251,16 @@ object AppBindings {
         context: Context,
         managedFiles: ProviderManagedFileStore,
         p2pJobs: ProviderP2pJobManager,
-    ): ProviderHostInvocationFactory =
-        ProviderHostInvocationFactory(
+        diagnostics: StructuredDiagnosticRecorder,
+    ): ProviderHostInvocationFactory {
+        val discoveryDiagnostics = ProviderDiscoveryDiagnosticLogSink(diagnostics)
+        return ProviderHostInvocationFactory(
             context = context,
+            logSink = discoveryDiagnostics::record,
             p2pServiceFactory = p2pJobs::service,
             managedFiles = managedFiles,
         )
+    }
 
     @Provides
     @SingleIn(AppScope::class)
