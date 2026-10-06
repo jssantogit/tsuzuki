@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticDiscoveryPhase
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
@@ -25,12 +26,12 @@ class ProviderDiscoveryDiagnosticLogSinkTest {
         sink.record(
             providerId = "app.tsuzuki.nyaa",
             invocationId = invocationId,
-            message = "TSZ_DISCOVERY_V1 state=start attempt=1 broadened=0",
+            message = "TSZ_DISCOVERY_V1 state=start attempt=1 phase=primary_narrow",
         )
         sink.record(
             providerId = "app.tsuzuki.nyaa",
             invocationId = invocationId,
-            message = "TSZ_DISCOVERY_V1 state=end attempt=1 broadened=0 raw=2 accepted=1 duration_ms=120",
+            message = "TSZ_DISCOVERY_V1 state=end attempt=1 phase=primary_narrow raw=2 accepted=1 duration_ms=120",
         )
         sink.record(
             providerId = "app.tsuzuki.nyaa",
@@ -40,7 +41,7 @@ class ProviderDiscoveryDiagnosticLogSinkTest {
         sink.record(
             providerId = "app.tsuzuki.nyaa",
             invocationId = invocationId,
-            message = "TSZ_DISCOVERY_V1 state=end attempt=1 broadened=0 raw=2 accepted=1 duration_ms=120 title=secret",
+            message = "TSZ_DISCOVERY_V1 state=end attempt=1 phase=primary_narrow raw=2 accepted=1 duration_ms=120 title=secret",
         )
 
         assertEquals(2, recorder.events.size)
@@ -52,7 +53,10 @@ class ProviderDiscoveryDiagnosticLogSinkTest {
         assertEquals(1, started.attempt)
         assertEquals("11111111-2222-3333-8444-555555555555", started.operationId)
         assertEquals(DiagnosticAttributeValue.Text("app.tsuzuki.nyaa"), started.attributes["provider_id"])
-        assertEquals(DiagnosticAttributeValue.Flag(false), started.attributes["broadened"])
+        assertEquals(
+            DiagnosticAttributeValue.Code(DiagnosticDiscoveryPhase.PRIMARY_NARROW),
+            started.attributes["discovery_phase"],
+        )
         assertNotNull(StructuredDiagnosticSanitizer.sanitize(started))
 
         val completed = recorder.events[1]
