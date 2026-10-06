@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'tsuzuki/provider-platform-*'
+      - 'tsuzuki/provider-torrent-acceptance-harness'
     paths:
       # Runtime + Host Service boundary.
       - 'app/src/main/java/eu/kanade/tachiyomi/provider/**'
