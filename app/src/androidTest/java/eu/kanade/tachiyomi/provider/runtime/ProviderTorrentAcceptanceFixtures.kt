@@ -132,6 +132,76 @@ object ProviderTorrentAcceptanceFixtures {
         )
     }
 
+    fun createDirectP2pProviderPackage(
+        providerId: String,
+        repositoryId: String,
+    ): ScriptProviderPackage {
+        val manifest = """
+            {
+              "manifestVersion": 1,
+              "id": ${jsonString(providerId)},
+              "name": "Direct P2P Acceptance Provider",
+              "version": {"name": "1.0.0", "code": 1},
+              "minHostApi": 1,
+              "entrypoint": "main.js",
+              "capabilities": [{"id": "acquisition.p2p", "version": 1}],
+              "permissions": {
+                "storage": {"enabled": false},
+                "secrets": []
+              },
+              "contentLanguages": [],
+              "settings": []
+            }
+        """.trimIndent()
+        val main = """
+            async function p2p(input) {
+              const torrent = input.torrent ?? {};
+              const file = input.file ?? {};
+              const request = {
+                operationId: input.operationId,
+                magnetUri: torrent.magnetUri ?? null,
+                torrentUrl: torrent.torrentUrl ?? null,
+                infoHash: torrent.infoHash ?? null,
+                selectedFileIndex: file.index,
+                selectedFilePath: file.path,
+                selectedFileSizeBytes: file.sizeBytes ?? null,
+              };
+              const encoded = await tsuzuki.p2p.acquire(JSON.stringify(request));
+              const response = JSON.parse(encoded);
+              if (response.status === "pending") {
+                return { status: "pending", jobId: response.jobId };
+              }
+              if (response.status === "ready") {
+                return {
+                  status: "ready",
+                  resource: response.resource,
+                  format: response.format,
+                };
+              }
+              throw new Error(`fixture P2P failure: ${'$'}{response.failure ?? response.status}`);
+            }
+
+            export default {
+              acquisition: {
+                p2p,
+              },
+            };
+        """.trimIndent()
+        val bytes = providerPackage(
+            mapOf(
+                "manifest.json" to manifest.encodeToByteArray(),
+                "main.js" to main.encodeToByteArray(),
+            ),
+        )
+        val parsed = ProviderPackageParser().parse(bytes)
+        return ScriptProviderPackage(
+            repositoryId = repositoryId,
+            versionCode = 1L,
+            bytes = bytes,
+            parsed = parsed,
+        )
+    }
+
     fun localOnlyParams(port: Int): SessionParams {
         val settings = SettingsPack()
             .listenInterfaces("127.0.0.1:$port")
