@@ -39,7 +39,10 @@ class ProviderRuntimeClient(
     ): ProviderRuntimeInvocationResponse {
         validateInvocation(request, source, hostPolicy)
 
-        val hostInvocation = hostInvocationFactory.create(hostPolicy)
+        val hostInvocation = hostInvocationFactory.create(
+            policy = hostPolicy,
+            invocationTimeoutMs = request.limits.wallClockTimeoutMs,
+        )
         return try {
             withRuntimeFile(
                 bytes = source,
@@ -73,7 +76,10 @@ class ProviderRuntimeClient(
             "Provider capability input exceeds the runtime input-size limit"
         }
 
-        val hostInvocation = hostInvocationFactory.create(hostPolicy)
+        val hostInvocation = hostInvocationFactory.create(
+            policy = hostPolicy,
+            invocationTimeoutMs = request.limits.wallClockTimeoutMs,
+        )
         return try {
             withRuntimeFile(
                 bytes = packageBytes,
