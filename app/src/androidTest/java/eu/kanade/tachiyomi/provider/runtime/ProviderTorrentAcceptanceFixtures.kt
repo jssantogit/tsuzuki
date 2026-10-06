@@ -34,6 +34,7 @@ object ProviderTorrentAcceptanceFixtures {
         val chapter012 = cbz(
             listOf(
                 "003.png" to tinyPng(Color.BLUE),
+                "README.txt" to "fixture-not-image".encodeToByteArray(),
                 "001.png" to tinyPng(Color.RED),
                 "002.png" to tinyPng(Color.GREEN),
             ),
