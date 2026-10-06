@@ -21,27 +21,22 @@ class ProviderDiscoveryDiagnosticLogSinkTest {
             recorder = recorder,
             clock = { 1234L },
         )
-        val invocationId = "provider:torrent.search:11111111-2222-3333-8444-555555555555"
 
         sink.record(
             providerId = "app.tsuzuki.nyaa",
-            invocationId = invocationId,
             message = "TSZ_DISCOVERY_V1 state=start attempt=1 phase=primary_narrow",
         )
         sink.record(
             providerId = "app.tsuzuki.nyaa",
-            invocationId = invocationId,
             message = "TSZ_DISCOVERY_V1 state=end attempt=1 phase=primary_narrow " +
                 "raw=2 accepted=1 duration_ms=120",
         )
         sink.record(
             providerId = "app.tsuzuki.nyaa",
-            invocationId = invocationId,
             message = "Diagnostic Test https://nyaa.si/?q=secret",
         )
         sink.record(
             providerId = "app.tsuzuki.nyaa",
-            invocationId = invocationId,
             message = "TSZ_DISCOVERY_V1 state=end attempt=1 phase=primary_narrow " +
                 "raw=2 accepted=1 duration_ms=120 title=secret",
         )
@@ -53,7 +48,7 @@ class ProviderDiscoveryDiagnosticLogSinkTest {
         assertEquals(DiagnosticStage.SEARCH, started.stage)
         assertEquals(DiagnosticOutcome.STARTED, started.outcome)
         assertEquals(1, started.attempt)
-        assertEquals("11111111-2222-3333-8444-555555555555", started.operationId)
+        assertEquals(null, started.operationId)
         assertEquals(DiagnosticAttributeValue.Text("app.tsuzuki.nyaa"), started.attributes["provider_id"])
         assertEquals(
             DiagnosticAttributeValue.Code(DiagnosticDiscoveryPhase.PRIMARY_NARROW),
