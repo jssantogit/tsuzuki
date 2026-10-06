@@ -246,7 +246,12 @@ class ProviderTorrentAcquisitionAcceptanceTest {
         try {
             val fixture = ProviderTorrentAcceptanceFixtures.createThreeChapterTorrent(root)
             val candidate = candidate(fixture)
-            val selected = (TorrentChapterMapper().map(chapter12Request(), candidate) as TorrentChapterFileMatch.Exact).file
+            val selected = (
+                TorrentChapterMapper().map(
+                    chapter12Request(),
+                    candidate,
+                ) as TorrentChapterFileMatch.Exact
+                ).file
             val activePackage = ProviderTorrentAcceptanceFixtures.createDirectP2pProviderPackage(
                 providerId = PROVIDER_ID.value,
                 repositoryId = REPOSITORY_ID,
@@ -301,7 +306,12 @@ class ProviderTorrentAcquisitionAcceptanceTest {
         val fixture = ProviderTorrentAcceptanceFixtures.createThreeChapterTorrent(root)
         val managedFiles = ProviderManagedFileStore(context).apply { clearAll() }
         val candidate = candidate(fixture)
-        val selected = (TorrentChapterMapper().map(chapter12Request(), candidate) as TorrentChapterFileMatch.Exact).file
+        val selected = (
+            TorrentChapterMapper().map(
+                chapter12Request(),
+                candidate,
+            ) as TorrentChapterFileMatch.Exact
+            ).file
         val jobRoot = File(root, "jobs")
         val engine = JlibtorrentProviderP2pDownloadEngine(
             metadataResolver = { _, _, _ -> fixture.torrent },
