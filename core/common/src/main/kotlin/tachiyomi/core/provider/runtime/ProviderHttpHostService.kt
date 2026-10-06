@@ -2,6 +2,7 @@ package tachiyomi.core.provider.runtime
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Call
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
@@ -12,6 +13,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class ProviderHttpSessionStore {
@@ -37,10 +39,13 @@ class DefaultProviderHttpHostService(
     private val maxRedirects: Int = 5,
     private val maxTextChars: Int = ProviderHttpProtocol.MAX_RESPONSE_BODY_CHARS,
     private val maxResponseBytes: Int = 16 * 1024 * 1024,
+    private val invocationTimeoutMs: Long = ProviderRuntimeLimits().wallClockTimeoutMs,
 ) : ProviderHttpHostService, AutoCloseable {
 
-    private val activeCalls = ConcurrentHashMap.newKeySet<okhttp3.Call>()
+    private val activeCalls = ConcurrentHashMap.newKeySet<Call>()
     private val closed = AtomicBoolean(false)
+    private val invocationDeadlineNanos =
+        System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(invocationTimeoutMs)
 
     private val client = baseClient.newBuilder()
         .followRedirects(false)
@@ -55,6 +60,7 @@ class DefaultProviderHttpHostService(
             "Provider HTTP text limit is outside supported bounds"
         }
         require(maxResponseBytes > 0) { "Provider HTTP byte limit must be positive" }
+        require(invocationTimeoutMs > 0L) { "Provider HTTP invocation timeout must be positive" }
     }
 
     override suspend fun request(request: ProviderHttpRequest): ProviderHttpResponse =
@@ -135,6 +141,7 @@ class DefaultProviderHttpHostService(
                     body = currentBody,
                 ),
             )
+            applyInvocationDeadline(call)
             activeCalls += call
             if (closed.get()) {
                 activeCalls -= call
@@ -190,6 +197,14 @@ class DefaultProviderHttpHostService(
                 response.close()
             }
         }
+    }
+
+    private fun applyInvocationDeadline(call: Call) {
+        val remainingNanos = invocationDeadlineNanos - System.nanoTime()
+        if (remainingNanos <= 0L) {
+            throw ProviderHostServiceException("Provider HTTP invocation deadline exceeded")
+        }
+        call.timeout().timeout(remainingNanos, TimeUnit.NANOSECONDS)
     }
 
     private fun buildRequest(
