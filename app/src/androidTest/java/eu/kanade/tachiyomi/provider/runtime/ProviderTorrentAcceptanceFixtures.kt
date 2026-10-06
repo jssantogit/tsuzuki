@@ -7,6 +7,7 @@ import com.frostwire.jlibtorrent.SessionParams
 import com.frostwire.jlibtorrent.SettingsPack
 import com.frostwire.jlibtorrent.TorrentBuilder
 import com.frostwire.jlibtorrent.TorrentInfo
+import tachiyomi.core.provider.packageformat.ProviderPackageParser
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.zip.ZipEntry
@@ -69,6 +70,68 @@ object ProviderTorrentAcceptanceFixtures {
         )
     }
 
+    fun createTorrentSearchProviderPackage(
+        providerId: String,
+        repositoryId: String,
+        origin: String,
+        endpoint: String,
+    ): ScriptProviderPackage {
+        val manifest = """
+            {
+              "manifestVersion": 1,
+              "id": ${jsonString(providerId)},
+              "name": "Torrent Acceptance Provider",
+              "version": {"name": "1.0.0", "code": 1},
+              "minHostApi": 1,
+              "entrypoint": "main.js",
+              "capabilities": [{"id": "torrent.search", "version": 1}],
+              "permissions": {
+                "network": {
+                  "origins": [${jsonString(origin)}],
+                  "localNetwork": true
+                }
+              },
+              "contentLanguages": ["en"],
+              "settings": []
+            }
+        """.trimIndent()
+        val main = """
+            const endpoint = ${jsonString(endpoint)};
+
+            export default {
+              torrent: {
+                search: async (input) => {
+                  const headers = JSON.stringify({
+                    "X-Tsuzuki-Titles": (input.titles ?? []).join("|"),
+                    "X-Tsuzuki-Languages": (input.preferredLanguages ?? []).join("|"),
+                    "X-Tsuzuki-Chapter": input.chapterNumber ?? "",
+                    "X-Tsuzuki-Volume": input.volume == null ? "" : String(input.volume),
+                  });
+                  const encoded = await tsuzuki.http.request("GET", endpoint, headers);
+                  const response = JSON.parse(encoded);
+                  if (response.statusCode < 200 || response.statusCode >= 300) {
+                    throw new Error(`fixture HTTP ${'$'}{response.statusCode}`);
+                  }
+                  return JSON.parse(response.body);
+                },
+              },
+            };
+        """.trimIndent()
+        val bytes = providerPackage(
+            mapOf(
+                "manifest.json" to manifest.encodeToByteArray(),
+                "main.js" to main.encodeToByteArray(),
+            ),
+        )
+        val parsed = ProviderPackageParser().parse(bytes)
+        return ScriptProviderPackage(
+            repositoryId = repositoryId,
+            versionCode = 1L,
+            bytes = bytes,
+            parsed = parsed,
+        )
+    }
+
     fun localOnlyParams(port: Int): SessionParams {
         val settings = SettingsPack()
             .listenInterfaces("127.0.0.1:$port")
@@ -94,6 +157,43 @@ object ProviderTorrentAcceptanceFixtures {
             start()
             join(10_000)
         }
+    }
+
+    private fun providerPackage(entries: Map<String, ByteArray>): ByteArray {
+        return ByteArrayOutputStream().use { output ->
+            ZipOutputStream(output).use { zip ->
+                entries.forEach { (name, bytes) ->
+                    zip.putNextEntry(ZipEntry(name))
+                    zip.write(bytes)
+                    zip.closeEntry()
+                }
+            }
+            output.toByteArray()
+        }
+    }
+
+    private fun jsonString(value: String): String = buildString {
+        append('"')
+        value.forEach { char ->
+            when (char) {
+                '"' -> append("\\\"")
+                '\\' -> append("\\\\")
+                '\b' -> append("\\b")
+                '\u000C' -> append("\\f")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> {
+                    if (char.code < 0x20) {
+                        append("\\u")
+                        append(char.code.toString(16).padStart(4, '0'))
+                    } else {
+                        append(char)
+                    }
+                }
+            }
+        }
+        append('"')
     }
 
     private fun await(
