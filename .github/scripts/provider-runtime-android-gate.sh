@@ -24,6 +24,12 @@ run_package() {
       echo "No connected-test XML directory found at $result_root"
     fi
     echo "::endgroup::"
+
+    if command -v adb >/dev/null 2>&1; then
+      echo "::group::$label acceptance diagnostics"
+      adb logcat -d -s ProviderTorrentReaderAcceptance:I '*:S' || true
+      echo "::endgroup::"
+    fi
   fi
 }
 
