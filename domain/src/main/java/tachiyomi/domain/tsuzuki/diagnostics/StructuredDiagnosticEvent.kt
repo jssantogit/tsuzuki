@@ -98,6 +98,7 @@ enum class DiagnosticEventName {
     CONTENT_BINDING_LOOKUP,
     CONTENT_BINDING_RESOLVE_STARTED,
     CONTENT_BINDING_RESOLVE_COMPLETED,
+    PROVIDER_DISCOVERY_ATTEMPT,
 
     CHAPTER_REFRESH_STARTED,
     CHAPTER_EVIDENCE_RECONCILED,
@@ -188,6 +189,7 @@ enum class DiagnosticAttribute {
     PROVIDER_VERSION_CODE,
     PROVIDER_ERROR_CODE,
     PROVIDER_RETRYABLE,
+    DISCOVERY_PHASE,
     ADDON_ID,
     CANONICAL_TITLE_REF,
     MIHON_MANGA_REF,
@@ -280,6 +282,13 @@ enum class DiagnosticCacheStatus : DiagnosticSafeCode {
     MISS,
     STALE,
     BYPASSED,
+}
+
+enum class DiagnosticDiscoveryPhase : DiagnosticSafeCode {
+    PRIMARY_NARROW,
+    PRIMARY_FALLBACK,
+    ALIAS_NARROW,
+    ALIAS_FALLBACK,
 }
 
 enum class DiagnosticInvariantCode : DiagnosticSafeCode {
@@ -437,6 +446,8 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticCandidateType }
         DiagnosticAttribute.CACHE_STATUS -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticCacheStatus }
+        DiagnosticAttribute.DISCOVERY_PHASE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticDiscoveryPhase }
         DiagnosticAttribute.INVARIANT_CODE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticInvariantCode }
     }
