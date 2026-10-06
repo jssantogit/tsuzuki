@@ -31,7 +31,8 @@ class ProviderDiscoveryDiagnosticLogSinkTest {
         sink.record(
             providerId = "app.tsuzuki.nyaa",
             invocationId = invocationId,
-            message = "TSZ_DISCOVERY_V1 state=end attempt=1 phase=primary_narrow raw=2 accepted=1 duration_ms=120",
+            message = "TSZ_DISCOVERY_V1 state=end attempt=1 phase=primary_narrow " +
+                "raw=2 accepted=1 duration_ms=120",
         )
         sink.record(
             providerId = "app.tsuzuki.nyaa",
@@ -41,7 +42,8 @@ class ProviderDiscoveryDiagnosticLogSinkTest {
         sink.record(
             providerId = "app.tsuzuki.nyaa",
             invocationId = invocationId,
-            message = "TSZ_DISCOVERY_V1 state=end attempt=1 phase=primary_narrow raw=2 accepted=1 duration_ms=120 title=secret",
+            message = "TSZ_DISCOVERY_V1 state=end attempt=1 phase=primary_narrow " +
+                "raw=2 accepted=1 duration_ms=120 title=secret",
         )
 
         assertEquals(2, recorder.events.size)
