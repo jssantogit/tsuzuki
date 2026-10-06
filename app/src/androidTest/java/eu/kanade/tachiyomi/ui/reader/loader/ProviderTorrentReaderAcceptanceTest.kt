@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.reader.loader
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
+import android.util.Log
 import androidx.core.content.FileProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -46,6 +47,7 @@ class ProviderTorrentReaderAcceptanceTest {
         )
 
         try {
+            Log.i(TAG, "stage=fixture archiveBytes=${fixture.selectedArchiveBytes.size}")
             val token = store.promote(
                 providerId = PROVIDER_ID.value,
                 bytes = fixture.selectedArchiveBytes,
@@ -57,32 +59,53 @@ class ProviderTorrentReaderAcceptanceTest {
                 format = ProviderManagedFileFormat.CBZ,
             )
             assertNotNull("managed archive must resolve to a Reader URI", uri)
+            Log.i(TAG, "stage=managed-resolve token=$token uri=$uri")
 
             val reader = context.contentResolver
                 .openFileDescriptor(Uri.parse(uri), "r")
                 .use { descriptor ->
-                    ArchiveReader(requireNotNull(descriptor))
+                    val required = requireNotNull(descriptor)
+                    Log.i(TAG, "stage=descriptor statSize=${required.statSize}")
+                    ArchiveReader(required)
                 }
             val loader = ArchivePageLoader(reader)
 
             try {
                 val pages = loader.getPages()
+                Log.i(
+                    TAG,
+                    "stage=pages count=${pages.size} indexes=${pages.map { it.index }} " +
+                        "statuses=${pages.map { it.status }}",
+                )
 
-                assertEquals(3, pages.size)
-                assertEquals(listOf(0, 1, 2), pages.map { it.index })
-                assertTrue(pages.all { it.status == Page.State.Ready })
+                assertEquals("Reader must expose exactly three image pages", 3, pages.size)
+                assertEquals(
+                    "Reader page indexes must reflect natural archive order",
+                    listOf(0, 1, 2),
+                    pages.map { it.index },
+                )
+                assertTrue(
+                    "all Reader pages must be ready",
+                    pages.all { it.status == Page.State.Ready },
+                )
 
-                val colors = pages.map { page ->
-                    val stream = requireNotNull(page.stream).invoke()
+                val colors = pages.mapIndexed { index, page ->
+                    val stream = requireNotNull(page.stream) {
+                        "Reader page $index must expose a stream"
+                    }.invoke()
                     stream.use {
                         val bitmap = BitmapFactory.decodeStream(it)
-                        assertNotNull("Reader page stream must decode as an image", bitmap)
+                        assertNotNull("Reader page $index stream must decode as an image", bitmap)
                         requireNotNull(bitmap).useBitmap { decoded ->
-                            decoded.getPixel(0, 0)
+                            decoded.getPixel(0, 0).also { color ->
+                                Log.i(TAG, "stage=decode index=$index color=$color")
+                            }
                         }
                     }
                 }
+                Log.i(TAG, "stage=colors actual=$colors expected=${listOf(Color.RED, Color.GREEN, Color.BLUE)}")
                 assertEquals(
+                    "Reader page streams must preserve the naturally ordered fixture colors",
                     listOf(Color.RED, Color.GREEN, Color.BLUE),
                     colors,
                 )
@@ -138,6 +161,7 @@ class ProviderTorrentReaderAcceptanceTest {
         }
 
     private companion object {
+        const val TAG = "ProviderTorrentReaderAcceptance"
         val PROVIDER_ID = ProviderId("org.example.torrent.reader.acceptance")
     }
 }
