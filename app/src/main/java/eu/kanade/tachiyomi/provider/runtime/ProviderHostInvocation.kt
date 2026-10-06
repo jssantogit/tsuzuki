@@ -20,6 +20,7 @@ import tachiyomi.core.provider.runtime.ProviderP2pProtocol
 import tachiyomi.core.provider.runtime.ProviderResourceHandle
 import tachiyomi.core.provider.runtime.ProviderResourceOwner
 import tachiyomi.core.provider.runtime.ProviderResourceStore
+import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ScopedProviderSecretsHostService
 import java.io.File
 import java.security.MessageDigest
@@ -90,7 +91,10 @@ class ProviderHostInvocationFactory(
 
     private val context = context.applicationContext
 
-    fun create(policy: ProviderHostInvocationPolicy): ProviderHostInvocation {
+    fun create(
+        policy: ProviderHostInvocationPolicy,
+        invocationTimeoutMs: Long = ProviderRuntimeLimitsDto().wallClockTimeoutMs,
+    ): ProviderHostInvocation {
         val owner = ProviderResourceOwner(
             providerId = policy.providerId,
             invocationId = policy.invocationId,
@@ -108,6 +112,7 @@ class ProviderHostInvocationFactory(
                         allowLocalNetwork = policy.allowLocalNetwork,
                     ),
                     cookieJar = httpSessions.cookieJar(policy.providerId),
+                    invocationTimeoutMs = invocationTimeoutMs,
                 )
             }
 
