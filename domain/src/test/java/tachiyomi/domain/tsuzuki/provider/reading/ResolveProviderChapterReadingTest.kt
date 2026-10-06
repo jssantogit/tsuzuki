@@ -254,6 +254,7 @@ class ResolveProviderChapterReadingTest {
                 pagesCalls += 1
                 error("must not invoke")
             },
+            managedResources = ProviderManagedResourceResolver.DenyAll,
         )
         val option = ProviderChapterReadingOption(
             canonicalChapterId = "missing",

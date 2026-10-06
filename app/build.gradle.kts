@@ -326,6 +326,16 @@ dependencies {
     implementation(libs.okio)
     implementation(libs.conscrypt) // TLS 1.3 support for Android < 10
 
+    // Privileged host-owned BitTorrent engine for Provider acquisition.p2p@1.
+    implementation(libs.jlibtorrent.core)
+    implementation(libs.jlibtorrent.native.arm)
+    implementation(libs.jlibtorrent.native.arm64)
+    implementation(libs.jlibtorrent.native.x86)
+    // The upstream 2.0.12.9 x86_64 ELF has a GNU_RELRO range that is not
+    // 16 KiB aligned. Keep it in debug only for the API 35 emulator native
+    // transport gate; release Direct P2P fails closed on x86_64.
+    debugImplementation(libs.jlibtorrent.native.x8664)
+
     // Data serialization (JSON, protobuf, xml)
     implementation(libs.bundles.serialization)
 

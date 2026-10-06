@@ -1,5 +1,6 @@
 package tachiyomi.domain.tsuzuki.provider.reading
 
+import dev.zacsweers.metro.Inject
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
@@ -30,6 +31,7 @@ data class ProviderChapterReadingOption(
     )
 }
 
+@Inject
 class ResolveProviderChapterReading(
     private val canonicalChapterRepository: CanonicalChapterRepository,
     private val evidenceRepository: ChapterEvidenceRepository,

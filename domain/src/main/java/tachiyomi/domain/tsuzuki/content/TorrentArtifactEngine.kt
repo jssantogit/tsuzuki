@@ -1,6 +1,6 @@
 package tachiyomi.domain.tsuzuki.content
 
-interface TorrentArtifactEngine {
+fun interface TorrentArtifactEngine {
     suspend fun acquire(request: TorrentArtifactRequest): Result<PreparedTorrentArtifact>
 }
 

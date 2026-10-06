@@ -52,6 +52,7 @@ RULES = (
             "tsuzuki/fix-cover-rendering",
             "tsuzuki/runtime-v2-integration*",
             "tsuzuki/runtime-v2-torrent*",
+            "tsuzuki/provider-platform-*",
         ),
         RELEASE,
     ),

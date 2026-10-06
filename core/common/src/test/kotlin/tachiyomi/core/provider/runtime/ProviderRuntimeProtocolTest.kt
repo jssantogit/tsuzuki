@@ -144,6 +144,28 @@ class ProviderRuntimeProtocolTest {
     }
 
     @Test
+    fun `http response protocol round trips bounded feed payload above legacy 64 KiB ceiling`() {
+        val response = ProviderHttpResponse(
+            statusCode = 200,
+            body = "x".repeat(96 * 1024),
+        )
+
+        ProviderHttpProtocol.decodeResponse(
+            ProviderHttpProtocol.encodeResponse(response),
+        ) shouldBe response
+    }
+
+    @Test
+    fun `http response protocol rejects text beyond bounded feed ceiling`() {
+        shouldThrow<IllegalArgumentException> {
+            ProviderHttpResponse(
+                statusCode = 200,
+                body = "x".repeat(ProviderHttpProtocol.MAX_RESPONSE_BODY_CHARS + 1),
+            )
+        }
+    }
+
+    @Test
     fun `runtime responses never carry provider exception text`() {
         ProviderRuntimeInvocationResponse.failure(ProviderRuntimeFailureCode.SCRIPT_ERROR) shouldBe
             ProviderRuntimeInvocationResponse(

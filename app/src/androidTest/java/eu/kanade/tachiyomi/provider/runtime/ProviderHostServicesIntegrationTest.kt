@@ -89,6 +89,21 @@ class ProviderHostServicesIntegrationTest {
     }
 
     @Test
+    fun providerHostPolicy_keepsP2pFailClosedUnlessCoreExplicitlyGrantsIt() {
+        val defaultPolicy = ProviderHostInvocationPolicy(
+            providerId = "org.example.p2p",
+            invocationId = "p2p-default",
+        )
+        assertTrue(ProviderHostModule.P2P !in defaultPolicy.allowedHostModules())
+
+        val grantedPolicy = defaultPolicy.copy(
+            invocationId = "p2p-granted",
+            directP2pEnabled = true,
+        )
+        assertTrue(ProviderHostModule.P2P in grantedPolicy.allowedHostModules())
+    }
+
+    @Test
     fun providerRuntime_keepsComplexReadingBytesInsideHostServices() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val key = ByteArray(16) { index -> (index + 1).toByte() }

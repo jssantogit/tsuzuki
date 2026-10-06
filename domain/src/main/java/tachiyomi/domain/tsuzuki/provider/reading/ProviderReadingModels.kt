@@ -4,6 +4,12 @@ import tachiyomi.domain.tsuzuki.provider.ProviderId
 import java.net.URI
 import java.security.MessageDigest
 
+typealias ProviderCursor = tachiyomi.domain.tsuzuki.provider.ProviderCursor
+typealias ProviderPage<T> = tachiyomi.domain.tsuzuki.provider.ProviderPage<T>
+typealias ProviderManagedResourceRef = tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceRef
+typealias ProviderManagedFileFormat = tachiyomi.domain.tsuzuki.provider.ProviderManagedFileFormat
+typealias ProviderManagedResourceResolver = tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceResolver
+
 data class ProviderBindingRef(
     val providerId: ProviderId,
     val facetId: String?,
@@ -107,30 +113,6 @@ data class ProviderChapterObservation(
     }
 }
 
-data class ProviderCursor(val value: String) {
-    init {
-        require(value.isNotBlank()) { "Provider cursor must not be blank" }
-        require(value.length <= MAX_CURSOR_CHARS) { "Provider cursor is too large" }
-    }
-
-    private companion object {
-        const val MAX_CURSOR_CHARS = 4096
-    }
-}
-
-data class ProviderPage<T>(
-    val items: List<T>,
-    val nextCursor: ProviderCursor?,
-) {
-    init {
-        require(items.size <= MAX_PAGE_ITEMS) { "Provider page contains too many items" }
-    }
-
-    private companion object {
-        const val MAX_PAGE_ITEMS = 500
-    }
-}
-
 data class ProviderPageRequest(
     val url: String,
     val headers: Map<String, String> = emptyMap(),
@@ -185,36 +167,6 @@ data class ProviderPageRequest(
             "transfer-encoding",
             "upgrade",
         )
-    }
-}
-
-@JvmInline
-value class ProviderManagedResourceRef(val value: String) {
-    init {
-        require(MANAGED_RESOURCE.matches(value)) {
-            "Provider managed resource reference is invalid"
-        }
-    }
-
-    private companion object {
-        val MANAGED_RESOURCE = Regex("managed:[A-Za-z0-9_-]{1,256}")
-    }
-}
-
-enum class ProviderManagedFileFormat {
-    CBZ,
-    ZIP,
-}
-
-fun interface ProviderManagedResourceResolver {
-    fun resolve(
-        providerId: ProviderId,
-        resource: ProviderManagedResourceRef,
-        format: ProviderManagedFileFormat,
-    ): String?
-
-    companion object {
-        val DenyAll = ProviderManagedResourceResolver { _, _, _ -> null }
     }
 }
 

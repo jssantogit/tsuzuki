@@ -68,6 +68,101 @@ class ProviderHttpHostServiceTest {
     }
 
     @Test
+    fun `http broker supports bounded authenticated api requests and returns typed status`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse(code = 401, body = """{"error":"auth"}"""))
+        server.start()
+
+        try {
+            val owner = ProviderResourceOwner("org.example.debrid", "invocation-post")
+            val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+            val http = DefaultProviderHttpHostService(
+                owner = owner,
+                resources = ProviderResourceStore(),
+                policy = ProviderNetworkPolicy(
+                    allowedOrigins = setOf(origin),
+                    allowLocalNetwork = true,
+                ),
+                cookieJar = ProviderHttpSessionStore().cookieJar(owner.providerId),
+            )
+
+            val response = http.request(
+                ProviderHttpRequest(
+                    method = ProviderHttpMethod.POST,
+                    url = server.url("/v1/torrents").toString(),
+                    headers = mapOf(
+                        "Authorization" to "Bearer provider-secret",
+                        "Content-Type" to "application/json",
+                    ),
+                    body = """{"magnet":"magnet:?xt=urn:btih:abc"}""",
+                ),
+            )
+
+            response shouldBe ProviderHttpResponse(
+                statusCode = 401,
+                body = """{"error":"auth"}""",
+            )
+            val recorded = server.takeRequest()
+            recorded.method shouldBe "POST"
+            recorded.headers["Authorization"] shouldBe "Bearer provider-secret"
+            recorded.body?.utf8() shouldBe """{"magnet":"magnet:?xt=urn:btih:abc"}"""
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun `cross origin redirects never forward provider supplied request headers`() = runBlocking {
+        val first = MockWebServer()
+        val second = MockWebServer()
+        first.start()
+        second.start()
+        first.enqueue(
+            MockResponse(
+                code = 307,
+                headers = headersOf("Location", second.url("/target").toString()),
+            ),
+        )
+        second.enqueue(MockResponse(body = "ok"))
+
+        try {
+            val firstOrigin = first.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+            val secondOrigin = second.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+            val owner = ProviderResourceOwner("org.example.debrid", "invocation-redirect")
+            val http = DefaultProviderHttpHostService(
+                owner = owner,
+                resources = ProviderResourceStore(),
+                policy = ProviderNetworkPolicy(
+                    allowedOrigins = setOf(firstOrigin, secondOrigin),
+                    allowLocalNetwork = true,
+                ),
+                cookieJar = ProviderHttpSessionStore().cookieJar(owner.providerId),
+            )
+
+            http.request(
+                ProviderHttpRequest(
+                    method = ProviderHttpMethod.POST,
+                    url = first.url("/start").toString(),
+                    headers = mapOf(
+                        "Authorization" to "Bearer provider-secret",
+                        "X-Provider-Key" to "secret",
+                        "Content-Type" to "application/json",
+                    ),
+                    body = """{"probe":true}""",
+                ),
+            ).statusCode shouldBe 200
+
+            first.takeRequest().headers["Authorization"] shouldBe "Bearer provider-secret"
+            val redirected = second.takeRequest()
+            redirected.headers["Authorization"] shouldBe null
+            redirected.headers["X-Provider-Key"] shouldBe null
+        } finally {
+            first.close()
+            second.close()
+        }
+    }
+
+    @Test
     fun `closing http broker cancels in flight request`() = runBlocking {
         val server = MockWebServer()
         server.enqueue(

@@ -48,6 +48,7 @@ data class ProviderRuntimeLimitsDto(
 @Serializable
 enum class ProviderHostModule {
     HTTP,
+    P2P,
     DOM,
     BROWSER,
     STORAGE,

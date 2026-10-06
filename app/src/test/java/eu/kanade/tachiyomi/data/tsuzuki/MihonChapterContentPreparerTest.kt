@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.addon.AddonId
 import tachiyomi.domain.tsuzuki.content.ContentDelivery
 import tachiyomi.domain.tsuzuki.content.ContentOption
+import tachiyomi.domain.tsuzuki.content.PreparedTorrentArtifact
+import tachiyomi.domain.tsuzuki.content.TorrentArtifactEngine
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterProgress
 import tachiyomi.domain.tsuzuki.reader.model.OperationalReaderChapter
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
@@ -42,6 +44,40 @@ class MihonChapterContentPreparerTest {
         gateway.lastCanonicalChapterId shouldBe "chapter-1"
         gateway.lastDelivery shouldBe option.delivery
         gateway.lastProgress shouldBe progress
+    }
+
+    @Test
+    fun `torrent delivery uses provider neutral torrent artifact engine`() = runTest {
+        val gateway = FakeCanonicalReaderGateway()
+        var captured: tachiyomi.domain.tsuzuki.content.TorrentArtifactRequest? = null
+        val preparer = MihonChapterContentPreparer(
+            canonicalReaderGateway = gateway,
+            torrentEngine = TorrentArtifactEngine { request ->
+                captured = request
+                Result.success(
+                    PreparedTorrentArtifact(
+                        localUri = "content://app.tsuzuki.provider/chapter.cbz",
+                        format = "CBZ",
+                    ),
+                )
+            },
+        )
+        val delivery = ContentDelivery.Torrent(
+            infoHash = "0123456789abcdef0123456789abcdef01234567",
+            magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+            fileIndex = 1,
+            filePath = "pack/chapter-012.cbz",
+        )
+
+        preparer.prepare(
+            option(delivery),
+            null,
+        ).getOrThrow() shouldBe PreparedChapterContent.LocalArchive(
+            "content://app.tsuzuki.provider/chapter.cbz",
+        )
+        captured?.fileIndex shouldBe 1
+        captured?.filePath shouldBe "pack/chapter-012.cbz"
+        gateway.calls shouldBe 0
     }
 
     @Test

@@ -9,6 +9,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 import java.util.concurrent.atomic.AtomicBoolean
 
 data class ProviderRuntimeLimits(
@@ -95,6 +97,44 @@ internal fun QuickJs.installHostServices(
                 }
                 asyncFunction("getResource") { args ->
                     hostFailures.call { http.getResource(args.stringArgument(0)).value }
+                }
+                asyncFunction("request") { args ->
+                    hostFailures.call {
+                        val method = try {
+                            ProviderHttpMethod.valueOf(args.stringArgument(0).uppercase())
+                        } catch (error: IllegalArgumentException) {
+                            throw ProviderHostServiceException(
+                                "Provider HTTP method is unsupported",
+                                error,
+                            )
+                        }
+                        val headers = decodeHttpHeaders(args.stringArgument(2))
+                        ProviderHttpProtocol.encodeResponse(
+                            http.request(
+                                ProviderHttpRequest(
+                                    method = method,
+                                    url = args.stringArgument(1),
+                                    headers = headers,
+                                    body = args.optionalStringArgument(3),
+                                ),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+        services.p2p?.let { p2p ->
+            define("p2p") {
+                asyncFunction("acquire") { args ->
+                    hostFailures.call {
+                        ProviderP2pProtocol.encodeResponse(
+                            p2p.acquire(
+                                ProviderP2pProtocol.decodeRequest(
+                                    args.stringArgument(0),
+                                ),
+                            ),
+                        )
+                    }
                 }
             }
         }
@@ -247,3 +287,22 @@ private fun Array<Any?>.intArgument(index: Int): Int =
     (getOrNull(index) as? Number)?.toInt()
         ?: getOrNull(index)?.toString()?.toIntOrNull()
         ?: throw IllegalArgumentException("Provider host argument $index must be an integer")
+
+private fun Array<Any?>.optionalStringArgument(index: Int): String? =
+    getOrNull(index)?.toString()
+
+private fun decodeHttpHeaders(value: String): Map<String, String> {
+    if (value.length > ProviderHttpProtocol.MAX_REQUEST_JSON_CHARS) {
+        throw ProviderHostServiceException("Provider HTTP headers exceed the size limit")
+    }
+    return try {
+        HOST_JSON.decodeFromString(value)
+    } catch (error: Exception) {
+        throw ProviderHostServiceException("Provider HTTP headers are malformed", error)
+    }
+}
+
+private val HOST_JSON = Json {
+    ignoreUnknownKeys = false
+    explicitNulls = false
+}

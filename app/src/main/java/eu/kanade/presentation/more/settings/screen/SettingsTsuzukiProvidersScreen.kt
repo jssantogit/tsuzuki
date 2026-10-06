@@ -16,6 +16,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -37,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.util.Screen
+import eu.kanade.tachiyomi.provider.runtime.JlibtorrentNativeSupport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
@@ -55,6 +57,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderSettingType
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentAcquisitionPreference
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -216,6 +219,19 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                         onClick = { selectedTab = 1 },
                     )
                 }
+
+                ListItem(
+                    headlineContent = {
+                        Text(stringResource(MR.strings.tsuzuki_provider_acquisition_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(MR.strings.tsuzuki_provider_acquisition_summary))
+                    },
+                    modifier = Modifier.clickable {
+                        navigator.push(SettingsTsuzukiTorrentAcquisitionScreen())
+                    },
+                )
+                HorizontalDivider()
 
                 if (refreshing) {
                     Row(
@@ -664,6 +680,233 @@ class SettingsTsuzukiProviderDetailScreen(
             }
         }
     }
+}
+
+class SettingsTsuzukiTorrentAcquisitionScreen : Screen() {
+
+    @Composable
+    override fun Content() {
+        val context = LocalContext.current
+        val navigator = LocalNavigator.currentOrThrow
+        val scope = rememberCoroutineScope()
+        val preferences = remember { context.appGraph.providerTorrentPreferences }
+        val managedFiles = remember { context.appGraph.providerManagedFileStore }
+        val p2pJobs = remember { context.appGraph.providerP2pJobManager }
+        val p2pNativeSupported = remember {
+            JlibtorrentNativeSupport.isCurrentRuntimeSupported()
+        }
+
+        var acquisitionPreference by remember {
+            mutableStateOf(preferences.acquisitionPreference.get())
+        }
+        var directP2pAllowed by remember {
+            mutableStateOf(preferences.directP2pAllowed.get())
+        }
+        val temporaryStorageClearedMessage =
+            stringResource(MR.strings.tsuzuki_provider_temporary_storage_cleared)
+        val p2pStoppedMessage =
+            stringResource(MR.strings.tsuzuki_provider_p2p_stopped)
+        var statusMessage by remember { mutableStateOf<String?>(null) }
+
+        fun setPreference(value: TorrentAcquisitionPreference) {
+            preferences.acquisitionPreference.set(value)
+            acquisitionPreference = value
+        }
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(stringResource(MR.strings.tsuzuki_provider_acquisition_title))
+                    },
+                    navigationIcon = {
+                        TextButton(onClick = navigator::pop) {
+                            Text(stringResource(MR.strings.tsuzuki_navigation_back))
+                        }
+                    },
+                )
+            },
+        ) { contentPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(contentPadding),
+            ) {
+                item(key = "route_header") {
+                    ProviderSectionHeader(
+                        stringResource(MR.strings.tsuzuki_provider_acquisition_route),
+                    )
+                }
+
+                item(key = "route_debrid_then_p2p") {
+                    TorrentAcquisitionPreferenceRow(
+                        selected = acquisitionPreference ==
+                            TorrentAcquisitionPreference.DEBRID_THEN_P2P,
+                        title = stringResource(
+                            MR.strings.tsuzuki_provider_acquisition_debrid_then_p2p,
+                        ),
+                        summary = stringResource(
+                            MR.strings.tsuzuki_provider_acquisition_debrid_then_p2p_summary,
+                        ),
+                        onClick = {
+                            setPreference(TorrentAcquisitionPreference.DEBRID_THEN_P2P)
+                        },
+                    )
+                }
+
+                item(key = "route_debrid_only") {
+                    TorrentAcquisitionPreferenceRow(
+                        selected = acquisitionPreference ==
+                            TorrentAcquisitionPreference.DEBRID_ONLY,
+                        title = stringResource(
+                            MR.strings.tsuzuki_provider_acquisition_debrid_only,
+                        ),
+                        summary = stringResource(
+                            MR.strings.tsuzuki_provider_acquisition_debrid_only_summary,
+                        ),
+                        onClick = {
+                            setPreference(TorrentAcquisitionPreference.DEBRID_ONLY)
+                        },
+                    )
+                }
+
+                item(key = "route_p2p_only") {
+                    TorrentAcquisitionPreferenceRow(
+                        selected = acquisitionPreference ==
+                            TorrentAcquisitionPreference.P2P_ONLY,
+                        enabled = p2pNativeSupported,
+                        title = stringResource(
+                            MR.strings.tsuzuki_provider_acquisition_p2p_only,
+                        ),
+                        summary = stringResource(
+                            MR.strings.tsuzuki_provider_acquisition_p2p_only_summary,
+                        ),
+                        onClick = {
+                            setPreference(TorrentAcquisitionPreference.P2P_ONLY)
+                        },
+                    )
+                }
+
+                item(key = "direct_p2p") {
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = {
+                            Text(stringResource(MR.strings.tsuzuki_provider_direct_p2p))
+                        },
+                        supportingContent = {
+                            Text(
+                                stringResource(
+                                    if (p2pNativeSupported) {
+                                        MR.strings.tsuzuki_provider_direct_p2p_warning
+                                    } else {
+                                        MR.strings.tsuzuki_provider_direct_p2p_unavailable
+                                    },
+                                ),
+                            )
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = directP2pAllowed,
+                                enabled = p2pNativeSupported,
+                                onCheckedChange = { enabled ->
+                                    preferences.directP2pAllowed.set(enabled)
+                                    directP2pAllowed = enabled
+                                },
+                            )
+                        },
+                    )
+                }
+
+                item(key = "temporary_storage") {
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = {
+                            Text(stringResource(MR.strings.tsuzuki_provider_temporary_storage))
+                        },
+                        supportingContent = {
+                            Text(
+                                stringResource(
+                                    MR.strings.tsuzuki_provider_temporary_storage_summary,
+                                ),
+                            )
+                        },
+                        trailingContent = {
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            p2pJobs.cancelAll()
+                                            managedFiles.clearAll()
+                                        }
+                                        statusMessage = temporaryStorageClearedMessage
+                                    }
+                                },
+                            ) {
+                                Text(
+                                    stringResource(
+                                        MR.strings.tsuzuki_provider_clear_temporary_storage,
+                                    ),
+                                )
+                            }
+                        },
+                    )
+                }
+
+                item(key = "active_p2p") {
+                    ListItem(
+                        headlineContent = {
+                            Text(stringResource(MR.strings.tsuzuki_provider_active_p2p))
+                        },
+                        supportingContent = {
+                            Text(stringResource(MR.strings.tsuzuki_provider_active_p2p_summary))
+                        },
+                        trailingContent = {
+                            TextButton(
+                                onClick = {
+                                    p2pJobs.cancelAll()
+                                    statusMessage = p2pStoppedMessage
+                                },
+                            ) {
+                                Text(stringResource(MR.strings.tsuzuki_provider_stop_p2p))
+                            }
+                        },
+                    )
+                }
+
+                statusMessage?.let { message ->
+                    item(key = "status") {
+                        HorizontalDivider()
+                        ListItem(headlineContent = { Text(message) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TorrentAcquisitionPreferenceRow(
+    selected: Boolean,
+    title: String,
+    summary: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = { Text(summary) },
+        leadingContent = {
+            RadioButton(
+                selected = selected,
+                enabled = enabled,
+                onClick = null,
+            )
+        },
+        modifier = Modifier.clickable(
+            enabled = enabled,
+            onClick = onClick,
+        ),
+    )
 }
 
 @Composable

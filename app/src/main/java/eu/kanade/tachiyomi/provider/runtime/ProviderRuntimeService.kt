@@ -21,10 +21,16 @@ import tachiyomi.core.provider.runtime.ProviderDomHostService
 import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderHostServices
 import tachiyomi.core.provider.runtime.ProviderHttpHostService
+import tachiyomi.core.provider.runtime.ProviderHttpProtocol
+import tachiyomi.core.provider.runtime.ProviderHttpRequest
+import tachiyomi.core.provider.runtime.ProviderHttpResponse
 import tachiyomi.core.provider.runtime.ProviderImageHostService
 import tachiyomi.core.provider.runtime.ProviderInvocationLimiter
 import tachiyomi.core.provider.runtime.ProviderLogHostService
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
+import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
+import tachiyomi.core.provider.runtime.ProviderP2pHostService
+import tachiyomi.core.provider.runtime.ProviderP2pProtocol
 import tachiyomi.core.provider.runtime.ProviderPackageContract
 import tachiyomi.core.provider.runtime.ProviderPackageExecution
 import tachiyomi.core.provider.runtime.ProviderPackageFailure
@@ -355,6 +361,17 @@ private fun IProviderHostBridge?.toHostServices(
     return ProviderHostServices(
         http = if (ProviderHostModule.HTTP in allowedModules) {
             object : ProviderHttpHostService {
+                override suspend fun request(request: ProviderHttpRequest): ProviderHttpResponse {
+                    val encoded = ProviderHttpProtocol.encodeRequest(request)
+                    val response = bridge.httpRequest(
+                        encoded.boundedHostArg(
+                            ProviderHttpProtocol.MAX_REQUEST_JSON_CHARS,
+                            "HTTP request",
+                        ),
+                    ).orEmpty()
+                    return ProviderHttpProtocol.decodeResponse(response)
+                }
+
                 override suspend fun getText(url: String): String =
                     bridge.httpGet(url.boundedHostArg(MAX_HOST_URL_CHARS, "HTTP URL")).orEmpty()
 
@@ -364,6 +381,20 @@ private fun IProviderHostBridge?.toHostServices(
                             url.boundedHostArg(MAX_HOST_URL_CHARS, "HTTP URL"),
                         ).orEmpty(),
                     )
+            }
+        } else {
+            null
+        },
+        p2p = if (ProviderHostModule.P2P in allowedModules) {
+            ProviderP2pHostService { request: ProviderP2pAcquireRequest ->
+                val encoded = ProviderP2pProtocol.encodeRequest(request)
+                val response = bridge.p2pAcquire(
+                    encoded.boundedHostArg(
+                        ProviderP2pProtocol.MAX_REQUEST_JSON_CHARS,
+                        "P2P request",
+                    ),
+                ).orEmpty()
+                ProviderP2pProtocol.decodeResponse(response)
             }
         } else {
             null

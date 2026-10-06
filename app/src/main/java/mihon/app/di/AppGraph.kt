@@ -37,6 +37,9 @@ import eu.kanade.tachiyomi.extension.util.ExtensionInstallActivity
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.provider.repository.InstalledScriptProviderRegistry
+import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
+import eu.kanade.tachiyomi.provider.runtime.ProviderP2pJobManager
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentPreferences
 import eu.kanade.tachiyomi.ui.base.delegate.SecureActivityDelegateImpl
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
@@ -66,6 +69,8 @@ import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.library.interactor.RefreshUserLibraries
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
+import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
+import tachiyomi.domain.tsuzuki.provider.torrent.PrepareProviderChapterTorrent
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalReaderPreferences
 import tachiyomi.domain.tsuzuki.source.service.ReadingSourceGateway
 
@@ -128,6 +133,20 @@ interface AppGraph : ViewModelGraph {
     val installedScriptProviderRegistry: InstalledScriptProviderRegistry
     val providerRegistry: ProviderRegistry
     val providerReadingGateway: ProviderReadingGateway
+
+    @Provides
+    fun providesNullableProviderChapterReading(
+        resolver: ResolveProviderChapterReading,
+    ): ResolveProviderChapterReading? = resolver
+
+    @Provides
+    fun providesNullableProviderChapterTorrent(
+        preparer: PrepareProviderChapterTorrent,
+    ): PrepareProviderChapterTorrent? = preparer
+
+    val providerTorrentPreferences: ProviderTorrentPreferences
+    val providerManagedFileStore: ProviderManagedFileStore
+    val providerP2pJobManager: ProviderP2pJobManager
     val addonRepository: AddonRepository
     val readingSourceGateway: ReadingSourceGateway
     val addonSyncIntentRepository: AddonSyncIntentRepository

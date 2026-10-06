@@ -19,7 +19,7 @@ class PlannerTest(unittest.TestCase):
         self.assertTrue(result["run_database"])
         self.assertTrue(result["run_supabase"])
         self.assertTrue(result["run_release"])
-        self.assertFalse(result["run_native_package"])
+        self.assertTrue(result["run_native_package"])
 
     def test_tsuzuki_domain_test_change_stays_filtered_to_domain(self):
         result = plan(["domain/src/test/java/tachiyomi/domain/tsuzuki/FooTest.kt"], "affected")

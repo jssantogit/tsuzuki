@@ -60,6 +60,19 @@ internal fun additionalSourcesAction(
     return { action(ready.canonicalTitleId) }
 }
 
+internal fun emptySelectorMessage(state: ContentSelectorScreenState.Empty): String? = when {
+    state.noEnabledAddon ->
+        "No selectable reading sources are available here. Enable or install a reading Add-on, " +
+            "or add a compatible Provider."
+    state.confirmationRequired ->
+        "Possible editions were found, but you must confirm the correct one. Choose an Add-on."
+    state.timedOut ->
+        "The initial search has finished its time budget. Choose an Add-on to search further or retry."
+    state.discoveryAttempted ->
+        "No verified chapter was found in the initial sources. Choose another Add-on to search more."
+    else -> null
+}
+
 @Composable
 fun ContentOptionSelectorSheet(
     state: ContentSelectorScreenState,
@@ -188,19 +201,8 @@ fun ContentOptionSelectorSheet(
 
                 is ContentSelectorScreenState.Empty -> {
                     SelectorUnavailableContent(
-                        message = when {
-                            state.noEnabledAddon ->
-                                "No reading Add-ons are enabled. Enable or install one to discover chapters."
-                            state.confirmationRequired ->
-                                "Possible editions were found, but you must confirm the correct one. Choose an Add-on."
-                            state.timedOut ->
-                                "The initial search has finished its time budget. " +
-                                    "Choose an Add-on to search further or retry."
-                            state.discoveryAttempted ->
-                                "No verified chapter was found in the initial sources. " +
-                                    "Choose another Add-on to search more."
-                            else -> stringResource(MR.strings.tsuzuki_content_no_options)
-                        },
+                        message = emptySelectorMessage(state)
+                            ?: stringResource(MR.strings.tsuzuki_content_no_options),
                         onRetry = onRetry,
                         onOpenAddonsSettings = onOpenAddonsSettings,
                         onFindOrAddSource = sourceDiscoveryAction(state, onFindOrAddSource),

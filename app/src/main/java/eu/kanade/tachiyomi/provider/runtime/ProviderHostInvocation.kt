@@ -11,12 +11,16 @@ import tachiyomi.core.provider.runtime.DefaultProviderHttpHostService
 import tachiyomi.core.provider.runtime.FileProviderStorageHostService
 import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderHostServices
+import tachiyomi.core.provider.runtime.ProviderHttpProtocol
 import tachiyomi.core.provider.runtime.ProviderHttpSessionStore
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
+import tachiyomi.core.provider.runtime.ProviderP2pHostService
+import tachiyomi.core.provider.runtime.ProviderP2pProtocol
 import tachiyomi.core.provider.runtime.ProviderResourceHandle
 import tachiyomi.core.provider.runtime.ProviderResourceOwner
 import tachiyomi.core.provider.runtime.ProviderResourceStore
+import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ScopedProviderSecretsHostService
 import java.io.File
 import java.security.MessageDigest
@@ -30,6 +34,7 @@ data class ProviderHostInvocationPolicy(
     val allowLocalNetwork: Boolean = false,
     val storageEnabled: Boolean = false,
     val allowedSecrets: Set<String> = emptySet(),
+    val directP2pEnabled: Boolean = false,
     val maxHostOperations: Int = 256,
 ) {
     init {
@@ -48,6 +53,7 @@ data class ProviderHostInvocationPolicy(
         add(ProviderHostModule.LOG)
 
         if (networkOrigins.isNotEmpty()) add(ProviderHostModule.HTTP)
+        if (directP2pEnabled) add(ProviderHostModule.P2P)
         if (browserOrigins.isNotEmpty()) add(ProviderHostModule.BROWSER)
         if (storageEnabled) add(ProviderHostModule.STORAGE)
         if (allowedSecrets.isNotEmpty()) add(ProviderHostModule.SECRETS)
@@ -79,12 +85,16 @@ class ProviderHostInvocationFactory(
     private val secretResolver: suspend (providerId: String, key: String) -> String? = { _, _ -> null },
     private val logSink: (providerId: String, message: String) -> Unit = { _, _ -> },
     private val httpSessions: ProviderHttpSessionStore = ProviderHttpSessionStore(),
+    private val p2pServiceFactory: (String) -> ProviderP2pHostService? = { null },
     val managedFiles: ProviderManagedFileStore = ProviderManagedFileStore(context.applicationContext),
 ) {
 
     private val context = context.applicationContext
 
-    fun create(policy: ProviderHostInvocationPolicy): ProviderHostInvocation {
+    fun create(
+        policy: ProviderHostInvocationPolicy,
+        invocationTimeoutMs: Long = ProviderRuntimeLimitsDto().wallClockTimeoutMs,
+    ): ProviderHostInvocation {
         val owner = ProviderResourceOwner(
             providerId = policy.providerId,
             invocationId = policy.invocationId,
@@ -102,6 +112,7 @@ class ProviderHostInvocationFactory(
                         allowLocalNetwork = policy.allowLocalNetwork,
                     ),
                     cookieJar = httpSessions.cookieJar(policy.providerId),
+                    invocationTimeoutMs = invocationTimeoutMs,
                 )
             }
 
@@ -120,6 +131,11 @@ class ProviderHostInvocationFactory(
 
         val services = ProviderHostServices(
             http = http,
+            p2p = if (policy.directP2pEnabled) {
+                p2pServiceFactory(policy.providerId)
+            } else {
+                null
+            },
             dom = DefaultProviderDomHostService(owner, resources),
             browser = browser,
             storage = if (policy.storageEnabled) {
@@ -206,6 +222,24 @@ private class ProviderHostBridgeAdapter(
 
     override fun httpGetResource(url: String?): String =
         runBlocking { requireService(services.http, "http").getResource(url.orEmpty()).value }
+
+    override fun httpRequest(requestJson: String?): String =
+        runBlocking {
+            ProviderHttpProtocol.encodeResponse(
+                requireService(services.http, "http").request(
+                    ProviderHttpProtocol.decodeRequest(requestJson.orEmpty()),
+                ),
+            )
+        }
+
+    override fun p2pAcquire(requestJson: String?): String =
+        runBlocking {
+            ProviderP2pProtocol.encodeResponse(
+                requireService(services.p2p, "p2p").acquire(
+                    ProviderP2pProtocol.decodeRequest(requestJson.orEmpty()),
+                ),
+            )
+        }
 
     override fun domSelectText(resourceHandle: String?, cssSelector: String?): String =
         runBlocking {

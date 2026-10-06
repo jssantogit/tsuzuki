@@ -1,6 +1,9 @@
 package tachiyomi.core.provider.runtime
 
 interface ProviderHttpHostService {
+    suspend fun request(request: ProviderHttpRequest): ProviderHttpResponse =
+        throw ProviderHostServiceException("Provider HTTP request API is unavailable")
+
     suspend fun getText(url: String): String
 
     suspend fun getResource(url: String): ProviderResourceHandle
@@ -81,6 +84,7 @@ interface ProviderLogHostService {
 
 data class ProviderHostServices(
     val http: ProviderHttpHostService? = null,
+    val p2p: ProviderP2pHostService? = null,
     val dom: ProviderDomHostService? = null,
     val browser: ProviderBrowserHostService? = null,
     val storage: ProviderStorageHostService? = null,

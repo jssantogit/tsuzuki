@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.CanonicalReaderTargetPlan
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -92,6 +93,9 @@ internal class ProviderHttpPageLoader(
             }
             page.stream = { target.inputStream() }
             page.status = Page.State.Ready
+        } catch (error: CancellationException) {
+            target.delete()
+            throw error
         } catch (error: Throwable) {
             target.delete()
             val failure = if (error is ProviderHttpPageException) {

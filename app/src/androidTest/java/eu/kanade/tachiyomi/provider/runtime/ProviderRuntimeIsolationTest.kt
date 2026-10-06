@@ -17,6 +17,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.core.provider.runtime.ProviderHostModule
+import tachiyomi.core.provider.runtime.ProviderHttpProtocol
+import tachiyomi.core.provider.runtime.ProviderHttpResponse
+import tachiyomi.core.provider.runtime.ProviderP2pAcquireResponse
+import tachiyomi.core.provider.runtime.ProviderP2pProtocol
 import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
@@ -138,9 +142,26 @@ class ProviderRuntimeIsolationTest {
             assertTrue(connected.await(SERVICE_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS))
 
             val storageSetCalled = AtomicBoolean(false)
+            val httpRequestCalled = AtomicBoolean(false)
+            val p2pAcquireCalled = AtomicBoolean(false)
             val host = object : IProviderHostBridge.Stub() {
                 override fun httpGet(url: String?): String = throw UnsupportedOperationException()
                 override fun httpGetResource(url: String?): String = throw UnsupportedOperationException()
+                override fun httpRequest(requestJson: String?): String {
+                    httpRequestCalled.set(true)
+                    return ProviderHttpProtocol.encodeResponse(
+                        ProviderHttpResponse(
+                            statusCode = 200,
+                            body = "ok",
+                        ),
+                    )
+                }
+                override fun p2pAcquire(requestJson: String?): String {
+                    p2pAcquireCalled.set(true)
+                    return ProviderP2pProtocol.encodeResponse(
+                        ProviderP2pAcquireResponse.Pending("instrumented-p2p"),
+                    )
+                }
                 override fun domSelectText(resourceHandle: String?, cssSelector: String?): String =
                     throw UnsupportedOperationException()
                 override fun browserReadText(url: String?, cssSelector: String?): String =
@@ -193,6 +214,74 @@ class ProviderRuntimeIsolationTest {
 
             assertEquals(ProviderRuntimeFailureCode.HOST_ERROR, oversized.failure)
             assertEquals(false, storageSetCalled.get())
+
+            val httpAllowed = invoke(
+                runtime = runtime,
+                source = """
+                    await tsuzuki.http.request(
+                      'POST',
+                      'https://allowed.example/data',
+                      '{}',
+                      'x'.repeat(65536)
+                    );
+                    'ok'
+                """.trimIndent(),
+                hostBridge = host,
+                hostModules = setOf(ProviderHostModule.HTTP),
+            )
+            assertEquals(null, httpAllowed.failure)
+            assertEquals(true, httpRequestCalled.get())
+
+            httpRequestCalled.set(false)
+            val httpOversized = invoke(
+                runtime = runtime,
+                source = """
+                    await tsuzuki.http.request(
+                      'POST',
+                      'https://allowed.example/data',
+                      '{}',
+                      'x'.repeat(65537)
+                    )
+                """.trimIndent(),
+                hostBridge = host,
+                hostModules = setOf(ProviderHostModule.HTTP),
+            )
+            assertEquals(ProviderRuntimeFailureCode.HOST_ERROR, httpOversized.failure)
+            assertEquals(false, httpRequestCalled.get())
+
+            val p2pAllowed = invoke(
+                runtime = runtime,
+                source = """
+                    await tsuzuki.p2p.acquire(JSON.stringify({
+                      operationId: 'read:canonical-12',
+                      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+                      selectedFileIndex: 1,
+                      selectedFilePath: 'pack/chapter-012.cbz'
+                    }));
+                    'ok'
+                """.trimIndent(),
+                hostBridge = host,
+                hostModules = setOf(ProviderHostModule.P2P),
+            )
+            assertEquals(null, p2pAllowed.failure)
+            assertEquals(true, p2pAcquireCalled.get())
+
+            p2pAcquireCalled.set(false)
+            val p2pOversized = invoke(
+                runtime = runtime,
+                source = """
+                    await tsuzuki.p2p.acquire(JSON.stringify({
+                      operationId: 'read:canonical-12',
+                      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+                      selectedFileIndex: 1,
+                      selectedFilePath: 'pack/' + 'x'.repeat(5000) + '.cbz'
+                    }))
+                """.trimIndent(),
+                hostBridge = host,
+                hostModules = setOf(ProviderHostModule.P2P),
+            )
+            assertEquals(ProviderRuntimeFailureCode.HOST_ERROR, p2pOversized.failure)
+            assertEquals(false, p2pAcquireCalled.get())
         } finally {
             if (bound) {
                 context.unbindService(connection)
@@ -247,6 +336,12 @@ class ProviderRuntimeIsolationTest {
         }
 
         override fun httpGetResource(url: String?): String =
+            throw UnsupportedOperationException()
+
+        override fun httpRequest(requestJson: String?): String =
+            throw UnsupportedOperationException()
+
+        override fun p2pAcquire(requestJson: String?): String =
             throw UnsupportedOperationException()
 
         override fun domSelectText(resourceHandle: String?, cssSelector: String?): String =

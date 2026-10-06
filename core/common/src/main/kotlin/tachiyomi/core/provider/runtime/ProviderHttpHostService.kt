@@ -2,14 +2,18 @@ package tachiyomi.core.provider.runtime
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Call
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class ProviderHttpSessionStore {
@@ -33,12 +37,15 @@ class DefaultProviderHttpHostService(
     cookieJar: CookieJar,
     baseClient: OkHttpClient = OkHttpClient(),
     private val maxRedirects: Int = 5,
-    private val maxTextChars: Int = 64 * 1024,
+    private val maxTextChars: Int = ProviderHttpProtocol.MAX_RESPONSE_BODY_CHARS,
     private val maxResponseBytes: Int = 16 * 1024 * 1024,
+    private val invocationTimeoutMs: Long = ProviderRuntimeLimits().wallClockTimeoutMs,
 ) : ProviderHttpHostService, AutoCloseable {
 
-    private val activeCalls = ConcurrentHashMap.newKeySet<okhttp3.Call>()
+    private val activeCalls = ConcurrentHashMap.newKeySet<Call>()
     private val closed = AtomicBoolean(false)
+    private val invocationDeadlineNanos =
+        System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(invocationTimeoutMs)
 
     private val client = baseClient.newBuilder()
         .followRedirects(false)
@@ -49,18 +56,46 @@ class DefaultProviderHttpHostService(
 
     init {
         require(maxRedirects >= 0) { "Provider HTTP redirect limit must not be negative" }
-        require(maxTextChars > 0) { "Provider HTTP text limit must be positive" }
+        require(maxTextChars in 1..ProviderHttpProtocol.MAX_RESPONSE_BODY_CHARS) {
+            "Provider HTTP text limit is outside supported bounds"
+        }
         require(maxResponseBytes > 0) { "Provider HTTP byte limit must be positive" }
+        require(invocationTimeoutMs > 0L) { "Provider HTTP invocation timeout must be positive" }
     }
 
+    override suspend fun request(request: ProviderHttpRequest): ProviderHttpResponse =
+        withContext(Dispatchers.IO) {
+            execute(
+                request = request,
+                requireSuccessful = false,
+            ) { statusCode, body ->
+                ProviderHttpResponse(
+                    statusCode = statusCode,
+                    body = body?.readBoundedText(maxTextChars).orEmpty(),
+                )
+            }
+        }
+
     override suspend fun getText(url: String): String = withContext(Dispatchers.IO) {
-        execute(url) { body ->
+        execute(
+            request = ProviderHttpRequest(
+                method = ProviderHttpMethod.GET,
+                url = url,
+            ),
+            requireSuccessful = true,
+        ) { _, body ->
             body?.readBoundedText(maxTextChars).orEmpty()
         }
     }
 
     override suspend fun getResource(url: String): ProviderResourceHandle = withContext(Dispatchers.IO) {
-        val bytes = execute(url) { body ->
+        val bytes = execute(
+            request = ProviderHttpRequest(
+                method = ProviderHttpMethod.GET,
+                url = url,
+            ),
+            requireSuccessful = true,
+        ) { _, body ->
             body?.readBoundedBytes(maxResponseBytes) ?: ByteArray(0)
         }
         resources.put(
@@ -71,28 +106,42 @@ class DefaultProviderHttpHostService(
     }
 
     suspend fun getBinaryBytes(url: String): ByteArray = withContext(Dispatchers.IO) {
-        execute(url) { body ->
+        execute(
+            request = ProviderHttpRequest(
+                method = ProviderHttpMethod.GET,
+                url = url,
+            ),
+            requireSuccessful = true,
+        ) { _, body ->
             body?.readBoundedBytes(maxResponseBytes) ?: ByteArray(0)
         }
     }
 
     private fun <T> execute(
-        rawUrl: String,
-        consume: (ResponseBody?) -> T,
+        request: ProviderHttpRequest,
+        requireSuccessful: Boolean,
+        consume: (Int, ResponseBody?) -> T,
     ): T {
         if (closed.get()) {
             throw ProviderHostServiceException("Provider HTTP broker is closed")
         }
-        var currentUrl = policy.validate(rawUrl, resolveAddress = false)
+
+        var currentUrl = policy.validate(request.url, resolveAddress = false)
+        var currentMethod = request.method
+        var currentHeaders = request.headers
+        var currentBody = request.body
         var redirects = 0
 
         while (true) {
             val call = client.newCall(
-                Request.Builder()
-                    .url(currentUrl)
-                    .get()
-                    .build(),
+                buildRequest(
+                    url = currentUrl,
+                    method = currentMethod,
+                    headers = currentHeaders,
+                    body = currentBody,
+                ),
             )
+            applyInvocationDeadline(call)
             activeCalls += call
             if (closed.get()) {
                 activeCalls -= call
@@ -120,19 +169,73 @@ class DefaultProviderHttpHostService(
                         ?: throw ProviderHostServiceException("Provider HTTP redirect is missing Location")
                     val redirected = currentUrl.resolve(location)
                         ?: throw ProviderHostServiceException("Provider HTTP redirect URL is invalid")
-                    currentUrl = policy.validate(redirected.toString(), resolveAddress = false)
+                    val validated = policy.validate(redirected.toString(), resolveAddress = false)
+
+                    if (!sameOrigin(currentUrl, validated)) {
+                        currentHeaders = emptyMap()
+                    }
+                    if (
+                        response.code in REDIRECT_TO_GET_CODES &&
+                        currentMethod != ProviderHttpMethod.GET
+                    ) {
+                        currentMethod = ProviderHttpMethod.GET
+                        currentBody = null
+                        currentHeaders = currentHeaders.filterKeys {
+                            !it.equals("Content-Type", ignoreCase = true)
+                        }
+                    }
+                    currentUrl = validated
                     continue
                 }
 
-                if (!response.isSuccessful) {
+                if (requireSuccessful && !response.isSuccessful) {
                     throw ProviderHostServiceException("Provider HTTP response was not successful")
                 }
-                return consume(response.body)
+                return consume(response.code, response.body)
             } finally {
                 activeCalls -= call
                 response.close()
             }
         }
+    }
+
+    private fun applyInvocationDeadline(call: Call) {
+        val remainingNanos = invocationDeadlineNanos - System.nanoTime()
+        if (remainingNanos <= 0L) {
+            throw ProviderHostServiceException("Provider HTTP invocation deadline exceeded")
+        }
+        call.timeout().timeout(remainingNanos, TimeUnit.NANOSECONDS)
+    }
+
+    private fun buildRequest(
+        url: HttpUrl,
+        method: ProviderHttpMethod,
+        headers: Map<String, String>,
+        body: String?,
+    ): Request {
+        val contentType = headers.entries
+            .firstOrNull { (name, _) -> name.equals("Content-Type", ignoreCase = true) }
+            ?.value
+            ?.toMediaTypeOrNull()
+
+        val requestBody = when (method) {
+            ProviderHttpMethod.GET -> null
+            ProviderHttpMethod.DELETE -> body?.toRequestBody(contentType)
+            ProviderHttpMethod.POST,
+            ProviderHttpMethod.PUT,
+            ProviderHttpMethod.PATCH,
+            -> body.orEmpty().toRequestBody(contentType)
+        }
+
+        return Request.Builder()
+            .url(url)
+            .apply {
+                headers.forEach { (name, value) ->
+                    header(name, value)
+                }
+            }
+            .method(method.name, requestBody)
+            .build()
     }
 
     override fun close() {
@@ -145,6 +248,12 @@ class DefaultProviderHttpHostService(
 
     private companion object {
         val REDIRECT_CODES = setOf(300, 301, 302, 303, 307, 308)
+        val REDIRECT_TO_GET_CODES = setOf(301, 302, 303)
+
+        fun sameOrigin(first: HttpUrl, second: HttpUrl): Boolean =
+            first.scheme == second.scheme &&
+                first.host == second.host &&
+                first.port == second.port
     }
 }
 

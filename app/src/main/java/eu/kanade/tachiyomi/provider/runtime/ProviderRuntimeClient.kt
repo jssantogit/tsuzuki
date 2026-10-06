@@ -39,13 +39,16 @@ class ProviderRuntimeClient(
     ): ProviderRuntimeInvocationResponse {
         validateInvocation(request, source, hostPolicy)
 
-        val hostInvocation = hostInvocationFactory.create(hostPolicy)
-        return try {
-            withRuntimeFile(
-                bytes = source,
-                suffix = ".js",
-                invocationId = request.invocationId,
-            ) { remote, descriptor ->
+        return withRuntimeFile(
+            bytes = source,
+            suffix = ".js",
+            invocationId = request.invocationId,
+        ) { remote, descriptor ->
+            val hostInvocation = hostInvocationFactory.create(
+                policy = hostPolicy,
+                invocationTimeoutMs = request.limits.wallClockTimeoutMs,
+            )
+            try {
                 callRemote(
                     remote = remote,
                     invocationId = request.invocationId,
@@ -56,9 +59,9 @@ class ProviderRuntimeClient(
                         hostInvocation.bridge,
                     )
                 }
+            } finally {
+                hostInvocation.close()
             }
-        } finally {
-            hostInvocation.close()
         }
     }
 
@@ -73,13 +76,16 @@ class ProviderRuntimeClient(
             "Provider capability input exceeds the runtime input-size limit"
         }
 
-        val hostInvocation = hostInvocationFactory.create(hostPolicy)
-        return try {
-            withRuntimeFile(
-                bytes = packageBytes,
-                suffix = ".tsz",
-                invocationId = request.invocationId,
-            ) { remote, descriptor ->
+        return withRuntimeFile(
+            bytes = packageBytes,
+            suffix = ".tsz",
+            invocationId = request.invocationId,
+        ) { remote, descriptor ->
+            val hostInvocation = hostInvocationFactory.create(
+                policy = hostPolicy,
+                invocationTimeoutMs = request.limits.wallClockTimeoutMs,
+            )
+            try {
                 callRemote(
                     remote = remote,
                     invocationId = request.invocationId,
@@ -91,9 +97,9 @@ class ProviderRuntimeClient(
                         hostInvocation.bridge,
                     )
                 }
+            } finally {
+                hostInvocation.close()
             }
-        } finally {
-            hostInvocation.close()
         }
     }
 

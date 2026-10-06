@@ -178,6 +178,7 @@ def select_full(result: dict[str, object]) -> None:
     compiles.clear()
     result["run_database"] = True
     result["run_supabase"] = True
+    result["run_native_package"] = True
     result["run_release"] = True
     result["run_format"] = True
 

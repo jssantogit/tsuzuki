@@ -20,8 +20,19 @@ import eu.kanade.tachiyomi.provider.reading.StoredProviderScriptPackageSource
 import eu.kanade.tachiyomi.provider.repository.AndroidProviderRepositoryTransport
 import eu.kanade.tachiyomi.provider.repository.InstalledScriptProviderRegistry
 import eu.kanade.tachiyomi.provider.runtime.IsolatedProviderPackageContractValidator
+import eu.kanade.tachiyomi.provider.runtime.JlibtorrentNativeSupport
+import eu.kanade.tachiyomi.provider.runtime.JlibtorrentProviderP2pDownloadEngine
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
+import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
+import eu.kanade.tachiyomi.provider.runtime.ProviderP2pJobManager
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
+import eu.kanade.tachiyomi.provider.runtime.ScriptProviderCapabilityExecutor
+import eu.kanade.tachiyomi.provider.runtime.ScriptProviderPackageSource
+import eu.kanade.tachiyomi.provider.runtime.StoredScriptProviderPackageSource
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentArtifactEngine
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentHttpFileMaterializer
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentPreferences
+import eu.kanade.tachiyomi.provider.torrent.ScriptProviderTorrentGateway
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
 import nl.adaptivity.xmlutil.XmlDeclMode
@@ -47,12 +58,20 @@ import tachiyomi.data.Mangas
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
+import tachiyomi.domain.tsuzuki.content.TorrentArtifactEngine
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
 import tachiyomi.domain.tsuzuki.provider.CompositeProviderRegistry
+import tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceResolver
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
+import tachiyomi.domain.tsuzuki.provider.torrent.DebridResolveGateway
+import tachiyomi.domain.tsuzuki.provider.torrent.P2pAcquireGateway
+import tachiyomi.domain.tsuzuki.provider.torrent.PrepareProviderTorrentForReader
+import tachiyomi.domain.tsuzuki.provider.torrent.ProviderTorrentAcquisitionCoordinator
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentHttpFileMaterializer
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchGateway
 import java.io.File
 
 @BindingContainer
@@ -199,12 +218,43 @@ object AppBindings {
     ): ProviderRepositoryTransport =
         AndroidProviderRepositoryTransport(networkHelper.client)
 
+    // Provider reading bindings are persisted by the canonical SQLDelight repository in :data.
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderManagedFileStore(
+        context: Context,
+    ): ProviderManagedFileStore =
+        ProviderManagedFileStore(context)
+
+    @Provides
+    fun providesProviderManagedResourceResolver(
+        managedFiles: ProviderManagedFileStore,
+    ): ProviderManagedResourceResolver = managedFiles
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderP2pJobManager(
+        context: Context,
+        managedFiles: ProviderManagedFileStore,
+    ): ProviderP2pJobManager =
+        ProviderP2pJobManager(
+            root = File(context.cacheDir, "provider-platform/p2p-jobs"),
+            managedFiles = managedFiles,
+            engine = JlibtorrentProviderP2pDownloadEngine(),
+        )
+
     @Provides
     @SingleIn(AppScope::class)
     fun providesProviderHostInvocationFactory(
         context: Context,
+        managedFiles: ProviderManagedFileStore,
+        p2pJobs: ProviderP2pJobManager,
     ): ProviderHostInvocationFactory =
-        ProviderHostInvocationFactory(context)
+        ProviderHostInvocationFactory(
+            context = context,
+            p2pServiceFactory = p2pJobs::service,
+            managedFiles = managedFiles,
+        )
 
     @Provides
     @SingleIn(AppScope::class)
@@ -230,6 +280,101 @@ object AppBindings {
         artifactStore: ProviderArtifactStore,
     ): ActiveProviderScriptPackageSource =
         StoredProviderScriptPackageSource(artifactStore)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesScriptProviderPackageSource(
+        artifactStore: ProviderArtifactStore,
+    ): ScriptProviderPackageSource =
+        StoredScriptProviderPackageSource(artifactStore)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesScriptProviderCapabilityExecutor(
+        registry: ProviderRegistry,
+        packageSource: ScriptProviderPackageSource,
+        runtimeClient: ProviderRuntimeClient,
+    ): ScriptProviderCapabilityExecutor =
+        ScriptProviderCapabilityExecutor(
+            registry = registry,
+            packageSource = packageSource,
+            runtimeClient = runtimeClient,
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesScriptProviderTorrentGateway(
+        executor: ScriptProviderCapabilityExecutor,
+        managedFiles: ProviderManagedFileStore,
+    ): ScriptProviderTorrentGateway =
+        ScriptProviderTorrentGateway(
+            executor = executor,
+            managedResources = managedFiles,
+        )
+
+    @Provides
+    fun providesTorrentSearchGateway(
+        gateway: ScriptProviderTorrentGateway,
+    ): TorrentSearchGateway = gateway
+
+    @Provides
+    fun providesDebridResolveGateway(
+        gateway: ScriptProviderTorrentGateway,
+    ): DebridResolveGateway = gateway
+
+    @Provides
+    fun providesP2pAcquireGateway(
+        gateway: ScriptProviderTorrentGateway,
+    ): P2pAcquireGateway = gateway
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderTorrentAcquisitionCoordinator(
+        registry: ProviderRegistry,
+        debrid: DebridResolveGateway,
+        p2p: P2pAcquireGateway,
+    ): ProviderTorrentAcquisitionCoordinator =
+        ProviderTorrentAcquisitionCoordinator(
+            registry = registry,
+            debrid = debrid,
+            p2p = p2p,
+            directP2pHostAvailable = JlibtorrentNativeSupport::isCurrentRuntimeSupported,
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesTorrentHttpFileMaterializer(
+        context: Context,
+        networkHelper: NetworkHelper,
+        managedFiles: ProviderManagedFileStore,
+    ): TorrentHttpFileMaterializer =
+        ProviderTorrentHttpFileMaterializer(
+            baseClient = networkHelper.client,
+            managedFiles = managedFiles,
+            tempRoot = File(context.cacheDir, "provider-platform/http-artifacts"),
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesPrepareProviderTorrentForReader(
+        coordinator: ProviderTorrentAcquisitionCoordinator,
+        httpMaterializer: TorrentHttpFileMaterializer,
+    ): PrepareProviderTorrentForReader =
+        PrepareProviderTorrentForReader(
+            coordinator = coordinator,
+            httpMaterializer = httpMaterializer,
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesTorrentArtifactEngine(
+        prepareForReader: PrepareProviderTorrentForReader,
+        preferences: ProviderTorrentPreferences,
+    ): TorrentArtifactEngine =
+        ProviderTorrentArtifactEngine(
+            prepareForReader = prepareForReader,
+            preferences = preferences,
+        )
 
     @Provides
     @SingleIn(AppScope::class)

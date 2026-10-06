@@ -49,6 +49,52 @@ class ProviderManagedFileStoreTest {
     }
 
     @Test
+    fun `host downloaded archive can be adopted without exposing its filesystem path`() {
+        val store = store(
+            maxFileBytes = 4L * 1024L * 1024L,
+            maxTotalBytesPerProvider = 8L * 1024L * 1024L,
+        )
+        val source = tempDir.resolve("p2p-selected.cbz").toFile().apply {
+            writeBytes(zip("page-1.jpg", "torrent chapter"))
+        }
+
+        val token = store.adoptFile(
+            providerId = "org.example.p2p",
+            source = source,
+            format = ProviderManagedResourceFormat.CBZ,
+        )
+
+        source.exists() shouldBe false
+        token.startsWith("managed:") shouldBe true
+        token.contains("p2p-selected") shouldBe false
+        store.resolve(
+            providerId = ProviderId("org.example.p2p"),
+            resource = ProviderManagedResourceRef(token),
+            format = ProviderManagedFileFormat.CBZ,
+        ) shouldBe "managed-uri:$token.cbz"
+    }
+
+    @Test
+    fun `failed host archive adoption leaves source available for engine cleanup`() {
+        val store = store(
+            maxFileBytes = 1024L,
+        )
+        val source = tempDir.resolve("invalid.cbz").toFile().apply {
+            writeText("not-a-zip")
+        }
+
+        runCatching {
+            store.adoptFile(
+                providerId = "org.example.p2p",
+                source = source,
+                format = ProviderManagedResourceFormat.CBZ,
+            )
+        }.isFailure shouldBe true
+
+        source.isFile shouldBe true
+    }
+
+    @Test
     fun `expired promoted resource is deleted and no longer resolves`() {
         var now = 1_000L
         val store = store(
@@ -66,6 +112,36 @@ class ProviderManagedFileStoreTest {
         store.resolve(
             providerId = ProviderId("org.example.reader"),
             resource = ProviderManagedResourceRef(token),
+            format = ProviderManagedFileFormat.ZIP,
+        ) shouldBe null
+        tempDir.toFile().walkTopDown().filter { it.isFile }.toList() shouldBe emptyList()
+    }
+
+    @Test
+    fun `clear all removes managed provider files without exposing raw paths`() {
+        val store = store()
+        val first = store.promote(
+            providerId = "org.example.reader",
+            bytes = zip("page-1.jpg", "first"),
+            format = ProviderManagedResourceFormat.CBZ,
+        )
+        val second = store.promote(
+            providerId = "org.example.other",
+            bytes = zip("page-2.jpg", "second"),
+            format = ProviderManagedResourceFormat.ZIP,
+        )
+
+        store.clearAll()
+        store.clearAll()
+
+        store.resolve(
+            providerId = ProviderId("org.example.reader"),
+            resource = ProviderManagedResourceRef(first),
+            format = ProviderManagedFileFormat.CBZ,
+        ) shouldBe null
+        store.resolve(
+            providerId = ProviderId("org.example.other"),
+            resource = ProviderManagedResourceRef(second),
             format = ProviderManagedFileFormat.ZIP,
         ) shouldBe null
         tempDir.toFile().walkTopDown().filter { it.isFile }.toList() shouldBe emptyList()
@@ -136,7 +212,7 @@ class ProviderManagedFileStoreTest {
     private fun store(
         clock: () -> Long = { 1_000L },
         ttlMs: Long = 10_000L,
-        maxFileBytes: Int = 1024,
+        maxFileBytes: Long = 1024L,
         maxFilesPerProvider: Int = 8,
         maxTotalBytesPerProvider: Long = 4096,
         maxArchiveEntries: Int = 32,

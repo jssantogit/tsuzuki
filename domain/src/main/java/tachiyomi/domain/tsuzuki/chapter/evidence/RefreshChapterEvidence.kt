@@ -48,6 +48,9 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticWorkflow
 import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
+import tachiyomi.domain.tsuzuki.provider.reading.CollectProviderReadingEvidence
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingEvidenceCollection
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingEvidenceSnapshot
 import kotlin.time.Clock
 import kotlin.time.TimeSource
 
@@ -62,6 +65,7 @@ class RefreshChapterEvidence private constructor(
     private val discoverReadableTitle: DiscoverReadableTitle?,
     private val structuredDiagnostics: StructuredDiagnosticRecorder,
     private val refreshSnapshots: ChapterRefreshSnapshotRepository?,
+    private val providerReadingEvidence: CollectProviderReadingEvidence?,
     private val clock: () -> Long,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit,
 ) {
@@ -78,6 +82,7 @@ class RefreshChapterEvidence private constructor(
         discoverReadableTitle: DiscoverReadableTitle,
         structuredDiagnostics: StructuredDiagnosticRecorder,
         refreshSnapshots: ChapterRefreshSnapshotRepository,
+        providerReadingEvidence: CollectProviderReadingEvidence,
     ) : this(
         registry = registry,
         reconcileChapterEvidence = reconcileChapterEvidence,
@@ -89,6 +94,7 @@ class RefreshChapterEvidence private constructor(
         discoverReadableTitle = discoverReadableTitle,
         structuredDiagnostics = structuredDiagnostics,
         refreshSnapshots = refreshSnapshots,
+        providerReadingEvidence = providerReadingEvidence,
         clock = { Clock.System.now().toEpochMilliseconds() },
         constructorMarker = Unit,
     )
@@ -112,6 +118,7 @@ class RefreshChapterEvidence private constructor(
         discoverReadableTitle = discoverReadableTitle,
         structuredDiagnostics = NoOpStructuredDiagnosticRecorder,
         refreshSnapshots = null,
+        providerReadingEvidence = null,
         clock = { Clock.System.now().toEpochMilliseconds() },
         constructorMarker = Unit,
     )
@@ -130,6 +137,27 @@ class RefreshChapterEvidence private constructor(
         discoverReadableTitle = null,
         structuredDiagnostics = NoOpStructuredDiagnosticRecorder,
         refreshSnapshots = null,
+        providerReadingEvidence = null,
+        clock = { Clock.System.now().toEpochMilliseconds() },
+        constructorMarker = Unit,
+    )
+
+    constructor(
+        registry: IntegrationRegistry,
+        reconcileChapterEvidence: ReconcileChapterEvidence,
+        providerReadingEvidence: CollectProviderReadingEvidence,
+    ) : this(
+        registry = registry,
+        reconcileChapterEvidence = reconcileChapterEvidence,
+        addonRegistry = null,
+        resolveContentBinding = null,
+        contentOptionCache = null,
+        inFlightContentResolution = null,
+        diagnostics = NoOpChapterInventoryDiagnostics,
+        discoverReadableTitle = null,
+        structuredDiagnostics = NoOpStructuredDiagnosticRecorder,
+        refreshSnapshots = null,
+        providerReadingEvidence = providerReadingEvidence,
         clock = { Clock.System.now().toEpochMilliseconds() },
         constructorMarker = Unit,
     )
@@ -155,6 +183,7 @@ class RefreshChapterEvidence private constructor(
         discoverReadableTitle = discoverReadableTitle,
         structuredDiagnostics = structuredDiagnostics,
         refreshSnapshots = null,
+        providerReadingEvidence = null,
         clock = { Clock.System.now().toEpochMilliseconds() },
         constructorMarker = Unit,
     )
@@ -175,6 +204,7 @@ class RefreshChapterEvidence private constructor(
         discoverReadableTitle = null,
         structuredDiagnostics = NoOpStructuredDiagnosticRecorder,
         refreshSnapshots = refreshSnapshots,
+        providerReadingEvidence = null,
         clock = clock,
         constructorMarker = Unit,
     )
@@ -238,6 +268,25 @@ class RefreshChapterEvidence private constructor(
             val stagedEvidence = linkedMapOf<String, ChapterEvidence>()
             val stageMutex = Mutex()
 
+            suspend fun notifyStageReconciled() {
+                try {
+                    onStageReconciled()
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Throwable) {
+                    // Progressive publication is observational; canonical refresh stays authoritative.
+                }
+            }
+
+            suspend fun invalidateTitleContentOptions() {
+                invalidateContentOptionsAfterChapterRefresh(
+                    invalidateInFlight = {
+                        inFlightContentResolution?.invalidateTitle(canonicalTitleId)
+                    },
+                    invalidateCache = { contentOptionCache?.invalidateTitle(canonicalTitleId) },
+                )
+            }
+
             suspend fun reconcileStage(
                 observations: List<ChapterEvidence>,
                 pendingSnapshots: List<ChapterRefreshSnapshot> = emptyList(),
@@ -257,20 +306,30 @@ class RefreshChapterEvidence private constructor(
                         .forEach { snapshot -> refreshSnapshots?.upsertIfNewer(snapshot) }
 
                     if (delta.isNotEmpty()) {
-                        invalidateContentOptionsAfterChapterRefresh(
-                            invalidateInFlight = {
-                                inFlightContentResolution?.invalidateTitle(canonicalTitleId)
-                            },
-                            invalidateCache = { contentOptionCache?.invalidateTitle(canonicalTitleId) },
-                        )
-                        try {
-                            onStageReconciled()
-                        } catch (error: CancellationException) {
-                            throw error
-                        } catch (_: Throwable) {
-                            // Progressive publication is observational; canonical refresh stays authoritative.
-                        }
+                        invalidateTitleContentOptions()
+                        notifyStageReconciled()
                     }
+                } finally {
+                    stageMutex.unlock()
+                }
+            }
+
+            suspend fun reconcileProviderSnapshot(snapshot: ProviderReadingEvidenceSnapshot) {
+                stageMutex.lock()
+                try {
+                    reconcileChapterEvidence.executeProviderSnapshot(
+                        canonicalTitleId = canonicalTitleId,
+                        producerId = snapshot.producerId,
+                        snapshotObservedAt = snapshot.observedAt,
+                        evidence = snapshot.evidence,
+                    )
+                    snapshot.evidence.forEach { observation ->
+                        stagedEvidence[observation.id] = observation
+                    }
+                    // A complete empty snapshot may detach stale Provider support, so invalidation
+                    // and progressive publication must run even when this snapshot has no evidence.
+                    invalidateTitleContentOptions()
+                    notifyStageReconciled()
                 } finally {
                     stageMutex.unlock()
                 }
@@ -281,6 +340,14 @@ class RefreshChapterEvidence private constructor(
                     collectAddonEvidence(canonicalTitleId, forceRefresh = forceRefresh) { batch ->
                         reconcileStage(batch.evidence, batch.pendingSnapshots)
                     }
+                }
+                val providerEvidence = async {
+                    val collected = providerReadingEvidence?.execute(canonicalTitleId)
+                        ?: ProviderReadingEvidenceCollection()
+                    collected.snapshots.forEach { snapshot ->
+                        reconcileProviderSnapshot(snapshot)
+                    }
+                    collected
                 }
                 val integrationEvidence = collectIntegrationEvidence(canonicalTitleId) { batch ->
                     reconcileStage(batch.evidence)
@@ -332,14 +399,24 @@ class RefreshChapterEvidence private constructor(
                         },
                     )
                 }
-                integrationEvidence to addonEvidence
+                RefreshCollections(
+                    integration = integrationEvidence,
+                    addon = addonEvidence,
+                    provider = providerEvidence.await(),
+                )
             }
-            val integrationEvidence = collections.first
-            val addonEvidence = collections.second
-            val evidence = (integrationEvidence.evidence + addonEvidence.evidence)
-                .distinctBy(ChapterEvidence::id)
+            val evidence = (
+                collections.integration.evidence +
+                    collections.addon.evidence +
+                    collections.provider.evidence
+                ).distinctBy(ChapterEvidence::id)
 
-            if (integrationEvidence.complete && addonEvidence.complete && refreshSnapshots != null) {
+            if (
+                collections.integration.complete &&
+                collections.addon.complete &&
+                collections.provider.complete &&
+                refreshSnapshots != null
+            ) {
                 val now = clock()
                 refreshSnapshots.upsertIfNewer(
                     ChapterRefreshSnapshot(
@@ -757,8 +834,15 @@ class RefreshChapterEvidence private constructor(
             }
             tokens += "addon:$providerToken"
         }
+        providerReadingEvidence?.configurationTokens()?.let(tokens::addAll)
         return ChapterRefreshConfigurationFingerprint.compute(tokens)
     }
+
+    private data class RefreshCollections(
+        val integration: EvidenceCollection,
+        val addon: AddonEvidenceCollection,
+        val provider: ProviderReadingEvidenceCollection,
+    )
 
     private data class EvidenceCollection(
         val evidence: List<ChapterEvidence> = emptyList(),
