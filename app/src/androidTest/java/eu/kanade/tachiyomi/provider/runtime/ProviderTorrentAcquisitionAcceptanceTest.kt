@@ -16,6 +16,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
+import tachiyomi.core.provider.runtime.ProviderP2pAcquireResponse
+import tachiyomi.core.provider.runtime.ProviderP2pFailureCode
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
@@ -29,8 +32,10 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.provider.torrent.DebridResolveGateway
+import tachiyomi.domain.tsuzuki.provider.torrent.P2pAcquireGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.ProviderTorrentAcquisitionCoordinator
 import tachiyomi.domain.tsuzuki.provider.torrent.ProviderTorrentAcquisitionState
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentAcquisitionFailure
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentAcquisitionPreference
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentAcquisitionRequest
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentAcquisitionRoute
@@ -136,14 +141,7 @@ class ProviderTorrentAcquisitionAcceptanceTest {
         try {
             val candidate = candidate(fixture)
             val match = TorrentChapterMapper().map(
-                request = TorrentChapterRequest(
-                    identity = CanonicalChapterIdentity(
-                        type = CanonicalChapterType.REGULAR,
-                        baseNumber = 12,
-                    ),
-                    volume = null,
-                    preferredLanguages = setOf("en"),
-                ),
+                request = chapter12Request(),
                 candidate = candidate,
             )
             assertTrue("canonical chapter 12 must map exactly but was $match", match is TorrentChapterFileMatch.Exact)
@@ -161,7 +159,10 @@ class ProviderTorrentAcquisitionAcceptanceTest {
                 preference = TorrentAcquisitionPreference.P2P_ONLY,
                 directP2pAllowed = true,
             )
-            assertTrue("first P2P acquisition must be pending but was $first", first is ProviderTorrentAcquisitionState.Pending)
+            assertTrue(
+                "first P2P acquisition must be pending but was $first",
+                first is ProviderTorrentAcquisitionState.Pending,
+            )
 
             val ready = withTimeout(35_000L) {
                 while (true) {
@@ -200,6 +201,170 @@ class ProviderTorrentAcquisitionAcceptanceTest {
             root.deleteRecursively()
         }
     }
+
+    @Test
+    fun ambiguousChapterMapping_neverProducesAnAutomaticP2pSelection() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "provider-torrent-acquisition-ambiguous").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        try {
+            val fixture = ProviderTorrentAcceptanceFixtures.createThreeChapterTorrent(root)
+            val candidate = candidate(fixture)
+            val duplicate = TorrentCandidateFile(
+                index = candidate.files.orEmpty().maxOf(TorrentCandidateFile::index) + 1,
+                path = "alternate/chapter-012.zip",
+                sizeBytes = fixture.selectedArchiveBytes.size.toLong(),
+                languages = setOf("en"),
+            )
+            val ambiguous = candidate.copy(
+                files = candidate.files.orEmpty() + duplicate,
+            )
+
+            val match = TorrentChapterMapper().map(
+                request = chapter12Request(),
+                candidate = ambiguous,
+            )
+
+            assertTrue(
+                "ambiguous chapter pack must fail closed before acquisition but was $match",
+                match is TorrentChapterFileMatch.Ambiguous,
+            )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun directP2pWithoutConsent_neverCallsP2pGateway() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "provider-torrent-acquisition-no-consent").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        try {
+            val fixture = ProviderTorrentAcceptanceFixtures.createThreeChapterTorrent(root)
+            val candidate = candidate(fixture)
+            val selected = (TorrentChapterMapper().map(chapter12Request(), candidate) as TorrentChapterFileMatch.Exact).file
+            val activePackage = ProviderTorrentAcceptanceFixtures.createDirectP2pProviderPackage(
+                providerId = PROVIDER_ID.value,
+                repositoryId = REPOSITORY_ID,
+            )
+            val registry = DefaultProviderRegistry(
+                registrations = { listOf(registration(activePackage)) },
+            )
+            var p2pCalls = 0
+            val coordinator = ProviderTorrentAcquisitionCoordinator(
+                registry = registry,
+                debrid = DebridResolveGateway { _, _ ->
+                    error("Debrid must not be touched in P2P_ONLY acceptance")
+                },
+                p2p = P2pAcquireGateway { _, _ ->
+                    p2pCalls += 1
+                    error("P2P gateway must not be touched without consent")
+                },
+                directP2pHostAvailable = { true },
+            )
+
+            val result = coordinator.acquire(
+                request = TorrentAcquisitionRequest(
+                    operationId = "acceptance:no-consent",
+                    candidate = candidate,
+                    selectedFile = selected,
+                ),
+                preference = TorrentAcquisitionPreference.P2P_ONLY,
+                directP2pAllowed = false,
+            )
+
+            assertEquals(
+                ProviderTorrentAcquisitionState.Failure(
+                    TorrentAcquisitionFailure.P2P_CONSENT_REQUIRED,
+                ),
+                result,
+            )
+            assertEquals(0, p2pCalls)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun unavailableLoopbackSeeder_failsBoundedlyAndCleansWorkingFiles() = runBlocking {
+        assertTrue("native libtorrent failed to load", LibTorrent.version().isNotBlank())
+
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "provider-torrent-acquisition-no-seeder").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        val fixture = ProviderTorrentAcceptanceFixtures.createThreeChapterTorrent(root)
+        val managedFiles = ProviderManagedFileStore(context).apply { clearAll() }
+        val candidate = candidate(fixture)
+        val selected = (TorrentChapterMapper().map(chapter12Request(), candidate) as TorrentChapterFileMatch.Exact).file
+        val jobRoot = File(root, "jobs")
+        val engine = JlibtorrentProviderP2pDownloadEngine(
+            metadataResolver = { _, _, _ -> fixture.torrent },
+            initialPeers = { listOf(TcpEndpoint("127.0.0.1", 49311)) },
+            sessionParamsFactory = {
+                ProviderTorrentAcceptanceFixtures.localOnlyParams(49312)
+            },
+            downloadTimeoutMs = 1_000L,
+            nativeSupport = { true },
+        )
+        val jobs = ProviderP2pJobManager(
+            root = jobRoot,
+            managedFiles = managedFiles,
+            engine = engine,
+        )
+        val service = jobs.service(PROVIDER_ID.value)
+        val request = ProviderP2pAcquireRequest(
+            operationId = "acceptance:no-seeder",
+            magnetUri = candidate.magnetUri,
+            infoHash = candidate.infoHash,
+            selectedFileIndex = selected.index,
+            selectedFilePath = selected.path,
+            selectedFileSizeBytes = selected.sizeBytes,
+        )
+
+        try {
+            val first = service.acquire(request)
+            assertTrue(
+                "first no-seeder acquisition must be pending but was $first",
+                first is ProviderP2pAcquireResponse.Pending,
+            )
+
+            val failure = withTimeout(8_000L) {
+                while (true) {
+                    when (val state = service.acquire(request)) {
+                        is ProviderP2pAcquireResponse.Failure -> return@withTimeout state
+                        is ProviderP2pAcquireResponse.Pending -> delay(100L)
+                        is ProviderP2pAcquireResponse.Ready ->
+                            error("no-seeder acquisition unexpectedly completed")
+                    }
+                }
+                error("unreachable")
+            }
+
+            assertEquals(ProviderP2pFailureCode.NETWORK_ERROR, failure.reason)
+            await("failed P2P working directory cleanup") {
+                jobRoot.listFiles().orEmpty().isEmpty()
+            }
+        } finally {
+            jobs.close()
+            managedFiles.clearAll()
+            root.deleteRecursively()
+        }
+    }
+
+    private fun chapter12Request() = TorrentChapterRequest(
+        identity = CanonicalChapterIdentity(
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 12,
+        ),
+        volume = null,
+        preferredLanguages = setOf("en"),
+    )
 
     private fun candidate(
         fixture: ProviderTorrentAcceptanceFixtures.ThreeChapterTorrent,
