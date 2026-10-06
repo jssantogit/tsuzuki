@@ -31,6 +31,7 @@ on:
       - 'gradle/libs.versions.toml'
       - '.github/workflows/provider-runtime-android.yml'
       - '.github/scripts/provider-runtime-android-gate.sh'
+      - '.github/scripts/test_provider_runtime_android_gate.py'
   workflow_dispatch:
 
 permissions:
@@ -53,6 +54,8 @@ jobs:
           java-version-file: .github/.java-version
           distribution: temurin
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - name: Validate Provider Android gate routing
+        run: python .github/scripts/test_provider_runtime_android_gate.py
       - name: Compile Provider runtime instrumentation
         run: ./gradlew :app:compileDebugAndroidTestKotlin
       - name: Enable KVM
