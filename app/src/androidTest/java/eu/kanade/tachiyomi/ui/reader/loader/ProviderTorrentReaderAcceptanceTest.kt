@@ -21,7 +21,9 @@ import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderManagedFileFormat
 import tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceRef
+import java.io.ByteArrayInputStream
 import java.io.File
+import java.util.zip.ZipInputStream
 
 @RunWith(AndroidJUnit4::class)
 class ProviderTorrentReaderAcceptanceTest {
@@ -34,6 +36,11 @@ class ProviderTorrentReaderAcceptanceTest {
             mkdirs()
         }
         val fixture = ProviderTorrentAcceptanceFixtures.createThreeChapterTorrent(root)
+        assertEquals(
+            "fixture must contain out-of-order images plus one non-image entry",
+            listOf("003.png", "README.txt", "001.png", "002.png"),
+            archiveEntryNames(fixture.selectedArchiveBytes),
+        )
         val managedRoot = File(root, "managed")
         val store = ProviderManagedFileStore(
             root = managedRoot,
@@ -152,6 +159,19 @@ class ProviderTorrentReaderAcceptanceTest {
             root.deleteRecursively()
         }
     }
+
+    private fun archiveEntryNames(bytes: ByteArray): List<String> =
+        ByteArrayInputStream(bytes).use { input ->
+            ZipInputStream(input).use { zip ->
+                buildList {
+                    while (true) {
+                        val entry = zip.nextEntry ?: break
+                        add(entry.name)
+                        zip.closeEntry()
+                    }
+                }
+            }
+        }
 
     private inline fun <T> android.graphics.Bitmap.useBitmap(block: (android.graphics.Bitmap) -> T): T =
         try {
