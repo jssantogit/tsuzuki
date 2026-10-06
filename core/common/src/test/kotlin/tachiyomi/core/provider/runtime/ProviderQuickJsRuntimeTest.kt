@@ -1,6 +1,7 @@
 package tachiyomi.core.provider.runtime
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 
@@ -36,6 +37,33 @@ class ProviderQuickJsRuntimeTest {
             ProviderScriptExecution.Failure(ProviderScriptFailure.TIMEOUT)
         runtime.evaluate("throw new Error('provider secret text')") shouldBe
             ProviderScriptExecution.Failure(ProviderScriptFailure.SCRIPT_ERROR)
+    }
+
+    @Test
+    fun `async Host wait does not consume JavaScript execution budget`() = runBlocking {
+        val runtime = ProviderQuickJsRuntime(
+            limits = ProviderRuntimeLimits(
+                wallClockTimeoutMs = 500,
+                jsExecutionTimeoutMs = 50,
+                memoryLimitBytes = 8L * 1024L * 1024L,
+                stackLimitBytes = 256L * 1024L,
+            ),
+        )
+        val services = ProviderHostServices(
+            http = object : ProviderHttpHostService {
+                override suspend fun getText(url: String): String {
+                    delay(150)
+                    return "host-ok"
+                }
+
+                override suspend fun getResource(url: String): ProviderResourceHandle = error("unused")
+            },
+        )
+
+        runtime.evaluate(
+            source = "await tsuzuki.http.get('https://allowed.example/data'); 7",
+            hostServices = services,
+        ) shouldBe ProviderScriptExecution.Success("7")
     }
 
     @Test
