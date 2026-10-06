@@ -40,11 +40,11 @@ class ProviderQuickJsRuntimeTest {
     }
 
     @Test
-    fun `async Host wait does not consume JavaScript execution budget`() = runBlocking {
+    fun `async Host wait does not expire subsequent JavaScript execution budget`() = runBlocking {
         val runtime = ProviderQuickJsRuntime(
             limits = ProviderRuntimeLimits(
-                wallClockTimeoutMs = 500,
-                jsExecutionTimeoutMs = 50,
+                wallClockTimeoutMs = 1_000,
+                jsExecutionTimeoutMs = 100,
                 memoryLimitBytes = 8L * 1024L * 1024L,
                 stackLimitBytes = 256L * 1024L,
             ),
@@ -52,7 +52,7 @@ class ProviderQuickJsRuntimeTest {
         val services = ProviderHostServices(
             http = object : ProviderHttpHostService {
                 override suspend fun getText(url: String): String {
-                    delay(150)
+                    delay(250)
                     return "host-ok"
                 }
 
@@ -61,7 +61,12 @@ class ProviderQuickJsRuntimeTest {
         )
 
         runtime.evaluate(
-            source = "await tsuzuki.http.get('https://allowed.example/data'); 7",
+            source = """
+                await tsuzuki.http.get('https://allowed.example/data');
+                let total = 0;
+                for (let i = 0; i < 100000; i++) total += i;
+                total > 0 ? 7 : 0;
+            """.trimIndent(),
             hostServices = services,
         ) shouldBe ProviderScriptExecution.Success("7")
     }
