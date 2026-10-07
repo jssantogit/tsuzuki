@@ -83,7 +83,7 @@ class ProviderHostInvocationFactory(
     context: Context,
     private val storageRoot: File = File(context.filesDir, "provider-storage"),
     private val secretResolver: suspend (providerId: String, key: String) -> String? = { _, _ -> null },
-    private val logSink: (providerId: String, message: String) -> Unit = { _, _ -> },
+    private val logSink: (providerId: String, message: String) -> Unit = ProviderRuntimeLogSink()::info,
     private val httpSessions: ProviderHttpSessionStore = ProviderHttpSessionStore(),
     private val p2pServiceFactory: (String) -> ProviderP2pHostService? = { null },
     val managedFiles: ProviderManagedFileStore = ProviderManagedFileStore(context.applicationContext),
