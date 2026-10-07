@@ -126,6 +126,7 @@ class ScriptProviderTorrentGatewayTest {
         input["titles"].toString() shouldBe """["Example"]"""
         input["chapterNumber"].toString() shouldBe """"12""""
         input["volume"].toString() shouldBe "2"
+        input["supportsParallelCursors"].toString() shouldBe "true"
     }
 
     @Test
@@ -294,7 +295,7 @@ class ScriptProviderTorrentGatewayTest {
             operationId = "read:canonical-12",
             candidate = TorrentCandidate(
                 infoHash = "0123456789abcdef0123456789abcdef01234567",
-                magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+                magnetUri = "magnet:?xt=urn:btih:0123456789abcdef01234567",
                 torrentUrl = null,
                 displayName = "Example pack",
                 files = listOf(file),
