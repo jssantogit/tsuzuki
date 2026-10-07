@@ -53,6 +53,7 @@ class ScriptProviderTorrentGateway(
                     volume = request.volume,
                     cursor = request.cursor?.value,
                     supportsParallelCursors = true,
+                    supportsTorrentMetadataHydration = true,
                 ),
             ),
         ) { value, active ->
@@ -211,6 +212,7 @@ class ScriptProviderTorrentGateway(
         val volume: Int? = null,
         val cursor: String? = null,
         val supportsParallelCursors: Boolean = true,
+        val supportsTorrentMetadataHydration: Boolean = true,
     )
 
     @Serializable
