@@ -113,13 +113,17 @@ class ResolveProviderChapterTorrentParallelPagesTest {
                     )
                     "parallel-a" -> ProviderCallResult.Success(
                         ProviderPage(
-                            items = listOf(candidate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "pack/A Vol. 2 Ch. 12.cbz")),
+                            items = listOf(
+                                candidate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "pack/A Vol. 2 Ch. 12.cbz"),
+                            ),
                             nextCursor = null,
                         ),
                     )
                     "parallel-b" -> ProviderCallResult.Success(
                         ProviderPage(
-                            items = listOf(candidate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "pack/B Vol. 2 Ch. 12.zip")),
+                            items = listOf(
+                                candidate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "pack/B Vol. 2 Ch. 12.zip"),
+                            ),
                             nextCursor = null,
                         ),
                     )
@@ -179,21 +183,29 @@ class ResolveProviderChapterTorrentParallelPagesTest {
 
     private fun chapterRepository(value: CanonicalChapter) = object : CanonicalChapterRepository {
         override suspend fun getByCanonicalTitleId(canonicalTitleId: String) = listOf(value)
-        override fun observeByCanonicalTitleId(canonicalTitleId: String): Flow<List<CanonicalChapter>> = flowOf(listOf(value))
+        override fun observeByCanonicalTitleId(
+            canonicalTitleId: String,
+        ): Flow<List<CanonicalChapter>> = flowOf(listOf(value))
         override suspend fun getById(id: String) = value.takeIf { it.id == id }
         override suspend fun getVariantBySourceIdentity(sourceId: Long, sourceChapterId: String): ChapterVariant? = null
         override suspend fun getVariantsByCanonicalChapterId(canonicalChapterId: String) = emptyList<ChapterVariant>()
         override suspend fun getVariantsBySourceMappingId(sourceMappingId: String) = emptyList<ChapterVariant>()
         override suspend fun upsert(chapter: CanonicalChapter) = error("not used")
         override suspend fun upsertVariant(variant: ChapterVariant) = error("not used")
-        override suspend fun upsertBatch(chapters: List<CanonicalChapter>, variants: List<ChapterVariant>) = error("not used")
+        override suspend fun upsertBatch(
+            chapters: List<CanonicalChapter>,
+            variants: List<ChapterVariant>,
+        ) = error("not used")
     }
 
     private fun titleRepository(value: CanonicalTitle) = object : CanonicalTitleRepository {
         override suspend fun getById(id: String) = value.takeIf { it.id == id }
         override fun getByIdAsFlow(id: String): Flow<CanonicalTitle?> = flowOf(value.takeIf { it.id == id })
         override suspend fun getByExternalIdentity(provider: String, externalId: String): CanonicalTitle? = null
-        override suspend fun getOrCreateByExternalIdentity(title: CanonicalTitle, identity: ExternalIdentity): CanonicalTitle = error("not used")
+        override suspend fun getOrCreateByExternalIdentity(
+            title: CanonicalTitle,
+            identity: ExternalIdentity,
+        ): CanonicalTitle = error("not used")
         override suspend fun insert(title: CanonicalTitle) = error("not used")
         override suspend fun addExternalIdentity(identity: ExternalIdentity) = error("not used")
     }
