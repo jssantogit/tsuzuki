@@ -126,6 +126,7 @@ class ScriptProviderTorrentGatewayTest {
         input["titles"].toString() shouldBe """["Example"]"""
         input["chapterNumber"].toString() shouldBe """"12""""
         input["volume"].toString() shouldBe "2"
+        input["supportsParallelCursors"].toString() shouldBe "true"
     }
 
     @Test
