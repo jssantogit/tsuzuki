@@ -343,11 +343,13 @@ object AppBindings {
         gateway: ScriptProviderTorrentGateway,
         registry: ProviderRegistry,
         inspector: ProviderTorrentMetadataInspector,
+        logSink: ProviderRuntimeLogSink,
     ): TorrentSearchGateway =
         ProviderTorrentMetadataSearchGateway(
             delegate = gateway,
             registry = registry,
             inspector = inspector,
+            logSink = logSink,
         )
 
     @Provides

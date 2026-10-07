@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.provider.torrent
 
+import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeLogSink
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -26,6 +27,7 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
     private val delegate: TorrentSearchGateway,
     private val registry: ProviderRegistry,
     private val inspector: ProviderTorrentMetadataInspector,
+    private val logSink: ProviderRuntimeLogSink = ProviderRuntimeLogSink { _, _ -> },
     maxConcurrentInspections: Int = DEFAULT_MAX_CONCURRENT_INSPECTIONS,
 ) : TorrentSearchGateway {
 
@@ -46,8 +48,11 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
             is ProviderCallResult.Success -> {
                 val descriptor = registry.registration(providerId)?.descriptor
                     ?: return result
+                val sourceItems = result.value.items
+                val attempted = sourceItems.count { it.files == null }
+                val startedAtNanos = System.nanoTime()
                 val items = coroutineScope {
-                    result.value.items.map { candidate ->
+                    sourceItems.map { candidate ->
                         async {
                             if (candidate.files != null) {
                                 candidate
@@ -57,6 +62,18 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                         }
                     }.awaitAll()
                 }
+                val hydrated = sourceItems.zip(items).count { (source, resolved) ->
+                    source.files == null && resolved.files != null
+                }
+                val elapsedMillis = ((System.nanoTime() - startedAtNanos) / NANOS_PER_MILLISECOND)
+                    .coerceAtLeast(0L)
+                emitHydrationSummary(
+                    providerId = providerId,
+                    total = sourceItems.size,
+                    attempted = attempted,
+                    hydrated = hydrated,
+                    elapsedMillis = elapsedMillis,
+                )
                 ProviderCallResult.Success(result.value.copy(items = items))
             }
         }
@@ -75,8 +92,25 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
         candidate
     }
 
+    private fun emitHydrationSummary(
+        providerId: ProviderId,
+        total: Int,
+        attempted: Int,
+        hydrated: Int,
+        elapsedMillis: Long,
+    ) {
+        runCatching {
+            logSink.info(
+                providerId.value,
+                "host_torrent_metadata total=$total attempted=$attempted hydrated=$hydrated " +
+                    "failed=${attempted - hydrated} elapsedMs=$elapsedMillis",
+            )
+        }
+    }
+
     private companion object {
         const val DEFAULT_MAX_CONCURRENT_INSPECTIONS = 4
         const val MAX_CONCURRENT_INSPECTIONS = 8
+        const val NANOS_PER_MILLISECOND = 1_000_000L
     }
 }
