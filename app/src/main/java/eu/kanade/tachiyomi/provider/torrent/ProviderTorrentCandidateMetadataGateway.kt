@@ -1,12 +1,12 @@
 package eu.kanade.tachiyomi.provider.torrent
 
 import com.frostwire.jlibtorrent.TorrentInfo
-import eu.kanade.tachiyomi.network.NetworkHelper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
@@ -25,7 +25,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class ProviderTorrentCandidateMetadataGateway(
-    networkHelper: NetworkHelper,
+    baseClient: OkHttpClient,
     private val registry: ProviderRegistry,
     private val maxMetadataBytes: Long = DEFAULT_MAX_METADATA_BYTES,
     private val maxRedirects: Int = DEFAULT_MAX_REDIRECTS,
@@ -33,7 +33,7 @@ class ProviderTorrentCandidateMetadataGateway(
 ) : TorrentCandidateMetadataGateway {
 
     private val permits = Semaphore(maxConcurrentRequests)
-    private val baseClient = networkHelper.client.newBuilder()
+    private val baseClient = baseClient.newBuilder()
         .followRedirects(false)
         .followSslRedirects(false)
         .callTimeout(METADATA_REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS)
