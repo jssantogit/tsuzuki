@@ -8,6 +8,7 @@ on:
     paths:
       # Runtime + Host Service boundary.
       - 'app/src/main/java/eu/kanade/tachiyomi/provider/**'
+      - 'app/src/main/java/mihon/app/di/AppBindings.kt'
       - 'app/src/main/aidl/eu/kanade/tachiyomi/provider/runtime/**'
       - 'core/common/src/main/kotlin/tachiyomi/core/provider/**'
       - 'core/common/src/test/kotlin/tachiyomi/core/provider/**'
