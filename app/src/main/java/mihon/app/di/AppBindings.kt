@@ -31,6 +31,7 @@ import eu.kanade.tachiyomi.provider.runtime.ScriptProviderCapabilityExecutor
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderPackageSource
 import eu.kanade.tachiyomi.provider.runtime.StoredScriptProviderPackageSource
 import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentArtifactEngine
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentCandidateMetadataGateway
 import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentHttpFileMaterializer
 import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentPreferences
 import eu.kanade.tachiyomi.provider.torrent.ScriptProviderTorrentGateway
@@ -73,6 +74,7 @@ import tachiyomi.domain.tsuzuki.provider.torrent.DebridResolveGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.P2pAcquireGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.PrepareProviderTorrentForReader
 import tachiyomi.domain.tsuzuki.provider.torrent.ProviderTorrentAcquisitionCoordinator
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateMetadataGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentHttpFileMaterializer
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchGateway
 import java.io.File
@@ -332,6 +334,17 @@ object AppBindings {
     fun providesTorrentSearchGateway(
         gateway: ScriptProviderTorrentGateway,
     ): TorrentSearchGateway = gateway
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesTorrentCandidateMetadataGateway(
+        networkHelper: NetworkHelper,
+        registry: ProviderRegistry,
+    ): TorrentCandidateMetadataGateway =
+        ProviderTorrentCandidateMetadataGateway(
+            networkHelper = networkHelper,
+            registry = registry,
+        )
 
     @Provides
     fun providesDebridResolveGateway(
