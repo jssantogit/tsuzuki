@@ -187,6 +187,14 @@ class ProviderTorrentMetadataSearchGatewayTest {
                     TorrentCandidateFile(index = 1, path = "pack-b/Vol. 2 Chapter 12.zip"),
                 ),
             ),
+            candidate(
+                files = listOf(
+                    TorrentCandidateFile(
+                        index = 0,
+                        path = "pack/Secret Example Manga - Chapter 12.cbz",
+                    ),
+                ),
+            ),
         )
         val logs = mutableListOf<String>()
         val gateway = ProviderTorrentMetadataSearchGateway(
@@ -213,9 +221,10 @@ class ProviderTorrentMetadataSearchGatewayTest {
         )
 
         logs.singleOrNull { it.startsWith("host_torrent_match ") } shouldBe
-            "host_torrent_match total=5 readable=4 identity=3 volume=2 exact=1 ambiguous=1"
+            "host_torrent_match total=6 readable=5 parsed=4 embedded=1 identity=3 volume=2 exact=1 ambiguous=1"
         val encoded = logs.joinToString("\n")
         encoded.contains("Secret Example Manga") shouldBe false
+        encoded.contains("Secret Example Manga - Chapter 12.cbz") shouldBe false
         encoded.contains("Vol. 2 Ch. 12.cbz") shouldBe false
         encoded.contains("0123456789abcdef0123456789abcdef01234567") shouldBe false
     }
