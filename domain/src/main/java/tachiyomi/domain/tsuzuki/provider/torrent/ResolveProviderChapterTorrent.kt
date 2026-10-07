@@ -2,6 +2,9 @@ package tachiyomi.domain.tsuzuki.provider.torrent
 
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.content.ContentDelivery
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
@@ -67,6 +70,7 @@ class ResolveProviderChapterTorrent(
     private val providerRegistry: ProviderRegistry,
     private val gateway: TorrentSearchGateway,
     private val titleNameObservationRepository: TitleNameObservationRepository = EmptyTitleNameObservationRepository,
+    private val metadataGateway: TorrentCandidateMetadataGateway = TorrentCandidateMetadataGateway.Passthrough,
 ) {
 
     suspend fun options(
@@ -118,11 +122,14 @@ class ResolveProviderChapterTorrent(
                 )
 
                 when (
-                    val discovery = discover(
+                    val discovery = discoverMatches(
+                        canonicalChapterId = canonicalChapterId,
                         providerId = providerId,
                         titles = searchTitles,
                         chapterNumber = chapter.displayNumber,
                         volume = chapter.volume,
+                        request = request,
+                        mapper = mapper,
                     )
                 ) {
                     is TorrentDiscoveryResult.Failure -> {
@@ -145,7 +152,7 @@ class ResolveProviderChapterTorrent(
                             outcome = DiagnosticOutcome.SKIPPED,
                             attributes = providerAttributes,
                         )
-                        return@flatMap emptyList()
+                        emptyList()
                     }
 
                     TorrentDiscoveryResult.Threw -> {
@@ -163,56 +170,39 @@ class ResolveProviderChapterTorrent(
                             outcome = DiagnosticOutcome.SKIPPED,
                             attributes = providerAttributes,
                         )
-                        return@flatMap emptyList()
+                        emptyList()
                     }
 
                     is TorrentDiscoveryResult.Success -> {
-                        val candidates = discovery.candidates
                         providerTrace?.event(
                             subsystem = DiagnosticSubsystem.CONTENT,
                             name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
                             stage = DiagnosticStage.SEARCH,
-                            outcome = if (candidates.isEmpty()) {
+                            outcome = if (discovery.candidateCount == 0) {
                                 DiagnosticOutcome.EMPTY
                             } else {
                                 DiagnosticOutcome.CANDIDATES
                             },
                             attributes = providerAttributes + mapOf(
                                 DiagnosticAttribute.CANDIDATE_COUNT to
-                                    DiagnosticAttributeValue.Number(candidates.size.toLong()),
+                                    DiagnosticAttributeValue.Number(discovery.candidateCount.toLong()),
                             ),
                         )
-
-                        val matches = candidates.mapNotNull { candidate ->
-                            if (candidate.infoHash == null) return@mapNotNull null
-                            val file = when (val match = mapper.map(request, candidate)) {
-                                is TorrentChapterFileMatch.Exact -> match.file
-                                TorrentChapterFileMatch.None,
-                                is TorrentChapterFileMatch.Ambiguous,
-                                -> return@mapNotNull null
-                            }
-                            ProviderChapterTorrentOption(
-                                canonicalChapterId = canonicalChapterId,
-                                providerId = providerId,
-                                candidate = candidate,
-                                selectedFile = file,
-                            )
-                        }
                         providerTrace?.event(
                             subsystem = DiagnosticSubsystem.CONTENT,
                             name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
                             stage = DiagnosticStage.MATCH,
-                            outcome = if (matches.isEmpty()) {
+                            outcome = if (discovery.matches.isEmpty()) {
                                 DiagnosticOutcome.EMPTY
                             } else {
                                 DiagnosticOutcome.CANDIDATES
                             },
                             attributes = providerAttributes + mapOf(
                                 DiagnosticAttribute.CANDIDATE_COUNT to
-                                    DiagnosticAttributeValue.Number(matches.size.toLong()),
+                                    DiagnosticAttributeValue.Number(discovery.matches.size.toLong()),
                             ),
                         )
-                        matches
+                        discovery.matches
                     }
                 }
             }
@@ -227,20 +217,27 @@ class ResolveProviderChapterTorrent(
             )
     }
 
-    private suspend fun discover(
+    private suspend fun discoverMatches(
+        canonicalChapterId: String,
         providerId: ProviderId,
         titles: List<String>,
         chapterNumber: String,
         volume: Int?,
+        request: TorrentChapterRequest,
+        mapper: TorrentChapterMapper,
     ): TorrentDiscoveryResult {
         return try {
-            val items = mutableListOf<TorrentCandidate>()
+            val matches = linkedSetOf<ProviderChapterTorrentOption>()
             val seenCursors = mutableSetOf<String>()
+            var candidateCount = 0
             var cursor: ProviderCursor? = null
             var pageCount = 0
             while (true) {
                 if (++pageCount > MAX_SEARCH_PAGES) {
-                    return TorrentDiscoveryResult.Success(emptyList())
+                    return TorrentDiscoveryResult.Success(
+                        candidateCount = 0,
+                        matches = emptyList(),
+                    )
                 }
                 val page = when (
                     val result = gateway.search(
@@ -256,22 +253,73 @@ class ResolveProviderChapterTorrent(
                     is ProviderCallResult.Failure -> return TorrentDiscoveryResult.Failure(result.error)
                     is ProviderCallResult.Success -> result.value
                 }
-                items += page.items
-                if (items.size > MAX_SEARCH_ITEMS) {
-                    return TorrentDiscoveryResult.Success(emptyList())
+                candidateCount += page.items.size
+                if (candidateCount > MAX_SEARCH_ITEMS) {
+                    return TorrentDiscoveryResult.Success(
+                        candidateCount = 0,
+                        matches = emptyList(),
+                    )
                 }
+
+                hydratePage(providerId, page.items).forEach { candidate ->
+                    if (candidate.infoHash == null) return@forEach
+                    val file = when (val match = mapper.map(request, candidate)) {
+                        is TorrentChapterFileMatch.Exact -> match.file
+                        TorrentChapterFileMatch.None,
+                        is TorrentChapterFileMatch.Ambiguous,
+                        -> return@forEach
+                    }
+                    matches += ProviderChapterTorrentOption(
+                        canonicalChapterId = canonicalChapterId,
+                        providerId = providerId,
+                        candidate = candidate,
+                        selectedFile = file,
+                    )
+                }
+
+                if (matches.size > 1) {
+                    return TorrentDiscoveryResult.Success(
+                        candidateCount = candidateCount,
+                        matches = matches.toList(),
+                    )
+                }
+
                 val next = page.nextCursor ?: break
                 if (!seenCursors.add(next.value)) {
-                    return TorrentDiscoveryResult.Success(emptyList())
+                    return TorrentDiscoveryResult.Success(
+                        candidateCount = 0,
+                        matches = emptyList(),
+                    )
                 }
                 cursor = next
             }
-            TorrentDiscoveryResult.Success(items)
+            TorrentDiscoveryResult.Success(
+                candidateCount = candidateCount,
+                matches = matches.toList(),
+            )
         } catch (error: CancellationException) {
             throw error
         } catch (_: Throwable) {
             TorrentDiscoveryResult.Threw
         }
+    }
+
+    private suspend fun hydratePage(
+        providerId: ProviderId,
+        candidates: List<TorrentCandidate>,
+    ): List<TorrentCandidate> = coroutineScope {
+        candidates.map { candidate ->
+            async {
+                if (candidate.files.orEmpty().isNotEmpty()) {
+                    candidate
+                } else {
+                    when (val result = metadataGateway.hydrate(providerId, candidate)) {
+                        is ProviderCallResult.Failure -> null
+                        is ProviderCallResult.Success -> result.value
+                    }
+                }
+            }
+        }.awaitAll().filterNotNull()
     }
 
     private fun buildSearchTitles(
@@ -297,7 +345,10 @@ class ResolveProviderChapterTorrent(
     }
 
     private sealed interface TorrentDiscoveryResult {
-        data class Success(val candidates: List<TorrentCandidate>) : TorrentDiscoveryResult
+        data class Success(
+            val candidateCount: Int,
+            val matches: List<ProviderChapterTorrentOption>,
+        ) : TorrentDiscoveryResult
 
         data class Failure(val error: ProviderError) : TorrentDiscoveryResult
 
