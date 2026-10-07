@@ -1,7 +1,6 @@
 package tachiyomi.core.provider.runtime
 
 import io.kotest.matchers.collections.shouldHaveSize
-import io.kotest.matchers.ints.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.runBlocking
@@ -55,7 +54,7 @@ class ProviderHttpDiagnosticsTest {
                 failed.phase shouldBe ProviderHttpDiagnosticPhase.FAILED
                 failed.host shouldBe server.url("/").host
                 failed.timeoutMs shouldBe 250L
-                failed.elapsedMs.shouldBeGreaterThanOrEqual(0L)
+                (failed.elapsedMs >= 0L) shouldBe true
                 failed.statusCode shouldBe 200
                 failed.failureFamily shouldBe ProviderHttpFailureFamily.HOST_DEADLINE
             }
