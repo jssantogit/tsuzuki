@@ -102,6 +102,7 @@ class ScriptProviderTorrentParallelOptInTest {
             request = TorrentSearchRequest(titles = listOf("Example")),
         )
 
+        // Providers gate the new response shape behind this explicit Host negotiation flag.
         assertTrue(
             requireNotNull(capturedInput).contains("\"supportsParallelCursors\":true"),
             "Host torrent.search request must explicitly opt in to parallel cursor responses",
