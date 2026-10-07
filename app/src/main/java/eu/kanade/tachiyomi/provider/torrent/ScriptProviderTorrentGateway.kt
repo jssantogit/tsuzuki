@@ -68,6 +68,7 @@ class ScriptProviderTorrentGateway(
                     )
                 },
                 nextCursor = decoded.nextCursor?.let(::ProviderCursor),
+                parallelCursors = decoded.parallelCursors.map(::ProviderCursor),
             )
         }
 
@@ -214,6 +215,7 @@ class ScriptProviderTorrentGateway(
     private data class SearchPageDto(
         val items: List<TorrentCandidateDto>,
         val nextCursor: String? = null,
+        val parallelCursors: List<String> = emptyList(),
     )
 
     @Serializable
