@@ -2,6 +2,11 @@ package tachiyomi.domain.tsuzuki.provider.torrent
 
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.content.ContentDelivery
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
@@ -234,45 +239,153 @@ class ResolveProviderChapterTorrent(
         volume: Int?,
     ): TorrentDiscoveryResult {
         return try {
-            val items = mutableListOf<TorrentCandidate>()
-            val seenCursors = mutableSetOf<String>()
-            var cursor: ProviderCursor? = null
-            var pageCount = 0
-            while (true) {
-                if (++pageCount > MAX_SEARCH_PAGES) {
-                    return TorrentDiscoveryResult.Success(emptyList())
-                }
-                val page = when (
-                    val result = gateway.search(
-                        providerId = providerId,
-                        request = TorrentSearchRequest(
-                            titles = titles,
-                            chapterNumber = chapterNumber,
-                            volume = volume,
-                            cursor = cursor,
-                        ),
-                    )
-                ) {
-                    is ProviderCallResult.Failure -> return TorrentDiscoveryResult.Failure(result.error)
-                    is ProviderCallResult.Success -> result.value
-                }
-                items += page.items
-                if (items.size > MAX_SEARCH_ITEMS) {
-                    return TorrentDiscoveryResult.Success(emptyList())
-                }
-                val next = page.nextCursor ?: break
-                if (!seenCursors.add(next.value)) {
-                    return TorrentDiscoveryResult.Success(emptyList())
-                }
-                cursor = next
+            val firstPage = when (
+                val result = searchPage(
+                    providerId = providerId,
+                    titles = titles,
+                    chapterNumber = chapterNumber,
+                    volume = volume,
+                    cursor = null,
+                )
+            ) {
+                is ProviderCallResult.Failure -> return TorrentDiscoveryResult.Failure(result.error)
+                is ProviderCallResult.Success -> result.value
             }
-            TorrentDiscoveryResult.Success(items)
+
+            if (firstPage.parallelCursors.isNotEmpty()) {
+                discoverParallelPages(
+                    providerId = providerId,
+                    titles = titles,
+                    chapterNumber = chapterNumber,
+                    volume = volume,
+                    firstPage = firstPage,
+                )
+            } else {
+                discoverSequentialPages(
+                    providerId = providerId,
+                    titles = titles,
+                    chapterNumber = chapterNumber,
+                    volume = volume,
+                    firstPage = firstPage,
+                )
+            }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Throwable) {
             TorrentDiscoveryResult.Threw
         }
     }
+
+    private suspend fun discoverParallelPages(
+        providerId: ProviderId,
+        titles: List<String>,
+        chapterNumber: String,
+        volume: Int?,
+        firstPage: tachiyomi.domain.tsuzuki.provider.ProviderPage<TorrentCandidate>,
+    ): TorrentDiscoveryResult = coroutineScope {
+        if (firstPage.parallelCursors.size + 1 > MAX_SEARCH_PAGES) {
+            return@coroutineScope TorrentDiscoveryResult.Success(emptyList())
+        }
+
+        val items = firstPage.items.toMutableList()
+        if (items.size > MAX_SEARCH_ITEMS) {
+            return@coroutineScope TorrentDiscoveryResult.Success(emptyList())
+        }
+
+        val permits = Semaphore(MAX_PARALLEL_PAGE_REQUESTS)
+        val results = firstPage.parallelCursors
+            .map { cursor ->
+                async {
+                    permits.withPermit {
+                        searchPage(
+                            providerId = providerId,
+                            titles = titles,
+                            chapterNumber = chapterNumber,
+                            volume = volume,
+                            cursor = cursor,
+                        )
+                    }
+                }
+            }
+            .awaitAll()
+
+        for (result in results) {
+            val page = when (result) {
+                is ProviderCallResult.Failure -> {
+                    return@coroutineScope TorrentDiscoveryResult.Failure(result.error)
+                }
+                is ProviderCallResult.Success -> result.value
+            }
+            if (page.nextCursor != null || page.parallelCursors.isNotEmpty()) {
+                return@coroutineScope TorrentDiscoveryResult.Success(emptyList())
+            }
+            items += page.items
+            if (items.size > MAX_SEARCH_ITEMS) {
+                return@coroutineScope TorrentDiscoveryResult.Success(emptyList())
+            }
+        }
+
+        TorrentDiscoveryResult.Success(items)
+    }
+
+    private suspend fun discoverSequentialPages(
+        providerId: ProviderId,
+        titles: List<String>,
+        chapterNumber: String,
+        volume: Int?,
+        firstPage: tachiyomi.domain.tsuzuki.provider.ProviderPage<TorrentCandidate>,
+    ): TorrentDiscoveryResult {
+        val items = firstPage.items.toMutableList()
+        if (items.size > MAX_SEARCH_ITEMS) {
+            return TorrentDiscoveryResult.Success(emptyList())
+        }
+
+        val seenCursors = mutableSetOf<String>()
+        var cursor = firstPage.nextCursor
+        var pageCount = 1
+        while (cursor != null) {
+            if (++pageCount > MAX_SEARCH_PAGES || !seenCursors.add(cursor.value)) {
+                return TorrentDiscoveryResult.Success(emptyList())
+            }
+            val page = when (
+                val result = searchPage(
+                    providerId = providerId,
+                    titles = titles,
+                    chapterNumber = chapterNumber,
+                    volume = volume,
+                    cursor = cursor,
+                )
+            ) {
+                is ProviderCallResult.Failure -> return TorrentDiscoveryResult.Failure(result.error)
+                is ProviderCallResult.Success -> result.value
+            }
+            if (page.parallelCursors.isNotEmpty()) {
+                return TorrentDiscoveryResult.Success(emptyList())
+            }
+            items += page.items
+            if (items.size > MAX_SEARCH_ITEMS) {
+                return TorrentDiscoveryResult.Success(emptyList())
+            }
+            cursor = page.nextCursor
+        }
+        return TorrentDiscoveryResult.Success(items)
+    }
+
+    private suspend fun searchPage(
+        providerId: ProviderId,
+        titles: List<String>,
+        chapterNumber: String,
+        volume: Int?,
+        cursor: ProviderCursor?,
+    ) = gateway.search(
+        providerId = providerId,
+        request = TorrentSearchRequest(
+            titles = titles,
+            chapterNumber = chapterNumber,
+            volume = volume,
+            cursor = cursor,
+        ),
+    )
 
     private fun buildSearchTitles(
         displayTitle: String,
@@ -308,5 +421,6 @@ class ResolveProviderChapterTorrent(
         const val MAX_SEARCH_PAGES = 8
         const val MAX_SEARCH_ITEMS = 2_000
         const val MAX_SEARCH_TITLES = 16
+        const val MAX_PARALLEL_PAGE_REQUESTS = 2
     }
 }
