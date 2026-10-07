@@ -294,7 +294,7 @@ private class ProviderHostBridgeAdapter(
     }
 
     override fun secretGet(key: String?): String? =
-        runBlocking { requireService(services.secrets, "secrets").get(key.orEmpty() ) }
+        runBlocking { requireService(services.secrets, "secrets").get(key.orEmpty()) }
 
     override fun binaryFetch(url: String?): String =
         runBlocking { requireService(services.binary, "binary").fetch(url.orEmpty()).value }
