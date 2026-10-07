@@ -92,7 +92,7 @@ class ProviderTorrentMetadataSearchGatewayTest {
     }
 
     @Test
-    fun `metadata inspection failure stays fail closed without converting discovery to success with guessed files`() = runTest {
+    fun `metadata inspection failure keeps candidate fail closed`() = runTest {
         val raw = candidate(files = null)
         val gateway = ProviderTorrentMetadataSearchGateway(
             delegate = TorrentSearchGateway { _, _ ->
