@@ -18,6 +18,7 @@ class ProviderRuntimeAndroidGateTest(unittest.TestCase):
 
         self.assertIn("tsuzuki/provider-torrent-acceptance-harness", workflow)
         self.assertIn("app/src/androidTest/**", workflow)
+        # Provider composition changes can alter which real Host services are reachable.
         self.assertIn("app/src/main/java/mihon/app/di/AppBindings.kt", workflow)
         self.assertIn("core/archive/**", workflow)
         self.assertIn("provider-runtime-android-gate.sh", workflow)
