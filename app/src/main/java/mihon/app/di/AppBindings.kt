@@ -342,7 +342,7 @@ object AppBindings {
         registry: ProviderRegistry,
     ): TorrentCandidateMetadataGateway =
         ProviderTorrentCandidateMetadataGateway(
-            networkHelper = networkHelper,
+            baseClient = networkHelper.client,
             registry = registry,
         )
 
