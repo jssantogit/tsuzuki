@@ -15,13 +15,24 @@ value class ProviderCursor(val value: String) {
 data class ProviderPage<T>(
     val items: List<T>,
     val nextCursor: ProviderCursor?,
+    val parallelCursors: List<ProviderCursor> = emptyList(),
 ) {
     init {
         require(items.size <= MAX_PAGE_ITEMS) { "Provider page contains too many items" }
+        require(parallelCursors.size <= MAX_PARALLEL_CURSORS) {
+            "Provider page contains too many parallel cursors"
+        }
+        require(parallelCursors.map(ProviderCursor::value).distinct().size == parallelCursors.size) {
+            "Provider page contains duplicate parallel cursors"
+        }
+        require(nextCursor == null || parallelCursors.none { it.value == nextCursor.value }) {
+            "Provider next cursor must not duplicate a parallel cursor"
+        }
     }
 
     private companion object {
         const val MAX_PAGE_ITEMS = 500
+        const val MAX_PARALLEL_CURSORS = 7
     }
 }
 
