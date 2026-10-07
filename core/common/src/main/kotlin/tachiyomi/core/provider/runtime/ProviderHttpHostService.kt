@@ -10,11 +10,18 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import okhttp3.ResponseBody
 import java.io.ByteArrayOutputStream
+import java.io.InterruptedIOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.net.ssl.SSLException
 
 class ProviderHttpSessionStore {
 
@@ -40,6 +47,7 @@ class DefaultProviderHttpHostService(
     private val maxTextChars: Int = ProviderHttpProtocol.MAX_RESPONSE_BODY_CHARS,
     private val maxResponseBytes: Int = 16 * 1024 * 1024,
     private val invocationTimeoutMs: Long = ProviderRuntimeLimits().wallClockTimeoutMs,
+    private val diagnosticSink: (ProviderHttpDiagnostic) -> Unit = {},
 ) : ProviderHttpHostService, AutoCloseable {
 
     private val activeCalls = ConcurrentHashMap.newKeySet<Call>()
@@ -141,31 +149,37 @@ class DefaultProviderHttpHostService(
                     body = currentBody,
                 ),
             )
-            applyInvocationDeadline(call)
-            activeCalls += call
-            if (closed.get()) {
-                activeCalls -= call
-                call.cancel()
-                throw ProviderHostServiceException("Provider HTTP broker is closed")
-            }
-            val response = try {
-                call.execute()
-            } catch (error: ProviderNetworkPolicyException) {
-                activeCalls -= call
-                throw error
-            } catch (error: Exception) {
-                activeCalls -= call
-                throw ProviderHostServiceException("Provider HTTP request failed", error)
-            }
+            val startedNanos = System.nanoTime()
+            emitDiagnostic(
+                ProviderHttpDiagnostic(
+                    phase = ProviderHttpDiagnosticPhase.STARTED,
+                    host = currentUrl.host,
+                    elapsedMs = 0,
+                    timeoutMs = invocationTimeoutMs,
+                ),
+            )
 
+            var response: Response? = null
+            var statusCode: Int? = null
             try {
-                if (response.code in REDIRECT_CODES) {
+                applyInvocationDeadline(call)
+                activeCalls += call
+                if (closed.get()) {
+                    call.cancel()
+                    throw ProviderHostServiceException("Provider HTTP broker is closed")
+                }
+
+                val received = call.execute()
+                response = received
+                statusCode = received.code
+
+                if (received.code in REDIRECT_CODES) {
                     if (redirects >= maxRedirects) {
                         throw ProviderHostServiceException("Provider HTTP redirect limit exceeded")
                     }
                     redirects += 1
 
-                    val location = response.header("Location")
+                    val location = received.header("Location")
                         ?: throw ProviderHostServiceException("Provider HTTP redirect is missing Location")
                     val redirected = currentUrl.resolve(location)
                         ?: throw ProviderHostServiceException("Provider HTTP redirect URL is invalid")
@@ -175,7 +189,7 @@ class DefaultProviderHttpHostService(
                         currentHeaders = emptyMap()
                     }
                     if (
-                        response.code in REDIRECT_TO_GET_CODES &&
+                        received.code in REDIRECT_TO_GET_CODES &&
                         currentMethod != ProviderHttpMethod.GET
                     ) {
                         currentMethod = ProviderHttpMethod.GET
@@ -185,17 +199,96 @@ class DefaultProviderHttpHostService(
                         }
                     }
                     currentUrl = validated
+                    emitTerminalDiagnostic(
+                        phase = ProviderHttpDiagnosticPhase.SUCCEEDED,
+                        host = received.request.url.host,
+                        startedNanos = startedNanos,
+                        statusCode = received.code,
+                    )
                     continue
                 }
 
-                if (requireSuccessful && !response.isSuccessful) {
+                if (requireSuccessful && !received.isSuccessful) {
                     throw ProviderHostServiceException("Provider HTTP response was not successful")
                 }
-                return consume(response.code, response.body)
+                val result = consume(received.code, received.body)
+                emitTerminalDiagnostic(
+                    phase = ProviderHttpDiagnosticPhase.SUCCEEDED,
+                    host = received.request.url.host,
+                    startedNanos = startedNanos,
+                    statusCode = received.code,
+                )
+                return result
+            } catch (error: Exception) {
+                emitTerminalDiagnostic(
+                    phase = ProviderHttpDiagnosticPhase.FAILED,
+                    host = currentUrl.host,
+                    startedNanos = startedNanos,
+                    statusCode = statusCode,
+                    failureFamily = classifyFailure(error, call),
+                )
+                when (error) {
+                    is ProviderNetworkPolicyException,
+                    is ProviderHostServiceException,
+                    -> throw error
+                    else -> throw ProviderHostServiceException("Provider HTTP request failed", error)
+                }
             } finally {
                 activeCalls -= call
-                response.close()
+                response?.close()
             }
+        }
+    }
+
+    private fun emitTerminalDiagnostic(
+        phase: ProviderHttpDiagnosticPhase,
+        host: String,
+        startedNanos: Long,
+        statusCode: Int?,
+        failureFamily: ProviderHttpFailureFamily? = null,
+    ) {
+        emitDiagnostic(
+            ProviderHttpDiagnostic(
+                phase = phase,
+                host = host,
+                elapsedMs = TimeUnit.NANOSECONDS.toMillis(
+                    (System.nanoTime() - startedNanos).coerceAtLeast(0L),
+                ),
+                timeoutMs = invocationTimeoutMs,
+                statusCode = statusCode,
+                failureFamily = failureFamily,
+            ),
+        )
+    }
+
+    private fun emitDiagnostic(diagnostic: ProviderHttpDiagnostic) {
+        runCatching { diagnosticSink(diagnostic) }
+    }
+
+    private fun classifyFailure(
+        error: Exception,
+        call: Call,
+    ): ProviderHttpFailureFamily {
+        if (call.isCanceled()) return ProviderHttpFailureFamily.CANCELLED
+
+        val causes = generateSequence<Throwable>(error) { it.cause }.take(MAX_CAUSE_DEPTH).toList()
+        return when {
+            error.message == "Provider HTTP invocation deadline exceeded" ->
+                ProviderHttpFailureFamily.HOST_DEADLINE
+            causes.any { it is UnknownHostException } -> ProviderHttpFailureFamily.DNS
+            causes.any { it is SSLException } -> ProviderHttpFailureFamily.TLS
+            causes.any { it is NoRouteToHostException || it is ConnectException } ->
+                ProviderHttpFailureFamily.CONNECT
+            error is ProviderNetworkPolicyException -> ProviderHttpFailureFamily.NETWORK_POLICY
+            causes.any { it is SocketTimeoutException } -> ProviderHttpFailureFamily.READ_TIMEOUT
+            causes.any { it is InterruptedIOException } -> ProviderHttpFailureFamily.HOST_DEADLINE
+            error.message == "Provider HTTP response was not successful" ->
+                ProviderHttpFailureFamily.HTTP_STATUS
+            error.message == "Provider HTTP text response exceeds the size limit" ||
+                error.message == "Provider HTTP binary response exceeds the size limit" ->
+                ProviderHttpFailureFamily.RESPONSE_LIMIT
+            error.message == "Provider HTTP broker is closed" -> ProviderHttpFailureFamily.CANCELLED
+            else -> ProviderHttpFailureFamily.UNKNOWN
         }
     }
 
@@ -247,6 +340,7 @@ class DefaultProviderHttpHostService(
     }
 
     private companion object {
+        const val MAX_CAUSE_DEPTH = 8
         val REDIRECT_CODES = setOf(300, 301, 302, 303, 307, 308)
         val REDIRECT_TO_GET_CODES = setOf(301, 302, 303)
 
