@@ -158,6 +158,68 @@ class ProviderTorrentMetadataSearchGatewayTest {
         summary.contains("Secret Example Manga") shouldBe false
     }
 
+    @Test
+    fun `emits bounded Provider neutral exact match classification`() = runTest {
+        val candidates = listOf(
+            candidate(
+                files = listOf(
+                    TorrentCandidateFile(index = 0, path = "pack/page-001.jpg"),
+                ),
+            ),
+            candidate(
+                files = listOf(
+                    TorrentCandidateFile(index = 0, path = "pack/Vol. 2 Ch. 11.cbz"),
+                ),
+            ),
+            candidate(
+                files = listOf(
+                    TorrentCandidateFile(index = 0, path = "pack/Vol. 1 Ch. 12.cbz"),
+                ),
+            ),
+            candidate(
+                files = listOf(
+                    TorrentCandidateFile(index = 0, path = "pack/Vol. 2 Ch. 12.cbz"),
+                ),
+            ),
+            candidate(
+                files = listOf(
+                    TorrentCandidateFile(index = 0, path = "pack-a/Vol. 2 Ch. 12.cbz"),
+                    TorrentCandidateFile(index = 1, path = "pack-b/Vol. 2 Chapter 12.zip"),
+                ),
+            ),
+        )
+        val logs = mutableListOf<String>()
+        val gateway = ProviderTorrentMetadataSearchGateway(
+            delegate = TorrentSearchGateway { _, _ ->
+                ProviderCallResult.Success(ProviderPage(candidates, nextCursor = null))
+            },
+            registry = registry(),
+            inspector = ProviderTorrentMetadataInspector { _, _ ->
+                error("pre-hydrated candidates must not be inspected")
+            },
+            logSink = ProviderRuntimeLogSink { id, message ->
+                id shouldBe providerId.value
+                logs += message
+            },
+        )
+
+        gateway.search(
+            providerId = providerId,
+            request = TorrentSearchRequest(
+                titles = listOf("Secret Example Manga"),
+                chapterNumber = "12",
+                volume = 2,
+            ),
+        )
+
+        logs.singleOrNull { it.startsWith("host_torrent_match ") } shouldBe
+            "host_torrent_match total=5 readable=4 identity=3 volume=2 exact=1 ambiguous=1"
+        val encoded = logs.joinToString("\n")
+        encoded.contains("Secret Example Manga") shouldBe false
+        encoded.contains("Vol. 2 Ch. 12.cbz") shouldBe false
+        encoded.contains("0123456789abcdef0123456789abcdef01234567") shouldBe false
+    }
+
     private fun candidate(files: List<TorrentCandidateFile>?): TorrentCandidate = TorrentCandidate(
         infoHash = "0123456789abcdef0123456789abcdef01234567",
         magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
