@@ -7,12 +7,17 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderPage
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateFile
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterFileMatch
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterMapper
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterRequest
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchRequest
 
@@ -32,6 +37,8 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
 ) : TorrentSearchGateway {
 
     private val inspectionPermits = Semaphore(maxConcurrentInspections)
+    private val parseChapterLabel = ParseCanonicalChapterLabel()
+    private val chapterMapper = TorrentChapterMapper()
 
     init {
         require(maxConcurrentInspections in 1..MAX_CONCURRENT_INSPECTIONS) {
@@ -74,6 +81,11 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                     hydrated = hydrated,
                     elapsedMillis = elapsedMillis,
                 )
+                emitMatchSummary(
+                    providerId = providerId,
+                    request = request,
+                    items = items,
+                )
                 ProviderCallResult.Success(result.value.copy(items = items))
             }
         }
@@ -106,6 +118,72 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                     "failed=${attempted - hydrated} elapsedMs=$elapsedMillis",
             )
         }
+    }
+
+    private fun emitMatchSummary(
+        providerId: ProviderId,
+        request: TorrentSearchRequest,
+        items: List<TorrentCandidate>,
+    ) {
+        val chapterNumber = request.chapterNumber ?: return
+        runCatching {
+            val identity = parseChapterLabel(chapterNumber).identity
+            if (!identity.isSpecific || !identity.isNumbered) return@runCatching
+
+            val volumeRequest = TorrentChapterRequest(
+                identity = identity,
+                volume = request.volume,
+            )
+            val identityRequest = if (request.volume != null) {
+                TorrentChapterRequest(identity = identity, volume = null)
+            } else {
+                volumeRequest
+            }
+
+            var readable = 0
+            var identityMatches = 0
+            var volumeMatches = 0
+            var exactMatches = 0
+            var ambiguousMatches = 0
+
+            items.forEach { candidate ->
+                if (candidate.files.orEmpty().any(::isSupportedReadableFile)) {
+                    readable += 1
+                }
+
+                when (chapterMapper.map(volumeRequest, candidate)) {
+                    TorrentChapterFileMatch.None -> {
+                        if (
+                            request.volume != null &&
+                            chapterMapper.map(identityRequest, candidate) !is TorrentChapterFileMatch.None
+                        ) {
+                            identityMatches += 1
+                        }
+                    }
+                    is TorrentChapterFileMatch.Exact -> {
+                        identityMatches += 1
+                        volumeMatches += 1
+                        exactMatches += 1
+                    }
+                    is TorrentChapterFileMatch.Ambiguous -> {
+                        identityMatches += 1
+                        volumeMatches += 1
+                        ambiguousMatches += 1
+                    }
+                }
+            }
+
+            logSink.info(
+                providerId.value,
+                "host_torrent_match total=${items.size} readable=$readable identity=$identityMatches " +
+                    "volume=$volumeMatches exact=$exactMatches ambiguous=$ambiguousMatches",
+            )
+        }
+    }
+
+    private fun isSupportedReadableFile(file: TorrentCandidateFile): Boolean {
+        val lower = file.path.lowercase()
+        return lower.endsWith(".cbz") || lower.endsWith(".zip")
     }
 
     private companion object {
