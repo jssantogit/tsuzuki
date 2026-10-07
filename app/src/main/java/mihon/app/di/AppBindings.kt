@@ -26,6 +26,7 @@ import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import eu.kanade.tachiyomi.provider.runtime.ProviderP2pJobManager
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
+import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeLogSink
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderCapabilityExecutor
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderPackageSource
 import eu.kanade.tachiyomi.provider.runtime.StoredScriptProviderPackageSource
@@ -35,9 +36,11 @@ import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentPreferences
 import eu.kanade.tachiyomi.provider.torrent.ScriptProviderTorrentGateway
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
+import logcat.LogPriority
 import nl.adaptivity.xmlutil.XmlDeclMode
 import nl.adaptivity.xmlutil.core.XmlVersion
 import nl.adaptivity.xmlutil.serialization.XML
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.core.provider.packageformat.ProviderPackageActivator
 import tachiyomi.core.provider.packageformat.ProviderPackageContractValidator
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
@@ -245,14 +248,27 @@ object AppBindings {
 
     @Provides
     @SingleIn(AppScope::class)
+    fun providesProviderRuntimeLogSink(): ProviderRuntimeLogSink =
+        ProviderRuntimeLogSink { providerId, message ->
+            runCatching {
+                logcat(LogPriority.INFO) {
+                    "provider_runtime_log providerId=$providerId payload=$message"
+                }
+            }
+        }
+
+    @Provides
+    @SingleIn(AppScope::class)
     fun providesProviderHostInvocationFactory(
         context: Context,
         managedFiles: ProviderManagedFileStore,
         p2pJobs: ProviderP2pJobManager,
+        logSink: ProviderRuntimeLogSink,
     ): ProviderHostInvocationFactory =
         ProviderHostInvocationFactory(
             context = context,
             p2pServiceFactory = p2pJobs::service,
+            logSink = logSink::info,
             managedFiles = managedFiles,
         )
 
