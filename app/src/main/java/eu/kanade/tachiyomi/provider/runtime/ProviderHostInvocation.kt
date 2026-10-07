@@ -11,6 +11,7 @@ import tachiyomi.core.provider.runtime.DefaultProviderHttpHostService
 import tachiyomi.core.provider.runtime.FileProviderStorageHostService
 import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderHostServices
+import tachiyomi.core.provider.runtime.ProviderHttpDiagnostic
 import tachiyomi.core.provider.runtime.ProviderHttpProtocol
 import tachiyomi.core.provider.runtime.ProviderHttpSessionStore
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
@@ -113,6 +114,9 @@ class ProviderHostInvocationFactory(
                     ),
                     cookieJar = httpSessions.cookieJar(policy.providerId),
                     invocationTimeoutMs = invocationTimeoutMs,
+                    diagnosticSink = { diagnostic ->
+                        logSink(policy.providerId, diagnostic.toRuntimeLogMessage())
+                    },
                 )
             }
 
@@ -197,6 +201,22 @@ class ProviderHostInvocationFactory(
     }
 }
 
+private fun ProviderHttpDiagnostic.toRuntimeLogMessage(): String =
+    buildString {
+        append("host_http phase=")
+        append(phase.name)
+        append(" host=")
+        append(host)
+        append(" elapsedMs=")
+        append(elapsedMs)
+        append(" timeoutMs=")
+        append(timeoutMs)
+        append(" status=")
+        append(statusCode ?: "none")
+        append(" failure=")
+        append(failureFamily?.name ?: "none")
+    }
+
 class ProviderHostInvocation internal constructor(
     private val owner: ProviderResourceOwner,
     private val resources: ProviderResourceStore,
@@ -274,7 +294,7 @@ private class ProviderHostBridgeAdapter(
     }
 
     override fun secretGet(key: String?): String? =
-        runBlocking { requireService(services.secrets, "secrets").get(key.orEmpty()) }
+        runBlocking { requireService(services.secrets, "secrets").get(key.orEmpty() ) }
 
     override fun binaryFetch(url: String?): String =
         runBlocking { requireService(services.binary, "binary").fetch(url.orEmpty()).value }
