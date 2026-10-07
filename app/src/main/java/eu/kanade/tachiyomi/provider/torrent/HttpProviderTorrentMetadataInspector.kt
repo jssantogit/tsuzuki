@@ -134,7 +134,7 @@ class HttpProviderTorrentMetadataInspector internal constructor(
                     64 -> torrent.infoHashV2()?.toHex()
                     else -> null
                 }
-                if (!actualInfoHash.equals(expectedInfoHash, ignoreCase = true)) {
+                if (actualInfoHash?.equals(expectedInfoHash, ignoreCase = true) != true) {
                     return null
                 }
             }
