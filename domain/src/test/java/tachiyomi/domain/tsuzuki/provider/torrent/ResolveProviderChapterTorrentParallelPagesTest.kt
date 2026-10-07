@@ -114,7 +114,10 @@ class ResolveProviderChapterTorrentParallelPagesTest {
                     "parallel-a" -> ProviderCallResult.Success(
                         ProviderPage(
                             items = listOf(
-                                candidate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "pack/A Vol. 2 Ch. 12.cbz"),
+                                candidate(
+                                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                    "pack/Vol. 2 Ch. 12.cbz",
+                                ),
                             ),
                             nextCursor = null,
                         ),
@@ -122,7 +125,10 @@ class ResolveProviderChapterTorrentParallelPagesTest {
                     "parallel-b" -> ProviderCallResult.Success(
                         ProviderPage(
                             items = listOf(
-                                candidate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "pack/B Vol. 2 Ch. 12.zip"),
+                                candidate(
+                                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                                    "pack/Vol. 2 Ch. 12.zip",
+                                ),
                             ),
                             nextCursor = null,
                         ),
