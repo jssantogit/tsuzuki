@@ -52,6 +52,7 @@ class ScriptProviderTorrentGateway(
                     chapterNumber = request.chapterNumber,
                     volume = request.volume,
                     cursor = request.cursor?.value,
+                    supportsParallelCursors = true,
                 ),
             ),
         ) { value, active ->
@@ -209,6 +210,7 @@ class ScriptProviderTorrentGateway(
         val chapterNumber: String? = null,
         val volume: Int? = null,
         val cursor: String? = null,
+        val supportsParallelCursors: Boolean = true,
     )
 
     @Serializable
