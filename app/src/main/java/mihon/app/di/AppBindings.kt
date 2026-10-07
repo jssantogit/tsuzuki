@@ -30,8 +30,11 @@ import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeLogSink
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderCapabilityExecutor
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderPackageSource
 import eu.kanade.tachiyomi.provider.runtime.StoredScriptProviderPackageSource
+import eu.kanade.tachiyomi.provider.torrent.HttpProviderTorrentMetadataInspector
 import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentArtifactEngine
 import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentHttpFileMaterializer
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentMetadataInspector
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentMetadataSearchGateway
 import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentPreferences
 import eu.kanade.tachiyomi.provider.torrent.ScriptProviderTorrentGateway
 import kotlinx.serialization.json.Json
@@ -329,9 +332,23 @@ object AppBindings {
         )
 
     @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderTorrentMetadataInspector(
+        networkHelper: NetworkHelper,
+    ): ProviderTorrentMetadataInspector =
+        HttpProviderTorrentMetadataInspector(networkHelper.client)
+
+    @Provides
     fun providesTorrentSearchGateway(
         gateway: ScriptProviderTorrentGateway,
-    ): TorrentSearchGateway = gateway
+        registry: ProviderRegistry,
+        inspector: ProviderTorrentMetadataInspector,
+    ): TorrentSearchGateway =
+        ProviderTorrentMetadataSearchGateway(
+            delegate = gateway,
+            registry = registry,
+            inspector = inspector,
+        )
 
     @Provides
     fun providesDebridResolveGateway(
