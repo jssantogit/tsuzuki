@@ -12,6 +12,8 @@ class ProviderRuntimeLogSink(
     }
 }
 
+private object ProviderRuntimeLogger
+
 private fun writeProviderRuntimeLog(line: String) {
-    logcat(LogPriority.INFO) { line }
+    ProviderRuntimeLogger.logcat(LogPriority.INFO) { line }
 }
