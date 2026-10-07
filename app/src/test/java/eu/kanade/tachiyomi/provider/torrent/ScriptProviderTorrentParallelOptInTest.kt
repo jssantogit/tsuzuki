@@ -83,7 +83,12 @@ class ScriptProviderTorrentParallelOptInTest {
             packageSource = ScriptProviderPackageSource { requested ->
                 activePackage.takeIf { requested == providerId }
             },
-            invokePackage = ScriptProviderRuntimeInvoker { request: ProviderRuntimeInvocationRequest, _: ByteArray, input: String, _: ProviderHostInvocationPolicy ->
+            invokePackage = ScriptProviderRuntimeInvoker {
+                    request: ProviderRuntimeInvocationRequest,
+                    _: ByteArray,
+                    input: String,
+                    _: ProviderHostInvocationPolicy,
+                ->
                 request.capabilityId
                 capturedInput = input
                 ProviderRuntimeInvocationResponse.success("""{"items":[]}""")
