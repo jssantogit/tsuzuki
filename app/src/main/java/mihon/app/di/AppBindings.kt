@@ -124,14 +124,13 @@ object AppBindings {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun providesXML(): XML = XML.v1 {
-        policy {
+    fun providesXml(): XML = XML {
+        defaultPolicy {
             ignoreUnknownChildren()
             autoPolymorphic = true
         }
         xmlDeclMode = XmlDeclMode.Charset
         xmlVersion = XmlVersion.XML10
-        setIndent(2)
     }
 
     @Provides
@@ -140,82 +139,76 @@ object AppBindings {
 
     @Provides
     @SingleIn(AppScope::class)
+    fun providesIntegrationRegistry(): IntegrationRegistry = BuiltinIntegrationProviderRegistry
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderPackageParser(): ProviderPackageParser = ProviderPackageParser()
+
+    @Provides
+    @SingleIn(AppScope::class)
     fun providesProviderLocalConfigurationStore(
         context: Context,
     ): ProviderLocalConfigurationStore =
-        FileProviderLocalConfigurationStore(
-            File(context.filesDir, "provider-platform/configuration"),
-        )
-
-    @Provides
-    @SingleIn(AppScope::class)
-    fun providesInstalledScriptProviderRegistry(
-        artifactStore: ProviderArtifactStore,
-        configurationStore: ProviderLocalConfigurationStore,
-        integrationRegistry: IntegrationRegistry,
-    ): InstalledScriptProviderRegistry =
-        InstalledScriptProviderRegistry(
-            artifactStore = artifactStore,
-            configurationStore = configurationStore,
-            reservedProviderIds = integrationRegistry.manifests()
-                .map { it.integrationId.value }
-                .toSet(),
-        )
-
-    @Provides
-    @SingleIn(AppScope::class)
-    fun providesBuiltinIntegrationProviderRegistry(
-        integrationRegistry: IntegrationRegistry,
-        settingsRepository: IntegrationSettingsRepository,
-    ): BuiltinIntegrationProviderRegistry =
-        BuiltinIntegrationProviderRegistry(
-            integrationRegistry = integrationRegistry,
-            settingsRepository = settingsRepository,
-            providerVersion = ProviderVersion(
-                name = BuildConfig.VERSION_NAME,
-                code = BuildConfig.VERSION_CODE.toLong(),
-            ),
-        )
-
-    @Provides
-    @SingleIn(AppScope::class)
-    fun providesProviderRegistry(
-        builtinRegistry: BuiltinIntegrationProviderRegistry,
-        scriptRegistry: InstalledScriptProviderRegistry,
-    ): ProviderRegistry =
-        CompositeProviderRegistry(
-            registries = listOf(
-                builtinRegistry,
-                scriptRegistry,
-            ),
-        )
+        FileProviderLocalConfigurationStore(File(context.filesDir, "provider-platform/local-config.json"))
 
     @Provides
     @SingleIn(AppScope::class)
     fun providesProviderRepositoryEnrollmentStore(
         context: Context,
     ): ProviderRepositoryEnrollmentStore =
-        FileProviderRepositoryEnrollmentStore(
-            File(context.filesDir, "provider-platform/repositories"),
-        )
+        FileProviderRepositoryEnrollmentStore(File(context.filesDir, "provider-platform/repositories.json"))
 
     @Provides
     @SingleIn(AppScope::class)
     fun providesProviderRepositoryTrustStore(
         context: Context,
     ): ProviderRepositoryTrustStore =
-        FileProviderRepositoryTrustStore(
-            File(context.filesDir, "provider-platform/trust"),
-        )
+        FileProviderRepositoryTrustStore(File(context.filesDir, "provider-platform/trust.json"))
 
     @Provides
     @SingleIn(AppScope::class)
     fun providesProviderArtifactStore(
         context: Context,
+        parser: ProviderPackageParser,
     ): ProviderArtifactStore =
         ProviderArtifactStore(
-            File(context.filesDir, "provider-platform/artifacts"),
+            root = File(context.filesDir, "provider-platform/artifacts"),
+            parser = parser,
         )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderRepositoryManager(
+        enrollmentStore: ProviderRepositoryEnrollmentStore,
+        trustStore: ProviderRepositoryTrustStore,
+        artifactStore: ProviderArtifactStore,
+        transport: ProviderRepositoryTransport,
+        localConfigurationStore: ProviderLocalConfigurationStore,
+        validator: ProviderPackageContractValidator,
+    ): ProviderRepositoryManager =
+        ProviderRepositoryManager(
+            enrollmentStore = enrollmentStore,
+            trustStore = trustStore,
+            artifactStore = artifactStore,
+            transport = transport,
+            localConfigurationStore = localConfigurationStore,
+            validator = validator,
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesInstalledScriptProviderRegistry(
+        artifactStore: ProviderArtifactStore,
+    ): InstalledScriptProviderRegistry =
+        InstalledScriptProviderRegistry(artifactStore)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderRegistry(
+        builtins: IntegrationRegistry,
+        scripts: InstalledScriptProviderRegistry,
+    ): ProviderRegistry = CompositeProviderRegistry(builtins, scripts)
 
     @Provides
     @SingleIn(AppScope::class)
@@ -343,11 +336,13 @@ object AppBindings {
         gateway: ScriptProviderTorrentGateway,
         registry: ProviderRegistry,
         inspector: ProviderTorrentMetadataInspector,
+        logSink: ProviderRuntimeLogSink,
     ): TorrentSearchGateway =
         ProviderTorrentMetadataSearchGateway(
             delegate = gateway,
             registry = registry,
             inspector = inspector,
+            logSink = logSink,
         )
 
     @Provides
@@ -379,85 +374,40 @@ object AppBindings {
     fun providesTorrentHttpFileMaterializer(
         context: Context,
         networkHelper: NetworkHelper,
-        managedFiles: ProviderManagedFileStore,
     ): TorrentHttpFileMaterializer =
         ProviderTorrentHttpFileMaterializer(
-            baseClient = networkHelper.client,
-            managedFiles = managedFiles,
-            tempRoot = File(context.cacheDir, "provider-platform/http-artifacts"),
+            context = context,
+            client = networkHelper.client,
         )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderTorrentArtifactEngine(
+        context: Context,
+    ): TorrentArtifactEngine = ProviderTorrentArtifactEngine(context)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providesProviderTorrentPreferences(
+        context: Context,
+    ): ProviderTorrentPreferences = ProviderTorrentPreferences(context)
 
     @Provides
     @SingleIn(AppScope::class)
     fun providesPrepareProviderTorrentForReader(
-        coordinator: ProviderTorrentAcquisitionCoordinator,
-        httpMaterializer: TorrentHttpFileMaterializer,
+        registry: ProviderRegistry,
+        acquisition: ProviderTorrentAcquisitionCoordinator,
+        httpFileMaterializer: TorrentHttpFileMaterializer,
+        artifactEngine: TorrentArtifactEngine,
+        preferences: ProviderTorrentPreferences,
+        managedFiles: ProviderManagedFileStore,
     ): PrepareProviderTorrentForReader =
         PrepareProviderTorrentForReader(
-            coordinator = coordinator,
-            httpMaterializer = httpMaterializer,
-        )
-
-    @Provides
-    @SingleIn(AppScope::class)
-    fun providesTorrentArtifactEngine(
-        prepareForReader: PrepareProviderTorrentForReader,
-        preferences: ProviderTorrentPreferences,
-    ): TorrentArtifactEngine =
-        ProviderTorrentArtifactEngine(
-            prepareForReader = prepareForReader,
-            preferences = preferences,
-        )
-
-    @Provides
-    @SingleIn(AppScope::class)
-    fun providesProviderReadingGateway(
-        registry: ProviderRegistry,
-        packageSource: ActiveProviderScriptPackageSource,
-        runtimeClient: ProviderRuntimeClient,
-        hostInvocationFactory: ProviderHostInvocationFactory,
-    ): ProviderReadingGateway =
-        ScriptProviderReadingGateway(
-            registry = registry,
-            packageSource = packageSource,
-            runtimeClient = runtimeClient,
-            managedResources = hostInvocationFactory.managedFiles,
-        )
-
-    @Provides
-    @SingleIn(AppScope::class)
-    fun providesProviderPackageActivator(
-        artifactStore: ProviderArtifactStore,
-        contractValidator: ProviderPackageContractValidator,
-    ): ProviderPackageActivator =
-        ProviderPackageActivator(
-            hostApiVersion = PROVIDER_HOST_API_VERSION,
-            parser = ProviderPackageParser(),
-            artifactStore = artifactStore,
-            contractValidator = contractValidator,
-        )
-
-    @Provides
-    @SingleIn(AppScope::class)
-    fun providesProviderRepositoryManager(
-        enrollmentStore: ProviderRepositoryEnrollmentStore,
-        trustStore: ProviderRepositoryTrustStore,
-        artifactStore: ProviderArtifactStore,
-        packageActivator: ProviderPackageActivator,
-        transport: ProviderRepositoryTransport,
-        integrationRegistry: IntegrationRegistry,
-    ): ProviderRepositoryManager =
-        ProviderRepositoryManager(
-            hostApiVersion = PROVIDER_HOST_API_VERSION,
-            enrollmentStore = enrollmentStore,
-            trustStore = trustStore,
-            artifactStore = artifactStore,
-            packageActivator = packageActivator,
-            transport = transport,
-            reservedProviderIds = integrationRegistry.manifests()
-                .map { it.integrationId.value }
-                .toSet(),
+            providerRegistry = registry,
+            acquisitionCoordinator = acquisition,
+            httpFileMaterializer = httpFileMaterializer,
+            artifactEngine = artifactEngine,
+            providerP2pConsent = preferences::isDirectP2pAllowed,
+            managedFileStore = managedFiles,
         )
 }
-
-private const val PROVIDER_HOST_API_VERSION = 1
