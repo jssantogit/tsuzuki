@@ -141,16 +141,29 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
             }
 
             var readable = 0
+            var parsed = 0
+            var embedded = 0
             var identityMatches = 0
             var volumeMatches = 0
             var exactMatches = 0
             var ambiguousMatches = 0
 
             items.forEach { candidate ->
-                if (candidate.files.orEmpty().any(::isSupportedReadableFile)) {
+                val readableFiles = candidate.files.orEmpty().filter(::isSupportedReadableFile)
+                if (readableFiles.isNotEmpty()) {
                     readable += 1
                 }
+                if (
+                    readableFiles.any { file ->
+                        parseChapterLabel(chapterLabel(file.path)).identity.let { parsedIdentity ->
+                            parsedIdentity.isSpecific && parsedIdentity.isNumbered
+                        }
+                    }
+                ) {
+                    parsed += 1
+                }
 
+                var currentIdentityMatched = false
                 when (chapterMapper.map(volumeRequest, candidate)) {
                     TorrentChapterFileMatch.None -> {
                         if (
@@ -158,25 +171,38 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                             chapterMapper.map(identityRequest, candidate) !is TorrentChapterFileMatch.None
                         ) {
                             identityMatches += 1
+                            currentIdentityMatched = true
                         }
                     }
                     is TorrentChapterFileMatch.Exact -> {
                         identityMatches += 1
                         volumeMatches += 1
                         exactMatches += 1
+                        currentIdentityMatched = true
                     }
                     is TorrentChapterFileMatch.Ambiguous -> {
                         identityMatches += 1
                         volumeMatches += 1
                         ambiguousMatches += 1
+                        currentIdentityMatched = true
                     }
+                }
+
+                if (
+                    !currentIdentityMatched &&
+                    readableFiles.any { file ->
+                        val explicitMarker = EMBEDDED_CHAPTER_MARKER.find(chapterLabel(file.path))?.value
+                        explicitMarker != null && parseChapterLabel(explicitMarker).identity == identity
+                    }
+                ) {
+                    embedded += 1
                 }
             }
 
             logSink.info(
                 providerId.value,
-                "host_torrent_match total=${items.size} readable=$readable identity=$identityMatches " +
-                    "volume=$volumeMatches exact=$exactMatches ambiguous=$ambiguousMatches",
+                "host_torrent_match total=${items.size} readable=$readable parsed=$parsed embedded=$embedded " +
+                    "identity=$identityMatches volume=$volumeMatches exact=$exactMatches ambiguous=$ambiguousMatches",
             )
         }
     }
@@ -186,9 +212,21 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
         return lower.endsWith(".cbz") || lower.endsWith(".zip")
     }
 
+    private fun chapterLabel(path: String): String {
+        val basename = path.substringAfterLast('/')
+        val stem = basename.substringBeforeLast('.', missingDelimiterValue = basename)
+        return stem
+            .replace('_', ' ')
+            .replace('-', ' ')
+            .trim()
+    }
+
     private companion object {
         const val DEFAULT_MAX_CONCURRENT_INSPECTIONS = 4
         const val MAX_CONCURRENT_INSPECTIONS = 8
         const val NANOS_PER_MILLISECOND = 1_000_000L
+        val EMBEDDED_CHAPTER_MARKER = Regex(
+            "(?i)(?<![\\p{L}\\p{N}])(?:ch(?:apter)?|cap(?:i|í)tulo)\\s*\\.?\\s*\\d+(?:\\.\\d+|[a-z])?",
+        )
     }
 }
