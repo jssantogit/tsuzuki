@@ -72,166 +72,176 @@ class ScriptProviderTorrentGatewayTest {
     )
 
     @Test
-    fun `torrent search invokes capability and decodes bounded provider candidates`() = runBlocking {
-        var captured: ProviderRuntimeInvocationRequest? = null
-        var capturedInput: String? = null
-        val gateway = gateway { request, _, input, _ ->
-            captured = request
-            capturedInput = input
-            ProviderRuntimeInvocationResponse.success(
-                """
-                {
-                  "items": [
+    fun `torrent search invokes capability and decodes bounded provider candidates`() {
+        runBlocking {
+            var captured: ProviderRuntimeInvocationRequest? = null
+            var capturedInput: String? = null
+            val gateway = gateway { request, _, input, _ ->
+                captured = request
+                capturedInput = input
+                ProviderRuntimeInvocationResponse.success(
+                    """
                     {
-                      "infoHash": "0123456789abcdef0123456789abcdef01234567",
-                      "magnetUri": "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
-                      "torrentUrl": "https://index.example/files/example.torrent",
-                      "displayName": "Example pack",
-                      "sizeBytes": 4096,
-                      "seeders": 7,
-                      "peers": 2,
-                      "languages": ["en"],
-                      "files": [
+                      "items": [
                         {
-                          "index": 1,
-                          "path": "pack/chapter-012.cbz",
-                          "sizeBytes": 2048,
-                          "languages": ["en"]
+                          "infoHash": "0123456789abcdef0123456789abcdef01234567",
+                          "magnetUri": "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+                          "torrentUrl": "https://index.example/files/example.torrent",
+                          "displayName": "Example pack",
+                          "sizeBytes": 4096,
+                          "seeders": 7,
+                          "peers": 2,
+                          "languages": ["en"],
+                          "files": [
+                            {
+                              "index": 1,
+                              "path": "pack/chapter-012.cbz",
+                              "sizeBytes": 2048,
+                              "languages": ["en"]
+                            }
+                          ]
                         }
-                      ]
+                      ],
+                      "nextCursor": "next",
+                      "parallelCursors": ["parallel-1", "parallel-2"]
                     }
-                  ],
-                  "nextCursor": "next",
-                  "parallelCursors": ["parallel-1", "parallel-2"]
-                }
-                """.trimIndent(),
-            )
+                    """.trimIndent(),
+                )
+            }
+
+            val result = gateway.search(
+                providerId,
+                TorrentSearchRequest(
+                    titles = listOf("Example"),
+                    preferredLanguages = setOf("en"),
+                    chapterNumber = "12",
+                    volume = 2,
+                ),
+            ) as ProviderCallResult.Success
+
+            result.value.items.single().files!!.single().path shouldBe "pack/chapter-012.cbz"
+            result.value.nextCursor?.value shouldBe "next"
+            result.value.parallelCursors.map { it.value } shouldBe listOf("parallel-1", "parallel-2")
+            captured?.capabilityId shouldBe "torrent.search"
+            val input = Json.parseToJsonElement(requireNotNull(capturedInput)).jsonObject
+            input["titles"].toString() shouldBe """["Example"]"""
+            input["chapterNumber"].toString() shouldBe """"12""""
+            input["volume"].toString() shouldBe "2"
+            input["supportsParallelCursors"].toString() shouldBe "true"
         }
-
-        val result = gateway.search(
-            providerId,
-            TorrentSearchRequest(
-                titles = listOf("Example"),
-                preferredLanguages = setOf("en"),
-                chapterNumber = "12",
-                volume = 2,
-            ),
-        ) as ProviderCallResult.Success
-
-        result.value.items.single().files!!.single().path shouldBe "pack/chapter-012.cbz"
-        result.value.nextCursor?.value shouldBe "next"
-        result.value.parallelCursors.map { it.value } shouldBe listOf("parallel-1", "parallel-2")
-        captured?.capabilityId shouldBe "torrent.search"
-        val input = Json.parseToJsonElement(requireNotNull(capturedInput)).jsonObject
-        input["titles"].toString() shouldBe """["Example"]"""
-        input["chapterNumber"].toString() shouldBe """"12""""
-        input["volume"].toString() shouldBe "2"
-        input["supportsParallelCursors"].toString() shouldBe "true"
     }
 
     @Test
-    fun `debrid resolve converges provider output to validated HTTP resource`() = runBlocking {
-        val gateway = gateway { request, _, _, _ ->
-            request.capabilityId shouldBe "debrid.resolve"
-            ProviderRuntimeInvocationResponse.success(
-                """
-                {
-                  "status": "ready",
-                  "url": "https://cdn.example/chapter-012.cbz",
-                  "headers": {"Authorization": "Bearer opaque"}
-                }
-                """.trimIndent(),
-            )
-        }
+    fun `debrid resolve converges provider output to validated HTTP resource`() {
+        runBlocking {
+            val gateway = gateway { request, _, _, _ ->
+                request.capabilityId shouldBe "debrid.resolve"
+                ProviderRuntimeInvocationResponse.success(
+                    """
+                    {
+                      "status": "ready",
+                      "url": "https://cdn.example/chapter-012.cbz",
+                      "headers": {"Authorization": "Bearer opaque"}
+                    }
+                    """.trimIndent(),
+                )
+            }
 
-        gateway.resolve(providerId, acquisitionRequest()) shouldBe ProviderCallResult.Success(
-            DebridResolveState.Ready(
-                TorrentReadableResource.HttpFile(
-                    url = "https://cdn.example/chapter-012.cbz",
-                    headers = mapOf("Authorization" to "Bearer opaque"),
-                    allowedOrigins = setOf(
-                        "https://index.example",
-                        "https://debrid.example",
-                        "https://cdn.example",
+            gateway.resolve(providerId, acquisitionRequest()) shouldBe ProviderCallResult.Success(
+                DebridResolveState.Ready(
+                    TorrentReadableResource.HttpFile(
+                        url = "https://cdn.example/chapter-012.cbz",
+                        headers = mapOf("Authorization" to "Bearer opaque"),
+                        allowedOrigins = setOf(
+                            "https://index.example",
+                            "https://debrid.example",
+                            "https://cdn.example",
+                        ),
                     ),
                 ),
-            ),
-        )
-    }
-
-    @Test
-    fun `debrid output outside provider network authority fails closed`() = runBlocking {
-        val gateway = gateway { _, _, _, _ ->
-            ProviderRuntimeInvocationResponse.success(
-                """{"status":"ready","url":"https://evil.example/chapter.cbz","headers":{}}""",
             )
         }
-
-        val result = gateway.resolve(providerId, acquisitionRequest())
-        (result is ProviderCallResult.Failure) shouldBe true
     }
 
     @Test
-    fun `p2p capability accepts only host owned managed archive resources`() = runBlocking {
-        val resolver = ProviderManagedResourceResolver { requestedProviderId, resource, format ->
-            if (
-                requestedProviderId == providerId &&
-                resource.value == "managed:p2p-ready" &&
-                format == ProviderManagedFileFormat.CBZ
-            ) {
-                "content://app.tsuzuki.provider/provider-p2p/chapter-012.cbz"
-            } else {
-                null
+    fun `debrid output outside provider network authority fails closed`() {
+        runBlocking {
+            val gateway = gateway { _, _, _, _ ->
+                ProviderRuntimeInvocationResponse.success(
+                    """{"status":"ready","url":"https://evil.example/chapter.cbz","headers":{}}""",
+                )
             }
-        }
-        val gateway = gateway(
-            managedResources = resolver,
-        ) { request, _, _, _ ->
-            request.capabilityId shouldBe "acquisition.p2p"
-            ProviderRuntimeInvocationResponse.success(
-                """{"status":"ready","resource":"managed:p2p-ready","format":"CBZ"}""",
-            )
-        }
 
-        gateway.acquire(providerId, acquisitionRequest()) shouldBe ProviderCallResult.Success(
-            P2pAcquireState.Ready(
-                TorrentReadableResource.LocalArchive(
-                    uri = "content://app.tsuzuki.provider/provider-p2p/chapter-012.cbz",
-                    format = TorrentArchiveFormat.CBZ,
+            val result = gateway.resolve(providerId, acquisitionRequest())
+            (result is ProviderCallResult.Failure) shouldBe true
+        }
+    }
+
+    @Test
+    fun `p2p capability accepts only host owned managed archive resources`() {
+        runBlocking {
+            val resolver = ProviderManagedResourceResolver { requestedProviderId, resource, format ->
+                if (
+                    requestedProviderId == providerId &&
+                    resource.value == "managed:p2p-ready" &&
+                    format == ProviderManagedFileFormat.CBZ
+                ) {
+                    "content://app.tsuzuki.provider/provider-p2p/chapter-012.cbz"
+                } else {
+                    null
+                }
+            }
+            val gateway = gateway(
+                managedResources = resolver,
+            ) { request, _, _, _ ->
+                request.capabilityId shouldBe "acquisition.p2p"
+                ProviderRuntimeInvocationResponse.success(
+                    """{"status":"ready","resource":"managed:p2p-ready","format":"CBZ"}""",
+                )
+            }
+
+            gateway.acquire(providerId, acquisitionRequest()) shouldBe ProviderCallResult.Success(
+                P2pAcquireState.Ready(
+                    TorrentReadableResource.LocalArchive(
+                        uri = "content://app.tsuzuki.provider/provider-p2p/chapter-012.cbz",
+                        format = TorrentArchiveFormat.CBZ,
+                    ),
                 ),
-            ),
-        )
-
-        val unowned = gateway(
-            managedResources = ProviderManagedResourceResolver.DenyAll,
-        ) { _, _, _, _ ->
-            ProviderRuntimeInvocationResponse.success(
-                """{"status":"ready","resource":"managed:p2p-ready","format":"CBZ"}""",
             )
+
+            val unowned = gateway(
+                managedResources = ProviderManagedResourceResolver.DenyAll,
+            ) { _, _, _, _ ->
+                ProviderRuntimeInvocationResponse.success(
+                    """{"status":"ready","resource":"managed:p2p-ready","format":"CBZ"}""",
+                )
+            }
+            (unowned.acquire(providerId, acquisitionRequest()) is ProviderCallResult.Failure) shouldBe true
         }
-        (unowned.acquire(providerId, acquisitionRequest()) is ProviderCallResult.Failure) shouldBe true
     }
 
     @Test
-    fun `long running debrid and p2p operations preserve provider job identity`() = runBlocking {
-        val gateway = gateway { request, _, _, _ ->
-            when (request.capabilityId) {
-                "debrid.resolve" -> ProviderRuntimeInvocationResponse.success(
-                    """{"status":"pending","jobId":"debrid-job-12"}""",
-                )
-                "acquisition.p2p" -> ProviderRuntimeInvocationResponse.success(
-                    """{"status":"pending","jobId":"p2p-job-12"}""",
-                )
-                else -> error("unexpected capability")
+    fun `long running debrid and p2p operations preserve provider job identity`() {
+        runBlocking {
+            val gateway = gateway { request, _, _, _ ->
+                when (request.capabilityId) {
+                    "debrid.resolve" -> ProviderRuntimeInvocationResponse.success(
+                        """{"status":"pending","jobId":"debrid-job-12"}""",
+                    )
+                    "acquisition.p2p" -> ProviderRuntimeInvocationResponse.success(
+                        """{"status":"pending","jobId":"p2p-job-12"}""",
+                    )
+                    else -> error("unexpected capability")
+                }
             }
-        }
 
-        gateway.resolve(providerId, acquisitionRequest()) shouldBe ProviderCallResult.Success(
-            DebridResolveState.Pending("debrid-job-12"),
-        )
-        gateway.acquire(providerId, acquisitionRequest()) shouldBe ProviderCallResult.Success(
-            P2pAcquireState.Pending("p2p-job-12"),
-        )
+            gateway.resolve(providerId, acquisitionRequest()) shouldBe ProviderCallResult.Success(
+                DebridResolveState.Pending("debrid-job-12"),
+            )
+            gateway.acquire(providerId, acquisitionRequest()) shouldBe ProviderCallResult.Success(
+                P2pAcquireState.Pending("p2p-job-12"),
+            )
+        }
     }
 
     private fun gateway(
