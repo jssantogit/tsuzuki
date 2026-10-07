@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.provider.torrent
 
+import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeLogSink
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
@@ -118,6 +119,43 @@ class ProviderTorrentMetadataSearchGatewayTest {
         )
 
         (result as ProviderCallResult.Success).value.items.single().files shouldBe null
+    }
+
+    @Test
+    fun `emits bounded Provider neutral hydration summary`() = runTest {
+        val raw = candidate(files = null)
+        val suppliedFiles = listOf(
+            TorrentCandidateFile(index = 0, path = "Chapter 12.cbz", sizeBytes = 12L),
+        )
+        val supplied = candidate(files = suppliedFiles)
+        val logs = mutableListOf<String>()
+        val gateway = ProviderTorrentMetadataSearchGateway(
+            delegate = TorrentSearchGateway { _, _ ->
+                ProviderCallResult.Success(ProviderPage(listOf(raw, supplied), nextCursor = null))
+            },
+            registry = registry(),
+            inspector = ProviderTorrentMetadataInspector { _, candidate ->
+                candidate.copy(files = suppliedFiles)
+            },
+            logSink = ProviderRuntimeLogSink { id, message ->
+                id shouldBe providerId.value
+                logs += message
+            },
+        )
+
+        gateway.search(
+            providerId = providerId,
+            request = TorrentSearchRequest(titles = listOf("Secret Example Manga")),
+        )
+
+        logs.size shouldBe 1
+        val summary = logs.single()
+        summary.substringBefore(" elapsedMs=") shouldBe
+            "host_torrent_metadata total=2 attempted=1 hydrated=1 failed=0"
+        val elapsed = summary.substringAfter(" elapsedMs=").toLongOrNull()
+        (elapsed != null && elapsed >= 0L) shouldBe true
+        summary.contains("nyaa.si") shouldBe false
+        summary.contains("Secret Example Manga") shouldBe false
     }
 
     private fun candidate(files: List<TorrentCandidateFile>?): TorrentCandidate = TorrentCandidate(
