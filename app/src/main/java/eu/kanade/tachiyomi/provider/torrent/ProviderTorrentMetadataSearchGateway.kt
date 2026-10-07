@@ -9,6 +9,7 @@ import kotlinx.coroutines.sync.withPermit
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
 import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.ProviderPage
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchGateway
@@ -39,23 +40,25 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
     override suspend fun search(
         providerId: ProviderId,
         request: TorrentSearchRequest,
-    ) = when (val result = delegate.search(providerId, request)) {
-        is ProviderCallResult.Failure -> result
-        is ProviderCallResult.Success -> {
-            val descriptor = registry.registration(providerId)?.descriptor
-                ?: return result
-            val items = coroutineScope {
-                result.value.items.map { candidate ->
-                    async {
-                        if (candidate.files != null) {
-                            candidate
-                        } else {
-                            inspectFailClosed(descriptor, candidate)
+    ): ProviderCallResult<ProviderPage<TorrentCandidate>> {
+        return when (val result = delegate.search(providerId, request)) {
+            is ProviderCallResult.Failure -> result
+            is ProviderCallResult.Success -> {
+                val descriptor = registry.registration(providerId)?.descriptor
+                    ?: return result
+                val items = coroutineScope {
+                    result.value.items.map { candidate ->
+                        async {
+                            if (candidate.files != null) {
+                                candidate
+                            } else {
+                                inspectFailClosed(descriptor, candidate)
+                            }
                         }
-                    }
-                }.awaitAll()
+                    }.awaitAll()
+                }
+                ProviderCallResult.Success(result.value.copy(items = items))
             }
-            ProviderCallResult.Success(result.value.copy(items = items))
         }
     }
 
