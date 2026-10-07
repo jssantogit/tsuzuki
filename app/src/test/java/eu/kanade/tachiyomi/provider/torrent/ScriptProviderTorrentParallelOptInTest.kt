@@ -31,7 +31,7 @@ import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchRequest
 class ScriptProviderTorrentParallelOptInTest {
 
     @Test
-    fun `torrent search advertises parallel cursor support to script providers`() = runBlocking {
+    fun `torrent search advertises Host continuation and metadata capabilities to script providers`() = runBlocking {
         val providerId = ProviderId("org.example.parallel")
         val manifest = ProviderScriptManifest(
             manifestVersion = 1,
@@ -102,10 +102,14 @@ class ScriptProviderTorrentParallelOptInTest {
             request = TorrentSearchRequest(titles = listOf("Example")),
         )
 
-        // Providers gate the new response shape behind this explicit Host negotiation flag.
+        val input = requireNotNull(capturedInput)
         assertTrue(
-            requireNotNull(capturedInput).contains("\"supportsParallelCursors\":true"),
+            input.contains("\"supportsParallelCursors\":true"),
             "Host torrent.search request must explicitly opt in to parallel cursor responses",
+        )
+        assertTrue(
+            input.contains("\"supportsTorrentMetadataHydration\":true"),
+            "Host torrent.search request must advertise authoritative torrent metadata hydration",
         )
     }
 }
