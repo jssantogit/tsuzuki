@@ -16,6 +16,7 @@ import eu.kanade.tachiyomi.data.tsuzuki.diagnostics.LocalStructuredDiagnosticHis
 import eu.kanade.tachiyomi.data.tsuzuki.diagnostics.LogcatCapture
 import eu.kanade.tachiyomi.data.tsuzuki.diagnostics.LogcatFailure
 import eu.kanade.tachiyomi.data.tsuzuki.diagnostics.StructuredDiagnosticSummary
+import eu.kanade.tachiyomi.data.tsuzuki.diagnostics.collectForExport
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.util.storage.getUriCompat
@@ -65,18 +66,18 @@ class CrashLogUtil(
                     health = diagnosticRecorderHealth.snapshot(),
                 )
                 val captureWindow = diagnosticCaptureState.describeWindow()
+                val verboseLogging = networkPreferences.verboseLogging.get()
                 val runtimeSnapshot = buildString {
                     appendLine(diagnosticRuntimeSnapshot.build())
-                    appendLine("verbose_logging=${networkPreferences.verboseLogging.get()}")
+                    appendLine("verbose_logging=$verboseLogging")
                     appendLine("incognito=${preferences.incognitoMode.get()}")
                     appendLine("installed_extensions=${extensionManager.getInstalledExtensions().size}")
                     append("detailed_capture_active=${diagnosticCaptureState.isDetailedCaptureActive()}")
                 }
                 val crashContext = diagnosticCrashContextStore.describe()
                 val persistentCrash = persistentCrashLogStore.read()
-                val logPriority = if (networkPreferences.verboseLogging.get()) "V" else "E"
                 val logcat = try {
-                    logcatCollector.collect(logPriority)
+                    logcatCollector.collectForExport(verboseLogging)
                 } catch (error: CancellationException) {
                     throw error
                 } catch (_: Exception) {
