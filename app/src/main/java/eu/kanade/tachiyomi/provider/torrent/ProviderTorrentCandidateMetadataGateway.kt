@@ -7,8 +7,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
@@ -144,7 +142,7 @@ class ProviderTorrentCandidateMetadataGateway(
                     .build(),
             ).execute()
 
-            response.use {
+            try {
                 if (response.code in REDIRECT_CODES) {
                     if (redirects >= maxRedirects) {
                         throw IOException("Torrent metadata redirect limit exceeded")
@@ -164,6 +162,8 @@ class ProviderTorrentCandidateMetadataGateway(
                     throw IOException("Torrent metadata HTTP ${response.code}")
                 }
                 return response.body.readBounded(maxMetadataBytes)
+            } finally {
+                response.close()
             }
         }
     }
