@@ -101,7 +101,8 @@ class ScriptProviderTorrentGatewayTest {
                       ]
                     }
                   ],
-                  "nextCursor": "next"
+                  "nextCursor": "next",
+                  "parallelCursors": ["parallel-1", "parallel-2"]
                 }
                 """.trimIndent(),
             )
@@ -119,6 +120,7 @@ class ScriptProviderTorrentGatewayTest {
 
         result.value.items.single().files!!.single().path shouldBe "pack/chapter-012.cbz"
         result.value.nextCursor?.value shouldBe "next"
+        result.value.parallelCursors.map { it.value } shouldBe listOf("parallel-1", "parallel-2")
         captured?.capabilityId shouldBe "torrent.search"
         val input = Json.parseToJsonElement(requireNotNull(capturedInput)).jsonObject
         input["titles"].toString() shouldBe """["Example"]"""
