@@ -111,6 +111,7 @@ DOMAIN_RUNTIME_INTEGRATION_MARKERS = (
     "/tachiyomi/domain/tsuzuki/addon/",
     "/tachiyomi/domain/tsuzuki/chapter/",
     "/tachiyomi/domain/tsuzuki/content/",
+    "/tachiyomi/domain/tsuzuki/provider/torrent/",
     "/tachiyomi/domain/tsuzuki/source/",
 )
 
