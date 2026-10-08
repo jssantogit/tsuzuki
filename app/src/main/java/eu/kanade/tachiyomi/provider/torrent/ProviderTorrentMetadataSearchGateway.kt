@@ -221,8 +221,13 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                 val releaseChapterMatches = EMBEDDED_CHAPTER_MARKER
                     .findAll(candidate.displayName)
                     .any { marker -> parseChapterLabel(marker.value).identity == identity }
+                val releaseVolume = EMBEDDED_VOLUME_CHAPTER_MARKER
+                    .findAll(candidate.displayName)
+                    .firstOrNull { marker -> parseChapterLabel(marker.value).identity == identity }
+                    ?.value
+                    ?.let { marker -> parseChapterVolume(marker) }
                 val releaseRequestMatches = releaseChapterMatches &&
-                    (request.volume == null || parseChapterVolume(candidate.displayName) == request.volume)
+                    (request.volume == null || releaseVolume == request.volume)
 
                 if (releaseChapterMatches) releaseExplicit += 1
                 if (releaseRequestMatches) releaseExact += 1
@@ -261,6 +266,10 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
         const val DEFAULT_MAX_CONCURRENT_INSPECTIONS = 4
         const val MAX_CONCURRENT_INSPECTIONS = 8
         const val NANOS_PER_MILLISECOND = 1_000_000L
+        val EMBEDDED_VOLUME_CHAPTER_MARKER = Regex(
+            "(?i)(?<![\\p{L}\\p{N}])vol(?:ume)?\\.?\\s*\\d+\\s*(?:[-:|/]\\s*|\\s+)" +
+                "(?:ch(?:apter)?|cap(?:i|í)tulo)\\s*\\.?\\s*\\d+(?:\\.\\d+|[a-z])?",
+        )
         val EMBEDDED_CHAPTER_MARKER = Regex(
             "(?i)(?<![\\p{L}\\p{N}])(?:ch(?:apter)?|cap(?:i|í)tulo)\\s*\\.?\\s*\\d+(?:\\.\\d+|[a-z])?",
         )
