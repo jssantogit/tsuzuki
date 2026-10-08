@@ -247,9 +247,10 @@ class TorrentChapterMapper(
             .filter(::isSupportedReadableFile)
             .mapNotNull { file ->
                 val label = file.chapterLabel()
-                val parsed = parseLabel(label)
+                val mappingLabel = explicitChapterLabel(label) ?: label
+                val parsed = parseLabel(mappingLabel)
                 file.takeIf { parsed.identity == request.identity }
-                    ?.let { ParsedTorrentFile(file, parseVolume(label)) }
+                    ?.let { ParsedTorrentFile(file, parseVolume(mappingLabel)) }
             }
             .toList()
 
@@ -289,10 +290,24 @@ class TorrentChapterMapper(
             .replace('-', ' ')
             .trim()
 
+    private fun explicitChapterLabel(label: String): String? =
+        EMBEDDED_VOLUME_CHAPTER_MARKER.find(label)?.value
+            ?: EMBEDDED_CHAPTER_MARKER.find(label)?.value
+
     private data class ParsedTorrentFile(
         val file: TorrentCandidateFile,
         val volume: Int?,
     )
+
+    private companion object {
+        val EMBEDDED_VOLUME_CHAPTER_MARKER = Regex(
+            "(?i)(?<![\\p{L}\\p{N}])vol(?:ume)?\\.?\\s*\\d+\\s*(?:[-:|/]\\s*|\\s+)" +
+                "(?:ch(?:apter)?|cap(?:i|í)tulo)\\s*\\.?\\s*\\d+(?:\\.\\d+|[a-z])?",
+        )
+        val EMBEDDED_CHAPTER_MARKER = Regex(
+            "(?i)(?<![\\p{L}\\p{N}])(?:ch(?:apter)?|cap(?:i|í)tulo)\\s*\\.?\\s*\\d+(?:\\.\\d+|[a-z])?",
+        )
+    }
 }
 
 enum class TorrentAcquisitionPreference {
