@@ -151,6 +151,12 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(result["selected_compiles"], [])
         self.assertTrue(result["run_native_package"])
 
+    def test_torrent_domain_provider_change_runs_domain_and_app_tests_and_native_gate(self):
+        result = plan(["domain/src/main/java/tachiyomi/domain/tsuzuki/provider/torrent/ProviderTorrentModels.kt"], "affected")
+        self.assertEqual(set(result["selected_tests"]), {"Domain — Tsuzuki", "App — Tsuzuki"})
+        self.assertEqual(result["selected_compiles"], [])
+        self.assertTrue(result["run_native_package"])
+
     def test_ci_configuration_change_uses_planner_self_test_only(self):
         result = plan([".github/workflows/ci-v2.yml"], "affected")
         self.assertEqual(result["selected_tests"], [])

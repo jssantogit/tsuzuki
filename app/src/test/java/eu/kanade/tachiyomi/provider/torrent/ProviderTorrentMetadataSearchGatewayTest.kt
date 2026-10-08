@@ -221,7 +221,7 @@ class ProviderTorrentMetadataSearchGatewayTest {
         )
 
         logs.singleOrNull { it.startsWith("host_torrent_match ") } shouldBe
-            "host_torrent_match total=6 readable=5 parsed=4 embedded=1 identity=3 volume=2 exact=1 ambiguous=1"
+            "host_torrent_match total=6 readable=5 parsed=4 embedded=0 identity=4 volume=2 exact=1 ambiguous=1"
         val encoded = logs.joinToString("\n")
         encoded.contains("Secret Example Manga") shouldBe false
         encoded.contains("Secret Example Manga - Chapter 12.cbz") shouldBe false
