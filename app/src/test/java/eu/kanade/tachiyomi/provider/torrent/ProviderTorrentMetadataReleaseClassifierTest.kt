@@ -47,16 +47,7 @@ class ProviderTorrentMetadataReleaseClassifierTest {
             ),
         )
         val logs = mutableListOf<String>()
-        val gateway = ProviderTorrentMetadataSearchGateway(
-            delegate = TorrentSearchGateway { _, _ ->
-                ProviderCallResult.Success(ProviderPage(candidates, nextCursor = null))
-            },
-            registry = registry(),
-            inspector = ProviderTorrentMetadataInspector { _, _ ->
-                error("pre-hydrated candidates must not be inspected")
-            },
-            logSink = ProviderRuntimeLogSink { _, message -> logs += message },
-        )
+        val gateway = gateway(candidates, logs)
 
         gateway.search(
             providerId = providerId,
@@ -66,14 +57,57 @@ class ProviderTorrentMetadataReleaseClassifierTest {
             ),
         )
 
-        logs.single { it.startsWith("host_torrent_match ") } shouldBe
-            "host_torrent_match total=4 readable=4 parsed=0 embedded=0 identity=0 volume=0 exact=0 ambiguous=0 " +
-            "releaseExplicit=2 singleReadable=3 releaseExplicitSingle=1 fileToken=1"
+        logs.single { it.startsWith("host_torrent_release ") } shouldBe
+            "host_torrent_release total=4 releaseExplicit=2 releaseExact=2 singleReadable=3 " +
+            "releaseExactSingle=1 fileToken=1 volumeRequested=0"
         val encoded = logs.joinToString("\n")
         encoded.contains("Secret Example Manga") shouldBe false
         encoded.contains("archive.cbz") shouldBe false
         encoded.contains("0123456789abcdef0123456789abcdef01234567") shouldBe false
     }
+
+    @Test
+    fun `release exact evidence respects requested volume`() = runTest {
+        val candidates = listOf(
+            candidate(
+                displayName = "Secret Example Manga Vol. 1 Chapter 12",
+                files = listOf(file(0, "archive-a.cbz")),
+            ),
+            candidate(
+                displayName = "Secret Example Manga Vol. 2 Chapter 12",
+                files = listOf(file(0, "archive-b.cbz")),
+            ),
+        )
+        val logs = mutableListOf<String>()
+        val gateway = gateway(candidates, logs)
+
+        gateway.search(
+            providerId = providerId,
+            request = TorrentSearchRequest(
+                titles = listOf("Secret Example Manga"),
+                chapterNumber = "12",
+                volume = 2,
+            ),
+        )
+
+        logs.single { it.startsWith("host_torrent_release ") } shouldBe
+            "host_torrent_release total=2 releaseExplicit=2 releaseExact=1 singleReadable=2 " +
+            "releaseExactSingle=1 fileToken=0 volumeRequested=1"
+    }
+
+    private fun gateway(
+        candidates: List<TorrentCandidate>,
+        logs: MutableList<String>,
+    ) = ProviderTorrentMetadataSearchGateway(
+        delegate = TorrentSearchGateway { _, _ ->
+            ProviderCallResult.Success(ProviderPage(candidates, nextCursor = null))
+        },
+        registry = registry(),
+        inspector = ProviderTorrentMetadataInspector { _, _ ->
+            error("pre-hydrated candidates must not be inspected")
+        },
+        logSink = ProviderRuntimeLogSink { _, message -> logs += message },
+    )
 
     private fun candidate(
         displayName: String,
