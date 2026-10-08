@@ -235,8 +235,9 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
 
             logSink.info(
                 providerId.value,
-                "host_torrent_release total=${items.size} releaseExplicit=$releaseExplicit releaseExact=$releaseExact " +
-                    "singleReadable=$singleReadable releaseExactSingle=$releaseExactSingle fileToken=$fileToken " +
+                "host_torrent_release total=${items.size} releaseExplicit=$releaseExplicit " +
+                    "releaseExact=$releaseExact singleReadable=$singleReadable " +
+                    "releaseExactSingle=$releaseExactSingle fileToken=$fileToken " +
                     "volumeRequested=${if (request.volume == null) 0 else 1}",
             )
         }
