@@ -8,6 +8,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
+import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterVolume
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
 import tachiyomi.domain.tsuzuki.provider.ProviderId
@@ -38,6 +39,7 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
 
     private val inspectionPermits = Semaphore(maxConcurrentInspections)
     private val parseChapterLabel = ParseCanonicalChapterLabel()
+    private val parseChapterVolume = ParseCanonicalChapterVolume()
     private val chapterMapper = TorrentChapterMapper()
 
     init {
@@ -203,6 +205,39 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                 providerId.value,
                 "host_torrent_match total=${items.size} readable=$readable parsed=$parsed embedded=$embedded " +
                     "identity=$identityMatches volume=$volumeMatches exact=$exactMatches ambiguous=$ambiguousMatches",
+            )
+
+            var releaseExplicit = 0
+            var releaseExact = 0
+            var singleReadable = 0
+            var releaseExactSingle = 0
+            var fileToken = 0
+            val chapterToken = Regex(
+                "(?i)(?<![\\p{L}\\p{N}])${Regex.escape(chapterNumber.trim())}(?![\\p{L}\\p{N}])",
+            )
+
+            items.forEach { candidate ->
+                val readableFiles = candidate.files.orEmpty().filter(::isSupportedReadableFile)
+                val releaseChapterMatches = EMBEDDED_CHAPTER_MARKER
+                    .findAll(candidate.displayName)
+                    .any { marker -> parseChapterLabel(marker.value).identity == identity }
+                val releaseRequestMatches = releaseChapterMatches &&
+                    (request.volume == null || parseChapterVolume(candidate.displayName) == request.volume)
+
+                if (releaseChapterMatches) releaseExplicit += 1
+                if (releaseRequestMatches) releaseExact += 1
+                if (readableFiles.size == 1) singleReadable += 1
+                if (releaseRequestMatches && readableFiles.size == 1) releaseExactSingle += 1
+                if (readableFiles.any { file -> chapterToken.containsMatchIn(chapterLabel(file.path)) }) {
+                    fileToken += 1
+                }
+            }
+
+            logSink.info(
+                providerId.value,
+                "host_torrent_release total=${items.size} releaseExplicit=$releaseExplicit releaseExact=$releaseExact " +
+                    "singleReadable=$singleReadable releaseExactSingle=$releaseExactSingle fileToken=$fileToken " +
+                    "volumeRequested=${if (request.volume == null) 0 else 1}",
             )
         }
     }
