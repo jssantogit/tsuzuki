@@ -43,9 +43,9 @@ object ProviderTorrentAcceptanceFixtures {
             listOf("001.png" to tinyPng(Color.BLUE)),
         )
 
-        File(pack, "chapter-011.cbz").writeBytes(chapter011)
-        File(pack, "chapter-012.cbz").writeBytes(chapter012)
-        File(pack, "chapter-013.cbz").writeBytes(chapter013)
+        File(pack, "Acceptance Series - Chapter 011.cbz").writeBytes(chapter011)
+        File(pack, "Acceptance Series - Chapter 012.cbz").writeBytes(chapter012)
+        File(pack, "Acceptance Series - Chapter 013.cbz").writeBytes(chapter013)
 
         val torrent = TorrentBuilder()
             .path(pack)
@@ -56,7 +56,7 @@ object ProviderTorrentAcceptanceFixtures {
             .let(::TorrentInfo)
         val files = torrent.files()
         val selectedFileIndex = (0 until files.numFiles())
-            .single { files.filePath(it).endsWith("chapter-012.cbz") }
+            .single { files.filePath(it).endsWith("Chapter 012.cbz") }
         val selectedFilePath = files.filePath(selectedFileIndex)
         val unselectedFileIndexes = (0 until files.numFiles())
             .filterNot { it == selectedFileIndex }

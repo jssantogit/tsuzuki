@@ -22,6 +22,8 @@ class ProviderRuntimeAndroidGateTest(unittest.TestCase):
         self.assertIn("app/src/main/java/mihon/app/di/AppBindings.kt", workflow)
         self.assertIn("core/archive/**", workflow)
         self.assertIn("provider-runtime-android-gate.sh", workflow)
+        # The emulator gate is intentionally opt-in on pushes because it is expensive.
+        self.assertIn("contains(github.event.head_commit.message, '[ci-full]')", workflow)
 
 
 if __name__ == "__main__":
