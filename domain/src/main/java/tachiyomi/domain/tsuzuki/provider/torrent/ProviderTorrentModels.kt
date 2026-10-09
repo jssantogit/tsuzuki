@@ -261,9 +261,11 @@ class TorrentChapterMapper(
             .filter(::isSupportedReadableFile)
             .mapNotNull { file ->
                 val label = file.chapterLabel()
-                val mappingLabel = explicitChapterLabel(label) ?: label
+                val explicitLabel = explicitChapterLabel(label)
+                val mappingLabel = explicitLabel ?: label
                 val parsed = parseLabel(mappingLabel)
-                file.takeIf { parsed.identity == request.identity }
+                val titleAwareSafe = explicitLabel != null || isImplicitIdentitySafe(request, label)
+                file.takeIf { parsed.identity == request.identity && titleAwareSafe }
                     ?.let { ParsedTorrentFile(file, parseVolume(mappingLabel)) }
             }
             .toList()
@@ -292,6 +294,16 @@ class TorrentChapterMapper(
         }
     }
 
+    private fun isImplicitIdentitySafe(
+        request: TorrentChapterRequest,
+        label: String,
+    ): Boolean {
+        if (request.titles.isEmpty()) return true
+        val chapterNumber = request.chapterNumber?.trim()?.takeIf(String::isNotEmpty) ?: return true
+        if (!containsRequestedTitle(label, request.titles)) return true
+        return hasTitleAwareChapterToken(label, request.titles, chapterNumber)
+    }
+
     private fun titleAwareTokenFallback(
         request: TorrentChapterRequest,
         files: List<TorrentCandidateFile>,
@@ -310,6 +322,11 @@ class TorrentChapterMapper(
         return TorrentChapterFileMatch.Exact(file)
     }
 
+    private fun containsRequestedTitle(
+        label: String,
+        titles: List<String>,
+    ): Boolean = titles.any { title -> titlePattern(title)?.containsMatchIn(label) == true }
+
     private fun hasTitleAwareChapterToken(
         label: String,
         titles: List<String>,
@@ -319,17 +336,21 @@ class TorrentChapterMapper(
             "(?i)(?<![\\p{L}\\p{N}])${Regex.escape(chapterNumber)}(?![\\p{L}\\p{N}])",
         )
         return titles.asSequence()
-            .map { title -> TITLE_WORD.findAll(title).map { word -> Regex.escape(word.value) }.toList() }
-            .filter { words -> words.isNotEmpty() }
-            .any { words ->
-                val titlePattern = Regex(
-                    "(?i)(?<![\\p{L}\\p{N}])${words.joinToString("[^\\p{L}\\p{N}]+")}(?![\\p{L}\\p{N}])",
-                )
-                titlePattern.findAll(label).any { titleMatch ->
+            .mapNotNull(::titlePattern)
+            .any { pattern ->
+                pattern.findAll(label).any { titleMatch ->
                     val withoutTitle = label.removeRange(titleMatch.range)
                     chapterToken.containsMatchIn(withoutTitle)
                 }
             }
+    }
+
+    private fun titlePattern(title: String): Regex? {
+        val words = TITLE_WORD.findAll(title).map { word -> Regex.escape(word.value) }.toList()
+        if (words.isEmpty()) return null
+        return Regex(
+            "(?i)(?<![\\p{L}\\p{N}])${words.joinToString("[^\\p{L}\\p{N}]+")}(?![\\p{L}\\p{N}])",
+        )
     }
 
     private fun isSupportedReadableFile(file: TorrentCandidateFile): Boolean {
@@ -383,7 +404,7 @@ sealed interface TorrentAcquisitionDecision {
         init {
             require(ordered.isNotEmpty()) { "Torrent acquisition route list must not be empty" }
             require(ordered.distinct().size == ordered.size) {
-                "Torrent acquisition route list must not contain duplicates"
+                "Torrent acquisition routes must not contain duplicates"
             }
         }
     }
