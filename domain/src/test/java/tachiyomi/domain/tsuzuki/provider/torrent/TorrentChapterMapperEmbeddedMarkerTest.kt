@@ -47,7 +47,7 @@ class TorrentChapterMapperEmbeddedMarkerTest {
     }
 
     @Test
-    fun `chapter mapper accepts a title aware chapter token in the sole readable archive`() {
+    fun `chapter mapper accepts the physically observed title aware token in the sole readable archive`() {
         val request = chapter12.copy(
             titles = listOf("Secret Example Manga"),
             chapterNumber = "12",
