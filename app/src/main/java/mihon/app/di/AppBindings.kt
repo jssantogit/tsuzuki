@@ -65,6 +65,7 @@ import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
 import tachiyomi.domain.tsuzuki.content.TorrentArtifactEngine
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
 import tachiyomi.domain.tsuzuki.provider.CompositeProviderRegistry
@@ -343,12 +344,14 @@ object AppBindings {
         gateway: ScriptProviderTorrentGateway,
         registry: ProviderRegistry,
         inspector: ProviderTorrentMetadataInspector,
+        diagnosticRecorder: StructuredDiagnosticRecorder,
         logSink: ProviderRuntimeLogSink,
     ): TorrentSearchGateway =
         ProviderTorrentMetadataSearchGateway(
             delegate = gateway,
             registry = registry,
             inspector = inspector,
+            diagnosticRecorder = diagnosticRecorder,
             logSink = logSink,
         )
 
