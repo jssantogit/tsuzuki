@@ -113,6 +113,10 @@ enum class DiagnosticEventName {
     DOWNLOAD_PREPARED,
     DOWNLOAD_COMPLETED,
 
+    TORRENT_METADATA_SUMMARY,
+    TORRENT_MATCH_SUMMARY,
+    TORRENT_RELEASE_EVIDENCE_SUMMARY,
+
     CACHE_LOOKUP,
     DATABASE_OPERATION,
     INVARIANT_VIOLATION,
@@ -208,6 +212,23 @@ enum class DiagnosticAttribute {
     CHAPTER_COUNT,
     VARIANT_COUNT,
     QUEUE_DEPTH,
+
+    TORRENT_HYDRATION_ATTEMPTED_COUNT,
+    TORRENT_HYDRATED_COUNT,
+    TORRENT_HYDRATION_FAILED_COUNT,
+    TORRENT_READABLE_COUNT,
+    TORRENT_PARSED_COUNT,
+    TORRENT_EMBEDDED_COUNT,
+    TORRENT_IDENTITY_MATCH_COUNT,
+    TORRENT_VOLUME_MATCH_COUNT,
+    TORRENT_EXACT_MATCH_COUNT,
+    TORRENT_AMBIGUOUS_MATCH_COUNT,
+    TORRENT_RELEASE_EXPLICIT_COUNT,
+    TORRENT_RELEASE_EXACT_COUNT,
+    TORRENT_SINGLE_READABLE_COUNT,
+    TORRENT_RELEASE_EXACT_SINGLE_COUNT,
+    TORRENT_FILE_TOKEN_COUNT,
+    TORRENT_VOLUME_REQUESTED,
 
     COVER_PRESENT,
     SOURCE_ARTWORK_PRESENT,
@@ -389,6 +410,21 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.HISTORY_SINK_FAILURES,
         DiagnosticAttribute.HISTORY_DROPPED_EVENTS,
         DiagnosticAttribute.EXPORT_FLUSH_TIMEOUTS,
+        DiagnosticAttribute.TORRENT_HYDRATION_ATTEMPTED_COUNT,
+        DiagnosticAttribute.TORRENT_HYDRATED_COUNT,
+        DiagnosticAttribute.TORRENT_HYDRATION_FAILED_COUNT,
+        DiagnosticAttribute.TORRENT_READABLE_COUNT,
+        DiagnosticAttribute.TORRENT_PARSED_COUNT,
+        DiagnosticAttribute.TORRENT_EMBEDDED_COUNT,
+        DiagnosticAttribute.TORRENT_IDENTITY_MATCH_COUNT,
+        DiagnosticAttribute.TORRENT_VOLUME_MATCH_COUNT,
+        DiagnosticAttribute.TORRENT_EXACT_MATCH_COUNT,
+        DiagnosticAttribute.TORRENT_AMBIGUOUS_MATCH_COUNT,
+        DiagnosticAttribute.TORRENT_RELEASE_EXPLICIT_COUNT,
+        DiagnosticAttribute.TORRENT_RELEASE_EXACT_COUNT,
+        DiagnosticAttribute.TORRENT_SINGLE_READABLE_COUNT,
+        DiagnosticAttribute.TORRENT_RELEASE_EXACT_SINGLE_COUNT,
+        DiagnosticAttribute.TORRENT_FILE_TOKEN_COUNT,
         -> (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..MAX_COUNT }
 
         DiagnosticAttribute.PROVIDER_VERSION_CODE -> (value as? DiagnosticAttributeValue.Number)
@@ -408,6 +444,7 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.RATING_PRESENT,
         DiagnosticAttribute.TSUZUKI_RATING_PRESENT,
         DiagnosticAttribute.PROVIDER_RETRYABLE,
+        DiagnosticAttribute.TORRENT_VOLUME_REQUESTED,
         -> value as? DiagnosticAttributeValue.Flag
 
         DiagnosticAttribute.LANGUAGE -> (value as? DiagnosticAttributeValue.Text)
