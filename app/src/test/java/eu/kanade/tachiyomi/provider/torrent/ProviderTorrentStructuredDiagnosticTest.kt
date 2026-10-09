@@ -4,7 +4,7 @@ import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
-import tachiyomi.data.tsuzuki.diagnostics.StructuredDiagnosticHistoryJson
+import tachiyomi.data.tsuzuki.diagnostics.StructuredDiagnosticHistory
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
@@ -26,13 +26,14 @@ import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateFile
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchRequest
+import java.nio.file.Files
 
 class ProviderTorrentStructuredDiagnosticTest {
 
     private val providerId = ProviderId("app.tsuzuki.nyaa")
 
     @Test
-    fun `torrent summaries survive the structured export codec without sensitive payloads`() = runTest {
+    fun `torrent summaries survive structured history snapshot without sensitive payloads`() = runTest {
         val recorder = RecordingDiagnosticRecorder()
         val candidate = TorrentCandidate(
             infoHash = "0123456789abcdef0123456789abcdef01234567",
@@ -72,9 +73,19 @@ class ProviderTorrentStructuredDiagnosticTest {
             DiagnosticEventName.TORRENT_RELEASE_EVIDENCE_SUMMARY,
         )
 
-        val exported = recorder.events.joinToString("\n") { event ->
-            val sanitized = requireNotNull(StructuredDiagnosticSanitizer.sanitize(event))
-            StructuredDiagnosticHistoryJson.serialize(sanitized)
+        val directory = Files.createTempDirectory("tsuzuki-torrent-diagnostics").toFile()
+        val exported = try {
+            StructuredDiagnosticHistory(
+                directory = directory,
+                persistenceEnabled = { true },
+            ).use { history ->
+                recorder.events.forEach { event ->
+                    history.submit(requireNotNull(StructuredDiagnosticSanitizer.sanitize(event)))
+                }
+                history.snapshot()
+            }
+        } finally {
+            directory.deleteRecursively()
         }
 
         exported.contains("\"name\":\"torrent_release_evidence_summary\"") shouldBe true
