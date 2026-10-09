@@ -13,7 +13,8 @@ class ProviderTorrentAcquisitionExceptionTest {
         )
 
         error.message shouldBe
-            "Direct P2P consent is required. Enable Direct P2P in Settings > Providers > Acquisition."
+            "Direct P2P consent is required. Enable Direct P2P in " +
+            "Settings > Advanced > Provider torrent acquisition."
     }
 
     @Test
