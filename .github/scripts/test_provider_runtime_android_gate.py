@@ -1,6 +1,7 @@
 import unittest
 from pathlib import Path
 
+# Verification-only touch so the opt-in Android gate sees a relevant changed path.
 SCRIPT_PATH = Path(__file__).with_name("provider-runtime-android-gate.sh")
 WORKFLOW_PATH = Path(__file__).parents[1] / "workflows" / "provider-runtime-android.yml"
 
