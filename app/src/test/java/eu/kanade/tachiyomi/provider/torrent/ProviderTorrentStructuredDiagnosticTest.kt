@@ -93,7 +93,8 @@ class ProviderTorrentStructuredDiagnosticTest {
         exported.contains("\"torrent_single_readable_count\":{\"type\":\"number\",\"value\":1}") shouldBe true
         exported.contains("\"torrent_release_exact_single_count\":{\"type\":\"number\",\"value\":1}") shouldBe true
         exported.contains("\"torrent_release_exact_readable_count\":{\"type\":\"number\",\"value\":1}") shouldBe true
-        exported.contains("\"torrent_release_exact_multi_readable_count\":{\"type\":\"number\",\"value\":0}") shouldBe true
+        exported.contains("\"torrent_release_exact_multi_readable_count\":{\"type\":\"number\",\"value\":0}") shouldBe
+            true
         exported.contains("\"torrent_file_token_count\":{\"type\":\"number\",\"value\":1}") shouldBe true
         exported.contains("\"torrent_file_token_single_count\":{\"type\":\"number\",\"value\":1}") shouldBe true
         exported.contains("\"torrent_file_title_token_count\":{\"type\":\"number\",\"value\":1}") shouldBe true
