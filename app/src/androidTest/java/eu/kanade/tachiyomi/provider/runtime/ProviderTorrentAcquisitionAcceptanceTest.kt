@@ -374,6 +374,8 @@ class ProviderTorrentAcquisitionAcceptanceTest {
         ),
         volume = null,
         preferredLanguages = setOf("en"),
+        titles = listOf("Acceptance Series"),
+        chapterNumber = "12",
     )
 
     private fun candidate(
