@@ -74,6 +74,31 @@ class ResolveProviderChapterTorrentTest {
     }
 
     @Test
+    fun `title aware sole archive mapping uses canonical title context`() = runTest {
+        val titleAwareChapter = chapter.copy(volume = null)
+        val resolver = ResolveProviderChapterTorrent(
+            canonicalChapterRepository = chapterRepository(titleAwareChapter),
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { listOf(registration(providerId)) },
+            ),
+            gateway = TorrentSearchGateway { _, _ ->
+                ProviderCallResult.Success(
+                    ProviderPage(
+                        items = listOf(candidate("pack/Example Manga 12.cbz")),
+                        nextCursor = null,
+                    ),
+                )
+            },
+            titleNameObservationRepository = titleNameRepository(emptyList()),
+        )
+
+        val options = resolver.options(titleAwareChapter.id)
+
+        options.single().selectedFile.path shouldBe "pack/Example Manga 12.cbz"
+    }
+
+    @Test
     fun `torrent discovery receives bounded deduplicated canonical title aliases`() = runTest {
         val calls = mutableListOf<TorrentSearchRequest>()
         val resolver = resolver(
