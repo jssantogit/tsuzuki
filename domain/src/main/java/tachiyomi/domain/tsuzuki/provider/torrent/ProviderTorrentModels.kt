@@ -332,15 +332,20 @@ class TorrentChapterMapper(
         titles: List<String>,
         chapterNumber: String,
     ): Boolean {
+        val escapedNumber = Regex.escape(chapterNumber)
         val chapterToken = Regex(
-            "(?i)(?<![\\p{L}\\p{N}])${Regex.escape(chapterNumber)}(?![\\p{L}\\p{N}])",
+            "(?i)(?<![\\p{L}\\p{N}])$escapedNumber(?![\\p{L}\\p{N}])",
+        )
+        val sameNumberVolumeEvidence = Regex(
+            "(?i)(?<![\\p{L}\\p{N}])vol(?:ume)?\\.?\\s*$escapedNumber(?![\\p{L}\\p{N}])",
         )
         return titles.asSequence()
             .mapNotNull(::titlePattern)
             .any { pattern ->
                 pattern.findAll(label).any { titleMatch ->
                     val withoutTitle = label.removeRange(titleMatch.range)
-                    chapterToken.containsMatchIn(withoutTitle)
+                    val withoutVolumeEvidence = sameNumberVolumeEvidence.replace(withoutTitle, " ")
+                    chapterToken.containsMatchIn(withoutVolumeEvidence)
                 }
             }
     }
