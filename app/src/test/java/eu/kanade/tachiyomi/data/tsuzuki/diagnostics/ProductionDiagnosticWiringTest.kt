@@ -28,6 +28,7 @@ class ProductionDiagnosticWiringTest {
         val criticalFiles = listOf(
             "app/src/main/java/eu/kanade/tachiyomi/ui/tsuzuki/detail/CanonicalTitleScreenModel.kt",
             "app/src/main/java/eu/kanade/tachiyomi/ui/tsuzuki/home/TsuzukiHomeScreenModel.kt",
+            "app/src/main/java/eu/kanade/tachiyomi/provider/torrent/ProviderTorrentMetadataSearchGateway.kt",
             "domain/src/main/java/tachiyomi/domain/tsuzuki/artwork/ResolveCanonicalArtwork.kt",
             "domain/src/main/java/tachiyomi/domain/tsuzuki/integration/interactor/ResolveCanonicalMetadata.kt",
             "domain/src/main/java/tachiyomi/domain/tsuzuki/source/interactor/ResolveCanonicalSourceManga.kt",
