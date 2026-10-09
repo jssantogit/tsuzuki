@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Personalização · Tsuzuki</title>
+<style>
+/* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio.
+   Put this @layer first; product CSS outside the layer always wins. */
+@layer od-layout {
+  :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
+  .od-stack { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
+  .od-row { display: flex; align-items: center; gap: var(--od-gap, 8px); }
+  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, 8px); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-fill { flex: 1 1 0; min-width: 0; }
+  .od-fixed { flex: none; }
+  .od-grid { display: grid; gap: var(--od-gap, 12px); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
+  .od-stat,.od-field,.od-cell { display: grid; gap: var(--od-gap, 2px); }
+  :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
+  .od-tile { display: grid; grid-template-rows: auto 1fr; }
+  :where(.od-tile) > :where(*) { display: block; }
+  .od-media { display: block; width: 100%; height: auto; aspect-ratio: var(--od-ratio, auto); }
+  .od-media-cover { object-fit: cover; }
+  .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .od-clamp-2,.od-clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .od-clamp-2 { -webkit-line-clamp: 2; }
+  .od-clamp-3 { -webkit-line-clamp: 3; }
+  .od-lines-2 { min-height: calc(2 * 1.4em); }
+  .od-nowrap { white-space: nowrap; }
+  .od-keep { word-break: keep-all; overflow-wrap: anywhere; }
+  .od-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+  .od-scroll { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+  .od-rail { display: flex; gap: var(--od-gap, 8px); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; padding-inline: var(--od-rail-pad, 16px); scroll-padding-inline: var(--od-rail-pad, 16px); }
+  .od-rail::-webkit-scrollbar { display: none; }
+  :where(.od-rail) > :where(*) { flex: none; scroll-snap-align: start; }
+  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, 16px); }
+  .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
+  .od-touch { min-width: 44px; min-height: 44px; }
+}
+/* /OD-LAYOUT-PRIMITIVES v1 */
+@font-face{font-family:Segoe UI Local;src:url(../../assets/fonts/segoeui.ttf) format('truetype');font-weight:400;font-display:swap}
+@font-face{font-family:Segoe UI Local;src:url(../../assets/fonts/segoeuib.ttf) format('truetype');font-weight:700;font-display:swap}
+:root{
+ --phone-screen-width:412px;--phone-screen-height:915px;--phone-bezel:10px;--phone-outer-radius:46px;--phone-screen-radius:38px;
+ --phone-safe-top:52px;--phone-safe-bottom:28px;--phone-system-fg:#F5F5F5;--phone-screen-bg:#0B0C0D;--phone-stage-bg:#101214;
+ --bg:#0B0C0D;--surface:#1C1E1F;--icon-surface:#2B2D2E;--text:#F5F5F5;--secondary:#ADB2B6;--section:#BCC5CD;--divider:#303234;
+ --font-ui:'Segoe UI Local','Segoe UI',sans-serif;--motion:180ms;--nav-selected:#303233;
+ --screen-horizontal:16px;--section-gap:24px;--row-padding:12px;--group-radius:16px;--icon-radius:8px;--title-to-list:32px
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{min-height:100dvh;display:grid;place-items:center;padding:32px;background:var(--phone-stage-bg);color:var(--text);font-family:var(--font-ui);font-size:16px;line-height:1.35}
+button,input{font:inherit}
+button{cursor:pointer;color:inherit}
+button svg{pointer-events:none}
+button:focus-visible,input:focus-visible{outline:2px solid var(--text);outline-offset:3px}
+[hidden]{display:none!important}
+.phone-frame{position:relative;width:calc(var(--phone-screen-width) + var(--phone-bezel)*2);height:calc(var(--phone-screen-height) + var(--phone-bezel)*2);padding:var(--phone-bezel);border-radius:var(--phone-outer-radius);background:linear-gradient(145deg,rgba(255,255,255,.2),transparent 18%),linear-gradient(155deg,#414348 0%,#23252a 44%,#0c0d10 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.13),inset 0 0 0 2px rgba(0,0,0,.84),0 34px 72px -22px rgba(8,10,14,.56),0 11px 25px -10px rgba(8,10,14,.34);isolation:isolate}
+.phone-frame:before,.phone-frame:after{content:"";position:absolute;z-index:-1;top:92px;bottom:92px;width:2px;background:linear-gradient(to bottom,transparent,rgba(255,255,255,.14) 18%,transparent 32%,transparent 72%,rgba(255,255,255,.07) 88%,transparent)}
+.phone-frame:before{left:0}.phone-frame:after{right:0}
+.hardware-button{position:absolute;right:-3px;width:4px;border-radius:3px;background:linear-gradient(90deg,#08090b,#2d3036 62%,#08090b);box-shadow:inset 0 1px rgba(255,255,255,.1)}
+.hardware-button.volume{top:205px;height:92px}.hardware-button.power{top:322px;height:70px;background:linear-gradient(90deg,#08090b,#3c424c 62%,#08090b)}
+.phone-screen{position:relative;width:var(--phone-screen-width);height:var(--phone-screen-height);overflow:hidden;border-radius:var(--phone-screen-radius);background:var(--phone-screen-bg);box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+.phone-content{position:absolute;inset:0;overflow:hidden;padding:var(--phone-safe-top) 0 var(--phone-safe-bottom);background:var(--phone-screen-bg)}
+.punch-hole{position:absolute;z-index:20;top:14px;left:50%;width:14px;height:14px;transform:translateX(-50%);border-radius:50%;background:radial-gradient(circle at 38% 35%,#283343 0 10%,#090b0f 30%,#000 72%);box-shadow:0 0 0 1px rgba(255,255,255,.08),inset 0 0 3px #000;pointer-events:none}
+.status-bar{position:absolute;z-index:15;inset:0 0 auto;height:var(--phone-safe-top);display:grid;grid-template-columns:minmax(0,1fr) 64px minmax(0,1fr);align-items:start;padding:14px 19px 0;color:var(--phone-system-fg);pointer-events:none}
+.status-time{justify-self:start;display:flex;align-items:center;height:16px;font-size:14px;font-weight:700;line-height:1;letter-spacing:.01em}
+.status-cutout-zone{width:64px}
+.status-icons{justify-self:end;display:inline-flex;align-items:center;height:16px;gap:5px}
+.status-icons svg{display:block;flex:none;fill:currentColor}.status-icons .wifi{width:15px;height:12px}.status-icons .cellular{width:14px;height:12px}.status-icons .battery{width:9px;height:14px}
+.gesture-indicator{position:absolute;z-index:20;left:50%;bottom:8px;width:108px;height:4px;transform:translateX(-50%);border-radius:99px;background:var(--phone-system-fg);opacity:.95;pointer-events:none}
+.app{position:relative;height:100%;min-width:0;min-height:0;background:var(--bg);color:var(--text)}
+.app-header{padding:10px var(--screen-horizontal) 0}
+.title-row{min-height:52px;--od-gap:8px}
+.app-title{margin:0;font-size:36px;font-weight:700;line-height:1.12;letter-spacing:-1.3px;overflow-wrap:anywhere}
+.icon-button{display:grid;place-items:center;min-width:48px;min-height:48px;padding:12px;border:0;border-radius:50%;background:#1B1D1E;color:var(--text)}
+.icon-button .icon{width:24px;height:24px}
+.icon{display:block;width:24px;height:24px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.deep-header{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.deep-back{display:flex;align-items:center;gap:8px;min-width:44px;min-height:44px;margin:0;padding:0 10px 0 0;border:0;border-radius:10px;background:transparent;color:var(--secondary);font-size:14px;font-weight:600;text-align:left}
+.deep-back .icon{width:20px;height:20px}
+.hub-header .app-title{padding:0}
+.search-field{margin-top:12px;--od-gap:7px}
+.search-field label{color:var(--secondary);font-size:14px;font-weight:600}
+.search-input-row{min-height:48px;padding-inline:12px;border:1px solid var(--divider);border-radius:14px;background:var(--surface);--od-gap:8px}
+.search-input-row input{width:100%;min-width:0;min-height:46px;border:0;background:none;color:var(--text);outline:none}
+.search-input-row input::placeholder{color:var(--secondary)}
+.clear-search{min-width:44px;min-height:44px;background:transparent;color:var(--secondary)}
+.settings-list,.hub-list{padding:0 var(--screen-horizontal) 16px;scrollbar-width:none;overscroll-behavior:contain}
+.settings-list::-webkit-scrollbar,.hub-list::-webkit-scrollbar{display:none}
+.hub-list{padding-top:var(--title-to-list)}
+.settings-group{margin:0 0 var(--section-gap)}
+.group-title{margin:0 0 9px;padding-inline:5px;color:var(--section);font-size:12px;font-weight:700;line-height:1.2;letter-spacing:1.25px;text-transform:uppercase}
+.group-surface{overflow:hidden;border-radius:var(--group-radius);background:var(--surface)}
+.setting-row{display:flex;align-items:center;width:100%;min-height:52px;padding:var(--row-padding);text-align:left;border:0;border-radius:0;background:transparent;--od-gap:12px;transition:background var(--motion) ease-out}
+.setting-row+.setting-row{border-top:1px solid var(--divider)}
+.row-icon-wrap{display:grid;place-items:center;width:36px;height:36px;flex:none;border-radius:var(--icon-radius);background:var(--icon-surface);color:var(--text)}
+.row-icon{width:22px;height:22px;stroke-width:2.2}
+.row-name{display:block;color:var(--text);font-size:16px;font-weight:400;line-height:1.25}
+.row-description{display:block;margin-top:3px;color:var(--secondary);font-size:14px;font-weight:400;line-height:1.25;overflow-wrap:anywhere}
+.chevron{width:20px;height:20px;color:var(--secondary);stroke-width:2}
+.empty-state{display:grid;gap:8px;padding:20px 4px;color:var(--text)}
+.empty-state h3{margin:0;font-size:18px;font-weight:700}
+.empty-state p{margin:0;color:var(--secondary);font-size:14px}
+.empty-state button{justify-self:start;min-height:44px;padding:8px 14px;border:1px solid var(--divider);border-radius:12px;background:var(--surface)}
+.app-footer{padding:4px 10px 14px;border-top:1px solid rgba(48,50,52,.6);background:var(--bg)}
+.feedback{position:absolute;z-index:5;right:16px;bottom:90px;left:16px;min-height:48px;padding:8px 10px 8px 14px;border:1px solid var(--divider);border-radius:14px;background:#252728;color:var(--text);box-shadow:0 8px 24px #0008;--od-gap:8px}
+.feedback [role=status]{font-size:14px}
+.feedback-title{margin:0;color:var(--section);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.feedback-actions{display:flex;align-items:center;gap:8px;flex:none}
+.feedback-return{min-height:44px;padding:8px 12px;border:1px solid var(--divider);border-radius:12px;background:var(--surface);font-size:14px}
+.dismiss-feedback{min-width:40px;min-height:40px;background:transparent;color:var(--secondary)}
+.bottom-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px}
+.nav-button{display:flex;min-width:0;min-height:62px;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:3px 0;border:0;border-radius:28px;background:transparent;color:var(--secondary);font-size:12px;line-height:1.15;transition:background var(--motion) ease-out,color var(--motion) ease-out}
+.nav-glyph{display:grid;place-items:center;width:40px;height:28px;border-radius:18px}
+.nav-glyph .icon{width:23px;height:23px}
+.nav-button[aria-current=page]{color:var(--text)}
+.nav-button[aria-current=page] .nav-glyph{width:100%;max-width:132px;background:var(--nav-selected)}
+@media(hover:hover){.setting-row:hover{background:#252728}.icon-button:hover,.nav-button:not([aria-current=page]):hover,.deep-back:hover{background:#252728}}
+@media(max-height:998px){.phone-frame{zoom:.9}}
+@media(max-height:904px){.phone-frame{zoom:.82}}
+@media(max-height:829px){.phone-frame{zoom:.74}}
+@media(max-height:754px){.phone-frame{zoom:.66}}
+@media(max-width:480px){body{padding:0;display:block}.phone-frame{width:100%;height:100dvh;padding:0;border-radius:0;background:none;box-shadow:none;zoom:1}.phone-frame:before,.phone-frame:after,.hardware-button{display:none}.phone-screen{width:100%;height:100%;border-radius:0}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="phone-frame" data-phone-shell data-platform="android">
+  <span class="hardware-button volume" aria-hidden="true"></span>
+  <span class="hardware-button power" aria-hidden="true"></span>
+  <section class="phone-screen" data-phone-screen>
+    <main class="phone-content" data-phone-content>
+      <!-- APP CONTENT START -->
+      <div class="app od-screen" id="settings-app" data-view="hub">
+        <header class="app-header hub-header" id="app-header">
+          <div class="deep-header" id="hub-header-content">
+            <button class="deep-back" type="button" data-back-settings aria-label="Voltar para Configurações">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h12"/></svg><span>Configurações</span>
+            </button>
+            <h1 class="app-title">Personalização</h1>
+          </div>
+          <div class="settings-header-content" id="settings-header-content" hidden>
+            <div class="title-row od-row">
+              <h1 class="app-title od-fill">Configurações</h1>
+              <button class="icon-button search-toggle od-fixed" type="button" aria-label="Buscar em Configurações" aria-expanded="false" aria-controls="settings-search">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
+              </button>
+            </div>
+            <div class="search-field od-field" id="settings-search" hidden>
+              <label for="settings-query">Buscar em Configurações</label>
+              <div class="search-input-row od-row">
+                <input class="od-fill" id="settings-query" type="search" autocomplete="off" placeholder="Buscar áreas e assuntos">
+                <button class="clear-search icon-button od-fixed" type="button" aria-label="Limpar busca">
+                  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+        <div class="settings-list od-scroll" aria-label="Áreas de Configurações" hidden></div>
+        <div class="hub-list od-scroll" aria-label="Áreas de Personalização"></div>
+        <footer class="app-footer" id="app-footer" hidden>
+          <nav class="bottom-nav" aria-label="Navegação principal">
+            <button class="nav-button" type="button" data-nav="Início"><span class="nav-glyph"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-8 9 8v11h-6v-7H9v7H3Z"/></svg></span><span>Início</span></button>
+            <button class="nav-button" type="button" data-nav="Busca"><span class="nav-glyph"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg></span><span>Busca</span></button>
+            <button class="nav-button" type="button" data-nav="Biblioteca"><span class="nav-glyph"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M5 3h14M7 9h10"/></svg></span><span>Biblioteca</span></button>
+            <button class="nav-button" type="button" data-nav="Configurações" aria-current="page"><span class="nav-glyph"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m10 2-.5 2.1a8 8 0 0 0-2 .9L5.6 4 3 6.6l1 1.9a8 8 0 0 0-.8 2.1L1 11v3l2.2.5a8 8 0 0 0 .8 2.1L3 18.5 5.5 21l2-1a8 8 0 0 0 2 .8L10 23h4l.5-2.2a8 8 0 0 0 2-.8l2 1 2.5-2.5-1-1.9a8 8 0 0 0 .8-2.1L22 14v-3l-2.2-.5a8 8 0 0 0-.8-2.1l1-1.9L17.5 4l-2 1a8 8 0 0 0-2-.9L13 2z"/><circle cx="12" cy="12.5" r="3" fill="var(--bg)"/></svg></span><span>Configurações</span></button>
+          </nav>
+        </footer>
+        <aside class="feedback od-stack" id="feedback" hidden>
+          <p class="feedback-title" id="feedback-title">Destino demonstrativo</p>
+          <div class="od-row-top">
+            <span class="od-fill" role="status" aria-live="polite"></span>
+            <div class="feedback-actions">
+              <button class="feedback-return" type="button" data-return-hub hidden>Voltar ao hub</button>
+              <button class="dismiss-feedback icon-button od-fixed" type="button" aria-label="Fechar mensagem"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </div>
+          </div>
+        </aside>
+      </div>
+      <!-- APP CONTENT END -->
+    </main>
+    <div class="status-bar" aria-hidden="true">
+      <span class="status-time">9:41</span>
+      <span class="status-cutout-zone"></span>
+      <span class="status-icons">
+        <svg class="wifi" viewBox="0 0 16 12"><path d="M8 11.4 6.55 9.95a2.05 2.05 0 0 1 2.9 0L8 11.4Zm3.58-3.55-1.16 1.16a3.43 3.43 0 0 0-4.84 0L4.42 7.85a5.08 5.08 0 0 1 7.16 0Zm3-2.95-1.16 1.16a7.67 7.67 0 0 0-10.84 0L1.42 4.9a9.31 9.31 0 0 1 13.16 0Z"/></svg>
+        <svg class="cellular" viewBox="0 0 14 12"><path d="M1 11h2V8.5H1V11Zm3.35 0h2V6H4.35v5Zm3.35 0h2V3.5h-2V11Zm3.35 0h2V1h-2v10Z"/></svg>
+        <svg class="battery" viewBox="0 0 9 14"><path d="M3 0h3v1H3V0ZM2 1.5h5a1.25 1.25 0 0 1 1.25 1.25v9.75A1.5 1.5 0 0 1 6.75 14h-4.5a1.5 1.5 0 0 1-1.5-1.5V2.75A1.25 1.25 0 0 1 2 1.5Z"/></svg>
+      </span>
+    </div>
+    <div class="punch-hole" aria-hidden="true"></div>
+    <div class="gesture-indicator" aria-hidden="true"></div>
+  </section>
+</div>
+<script>
+const settingsGroups=[
+ {name:"Conta",items:[{name:"Conta",description:"Perfil, login e sincronização",icon:"account"},{name:"Tracking",description:"Contas MAL, Kitsu, Bangumi e mais",icon:"tracking"}]},
+ {name:"Experiência",items:[{name:"Personalização",description:"Aparência e layout do app",icon:"custom"},{name:"Leitura",description:"",icon:"reader"},{name:"Biblioteca",description:"",icon:"library"}]},
+ {name:"Conteúdo",items:[{name:"Integrações",description:"Metadados e serviços externos",icon:"integration"},{name:"Add-ons",description:"Fontes, extensões e repositórios",icon:"addon"},{name:"Collections",description:"Pastas e listas inteligentes",icon:"collection"}]},
+ {name:"Dados",items:[{name:"Downloads",description:"",icon:"download"},{name:"Dados e armazenamento",description:"Backup, cache e exportação",icon:"storage"}]},
+ {name:"Sistema",items:[{name:"Privacidade e segurança",description:"Biometria, privacidade e proteção",icon:"security"},{name:"Diagnóstico",description:"Logs e solução de problemas",icon:"diagnostic"},{name:"Avançado",description:"Compatibilidade e sistema",icon:"advanced"}]},
+ {name:"Sobre",items:[{name:"Sobre",description:"Tsuzuki, versão e licenças",icon:"about"}]}
+];
+const hubGroups=[
+ {name:"Visual",items:[{name:"Aparência",description:"Elementos visuais do app",icon:"custom",scope:"Esta área reúne a apresentação visual geral do aplicativo."},{name:"Preset visual",description:"Tsuzuki Default Skin",icon:"preset",scope:"O preset visual atual é Tsuzuki Default Skin."}]},
+ {name:"Layout",items:[{name:"Home",description:"",icon:"home",scope:"Esta área reúne opções de apresentação da Home."},{name:"Biblioteca",description:"",icon:"library",scope:"Esta área reúne opções de apresentação da Biblioteca."},{name:"Collections",description:"Apresentação global; cada Collection tem sua própria personalização.",icon:"collection",scope:"A apresentação padrão é global; a personalização específica pertence à própria Collection."},{name:"Navegação",description:"",icon:"navigation",scope:"Esta área reúne opções de apresentação da navegação."}]}
+];
+const paths={
+ account:'<circle cx="12" cy="8" r="3.5" fill="currentColor" stroke="none"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0v1h-15z" fill="currentColor" stroke="none"/>',
+ tracking:'<path d="M20 7a8 8 0 0 0-14-2L4 7"/><path d="M4 3v4h4M4 17a8 8 0 0 0 14 2l2-2"/><path d="M20 21v-4h-4"/>',
+ custom:'<path d="M12 3a9 9 0 1 0 0 18h1.2a2.8 2.8 0 0 0 1.7-5 1.5 1.5 0 0 1 .9-2.7H18a3 3 0 0 0 3-3c0-4-4-7.3-9-7.3Z"/><circle cx="7.5" cy="11" r="1" fill="currentColor"/><circle cx="10" cy="6.5" r="1" fill="currentColor"/><circle cx="15" cy="7.5" r="1" fill="currentColor"/><circle cx="17" cy="11.5" r="1" fill="currentColor"/>',
+ preset:'<path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="4"/>',
+ home:'<path d="m3 10 9-8 9 8v11h-6v-7H9v7H3Z"/>',
+ reader:'<path d="M12 6.2C9.4 4.3 6.1 4 3 5v14c3.1-1 6.4-.7 9 1.2 2.6-1.9 5.9-2.2 9-1.2V5c-3.1-1-6.4-.7-9 1.2Z" fill="currentColor" stroke="none"/><path d="M12 6v14" stroke="var(--icon-surface)"/>',
+ library:'<path d="M4 4h3v16H4zM9 4h3v16H9zM15 5l3-.8 3.5 15-3 .8z" fill="currentColor" stroke="none"/>',
+ integration:'<path d="M10 3H5a2 2 0 0 0-2 2v5h4a2 2 0 1 1 0 4H3v5a2 2 0 0 0 2 2h5v-4a2 2 0 1 1 4 0v4h5a2 2 0 0 0 2-2v-5h-4a2 2 0 1 1 0-4h4V5a2 2 0 0 0-2-2h-5v4a2 2 0 1 1-4 0z" fill="currentColor" stroke="none"/>',
+ addon:'<circle cx="12" cy="12" r="9"/><path d="M3.5 9h17M3.5 15h17M11 3.2a14 14 0 0 0 0 17.6M13 3.2a14 14 0 0 1 0 17.6"/>',
+ collection:'<path d="M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor" stroke="none"/>',
+ navigation:'<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="1" fill="var(--icon-surface)"/><circle cx="15" cy="12" r="1" fill="var(--icon-surface)"/><circle cx="10" cy="18" r="1" fill="var(--icon-surface)"/>',
+ download:'<path d="M12 3v11m-4-4 4 4 4-4M5 18v3h14v-3" stroke-width="2.5"/>',
+ storage:'<ellipse cx="12" cy="5" rx="8" ry="3" fill="currentColor" stroke="none"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0" fill="currentColor" stroke="none"/>',
+ security:'<rect x="5" y="10" width="14" height="11" rx="2" fill="currentColor" stroke="none"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" stroke="var(--icon-surface)" stroke-width="2.5"/>',
+ diagnostic:'<rect x="4" y="3" width="16" height="18" rx="2" fill="currentColor" stroke="none"/><path d="M8 8h8M8 12h8M8 16h5" stroke="var(--icon-surface)" stroke-width="2"/>',
+ advanced:'<path d="m8 8-4 4 4 4m8-8 4 4-4 4m-3-11-2 14" stroke-width="2.2"/>',
+ about:'<circle cx="12" cy="12" r="9" fill="currentColor" stroke="none"/><path d="M12 11v6m0-10v.1" stroke="var(--icon-surface)" stroke-width="2.5"/>',
+ chevron:'<path d="m9 5 7 7-7 7"/>'
+};
+function icon(name,extra){return '<svg class="icon '+(extra||'')+'" viewBox="0 0 24 24" aria-hidden="true">'+(paths[name]||paths.about)+'</svg>'}
+function normalize(text){return text.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase()}
+const app=document.getElementById("settings-app");
+const settingsList=app.querySelector(".settings-list"),hubList=app.querySelector(".hub-list"),settingsHeader=app.querySelector("#settings-header-content"),hubHeader=app.querySelector("#hub-header-content"),settingsSearch=app.querySelector("#settings-search"),searchInput=app.querySelector("#settings-query"),searchToggle=app.querySelector(".search-toggle"),footer=app.querySelector("#app-footer"),feedback=app.querySelector("#feedback"),feedbackBody=feedback.querySelector('[role="status"]'),feedbackTitle=feedback.querySelector(".feedback-title"),returnHub=feedback.querySelector("[data-return-hub]");
+let settingsScrollTop=0;
+function showFeedback(message,options){
+ const config=options||{};
+ feedback.hidden=false;
+ feedback.dataset.context=config.context||"settings";
+ feedbackTitle.hidden=!config.title;
+ feedbackTitle.textContent=config.title||"";
+ feedbackBody.textContent=message;
+ returnHub.hidden=!config.returnHub;
+}
+function hideFeedback(){feedback.hidden=true;feedbackBody.textContent="";returnHub.hidden=true}
+function renderSettings(query,resetScroll){
+ const term=normalize((query||"").trim());let count=0;
+ settingsList.innerHTML=settingsGroups.map(function(group,index){
+  const items=group.items.filter(function(item){return normalize([group.name,item.name,item.description].join(" ")).includes(term)});
+  if(!items.length)return "";
+  count+=items.length;
+  return '<section class="settings-group" aria-labelledby="settings-group-'+index+'"><h2 class="group-title" id="settings-group-'+index+'">'+group.name+'</h2><div class="group-surface">'+items.map(function(item){
+   const accessible=item.description?item.name+", "+item.description:item.name;
+   return '<button class="setting-row od-row" type="button" data-settings-destination="'+item.name+'" aria-label="'+accessible+'"><span class="row-icon-wrap">'+icon(item.icon,"row-icon")+'</span><span class="od-field od-fill"><span class="row-name">'+item.name+'</span>'+(item.description?'<span class="row-description">'+item.description+'</span>':'')+'</span>'+icon("chevron","chevron od-fixed")+'</button>';
+  }).join("")+'</div></section>';
+ }).join("");
+ if(!count)settingsList.innerHTML='<div class="empty-state"><h3>Nenhuma área encontrada</h3><p>Limpe a busca para ver todas as áreas de Configurações.</p><button class="reset-results" type="button">Limpar busca</button></div>';
+ if(resetScroll!==false)settingsList.scrollTop=0;
+}
+function renderHub(){
+ hubList.innerHTML=hubGroups.map(function(group,index){
+  return '<section class="settings-group" aria-labelledby="hub-group-'+index+'"><h2 class="group-title" id="hub-group-'+index+'">'+group.name+'</h2><div class="group-surface">'+group.items.map(function(item){
+   const accessible=item.description?item.name+", "+item.description:item.name;
+   return '<button class="setting-row od-row" type="button" data-hub-destination="'+item.name+'"><span class="row-icon-wrap">'+icon(item.icon,"row-icon")+'</span><span class="od-field od-fill"><span class="row-name">'+item.name+'</span>'+(item.description?'<span class="row-description">'+item.description+'</span>':'')+'</span>'+icon("chevron","chevron od-fixed")+'</button>';
+  }).join("")+'</div></section>';
+ }).join("");
+}
+function setView(view){
+ const inSettings=view==="settings";
+ app.dataset.view=view;
+ settingsHeader.hidden=!inSettings;
+ hubHeader.hidden=inSettings;
+ settingsList.hidden=!inSettings;
+ hubList.hidden=inSettings;
+ footer.hidden=!inSettings;
+ if(inSettings){
+  app.classList.remove("hub-view");
+  window.requestAnimationFrame(function(){settingsList.scrollTop=settingsScrollTop});
+ }else{
+  app.classList.add("hub-view");
+  hubList.scrollTop=0;
+ }
+}
+function openHub(){
+ settingsScrollTop=settingsList.scrollTop;
+ searchInput.value="";
+ settingsSearch.hidden=true;
+ searchToggle.setAttribute("aria-expanded","false");
+ hideFeedback();
+ renderSettings("",false);
+ setView("hub");
+ hubHeader.querySelector(".app-title").focus({preventScroll:true});
+}
+function returnToSettings(){
+ hideFeedback();
+ setView("settings");
+}
+function announceSettingsDestination(name){showFeedback("Destino: "+name+".")}
+function openHubDestination(name){
+ const item=hubGroups.flatMap(function(group){return group.items}).find(function(entry){return entry.name===name});
+ if(!item)return;
+ showFeedback(item.scope,{title:name,context:"hub",returnHub:true});
+}
+const searchField=app.querySelector(".search-field");
+searchToggle.addEventListener("click",function(){searchField.hidden=!searchField.hidden;searchToggle.setAttribute("aria-expanded",String(!searchField.hidden));if(!searchField.hidden)searchInput.focus();else{searchInput.value="";renderSettings("")}});
+app.querySelector(".clear-search").addEventListener("click",function(){searchInput.value="";renderSettings("");searchInput.focus()});
+searchInput.addEventListener("input",function(){renderSettings(searchInput.value)});
+searchInput.addEventListener("keydown",function(event){if(event.key==="Escape"){searchField.hidden=true;searchToggle.setAttribute("aria-expanded","false");searchInput.value="";renderSettings("");searchToggle.focus()}});
+settingsList.addEventListener("click",function(event){
+ const row=event.target.closest("[data-settings-destination]");
+ if(row){if(row.dataset.settingsDestination==="Personalização")openHub();else announceSettingsDestination(row.dataset.settingsDestination)}
+ if(event.target.closest(".reset-results")){searchInput.value="";renderSettings("");searchInput.focus()}
+});
+hubList.addEventListener("click",function(event){const row=event.target.closest("[data-hub-destination]");if(row)openHubDestination(row.dataset.hubDestination)});
+app.querySelector("[data-back-settings]").addEventListener("click",returnToSettings);
+returnHub.addEventListener("click",function(){hideFeedback();hubList.querySelector("[data-hub-destination]")?.focus()});
+app.querySelector(".dismiss-feedback").addEventListener("click",hideFeedback);
+app.querySelectorAll("[data-nav]").forEach(function(button){button.addEventListener("click",function(){if(button.dataset.nav==="Configurações"){searchInput.value="";searchField.hidden=true;searchToggle.setAttribute("aria-expanded","false");renderSettings("");settingsScrollTop=0;settingsList.scrollTop=0;hideFeedback();return}showFeedback("Destino: "+button.dataset.nav+".")})});
+renderSettings("");
+renderHub();
+setView("hub");
+</script>
+</body>
+</html>

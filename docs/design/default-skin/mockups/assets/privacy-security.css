@@ -1,0 +1,19 @@
+/* Default Skin continuation. Local geometry remains Provisional. */
+body.privacy-comparison{display:block;padding:32px;background:#e9ebee;color:#17181a}
+body.privacy-comparison> :not(.privacy-board):not(script):not(style){display:none!important}
+.privacy-board{display:grid;grid-template-columns:repeat(4,432px);gap:32px;justify-content:center;margin:0 auto;--dl-pad:16px;--dl-gap:24px;--dl-radius:16px;--dl-motion:180ms;--ps-muted-surface:#eef0f2}
+.privacy-board figure{margin:0;min-width:0}.privacy-board .phone-frame{zoom:1}.privacy-board .phone-content{padding:0;overflow:hidden}
+.ps-app{height:auto;grid-template-rows:auto minmax(0,1fr)}
+.ps-app .dl-header h1{font-size:36px;line-height:1.2;letter-spacing:-.5px;text-wrap:balance}
+.ps-app .dl-row{gap:16px;padding:16px}.ps-app .dl-help{font-size:16px;line-height:1.5}.ps-app .dl-value{font-size:16px;line-height:1.5}
+.ps-app button.dl-row:disabled{color:var(--secondary);background:var(--ps-muted-surface);cursor:not-allowed}.ps-app button.dl-row:disabled .dl-icon{opacity:.5}
+.privacy-board .dl-sheet-heading h2{min-width:0;text-wrap:balance}.privacy-board .dl-sheet-heading{align-items:flex-start}
+.privacy-board .dl-sheet-footer .dl-action{min-width:0}.privacy-board .dl-sheet-footer .dl-primary{color:var(--surface)}
+.privacy-board .dl-live{bottom:calc(var(--phone-safe-bottom) + 16px);font:14px/1.5 var(--font-ui)}
+.privacy-board :focus-visible{outline:2px solid var(--text);outline-offset:3px}
+@media(hover:hover){.ps-app button.dl-row:not(:disabled):hover{background:var(--icon-surface)}}
+@media(max-width:1919px){.privacy-board{grid-template-columns:repeat(3,432px)}}
+@media(max-width:1439px){.privacy-board{grid-template-columns:repeat(2,432px)}}
+@media(max-width:959px){.privacy-board{grid-template-columns:minmax(0,432px)}}
+@media(max-width:479px){body.privacy-comparison{padding:0}.privacy-board{grid-template-columns:minmax(0,1fr)}}
+@media(prefers-reduced-motion:reduce){.privacy-board .dl-switch:after{transition:none}}

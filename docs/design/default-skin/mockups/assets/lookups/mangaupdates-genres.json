@@ -1,0 +1,150 @@
+{
+  "source": "https://api.mangaupdates.com/v1/genres",
+  "capturedAt": "2026-10-04T22:57:50.932581+00:00",
+  "options": [
+    {
+      "id": "Action",
+      "label": "Action"
+    },
+    {
+      "id": "Adult",
+      "label": "Adult"
+    },
+    {
+      "id": "Adventure",
+      "label": "Adventure"
+    },
+    {
+      "id": "Comedy",
+      "label": "Comedy"
+    },
+    {
+      "id": "Doujinshi",
+      "label": "Doujinshi"
+    },
+    {
+      "id": "Drama",
+      "label": "Drama"
+    },
+    {
+      "id": "Ecchi",
+      "label": "Ecchi"
+    },
+    {
+      "id": "Fantasy",
+      "label": "Fantasy"
+    },
+    {
+      "id": "Gender Bender",
+      "label": "Gender Bender"
+    },
+    {
+      "id": "Harem",
+      "label": "Harem"
+    },
+    {
+      "id": "Hentai",
+      "label": "Hentai"
+    },
+    {
+      "id": "Historical",
+      "label": "Historical"
+    },
+    {
+      "id": "Horror",
+      "label": "Horror"
+    },
+    {
+      "id": "Josei",
+      "label": "Josei"
+    },
+    {
+      "id": "Lolicon",
+      "label": "Lolicon"
+    },
+    {
+      "id": "Martial Arts",
+      "label": "Martial Arts"
+    },
+    {
+      "id": "Mature",
+      "label": "Mature"
+    },
+    {
+      "id": "Mecha",
+      "label": "Mecha"
+    },
+    {
+      "id": "Mystery",
+      "label": "Mystery"
+    },
+    {
+      "id": "Psychological",
+      "label": "Psychological"
+    },
+    {
+      "id": "Romance",
+      "label": "Romance"
+    },
+    {
+      "id": "School Life",
+      "label": "School Life"
+    },
+    {
+      "id": "Sci-fi",
+      "label": "Sci-fi"
+    },
+    {
+      "id": "Seinen",
+      "label": "Seinen"
+    },
+    {
+      "id": "Shotacon",
+      "label": "Shotacon"
+    },
+    {
+      "id": "Shoujo",
+      "label": "Shoujo"
+    },
+    {
+      "id": "Shoujo Ai",
+      "label": "Shoujo Ai"
+    },
+    {
+      "id": "Shounen",
+      "label": "Shounen"
+    },
+    {
+      "id": "Shounen Ai",
+      "label": "Shounen Ai"
+    },
+    {
+      "id": "Slice of Life",
+      "label": "Slice of Life"
+    },
+    {
+      "id": "Smut",
+      "label": "Smut"
+    },
+    {
+      "id": "Sports",
+      "label": "Sports"
+    },
+    {
+      "id": "Supernatural",
+      "label": "Supernatural"
+    },
+    {
+      "id": "Tragedy",
+      "label": "Tragedy"
+    },
+    {
+      "id": "Yaoi",
+      "label": "Yaoi"
+    },
+    {
+      "id": "Yuri",
+      "label": "Yuri"
+    }
+  ]
+}
