@@ -198,6 +198,8 @@ data class TorrentChapterRequest(
     val identity: CanonicalChapterIdentity,
     val volume: Int?,
     val preferredLanguages: Set<String> = emptySet(),
+    val titles: List<String> = emptyList(),
+    val chapterNumber: String? = null,
 ) {
     init {
         require(identity.isSpecific && identity.isNumbered) {
@@ -207,10 +209,22 @@ data class TorrentChapterRequest(
         require(preferredLanguages.size <= MAX_LANGUAGES && preferredLanguages.all(::validLanguage)) {
             "Torrent preferred languages are invalid"
         }
+        require(titles.size <= MAX_TITLES && titles.all { it.isNotBlank() && it.length <= MAX_TITLE_CHARS }) {
+            "Torrent chapter mapping titles are invalid"
+        }
+        require(
+            chapterNumber == null ||
+                (chapterNumber.isNotBlank() && chapterNumber.length <= MAX_CHAPTER_NUMBER_CHARS),
+        ) {
+            "Torrent chapter mapping number is invalid"
+        }
     }
 
     private companion object {
         const val MAX_LANGUAGES = 32
+        const val MAX_TITLES = 16
+        const val MAX_TITLE_CHARS = 1024
+        const val MAX_CHAPTER_NUMBER_CHARS = 64
     }
 }
 
@@ -272,10 +286,50 @@ class TorrentChapterMapper(
             .sortedBy(TorrentCandidateFile::index)
 
         return when (matchingFiles.size) {
-            0 -> TorrentChapterFileMatch.None
+            0 -> titleAwareTokenFallback(request, files)
             1 -> TorrentChapterFileMatch.Exact(matchingFiles.single())
             else -> TorrentChapterFileMatch.Ambiguous(matchingFiles)
         }
+    }
+
+    private fun titleAwareTokenFallback(
+        request: TorrentChapterRequest,
+        files: List<TorrentCandidateFile>,
+    ): TorrentChapterFileMatch {
+        if (request.volume != null || request.titles.isEmpty()) return TorrentChapterFileMatch.None
+        val chapterNumber = request.chapterNumber?.trim()?.takeIf(String::isNotEmpty)
+            ?: return TorrentChapterFileMatch.None
+        if (parseLabel(chapterNumber).identity != request.identity) return TorrentChapterFileMatch.None
+
+        val readableFiles = files.filter(::isSupportedReadableFile)
+        if (readableFiles.size != 1) return TorrentChapterFileMatch.None
+        val file = readableFiles.single()
+        if (!hasTitleAwareChapterToken(file.chapterLabel(), request.titles, chapterNumber)) {
+            return TorrentChapterFileMatch.None
+        }
+        return TorrentChapterFileMatch.Exact(file)
+    }
+
+    private fun hasTitleAwareChapterToken(
+        label: String,
+        titles: List<String>,
+        chapterNumber: String,
+    ): Boolean {
+        val chapterToken = Regex(
+            "(?i)(?<![\\p{L}\\p{N}])${Regex.escape(chapterNumber)}(?![\\p{L}\\p{N}])",
+        )
+        return titles.asSequence()
+            .map { title -> TITLE_WORD.findAll(title).map { word -> Regex.escape(word.value) }.toList() }
+            .filter { words -> words.isNotEmpty() }
+            .any { words ->
+                val titlePattern = Regex(
+                    "(?i)(?<![\\p{L}\\p{N}])${words.joinToString("[^\\p{L}\\p{N}]+")}(?![\\p{L}\\p{N}])",
+                )
+                titlePattern.findAll(label).any { titleMatch ->
+                    val withoutTitle = label.removeRange(titleMatch.range)
+                    chapterToken.containsMatchIn(withoutTitle)
+                }
+            }
     }
 
     private fun isSupportedReadableFile(file: TorrentCandidateFile): Boolean {
@@ -300,6 +354,7 @@ class TorrentChapterMapper(
     )
 
     private companion object {
+        val TITLE_WORD = Regex("[\\p{L}\\p{N}]+")
         val EMBEDDED_VOLUME_CHAPTER_MARKER = Regex(
             "(?i)(?<![\\p{L}\\p{N}])vol(?:ume)?\\.?\\s*\\d+\\s*(?:[-:|/]\\s*|\\s+)" +
                 "(?:ch(?:apter)?|cap(?:i|í)tulo)\\s*\\.?\\s*\\d+(?:\\.\\d+|[a-z])?",
@@ -328,7 +383,7 @@ sealed interface TorrentAcquisitionDecision {
         init {
             require(ordered.isNotEmpty()) { "Torrent acquisition route list must not be empty" }
             require(ordered.distinct().size == ordered.size) {
-                "Torrent acquisition routes must not contain duplicates"
+                "Torrent acquisition route list must not contain duplicates"
             }
         }
     }
