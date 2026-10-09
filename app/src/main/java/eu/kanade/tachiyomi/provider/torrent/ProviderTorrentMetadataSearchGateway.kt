@@ -9,6 +9,14 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterVolume
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
 import tachiyomi.domain.tsuzuki.provider.ProviderId
@@ -33,6 +41,7 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
     private val delegate: TorrentSearchGateway,
     private val registry: ProviderRegistry,
     private val inspector: ProviderTorrentMetadataInspector,
+    private val diagnosticRecorder: StructuredDiagnosticRecorder,
     private val logSink: ProviderRuntimeLogSink = ProviderRuntimeLogSink { _, _ -> },
     maxConcurrentInspections: Int = DEFAULT_MAX_CONCURRENT_INSPECTIONS,
 ) : TorrentSearchGateway {
@@ -113,13 +122,26 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
         hydrated: Int,
         elapsedMillis: Long,
     ) {
+        val failed = attempted - hydrated
         runCatching {
             logSink.info(
                 providerId.value,
                 "host_torrent_metadata total=$total attempted=$attempted hydrated=$hydrated " +
-                    "failed=${attempted - hydrated} elapsedMs=$elapsedMillis",
+                    "failed=$failed elapsedMs=$elapsedMillis",
             )
         }
+        recordSummary(
+            providerId = providerId,
+            name = DiagnosticEventName.TORRENT_METADATA_SUMMARY,
+            outcome = if (failed == 0) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
+            durationMillis = elapsedMillis,
+            attributes = mapOf(
+                "candidate_count" to total.numberValue(),
+                "torrent_hydration_attempted_count" to attempted.numberValue(),
+                "torrent_hydrated_count" to hydrated.numberValue(),
+                "torrent_hydration_failed_count" to failed.numberValue(),
+            ),
+        )
     }
 
     private fun emitMatchSummary(
@@ -206,6 +228,21 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                 "host_torrent_match total=${items.size} readable=$readable parsed=$parsed embedded=$embedded " +
                     "identity=$identityMatches volume=$volumeMatches exact=$exactMatches ambiguous=$ambiguousMatches",
             )
+            recordSummary(
+                providerId = providerId,
+                name = DiagnosticEventName.TORRENT_MATCH_SUMMARY,
+                outcome = DiagnosticOutcome.SUCCEEDED,
+                attributes = mapOf(
+                    "candidate_count" to items.size.numberValue(),
+                    "torrent_readable_count" to readable.numberValue(),
+                    "torrent_parsed_count" to parsed.numberValue(),
+                    "torrent_embedded_count" to embedded.numberValue(),
+                    "torrent_identity_match_count" to identityMatches.numberValue(),
+                    "torrent_volume_match_count" to volumeMatches.numberValue(),
+                    "torrent_exact_match_count" to exactMatches.numberValue(),
+                    "torrent_ambiguous_match_count" to ambiguousMatches.numberValue(),
+                ),
+            )
 
             var releaseExplicit = 0
             var releaseExact = 0
@@ -245,8 +282,50 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                     "releaseExactSingle=$releaseExactSingle fileToken=$fileToken " +
                     "volumeRequested=${if (request.volume == null) 0 else 1}",
             )
+            recordSummary(
+                providerId = providerId,
+                name = DiagnosticEventName.TORRENT_RELEASE_EVIDENCE_SUMMARY,
+                outcome = DiagnosticOutcome.SUCCEEDED,
+                attributes = mapOf(
+                    "candidate_count" to items.size.numberValue(),
+                    "torrent_release_explicit_count" to releaseExplicit.numberValue(),
+                    "torrent_release_exact_count" to releaseExact.numberValue(),
+                    "torrent_single_readable_count" to singleReadable.numberValue(),
+                    "torrent_release_exact_single_count" to releaseExactSingle.numberValue(),
+                    "torrent_file_token_count" to fileToken.numberValue(),
+                    "torrent_volume_requested" to DiagnosticAttributeValue.Flag(request.volume != null),
+                ),
+            )
         }
     }
+
+    private fun recordSummary(
+        providerId: ProviderId,
+        name: DiagnosticEventName,
+        outcome: DiagnosticOutcome,
+        attributes: Map<String, DiagnosticAttributeValue>,
+        durationMillis: Long? = null,
+    ) {
+        runCatching {
+            diagnosticRecorder.record(
+                StructuredDiagnosticEvent(
+                    timestampMillis = System.currentTimeMillis().coerceAtLeast(0L),
+                    severity = DiagnosticSeverity.INFO,
+                    subsystem = DiagnosticSubsystem.CONTENT,
+                    name = name,
+                    sessionId = diagnosticRecorder.sessionId,
+                    operationId = null,
+                    stage = DiagnosticStage.SUMMARY,
+                    outcome = outcome,
+                    durationMillis = durationMillis,
+                    attributes = attributes +
+                        ("provider_id" to DiagnosticAttributeValue.Text(providerId.value)),
+                ),
+            )
+        }
+    }
+
+    private fun Int.numberValue(): DiagnosticAttributeValue.Number = DiagnosticAttributeValue.Number(toLong())
 
     private fun isSupportedReadableFile(file: TorrentCandidateFile): Boolean {
         val lower = file.path.lowercase()
