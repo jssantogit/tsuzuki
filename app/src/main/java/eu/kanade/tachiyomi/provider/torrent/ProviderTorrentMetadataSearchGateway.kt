@@ -248,7 +248,12 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
             var releaseExact = 0
             var singleReadable = 0
             var releaseExactSingle = 0
+            var releaseExactReadable = 0
+            var releaseExactMultiReadable = 0
             var fileToken = 0
+            var fileTokenSingle = 0
+            var fileTitleToken = 0
+            var fileTitleTokenSingle = 0
             val chapterToken = Regex(
                 "(?i)(?<![\\p{L}\\p{N}])${Regex.escape(chapterNumber.trim())}(?![\\p{L}\\p{N}])",
             )
@@ -265,21 +270,37 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                     ?.let { marker -> parseChapterVolume(marker) }
                 val releaseRequestMatches = releaseChapterMatches &&
                     (request.volume == null || releaseVolume == request.volume)
+                val hasFileToken = readableFiles.any { file ->
+                    chapterToken.containsMatchIn(chapterLabel(file.path))
+                }
+                val hasFileTitleToken = readableFiles.any { file ->
+                    hasTitleAwareChapterToken(
+                        label = chapterLabel(file.path),
+                        titles = request.titles,
+                        chapterNumber = chapterNumber,
+                    )
+                }
 
                 if (releaseChapterMatches) releaseExplicit += 1
                 if (releaseRequestMatches) releaseExact += 1
                 if (readableFiles.size == 1) singleReadable += 1
                 if (releaseRequestMatches && readableFiles.size == 1) releaseExactSingle += 1
-                if (readableFiles.any { file -> chapterToken.containsMatchIn(chapterLabel(file.path)) }) {
-                    fileToken += 1
-                }
+                if (releaseRequestMatches && readableFiles.isNotEmpty()) releaseExactReadable += 1
+                if (releaseRequestMatches && readableFiles.size > 1) releaseExactMultiReadable += 1
+                if (hasFileToken) fileToken += 1
+                if (hasFileToken && readableFiles.size == 1) fileTokenSingle += 1
+                if (hasFileTitleToken) fileTitleToken += 1
+                if (hasFileTitleToken && readableFiles.size == 1) fileTitleTokenSingle += 1
             }
 
             logSink.info(
                 providerId.value,
                 "host_torrent_release total=${items.size} releaseExplicit=$releaseExplicit " +
                     "releaseExact=$releaseExact singleReadable=$singleReadable " +
-                    "releaseExactSingle=$releaseExactSingle fileToken=$fileToken " +
+                    "releaseExactSingle=$releaseExactSingle releaseExactReadable=$releaseExactReadable " +
+                    "releaseExactMultiReadable=$releaseExactMultiReadable fileToken=$fileToken " +
+                    "fileTokenSingle=$fileTokenSingle fileTitleToken=$fileTitleToken " +
+                    "fileTitleTokenSingle=$fileTitleTokenSingle " +
                     "volumeRequested=${if (request.volume == null) 0 else 1}",
             )
             recordSummary(
@@ -292,11 +313,38 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                     "torrent_release_exact_count" to releaseExact.numberValue(),
                     "torrent_single_readable_count" to singleReadable.numberValue(),
                     "torrent_release_exact_single_count" to releaseExactSingle.numberValue(),
+                    "torrent_release_exact_readable_count" to releaseExactReadable.numberValue(),
+                    "torrent_release_exact_multi_readable_count" to releaseExactMultiReadable.numberValue(),
                     "torrent_file_token_count" to fileToken.numberValue(),
+                    "torrent_file_token_single_count" to fileTokenSingle.numberValue(),
+                    "torrent_file_title_token_count" to fileTitleToken.numberValue(),
+                    "torrent_file_title_token_single_count" to fileTitleTokenSingle.numberValue(),
                     "torrent_volume_requested" to DiagnosticAttributeValue.Flag(request.volume != null),
                 ),
             )
         }
+    }
+
+    private fun hasTitleAwareChapterToken(
+        label: String,
+        titles: List<String>,
+        chapterNumber: String,
+    ): Boolean {
+        val chapterToken = Regex(
+            "(?i)(?<![\\p{L}\\p{N}])${Regex.escape(chapterNumber.trim())}(?![\\p{L}\\p{N}])",
+        )
+        return titles.asSequence()
+            .map { title -> TITLE_WORD.findAll(title).map { word -> Regex.escape(word.value) }.toList() }
+            .filter { words -> words.isNotEmpty() }
+            .any { words ->
+                val titlePattern = Regex(
+                    "(?i)(?<![\\p{L}\\p{N}])${words.joinToString("[^\\p{L}\\p{N}]+")}(?![\\p{L}\\p{N}])",
+                )
+                titlePattern.findAll(label).any { titleMatch ->
+                    val withoutTitle = label.removeRange(titleMatch.range)
+                    chapterToken.containsMatchIn(withoutTitle)
+                }
+            }
     }
 
     private fun recordSummary(
@@ -345,6 +393,7 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
         const val DEFAULT_MAX_CONCURRENT_INSPECTIONS = 4
         const val MAX_CONCURRENT_INSPECTIONS = 8
         const val NANOS_PER_MILLISECOND = 1_000_000L
+        val TITLE_WORD = Regex("[\\p{L}\\p{N}]+")
         val EMBEDDED_VOLUME_CHAPTER_MARKER = Regex(
             "(?i)(?<![\\p{L}\\p{N}])vol(?:ume)?\\.?\\s*\\d+\\s*(?:[-:|/]\\s*|\\s+)" +
                 "(?:ch(?:apter)?|cap(?:i|í)tulo)\\s*\\.?\\s*\\d+(?:\\.\\d+|[a-z])?",

@@ -60,7 +60,8 @@ class ProviderTorrentMetadataReleaseClassifierTest {
 
         logs.single { it.startsWith("host_torrent_release ") } shouldBe
             "host_torrent_release total=4 releaseExplicit=2 releaseExact=2 singleReadable=3 " +
-            "releaseExactSingle=1 fileToken=1 volumeRequested=0"
+            "releaseExactSingle=1 releaseExactReadable=2 releaseExactMultiReadable=1 fileToken=1 " +
+            "fileTokenSingle=1 fileTitleToken=1 fileTitleTokenSingle=1 volumeRequested=0"
         val encoded = logs.joinToString("\n")
         encoded.contains("Secret Example Manga") shouldBe false
         encoded.contains("archive.cbz") shouldBe false
@@ -93,7 +94,33 @@ class ProviderTorrentMetadataReleaseClassifierTest {
 
         logs.single { it.startsWith("host_torrent_release ") } shouldBe
             "host_torrent_release total=2 releaseExplicit=2 releaseExact=1 singleReadable=2 " +
-            "releaseExactSingle=1 fileToken=0 volumeRequested=1"
+            "releaseExactSingle=1 releaseExactReadable=1 releaseExactMultiReadable=0 fileToken=0 " +
+            "fileTokenSingle=0 fileTitleToken=0 fileTitleTokenSingle=0 volumeRequested=1"
+    }
+
+    @Test
+    fun `title aware file token ignores a chapter number that only belongs to the title`() = runTest {
+        val candidates = listOf(
+            candidate(
+                displayName = "86 Eighty-Six",
+                files = listOf(file(0, "86 Eighty-Six.cbz")),
+            ),
+        )
+        val logs = mutableListOf<String>()
+        val gateway = gateway(candidates, logs)
+
+        gateway.search(
+            providerId = providerId,
+            request = TorrentSearchRequest(
+                titles = listOf("86 Eighty-Six"),
+                chapterNumber = "86",
+            ),
+        )
+
+        logs.single { it.startsWith("host_torrent_release ") } shouldBe
+            "host_torrent_release total=1 releaseExplicit=0 releaseExact=0 singleReadable=1 " +
+            "releaseExactSingle=0 releaseExactReadable=0 releaseExactMultiReadable=0 fileToken=1 " +
+            "fileTokenSingle=1 fileTitleToken=0 fileTitleTokenSingle=0 volumeRequested=0"
     }
 
     private fun gateway(
