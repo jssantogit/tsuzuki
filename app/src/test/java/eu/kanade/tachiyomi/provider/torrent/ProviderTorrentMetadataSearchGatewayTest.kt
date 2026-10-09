@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeLogSink
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
@@ -57,6 +58,7 @@ class ProviderTorrentMetadataSearchGatewayTest {
                 candidate shouldBe raw
                 candidate.copy(files = hydratedFiles)
             },
+            diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
         )
 
         val result = gateway.search(
@@ -91,6 +93,7 @@ class ProviderTorrentMetadataSearchGatewayTest {
                 inspected += 1
                 error("pre-hydrated candidates must not be inspected")
             },
+            diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
         )
 
         val result = gateway.search(
@@ -111,6 +114,7 @@ class ProviderTorrentMetadataSearchGatewayTest {
             },
             registry = registry(),
             inspector = ProviderTorrentMetadataInspector { _, _ -> null },
+            diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
         )
 
         val result = gateway.search(
@@ -137,6 +141,7 @@ class ProviderTorrentMetadataSearchGatewayTest {
             inspector = ProviderTorrentMetadataInspector { _, candidate ->
                 candidate.copy(files = suppliedFiles)
             },
+            diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
             logSink = ProviderRuntimeLogSink { id, message ->
                 id shouldBe providerId.value
                 logs += message
@@ -205,6 +210,7 @@ class ProviderTorrentMetadataSearchGatewayTest {
             inspector = ProviderTorrentMetadataInspector { _, _ ->
                 error("pre-hydrated candidates must not be inspected")
             },
+            diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
             logSink = ProviderRuntimeLogSink { id, message ->
                 id shouldBe providerId.value
                 logs += message
