@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeLogSink
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
@@ -106,6 +107,7 @@ class ProviderTorrentMetadataReleaseClassifierTest {
         inspector = ProviderTorrentMetadataInspector { _, _ ->
             error("pre-hydrated candidates must not be inspected")
         },
+        diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
         logSink = ProviderRuntimeLogSink { _, message -> logs += message },
     )
 
