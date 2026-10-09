@@ -303,7 +303,10 @@ class PrepareCanonicalChapterForReader(
                             DiagnosticAttributeValue.Code(DiagnosticErrorCategory.SOURCE_UNAVAILABLE),
                     ),
                 )
-                CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+                CanonicalReaderPreparation.Failed(
+                    canonicalChapterId = canonicalChapterId,
+                    error = prepared.error,
+                )
             }
 
             is ProviderChapterTorrentPreparation.Ready -> {

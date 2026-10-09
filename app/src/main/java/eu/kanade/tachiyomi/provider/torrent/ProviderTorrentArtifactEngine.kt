@@ -134,4 +134,11 @@ class ProviderTorrentArtifactEngine(
 
 class ProviderTorrentAcquisitionException(
     val reason: TorrentAcquisitionFailure,
-) : IllegalStateException("Provider torrent acquisition failed: " + reason.name)
+) : IllegalStateException(
+    when (reason) {
+        TorrentAcquisitionFailure.P2P_CONSENT_REQUIRED ->
+            "Direct P2P consent is required. Enable Direct P2P in " +
+                "Settings > Advanced > Provider torrent acquisition."
+        else -> "Provider torrent acquisition failed: " + reason.name
+    },
+)

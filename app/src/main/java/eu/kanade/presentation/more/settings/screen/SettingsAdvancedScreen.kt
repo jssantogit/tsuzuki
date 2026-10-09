@@ -40,6 +40,7 @@ import eu.kanade.tachiyomi.network.PREF_DOH_NJALLA
 import eu.kanade.tachiyomi.network.PREF_DOH_QUAD101
 import eu.kanade.tachiyomi.network.PREF_DOH_QUAD9
 import eu.kanade.tachiyomi.network.PREF_DOH_SHECAN
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentPreferences
 import eu.kanade.tachiyomi.ui.more.OnboardingScreen
 import eu.kanade.tachiyomi.util.system.isReleaseBuildType
 import eu.kanade.tachiyomi.util.system.isShizukuInstalled
@@ -74,6 +75,7 @@ object SettingsAdvancedScreen : SearchableSettings {
         val basePreferences = remember { graph.basePreferences }
         val networkPreferences = remember { graph.networkPreferences }
         val libraryPreferences = remember { graph.libraryPreferences }
+        val providerTorrentPreferences = remember { graph.providerTorrentPreferences }
         return listOf(
             Preference.PreferenceItem.TextPreference(
                 title = stringResource(MR.strings.pref_debug_info),
@@ -95,6 +97,7 @@ object SettingsAdvancedScreen : SearchableSettings {
             getBackgroundActivityGroup(),
             getDataGroup(),
             getNetworkGroup(networkPreferences = networkPreferences),
+            getProviderTorrentAcquisitionGroup(providerTorrentPreferences = providerTorrentPreferences),
             getLibraryGroup(libraryPreferences = libraryPreferences),
             getReaderGroup(basePreferences = basePreferences),
             getExtensionsGroup(basePreferences = basePreferences),
@@ -254,6 +257,22 @@ object SettingsAdvancedScreen : SearchableSettings {
             ),
         )
     }
+
+    @Composable
+    private fun getProviderTorrentAcquisitionGroup(
+        providerTorrentPreferences: ProviderTorrentPreferences,
+    ): Preference.PreferenceGroup =
+        Preference.PreferenceGroup(
+            title = "Provider torrent acquisition",
+            preferenceItems = listOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = providerTorrentPreferences.directP2pAllowed,
+                    title = "Allow direct P2P",
+                    subtitle = "Allow Providers to connect directly to torrent peers when required. " +
+                        "Your IP address can be visible to those peers.",
+                ),
+            ),
+        )
 
     @Composable
     private fun getLibraryGroup(
