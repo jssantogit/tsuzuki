@@ -79,6 +79,19 @@ class TorrentChapterMapperEmbeddedMarkerTest {
     }
 
     @Test
+    fun `chapter mapper rejects a title aware token that is explicitly a volume`() {
+        val request = chapter12.copy(
+            titles = listOf("Secret Example Manga"),
+            chapterNumber = "12",
+        )
+        val candidate = candidate(
+            file(0, "pack/Secret Example Manga Vol. 12.cbz"),
+        )
+
+        TorrentChapterMapper().map(request, candidate) shouldBe TorrentChapterFileMatch.None
+    }
+
+    @Test
     fun `chapter mapper keeps title token fallback disabled for volume requests`() {
         val request = chapter12.copy(
             volume = 2,
