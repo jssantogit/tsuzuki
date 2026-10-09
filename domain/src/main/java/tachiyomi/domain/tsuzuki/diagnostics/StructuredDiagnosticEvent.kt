@@ -227,7 +227,12 @@ enum class DiagnosticAttribute {
     TORRENT_RELEASE_EXACT_COUNT,
     TORRENT_SINGLE_READABLE_COUNT,
     TORRENT_RELEASE_EXACT_SINGLE_COUNT,
+    TORRENT_RELEASE_EXACT_READABLE_COUNT,
+    TORRENT_RELEASE_EXACT_MULTI_READABLE_COUNT,
     TORRENT_FILE_TOKEN_COUNT,
+    TORRENT_FILE_TOKEN_SINGLE_COUNT,
+    TORRENT_FILE_TITLE_TOKEN_COUNT,
+    TORRENT_FILE_TITLE_TOKEN_SINGLE_COUNT,
     TORRENT_VOLUME_REQUESTED,
 
     COVER_PRESENT,
@@ -424,7 +429,12 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.TORRENT_RELEASE_EXACT_COUNT,
         DiagnosticAttribute.TORRENT_SINGLE_READABLE_COUNT,
         DiagnosticAttribute.TORRENT_RELEASE_EXACT_SINGLE_COUNT,
+        DiagnosticAttribute.TORRENT_RELEASE_EXACT_READABLE_COUNT,
+        DiagnosticAttribute.TORRENT_RELEASE_EXACT_MULTI_READABLE_COUNT,
         DiagnosticAttribute.TORRENT_FILE_TOKEN_COUNT,
+        DiagnosticAttribute.TORRENT_FILE_TOKEN_SINGLE_COUNT,
+        DiagnosticAttribute.TORRENT_FILE_TITLE_TOKEN_COUNT,
+        DiagnosticAttribute.TORRENT_FILE_TITLE_TOKEN_SINGLE_COUNT,
         -> (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..MAX_COUNT }
 
         DiagnosticAttribute.PROVIDER_VERSION_CODE -> (value as? DiagnosticAttributeValue.Number)
