@@ -46,6 +46,79 @@ class TorrentChapterMapperEmbeddedMarkerTest {
             TorrentChapterFileMatch.Exact(candidate.files!![1])
     }
 
+    @Test
+    fun `chapter mapper accepts the physically observed title aware token in the sole readable archive`() {
+        val request = chapter12.copy(
+            titles = listOf("Secret Example Manga"),
+            chapterNumber = "12",
+        )
+        val candidate = candidate(
+            file(0, "pack/Secret Example Manga 12.cbz"),
+        )
+
+        TorrentChapterMapper().map(request, candidate) shouldBe
+            TorrentChapterFileMatch.Exact(candidate.files!!.single())
+    }
+
+    @Test
+    fun `chapter mapper rejects a chapter token that only belongs to the title`() {
+        val request = TorrentChapterRequest(
+            identity = CanonicalChapterIdentity(
+                type = CanonicalChapterType.REGULAR,
+                baseNumber = 86,
+            ),
+            volume = null,
+            titles = listOf("86 Eighty-Six"),
+            chapterNumber = "86",
+        )
+        val candidate = candidate(
+            file(0, "pack/86 Eighty-Six.cbz"),
+        )
+
+        TorrentChapterMapper().map(request, candidate) shouldBe TorrentChapterFileMatch.None
+    }
+
+    @Test
+    fun `chapter mapper rejects a title aware token that is explicitly a volume`() {
+        val request = chapter12.copy(
+            titles = listOf("Secret Example Manga"),
+            chapterNumber = "12",
+        )
+        val candidate = candidate(
+            file(0, "pack/Secret Example Manga Vol. 12.cbz"),
+        )
+
+        TorrentChapterMapper().map(request, candidate) shouldBe TorrentChapterFileMatch.None
+    }
+
+    @Test
+    fun `chapter mapper keeps title token fallback disabled for volume requests`() {
+        val request = chapter12.copy(
+            volume = 2,
+            titles = listOf("Secret Example Manga"),
+            chapterNumber = "12",
+        )
+        val candidate = candidate(
+            file(0, "pack/Secret Example Manga 12.cbz"),
+        )
+
+        TorrentChapterMapper().map(request, candidate) shouldBe TorrentChapterFileMatch.None
+    }
+
+    @Test
+    fun `chapter mapper requires exactly one readable archive for title token fallback`() {
+        val request = chapter12.copy(
+            titles = listOf("Secret Example Manga"),
+            chapterNumber = "12",
+        )
+        val candidate = candidate(
+            file(0, "pack/Secret Example Manga 12.cbz"),
+            file(1, "pack/bonus.cbz"),
+        )
+
+        TorrentChapterMapper().map(request, candidate) shouldBe TorrentChapterFileMatch.None
+    }
+
     private fun candidate(vararg files: TorrentCandidateFile) = TorrentCandidate(
         infoHash = "0123456789abcdef0123456789abcdef01234567",
         magnetUri = null,

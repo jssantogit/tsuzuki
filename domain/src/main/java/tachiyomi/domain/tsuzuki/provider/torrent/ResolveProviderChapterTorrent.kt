@@ -107,6 +107,8 @@ class ResolveProviderChapterTorrent(
         val request = TorrentChapterRequest(
             identity = chapter.identity,
             volume = chapter.volume,
+            titles = searchTitles,
+            chapterNumber = chapter.displayNumber,
         )
         val mapper = TorrentChapterMapper()
 
