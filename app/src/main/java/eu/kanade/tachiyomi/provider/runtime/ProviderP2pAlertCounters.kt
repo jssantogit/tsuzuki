@@ -12,15 +12,23 @@ import java.util.concurrent.atomic.AtomicLong
  * Alert payloads are intentionally ignored because they may contain peer addresses, tracker
  * URLs, paths or other content-derived values. Only an allowlisted alert type counter survives.
  * Listener and snapshot work is best-effort so diagnostics can never disturb libtorrent.
+ *
+ * The aggregation model is string-based and native-free. AlertType values are resolved lazily
+ * only when the real jlibtorrent listener is attached, keeping ordinary JVM tests independent
+ * from FrostWire native linkage.
  */
 internal class ProviderP2pAlertCounters : AlertListener {
 
-    private val counts = ConcurrentHashMap<AlertType, AtomicLong>()
+    private val counts = ConcurrentHashMap<String, AtomicLong>()
 
-    override fun types(): IntArray = OBSERVED_SWIG_TYPES.copyOf()
+    override fun types(): IntArray = observedAlertTypes()
+        .map(AlertType::swig)
+        .toIntArray()
 
     override fun alert(alert: Alert<*>) {
-        runCatching { increment(alert.type()) }
+        runCatching {
+            fieldFor(alert.type())?.let(::incrementField)
+        }
     }
 
     fun recordSnapshot(
@@ -37,52 +45,107 @@ internal class ProviderP2pAlertCounters : AlertListener {
         }
     }
 
-    internal fun recordTypeForTest(type: AlertType) {
-        increment(type)
+    internal fun recordFieldForTest(field: String) {
+        if (field in SAFE_FIELDS) {
+            incrementField(field)
+        }
     }
 
     internal fun snapshotForTest(): Map<String, Long> = snapshot()
 
-    private fun increment(type: AlertType) {
-        if (type !in FIELD_BY_TYPE) return
-        counts.computeIfAbsent(type) { AtomicLong() }.incrementAndGet()
+    private fun incrementField(field: String) {
+        counts.computeIfAbsent(field) { AtomicLong() }.incrementAndGet()
     }
 
     private fun snapshot(): Map<String, Long> =
-        FIELD_BY_TYPE.mapNotNull { (type, field) ->
-            counts[type]
+        SAFE_FIELDS.mapNotNull { field ->
+            counts[field]
                 ?.get()
                 ?.takeIf { it > 0L }
                 ?.let { field to it }
         }.toMap()
 
+    private fun fieldFor(type: AlertType): String? = when (type) {
+        AlertType.METADATA_RECEIVED -> "alertMetadataReceived"
+        AlertType.METADATA_FAILED -> "alertMetadataFailed"
+        AlertType.TRACKER_REPLY -> "alertTrackerReply"
+        AlertType.TRACKER_WARNING -> "alertTrackerWarning"
+        AlertType.TRACKER_ERROR -> "alertTrackerError"
+        AlertType.DHT_BOOTSTRAP -> "alertDhtBootstrap"
+        AlertType.DHT_GET_PEERS -> "alertDhtGetPeers"
+        AlertType.DHT_GET_PEERS_REPLY -> "alertDhtGetPeersReply"
+        AlertType.DHT_ERROR -> "alertDhtError"
+        AlertType.LISTEN_SUCCEEDED -> "alertListenSucceeded"
+        AlertType.LISTEN_FAILED -> "alertListenFailed"
+        AlertType.UDP_ERROR -> "alertUdpError"
+        AlertType.PORTMAP -> "alertPortmap"
+        AlertType.PORTMAP_ERROR -> "alertPortmapError"
+        AlertType.SESSION_ERROR -> "alertSessionError"
+        AlertType.TORRENT_ERROR -> "alertTorrentError"
+        AlertType.PEER_CONNECT -> "alertPeerConnect"
+        AlertType.PEER_DISCONNECTED -> "alertPeerDisconnected"
+        AlertType.PEER_ERROR -> "alertPeerError"
+        AlertType.FILE_ERROR -> "alertFileError"
+        AlertType.HASH_FAILED -> "alertHashFailed"
+        AlertType.FILE_COMPLETED -> "alertFileCompleted"
+        AlertType.TORRENT_FINISHED -> "alertTorrentFinished"
+        AlertType.ALERTS_DROPPED -> "alertAlertsDropped"
+        else -> null
+    }
+
+    private fun observedAlertTypes(): List<AlertType> = listOf(
+        AlertType.METADATA_RECEIVED,
+        AlertType.METADATA_FAILED,
+        AlertType.TRACKER_REPLY,
+        AlertType.TRACKER_WARNING,
+        AlertType.TRACKER_ERROR,
+        AlertType.DHT_BOOTSTRAP,
+        AlertType.DHT_GET_PEERS,
+        AlertType.DHT_GET_PEERS_REPLY,
+        AlertType.DHT_ERROR,
+        AlertType.LISTEN_SUCCEEDED,
+        AlertType.LISTEN_FAILED,
+        AlertType.UDP_ERROR,
+        AlertType.PORTMAP,
+        AlertType.PORTMAP_ERROR,
+        AlertType.SESSION_ERROR,
+        AlertType.TORRENT_ERROR,
+        AlertType.PEER_CONNECT,
+        AlertType.PEER_DISCONNECTED,
+        AlertType.PEER_ERROR,
+        AlertType.FILE_ERROR,
+        AlertType.HASH_FAILED,
+        AlertType.FILE_COMPLETED,
+        AlertType.TORRENT_FINISHED,
+        AlertType.ALERTS_DROPPED,
+    )
+
     private companion object {
-        val FIELD_BY_TYPE = linkedMapOf(
-            AlertType.METADATA_RECEIVED to "alertMetadataReceived",
-            AlertType.METADATA_FAILED to "alertMetadataFailed",
-            AlertType.TRACKER_REPLY to "alertTrackerReply",
-            AlertType.TRACKER_WARNING to "alertTrackerWarning",
-            AlertType.TRACKER_ERROR to "alertTrackerError",
-            AlertType.DHT_BOOTSTRAP to "alertDhtBootstrap",
-            AlertType.DHT_GET_PEERS to "alertDhtGetPeers",
-            AlertType.DHT_GET_PEERS_REPLY to "alertDhtGetPeersReply",
-            AlertType.DHT_ERROR to "alertDhtError",
-            AlertType.LISTEN_SUCCEEDED to "alertListenSucceeded",
-            AlertType.LISTEN_FAILED to "alertListenFailed",
-            AlertType.UDP_ERROR to "alertUdpError",
-            AlertType.PORTMAP to "alertPortmap",
-            AlertType.PORTMAP_ERROR to "alertPortmapError",
-            AlertType.SESSION_ERROR to "alertSessionError",
-            AlertType.TORRENT_ERROR to "alertTorrentError",
-            AlertType.PEER_CONNECT to "alertPeerConnect",
-            AlertType.PEER_DISCONNECTED to "alertPeerDisconnected",
-            AlertType.PEER_ERROR to "alertPeerError",
-            AlertType.FILE_ERROR to "alertFileError",
-            AlertType.HASH_FAILED to "alertHashFailed",
-            AlertType.FILE_COMPLETED to "alertFileCompleted",
-            AlertType.TORRENT_FINISHED to "alertTorrentFinished",
-            AlertType.ALERTS_DROPPED to "alertAlertsDropped",
+        val SAFE_FIELDS = linkedSetOf(
+            "alertMetadataReceived",
+            "alertMetadataFailed",
+            "alertTrackerReply",
+            "alertTrackerWarning",
+            "alertTrackerError",
+            "alertDhtBootstrap",
+            "alertDhtGetPeers",
+            "alertDhtGetPeersReply",
+            "alertDhtError",
+            "alertListenSucceeded",
+            "alertListenFailed",
+            "alertUdpError",
+            "alertPortmap",
+            "alertPortmapError",
+            "alertSessionError",
+            "alertTorrentError",
+            "alertPeerConnect",
+            "alertPeerDisconnected",
+            "alertPeerError",
+            "alertFileError",
+            "alertHashFailed",
+            "alertFileCompleted",
+            "alertTorrentFinished",
+            "alertAlertsDropped",
         )
-        val OBSERVED_SWIG_TYPES = FIELD_BY_TYPE.keys.map(AlertType::swig).toIntArray()
     }
 }
