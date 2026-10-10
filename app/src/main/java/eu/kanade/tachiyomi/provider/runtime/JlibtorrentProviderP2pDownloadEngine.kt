@@ -75,7 +75,9 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
 
         val session = sessionManagerFactory()
         val alertCounters = ProviderP2pAlertCounters()
-        session.addListener(alertCounters)
+        val alertListenerAttached = runCatching {
+            session.addListener(alertCounters)
+        }.isSuccess
         var started = false
         var currentStage = "SESSION_START"
         try {
@@ -86,12 +88,13 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 numbers = mapOf(
                     "initialPeerCount" to configuredInitialPeers.size.toLong(),
                     "magnetTrackerCount" to trackerCount,
-                    "workingUsableBytes" to workingDirectory.usableSpace.coerceAtLeast(0L),
+                    "workingUsableBytes" to safeUsableBytes(workingDirectory),
                 ),
                 flags = mapOf(
                     "hasInitialPeers" to configuredInitialPeers.isNotEmpty(),
                     "hasMagnetTrackers" to (trackerCount > 0L),
                     "lsdExplicitlyDisabled" to true,
+                    "alertListenerAttached" to alertListenerAttached,
                 ),
             )
             session.start(sessionParamsFactory())
@@ -100,7 +103,9 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 event = ProviderP2pDiagnosticEvent.SESSION_READY,
                 operationId = request.operationId,
                 numbers = mapOf("elapsedMs" to elapsedMillis(sessionStartedAt)),
-                flags = mapOf("dhtRunning" to session.isDhtRunning),
+                flags = mapOf(
+                    "dhtRunning" to runCatching { session.isDhtRunning }.getOrDefault(false),
+                ),
             )
 
             currentStage = "METADATA"
@@ -545,7 +550,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 event = ProviderP2pDiagnosticEvent.JOB_CANCELLED,
                 operationId = request.operationId,
                 codes = mapOf("stage" to currentStage),
-                exceptionClass = error::class.qualifiedName,
+                exceptionClass = error.javaClass.name,
                 priority = LogPriority.WARN,
             )
             throw error
@@ -561,7 +566,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                     "stage" to currentStage,
                     "failure" to ProviderP2pFailureCode.METADATA_UNAVAILABLE.name,
                 ),
-                exceptionClass = error::class.qualifiedName,
+                exceptionClass = error.javaClass.name,
                 priority = LogPriority.WARN,
             )
             ProviderP2pDownloadResult.Failure(
@@ -579,7 +584,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                     "stage" to currentStage,
                     "failure" to ProviderP2pFailureCode.NETWORK_ERROR.name,
                 ),
-                exceptionClass = error::class.qualifiedName,
+                exceptionClass = error.javaClass.name,
                 priority = LogPriority.ERROR,
             )
             ProviderP2pDownloadResult.Failure(
@@ -597,7 +602,9 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                     priority = if (stopped) LogPriority.INFO else LogPriority.WARN,
                 )
             }
-            session.removeListener(alertCounters)
+            if (alertListenerAttached) {
+                runCatching { session.removeListener(alertCounters) }
+            }
         }
     }
 
@@ -639,11 +646,17 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             ?: 0L
 
     private fun currentAbiCode(): String =
-        Build.SUPPORTED_ABIS.firstOrNull()
+        runCatching { Build.SUPPORTED_ABIS.firstOrNull() }
+            .getOrNull()
             ?.uppercase()
             ?.replace('-', '_')
             ?.takeIf { ABI_CODE.matches(it) }
             ?: "UNKNOWN"
+
+    private fun safeUsableBytes(directory: File): Long =
+        runCatching { directory.usableSpace }
+            .getOrDefault(0L)
+            .coerceAtLeast(0L)
 
     private fun elapsedMillis(startedAtNanos: Long, nowNanos: Long = System.nanoTime()): Long =
         ((nowNanos - startedAtNanos) / NANOS_PER_MILLISECOND).coerceAtLeast(0L)
@@ -728,5 +741,7 @@ internal object JlibtorrentNativeSupport {
         abi != null && abi in RELEASE_SUPPORTED_ABIS
 
     fun isCurrentRuntimeSupported(): Boolean =
-        isReleaseAbiSupported(Build.SUPPORTED_ABIS.firstOrNull())
+        isReleaseAbiSupported(
+            runCatching { Build.SUPPORTED_ABIS.firstOrNull() }.getOrNull(),
+        )
 }
