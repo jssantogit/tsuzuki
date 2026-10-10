@@ -216,6 +216,8 @@ class ProviderP2pJobManager internal constructor(
                                 providerId = key.providerId,
                                 source = file,
                                 format = result.format,
+                                diagnosticOperationId = entry.request.operationId,
+                                diagnosticJobId = entry.jobId,
                             )
                         }.fold(
                             onSuccess = { resource ->
