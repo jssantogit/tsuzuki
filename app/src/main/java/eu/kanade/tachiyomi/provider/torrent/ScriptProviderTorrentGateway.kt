@@ -1,11 +1,14 @@
 package eu.kanade.tachiyomi.provider.torrent
 
+import eu.kanade.tachiyomi.provider.runtime.ProviderP2pDiagnosticEvent
+import eu.kanade.tachiyomi.provider.runtime.ProviderP2pDiagnostics
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderCapabilityExecutor
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderPrivilegedHostGrants
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import logcat.LogPriority
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
@@ -118,8 +121,25 @@ class ScriptProviderTorrentGateway(
     override suspend fun acquire(
         providerId: ProviderId,
         request: TorrentAcquisitionRequest,
-    ): ProviderCallResult<P2pAcquireState> =
-        executor.invoke(
+    ): ProviderCallResult<P2pAcquireState> {
+        val startedAtNanos = System.nanoTime()
+        ProviderP2pDiagnostics.record(
+            event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_STATE,
+            operationId = request.operationId,
+            providerId = providerId.value,
+            codes = mapOf(
+                "state" to "PROVIDER_CALL_STARTED",
+                "capability" to "ACQUISITION_P2P_V1",
+            ),
+            flags = mapOf(
+                "hostGrantP2p" to true,
+                "hasInfoHash" to !request.candidate.infoHash.isNullOrBlank(),
+                "hasMagnet" to !request.candidate.magnetUri.isNullOrBlank(),
+                "hasTorrentUrl" to !request.candidate.torrentUrl.isNullOrBlank(),
+            ),
+        )
+
+        val result = executor.invoke(
             providerId = providerId,
             capability = ProviderCapabilities.AcquisitionP2pV1,
             inputJson = json.encodeToString(request.toDto()),
@@ -137,11 +157,42 @@ class ScriptProviderTorrentGateway(
                         decoded.format?.uppercase()
                             ?: error("Ready P2P result is missing archive format"),
                     )
+                    ProviderP2pDiagnostics.record(
+                        event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_STATE,
+                        operationId = request.operationId,
+                        providerId = providerId.value,
+                        codes = mapOf(
+                            "state" to "MANAGED_RESOLVE_STARTED",
+                            "format" to managedFormat.name,
+                        ),
+                    )
                     val uri = managedResources.resolve(
                         providerId = providerId,
                         resource = resource,
                         format = managedFormat,
-                    ) ?: error("P2P result is not a host-owned managed resource")
+                    )
+                    if (uri == null) {
+                        ProviderP2pDiagnostics.record(
+                            event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_FAILED,
+                            operationId = request.operationId,
+                            providerId = providerId.value,
+                            codes = mapOf(
+                                "reason" to "MANAGED_RESOURCE_RESOLVE_FAILED",
+                                "format" to managedFormat.name,
+                            ),
+                            priority = LogPriority.ERROR,
+                        )
+                        error("P2P result is not a host-owned managed resource")
+                    }
+                    ProviderP2pDiagnostics.record(
+                        event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_STATE,
+                        operationId = request.operationId,
+                        providerId = providerId.value,
+                        codes = mapOf(
+                            "state" to "MANAGED_RESOLVE_READY",
+                            "format" to managedFormat.name,
+                        ),
+                    )
 
                     P2pAcquireState.Ready(
                         TorrentReadableResource.LocalArchive(
@@ -160,6 +211,36 @@ class ScriptProviderTorrentGateway(
                 else -> error("Unknown P2P result status")
             }
         }
+
+        when (result) {
+            is ProviderCallResult.Success -> {
+                if (result.value is P2pAcquireState.Ready) {
+                    ProviderP2pDiagnostics.record(
+                        event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_STATE,
+                        operationId = request.operationId,
+                        providerId = providerId.value,
+                        codes = mapOf("state" to "PROVIDER_CALL_READY"),
+                        numbers = mapOf("elapsedMs" to elapsedMillis(startedAtNanos)),
+                    )
+                }
+            }
+            is ProviderCallResult.Failure -> {
+                ProviderP2pDiagnostics.record(
+                    event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_FAILED,
+                    operationId = request.operationId,
+                    providerId = providerId.value,
+                    codes = mapOf(
+                        "reason" to "PROVIDER_CALL_FAILED",
+                        "providerError" to result.error.code.name,
+                    ),
+                    numbers = mapOf("elapsedMs" to elapsedMillis(startedAtNanos)),
+                    flags = mapOf("retryable" to result.error.retryable),
+                    priority = LogPriority.WARN,
+                )
+            }
+        }
+        return result
+    }
 
     private fun TorrentCandidateDto.toDomain(
         networkPolicy: ProviderNetworkPolicy?,
@@ -203,6 +284,9 @@ class ScriptProviderTorrentGateway(
             languages = selectedFile.languages,
         ),
     )
+
+    private fun elapsedMillis(startedAtNanos: Long): Long =
+        ((System.nanoTime() - startedAtNanos) / NANOS_PER_MILLISECOND).coerceAtLeast(0L)
 
     @Serializable
     private data class SearchRequestDto(
@@ -276,5 +360,6 @@ class ScriptProviderTorrentGateway(
     private companion object {
         const val STATUS_READY = "ready"
         const val STATUS_PENDING = "pending"
+        const val NANOS_PER_MILLISECOND = 1_000_000L
     }
 }
