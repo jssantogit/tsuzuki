@@ -200,7 +200,7 @@ class ProviderManagedFileStore internal constructor(
                 providerId = providerId,
                 phase = "SOURCE_ARCHIVE_VALIDATE",
                 state = "FAILED",
-                exceptionClass = error::class.qualifiedName,
+                exceptionClass = error.javaClass.name,
                 priority = LogPriority.WARN,
             )
             throw error
@@ -218,9 +218,7 @@ class ProviderManagedFileStore internal constructor(
         pruneExpired(directory)
 
         val existing = directory.listFiles().orEmpty().filter(File::isFile)
-        val totalBytes = existing.sumOf(File::length)
         val countWithinLimit = existing.size < maxFilesPerProvider
-        val bytesWithinLimit = totalBytes + sourceBytes <= maxTotalBytesPerProvider
         recordAdoptionStage(
             operationId = diagnosticOperationId,
             jobId = diagnosticJobId,
@@ -229,13 +227,9 @@ class ProviderManagedFileStore internal constructor(
             state = "STARTED",
             numbers = mapOf(
                 "existingFiles" to existing.size.toLong(),
-                "existingBytes" to totalBytes.coerceAtLeast(0L),
                 "incomingBytes" to sourceBytes,
             ),
-            flags = mapOf(
-                "countWithinLimit" to countWithinLimit,
-                "bytesWithinLimit" to bytesWithinLimit,
-            ),
+            flags = mapOf("countWithinLimit" to countWithinLimit),
         )
         if (!countWithinLimit) {
             recordAdoptionStage(
@@ -249,6 +243,25 @@ class ProviderManagedFileStore internal constructor(
             )
             throw IllegalStateException("Provider managed resource count limit exceeded")
         }
+
+        val totalBytes = existing.sumOf(File::length)
+        val bytesWithinLimit = totalBytes + sourceBytes <= maxTotalBytesPerProvider
+        recordAdoptionStage(
+            operationId = diagnosticOperationId,
+            jobId = diagnosticJobId,
+            providerId = providerId,
+            phase = "QUOTA_CHECK",
+            state = "STARTED",
+            numbers = mapOf(
+                "existingFiles" to existing.size.toLong(),
+                "existingBytes" to totalBytes.coerceAtLeast(0L),
+                "incomingBytes" to sourceBytes,
+            ),
+            flags = mapOf(
+                "countWithinLimit" to true,
+                "bytesWithinLimit" to bytesWithinLimit,
+            ),
+        )
         if (!bytesWithinLimit) {
             recordAdoptionStage(
                 operationId = diagnosticOperationId,
@@ -267,6 +280,11 @@ class ProviderManagedFileStore internal constructor(
             providerId = providerId,
             phase = "QUOTA_CHECK",
             state = "SUCCEEDED",
+            numbers = mapOf(
+                "existingFiles" to existing.size.toLong(),
+                "existingBytes" to totalBytes.coerceAtLeast(0L),
+                "incomingBytes" to sourceBytes,
+            ),
         )
 
         val id = UUID.randomUUID().toString()
@@ -376,7 +394,7 @@ class ProviderManagedFileStore internal constructor(
                 providerId = providerId,
                 phase = currentPhase,
                 state = "FAILED",
-                exceptionClass = error::class.qualifiedName,
+                exceptionClass = error.javaClass.name,
                 priority = LogPriority.ERROR,
             )
             temp.delete()
