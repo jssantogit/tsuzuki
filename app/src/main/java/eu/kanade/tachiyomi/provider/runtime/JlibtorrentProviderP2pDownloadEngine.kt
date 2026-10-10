@@ -70,6 +70,8 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
         }
 
         ensureDirectory(workingDirectory)
+        val configuredInitialPeers = initialPeers(request)
+        val trackerCount = magnetTrackerCount(request.magnetUri)
 
         val session = sessionManagerFactory()
         var started = false
@@ -79,9 +81,15 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             ProviderP2pDiagnostics.record(
                 event = ProviderP2pDiagnosticEvent.SESSION_START,
                 operationId = request.operationId,
+                numbers = mapOf(
+                    "initialPeerCount" to configuredInitialPeers.size.toLong(),
+                    "magnetTrackerCount" to trackerCount,
+                    "workingUsableBytes" to workingDirectory.usableSpace.coerceAtLeast(0L),
+                ),
                 flags = mapOf(
-                    "hasInitialPeers" to initialPeers(request).isNotEmpty(),
-                    "lsdDisabledByDefault" to true,
+                    "hasInitialPeers" to configuredInitialPeers.isNotEmpty(),
+                    "hasMagnetTrackers" to (trackerCount > 0L),
+                    "lsdExplicitlyDisabled" to true,
                 ),
             )
             session.start(sessionParamsFactory())
@@ -98,7 +106,10 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 event = ProviderP2pDiagnosticEvent.METADATA_START,
                 operationId = request.operationId,
                 codes = mapOf("source" to metadataSource(request)),
-                numbers = mapOf("timeoutMs" to METADATA_TIMEOUT_SECONDS * 1_000L),
+                numbers = mapOf(
+                    "timeoutMs" to METADATA_TIMEOUT_SECONDS * 1_000L,
+                    "magnetTrackerCount" to trackerCount,
+                ),
                 flags = mapOf(
                     "hasInfoHash" to !request.infoHash.isNullOrBlank(),
                     "hasMagnet" to !request.magnetUri.isNullOrBlank(),
@@ -114,7 +125,11 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                         "source" to metadataSource(request),
                         "failure" to ProviderP2pFailureCode.METADATA_UNAVAILABLE.name,
                     ),
-                    numbers = mapOf("elapsedMs" to elapsedMillis(metadataStartedAt)),
+                    numbers = mapOf(
+                        "elapsedMs" to elapsedMillis(metadataStartedAt),
+                        "timeoutMs" to METADATA_TIMEOUT_SECONDS * 1_000L,
+                        "magnetTrackerCount" to trackerCount,
+                    ),
                     priority = LogPriority.WARN,
                 )
                 return@withContext ProviderP2pDownloadResult.Failure(
@@ -264,14 +279,13 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
 
             val priorities = Priority.array(Priority.IGNORE, torrent.numFiles())
             priorities[selectedIndex] = Priority.NORMAL
-            val peers = initialPeers(request)
 
             session.download(
                 torrent,
                 downloadRoot,
                 null,
                 priorities,
-                peers,
+                configuredInitialPeers,
                 TorrentFlags.PAUSED,
             )
             ProviderP2pDiagnostics.record(
@@ -280,7 +294,8 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 numbers = mapOf(
                     "selectedIndex" to selectedIndex.toLong(),
                     "fileCount" to torrent.numFiles().toLong(),
-                    "initialPeerCount" to peers.size.toLong(),
+                    "ignoredFileCount" to (torrent.numFiles() - 1).coerceAtLeast(0).toLong(),
+                    "initialPeerCount" to configuredInitialPeers.size.toLong(),
                 ),
             )
 
@@ -331,16 +346,19 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             handle.resume()
 
             currentStage = "TRANSFER"
+            val transferStartedAt = System.nanoTime()
             var latestWanted = 0L
             var latestDone = 0L
             var latestPeers = 0
             var latestSeeds = 0
             var latestRate = 0L
+            var peakPeers = 0
+            var peakSeeds = 0
             var lastDone = 0L
-            var lastProgressAt = System.nanoTime()
+            var lastProgressAt = transferStartedAt
             var lastProgressBucket = -1
-            var firstPeerObserved = false
-            var firstByteObserved = false
+            var firstPeerElapsedMs: Long? = null
+            var firstByteElapsedMs: Long? = null
 
             val completedWithoutError: Boolean = try {
                 withTimeout(downloadTimeoutMs) {
@@ -355,6 +373,8 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                         latestPeers = status.numPeers().coerceAtLeast(0)
                         latestSeeds = status.numSeeds().coerceAtLeast(0)
                         latestRate = status.downloadRate().toLong().coerceAtLeast(0L)
+                        peakPeers = maxOf(peakPeers, latestPeers)
+                        peakSeeds = maxOf(peakSeeds, latestSeeds)
 
                         if (latestDone > lastDone) {
                             lastDone = latestDone
@@ -362,29 +382,37 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                         }
                         val progressPercent = progressPercent(latestDone, latestWanted)
                         val bucket = progressBucket(progressPercent)
-                        val peerTransition = latestPeers > 0 && !firstPeerObserved
-                        val byteTransition = latestDone > 0L && !firstByteObserved
-                        if (peerTransition) firstPeerObserved = true
-                        if (byteTransition) firstByteObserved = true
+                        val peerTransition = latestPeers > 0 && firstPeerElapsedMs == null
+                        val byteTransition = latestDone > 0L && firstByteElapsedMs == null
+                        if (peerTransition) {
+                            firstPeerElapsedMs = elapsedMillis(transferStartedAt, now)
+                        }
+                        if (byteTransition) {
+                            firstByteElapsedMs = elapsedMillis(transferStartedAt, now)
+                        }
 
                         if (bucket != lastProgressBucket || peerTransition || byteTransition) {
                             lastProgressBucket = bucket
                             ProviderP2pDiagnostics.record(
                                 event = ProviderP2pDiagnosticEvent.TRANSFER_PROGRESS,
                                 operationId = request.operationId,
-                                numbers = mapOf(
-                                    "wantedBytes" to latestWanted,
-                                    "doneBytes" to latestDone,
-                                    "progressPercent" to progressPercent.toLong(),
-                                    "peerCount" to latestPeers.toLong(),
-                                    "seedCount" to latestSeeds.toLong(),
-                                    "downloadRate" to latestRate,
-                                    "stalledMs" to elapsedMillis(lastProgressAt, now),
-                                ),
+                                numbers = buildMap {
+                                    put("wantedBytes", latestWanted)
+                                    put("doneBytes", latestDone)
+                                    put("progressPercent", progressPercent.toLong())
+                                    put("peerCount", latestPeers.toLong())
+                                    put("seedCount", latestSeeds.toLong())
+                                    put("peakPeerCount", peakPeers.toLong())
+                                    put("peakSeedCount", peakSeeds.toLong())
+                                    put("downloadRate", latestRate)
+                                    put("stalledMs", elapsedMillis(lastProgressAt, now))
+                                    firstPeerElapsedMs?.let { put("firstPeerMs", it) }
+                                    firstByteElapsedMs?.let { put("firstByteMs", it) }
+                                },
                                 flags = mapOf(
                                     "finished" to status.isFinished,
-                                    "firstPeerObserved" to firstPeerObserved,
-                                    "firstByteObserved" to firstByteObserved,
+                                    "firstPeerObserved" to (firstPeerElapsedMs != null),
+                                    "firstByteObserved" to (firstByteElapsedMs != null),
                                 ),
                             )
                         }
@@ -394,13 +422,17 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                                 event = ProviderP2pDiagnosticEvent.TRANSFER_FAILED,
                                 operationId = request.operationId,
                                 codes = mapOf("failure" to ProviderP2pFailureCode.NETWORK_ERROR.name),
-                                numbers = mapOf(
-                                    "nativeErrorCode" to errorValue.toLong().coerceAtLeast(0L),
-                                    "wantedBytes" to latestWanted,
-                                    "doneBytes" to latestDone,
-                                    "peerCount" to latestPeers.toLong(),
-                                    "seedCount" to latestSeeds.toLong(),
-                                ),
+                                numbers = buildMap {
+                                    put("nativeErrorCode", errorValue.toLong().coerceAtLeast(0L))
+                                    put("wantedBytes", latestWanted)
+                                    put("doneBytes", latestDone)
+                                    put("peerCount", latestPeers.toLong())
+                                    put("seedCount", latestSeeds.toLong())
+                                    put("peakPeerCount", peakPeers.toLong())
+                                    put("peakSeedCount", peakSeeds.toLong())
+                                    firstPeerElapsedMs?.let { put("firstPeerMs", it) }
+                                    firstByteElapsedMs?.let { put("firstByteMs", it) }
+                                },
                                 priority = LogPriority.WARN,
                             )
                             completed = false
@@ -420,17 +452,22 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                     event = ProviderP2pDiagnosticEvent.TRANSFER_TIMEOUT,
                     operationId = request.operationId,
                     codes = mapOf("failure" to ProviderP2pFailureCode.NETWORK_ERROR.name),
-                    numbers = mapOf(
-                        "timeoutMs" to downloadTimeoutMs,
-                        "wantedBytes" to latestWanted,
-                        "doneBytes" to latestDone,
-                        "peerCount" to latestPeers.toLong(),
-                        "seedCount" to latestSeeds.toLong(),
-                        "downloadRate" to latestRate,
-                    ),
+                    numbers = buildMap {
+                        put("timeoutMs", downloadTimeoutMs)
+                        put("wantedBytes", latestWanted)
+                        put("doneBytes", latestDone)
+                        put("peerCount", latestPeers.toLong())
+                        put("seedCount", latestSeeds.toLong())
+                        put("peakPeerCount", peakPeers.toLong())
+                        put("peakSeedCount", peakSeeds.toLong())
+                        put("downloadRate", latestRate)
+                        put("stalledMs", elapsedMillis(lastProgressAt))
+                        firstPeerElapsedMs?.let { put("firstPeerMs", it) }
+                        firstByteElapsedMs?.let { put("firstByteMs", it) }
+                    },
                     flags = mapOf(
-                        "firstPeerObserved" to firstPeerObserved,
-                        "firstByteObserved" to firstByteObserved,
+                        "firstPeerObserved" to (firstPeerElapsedMs != null),
+                        "firstByteObserved" to (firstByteElapsedMs != null),
                     ),
                     priority = LogPriority.WARN,
                 )
@@ -448,13 +485,18 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 event = ProviderP2pDiagnosticEvent.TRANSFER_PROGRESS,
                 operationId = request.operationId,
                 codes = mapOf("state" to "COMPLETE"),
-                numbers = mapOf(
-                    "wantedBytes" to latestWanted,
-                    "doneBytes" to latestDone,
-                    "progressPercent" to progressPercent(latestDone, latestWanted).toLong(),
-                    "peerCount" to latestPeers.toLong(),
-                    "seedCount" to latestSeeds.toLong(),
-                ),
+                numbers = buildMap {
+                    put("wantedBytes", latestWanted)
+                    put("doneBytes", latestDone)
+                    put("progressPercent", progressPercent(latestDone, latestWanted).toLong())
+                    put("peerCount", latestPeers.toLong())
+                    put("seedCount", latestSeeds.toLong())
+                    put("peakPeerCount", peakPeers.toLong())
+                    put("peakSeedCount", peakSeeds.toLong())
+                    put("elapsedMs", elapsedMillis(transferStartedAt))
+                    firstPeerElapsedMs?.let { put("firstPeerMs", it) }
+                    firstByteElapsedMs?.let { put("firstByteMs", it) }
+                },
             )
 
             handle.pause()
@@ -500,7 +542,11 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             throw error
         } catch (error: IllegalArgumentException) {
             ProviderP2pDiagnostics.record(
-                event = ProviderP2pDiagnosticEvent.METADATA_FAILED,
+                event = if (currentStage == "SESSION_START") {
+                    ProviderP2pDiagnosticEvent.SESSION_FAILED
+                } else {
+                    ProviderP2pDiagnosticEvent.METADATA_FAILED
+                },
                 operationId = request.operationId,
                 codes = mapOf(
                     "stage" to currentStage,
@@ -514,7 +560,11 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             )
         } catch (error: Throwable) {
             ProviderP2pDiagnostics.record(
-                event = ProviderP2pDiagnosticEvent.TRANSFER_FAILED,
+                event = if (currentStage == "SESSION_START") {
+                    ProviderP2pDiagnosticEvent.SESSION_FAILED
+                } else {
+                    ProviderP2pDiagnosticEvent.TRANSFER_FAILED
+                },
                 operationId = request.operationId,
                 codes = mapOf(
                     "stage" to currentStage,
@@ -570,6 +620,13 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
         else -> "NONE"
     }
 
+    private fun magnetTrackerCount(magnetUri: String?): Long =
+        magnetUri
+            ?.split('?', '&')
+            ?.count { part -> part.startsWith("tr=", ignoreCase = true) }
+            ?.toLong()
+            ?: 0L
+
     private fun currentAbiCode(): String =
         Build.SUPPORTED_ABIS.firstOrNull()
             ?.uppercase()
@@ -583,7 +640,9 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
     private fun progressPercent(done: Long, wanted: Long): Int = when {
         wanted <= 0L -> 0
         done >= wanted -> 100
-        else -> ((done * 100L) / wanted).coerceIn(0L, 99L).toInt()
+        else -> ((done.toDouble() / wanted.toDouble()) * 100.0)
+            .toInt()
+            .coerceIn(0, 99)
     }
 
     private fun progressBucket(percent: Int): Int = when {
