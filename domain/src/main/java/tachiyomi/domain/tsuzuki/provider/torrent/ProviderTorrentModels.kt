@@ -262,9 +262,11 @@ class TorrentChapterMapper(
             .mapNotNull { file ->
                 val label = file.chapterLabel()
                 val explicitLabel = explicitChapterLabel(label)
-                val mappingLabel = explicitLabel ?: label
+                val titleAwareLabel = explicitLabel?.let { null } ?: titleAwareMappingLabel(request, label)
+                val mappingLabel = explicitLabel ?: titleAwareLabel ?: label
                 val parsed = parseLabel(mappingLabel)
-                val titleAwareSafe = explicitLabel != null || isImplicitIdentitySafe(request, label)
+                val titleAwareSafe =
+                    explicitLabel != null || titleAwareLabel != null || isImplicitIdentitySafe(request, label)
                 file.takeIf { parsed.identity == request.identity && titleAwareSafe }
                     ?.let { ParsedTorrentFile(file, parseVolume(mappingLabel)) }
             }
@@ -292,6 +294,19 @@ class TorrentChapterMapper(
             1 -> TorrentChapterFileMatch.Exact(matchingFiles.single())
             else -> TorrentChapterFileMatch.Ambiguous(matchingFiles)
         }
+    }
+
+    private fun titleAwareMappingLabel(
+        request: TorrentChapterRequest,
+        label: String,
+    ): String? {
+        if (request.titles.isEmpty()) return null
+        return request.titles.asSequence()
+            .mapNotNull(::titlePattern)
+            .flatMap { pattern -> pattern.findAll(label).asSequence() }
+            .map { titleMatch -> label.removeRange(titleMatch.range).trim() }
+            .filter(String::isNotEmpty)
+            .firstOrNull { remainder -> parseLabel(remainder).identity == request.identity }
     }
 
     private fun isImplicitIdentitySafe(
