@@ -181,7 +181,7 @@ class ProviderTorrentArtifactEngine(
                                 jobId = lastJobId,
                                 providerId = lastProviderId,
                                 codes = buildMap {
-                                    put("failure" to state.reason.name)
+                                    put("failure", state.reason.name)
                                     lastRoute?.let { put("route", it) }
                                 },
                                 numbers = mapOf(
@@ -209,8 +209,8 @@ class ProviderTorrentArtifactEngine(
                 jobId = lastJobId,
                 providerId = lastProviderId,
                 codes = buildMap {
-                    put("failure" to TorrentAcquisitionFailure.ACQUISITION_FAILED.name)
-                    put("reason" to "OUTER_TIMEOUT")
+                    put("failure", TorrentAcquisitionFailure.ACQUISITION_FAILED.name)
+                    put("reason", "OUTER_TIMEOUT")
                     lastRoute?.let { put("route", it) }
                 },
                 numbers = mapOf(
@@ -232,7 +232,7 @@ class ProviderTorrentArtifactEngine(
                 jobId = lastJobId,
                 providerId = lastProviderId,
                 codes = buildMap {
-                    put("stage" to "READER_ACQUISITION")
+                    put("stage", "READER_ACQUISITION")
                     lastRoute?.let { put("route", it) }
                 },
                 numbers = mapOf(
@@ -250,7 +250,7 @@ class ProviderTorrentArtifactEngine(
                 jobId = lastJobId,
                 providerId = lastProviderId,
                 codes = buildMap {
-                    put("reason" to "THREW")
+                    put("reason", "THREW")
                     lastRoute?.let { put("route", it) }
                 },
                 numbers = mapOf(
