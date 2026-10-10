@@ -40,6 +40,15 @@ class TorrentChapterMapperZeroPaddingTest {
             TorrentChapterFileMatch.Ambiguous(candidate.files!!)
     }
 
+    @Test
+    fun `zero padded token that is explicitly a volume remains rejected`() {
+        val candidate = candidate(
+            file(0, "pack/Acceptance Series Vol. 012.cbz"),
+        )
+
+        TorrentChapterMapper().map(request, candidate) shouldBe TorrentChapterFileMatch.None
+    }
+
     private fun candidate(vararg files: TorrentCandidateFile) = TorrentCandidate(
         infoHash = "0123456789abcdef0123456789abcdef01234567",
         magnetUri = null,
