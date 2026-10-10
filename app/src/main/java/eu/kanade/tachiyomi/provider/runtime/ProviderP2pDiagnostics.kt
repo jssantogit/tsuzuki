@@ -48,10 +48,15 @@ internal enum class ProviderP2pDiagnosticEvent {
  * exception messages) are intentionally not accepted. Operation IDs are reduced to a
  * per-process salted reference so exported logs can correlate a single run without exposing
  * a stable content fingerprint.
+ *
+ * Production recording is strictly best-effort: formatting, hashing or logging failures are
+ * swallowed so observability cannot change an acquisition result.
  */
 internal object ProviderP2pDiagnostics {
 
-    private val salt = ByteArray(32).also(SecureRandom()::nextBytes)
+    private val salt: ByteArray by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        ByteArray(32).also(SecureRandom()::nextBytes)
+    }
 
     fun record(
         event: ProviderP2pDiagnosticEvent,
@@ -64,17 +69,17 @@ internal object ProviderP2pDiagnostics {
         exceptionClass: String? = null,
         priority: LogPriority = LogPriority.INFO,
     ) {
-        val line = format(
-            event = event,
-            operationId = operationId,
-            jobId = jobId,
-            providerId = providerId,
-            codes = codes,
-            numbers = numbers,
-            flags = flags,
-            exceptionClass = exceptionClass,
-        )
         runCatching {
+            val line = format(
+                event = event,
+                operationId = operationId,
+                jobId = jobId,
+                providerId = providerId,
+                codes = codes,
+                numbers = numbers,
+                flags = flags,
+                exceptionClass = exceptionClass,
+            )
             logcat(priority) { line }
         }
     }
