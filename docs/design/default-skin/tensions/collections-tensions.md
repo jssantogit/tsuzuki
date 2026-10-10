@@ -119,3 +119,15 @@ O Folder Catalog Mangás/Seinen foi excluído explicitamente do milestone. Sua e
 ## Continuidade
 
 Collections administration + List Builder é referência oficial. Não há nova composição nesta consolidação. Próximo trabalho deve partir das relações Approved, preservar separação administração/consumo e manter Provisional/TBD até evidência ou decisão explícita. Os documentos detalham a referência; Notion recebe somente resumo durável.
+
+## Projeção de Collections na Home: refinamento
+
+A Home projeta cada Collection como seção dinâmica, preservando a ordem do usuário. Tiles de pasta 16:9, sem artwork de obra, contagem, Provider, status ou controles administrativos. Nome abaixo, rail horizontal, sem card externo envolvendo a seção. Ausência de Collections não reserva espaço; novo usuário recebe estado quieto com ação de criar quando disponível no contexto do produto.
+
+Continue lendo é uma rail independente de cards verticais de progresso e retomada. Não confundir seus cards com Folder tiles ou futuros itens de catálogo/List. O board desta rodada materializa essa separação em onze estados de Home e demonstra Collection View / Folder Catalog como navegação de consumo, sem editar o List Builder.
+
+O antigo Folder Catalog Mangás/Seinen continua excluído do milestone anterior. Esta demonstração local não reclassifica aquela aprovação histórica. Mudanças visuais na projeção da Home aguardam revisão humana. Exposição e ordenação de futuras Lists seguem TBD de produto, não uma nova decisão administrativa.
+
+## Home — representação abstrata de Folder
+
+O polish troca o pictograma genérico de pasta por planos editoriais abstratos. Mantém 16:9, nome abaixo, ausência de capas e metadata, seção própria por Collection e os destinos aprovados. Não cria uma nova hierarquia nem altera o comportamento de Collections.

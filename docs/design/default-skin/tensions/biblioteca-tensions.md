@@ -16,3 +16,13 @@ No additional visual-direction decision is open. The remaining questions require
 The prototype's local CSS values and fonts are visual evidence only. They do not establish Android dp/sp tokens, accessibility conformance, runtime provider availability, or font redistribution rights. Existing font provenance and licensing notes remain in the [mockup usage notes](../mockups/README.md).
 
 The board's Kitsu/Manga/+2 filter example, example custom list, Sem categoria and seven local cover fixtures are demonstrative content. They do not define the runtime Provider list, custom lists, user categories, canonical catalogue, title-to-cover mapping, or a real user's library. Runtime origins and custom lists remain dynamic, and canonical artwork remains preferred where available.
+
+## Final polish closure
+
+The approved Biblioteca architecture is retained. The closing polish gives empty-state titles primary foreground, readable secondary explanations and enabled-looking actions. The status rail keeps its type size and horizontal scrolling with an edge continuation. The filter badge follows Android: origin + list + selected format count + category, excluding status. No grid, sheet, filter semantics or bottom-navigation redesign was introduced. This supersedes the earlier review-pending wording for Biblioteca architecture; Android evidence listed above remains outstanding.
+
+Nesta revisão de Search, os frames Nenhum resultado e Biblioteca vazia reaparecem para revisão do polish aprovado. O restante do board permanece no mesmo módulo. Nenhuma nova arquitetura ou semântica de filtro foi introduzida.
+
+## Canonical Details round — polish retained
+
+The closing board presents Nenhuma obra encontrada and Sua biblioteca está vazia with primary foreground titles, readable secondary text and enabled actions. Status remains horizontally scrollable with unchanged type size and a continuation at the edge. The existing advanced-filter badge counts origin, list, selected formats and category, never status. No architecture, grid, contextual search or filter-sheet changes. Android implementation remains outside this round.
