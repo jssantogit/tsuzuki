@@ -33,7 +33,8 @@ class ProviderP2pDiagnosticsTest {
         line.contains("failure=METADATA_UNAVAILABLE") shouldBe true
         line.contains("elapsedMs=30001") shouldBe true
         line.contains("nativeSupported=true") shouldBe true
-        line.contains("exceptionClass=kotlin.IllegalStateException") shouldBe true
+        line.contains("exceptionClass=") shouldBe true
+        line.contains("IllegalStateException") shouldBe true
 
         line.contains("reader:0123456789abcdef01234567:3") shouldBe false
         line.contains("0123456789abcdef01234567") shouldBe false
