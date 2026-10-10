@@ -11,27 +11,30 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * Alert payloads are intentionally ignored because they may contain peer addresses, tracker
  * URLs, paths or other content-derived values. Only an allowlisted alert type counter survives.
+ * Listener and snapshot work is best-effort so diagnostics can never disturb libtorrent.
  */
 internal class ProviderP2pAlertCounters : AlertListener {
 
     private val counts = ConcurrentHashMap<AlertType, AtomicLong>()
 
-    override fun types(): IntArray = OBSERVED_TYPES.map(AlertType::swig).toIntArray()
+    override fun types(): IntArray = OBSERVED_SWIG_TYPES.copyOf()
 
     override fun alert(alert: Alert<*>) {
-        increment(alert.type())
+        runCatching { increment(alert.type()) }
     }
 
     fun recordSnapshot(
         operationId: String,
         phase: String,
     ) {
-        ProviderP2pDiagnostics.record(
-            event = ProviderP2pDiagnosticEvent.NATIVE_ALERT_SUMMARY,
-            operationId = operationId,
-            codes = mapOf("phase" to phase),
-            numbers = snapshot(),
-        )
+        runCatching {
+            ProviderP2pDiagnostics.record(
+                event = ProviderP2pDiagnosticEvent.NATIVE_ALERT_SUMMARY,
+                operationId = operationId,
+                codes = mapOf("phase" to phase),
+                numbers = snapshot(),
+            )
+        }
     }
 
     internal fun recordTypeForTest(type: AlertType) {
@@ -80,6 +83,6 @@ internal class ProviderP2pAlertCounters : AlertListener {
             AlertType.TORRENT_FINISHED to "alertTorrentFinished",
             AlertType.ALERTS_DROPPED to "alertAlertsDropped",
         )
-        val OBSERVED_TYPES = FIELD_BY_TYPE.keys.toList()
+        val OBSERVED_SWIG_TYPES = FIELD_BY_TYPE.keys.map(AlertType::swig).toIntArray()
     }
 }
