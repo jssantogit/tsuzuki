@@ -30,6 +30,7 @@ internal enum class ProviderP2pDiagnosticEvent {
     TRANSFER_TIMEOUT,
     SELECTED_FILE_CHECK,
     ADOPTION_START,
+    ADOPTION_STAGE,
     ADOPTION_READY,
     ADOPTION_FAILED,
     JOB_COMPLETED,
