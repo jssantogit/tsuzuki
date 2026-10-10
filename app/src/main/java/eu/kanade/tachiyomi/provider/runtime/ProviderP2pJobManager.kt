@@ -183,9 +183,8 @@ class ProviderP2pJobManager internal constructor(
             when (val result = engine.download(entry.request, workingDirectory)) {
                 is ProviderP2pDownloadResult.Ready -> {
                     val file = result.file
-                    val withinWorkingDirectory = runCatching {
-                        file.canonicalFile.toPath().startsWith(workingDirectory.canonicalFile.toPath())
-                    }.getOrDefault(false)
+                    val withinWorkingDirectory = file.canonicalFile.toPath()
+                        .startsWith(workingDirectory.canonicalFile.toPath())
                     ProviderP2pDiagnostics.record(
                         event = ProviderP2pDiagnosticEvent.SELECTED_FILE_CHECK,
                         operationId = entry.request.operationId,
@@ -234,7 +233,7 @@ class ProviderP2pJobManager internal constructor(
                                 )
                             },
                             onFailure = { error ->
-                                terminalExceptionClass = error::class.qualifiedName
+                                terminalExceptionClass = error.javaClass.name
                                 ProviderP2pDiagnostics.record(
                                     event = ProviderP2pDiagnosticEvent.ADOPTION_FAILED,
                                     operationId = entry.request.operationId,
@@ -256,7 +255,7 @@ class ProviderP2pJobManager internal constructor(
                     ProviderP2pAcquireResponse.Failure(result.reason)
             }
         } catch (error: CancellationException) {
-            terminalExceptionClass = error::class.qualifiedName
+            terminalExceptionClass = error.javaClass.name
             ProviderP2pDiagnostics.record(
                 event = ProviderP2pDiagnosticEvent.JOB_CANCELLED,
                 operationId = entry.request.operationId,
@@ -268,7 +267,7 @@ class ProviderP2pJobManager internal constructor(
             )
             ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.CANCELLED)
         } catch (error: Throwable) {
-            terminalExceptionClass = error::class.qualifiedName
+            terminalExceptionClass = error.javaClass.name
             ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.UNAVAILABLE)
         }
 
