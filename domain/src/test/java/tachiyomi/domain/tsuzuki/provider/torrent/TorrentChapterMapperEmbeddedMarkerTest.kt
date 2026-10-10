@@ -106,17 +106,18 @@ class TorrentChapterMapperEmbeddedMarkerTest {
     }
 
     @Test
-    fun `chapter mapper requires exactly one readable archive for title token fallback`() {
+    fun `chapter mapper keeps multiple title aware canonical matches ambiguous`() {
         val request = chapter12.copy(
             titles = listOf("Secret Example Manga"),
             chapterNumber = "12",
         )
         val candidate = candidate(
             file(0, "pack/Secret Example Manga 12.cbz"),
-            file(1, "pack/bonus.cbz"),
+            file(1, "pack/Secret Example Manga 012.zip"),
         )
 
-        TorrentChapterMapper().map(request, candidate) shouldBe TorrentChapterFileMatch.None
+        TorrentChapterMapper().map(request, candidate) shouldBe
+            TorrentChapterFileMatch.Ambiguous(candidate.files!!)
     }
 
     private fun candidate(vararg files: TorrentCandidateFile) = TorrentCandidate(

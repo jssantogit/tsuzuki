@@ -1,9 +1,12 @@
 package eu.kanade.tachiyomi.provider.torrent
 
+import eu.kanade.tachiyomi.provider.runtime.ProviderP2pDiagnosticEvent
+import eu.kanade.tachiyomi.provider.runtime.ProviderP2pDiagnostics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
+import logcat.LogPriority
 import tachiyomi.domain.tsuzuki.content.PreparedTorrentArtifact
 import tachiyomi.domain.tsuzuki.content.TorrentArtifactEngine
 import tachiyomi.domain.tsuzuki.content.TorrentArtifactRequest
@@ -34,6 +37,13 @@ class ProviderTorrentArtifactEngine(
     override suspend fun acquire(
         request: TorrentArtifactRequest,
     ): Result<PreparedTorrentArtifact> {
+        val operationId = operationId(request)
+        val startedAtNanos = System.nanoTime()
+        var pendingPollCount = 0L
+        var lastJobId: String? = null
+        var lastProviderId: String? = null
+        var lastRoute: String? = null
+
         return try {
             val selectedIndex = request.fileIndex
                 ?: return Result.failure(
@@ -52,7 +62,7 @@ class ProviderTorrentArtifactEngine(
                 path = selectedPath,
             )
             val providerRequest = TorrentAcquisitionRequest(
-                operationId = operationId(request),
+                operationId = operationId,
                 candidate = TorrentCandidate(
                     infoHash = request.infoHash,
                     magnetUri = request.magnetUri,
@@ -61,6 +71,26 @@ class ProviderTorrentArtifactEngine(
                     files = listOf(selectedFile),
                 ),
                 selectedFile = selectedFile,
+            )
+
+            ProviderP2pDiagnostics.record(
+                event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_STATE,
+                operationId = operationId,
+                codes = mapOf(
+                    "state" to "STARTED",
+                    "preference" to preferences.acquisitionPreference.get().name,
+                ),
+                numbers = mapOf(
+                    "selectedIndex" to selectedIndex.toLong(),
+                    "pollIntervalMs" to pollIntervalMs,
+                    "timeoutMs" to acquisitionTimeoutMs,
+                ),
+                flags = mapOf(
+                    "directP2pAllowed" to preferences.directP2pAllowed.get(),
+                    "hasInfoHash" to request.infoHash.isNotBlank(),
+                    "hasMagnet" to !request.magnetUri.isNullOrBlank(),
+                    "hasTorrentUrl" to false,
+                ),
             )
 
             withTimeout(acquisitionTimeoutMs) {
@@ -73,14 +103,45 @@ class ProviderTorrentArtifactEngine(
                         )
                     ) {
                         is ProviderTorrentReaderState.Ready -> {
+                            lastProviderId = state.providerId.value
+                            lastRoute = state.route.name
                             val content = state.content
                             if (content !is PreparedChapterContent.CanonicalDownload) {
+                                ProviderP2pDiagnostics.record(
+                                    event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_FAILED,
+                                    operationId = operationId,
+                                    jobId = lastJobId,
+                                    providerId = lastProviderId,
+                                    codes = mapOf(
+                                        "route" to state.route.name,
+                                        "reason" to "NON_CANONICAL_CONTENT",
+                                    ),
+                                    numbers = mapOf(
+                                        "elapsedMs" to elapsedMillis(startedAtNanos),
+                                        "pendingPollCount" to pendingPollCount,
+                                    ),
+                                    priority = LogPriority.ERROR,
+                                )
                                 return@withTimeout Result.failure(
                                     IllegalStateException(
                                         "Torrent Provider did not converge to a canonical local artifact",
                                     ),
                                 )
                             }
+                            ProviderP2pDiagnostics.record(
+                                event = ProviderP2pDiagnosticEvent.READER_ARTIFACT_READY,
+                                operationId = operationId,
+                                jobId = lastJobId,
+                                providerId = lastProviderId,
+                                codes = mapOf(
+                                    "route" to state.route.name,
+                                    "format" to safeFormatCode(content.format),
+                                ),
+                                numbers = mapOf(
+                                    "elapsedMs" to elapsedMillis(startedAtNanos),
+                                    "pendingPollCount" to pendingPollCount,
+                                ),
+                            )
                             return@withTimeout Result.success(
                                 PreparedTorrentArtifact(
                                     localUri = content.uri,
@@ -89,13 +150,50 @@ class ProviderTorrentArtifactEngine(
                             )
                         }
 
-                        is ProviderTorrentReaderState.Pending ->
+                        is ProviderTorrentReaderState.Pending -> {
+                            pendingPollCount += 1L
+                            lastJobId = state.jobId
+                            lastProviderId = state.providerId.value
+                            lastRoute = state.route.name
+                            if (shouldLogPendingPoll(pendingPollCount)) {
+                                ProviderP2pDiagnostics.record(
+                                    event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_STATE,
+                                    operationId = operationId,
+                                    jobId = state.jobId,
+                                    providerId = state.providerId.value,
+                                    codes = mapOf(
+                                        "state" to "PENDING",
+                                        "route" to state.route.name,
+                                    ),
+                                    numbers = mapOf(
+                                        "pollCount" to pendingPollCount,
+                                        "elapsedMs" to elapsedMillis(startedAtNanos),
+                                    ),
+                                )
+                            }
                             delay(pollIntervalMs)
+                        }
 
-                        is ProviderTorrentReaderState.Failure ->
+                        is ProviderTorrentReaderState.Failure -> {
+                            ProviderP2pDiagnostics.record(
+                                event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_FAILED,
+                                operationId = operationId,
+                                jobId = lastJobId,
+                                providerId = lastProviderId,
+                                codes = buildMap {
+                                    put("failure", state.reason.name)
+                                    lastRoute?.let { put("route", it) }
+                                },
+                                numbers = mapOf(
+                                    "elapsedMs" to elapsedMillis(startedAtNanos),
+                                    "pendingPollCount" to pendingPollCount,
+                                ),
+                                priority = LogPriority.WARN,
+                            )
                             return@withTimeout Result.failure(
                                 ProviderTorrentAcquisitionException(state.reason),
                             )
+                        }
                     }
                 }
 
@@ -105,14 +203,63 @@ class ProviderTorrentArtifactEngine(
                 )
             }
         } catch (_: TimeoutCancellationException) {
+            ProviderP2pDiagnostics.record(
+                event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_FAILED,
+                operationId = operationId,
+                jobId = lastJobId,
+                providerId = lastProviderId,
+                codes = buildMap {
+                    put("failure", TorrentAcquisitionFailure.ACQUISITION_FAILED.name)
+                    put("reason", "OUTER_TIMEOUT")
+                    lastRoute?.let { put("route", it) }
+                },
+                numbers = mapOf(
+                    "elapsedMs" to elapsedMillis(startedAtNanos),
+                    "timeoutMs" to acquisitionTimeoutMs,
+                    "pendingPollCount" to pendingPollCount,
+                ),
+                priority = LogPriority.ERROR,
+            )
             Result.failure(
                 ProviderTorrentAcquisitionException(
                     TorrentAcquisitionFailure.ACQUISITION_FAILED,
                 ),
             )
         } catch (error: CancellationException) {
+            ProviderP2pDiagnostics.record(
+                event = ProviderP2pDiagnosticEvent.JOB_CANCELLED,
+                operationId = operationId,
+                jobId = lastJobId,
+                providerId = lastProviderId,
+                codes = buildMap {
+                    put("stage", "READER_ACQUISITION")
+                    lastRoute?.let { put("route", it) }
+                },
+                numbers = mapOf(
+                    "elapsedMs" to elapsedMillis(startedAtNanos),
+                    "pendingPollCount" to pendingPollCount,
+                ),
+                exceptionClass = error::class.qualifiedName,
+                priority = LogPriority.WARN,
+            )
             throw error
         } catch (error: Throwable) {
+            ProviderP2pDiagnostics.record(
+                event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_FAILED,
+                operationId = operationId,
+                jobId = lastJobId,
+                providerId = lastProviderId,
+                codes = buildMap {
+                    put("reason", "THREW")
+                    lastRoute?.let { put("route", it) }
+                },
+                numbers = mapOf(
+                    "elapsedMs" to elapsedMillis(startedAtNanos),
+                    "pendingPollCount" to pendingPollCount,
+                ),
+                exceptionClass = error::class.qualifiedName,
+                priority = LogPriority.ERROR,
+            )
             Result.failure(error)
         }
     }
@@ -125,10 +272,24 @@ class ProviderTorrentArtifactEngine(
             append(request.fileIndex ?: 0)
         }
 
+    private fun elapsedMillis(startedAtNanos: Long): Long =
+        ((System.nanoTime() - startedAtNanos) / NANOS_PER_MILLISECOND).coerceAtLeast(0L)
+
+    private fun shouldLogPendingPoll(pollCount: Long): Boolean =
+        pollCount in PENDING_POLL_MILESTONES || (pollCount >= 1_000L && pollCount % 1_000L == 0L)
+
+    private fun safeFormatCode(format: String): String =
+        format.uppercase()
+            .takeIf { SAFE_CODE.matches(it) }
+            ?: "UNKNOWN"
+
     private companion object {
         const val DEFAULT_POLL_INTERVAL_MS = 500L
         const val DEFAULT_ACQUISITION_TIMEOUT_MS = 15L * 60L * 1000L
         const val MAX_ACQUISITION_TIMEOUT_MS = 60L * 60L * 1000L
+        const val NANOS_PER_MILLISECOND = 1_000_000L
+        val PENDING_POLL_MILESTONES = setOf(1L, 2L, 5L, 10L, 25L, 50L, 100L, 250L, 500L)
+        val SAFE_CODE = Regex("^[A-Z][A-Z0-9_]{0,63}$")
     }
 }
 

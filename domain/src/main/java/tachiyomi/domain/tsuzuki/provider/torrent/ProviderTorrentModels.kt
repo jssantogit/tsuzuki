@@ -262,9 +262,11 @@ class TorrentChapterMapper(
             .mapNotNull { file ->
                 val label = file.chapterLabel()
                 val explicitLabel = explicitChapterLabel(label)
-                val mappingLabel = explicitLabel ?: label
+                val titleAwareLabel = explicitLabel?.let { null } ?: titleAwareMappingLabel(request, label)
+                val mappingLabel = explicitLabel ?: titleAwareLabel ?: label
                 val parsed = parseLabel(mappingLabel)
-                val titleAwareSafe = explicitLabel != null || isImplicitIdentitySafe(request, label)
+                val titleAwareSafe =
+                    explicitLabel != null || titleAwareLabel != null || isImplicitIdentitySafe(request, label)
                 file.takeIf { parsed.identity == request.identity && titleAwareSafe }
                     ?.let { ParsedTorrentFile(file, parseVolume(mappingLabel)) }
             }
@@ -292,6 +294,19 @@ class TorrentChapterMapper(
             1 -> TorrentChapterFileMatch.Exact(matchingFiles.single())
             else -> TorrentChapterFileMatch.Ambiguous(matchingFiles)
         }
+    }
+
+    private fun titleAwareMappingLabel(
+        request: TorrentChapterRequest,
+        label: String,
+    ): String? {
+        if (request.titles.isEmpty()) return null
+        return request.titles.asSequence()
+            .mapNotNull(::titlePattern)
+            .flatMap { pattern -> pattern.findAll(label).asSequence() }
+            .map { titleMatch -> label.removeRange(titleMatch.range).trim() }
+            .filter(String::isNotEmpty)
+            .firstOrNull { remainder -> parseLabel(remainder).identity == request.identity }
     }
 
     private fun isImplicitIdentitySafe(
@@ -332,12 +347,12 @@ class TorrentChapterMapper(
         titles: List<String>,
         chapterNumber: String,
     ): Boolean {
-        val escapedNumber = Regex.escape(chapterNumber)
+        val numberPattern = titleAwareChapterNumberPattern(chapterNumber)
         val chapterToken = Regex(
-            "(?i)(?<![\\p{L}\\p{N}])$escapedNumber(?![\\p{L}\\p{N}])",
+            "(?i)(?<![\\p{L}\\p{N}])$numberPattern(?![\\p{L}\\p{N}])",
         )
         val sameNumberVolumeEvidence = Regex(
-            "(?i)(?<![\\p{L}\\p{N}])vol(?:ume)?\\.?\\s*$escapedNumber(?![\\p{L}\\p{N}])",
+            "(?i)(?<![\\p{L}\\p{N}])vol(?:ume)?\\.?\\s*$numberPattern(?![\\p{L}\\p{N}])",
         )
         return titles.asSequence()
             .mapNotNull(::titlePattern)
@@ -348,6 +363,16 @@ class TorrentChapterMapper(
                     chapterToken.containsMatchIn(withoutVolumeEvidence)
                 }
             }
+    }
+
+    private fun titleAwareChapterNumberPattern(chapterNumber: String): String {
+        val match = ZERO_PADDED_CHAPTER_NUMBER.matchEntire(chapterNumber)
+            ?: return Regex.escape(chapterNumber)
+        val integer = match.groupValues[1]
+            .trimStart('0')
+            .ifEmpty { "0" }
+        val suffix = match.groupValues[2]
+        return "0*${Regex.escape(integer)}${Regex.escape(suffix)}"
     }
 
     private fun titlePattern(title: String): Regex? {
@@ -381,6 +406,7 @@ class TorrentChapterMapper(
 
     private companion object {
         val TITLE_WORD = Regex("[\\p{L}\\p{N}]+")
+        val ZERO_PADDED_CHAPTER_NUMBER = Regex("(\\d+)(\\.\\d+|[a-z])?", RegexOption.IGNORE_CASE)
         val EMBEDDED_VOLUME_CHAPTER_MARKER = Regex(
             "(?i)(?<![\\p{L}\\p{N}])vol(?:ume)?\\.?\\s*\\d+\\s*(?:[-:|/]\\s*|\\s+)" +
                 "(?:ch(?:apter)?|cap(?:i|í)tulo)\\s*\\.?\\s*\\d+(?:\\.\\d+|[a-z])?",

@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.provider.runtime
 
 import android.content.Context
 import kotlinx.coroutines.runBlocking
+import logcat.LogPriority
 import tachiyomi.core.provider.packageformat.ProviderScriptManifest
 import tachiyomi.core.provider.runtime.BoundedProviderLogHostService
 import tachiyomi.core.provider.runtime.DefaultProviderBinaryTransformHostService
@@ -16,6 +17,7 @@ import tachiyomi.core.provider.runtime.ProviderHttpProtocol
 import tachiyomi.core.provider.runtime.ProviderHttpSessionStore
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
+import tachiyomi.core.provider.runtime.ProviderP2pAcquireResponse
 import tachiyomi.core.provider.runtime.ProviderP2pHostService
 import tachiyomi.core.provider.runtime.ProviderP2pProtocol
 import tachiyomi.core.provider.runtime.ProviderResourceHandle
@@ -187,6 +189,7 @@ class ProviderHostInvocationFactory(
             resources = resources,
             closeables = listOfNotNull<AutoCloseable>(http, browser),
             bridge = ProviderHostBridgeAdapter(
+                providerId = policy.providerId,
                 services = services,
                 operationBudget = ProviderHostOperationBudget(policy.maxHostOperations),
             ),
@@ -233,6 +236,7 @@ class ProviderHostInvocation internal constructor(
 }
 
 private class ProviderHostBridgeAdapter(
+    private val providerId: String,
     private val services: ProviderHostServices,
     private val operationBudget: ProviderHostOperationBudget,
 ) : IProviderHostBridge.Stub() {
@@ -254,11 +258,34 @@ private class ProviderHostBridgeAdapter(
 
     override fun p2pAcquire(requestJson: String?): String =
         runBlocking {
-            ProviderP2pProtocol.encodeResponse(
-                requireService(services.p2p, "p2p").acquire(
-                    ProviderP2pProtocol.decodeRequest(requestJson.orEmpty()),
-                ),
-            )
+            val service = requireService(services.p2p, "p2p")
+            val request = ProviderP2pProtocol.decodeRequest(requestJson.orEmpty())
+            val response = service.acquire(request)
+            when (response) {
+                is ProviderP2pAcquireResponse.Ready ->
+                    ProviderP2pDiagnostics.record(
+                        event = ProviderP2pDiagnosticEvent.HOST_RESPONSE,
+                        operationId = request.operationId,
+                        providerId = providerId,
+                        codes = mapOf(
+                            "status" to "READY",
+                            "format" to response.format.name,
+                        ),
+                    )
+                is ProviderP2pAcquireResponse.Failure ->
+                    ProviderP2pDiagnostics.record(
+                        event = ProviderP2pDiagnosticEvent.HOST_RESPONSE,
+                        operationId = request.operationId,
+                        providerId = providerId,
+                        codes = mapOf(
+                            "status" to "FAILED",
+                            "failure" to response.reason.name,
+                        ),
+                        priority = LogPriority.WARN,
+                    )
+                is ProviderP2pAcquireResponse.Pending -> Unit
+            }
+            ProviderP2pProtocol.encodeResponse(response)
         }
 
     override fun domSelectText(resourceHandle: String?, cssSelector: String?): String =
