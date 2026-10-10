@@ -258,8 +258,9 @@ private class ProviderHostBridgeAdapter(
 
     override fun p2pAcquire(requestJson: String?): String =
         runBlocking {
+            val service = requireService(services.p2p, "p2p")
             val request = ProviderP2pProtocol.decodeRequest(requestJson.orEmpty())
-            val response = requireService(services.p2p, "p2p").acquire(request)
+            val response = service.acquire(request)
             when (response) {
                 is ProviderP2pAcquireResponse.Ready ->
                     ProviderP2pDiagnostics.record(
