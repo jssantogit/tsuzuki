@@ -123,22 +123,6 @@ class ScriptProviderTorrentGateway(
         request: TorrentAcquisitionRequest,
     ): ProviderCallResult<P2pAcquireState> {
         val startedAtNanos = System.nanoTime()
-        ProviderP2pDiagnostics.record(
-            event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_STATE,
-            operationId = request.operationId,
-            providerId = providerId.value,
-            codes = mapOf(
-                "state" to "PROVIDER_CALL_STARTED",
-                "capability" to "ACQUISITION_P2P_V1",
-            ),
-            flags = mapOf(
-                "hostGrantP2p" to true,
-                "hasInfoHash" to !request.candidate.infoHash.isNullOrBlank(),
-                "hasMagnet" to !request.candidate.magnetUri.isNullOrBlank(),
-                "hasTorrentUrl" to !request.candidate.torrentUrl.isNullOrBlank(),
-            ),
-        )
-
         val result = executor.invoke(
             providerId = providerId,
             capability = ProviderCapabilities.AcquisitionP2pV1,
