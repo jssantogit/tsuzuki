@@ -67,22 +67,6 @@ class ProviderP2pJobManager internal constructor(
         providerId: String,
         request: ProviderP2pAcquireRequest,
     ): ProviderP2pAcquireResponse {
-        ProviderP2pDiagnostics.record(
-            event = ProviderP2pDiagnosticEvent.ACQUISITION_REQUESTED,
-            operationId = request.operationId,
-            providerId = providerId,
-            codes = mapOf("format" to selectedFormatCode(request)),
-            numbers = buildMap {
-                put("fileIndex", request.selectedFileIndex.toLong())
-                request.selectedFileSizeBytes?.let { put("expectedBytes", it) }
-            },
-            flags = mapOf(
-                "hasInfoHash" to !request.infoHash.isNullOrBlank(),
-                "hasMagnet" to !request.magnetUri.isNullOrBlank(),
-                "hasTorrentUrl" to !request.torrentUrl.isNullOrBlank(),
-            ),
-        )
-
         val key = JobKey(
             providerId = providerId,
             operationId = request.operationId,
@@ -106,16 +90,22 @@ class ProviderP2pJobManager internal constructor(
                         ProviderP2pFailureCode.FILE_MISMATCH,
                     )
                 }
-                ProviderP2pDiagnostics.record(
-                    event = ProviderP2pDiagnosticEvent.JOB_REUSED,
-                    operationId = request.operationId,
-                    jobId = existing.jobId,
-                    providerId = providerId,
-                    codes = mapOf("state" to existing.response.stateCode()),
-                    numbers = existing.completedAtMillis?.let { completedAt ->
-                        mapOf("completedAgeMs" to (clock() - completedAt).coerceAtLeast(0L))
-                    }.orEmpty(),
-                )
+                existing.pollCount += 1L
+                if (shouldLogPoll(existing.pollCount)) {
+                    ProviderP2pDiagnostics.record(
+                        event = ProviderP2pDiagnosticEvent.JOB_REUSED,
+                        operationId = request.operationId,
+                        jobId = existing.jobId,
+                        providerId = providerId,
+                        codes = mapOf("state" to existing.response.stateCode()),
+                        numbers = buildMap {
+                            put("pollCount", existing.pollCount)
+                            existing.completedAtMillis?.let { completedAt ->
+                                put("completedAgeMs", (clock() - completedAt).coerceAtLeast(0L))
+                            }
+                        },
+                    )
+                }
                 return existing.response
             }
 
@@ -126,6 +116,22 @@ class ProviderP2pJobManager internal constructor(
                 response = ProviderP2pAcquireResponse.Pending(jobId),
             )
             jobs[key] = entry
+            ProviderP2pDiagnostics.record(
+                event = ProviderP2pDiagnosticEvent.ACQUISITION_REQUESTED,
+                operationId = request.operationId,
+                jobId = jobId,
+                providerId = providerId,
+                codes = mapOf("format" to selectedFormatCode(request)),
+                numbers = buildMap {
+                    put("fileIndex", request.selectedFileIndex.toLong())
+                    request.selectedFileSizeBytes?.let { put("expectedBytes", it) }
+                },
+                flags = mapOf(
+                    "hasInfoHash" to !request.infoHash.isNullOrBlank(),
+                    "hasMagnet" to !request.magnetUri.isNullOrBlank(),
+                    "hasTorrentUrl" to !request.torrentUrl.isNullOrBlank(),
+                ),
+            )
             ProviderP2pDiagnostics.record(
                 event = ProviderP2pDiagnosticEvent.JOB_CREATED,
                 operationId = request.operationId,
@@ -172,6 +178,7 @@ class ProviderP2pJobManager internal constructor(
             providerId = key.providerId,
         )
 
+        var terminalExceptionClass: String? = null
         val response = try {
             when (val result = engine.download(entry.request, workingDirectory)) {
                 is ProviderP2pDownloadResult.Ready -> {
@@ -225,13 +232,14 @@ class ProviderP2pJobManager internal constructor(
                                 )
                             },
                             onFailure = { error ->
+                                terminalExceptionClass = error::class.qualifiedName
                                 ProviderP2pDiagnostics.record(
                                     event = ProviderP2pDiagnosticEvent.ADOPTION_FAILED,
                                     operationId = entry.request.operationId,
                                     jobId = entry.jobId,
                                     providerId = key.providerId,
                                     codes = mapOf("failure" to ProviderP2pFailureCode.STORAGE_ERROR.name),
-                                    exceptionClass = error::class.qualifiedName,
+                                    exceptionClass = terminalExceptionClass,
                                     priority = LogPriority.ERROR,
                                 )
                                 ProviderP2pAcquireResponse.Failure(
@@ -246,25 +254,19 @@ class ProviderP2pJobManager internal constructor(
                     ProviderP2pAcquireResponse.Failure(result.reason)
             }
         } catch (error: CancellationException) {
+            terminalExceptionClass = error::class.qualifiedName
             ProviderP2pDiagnostics.record(
                 event = ProviderP2pDiagnosticEvent.JOB_CANCELLED,
                 operationId = entry.request.operationId,
                 jobId = entry.jobId,
                 providerId = key.providerId,
                 codes = mapOf("failure" to ProviderP2pFailureCode.CANCELLED.name),
+                exceptionClass = terminalExceptionClass,
                 priority = LogPriority.WARN,
             )
             ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.CANCELLED)
         } catch (error: Throwable) {
-            ProviderP2pDiagnostics.record(
-                event = ProviderP2pDiagnosticEvent.JOB_COMPLETED,
-                operationId = entry.request.operationId,
-                jobId = entry.jobId,
-                providerId = key.providerId,
-                codes = mapOf("failure" to ProviderP2pFailureCode.UNAVAILABLE.name),
-                exceptionClass = error::class.qualifiedName,
-                priority = LogPriority.ERROR,
-            )
+            terminalExceptionClass = error::class.qualifiedName
             ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.UNAVAILABLE)
         }
 
@@ -287,7 +289,9 @@ class ProviderP2pJobManager internal constructor(
             },
             numbers = mapOf(
                 "elapsedMs" to (completedAtMillis - startedAtMillis).coerceAtLeast(0L),
+                "pollCount" to entry.pollCount,
             ),
+            exceptionClass = terminalExceptionClass,
             priority = if (response is ProviderP2pAcquireResponse.Failure) {
                 LogPriority.WARN
             } else {
@@ -379,6 +383,9 @@ class ProviderP2pJobManager internal constructor(
         is ProviderP2pAcquireResponse.Failure -> "FAILED"
     }
 
+    private fun shouldLogPoll(pollCount: Long): Boolean =
+        pollCount in POLL_MILESTONES || (pollCount >= 1_000L && pollCount % 1_000L == 0L)
+
     private data class JobKey(
         val providerId: String,
         val operationId: String,
@@ -390,9 +397,11 @@ class ProviderP2pJobManager internal constructor(
         var response: ProviderP2pAcquireResponse,
         var completedAtMillis: Long? = null,
         var worker: Job? = null,
+        var pollCount: Long = 0L,
     )
 
     private companion object {
         const val DEFAULT_COMPLETED_TTL_MS = 24L * 60L * 60L * 1000L
+        val POLL_MILESTONES = setOf(1L, 2L, 5L, 10L, 25L, 50L, 100L, 250L, 500L)
     }
 }
