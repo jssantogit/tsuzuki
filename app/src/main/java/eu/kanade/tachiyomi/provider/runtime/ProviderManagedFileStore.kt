@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.provider.runtime
 
 import android.content.Context
 import androidx.core.content.FileProvider
+import logcat.LogPriority
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedFileFormat
@@ -110,36 +111,178 @@ class ProviderManagedFileStore internal constructor(
         providerId: String,
         source: File,
         format: ProviderManagedResourceFormat,
+        diagnosticOperationId: String? = null,
+        diagnosticJobId: String? = null,
     ): String {
         val provider = ProviderId(providerId)
-        require(source.isFile && !Files.isSymbolicLink(source.toPath())) {
+        val sourceValid = source.isFile && !Files.isSymbolicLink(source.toPath())
+        recordAdoptionStage(
+            operationId = diagnosticOperationId,
+            jobId = diagnosticJobId,
+            providerId = providerId,
+            phase = "SOURCE_CHECK",
+            state = "STARTED",
+            flags = mapOf("sourceValid" to sourceValid),
+        )
+        if (!sourceValid) {
+            recordAdoptionStage(
+                operationId = diagnosticOperationId,
+                jobId = diagnosticJobId,
+                providerId = providerId,
+                phase = "SOURCE_CHECK",
+                state = "FAILED",
+                flags = mapOf("sourceValid" to false),
+                priority = LogPriority.WARN,
+            )
+        }
+        require(sourceValid) {
             "Provider managed source must be a regular host-owned file"
         }
+        recordAdoptionStage(
+            operationId = diagnosticOperationId,
+            jobId = diagnosticJobId,
+            providerId = providerId,
+            phase = "SOURCE_CHECK",
+            state = "SUCCEEDED",
+            flags = mapOf("sourceValid" to true),
+        )
 
         val sourceBytes = source.length()
-        if (sourceBytes <= 0L || sourceBytes > maxFileBytes) {
+        val sourceSizeValid = sourceBytes > 0L && sourceBytes <= maxFileBytes
+        recordAdoptionStage(
+            operationId = diagnosticOperationId,
+            jobId = diagnosticJobId,
+            providerId = providerId,
+            phase = "SOURCE_SIZE",
+            state = "STARTED",
+            numbers = mapOf(
+                "sourceBytes" to sourceBytes.coerceAtLeast(0L),
+                "maxFileBytes" to maxFileBytes,
+            ),
+        )
+        if (!sourceSizeValid) {
+            recordAdoptionStage(
+                operationId = diagnosticOperationId,
+                jobId = diagnosticJobId,
+                providerId = providerId,
+                phase = "SOURCE_SIZE",
+                state = "FAILED",
+                numbers = mapOf(
+                    "sourceBytes" to sourceBytes.coerceAtLeast(0L),
+                    "maxFileBytes" to maxFileBytes,
+                ),
+                priority = LogPriority.WARN,
+            )
             throw IllegalStateException("Provider managed resource exceeds the file byte limit")
         }
-        validateArchive(source)
+        recordAdoptionStage(
+            operationId = diagnosticOperationId,
+            jobId = diagnosticJobId,
+            providerId = providerId,
+            phase = "SOURCE_SIZE",
+            state = "SUCCEEDED",
+            numbers = mapOf("sourceBytes" to sourceBytes),
+        )
+
+        recordAdoptionStage(
+            operationId = diagnosticOperationId,
+            jobId = diagnosticJobId,
+            providerId = providerId,
+            phase = "SOURCE_ARCHIVE_VALIDATE",
+            state = "STARTED",
+        )
+        try {
+            validateArchive(source)
+        } catch (error: Throwable) {
+            recordAdoptionStage(
+                operationId = diagnosticOperationId,
+                jobId = diagnosticJobId,
+                providerId = providerId,
+                phase = "SOURCE_ARCHIVE_VALIDATE",
+                state = "FAILED",
+                exceptionClass = error::class.qualifiedName,
+                priority = LogPriority.WARN,
+            )
+            throw error
+        }
+        recordAdoptionStage(
+            operationId = diagnosticOperationId,
+            jobId = diagnosticJobId,
+            providerId = providerId,
+            phase = "SOURCE_ARCHIVE_VALIDATE",
+            state = "SUCCEEDED",
+        )
 
         val directory = providerDirectory(provider)
         ensureDirectory(directory)
         pruneExpired(directory)
 
         val existing = directory.listFiles().orEmpty().filter(File::isFile)
-        if (existing.size >= maxFilesPerProvider) {
+        val totalBytes = existing.sumOf(File::length)
+        val countWithinLimit = existing.size < maxFilesPerProvider
+        val bytesWithinLimit = totalBytes + sourceBytes <= maxTotalBytesPerProvider
+        recordAdoptionStage(
+            operationId = diagnosticOperationId,
+            jobId = diagnosticJobId,
+            providerId = providerId,
+            phase = "QUOTA_CHECK",
+            state = "STARTED",
+            numbers = mapOf(
+                "existingFiles" to existing.size.toLong(),
+                "existingBytes" to totalBytes.coerceAtLeast(0L),
+                "incomingBytes" to sourceBytes,
+            ),
+            flags = mapOf(
+                "countWithinLimit" to countWithinLimit,
+                "bytesWithinLimit" to bytesWithinLimit,
+            ),
+        )
+        if (!countWithinLimit) {
+            recordAdoptionStage(
+                operationId = diagnosticOperationId,
+                jobId = diagnosticJobId,
+                providerId = providerId,
+                phase = "QUOTA_CHECK",
+                state = "FAILED",
+                codes = mapOf("reason" to "FILE_COUNT_LIMIT"),
+                priority = LogPriority.WARN,
+            )
             throw IllegalStateException("Provider managed resource count limit exceeded")
         }
-        val totalBytes = existing.sumOf(File::length)
-        if (totalBytes + sourceBytes > maxTotalBytesPerProvider) {
+        if (!bytesWithinLimit) {
+            recordAdoptionStage(
+                operationId = diagnosticOperationId,
+                jobId = diagnosticJobId,
+                providerId = providerId,
+                phase = "QUOTA_CHECK",
+                state = "FAILED",
+                codes = mapOf("reason" to "TOTAL_BYTES_LIMIT"),
+                priority = LogPriority.WARN,
+            )
             throw IllegalStateException("Provider managed resource total byte limit exceeded")
         }
+        recordAdoptionStage(
+            operationId = diagnosticOperationId,
+            jobId = diagnosticJobId,
+            providerId = providerId,
+            phase = "QUOTA_CHECK",
+            state = "SUCCEEDED",
+        )
 
         val id = UUID.randomUUID().toString()
         val target = File(directory, "$id.${format.extension}")
         val temp = File(directory, ".$id.tmp")
+        var currentPhase = "COPY"
 
         try {
+            recordAdoptionStage(
+                operationId = diagnosticOperationId,
+                jobId = diagnosticJobId,
+                providerId = providerId,
+                phase = currentPhase,
+                state = "STARTED",
+                numbers = mapOf("sourceBytes" to sourceBytes),
+            )
             FileInputStream(source).use { input ->
                 FileOutputStream(temp).use { output ->
                     var copied = 0L
@@ -163,14 +306,79 @@ class ProviderManagedFileStore internal constructor(
                     output.fd.sync()
                 }
             }
+            recordAdoptionStage(
+                operationId = diagnosticOperationId,
+                jobId = diagnosticJobId,
+                providerId = providerId,
+                phase = currentPhase,
+                state = "SUCCEEDED",
+                numbers = mapOf("copiedBytes" to sourceBytes),
+            )
+
+            currentPhase = "TEMP_ARCHIVE_VALIDATE"
+            recordAdoptionStage(
+                operationId = diagnosticOperationId,
+                jobId = diagnosticJobId,
+                providerId = providerId,
+                phase = currentPhase,
+                state = "STARTED",
+            )
             validateArchive(temp)
+            recordAdoptionStage(
+                operationId = diagnosticOperationId,
+                jobId = diagnosticJobId,
+                providerId = providerId,
+                phase = currentPhase,
+                state = "SUCCEEDED",
+            )
+
+            currentPhase = "MOVE"
+            recordAdoptionStage(
+                operationId = diagnosticOperationId,
+                jobId = diagnosticJobId,
+                providerId = providerId,
+                phase = currentPhase,
+                state = "STARTED",
+            )
             moveAtomically(temp, target)
             target.setLastModified(clock())
+            recordAdoptionStage(
+                operationId = diagnosticOperationId,
+                jobId = diagnosticJobId,
+                providerId = providerId,
+                phase = currentPhase,
+                state = "SUCCEEDED",
+            )
+
+            currentPhase = "RETIRE_SOURCE"
+            recordAdoptionStage(
+                operationId = diagnosticOperationId,
+                jobId = diagnosticJobId,
+                providerId = providerId,
+                phase = currentPhase,
+                state = "STARTED",
+            )
             if (!source.delete()) {
                 target.delete()
                 throw IllegalStateException("Provider managed source could not be retired after adoption")
             }
+            recordAdoptionStage(
+                operationId = diagnosticOperationId,
+                jobId = diagnosticJobId,
+                providerId = providerId,
+                phase = currentPhase,
+                state = "SUCCEEDED",
+            )
         } catch (error: Throwable) {
+            recordAdoptionStage(
+                operationId = diagnosticOperationId,
+                jobId = diagnosticJobId,
+                providerId = providerId,
+                phase = currentPhase,
+                state = "FAILED",
+                exceptionClass = error::class.qualifiedName,
+                priority = LogPriority.ERROR,
+            )
             temp.delete()
             target.delete()
             throw error
@@ -208,6 +416,35 @@ class ProviderManagedFileStore internal constructor(
             return null
         }
         return uriFactory(file)
+    }
+
+    private fun recordAdoptionStage(
+        operationId: String?,
+        jobId: String?,
+        providerId: String,
+        phase: String,
+        state: String,
+        codes: Map<String, String> = emptyMap(),
+        numbers: Map<String, Long> = emptyMap(),
+        flags: Map<String, Boolean> = emptyMap(),
+        exceptionClass: String? = null,
+        priority: LogPriority = LogPriority.INFO,
+    ) {
+        val safeOperationId = operationId ?: return
+        ProviderP2pDiagnostics.record(
+            event = ProviderP2pDiagnosticEvent.ADOPTION_STAGE,
+            operationId = safeOperationId,
+            jobId = jobId,
+            providerId = providerId,
+            codes = codes + mapOf(
+                "phase" to phase,
+                "state" to state,
+            ),
+            numbers = numbers,
+            flags = flags,
+            exceptionClass = exceptionClass,
+            priority = priority,
+        )
     }
 
     private fun providerDirectory(providerId: ProviderId): File =
