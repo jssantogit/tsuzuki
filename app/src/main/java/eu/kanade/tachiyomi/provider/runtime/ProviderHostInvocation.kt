@@ -292,7 +292,7 @@ private class ProviderHostBridgeAdapter(
             requireService(services.dom, "dom").selectText(
                 ProviderResourceHandle(resourceHandle.orEmpty()),
                 cssSelector.orEmpty(),
-            ).value
+            )
         }
 
     override fun browserReadText(url: String?, cssSelector: String?): String =
