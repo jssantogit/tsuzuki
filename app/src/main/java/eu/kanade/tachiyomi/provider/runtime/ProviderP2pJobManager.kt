@@ -98,12 +98,7 @@ class ProviderP2pJobManager internal constructor(
                         jobId = existing.jobId,
                         providerId = providerId,
                         codes = mapOf("state" to existing.response.stateCode()),
-                        numbers = buildMap {
-                            put("pollCount", existing.pollCount)
-                            existing.completedAtMillis?.let { completedAt ->
-                                put("completedAgeMs", (clock() - completedAt).coerceAtLeast(0L))
-                            }
-                        },
+                        numbers = mapOf("pollCount" to existing.pollCount),
                     )
                 }
                 return existing.response
@@ -165,7 +160,7 @@ class ProviderP2pJobManager internal constructor(
         key: JobKey,
         entry: JobEntry,
     ) {
-        val startedAtMillis = clock()
+        val startedAtNanos = System.nanoTime()
         val workingDirectory = File(
             root,
             "${sha256(key.providerId)}-${entry.jobId}",
@@ -271,7 +266,6 @@ class ProviderP2pJobManager internal constructor(
             ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.UNAVAILABLE)
         }
 
-        val completedAtMillis = clock()
         ProviderP2pDiagnostics.record(
             event = ProviderP2pDiagnosticEvent.JOB_COMPLETED,
             operationId = entry.request.operationId,
@@ -289,7 +283,7 @@ class ProviderP2pJobManager internal constructor(
                 )
             },
             numbers = mapOf(
-                "elapsedMs" to (completedAtMillis - startedAtMillis).coerceAtLeast(0L),
+                "elapsedMs" to elapsedMillis(startedAtNanos),
                 "pollCount" to entry.pollCount,
             ),
             exceptionClass = terminalExceptionClass,
@@ -304,7 +298,7 @@ class ProviderP2pJobManager internal constructor(
             val current = jobs[key]
             if (current === entry) {
                 entry.response = response
-                entry.completedAtMillis = completedAtMillis
+                entry.completedAtMillis = clock()
             }
         }
         val cleanupSucceeded = workingDirectory.deleteRecursively()
@@ -372,6 +366,9 @@ class ProviderP2pJobManager internal constructor(
             .digest(value.encodeToByteArray())
             .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xFF) }
 
+    private fun elapsedMillis(startedAtNanos: Long): Long =
+        ((System.nanoTime() - startedAtNanos) / NANOS_PER_MILLISECOND).coerceAtLeast(0L)
+
     private fun selectedFormatCode(request: ProviderP2pAcquireRequest): String =
         request.selectedFilePath.substringAfterLast('.', missingDelimiterValue = "UNKNOWN")
             .uppercase()
@@ -403,6 +400,7 @@ class ProviderP2pJobManager internal constructor(
 
     private companion object {
         const val DEFAULT_COMPLETED_TTL_MS = 24L * 60L * 60L * 1000L
+        const val NANOS_PER_MILLISECOND = 1_000_000L
         val POLL_MILESTONES = setOf(1L, 2L, 5L, 10L, 25L, 50L, 100L, 250L, 500L)
     }
 }
