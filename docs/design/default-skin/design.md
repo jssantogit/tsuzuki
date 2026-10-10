@@ -4,7 +4,7 @@
 
 **Settings milestone: visually complete, approved and closed.** This document consolidates the approved direction, including the final Settings work and the earlier Default Skin families. It supersedes contradictory iteration notes. Approval concerns architecture, presentation and relationships; it does not certify Android implementation, exact reusable tokens, accessibility or physical-device behavior.
 
-The [editable mockup](mockups/index.html) and [usage notes](mockups/README.md) preserve the existing source. The initial board shows Sobre and closing corrections. Other boards remain in the source and local navigation. [Earlier detailed reference](references/history/default-skin-before-settings-closure.md) preserves pre-closure material; it is historical where newer decisions supersede it.
+The [editable mockup](mockups/index.html) and [usage notes](mockups/README.md) preserve the existing source. The initial board now presents the main Biblioteca surface; earlier boards remain in the source and local navigation. [Earlier detailed reference](references/history/default-skin-before-settings-closure.md) preserves pre-closure material; it is historical where newer decisions supersede it.
 
 ## Identity and product boundaries
 
@@ -63,6 +63,28 @@ Sheets have a close/cancel path, return focus to their trigger and keep long con
 Observed light-role values in the mockup: background `#F7F7F8`, white groups `#FFFFFF`, primary text `#17181A`, secondary/section text `#50565C`, dividers `#D6D9DC`, icon surface `#E8EAED`. Older dark references use `#0B0C0D` background, `#1C1E1F` groups and `#F5F5F5` primary text. These are traceable visual evidence, not a new globally certified palette.
 
 Observed CSS geometry: horizontal inset 16px; group gap 24px; row padding 12px; group radius 16px; icon-container radius 8px; deep header/content spacing 32px; title 36px/700, row 16px, supporting copy 14px, section label 12px/700. Segoe UI regular/bold and Bahnschrift are local prototype fonts, **not approved Android font-distribution or dp/sp contracts**. Exact global tokens, type family, contrast measurements and scaling still require implementation decisions and checks. Handset frame, system bars and board background are presentation infrastructure, not product tokens.
+
+## Biblioteca principal
+
+This is the main navigation surface for the user's unified library. It is distinct from **Configurações → Biblioteca**, which remains the approved Settings hub and its preference drill-downs. This addition does not reopen or change the visually complete Settings milestone, and it does not define the canonical work detail.
+
+The main screen keeps the Default Skin direction: light background, low density, large title, generous whitespace and few semantic surfaces. The covers dominate the first view. Its persistent bottom navigation is **Início · Busca · Biblioteca · Perfil**, with Biblioteca selected. Search remains a local state of Biblioteca and does not change that selection.
+
+The header presents the large “Biblioteca” title, search and advanced-filter actions. A single light, horizontally scrollable status rail follows: **Todos · Lendo · Planejado · Concluído · Em pausa · Abandonado**. Selection is clear through type weight and a restrained indicator. With no advanced filters, the cover grid follows directly. When filters are active, a quiet contextual line shows at most two removable filter chips and a `+N` control that reopens Filtros; status never appears in this line.
+
+The responsive grid uses naturally proportioned, full-frame covers with subtle corners and consistent gaps. Each cover is the complete tap target and signals navigation to the existing canonical detail. It carries no permanent title, status, source, format, progress, rating, menu, button or decorative badge. The seven local covers in this prototype are visual fixtures only, not a canonical catalogue, real library inventory, or evidence that a Provider or volume is available. Artwork should represent the canonical work where it exists.
+
+Search expands in place, has distinct clear and exit actions, filters only the current library as text is entered, and preserves status and advanced filters. It adds no global or external results, history or suggestions. Filtros is a modal bottom sheet: ORIGEM is single-select and reflects runtime availability; LISTA appears only for a selected external origin with usable custom lists, never as a duplicate status rail; FORMATO is multi-select and omits `Unknown`; CATEGORIA is single-select with Todas, Sem categoria and real user categories. Demonstrative values such as Kitsu, Manga, an example list and Sem categoria may exercise the board but do not define a fixed Provider set, a permanent list or category catalogue, or real user data.
+
+Filter changes apply immediately. Limpar filtros clears only advanced filters and preserves status and search; Concluído closes the sheet without applying a separate draft. Dismissing the sheet also preserves choices already made. A genuinely empty library has a calm “Sua biblioteca está vazia” state. A query or active filter with no matches has a separate “Nenhuma obra encontrada” state, keeps the applied choices, and may offer Limpar filtros. Loading is discreet, accessible and has no false covers.
+
+The current board shows six compositions: Biblioteca padrão; filtros avançados ativos; busca ativa; Filtros open; nenhum resultado; and biblioteca vazia. The HTML's local interactions illustrate this surface and signal the existing canonical-detail destination; they do not implement Android operations. The generated proposal awaits visual review and is not recorded as approved or closed.
+
+Open Android questions remain for adaptive grid behavior, system insets, font scaling, TalkBack, touch targets and animation/transitions. These need evaluation in the real Android implementation. Prototype CSS measurements and local fonts are not dp/sp, accessibility or font-distribution contracts.
+
+### Biblioteca in Settings — approved scope retained
+
+Configurações → Biblioteca remains the operational hub with its existing three groups and eight rows. Configurações → Biblioteca and Personalização → Layout → Biblioteca keep their separate destinations. Its category-default choices remain Sempre perguntar and Padrão; internal identifiers and demonstration-only copy stay out of product UI. Atualização automática retains its approved detail screen and interval choices: Desligado, 12, 24, 48, 72 horas and Semanal (168 hours). Wi-Fi, rede não limitada and carregamento are independent restrictions; when the interval is off, dependent rows remain visible but disabled and keep their values. Included/excluded categories use separate three-state choices; they start unset, only Padrão do sistema is assumed in the documented fixture, and exclusion takes precedence. The metadata switch starts off. Four independent Smart update criteria start selected: skip works with unread chapters, skip works whose reading has not started, skip completed works, and estimate the next release date. Multi-selection keeps the approved confirmation/cancel semantics where that existing Settings flow stages changes; summaries reflect current values, and return preserves focus and scroll. These decisions apply only to Settings preferences; Biblioteca principal uses its own immediate filter semantics described above. Android persistence, scheduling and capability behavior remain implementation concerns.
 
 ## Downloads
 
