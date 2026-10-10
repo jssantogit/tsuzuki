@@ -74,6 +74,8 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
         val trackerCount = magnetTrackerCount(request.magnetUri)
 
         val session = sessionManagerFactory()
+        val alertCounters = ProviderP2pAlertCounters()
+        session.addListener(alertCounters)
         var started = false
         var currentStage = "SESSION_START"
         try {
@@ -98,6 +100,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 event = ProviderP2pDiagnosticEvent.SESSION_READY,
                 operationId = request.operationId,
                 numbers = mapOf("elapsedMs" to elapsedMillis(sessionStartedAt)),
+                flags = mapOf("dhtRunning" to session.isDhtRunning),
             )
 
             currentStage = "METADATA"
@@ -132,6 +135,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                     ),
                     priority = LogPriority.WARN,
                 )
+                alertCounters.recordSnapshot(request.operationId, "METADATA_FAILED")
                 return@withContext ProviderP2pDownloadResult.Failure(
                     ProviderP2pFailureCode.METADATA_UNAVAILABLE,
                 )
@@ -149,6 +153,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                     "hasV2" to (torrent.infoHashV2() != null),
                 ),
             )
+            alertCounters.recordSnapshot(request.operationId, "METADATA_READY")
 
             currentStage = "IDENTITY_CHECK"
             validateIdentity(request, torrent)?.let { failure ->
@@ -332,6 +337,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                     ),
                     priority = LogPriority.WARN,
                 )
+                alertCounters.recordSnapshot(request.operationId, "HANDLE_FAILED")
                 return@withContext ProviderP2pDownloadResult.Failure(
                     ProviderP2pFailureCode.UNAVAILABLE,
                 )
@@ -435,6 +441,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                                 },
                                 priority = LogPriority.WARN,
                             )
+                            alertCounters.recordSnapshot(request.operationId, "TRANSFER_FAILED")
                             completed = false
                         } else if (
                             status.isFinished ||
@@ -471,6 +478,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                     ),
                     priority = LogPriority.WARN,
                 )
+                alertCounters.recordSnapshot(request.operationId, "TRANSFER_TIMEOUT")
                 return@withContext ProviderP2pDownloadResult.Failure(
                     ProviderP2pFailureCode.NETWORK_ERROR,
                 )
@@ -498,6 +506,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                     firstByteElapsedMs?.let { put("firstByteMs", it) }
                 },
             )
+            alertCounters.recordSnapshot(request.operationId, "TRANSFER_COMPLETE")
 
             handle.pause()
             session.remove(handle)
@@ -577,6 +586,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 ProviderP2pFailureCode.NETWORK_ERROR,
             )
         } finally {
+            alertCounters.recordSnapshot(request.operationId, "FINAL")
             if (started) {
                 val stopped = runCatching { session.stop() }.isSuccess
                 ProviderP2pDiagnostics.record(
@@ -587,6 +597,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                     priority = if (stopped) LogPriority.INFO else LogPriority.WARN,
                 )
             }
+            session.removeListener(alertCounters)
         }
     }
 
