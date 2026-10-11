@@ -39,8 +39,8 @@ import eu.kanade.presentation.track.components.TrackLogoIcon
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinCard
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPageTitle
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinSectionLabel
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSecondaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSectionLabel
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextField

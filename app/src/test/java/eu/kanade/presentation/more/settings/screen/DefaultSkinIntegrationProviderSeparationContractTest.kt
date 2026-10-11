@@ -63,7 +63,7 @@ class DefaultSkinIntegrationProviderSeparationContractTest {
         )
 
         mainSource shouldContain "screen = SettingsTsuzukiIntegrationsScreen()"
-        mainSource shouldContain "screen = SettingsTsuzukiProvidersScreen()"
+        mainSource shouldContain "screen = SettingsTsuzukiProvidersDefaultSkinScreen()"
         mainSource shouldNotContain "screen = SettingsTrackingScreen"
     }
 

@@ -17,7 +17,7 @@ class SettingsDefaultSkinInformationArchitectureTest {
             "SettingsTsuzukiAccountScreen",
             "SettingsTsuzukiPersonalizationsScreen",
             "SettingsTsuzukiIntegrationsScreen",
-            "SettingsTsuzukiProvidersScreen",
+            "SettingsTsuzukiProvidersDefaultSkinScreen",
             "SettingsDownloadScreen",
             "SettingsDataScreen",
             "SettingsSecurityScreen",
@@ -36,7 +36,7 @@ class SettingsDefaultSkinInformationArchitectureTest {
             ).shouldBeTrue()
         (
             sections.indexOf("SettingsTsuzukiIntegrationsScreen") <
-                sections.indexOf("SettingsTsuzukiProvidersScreen")
+                sections.indexOf("SettingsTsuzukiProvidersDefaultSkinScreen")
             ).shouldBeTrue()
         sections shouldNotContain "screen = SettingsTrackingScreen"
     }
