@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -370,6 +371,7 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InstalledProviderCards(
     registrations: List<ProviderRegistration>,
@@ -383,7 +385,12 @@ private fun InstalledProviderCards(
     val colors = defaultSkinColors()
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(DefaultSkinSpacing.PageHorizontal, 18.dp, DefaultSkinSpacing.PageHorizontal, 32.dp),
+        contentPadding = PaddingValues(
+            DefaultSkinSpacing.PageHorizontal,
+            18.dp,
+            DefaultSkinSpacing.PageHorizontal,
+            32.dp,
+        ),
         verticalArrangement = Arrangement.spacedBy(DefaultSkinSpacing.Row),
     ) {
         if (registrations.isEmpty()) {
@@ -409,7 +416,10 @@ private fun InstalledProviderCards(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
                             Text(
                                 text = descriptor.name,
                                 color = colors.foreground,
@@ -419,7 +429,9 @@ private fun InstalledProviderCards(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = "${descriptor.version.name} · ${providerLifecycleLabelDefaultSkin(registration.lifecycleStatus)}",
+                                text = "${descriptor.version.name} · ${providerLifecycleLabelDefaultSkin(
+                                    registration.lifecycleStatus,
+                                )}",
                                 color = colors.secondary,
                                 style = MaterialTheme.typography.bodySmall,
                             )
@@ -432,7 +444,10 @@ private fun InstalledProviderCards(
                         )
                     }
                     if (descriptor.capabilities.isNotEmpty()) {
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
                             descriptor.capabilities.take(4).forEach { capability ->
                                 DefaultSkinChoiceChip(
                                     text = capability.id,
@@ -445,7 +460,9 @@ private fun InstalledProviderCards(
                     if (providerId in rollbackProviderIds) {
                         DefaultSkinTextAction(
                             text = stringResource(MR.strings.tsuzuki_providers_rollback),
-                            onClick = { if ("rollback:$providerId" !in operationKeys) onRollback(providerId) },
+                            onClick = {
+                                if ("rollback:$providerId" !in operationKeys) onRollback(providerId)
+                            },
                         )
                     }
                 }
@@ -467,7 +484,12 @@ private fun DiscoverProviderCards(
 
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(DefaultSkinSpacing.PageHorizontal, 18.dp, DefaultSkinSpacing.PageHorizontal, 32.dp),
+        contentPadding = PaddingValues(
+            DefaultSkinSpacing.PageHorizontal,
+            18.dp,
+            DefaultSkinSpacing.PageHorizontal,
+            32.dp,
+        ),
         verticalArrangement = Arrangement.spacedBy(DefaultSkinSpacing.Row),
     ) {
         if (entries.isEmpty()) {
@@ -483,7 +505,10 @@ private fun DiscoverProviderCards(
         items(entries, key = { "${it.repositoryId}:${it.descriptor.providerId}" }) { entry ->
             val operationKey = "install:${entry.repositoryId}:${entry.descriptor.providerId}"
             DefaultSkinCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     Text(
                         text = entry.descriptor.providerId,
                         color = colors.foreground,
@@ -491,7 +516,9 @@ private fun DiscoverProviderCards(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "${entry.descriptor.versionName} · ${providerRepositoryStatusLabelDefaultSkin(entry.status)}",
+                        text = "${entry.descriptor.versionName} · ${providerRepositoryStatusLabelDefaultSkin(
+                            entry.status,
+                        )}",
                         color = colors.secondary,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -539,16 +566,28 @@ private fun DefaultSkinRepositoriesDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (repositories.isEmpty()) {
-                    Text(stringResource(MR.strings.tsuzuki_providers_no_repositories), color = colors.secondary)
+                    Text(
+                        stringResource(MR.strings.tsuzuki_providers_no_repositories),
+                        color = colors.secondary,
+                    )
                 }
                 repositories.forEach { repository ->
                     val id = repository.enrollment.repositoryId
                     DefaultSkinCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
                             Text(repository.displayName, fontWeight = FontWeight.SemiBold)
-                            Text(repository.enrollment.indexUrl, color = colors.secondary, style = MaterialTheme.typography.bodySmall)
                             Text(
-                                "${stringResource(MR.strings.tsuzuki_providers_repository_fingerprint)}: ${repository.keyFingerprintSha256}",
+                                repository.enrollment.indexUrl,
+                                color = colors.secondary,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Text(
+                                "${stringResource(
+                                    MR.strings.tsuzuki_providers_repository_fingerprint,
+                                )}: ${repository.keyFingerprintSha256}",
                                 color = colors.secondary,
                                 style = MaterialTheme.typography.bodySmall,
                             )
@@ -581,7 +620,10 @@ private fun DefaultSkinRepositoriesDialog(
             )
         },
         dismissButton = {
-            DefaultSkinTextAction(text = stringResource(MR.strings.action_close), onClick = onDismiss)
+            DefaultSkinTextAction(
+                text = stringResource(MR.strings.action_close),
+                onClick = onDismiss,
+            )
         },
         containerColor = colors.surface,
         titleContentColor = colors.foreground,
@@ -603,7 +645,10 @@ private fun DefaultSkinAddRepositoryDialog(
     var confirmedTrustToken by remember { mutableStateOf<String?>(null) }
 
     val signingKey = remember(keyId, publicKeyBase64) {
-        ProviderRepositorySigningKey(keyId = keyId.trim(), publicKeyBase64 = publicKeyBase64.trim())
+        ProviderRepositorySigningKey(
+            keyId = keyId.trim(),
+            publicKeyBase64 = publicKeyBase64.trim(),
+        )
     }
     val fingerprint = remember(signingKey) {
         runCatching { providerRepositoryKeyFingerprint(signingKey) }.getOrNull()
@@ -618,8 +663,13 @@ private fun DefaultSkinAddRepositoryDialog(
         )
     }
     val trustConfirmed = trustToken != null && confirmedTrustToken == trustToken
-    val canConfirm = displayName.isNotBlank() && repositoryId.isNotBlank() && indexUrl.isNotBlank() &&
-        keyId.isNotBlank() && publicKeyBase64.isNotBlank() && fingerprint != null && trustConfirmed
+    val canConfirm = displayName.isNotBlank() &&
+        repositoryId.isNotBlank() &&
+        indexUrl.isNotBlank() &&
+        keyId.isNotBlank() &&
+        publicKeyBase64.isNotBlank() &&
+        fingerprint != null &&
+        trustConfirmed
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -653,14 +703,22 @@ private fun DefaultSkinAddRepositoryDialog(
                     singleLine = false,
                 )
                 fingerprint?.let {
-                    DefaultSkinSectionLabel(stringResource(MR.strings.tsuzuki_providers_repository_fingerprint))
-                    Text(it, color = colors.foreground, style = MaterialTheme.typography.bodySmall)
+                    DefaultSkinSectionLabel(
+                        stringResource(MR.strings.tsuzuki_providers_repository_fingerprint),
+                    )
+                    Text(
+                        it,
+                        color = colors.foreground,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
                         checked = trustConfirmed,
                         enabled = trustToken != null,
-                        onCheckedChange = { checked -> confirmedTrustToken = if (checked) trustToken else null },
+                        onCheckedChange = { checked ->
+                            confirmedTrustToken = if (checked) trustToken else null
+                        },
                     )
                     Text(stringResource(MR.strings.tsuzuki_providers_repository_trust_confirm))
                 }
@@ -685,7 +743,10 @@ private fun DefaultSkinAddRepositoryDialog(
             )
         },
         dismissButton = {
-            DefaultSkinTextAction(text = stringResource(MR.strings.action_cancel), onClick = onDismiss)
+            DefaultSkinTextAction(
+                text = stringResource(MR.strings.action_cancel),
+                onClick = onDismiss,
+            )
         },
         containerColor = colors.surface,
         titleContentColor = colors.foreground,
