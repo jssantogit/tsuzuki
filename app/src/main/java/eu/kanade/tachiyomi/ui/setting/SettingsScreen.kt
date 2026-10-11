@@ -16,7 +16,7 @@ import eu.kanade.presentation.more.settings.screen.SettingsAppearanceScreen
 import eu.kanade.presentation.more.settings.screen.SettingsDataScreen
 import eu.kanade.presentation.more.settings.screen.SettingsMainScreen
 import eu.kanade.presentation.more.settings.screen.SettingsTrackingScreen
-import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiAddonsScreen
+import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiProvidersScreen
 import eu.kanade.presentation.more.settings.screen.about.AboutScreen
 import eu.kanade.presentation.util.DefaultNavigatorScreenTransition
 import eu.kanade.presentation.util.LocalBackPress
@@ -33,13 +33,20 @@ class SettingsScreen(
     @Composable
     override fun Content() {
         val parentNavigator = LocalNavigator.currentOrThrow
+
+        // Destination 3 used to expose the public Add-ons surface. Keep the numeric/external
+        // compatibility contract, but land directly on the canonical Providers surface.
+        if (destination == Destination.Providers.id) {
+            SettingsTsuzukiProvidersScreen().Content()
+            return
+        }
+
         if (!isTabletUi()) {
             Navigator(
                 screen = when (destination) {
                     Destination.About.id -> AboutScreen
                     Destination.DataAndStorage.id -> SettingsDataScreen
                     Destination.Tracking.id -> SettingsTrackingScreen
-                    Destination.TsuzukiAddons.id -> SettingsTsuzukiAddonsScreen
                     else -> SettingsMainScreen
                 },
                 onBackPressed = null,
@@ -61,7 +68,6 @@ class SettingsScreen(
                     Destination.About.id -> AboutScreen
                     Destination.DataAndStorage.id -> SettingsDataScreen
                     Destination.Tracking.id -> SettingsTrackingScreen
-                    Destination.TsuzukiAddons.id -> SettingsTsuzukiAddonsScreen
                     else -> SettingsAppearanceScreen
                 },
                 onBackPressed = null,
@@ -86,14 +92,18 @@ class SettingsScreen(
         data object About : Destination(0)
         data object DataAndStorage : Destination(1)
         data object Tracking : Destination(2)
-        data object TsuzukiAddons : Destination(3)
+        data object Providers : Destination(3)
 
         companion object {
+            // Source/binary compatibility for old shortcuts and callers. This identifier is not
+            // a public IA surface; destination 3 now always means Providers.
+            val TsuzukiAddons: Destination get() = Providers
+
             fun fromId(id: Int): Destination? = when (id) {
                 About.id -> About
                 DataAndStorage.id -> DataAndStorage
                 Tracking.id -> Tracking
-                TsuzukiAddons.id -> TsuzukiAddons
+                Providers.id -> Providers
                 else -> null
             }
         }
