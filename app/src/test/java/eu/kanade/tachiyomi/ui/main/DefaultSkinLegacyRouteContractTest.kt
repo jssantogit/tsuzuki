@@ -48,7 +48,7 @@ class DefaultSkinLegacyRouteContractTest {
             "eu/kanade/presentation/more/settings/screen/SettingsTsuzukiTrackingServiceScreen.kt",
         )
 
-        source shouldContain "navigator.push(SettingsTsuzukiProvidersScreen())"
+        source shouldContain "navigator.push(SettingsTsuzukiProvidersDefaultSkinScreen())"
         source shouldContain "MR.strings.tsuzuki_providers_title"
         source shouldNotContain "SettingsTsuzukiAddonsScreen"
         source shouldNotContain "MR.strings.label_extensions"
