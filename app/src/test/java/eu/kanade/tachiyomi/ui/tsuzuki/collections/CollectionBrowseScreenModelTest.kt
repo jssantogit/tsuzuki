@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.ui.tsuzuki.home
+package eu.kanade.tachiyomi.ui.tsuzuki.collections
 
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
@@ -344,10 +345,25 @@ class CollectionBrowseScreenModelTest {
         advanceUntilIdle()
         val events = mutableListOf<FolderCatalogEvent>()
         backgroundScope.launch { model.events.collect { events += it } }
+        runCurrent()
         model.openCatalogItem(item("work"))
         advanceUntilIdle()
+        runCurrent()
         events shouldBe emptyList()
         model.state.value shouldBe FolderCatalogScreenState.Missing
+    }
+
+    @Test
+    fun `same folder rebind changes direct list without stale content`() = runTest(dispatcher) {
+        val (model, _) = folderModel(listOf(list("first", true, 0), list("second", true, 1)))
+        model.bind("collection-1", "folder-1", preferredListId = "first")
+        advanceUntilIdle()
+        model.bind("collection-1", "folder-1", preferredListId = "second")
+        advanceUntilIdle()
+        val ready = model.state.value.shouldBeInstanceOf<FolderCatalogScreenState.Ready>()
+        ready.selectedListId shouldBe "second"
+        ready.content.shouldBeInstanceOf<FolderCatalogContent.Content>().items.single().providerId shouldBe "second"
+        ready.showListSelector shouldBe false
     }
 
     private fun folderModel(lists: List<CollectionList>): Pair<FolderCatalogScreenModel, ExecuteCollectionList> {

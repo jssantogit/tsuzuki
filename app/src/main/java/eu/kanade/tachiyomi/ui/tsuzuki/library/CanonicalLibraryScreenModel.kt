@@ -51,6 +51,7 @@ sealed interface CanonicalLibraryScreenState {
 
     data class Success(
         val items: List<CanonicalLibraryCardModel>,
+        val totalItemCount: Int = items.size,
         val searchQuery: String? = null,
         val selectedCategoryId: Long? = null,
         val filters: CanonicalLibraryFilterState = CanonicalLibraryFilterState(),
@@ -234,6 +235,7 @@ class CanonicalLibraryScreenModel private constructor(
 
                 CanonicalLibraryScreenState.Success(
                     items = visibleItems,
+                    totalItemCount = items.size,
                     searchQuery = query,
                     selectedCategoryId = filterState.categoryId,
                     filters = filterState,

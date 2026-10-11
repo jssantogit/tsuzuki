@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.manga.components.MangaCover
+import eu.kanade.presentation.tsuzuki.collections.FolderTile
 import eu.kanade.presentation.tsuzuki.recordArtworkLoad
 import eu.kanade.tachiyomi.ui.tsuzuki.home.TsuzukiHomeScreenState
 import kotlinx.coroutines.delay

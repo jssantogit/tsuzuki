@@ -1,6 +1,5 @@
 package eu.kanade.presentation.tsuzuki.collections
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,48 +8,50 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
-import eu.kanade.presentation.tsuzuki.catalog.CatalogCompactCard
+import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionCardAction
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionDraftPreviewState
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionFolderUiModel
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionListDraft
-import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionListRuntimeState
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionUiModel
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionsAction
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionsScreenState
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionsTransferState
+import eu.kanade.tachiyomi.ui.tsuzuki.collections.handleCollectionCardAction
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.rounded.Add
 import mihon.icons.materialsymbols.rounded.DragHandle
@@ -67,6 +68,8 @@ import tachiyomi.domain.tsuzuki.collections.query.QueryExpression
 import tachiyomi.domain.tsuzuki.collections.query.QueryField
 import tachiyomi.domain.tsuzuki.collections.query.QueryOperator
 import tachiyomi.domain.tsuzuki.collections.query.QueryValue
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 fun CollectionsScreen(
@@ -76,33 +79,12 @@ fun CollectionsScreen(
     onImportRequest: () -> Unit,
     onExportRequest: () -> Unit,
     onDismissTransferState: () -> Unit,
+    onOpenCollection: (String) -> Unit,
     modifier: Modifier = Modifier,
-    initialCollectionId: String? = null,
-    initialFolderId: String? = null,
 ) {
     var editor by remember { mutableStateOf<EditorDialog?>(null) }
     var deleteTarget by remember { mutableStateOf<DeleteTarget?>(null) }
-    var selectedCollectionId by remember(initialCollectionId) { mutableStateOf(initialCollectionId) }
-    var selectedFolderId by remember(initialFolderId) { mutableStateOf(initialFolderId) }
-    var selectedListId by remember { mutableStateOf<String?>(null) }
-
     val readyState = state as? CollectionsScreenState.Ready
-    val selectedCollection = readyState?.collections?.firstOrNull {
-        it.collection.id == selectedCollectionId
-    }
-    val selectedFolder = selectedCollection?.folders?.firstOrNull {
-        it.folder.id == selectedFolderId
-    }
-    val selectedList = selectedFolder?.lists?.firstOrNull { it.id == selectedListId }
-
-    val navigateWithinCollections: () -> Unit = {
-        when {
-            selectedListId != null -> selectedListId = null
-            selectedFolderId != null -> selectedFolderId = null
-            selectedCollectionId != null -> selectedCollectionId = null
-            else -> navigateUp()
-        }
-    }
 
     val currentEditor = editor
     val editedCollectionGraph = (currentEditor as? EditorDialog.RenameCollection)
@@ -288,35 +270,42 @@ fun CollectionsScreen(
     }
 
     if (!fullScreenEditorRendered) {
-        BackHandler(
-            enabled = selectedListId != null || selectedFolderId != null || selectedCollectionId != null,
-            onBack = navigateWithinCollections,
-        )
-
         Scaffold(
             modifier = modifier,
+            containerColor = if (MaterialTheme.colorScheme.background.luminance() >
+                0.5f
+            ) {
+                Color(0xFFF7F7F8)
+            } else {
+                MaterialTheme.colorScheme.background
+            },
             topBar = {
-                AppBar(
-                    title = selectedList?.title
-                        ?: selectedFolder?.folder?.title
-                        ?: selectedCollection?.collection?.title
-                        ?: "Collections",
-                    navigateUp = navigateWithinCollections,
-                    actions = {
-                        AppBarActions(
-                            listOf(
-                                AppBar.OverflowAction(
-                                    title = "Import",
-                                    onClick = onImportRequest,
+                Column {
+                    AppBar(
+                        title = "",
+                        navigateUp = navigateUp,
+                        actions = {
+                            AppBarActions(
+                                listOf(
+                                    AppBar.OverflowAction(
+                                        title = stringResource(MR.strings.tsuzuki_collections_import),
+                                        onClick = onImportRequest,
+                                    ),
+                                    AppBar.OverflowAction(
+                                        title = stringResource(MR.strings.export),
+                                        onClick = onExportRequest,
+                                    ),
                                 ),
-                                AppBar.OverflowAction(
-                                    title = "Export",
-                                    onClick = onExportRequest,
-                                ),
-                            ),
-                        )
-                    },
-                )
+                            )
+                        },
+                    )
+                    Text(
+                        "Collections",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
             },
         ) { padding ->
             when (state) {
@@ -351,24 +340,10 @@ fun CollectionsScreen(
                 is CollectionsScreenState.Ready -> {
                     CollectionsReadyContent(
                         collections = state.collections,
-                        transferState = state.transferState,
-                        listRuntimeStates = state.listRuntimeStates,
                         onAction = onAction,
                         onEdit = { editor = it },
                         onDelete = { deleteTarget = it },
-                        selectedCollectionId = selectedCollectionId,
-                        selectedFolderId = selectedFolderId,
-                        selectedListId = selectedListId,
-                        onOpenCollection = {
-                            selectedCollectionId = it
-                            selectedFolderId = null
-                            selectedListId = null
-                        },
-                        onOpenFolder = {
-                            selectedFolderId = it
-                            selectedListId = null
-                        },
-                        onOpenList = { selectedListId = it },
+                        onOpenCollection = onOpenCollection,
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(padding),
@@ -435,6 +410,7 @@ fun CollectionsScreen(
     }
 
     deleteTarget?.let { target ->
+        val collectionTarget = target.action is CollectionsAction.DeleteCollection
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             confirmButton = {
@@ -444,20 +420,46 @@ fun CollectionsScreen(
                         deleteTarget = null
                     },
                 ) {
-                    Text(if (target.systemOwned) "Hide" else "Delete")
+                    Text(
+                        stringResource(
+                            if (target.systemOwned) MR.strings.tsuzuki_collections_hide else MR.strings.action_delete,
+                        ),
+                    )
                 }
             },
             dismissButton = {
                 TextButton(onClick = { deleteTarget = null }) {
-                    Text("Cancel")
+                    Text(stringResource(MR.strings.action_cancel))
                 }
             },
             title = {
-                Text(if (target.systemOwned) "Hide built-in item?" else "Delete item?")
+                Text(
+                    if (collectionTarget) {
+                        stringResource(
+                            if (target.systemOwned) {
+                                MR.strings.tsuzuki_collections_hide_title
+                            } else {
+                                MR.strings.tsuzuki_collections_delete_title
+                            },
+                        )
+                    } else if (target.systemOwned) {
+                        "Hide built-in item?"
+                    } else {
+                        "Delete item?"
+                    },
+                )
             },
             text = {
                 Text(
-                    if (target.systemOwned) {
+                    if (collectionTarget) {
+                        stringResource(
+                            if (target.systemOwned) {
+                                MR.strings.tsuzuki_collections_hide_message
+                            } else {
+                                MR.strings.tsuzuki_collections_delete_message
+                            },
+                        )
+                    } else if (target.systemOwned) {
                         "This built-in definition will stay hidden on this device."
                     } else {
                         "This uses a tombstone so future sync can preserve the deletion."
@@ -471,22 +473,12 @@ fun CollectionsScreen(
 @Composable
 private fun CollectionsReadyContent(
     collections: List<CollectionUiModel>,
-    transferState: CollectionsTransferState,
-    listRuntimeStates: Map<String, CollectionListRuntimeState>,
     onAction: (CollectionsAction) -> Unit,
     onEdit: (EditorDialog) -> Unit,
     onDelete: (DeleteTarget) -> Unit,
-    selectedCollectionId: String?,
-    selectedFolderId: String?,
-    selectedListId: String?,
     onOpenCollection: (String) -> Unit,
-    onOpenFolder: (String) -> Unit,
-    onOpenList: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val selectedCollection = collections.firstOrNull { it.collection.id == selectedCollectionId }
-    val selectedFolder = selectedCollection?.folders?.firstOrNull { it.folder.id == selectedFolderId }
-    val selectedList = selectedFolder?.lists?.firstOrNull { it.id == selectedListId }
     var displayedCollections by remember(collections) { mutableStateOf(collections) }
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
@@ -498,154 +490,53 @@ private fun CollectionsReadyContent(
             }
         }
     }
-
     LazyColumn(
         modifier = modifier,
         state = lazyListState,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        when {
-            selectedCollection == null -> {
-                item(key = "collections_overview") {
-                    CollectionsOverviewCard(
-                        collections = collections,
-                        onCreate = { onEdit(EditorDialog.CreateCollection) },
-                    )
-                }
-
-                if (collections.isEmpty()) {
-                    item(key = "empty") {
-                        Text(
-                            text = "No Collections yet. Create one to organize catalog queries.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-
-                items(
-                    items = displayedCollections,
-                    key = { graph -> "collection:${graph.collection.id}" },
-                ) { graph ->
-                    val itemKey = "collection:${graph.collection.id}"
-                    val reorderEnabled = displayedCollections.size > 1
-                    ReorderableItem(
-                        state = reorderableState,
-                        key = itemKey,
-                        enabled = reorderEnabled,
-                    ) { isDragging ->
-                        CollectionCard(
-                            graph = graph,
-                            isDragging = isDragging,
-                            reorderEnabled = reorderEnabled,
-                            reorderHandleModifier = if (reorderEnabled) {
-                                Modifier.draggableHandle(
-                                    onDragStopped = {
-                                        val persistedOrder = collections.map { it.collection.id }
-                                        val displayedOrder = displayedCollections.map { it.collection.id }
-                                        if (displayedOrder != persistedOrder) {
-                                            onAction(
-                                                CollectionsAction.ReorderCollections(
-                                                    orderedCollectionIds = displayedOrder,
-                                                ),
-                                            )
-                                        }
-                                    },
-                                )
-                            } else {
-                                Modifier
-                            },
-                            onEdit = onEdit,
-                            onDelete = onDelete,
-                            onDuplicate = {
-                                onAction(CollectionsAction.DuplicateCollection(graph.collection.id))
-                            },
-                            onOpen = {
-                                if (graph.collection.origin == CollectionOrigin.USER) {
-                                    onEdit(EditorDialog.RenameCollection(graph.collection))
-                                } else {
-                                    onOpenCollection(graph.collection.id)
-                                }
-                            },
-                        )
-                    }
-                }
-            }
-
-            selectedFolder == null -> {
-                val visibleFolders = selectedCollection.folders.filter { it.depth == 0 }
-                if (visibleFolders.isEmpty()) {
-                    item(key = "empty_folders") {
-                        Text("No folders in this Collection yet.")
-                    }
-                }
-                visibleFolders.forEach { folder ->
-                    item(key = "folder:${folder.folder.id}") {
-                        FolderRow(
-                            collectionId = selectedCollection.collection.id,
-                            model = folder,
-                            onAction = onAction,
-                            onEdit = onEdit,
-                            onDelete = onDelete,
-                            onOpen = { onOpenFolder(folder.folder.id) },
-                        )
-                    }
-                }
-            }
-
-            else -> {
-                val childFolders = selectedCollection.folders.filter {
-                    it.folder.parentFolderId == selectedFolder.folder.id
-                }
-                if (selectedList == null) {
-                    childFolders.forEach { folder ->
-                        item(key = "subfolder:${folder.folder.id}") {
-                            FolderRow(
-                                collectionId = selectedCollection.collection.id,
-                                model = folder,
-                                onAction = onAction,
-                                onEdit = onEdit,
-                                onDelete = onDelete,
-                                onOpen = { onOpenFolder(folder.folder.id) },
-                            )
-                        }
-                    }
-                    selectedFolder.lists.forEach { list ->
-                        item(key = "list:${list.id}") {
-                            ListSummaryRow(
-                                list = list,
-                                onOpen = { onOpenList(list.id) },
-                            )
-                        }
-                    }
-                    if (childFolders.isEmpty() && selectedFolder.lists.isEmpty()) {
-                        item(key = "empty_folder") {
-                            Text("This folder has no subfolders or Lists yet.")
-                        }
-                    }
-                } else {
-                    item(key = "list_detail:${selectedList.id}") {
-                        ListRow(
-                            folderDepth = 0,
-                            list = selectedList,
-                            runtimeState = listRuntimeStates[selectedList.id]
-                                ?: CollectionListRuntimeState.Idle,
-                            onAction = onAction,
-                            onEdit = onEdit,
-                            onDelete = onDelete,
-                        )
-                    }
-                }
+        item(key = "collections_overview") {
+            CollectionsOverview(collections = collections, onCreate = { onEdit(EditorDialog.CreateCollection) })
+        }
+        if (collections.isEmpty()) {
+            item(key = "empty") {
+                Text(
+                    stringResource(MR.strings.tsuzuki_collections_empty),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
-
-        if (transferState is CollectionsTransferState.ExportReady) {
-            item(key = "export_ready") {
-                Text(
-                    text = "Choose a destination for the JSON export.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        items(items = displayedCollections, key = { "collection:${it.collection.id}" }) { graph ->
+            val itemKey = "collection:${graph.collection.id}"
+            val reorderEnabled = displayedCollections.size > 1
+            ReorderableItem(state = reorderableState, key = itemKey, enabled = reorderEnabled) { isDragging ->
+                CollectionCard(
+                    graph = graph,
+                    isDragging = isDragging,
+                    reorderEnabled = reorderEnabled,
+                    reorderHandleModifier = if (reorderEnabled) {
+                        Modifier.draggableHandle(onDragStopped = {
+                            val persistedOrder = collections.map { it.collection.id }
+                            val displayedOrder = displayedCollections.map { it.collection.id }
+                            if (displayedOrder != persistedOrder) {
+                                onAction(CollectionsAction.ReorderCollections(displayedOrder))
+                            }
+                        })
+                    } else {
+                        Modifier
+                    },
+                    onEdit = onEdit,
+                    onDelete = onDelete,
+                    onDuplicate = { onAction(CollectionsAction.DuplicateCollection(graph.collection.id)) },
+                    onOpen = {
+                        handleCollectionCardAction(
+                            collection = graph.collection,
+                            action = CollectionCardAction.OPEN,
+                            onOpen = onOpenCollection,
+                            onEdit = { onEdit(EditorDialog.RenameCollection(it)) },
+                        )
+                    },
                 )
             }
         }
@@ -653,46 +544,37 @@ private fun CollectionsReadyContent(
 }
 
 @Composable
-private fun CollectionsOverviewCard(
+private fun CollectionsOverview(
     collections: List<CollectionUiModel>,
     onCreate: () -> Unit,
 ) {
     val folderCount = collections.sumOf { it.folders.size }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-        shape = MaterialTheme.shapes.extraLarge,
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+        Text(
+            stringResource(MR.strings.tsuzuki_collections_overview),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            stringResource(MR.strings.tsuzuki_collections_totals, collections.size, folderCount),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(
+            onClick = onCreate,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(top = 8.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.onBackground,
+                contentColor = MaterialTheme.colorScheme.background,
+            ),
         ) {
-            Text(
-                text = "YOUR COLLECTIONS",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = "${countLabel(collections.size, "collection")} · ${countLabel(folderCount, "folder")}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(
-                onClick = onCreate,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(
-                    imageVector = MaterialSymbols.Rounded.Add,
-                    contentDescription = null,
-                )
-                Text(
-                    text = "New collection",
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
+            Icon(imageVector = MaterialSymbols.Rounded.Add, contentDescription = null)
+            Text(stringResource(MR.strings.tsuzuki_collections_new), modifier = Modifier.padding(start = 8.dp))
         }
     }
 }
@@ -718,12 +600,18 @@ private fun CollectionCard(
             .fillMaxWidth()
             .clickable(onClick = onOpen),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            containerColor = if (MaterialTheme.colorScheme.background.luminance() >
+                0.5f
+            ) {
+                Color.White
+            } else {
+                MaterialTheme.colorScheme.surface
+            },
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = if (isDragging) 6.dp else 0.dp,
         ),
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = RoundedCornerShape(16.dp),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -739,10 +627,11 @@ private fun CollectionCard(
                 ) {
                     Text(
                         text = collection.title,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = countLabel(graph.folders.size, "folder"),
+                        text = stringResource(MR.strings.tsuzuki_collections_folder_count, graph.folders.size),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -752,7 +641,7 @@ private fun CollectionCard(
                     IconButton(onClick = { menuExpanded = true }) {
                         Icon(
                             imageVector = MaterialSymbols.Rounded.MoreVert,
-                            contentDescription = "Collection actions",
+                            contentDescription = stringResource(MR.strings.tsuzuki_collections_actions),
                         )
                     }
                     DropdownMenu(
@@ -761,7 +650,7 @@ private fun CollectionCard(
                     ) {
                         if (collection.origin == CollectionOrigin.USER) {
                             DropdownMenuItem(
-                                text = { Text("New folder") },
+                                text = { Text(stringResource(MR.strings.tsuzuki_collections_new_folder)) },
                                 onClick = {
                                     menuExpanded = false
                                     onEdit(
@@ -774,7 +663,7 @@ private fun CollectionCard(
                             )
                         }
                         DropdownMenuItem(
-                            text = { Text("Duplicate") },
+                            text = { Text(stringResource(MR.strings.tsuzuki_collections_duplicate)) },
                             onClick = {
                                 menuExpanded = false
                                 onDuplicate()
@@ -782,7 +671,17 @@ private fun CollectionCard(
                         )
                         DropdownMenuItem(
                             text = {
-                                Text(if (collection.origin == CollectionOrigin.SYSTEM) "Hide" else "Delete")
+                                Text(
+                                    stringResource(
+                                        if (collection.origin ==
+                                            CollectionOrigin.SYSTEM
+                                        ) {
+                                            MR.strings.tsuzuki_collections_hide
+                                        } else {
+                                            MR.strings.action_delete
+                                        },
+                                    ),
+                                )
                             },
                             onClick = {
                                 menuExpanded = false
@@ -800,7 +699,7 @@ private fun CollectionCard(
 
             if (previewFolders.isEmpty()) {
                 Text(
-                    text = "No folders yet",
+                    text = stringResource(MR.strings.tsuzuki_collections_no_folders),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -817,7 +716,7 @@ private fun CollectionCard(
                     )
                     if (hiddenFolderCount > 0) {
                         Text(
-                            text = "+$hiddenFolderCount more",
+                            text = stringResource(MR.strings.tsuzuki_collections_more_folders, hiddenFolderCount),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -836,11 +735,14 @@ private fun CollectionCard(
                 Spacer(modifier = Modifier.weight(1f))
                 if (collection.origin == CollectionOrigin.USER) {
                     IconButton(
-                        onClick = { onEdit(EditorDialog.RenameCollection(collection)) },
+                        onClick = {
+                            handleCollectionCardAction(collection, CollectionCardAction.EDIT, onOpen = {
+                            }, onEdit = { onEdit(EditorDialog.RenameCollection(it)) })
+                        },
                     ) {
                         Icon(
                             imageVector = MaterialSymbols.Rounded.Edit,
-                            contentDescription = "Rename collection",
+                            contentDescription = stringResource(MR.strings.tsuzuki_collections_edit),
                         )
                     }
                 }
@@ -862,305 +764,13 @@ private fun CollectionReorderHandle(
     ) {
         Icon(
             imageVector = MaterialSymbols.Rounded.DragHandle,
-            contentDescription = "Drag to reorder collection",
+            contentDescription = stringResource(MR.strings.tsuzuki_collections_reorder),
             tint = if (enabled) {
                 MaterialTheme.colorScheme.onSurfaceVariant
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
             },
         )
-    }
-}
-
-private fun countLabel(
-    count: Int,
-    singular: String,
-): String = if (count == 1) {
-    "1 $singular"
-} else {
-    "$count ${singular}s"
-}
-
-@Composable
-private fun FolderRow(
-    collectionId: String,
-    model: CollectionFolderUiModel,
-    onAction: (CollectionsAction) -> Unit,
-    onEdit: (EditorDialog) -> Unit,
-    onDelete: (DeleteTarget) -> Unit,
-    onOpen: () -> Unit,
-) {
-    val folder = model.folder
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = (model.depth * 20).dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onOpen),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = folder.title,
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.weight(1f),
-            )
-            if (folder.origin == CollectionOrigin.USER) {
-                TextButton(
-                    onClick = {
-                        onEdit(
-                            EditorDialog.CreateFolder(
-                                collectionId = collectionId,
-                                parentFolderId = folder.id,
-                            ),
-                        )
-                    },
-                ) {
-                    Text("+ Subfolder")
-                }
-                TextButton(
-                    onClick = {
-                        onEdit(
-                            EditorDialog.CreateList(
-                                collectionId = collectionId,
-                                folderId = folder.id,
-                            ),
-                        )
-                    },
-                ) {
-                    Text("+ List")
-                }
-            }
-        }
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            if (folder.origin == CollectionOrigin.USER) {
-                TextButton(onClick = { onEdit(EditorDialog.RenameFolder(folder)) }) {
-                    Text("Rename")
-                }
-            }
-            TextButton(onClick = { onAction(CollectionsAction.MoveFolder(folder, -1)) }) {
-                Text("↑")
-            }
-            TextButton(onClick = { onAction(CollectionsAction.MoveFolder(folder, 1)) }) {
-                Text("↓")
-            }
-            TextButton(
-                onClick = {
-                    onDelete(
-                        DeleteTarget(
-                            action = CollectionsAction.DeleteFolder(folder.id),
-                            systemOwned = folder.origin == CollectionOrigin.SYSTEM,
-                        ),
-                    )
-                },
-            ) {
-                Text(if (folder.origin == CollectionOrigin.SYSTEM) "Hide" else "Delete")
-            }
-        }
-
-        HorizontalDivider()
-    }
-}
-
-@Composable
-private fun ListSummaryRow(
-    list: CollectionList,
-    onOpen: () -> Unit,
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpen),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = list.title,
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = list.providerId,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ListRow(
-    folderDepth: Int,
-    list: CollectionList,
-    runtimeState: CollectionListRuntimeState,
-    onAction: (CollectionsAction) -> Unit,
-    onEdit: (EditorDialog) -> Unit,
-    onDelete: (DeleteTarget) -> Unit,
-) {
-    DisposableEffect(list.id, list.enabled) {
-        if (list.enabled) {
-            onAction(CollectionsAction.ListVisibilityChanged(list.id, visible = true))
-        }
-        onDispose {
-            onAction(CollectionsAction.ListVisibilityChanged(list.id, visible = false))
-        }
-    }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = ((folderDepth + 1) * 20).dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = list.title,
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        text = "${list.providerId} • ${list.sort.cacheKey}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = list.enabled,
-                    onCheckedChange = {
-                        onAction(CollectionsAction.SetListEnabled(list.id, it))
-                    },
-                )
-            }
-
-            Text(
-                text = list.query?.toCanonicalString() ?: "No filters",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            when (runtimeState) {
-                CollectionListRuntimeState.Idle -> {
-                    if (list.enabled) {
-                        Text(
-                            text = "Dormant until visible",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-
-                CollectionListRuntimeState.Loading -> {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp))
-                        Text(
-                            text = "Loading results…",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-
-                is CollectionListRuntimeState.Content -> {
-                    if (runtimeState.items.isEmpty()) {
-                        Text(
-                            text = "No matching titles",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            items(
-                                items = runtimeState.items,
-                                key = { "${it.provider}:${it.providerId}" },
-                            ) { item ->
-                                CatalogCompactCard(
-                                    item = item,
-                                    onClick = {},
-                                )
-                            }
-                        }
-                    }
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        TextButton(
-                            onClick = { onAction(CollectionsAction.RefreshList(list.id)) },
-                        ) {
-                            Text("Refresh")
-                        }
-                        if (runtimeState.nextCursor != null) {
-                            TextButton(
-                                onClick = { onAction(CollectionsAction.LoadMore(list.id)) },
-                            ) {
-                                Text("Load more")
-                            }
-                        }
-                    }
-                }
-
-                is CollectionListRuntimeState.Error -> {
-                    Text(
-                        text = runtimeState.message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    TextButton(
-                        onClick = { onAction(CollectionsAction.RefreshList(list.id)) },
-                    ) {
-                        Text("Retry")
-                    }
-                }
-            }
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                if (list.origin == CollectionOrigin.USER) {
-                    TextButton(onClick = { onEdit(EditorDialog.EditList(list)) }) {
-                        Text("Edit")
-                    }
-                }
-                TextButton(onClick = { onAction(CollectionsAction.DuplicateList(list.id)) }) {
-                    Text("Duplicate")
-                }
-                TextButton(onClick = { onAction(CollectionsAction.MoveList(list, -1)) }) {
-                    Text("↑")
-                }
-                TextButton(onClick = { onAction(CollectionsAction.MoveList(list, 1)) }) {
-                    Text("↓")
-                }
-                TextButton(
-                    onClick = {
-                        onDelete(
-                            DeleteTarget(
-                                action = CollectionsAction.DeleteList(list.id),
-                                systemOwned = list.origin == CollectionOrigin.SYSTEM,
-                            ),
-                        )
-                    },
-                ) {
-                    Text(if (list.origin == CollectionOrigin.SYSTEM) "Hide" else "Delete")
-                }
-            }
-        }
     }
 }
 

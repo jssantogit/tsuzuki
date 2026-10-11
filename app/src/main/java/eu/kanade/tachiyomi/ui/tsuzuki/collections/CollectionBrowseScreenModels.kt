@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.ui.tsuzuki.home
+package eu.kanade.tachiyomi.ui.tsuzuki.collections
 
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
@@ -121,7 +121,11 @@ sealed interface FolderCatalogScreenState {
         val folder: HomeFolderBrowse,
         val selectedListId: String?,
         val content: FolderCatalogContent,
-    ) : FolderCatalogScreenState
+        val preferredListId: String? = null,
+    ) : FolderCatalogScreenState {
+        val showListSelector: Boolean
+            get() = preferredListId == null && folder.lists.count(CollectionList::enabled) > 1
+    }
 
     data object Missing : FolderCatalogScreenState
 
@@ -139,6 +143,7 @@ sealed interface FolderCatalogEvent {
 private data class FolderBrowseRequest(
     val collectionId: String,
     val folderId: String,
+    val preferredListId: String?,
 )
 
 private sealed interface FolderBrowseProjection {
@@ -147,6 +152,7 @@ private sealed interface FolderBrowseProjection {
 
     data class Ready(
         val folder: HomeFolderBrowse,
+        val preferredListId: String?,
     ) : FolderBrowseProjection
 
     data class Error(
@@ -183,7 +189,7 @@ class FolderCatalogScreenModel(
                     if (folder == null) {
                         FolderBrowseProjection.Missing
                     } else {
-                        FolderBrowseProjection.Ready(folder)
+                        FolderBrowseProjection.Ready(folder, request.preferredListId)
                     }
                 }
             }
@@ -215,6 +221,7 @@ class FolderCatalogScreenModel(
                 folder = projection.folder,
                 selectedListId = selectedListId,
                 content = content,
+                preferredListId = projection.preferredListId,
             )
         }
     }.stateIn(
@@ -237,9 +244,12 @@ class FolderCatalogScreenModel(
                     .filter(CollectionList::enabled)
                     .sortedWith(compareBy({ it.sortOrder }, { it.id }))
                 val current = selectedListId.value
-                val target = current?.takeIf { currentId ->
-                    enabledLists.any { it.id == currentId }
-                } ?: enabledLists.firstOrNull()?.id
+                val target = if (projection.preferredListId != null) {
+                    enabledLists.firstOrNull { it.id == projection.preferredListId }?.id
+                } else {
+                    current?.takeIf { currentId -> enabledLists.any { it.id == currentId } }
+                        ?: enabledLists.firstOrNull()?.id
+                }
 
                 if (target == null) {
                     listJob?.cancel()
@@ -259,8 +269,9 @@ class FolderCatalogScreenModel(
     fun bind(
         collectionId: String,
         folderId: String,
+        preferredListId: String? = null,
     ) {
-        val next = FolderBrowseRequest(collectionId, folderId)
+        val next = FolderBrowseRequest(collectionId, folderId, preferredListId)
         if (request.value != next) {
             listJob?.cancel()
             selectedListId.value = null
@@ -270,6 +281,7 @@ class FolderCatalogScreenModel(
     }
 
     fun selectList(listId: String) {
+        if (request.value?.preferredListId != null) return
         val folder = (projection.value as? FolderBrowseProjection.Ready)?.folder ?: return
         if (folder.lists.none { it.id == listId && it.enabled }) return
         if (selectedListId.value == listId && content.value !is FolderCatalogContent.Error) return
@@ -329,6 +341,7 @@ class FolderCatalogScreenModel(
             content.value = FolderCatalogContent.Loading
         }
 
+        val executingRequest = request.value
         val job = viewModelScope.launch {
             try {
                 val result = executeCollectionList.execute(
@@ -343,7 +356,7 @@ class FolderCatalogScreenModel(
                     ),
                 )
 
-                if (selectedListId.value != listId) return@launch
+                if (request.value != executingRequest || selectedListId.value != listId) return@launch
 
                 content.value = when (result) {
                     is ExecuteCollectionListResult.Page -> {
@@ -382,7 +395,7 @@ class FolderCatalogScreenModel(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                if (selectedListId.value == listId) {
+                if (request.value == executingRequest && selectedListId.value == listId) {
                     content.value = FolderCatalogContent.Error(
                         error.message ?: "Collection List execution failed",
                     )
@@ -399,7 +412,6 @@ class FolderCatalogScreenModel(
     }
 
     private companion object {
-        const val PREVIEW_PAGE_SIZE = 4
         const val CATALOG_PAGE_SIZE = 30
     }
 }

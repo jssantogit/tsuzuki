@@ -16,6 +16,7 @@ import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import eu.kanade.tachiyomi.ui.tsuzuki.collections.FolderCatalogScreen
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreen
 import eu.kanade.tachiyomi.util.system.toast
 import tachiyomi.i18n.MR
@@ -54,7 +55,7 @@ data object TsuzukiHomeTab : Tab {
             },
             onFolder = { collectionId, folderId ->
                 navigator.push(
-                    HomeFolderScreen(
+                    homeFolderDestination(
                         collectionId = collectionId,
                         folderId = folderId,
                     ),
@@ -81,3 +82,6 @@ data object TsuzukiHomeTab : Tab {
         }
     }
 }
+
+internal fun homeFolderDestination(collectionId: String, folderId: String) =
+    FolderCatalogScreen(collectionId = collectionId, folderId = folderId)
