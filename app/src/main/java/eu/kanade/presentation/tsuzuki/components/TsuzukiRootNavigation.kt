@@ -25,7 +25,6 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldLayout
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldState
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldValue
@@ -97,14 +96,6 @@ fun TsuzukiRootNavigationScaffold(
                     }
                 }
             },
-            navigationSuiteColors = NavigationSuiteScaffoldDefaults.colors(
-                navigationBarContainerColor = colors.surface,
-                navigationRailContainerColor = colors.surface,
-                navigationDrawerContainerColor = colors.surface,
-                navigationBarContentColor = colors.foreground,
-                navigationRailContentColor = colors.foreground,
-                navigationDrawerContentColor = colors.foreground,
-            ),
         ) {
             val consumedInsets = if (state.currentValue == NavigationSuiteScaffoldValue.Hidden && !state.isAnimating) {
                 WindowInsets(0, 0, 0, 0)
