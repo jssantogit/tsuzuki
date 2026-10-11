@@ -13,7 +13,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.zacsweers.metrox.viewmodel.metroViewModel
-import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiProvidersScreen
+import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiProvidersDefaultSkinScreen
 import eu.kanade.presentation.tsuzuki.content.ContentBindingLinkSheet
 import eu.kanade.presentation.tsuzuki.content.ContentOptionSelectorSheet
 import eu.kanade.presentation.tsuzuki.detail.CanonicalTitleDetailScreen
@@ -152,7 +152,7 @@ data class CanonicalTitleScreen(
     }
 }
 
-internal fun canonicalDetailsProvidersDestination(): Screen = SettingsTsuzukiProvidersScreen()
+internal fun canonicalDetailsProvidersDestination(): Screen = SettingsTsuzukiProvidersDefaultSkinScreen()
 
 internal fun shouldAutoOpenSourceBindingFlow(
     canonicalTitleId: String,
