@@ -1,0 +1,70 @@
+package eu.kanade.presentation.more.settings.screen
+
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
+import org.junit.jupiter.api.Test
+import java.nio.file.Files
+import java.nio.file.Path
+
+class DefaultSkinIntegrationProviderSeparationContractTest {
+
+    @Test
+    fun `profile settings enters the settings navigator owner`() {
+        val source = readSource(
+            "app/src/main/java/eu/kanade/tachiyomi/ui/tsuzuki/profile/TsuzukiProfileTab.kt",
+            "src/main/java/eu/kanade/tachiyomi/ui/tsuzuki/profile/TsuzukiProfileTab.kt",
+        )
+
+        source shouldContain "navigator.push(SettingsScreen())"
+        source shouldNotContain "navigator.push(SettingsMainScreen)"
+    }
+
+    @Test
+    fun `search configuration is owned by metadata integrations not content providers`() {
+        val tabSource = readSource(
+            "app/src/main/java/eu/kanade/tachiyomi/ui/tsuzuki/search/TsuzukiSearchTab.kt",
+            "src/main/java/eu/kanade/tachiyomi/ui/tsuzuki/search/TsuzukiSearchTab.kt",
+        )
+        val screenSource = readSource(
+            "app/src/main/java/eu/kanade/presentation/tsuzuki/search/TsuzukiSearchScreen.kt",
+            "src/main/java/eu/kanade/presentation/tsuzuki/search/TsuzukiSearchScreen.kt",
+        )
+
+        tabSource shouldContain "SettingsTsuzukiIntegrationsScreen"
+        tabSource shouldContain "searchIntegrationsDestination"
+        tabSource shouldNotContain "SettingsTsuzukiProvidersScreen"
+        tabSource shouldNotContain "searchProvidersDestination"
+
+        screenSource shouldContain "onOpenIntegrations"
+        screenSource shouldContain "MR.strings.tsuzuki_search_no_integration"
+        screenSource shouldContain "MR.strings.tsuzuki_search_integration_prompt"
+        screenSource shouldContain "MR.strings.tsuzuki_search_configure_integrations"
+        screenSource shouldNotContain "MR.strings.tsuzuki_search_no_provider"
+        screenSource shouldNotContain "MR.strings.tsuzuki_search_provider_prompt"
+        screenSource shouldNotContain "MR.strings.tsuzuki_search_configure_providers"
+    }
+
+    @Test
+    fun `integration configuration and provider platform keep distinct UI ownership`() {
+        val integrationSource = readSource(
+            "app/src/main/java/eu/kanade/presentation/more/settings/screen/SettingsTsuzukiIntegrationsScreen.kt",
+            "src/main/java/eu/kanade/presentation/more/settings/screen/SettingsTsuzukiIntegrationsScreen.kt",
+        )
+        val providerSource = readSource(
+            "app/src/main/java/eu/kanade/presentation/more/settings/screen/SettingsTsuzukiProvidersScreen.kt",
+            "src/main/java/eu/kanade/presentation/more/settings/screen/SettingsTsuzukiProvidersScreen.kt",
+        )
+
+        integrationSource shouldNotContain "MR.strings.tsuzuki_integration_use_provider"
+        providerSource shouldContain "providerRepositoryManager"
+        providerSource shouldContain "providerRegistry"
+    }
+
+    private fun readSource(vararg candidates: String): String {
+        val source = candidates
+            .map(Path::of)
+            .firstOrNull(Files::exists)
+            ?: error("Source was not found from ${Path.of("").toAbsolutePath()}: ${candidates.joinToString()}")
+        return Files.readString(source)
+    }
+}
