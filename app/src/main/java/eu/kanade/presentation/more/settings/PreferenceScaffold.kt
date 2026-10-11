@@ -14,10 +14,11 @@ fun PreferenceScaffold(
     onBackPressed: (() -> Unit)? = null,
     itemsProvider: @Composable () -> List<Preference>,
 ) {
+    val title = stringResource(titleRes)
     Scaffold(
         topBar = {
             AppBar(
-                title = stringResource(titleRes),
+                title = "",
                 navigateUp = onBackPressed,
                 actions = actions,
                 scrollBehavior = it,
@@ -25,6 +26,7 @@ fun PreferenceScaffold(
         },
         content = { contentPadding ->
             PreferenceScreen(
+                title = title,
                 items = itemsProvider(),
                 contentPadding = contentPadding,
             )
