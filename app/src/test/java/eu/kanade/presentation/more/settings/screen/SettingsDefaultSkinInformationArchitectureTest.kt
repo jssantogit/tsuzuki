@@ -93,6 +93,68 @@ class SettingsDefaultSkinInformationArchitectureTest {
         source shouldNotContain "title = \"Aparência\""
     }
 
+    @Test
+    fun `promoted Settings surfaces keep public copy in resources`() {
+        val hardcodedCopyByFile = mapOf(
+            "SettingsMainScreen.kt" to listOf(
+                "title = \"Conta\"",
+                "title = \"Geral\"",
+                "title = \"Conteúdo\"",
+                "title = \"Downloads\"",
+                "title = \"Dados e armazenamento\"",
+                "title = \"Privacidade e segurança\"",
+                "title = \"Diagnóstico\"",
+                "title = \"Avançado\"",
+                "title = \"Sobre\"",
+                "text = \"›\"",
+            ),
+            "SettingsTsuzukiPersonalizationsScreen.kt" to listOf(
+                "title = \"Preset visual\"",
+                "title = \"Collections\"",
+                "subtitle = \"Organize coleções, pastas e listas exibidas pelo Tsuzuki\"",
+            ),
+            "SettingsTsuzukiDiagnosticsScreen.kt" to listOf(
+                "title = \"Diagnóstico\"",
+            ),
+            "SettingsTsuzukiVisualPresetScreen.kt" to listOf(
+                "text = \"Preset visual\"",
+                "text = \"PRESET ATUAL\"",
+                "text = \"A prévia acompanha o tema atual sem criar outro preset.\"",
+                "text = \"Selecionado\"",
+            ),
+            "SettingsDownloadScreen.kt" to listOf(
+                "title = \"Rede e arquivos\"",
+                "title = \"Performance\"",
+            ),
+            "SettingsDataScreen.kt" to listOf(
+                "subtitle = \"Espaço disponível, cache e arquivos temporários\"",
+                "title = \"Backup e restauração\"",
+                "subtitle = \"Criar, restaurar e agendar backups\"",
+                "title = \"Exportar biblioteca\"",
+                "subtitle = \"CSV com título, autor e artista\"",
+            ),
+            "SettingsSecurityScreen.kt" to listOf(
+                "Text(\"Permitir P2P direto?\")",
+                "Text(\"Cancelar\")",
+                "Text(\"Permitir\")",
+                "title = \"Privacidade de rede\"",
+                "title = \"Permitir P2P direto\"",
+                "title = \"Dados e telemetria\"",
+            ),
+            "SettingsTsuzukiLogsScreen.kt" to listOf(
+                "title = { Text(\"Limpar logs?\") }",
+                "Text(\"Cancelar\")",
+                "Text(\"Limpar\")",
+                "title = \"O arquivo compartilhado pode conter dados de diagnóstico do dispositivo e do app.",
+            ),
+        )
+
+        hardcodedCopyByFile.forEach { (fileName, forbiddenCopy) ->
+            val source = readSource(fileName)
+            forbiddenCopy.forEach(source::shouldNotContain)
+        }
+    }
+
     private fun readSource(fileName: String): String {
         val candidates = listOf(
             Path.of("src/main/java/eu/kanade/presentation/more/settings/screen/$fileName"),
