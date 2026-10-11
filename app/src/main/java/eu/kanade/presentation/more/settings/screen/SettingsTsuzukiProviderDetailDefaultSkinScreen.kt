@@ -31,10 +31,10 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinCard
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinChoiceChip
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPageTitle
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSectionLabel
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTag
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.util.Screen
@@ -195,10 +195,8 @@ class SettingsTsuzukiProviderDetailDefaultSkinScreen(
                             descriptor.capabilities
                                 .sortedWith(compareBy({ it.id }, { it.version }))
                                 .forEach { capability ->
-                                    DefaultSkinChoiceChip(
+                                    DefaultSkinTag(
                                         text = "${capability.id} · v${capability.version}",
-                                        selected = false,
-                                        onClick = {},
                                     )
                                 }
                         }
