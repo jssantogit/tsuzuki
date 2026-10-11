@@ -330,6 +330,7 @@ class CanonicalTitleScreenModelTest {
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = evidence,
             canonicalReadingRepository = FakeReadingRepository(),
+            resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
                 canonicalChapterRepository = chapters,
                 canonicalDownloadGateway = object : CanonicalDownloadGateway {
@@ -384,6 +385,7 @@ class CanonicalTitleScreenModelTest {
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
             canonicalReadingRepository = FakeReadingRepository(),
+            resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
                 canonicalChapterRepository = chapters,
                 canonicalDownloadGateway = object : CanonicalDownloadGateway {
@@ -444,6 +446,7 @@ class CanonicalTitleScreenModelTest {
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
             canonicalReadingRepository = FakeReadingRepository(),
+            resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
                 canonicalChapterRepository = chapters,
                 canonicalDownloadGateway = object : CanonicalDownloadGateway {
@@ -576,6 +579,7 @@ class CanonicalTitleScreenModelTest {
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
             canonicalReadingRepository = FakeReadingRepository(),
+            resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
                 canonicalChapterRepository = FakeChapterRepository(emptyList()),
                 canonicalDownloadGateway = object : CanonicalDownloadGateway {
@@ -635,6 +639,7 @@ class CanonicalTitleScreenModelTest {
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
             canonicalReadingRepository = FakeReadingRepository(),
+            resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
                 canonicalChapterRepository = FakeChapterRepository(emptyList()),
                 canonicalDownloadGateway = object : CanonicalDownloadGateway {
@@ -730,6 +735,7 @@ class CanonicalTitleScreenModelTest {
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = evidenceRepository,
             canonicalReadingRepository = FakeReadingRepository(),
+            resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
                 canonicalChapterRepository = chapters,
                 canonicalDownloadGateway = object : CanonicalDownloadGateway {
@@ -790,6 +796,7 @@ class CanonicalTitleScreenModelTest {
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
             canonicalReadingRepository = FakeReadingRepository(),
+            resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
                 canonicalChapterRepository = chapters,
                 canonicalDownloadGateway = object : CanonicalDownloadGateway {
@@ -861,6 +868,7 @@ class CanonicalTitleScreenModelTest {
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
             canonicalReadingRepository = FakeReadingRepository(),
+            resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
                 canonicalChapterRepository = chapters,
                 canonicalDownloadGateway = object : CanonicalDownloadGateway {
@@ -932,6 +940,7 @@ class CanonicalTitleScreenModelTest {
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
             canonicalReadingRepository = FakeReadingRepository(),
+            resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
                 canonicalChapterRepository = chapterRepo,
                 canonicalDownloadGateway = object : CanonicalDownloadGateway {
@@ -993,6 +1002,7 @@ class CanonicalTitleScreenModelTest {
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
             canonicalReadingRepository = FakeReadingRepository(),
+            resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
                 canonicalChapterRepository = chapters,
                 canonicalDownloadGateway = object : CanonicalDownloadGateway {
@@ -1043,6 +1053,7 @@ class CanonicalTitleScreenModelTest {
                 materializeInferredChapter = materializer,
                 chapterEvidenceRepository = FakeEvidenceRepository(),
                 canonicalReadingRepository = FakeReadingRepository(),
+                resolveCanonicalReadingStart = mockk(relaxed = true),
                 getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
                     canonicalChapterRepository = chapters,
                     canonicalDownloadGateway = object : CanonicalDownloadGateway {

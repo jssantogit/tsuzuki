@@ -137,6 +137,7 @@ class CanonicalTitleRefreshPreservationTest {
             resolveCanonicalMetadata = metadata,
             resolveCanonicalSourceManga = source,
             resolveCanonicalArtwork = artwork,
+            resolveCanonicalReadingStart = mockk(relaxed = true),
         )
     }
 }

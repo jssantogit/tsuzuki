@@ -57,9 +57,10 @@ fun CanonicalTitleDetailScreen(
     onAtualizar: () -> Unit,
     onAddToLibrary: () -> Unit,
     onRemoveFromLibrary: () -> Unit,
+    onReadTitle: () -> Unit,
     onOpenChapter: (String) -> Unit,
     onBaixarChapter: (String) -> Unit,
-    onOpenAddonsSettings: () -> Unit,
+    onOpenProvidersSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -136,8 +137,8 @@ fun CanonicalTitleDetailScreen(
                                 modifier = Modifier.padding(16.dp),
                             )
                             if (!state.isRefreshing) {
-                                TextButton(onClick = onOpenAddonsSettings) {
-                                    Text("Gerenciar Add-ons de leitura")
+                                TextButton(onClick = onOpenProvidersSettings) {
+                                    Text(stringResource(MR.strings.tsuzuki_details_providers))
                                 }
                             }
                         }

@@ -37,13 +37,14 @@ fun ContentBindingLinkSheet(
     onSearchMore: () -> Unit,
     onBack: () -> Unit,
     onDismiss: () -> Unit,
+    providerLabels: ContentProviderLabels? = null,
 ) {
     AdaptiveSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Link a reading Add-on", style = MaterialTheme.typography.titleLarge)
+            Text(providerLabels?.bindingTitle ?: "Link a reading Add-on", style = MaterialTheme.typography.titleLarge)
             when (state) {
                 ContentBindingLinkState.Idle, ContentBindingLinkState.Loading -> {
                     Row(
@@ -55,9 +56,15 @@ fun ContentBindingLinkSheet(
                 }
                 is ContentBindingLinkState.Addons -> {
                     if (state.enabled.isEmpty()) {
-                        Text("No enabled reading Add-ons with internal sources were found.")
+                        Text(
+                            providerLabels?.bindingEmpty
+                                ?: "No enabled reading Add-ons with internal sources were found.",
+                        )
                     } else {
-                        Text("Choose an installed, enabled Add-on to search for this title.")
+                        Text(
+                            providerLabels?.bindingChoice
+                                ?: "Choose an installed, enabled Add-on to search for this title.",
+                        )
                         LazyColumn(modifier = Modifier.heightIn(max = 440.dp)) {
                             items(state.enabled, key = { it.id.value }) { addon ->
                                 ListItem(
@@ -93,7 +100,7 @@ fun ContentBindingLinkSheet(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    state.error?.let { Text(providerLabels?.error ?: it, color = MaterialTheme.colorScheme.error) }
 
                     if (state.confirmationCandidates.isNotEmpty()) {
                         Text(
@@ -144,11 +151,11 @@ fun ContentBindingLinkSheet(
                             Text("Search more sources (${state.remainingSourceCount} remaining)")
                         }
                     }
-                    TextButton(onClick = onBack) { Text("Choose another Add-on") }
+                    TextButton(onClick = onBack) { Text(providerLabels?.choose ?: "Choose another Add-on") }
                 }
                 is ContentBindingLinkState.Error -> {
-                    Text(state.message, color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = onBack) { Text("Choose another Add-on") }
+                    Text(providerLabels?.error ?: state.message, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = onBack) { Text(providerLabels?.choose ?: "Choose another Add-on") }
                 }
             }
             TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
