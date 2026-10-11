@@ -20,22 +20,58 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
-    fun `entry search profile and settings consume shared Default Skin primitives`() {
+    fun `promoted root surfaces consume shared Default Skin primitives`() {
         readSource("entry/TsuzukiEntryScreen.kt") shouldContain "defaultSkinColors()"
         readSource("search/TsuzukiSearchScreen.kt") shouldContain "defaultSkinColors()"
         readSource("profile/TsuzukiProfileScreen.kt") shouldContain "defaultSkinColors()"
+        readSource("library/CanonicalLibraryScreen.kt") shouldContain "defaultSkinColors()"
         readSettingsSource("SettingsMainScreen.kt") shouldContain "defaultSkinColors()"
+        readSettingsSource("SettingsTsuzukiIntegrationsScreen.kt") shouldContain "defaultSkinColors()"
+        readSettingsSource("SettingsTsuzukiProvidersScreen.kt") shouldContain "defaultSkinColors()"
     }
 
     @Test
-    fun `public entry and search do not fall back to stock outlined Material fields`() {
-        val entry = readSource("entry/TsuzukiEntryScreen.kt")
-        val search = readSource("search/TsuzukiSearchScreen.kt")
+    fun `public text entry surfaces do not fall back to stock outlined Material fields`() {
+        val files = listOf(
+            readSource("entry/TsuzukiEntryScreen.kt"),
+            readSource("search/TsuzukiSearchScreen.kt"),
+            readSource("library/CanonicalLibraryScreen.kt"),
+            readSettingsSource("SettingsTsuzukiIntegrationsScreen.kt"),
+        )
 
-        entry shouldNotContain "OutlinedTextField("
-        search shouldNotContain "OutlinedTextField("
-        entry shouldContain "BasicTextField("
-        search shouldContain "BasicTextField("
+        files.forEach { source -> source shouldNotContain "OutlinedTextField(" }
+        readSource("entry/TsuzukiEntryScreen.kt") shouldContain "BasicTextField("
+        readSource("search/TsuzukiSearchScreen.kt") shouldContain "BasicTextField("
+    }
+
+    @Test
+    fun `library advanced filters use Default Skin controls instead of stock filter chips`() {
+        val library = readSource("library/CanonicalLibraryScreen.kt")
+
+        library shouldContain "DefaultSkinChoiceChip("
+        library shouldNotContain "FilterChip("
+        library shouldNotContain "SuggestionChip("
+    }
+
+    @Test
+    fun `integrations and providers use promoted page composition instead of settings list scaffolds`() {
+        val integrations = readSettingsSource("SettingsTsuzukiIntegrationsScreen.kt")
+        val providers = readSettingsSource("SettingsTsuzukiProvidersScreen.kt")
+
+        integrations shouldContain "DefaultSkinPageTitle("
+        providers shouldContain "DefaultSkinPageTitle("
+        integrations shouldNotContain "TopAppBar("
+        providers shouldNotContain "TopAppBar("
+    }
+
+    @Test
+    fun `providers do not expose the rejected global acquisition route`() {
+        val providers = readSettingsSource("SettingsTsuzukiProvidersScreen.kt")
+
+        providers shouldNotContain "SettingsTsuzukiTorrentAcquisitionScreen()"
+        providers shouldNotContain "tsuzuki_provider_acquisition_title"
+        providers shouldContain "tsuzuki_providers_installed"
+        providers shouldContain "tsuzuki_providers_discover"
     }
 
     @Test
