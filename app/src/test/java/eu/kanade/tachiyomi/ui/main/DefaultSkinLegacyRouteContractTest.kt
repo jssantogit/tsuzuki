@@ -9,45 +9,37 @@ import java.nio.file.Path
 class DefaultSkinLegacyRouteContractTest {
 
     @Test
-    fun `legacy source and extension shortcuts resolve to Providers`() {
+    fun `legacy source and extension shortcuts stay recognized through compatibility destination`() {
         val source = readAppSource("eu/kanade/tachiyomi/ui/main/MainActivity.kt")
 
         source shouldContain "Constants.SHORTCUT_SOURCES"
         source shouldContain "Constants.SHORTCUT_EXTENSIONS"
-        source shouldContain "SettingsScreen(SettingsScreen.Destination.Providers)"
-        source shouldNotContain "SettingsScreen(SettingsScreen.Destination.TsuzukiAddons)"
+        source shouldContain "SettingsScreen(SettingsScreen.Destination.TsuzukiAddons)"
     }
 
     @Test
-    fun `legacy extension repository links never reopen Extension Stores UI`() {
-        val source = readAppSource("eu/kanade/tachiyomi/ui/main/MainActivity.kt")
-
-        source shouldContain "scheme == \"tachiyomi\""
-        source shouldContain "scheme == \"mihon\""
-        source shouldContain "SettingsScreen(SettingsScreen.Destination.Providers)"
-        source shouldNotContain "navigator.push(ExtensionStoresScreen"
-        source shouldNotContain "import eu.kanade.presentation.more.settings.screen.browse.ExtensionStoresScreen"
-    }
-
-    @Test
-    fun `legacy destination id three is retained as Providers compatibility route`() {
+    fun `legacy destination id three canonicalizes directly to Providers`() {
         val source = readAppSource("eu/kanade/tachiyomi/ui/setting/SettingsScreen.kt")
 
         source shouldContain "data object Providers : Destination(3)"
-        source shouldContain "Destination.Providers.id -> SettingsTsuzukiProvidersScreen()"
-        source shouldNotContain "TsuzukiAddons"
+        source shouldContain "val TsuzukiAddons: Destination get() = Providers"
+        source shouldContain "if (destination == Destination.Providers.id)"
+        source shouldContain "SettingsTsuzukiProvidersScreen().Content()"
         source shouldNotContain "SettingsTsuzukiAddonsScreen"
     }
 
     @Test
-    fun `Providers top back delegates to Settings back contract`() {
-        val source = readAppSource(
-            "eu/kanade/presentation/more/settings/screen/SettingsTsuzukiProvidersScreen.kt",
+    fun `legacy extension repository deep links canonicalize to Providers`() {
+        val mainSource = readAppSource("eu/kanade/tachiyomi/ui/main/MainActivity.kt")
+        val storesSource = readAppSource(
+            "eu/kanade/presentation/more/settings/screen/browse/ExtensionStoresScreen.kt",
         )
 
-        source shouldContain "LocalBackPress.currentOrThrow"
-        source shouldContain "TextButton(onClick = navigateUp)"
-        source shouldNotContain "TextButton(onClick = navigator::pop)"
+        mainSource shouldContain "scheme == \"tachiyomi\""
+        mainSource shouldContain "scheme == \"mihon\""
+        storesSource shouldContain "if (url != null)"
+        storesSource shouldContain "navigator.replace(SettingsTsuzukiProvidersScreen())"
+        storesSource shouldNotContain "viewModel.addFromDeeplink(url)"
     }
 
     private fun readAppSource(relativePath: String): String {
