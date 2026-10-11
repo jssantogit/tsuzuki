@@ -15,7 +15,7 @@ object SettingsTsuzukiDiagnosticsScreen : Screen() {
         val navigator = LocalNavigator.currentOrThrow
 
         DefaultSkinSettingsNavigationScreen(
-            title = "Diagnóstico",
+            title = stringResource(MR.strings.tsuzuki_settings_section_diagnostics),
             navigateUp = navigator::pop,
             groups = listOf(
                 DefaultSkinSettingsNavGroup(
