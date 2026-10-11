@@ -1,9 +1,19 @@
 package eu.kanade.presentation.more.settings.screen.about
 
 import android.content.Context
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -40,7 +50,7 @@ object AboutScreen : Screen() {
         Scaffold(
             topBar = { scrollBehavior ->
                 AppBar(
-                    title = stringResource(MR.strings.pref_category_about),
+                    title = "",
                     navigateUp = if (handleBack != null) handleBack::invoke else null,
                     scrollBehavior = scrollBehavior,
                 )
@@ -50,46 +60,71 @@ object AboutScreen : Screen() {
                 contentPadding = contentPadding,
             ) {
                 item {
+                    Text(
+                        text = stringResource(MR.strings.pref_category_about),
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                    )
+                }
+
+                item {
                     LogoHeader(
-                        iconPadding = PaddingValues(vertical = 56.dp),
+                        iconPadding = PaddingValues(vertical = 36.dp),
+                        showDivider = false,
                     )
                 }
 
                 item {
-                    TextPreferenceWidget(
-                        title = stringResource(MR.strings.version),
-                        subtitle = getVersionName(withBuildDate = true),
-                        onPreferenceClick = {
-                            val context = Injekt.get<Context>()
-                            val deviceInfo = context.appGraph.crashLogUtil.getDebugInfo()
-                            context.copyToClipboard("Debug information", deviceInfo)
-                        },
-                    )
-                }
-
-                item {
-                    TextPreferenceWidget(
-                        title = stringResource(MR.strings.tsuzuki_project_source),
-                        onPreferenceClick = {
-                            uriHandler.openUri("https://github.com/jssantogit/tsuzuki")
-                        },
-                    )
-                }
-
-                item {
-                    TextPreferenceWidget(
-                        title = stringResource(MR.strings.tsuzuki_upstream_mihon),
-                        onPreferenceClick = {
-                            uriHandler.openUri("https://github.com/mihonapp/mihon")
-                        },
-                    )
-                }
-
-                item {
-                    TextPreferenceWidget(
-                        title = stringResource(MR.strings.licenses),
-                        onPreferenceClick = { navigator.push(OpenSourceLicensesScreen()) },
-                    )
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 1.dp,
+                    ) {
+                        Column {
+                            TextPreferenceWidget(
+                                title = stringResource(MR.strings.version),
+                                subtitle = getVersionName(withBuildDate = true),
+                                onPreferenceClick = {
+                                    val context = Injekt.get<Context>()
+                                    val deviceInfo = context.appGraph.crashLogUtil.getDebugInfo()
+                                    context.copyToClipboard("Debug information", deviceInfo)
+                                },
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 16.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                            )
+                            TextPreferenceWidget(
+                                title = stringResource(MR.strings.tsuzuki_project_source),
+                                onPreferenceClick = {
+                                    uriHandler.openUri("https://github.com/jssantogit/tsuzuki")
+                                },
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 16.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                            )
+                            TextPreferenceWidget(
+                                title = stringResource(MR.strings.tsuzuki_upstream_mihon),
+                                onPreferenceClick = {
+                                    uriHandler.openUri("https://github.com/mihonapp/mihon")
+                                },
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 16.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                            )
+                            TextPreferenceWidget(
+                                title = stringResource(MR.strings.licenses),
+                                onPreferenceClick = { navigator.push(OpenSourceLicensesScreen()) },
+                            )
+                        }
+                    }
                 }
             }
         }
