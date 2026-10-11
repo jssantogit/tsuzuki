@@ -67,7 +67,7 @@ fun TsuzukiSearchScreen(
     onResultClick: (CatalogItem) -> Unit,
     onClearRecent: () -> Unit,
     onRetry: () -> Unit,
-    onOpenProviders: () -> Unit,
+    onOpenIntegrations: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -141,7 +141,7 @@ fun TsuzukiSearchScreen(
                     NeedsIntegrationContent(
                         recentSearches = state.recentSearches,
                         onRecentSearch = onRecentSearch,
-                        onOpenProviders = onOpenProviders,
+                        onOpenIntegrations = onOpenIntegrations,
                     )
                 }
 
@@ -191,7 +191,7 @@ fun TsuzukiSearchScreen(
 private fun NeedsIntegrationContent(
     recentSearches: List<String>,
     onRecentSearch: (String) -> Unit,
-    onOpenProviders: () -> Unit,
+    onOpenIntegrations: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -209,19 +209,19 @@ private fun NeedsIntegrationContent(
         }
         item {
             Text(
-                text = stringResource(MR.strings.tsuzuki_search_no_provider),
+                text = stringResource(MR.strings.tsuzuki_search_no_integration),
                 style = MaterialTheme.typography.titleMedium,
             )
         }
         item {
             Text(
-                text = stringResource(MR.strings.tsuzuki_search_provider_prompt),
+                text = stringResource(MR.strings.tsuzuki_search_integration_prompt),
                 style = MaterialTheme.typography.bodyLarge,
             )
         }
         item {
-            Button(onClick = onOpenProviders) {
-                Text(stringResource(MR.strings.tsuzuki_search_configure_providers))
+            Button(onClick = onOpenIntegrations) {
+                Text(stringResource(MR.strings.tsuzuki_search_configure_integrations))
             }
         }
     }
