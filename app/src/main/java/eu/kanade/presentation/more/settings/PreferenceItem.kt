@@ -1,10 +1,5 @@
 package eu.kanade.presentation.more.settings
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -15,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.more.settings.widget.EditTextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.InfoWidget
@@ -31,6 +27,7 @@ import tachiyomi.presentation.core.components.BaseSliderItem
 import tachiyomi.presentation.core.util.collectAsState
 
 val LocalPreferenceHighlighted = compositionLocalOf(structuralEqualityPolicy()) { false }
+val LocalPreferenceEnabled = compositionLocalOf(structuralEqualityPolicy()) { true }
 val LocalPreferenceMinHeight = compositionLocalOf(structuralEqualityPolicy()) { 56.dp }
 
 @Composable
@@ -41,16 +38,10 @@ fun StatusWrapper(
 ) {
     val enabled = item.enabled
     val highlighted = item.title == highlightKey
-    AnimatedVisibility(
-        visible = enabled,
-        enter = expandVertically() + fadeIn(),
-        exit = shrinkVertically() + fadeOut(),
-        content = {
-            CompositionLocalProvider(
-                LocalPreferenceHighlighted provides highlighted,
-                content = content,
-            )
-        },
+    CompositionLocalProvider(
+        LocalPreferenceHighlighted provides highlighted,
+        LocalPreferenceEnabled provides enabled,
+        content = content,
     )
 }
 
@@ -90,15 +81,19 @@ internal fun PreferenceItem(
                     subtitle = item.subtitle,
                     valueString = item.valueString.takeUnless { it.isNullOrEmpty() } ?: item.value.toString(),
                     onChange = {
-                        scope.launch {
-                            item.onValueChanged(it)
+                        if (item.enabled) {
+                            scope.launch {
+                                item.onValueChanged(it)
+                            }
                         }
                     },
                     titleStyle = MaterialTheme.typography.titleLarge.copy(fontSize = TitleFontSize),
-                    modifier = Modifier.padding(
-                        horizontal = PrefsHorizontalPadding,
-                        vertical = PrefsVerticalPadding,
-                    ),
+                    modifier = Modifier
+                        .alpha(if (item.enabled) 1f else 0.38f)
+                        .padding(
+                            horizontal = PrefsHorizontalPadding,
+                            vertical = PrefsVerticalPadding,
+                        ),
                 )
             }
             is Preference.PreferenceItem.ListPreference<*> -> {
