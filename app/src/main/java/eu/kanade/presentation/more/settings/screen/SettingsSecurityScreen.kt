@@ -48,16 +48,11 @@ object SettingsSecurityScreen : SearchableSettings {
         if (showDirectP2pConfirmation) {
             AlertDialog(
                 onDismissRequest = { showDirectP2pConfirmation = false },
-                title = { Text("Permitir P2P direto?") },
-                text = {
-                    Text(
-                        "Conexões P2P diretas podem expor seu endereço IP para outros participantes da rede. " +
-                            "Permita apenas se você entende e aceita essa exposição.",
-                    )
-                },
+                title = { Text(stringResource(MR.strings.tsuzuki_direct_p2p_confirm_title)) },
+                text = { Text(stringResource(MR.strings.tsuzuki_direct_p2p_confirm_message)) },
                 dismissButton = {
                     TextButton(onClick = { showDirectP2pConfirmation = false }) {
-                        Text("Cancelar")
+                        Text(stringResource(MR.strings.action_cancel))
                     }
                 },
                 confirmButton = {
@@ -67,7 +62,7 @@ object SettingsSecurityScreen : SearchableSettings {
                             scope.launch { directP2pPreference.set(true) }
                         },
                     ) {
-                        Text("Permitir")
+                        Text(stringResource(MR.strings.tsuzuki_provider_direct_p2p))
                     }
                 },
             )
@@ -150,13 +145,12 @@ object SettingsSecurityScreen : SearchableSettings {
         val directP2pPreference = providerTorrentPreferences.directP2pAllowed
 
         return Preference.PreferenceGroup(
-            title = "Privacidade de rede",
+            title = stringResource(MR.strings.tsuzuki_network_privacy_title),
             preferenceItems = listOf(
                 Preference.PreferenceItem.SwitchPreference(
                     preference = directP2pPreference,
-                    title = "Permitir P2P direto",
-                    subtitle = "Permite conexões P2P diretas quando um Provider precisar. " +
-                        "Seu endereço IP pode ficar visível para outros participantes da rede.",
+                    title = stringResource(MR.strings.tsuzuki_provider_direct_p2p),
+                    subtitle = stringResource(MR.strings.tsuzuki_provider_direct_p2p_warning),
                     onValueChanged = { enabled ->
                         if (!enabled) {
                             true
@@ -175,7 +169,7 @@ object SettingsSecurityScreen : SearchableSettings {
         privacyPreferences: PrivacyPreferences,
     ): Preference.PreferenceGroup {
         return Preference.PreferenceGroup(
-            title = "Dados e telemetria",
+            title = stringResource(MR.strings.tsuzuki_telemetry_title),
             preferenceItems = listOf(
                 Preference.PreferenceItem.SwitchPreference(
                     preference = privacyPreferences.crashlytics,
