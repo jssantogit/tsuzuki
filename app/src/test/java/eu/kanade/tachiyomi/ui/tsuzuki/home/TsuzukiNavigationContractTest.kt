@@ -1,14 +1,12 @@
 package eu.kanade.tachiyomi.ui.tsuzuki.home
 
-import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiProvidersScreen
+import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiIntegrationsScreen
 import eu.kanade.tachiyomi.ui.home.HomeScreen
 import eu.kanade.tachiyomi.ui.library.LibraryTab
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.FolderCatalogScreen
-import eu.kanade.tachiyomi.ui.tsuzuki.home.TsuzukiHomeTab
-import eu.kanade.tachiyomi.ui.tsuzuki.home.homeFolderDestination
 import eu.kanade.tachiyomi.ui.tsuzuki.profile.TsuzukiProfileTab
 import eu.kanade.tachiyomi.ui.tsuzuki.search.TsuzukiSearchTab
-import eu.kanade.tachiyomi.ui.tsuzuki.search.searchProvidersDestination
+import eu.kanade.tachiyomi.ui.tsuzuki.search.searchIntegrationsDestination
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
@@ -37,8 +35,8 @@ class TsuzukiNavigationContractTest {
     }
 
     @Test
-    fun `Search Providers action opens the public Providers settings destination`() {
-        searchProvidersDestination()::class shouldBe SettingsTsuzukiProvidersScreen::class
+    fun `Search integration action opens metadata integrations settings destination`() {
+        searchIntegrationsDestination()::class shouldBe SettingsTsuzukiIntegrationsScreen::class
     }
 
     @Test
