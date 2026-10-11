@@ -14,7 +14,7 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import dev.zacsweers.metrox.viewmodel.metroViewModel
-import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiProvidersScreen
+import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiIntegrationsScreen
 import eu.kanade.presentation.tsuzuki.search.TsuzukiSearchScreen
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
@@ -75,8 +75,8 @@ data object TsuzukiSearchTab : Tab {
             onResultClick = screenModel::openResult,
             onClearRecent = screenModel::clearRecentSearches,
             onRetry = screenModel::loadDiscover,
-            onOpenProviders = {
-                navigator.push(searchProvidersDestination())
+            onOpenIntegrations = {
+                navigator.push(searchIntegrationsDestination())
             },
         )
     }
@@ -90,4 +90,4 @@ data object TsuzukiSearchTab : Tab {
     private val queryEvent = Channel<String>(capacity = Channel.CONFLATED)
 }
 
-internal fun searchProvidersDestination(): Screen = SettingsTsuzukiProvidersScreen()
+internal fun searchIntegrationsDestination(): Screen = SettingsTsuzukiIntegrationsScreen()
