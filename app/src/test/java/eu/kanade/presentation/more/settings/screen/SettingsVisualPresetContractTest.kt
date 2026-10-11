@@ -12,7 +12,7 @@ class SettingsVisualPresetContractTest {
     fun `personalization exposes the approved visual preset destination`() {
         val source = readSource("SettingsTsuzukiPersonalizationsScreen.kt")
 
-        source shouldContain "Preset visual"
+        source shouldContain "MR.strings.tsuzuki_visual_preset_title"
         source shouldContain "SettingsTsuzukiVisualPresetScreen"
     }
 
@@ -21,7 +21,8 @@ class SettingsVisualPresetContractTest {
         val source = readSource("SettingsTsuzukiVisualPresetScreen.kt")
 
         source shouldContain "Tsuzuki Default Skin"
-        source shouldContain "Selecionado"
+        source shouldContain "MR.strings.selected"
+        source shouldContain "MR.strings.tsuzuki_visual_preset_summary"
         source shouldNotContain "Download"
         source shouldNotContain "Install"
         source shouldNotContain "Marketplace"
