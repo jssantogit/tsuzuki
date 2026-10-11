@@ -14,8 +14,9 @@ class SettingsAdvancedProviderTorrentConsentTest {
 
         source shouldContain "graph.providerTorrentPreferences"
         source shouldContain "providerTorrentPreferences.directP2pAllowed"
-        source shouldContain "Permitir P2P direto?"
-        source shouldContain "Seu endereço IP pode ficar visível"
+        source shouldContain "MR.strings.tsuzuki_direct_p2p_confirm_title"
+        source shouldContain "MR.strings.tsuzuki_direct_p2p_confirm_message"
+        source shouldContain "MR.strings.tsuzuki_action_allow"
     }
 
     @Test
