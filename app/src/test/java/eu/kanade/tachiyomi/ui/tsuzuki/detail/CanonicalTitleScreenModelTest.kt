@@ -71,7 +71,9 @@ import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterHistory
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterHistoryUpdate
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterProgress
+import tachiyomi.domain.tsuzuki.reader.model.CanonicalReadingStart
 import tachiyomi.domain.tsuzuki.reader.repository.CanonicalReadingRepository
+import tachiyomi.domain.tsuzuki.reader.service.CanonicalReadingStartResolver
 import tachiyomi.domain.tsuzuki.repository.CanonicalLibraryRepository
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import tachiyomi.domain.tsuzuki.source.interactor.ResolveCanonicalSourceManga
@@ -89,6 +91,226 @@ class CanonicalTitleScreenModelTest {
     @AfterEach
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun `reading state uses actual progress and canonical active identity`() = runTest(dispatcher) {
+        val chapter = readingChapter("fraction", "10.5")
+        val model = readingModel(
+            chapters = FakeChapterRepository(listOf(chapter)),
+            progress = listOf(CanonicalChapterProgress(chapter.id, lastPageRead = 4, updatedAt = 9)),
+        )
+        model.start("title")
+        advanceUntilIdle()
+        val loaded = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        loaded.hasReadingProgress shouldBe true
+        loaded.activeChapterId shouldBe "fraction"
+    }
+
+    @Test
+    fun `timestamp only and orphaned progress do not turn Start into Continue`() = runTest(dispatcher) {
+        val model = readingModel(
+            chapters = FakeChapterRepository(listOf(readingChapter("real", "Special"))),
+            progress = listOf(
+                CanonicalChapterProgress("real", updatedAt = 999),
+                CanonicalChapterProgress("missing", read = true, updatedAt = 1000),
+            ),
+        )
+        model.start("title")
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>().hasReadingProgress shouldBe false
+    }
+
+    @Test
+    fun `completed real progress is Continue even without a partial chapter`() = runTest(dispatcher) {
+        val model = readingModel(
+            chapters = FakeChapterRepository(listOf(readingChapter("complete", "7"))),
+            progress = listOf(CanonicalChapterProgress("complete", read = true)),
+        )
+        model.start("title")
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>().hasReadingProgress shouldBe true
+    }
+
+    @Test
+    fun `first page checkpoint with a real variant is valid resume progress`() = runTest(dispatcher) {
+        val model = readingModel(
+            chapters = FakeChapterRepository(listOf(readingChapter("real", "0.5"))),
+            progress = listOf(CanonicalChapterProgress("real", lastVariantId = "variant-real")),
+        )
+        model.start("title")
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>().hasReadingProgress shouldBe true
+    }
+
+    @Test
+    fun `read CTA delegates to canonical resolver and opens its exact chapter identity`() = runTest(dispatcher) {
+        val resolver = mockk<CanonicalReadingStartResolver>()
+        coEvery { resolver.execute("title") } returns CanonicalReadingStart.Ready("special")
+        val model = readingModel(
+            chapters = FakeChapterRepository(
+                listOf(readingChapter("first", "10"), readingChapter("special", "Special")),
+            ),
+            resolver = resolver,
+        )
+        model.start("title")
+        advanceUntilIdle()
+        val opened = mutableListOf<String>()
+        model.startReading(opened::add)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { resolver.execute("title") }
+        opened shouldBe listOf("special")
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>().readingStartInProgress shouldBe false
+    }
+
+    @Test
+    fun `Unavailable read start keeps Details usable and never opens Reader`() = runTest(dispatcher) {
+        val resolver = mockk<CanonicalReadingStartResolver>()
+        coEvery { resolver.execute("title") } returns CanonicalReadingStart.Unavailable("title")
+        val model = readingModel(resolver = resolver)
+        model.start("title")
+        advanceUntilIdle()
+        val opened = mutableListOf<String>()
+        model.startReading(opened::add)
+        advanceUntilIdle()
+        opened shouldBe emptyList()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>().readingStartInProgress shouldBe false
+    }
+
+    @Test
+    fun `read resolver may materialize inventory after Details loaded empty`() = runTest(dispatcher) {
+        val chapters = FakeChapterRepository(emptyList())
+        val resolver = mockk<CanonicalReadingStartResolver>()
+        coEvery { resolver.execute("title") } coAnswers {
+            chapters.upsert(readingChapter("new-real", "3.5"))
+            CanonicalReadingStart.Ready("new-real")
+        }
+        val model = readingModel(chapters = chapters, resolver = resolver)
+        model.start("title")
+        advanceUntilIdle()
+        val opened = mutableListOf<String>()
+        model.startReading(opened::add)
+        advanceUntilIdle()
+        opened shouldBe listOf("new-real")
+    }
+
+    @Test
+    fun `read start rejects a resolver chapter belonging to another canonical title`() = runTest(dispatcher) {
+        val foreign = readingChapter("foreign", "1").copy(canonicalTitleId = "other-title")
+        val resolver = mockk<CanonicalReadingStartResolver>()
+        coEvery { resolver.execute("title") } returns CanonicalReadingStart.Ready(foreign.id)
+        val model = readingModel(chapters = FakeChapterRepository(listOf(foreign)), resolver = resolver)
+        model.start("title")
+        advanceUntilIdle()
+        val opened = mutableListOf<String>()
+        model.startReading(opened::add)
+        advanceUntilIdle()
+        opened shouldBe emptyList()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>().title.id shouldBe "title"
+    }
+
+    @Test
+    fun `no artwork and no chapters retain canonical textual title and Library actions`() = runTest(dispatcher) {
+        val model = readingModel(chapters = FakeChapterRepository(emptyList()))
+        model.start("title")
+        advanceUntilIdle()
+        val loaded = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        loaded.title.displayTitle shouldBe "Title"
+        loaded.coverUrl shouldBe null
+        loaded.sourceCover shouldBe null
+        loaded.chapters shouldBe emptyList()
+        loaded.hasReadingProgress shouldBe false
+        model.addToLibrary()
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+            .libraryEntry?.canonicalTitleId shouldBe "title"
+    }
+
+    @Test
+    fun `all seven native ratings retain their own brands values and scales`() = runTest(dispatcher) {
+        val nativeRatings = listOf(
+            ProvenancedMetadata(ResolvedRating(4.5, 5.0), IntegrationId("kitsu")),
+            ProvenancedMetadata(ResolvedRating(86.0, 100.0), IntegrationId("anilist")),
+            ProvenancedMetadata(ResolvedRating(8.2, 10.0), IntegrationId("mal")),
+            ProvenancedMetadata(ResolvedRating(8.9, 10.0), IntegrationId("mangaupdates")),
+            ProvenancedMetadata(ResolvedRating(3.5, 5.0), IntegrationId("provider-five")),
+            ProvenancedMetadata(ResolvedRating(92.0, 100.0), IntegrationId("provider-six")),
+            ProvenancedMetadata(ResolvedRating(7.5, 10.0), IntegrationId("provider-seven")),
+        )
+        val metadata = mockk<ResolveCanonicalMetadata>()
+        coEvery { metadata.cached("title") } returns null
+        coEvery { metadata.execute("title", any()) } returns Result.success(ResolvedMetadata(ratings = nativeRatings))
+        val model = readingModel(metadata = metadata)
+        model.start("title")
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>().ratings shouldBe
+            nativeRatings.map { CanonicalProviderRating(it.providerId.value, it.value.value, it.value.maxValue) }
+    }
+
+    @Test
+    fun `initial unavailable title is recoverable by refreshing the same canonical work`() = runTest(dispatcher) {
+        val titles = mockk<CanonicalTitleRepository>()
+        coEvery { titles.getById("title") } returnsMany listOf(
+            null,
+            CanonicalTitle(
+                id = "title",
+                displayTitle = "Title",
+                identityState = CanonicalIdentityState.RESOLVED,
+                createdAt = 1,
+                updatedAt = 1,
+            ),
+        )
+        val model = readingModel(titles = titles)
+        model.start("title")
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Error>()
+        model.refresh()
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>().title.id shouldBe "title"
+    }
+
+    private fun readingChapter(id: String, label: String) = CanonicalChapter(
+        id = id,
+        canonicalTitleId = "title",
+        displayNumber = label,
+        confidence = 1.0,
+        createdAt = 1,
+        updatedAt = 1,
+        confirmation = CanonicalChapterConfirmation.CONFIRMED,
+    )
+
+    private fun readingModel(
+        chapters: FakeChapterRepository = FakeChapterRepository(listOf(readingChapter("first", "1"))),
+        progress: List<CanonicalChapterProgress> = emptyList(),
+        resolver: CanonicalReadingStartResolver = mockk(relaxed = true),
+        metadata: ResolveCanonicalMetadata = emptyMetadataResolver(),
+        titles: CanonicalTitleRepository = FakeTitleRepository(),
+    ): CanonicalTitleScreenModel {
+        val downloads = mockk<CanonicalDownloadRepository>()
+        coEvery { downloads.getChapterIdsByCanonicalTitle(any()) } returns emptySet()
+        val refresh = mockk<RefreshChapterEvidence>()
+        coEvery { refresh.executeProgressively(any(), any(), any()) } returns Result.success(Unit)
+        val reading = mockk<CanonicalReadingRepository>()
+        coEvery { reading.getProgressByCanonicalTitleId(any()) } returns progress
+        return CanonicalTitleScreenModel(
+            canonicalTitleRepository = titles,
+            canonicalLibraryRepository = FakeLibraryRepository(),
+            canonicalChapterRepository = chapters,
+            materializeInferredChapter = mockk(relaxed = true),
+            chapterEvidenceRepository = FakeEvidenceRepository(),
+            canonicalReadingRepository = reading,
+            getCanonicalChapterDownloadState = mockk(relaxed = true),
+            downloadCanonicalChapter = mockk(relaxed = true),
+            canonicalDownloadRepository = downloads,
+            reportedChapterCountRepository = FakeReportedChapterCountRepository(),
+            addonRepository = FakeAddonRepository(),
+            refreshReportedChapterCounts = metadataRefresh(),
+            refreshChapterEvidence = refresh,
+            resolveCanonicalMetadata = metadata,
+            resolveCanonicalSourceManga = mockk(relaxed = true),
+            resolveCanonicalArtwork = mockk(relaxed = true),
+            resolveCanonicalReadingStart = resolver,
+        )
     }
 
     @Test
