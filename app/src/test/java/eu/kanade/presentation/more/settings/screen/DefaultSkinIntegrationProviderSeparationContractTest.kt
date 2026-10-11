@@ -20,6 +20,17 @@ class DefaultSkinIntegrationProviderSeparationContractTest {
     }
 
     @Test
+    fun `profile tracking opens integrations instead of legacy tracking settings`() {
+        val source = readSource(
+            "app/src/main/java/eu/kanade/tachiyomi/ui/tsuzuki/profile/TsuzukiProfileTab.kt",
+            "src/main/java/eu/kanade/tachiyomi/ui/tsuzuki/profile/TsuzukiProfileTab.kt",
+        )
+
+        source shouldContain "navigator.push(SettingsTsuzukiIntegrationsScreen())"
+        source shouldNotContain "SettingsTrackingScreen"
+    }
+
+    @Test
     fun `search configuration is owned by metadata integrations not content providers`() {
         val tabSource = readSource(
             "app/src/main/java/eu/kanade/tachiyomi/ui/tsuzuki/search/TsuzukiSearchTab.kt",
