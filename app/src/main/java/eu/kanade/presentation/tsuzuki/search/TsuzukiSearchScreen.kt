@@ -1,16 +1,20 @@
 package eu.kanade.presentation.tsuzuki.search
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -19,31 +23,36 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.manga.components.MangaCover
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinCard
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPageTitle
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSectionLabel
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.tsuzuki.integration.IntegrationBrandIcon
 import eu.kanade.presentation.tsuzuki.integration.ratingScaleLabel
 import eu.kanade.tachiyomi.R
@@ -70,8 +79,10 @@ fun TsuzukiSearchScreen(
     onOpenIntegrations: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = defaultSkinColors()
     Scaffold(
         modifier = modifier,
+        containerColor = colors.canvas,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { contentPadding ->
         Column(
@@ -80,108 +91,129 @@ fun TsuzukiSearchScreen(
                 .statusBarsPadding()
                 .padding(contentPadding),
         ) {
-            Text(
+            DefaultSkinPageTitle(
                 text = stringResource(MR.strings.tsuzuki_navigation_search),
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 8.dp),
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 16.dp),
             )
-            OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
+            SearchField(
+                query = query,
+                onQueryChange = onQueryChange,
+                onSearch = onSearch,
+                onClear = {
+                    onQueryChange("")
+                    onRetry()
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                singleLine = true,
-                label = { Text(stringResource(MR.strings.tsuzuki_search_query_label)) },
-                shape = RoundedCornerShape(12.dp),
-                leadingIcon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_search_24dp),
-                        contentDescription = null,
-                    )
-                },
-                trailingIcon = if (query.isNotEmpty()) {
-                    {
-                        IconButton(
-                            onClick = {
-                                onQueryChange("")
-                                onRetry()
-                            },
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_close_24dp),
-                                contentDescription = stringResource(MR.strings.tsuzuki_search_clear),
-                            )
-                        }
-                    }
-                } else {
-                    null
-                },
-                keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Search,
-                ),
-                keyboardActions = KeyboardActions(
-                    onSearch = { onSearch(query) },
-                ),
+                    .padding(horizontal = 20.dp),
             )
 
             when (state) {
-                SearchState.Loading -> {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        CircularProgressIndicator()
+                SearchState.Loading -> Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(
+                        color = colors.foreground,
+                        strokeWidth = 2.dp,
+                    )
+                }
+
+                is SearchState.NeedsIntegration -> NeedsIntegrationContent(
+                    recentSearches = state.recentSearches,
+                    onRecentSearch = onRecentSearch,
+                    onOpenIntegrations = onOpenIntegrations,
+                )
+
+                is SearchState.Discover -> DiscoverContent(
+                    state = state,
+                    onRecentSearch = onRecentSearch,
+                    onClearRecent = onClearRecent,
+                    onResultClick = onResultClick,
+                )
+
+                is SearchState.Results -> CatalogItems(
+                    query = state.query,
+                    items = state.items,
+                    onResultClick = onResultClick,
+                )
+
+                is SearchState.Empty -> MessageContent(
+                    message = stringResource(MR.strings.tsuzuki_search_empty),
+                )
+
+                is SearchState.Error -> MessageContent(
+                    message = stringResource(MR.strings.tsuzuki_search_error),
+                    action = stringResource(MR.strings.tsuzuki_search_retry),
+                    onAction = {
+                        state.query?.let(onSearch) ?: onRetry()
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onSearch: (String) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = defaultSkinColors()
+    Surface(
+        modifier = modifier.heightIn(min = 54.dp),
+        shape = DefaultSkinShape.Control,
+        color = colors.surface,
+        contentColor = colors.foreground,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_search_24dp),
+                contentDescription = null,
+                tint = colors.secondary,
+                modifier = Modifier.size(20.dp),
+            )
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.foreground),
+                cursorBrush = SolidColor(colors.foreground),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { onSearch(query) }),
+                decorationBox = { innerTextField ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (query.isBlank()) {
+                            Text(
+                                text = stringResource(MR.strings.tsuzuki_search_query_label),
+                                color = colors.secondary,
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                        innerTextField()
                     }
-                }
-
-                is SearchState.NeedsIntegration -> {
-                    NeedsIntegrationContent(
-                        recentSearches = state.recentSearches,
-                        onRecentSearch = onRecentSearch,
-                        onOpenIntegrations = onOpenIntegrations,
+                },
+            )
+            if (query.isNotEmpty()) {
+                IconButton(onClick = onClear) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_close_24dp),
+                        contentDescription = stringResource(MR.strings.tsuzuki_search_clear),
+                        tint = colors.secondary,
                     )
                 }
-
-                is SearchState.Discover -> {
-                    DiscoverContent(
-                        state = state,
-                        onRecentSearch = onRecentSearch,
-                        onClearRecent = onClearRecent,
-                        onResultClick = onResultClick,
-                    )
-                }
-
-                is SearchState.Results -> {
-                    CatalogItems(
-                        query = state.query,
-                        items = state.items,
-                        onResultClick = onResultClick,
-                    )
-                }
-
-                is SearchState.Empty -> {
-                    MessageContent(
-                        message = stringResource(MR.strings.tsuzuki_search_empty),
-                    )
-                }
-
-                is SearchState.Error -> {
-                    MessageContent(
-                        message = stringResource(MR.strings.tsuzuki_search_error),
-                        action = stringResource(MR.strings.tsuzuki_search_retry),
-                        onAction = {
-                            val retryQuery = state.query
-                            if (retryQuery == null) {
-                                onRetry()
-                            } else {
-                                onSearch(retryQuery)
-                            }
-                        },
-                    )
-                }
+            } else {
+                Spacer(Modifier.size(42.dp))
             }
         }
     }
@@ -193,10 +225,11 @@ private fun NeedsIntegrationContent(
     onRecentSearch: (String) -> Unit,
     onOpenIntegrations: () -> Unit,
 ) {
+    val colors = defaultSkinColors()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         if (recentSearches.isNotEmpty()) {
             item {
@@ -208,20 +241,28 @@ private fun NeedsIntegrationContent(
             }
         }
         item {
-            Text(
-                text = stringResource(MR.strings.tsuzuki_search_no_integration),
-                style = MaterialTheme.typography.titleMedium,
-            )
-        }
-        item {
-            Text(
-                text = stringResource(MR.strings.tsuzuki_search_integration_prompt),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-        }
-        item {
-            Button(onClick = onOpenIntegrations) {
-                Text(stringResource(MR.strings.tsuzuki_search_configure_integrations))
+            DefaultSkinCard {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = stringResource(MR.strings.tsuzuki_search_no_integration),
+                        color = colors.foreground,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = stringResource(MR.strings.tsuzuki_search_integration_prompt),
+                        color = colors.secondary,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    DefaultSkinPrimaryButton(
+                        text = stringResource(MR.strings.tsuzuki_search_configure_integrations),
+                        onClick = onOpenIntegrations,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
             }
         }
     }
@@ -236,7 +277,8 @@ private fun DiscoverContent(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = PaddingValues(top = 20.dp, bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         if (state.recentSearches.isNotEmpty()) {
             item {
@@ -251,10 +293,7 @@ private fun DiscoverContent(
             items = state.blocks.filter { it.items.isNotEmpty() },
             key = DiscoverBlock::kind,
         ) { block ->
-            DiscoverSection(
-                block = block,
-                onResultClick = onResultClick,
-            )
+            DiscoverSection(block = block, onResultClick = onResultClick)
         }
     }
 }
@@ -265,38 +304,47 @@ private fun RecentSearches(
     onSearch: (String) -> Unit,
     onClear: (() -> Unit)?,
 ) {
-    Column(
-        modifier = Modifier.padding(vertical = 8.dp),
-    ) {
+    val colors = defaultSkinColors()
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 20.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = "Buscas recentes",
-                style = MaterialTheme.typography.titleMedium,
-            )
+            DefaultSkinSectionLabel(text = "Buscas recentes")
             if (onClear != null) {
-                TextButton(onClick = onClear) {
-                    Text("Limpar")
-                }
+                Text(
+                    text = "Limpar",
+                    modifier = Modifier.clickable(role = Role.Button, onClick = onClear),
+                    color = colors.secondary,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Medium,
+                )
             }
         }
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(
-                items = searches,
-                key = { it },
-            ) { search ->
-                AssistChip(
-                    onClick = { onSearch(search) },
-                    label = { Text(search) },
-                )
+            items(items = searches, key = { it }) { search ->
+                Surface(
+                    modifier = Modifier.clickable(role = Role.Button) { onSearch(search) },
+                    shape = DefaultSkinShape.Pill,
+                    color = colors.surface,
+                    contentColor = colors.foreground,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                ) {
+                    Text(
+                        text = search,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }
@@ -307,10 +355,8 @@ private fun DiscoverSection(
     block: DiscoverBlock,
     onResultClick: (CatalogItem) -> Unit,
 ) {
-    Column(
-        modifier = Modifier.padding(vertical = 8.dp),
-    ) {
-        Text(
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        DefaultSkinSectionLabel(
             text = when (block.kind) {
                 DiscoverKind.TRENDING -> "Em alta"
                 DiscoverKind.POPULAR -> "Populares"
@@ -318,21 +364,17 @@ private fun DiscoverSection(
                 DiscoverKind.FAVORITES -> "Mais favoritados"
                 DiscoverKind.RECENTLY_UPDATED -> "Atualizados recentemente"
             },
-            modifier = Modifier.padding(horizontal = 16.dp),
-            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(horizontal = 20.dp),
         )
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(
                 items = block.items,
                 key = { "${it.provider}:${it.providerId}" },
             ) { item ->
-                SearchCompactCard(
-                    item = item,
-                    onClick = { onResultClick(item) },
-                )
+                SearchCompactCard(item = item, onClick = { onResultClick(item) })
             }
         }
     }
@@ -365,24 +407,21 @@ private fun CatalogItems(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(22.dp),
+        contentPadding = PaddingValues(top = 24.dp, bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(28.dp),
     ) {
         items(
             items = groups,
             key = { (format, _) -> "result_format_$format" },
-        ) { item ->
-            val (format, groupedItems) = item
+        ) { (format, groupedItems) ->
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
+                DefaultSkinSectionLabel(
                     text = format.displayName(),
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 20.dp),
                 )
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     items(
                         items = groupedItems,
@@ -390,9 +429,7 @@ private fun CatalogItems(
                     ) { result ->
                         SearchCompactCard(
                             item = result,
-                            year = result.startDate
-                                ?.takeIf { it.length >= 4 }
-                                ?.take(4),
+                            year = result.startDate?.takeIf { it.length >= 4 }?.take(4),
                             onClick = { onResultClick(result) },
                         )
                     }
@@ -408,10 +445,11 @@ private fun SearchCompactCard(
     onClick: () -> Unit,
     year: String? = null,
 ) {
+    val colors = defaultSkinColors()
     Column(
         modifier = Modifier
             .width(148.dp)
-            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick),
     ) {
         MangaCover.Book(
             data = item.coverUrl,
@@ -421,23 +459,24 @@ private fun SearchCompactCard(
         )
         Text(
             text = item.title,
+            color = colors.foreground,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp),
+            modifier = Modifier.padding(top = 8.dp),
         )
         SearchCompactRatings(
             scores = item.scores.ifEmpty { listOfNotNull(item.score) },
             tsuzukiRating = item.tsuzukiRating,
-            modifier = Modifier.padding(top = 4.dp),
+            modifier = Modifier.padding(top = 5.dp),
         )
         year?.let {
             Text(
                 text = it,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp),
+                color = colors.secondary,
+                modifier = Modifier.padding(top = 3.dp),
             )
         }
     }
@@ -451,7 +490,7 @@ private fun SearchCompactRatings(
     modifier: Modifier = Modifier,
 ) {
     if (scores.isEmpty() && tsuzukiRating == null) return
-
+    val colors = defaultSkinColors()
     val visibleScores = scores.take(if (tsuzukiRating == null) 2 else 1)
     val hiddenCount = (scores.size - visibleScores.size).coerceAtLeast(0)
     FlowRow(
@@ -472,7 +511,7 @@ private fun SearchCompactRatings(
                 Text(
                     text = String.format(java.util.Locale.US, "%.1f", rating.value),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = colors.foreground,
                     fontWeight = FontWeight.Bold,
                 )
             }
@@ -486,7 +525,7 @@ private fun SearchCompactRatings(
                 Text(
                     text = ratingScaleLabel(score.provider, score.value, score.maxValue),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = colors.foreground,
                     fontWeight = FontWeight.Bold,
                 )
             }
@@ -495,7 +534,7 @@ private fun SearchCompactRatings(
             Text(
                 text = "+$hiddenCount",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = colors.foreground,
                 fontWeight = FontWeight.Bold,
             )
         }
@@ -529,21 +568,25 @@ private fun MessageContent(
     action: String? = null,
     onAction: (() -> Unit)? = null,
 ) {
+    val colors = defaultSkinColors()
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
             text = message,
+            color = colors.secondary,
             style = MaterialTheme.typography.bodyLarge,
         )
         if (action != null && onAction != null) {
-            TextButton(onClick = onAction) {
-                Text(action)
-            }
+            DefaultSkinPrimaryButton(
+                text = action,
+                onClick = onAction,
+                modifier = Modifier.padding(top = 18.dp),
+            )
         }
     }
 }
