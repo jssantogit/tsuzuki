@@ -64,16 +64,17 @@ class ReaderSessionPresentationTest {
     }
 
     @Test
-    fun `progress uses a real zero based page and total`() {
-        readerPageProgress(0, 17) shouldBe ReaderPageProgress(1, 17)
-        readerPageProgress(16, 17) shouldBe ReaderPageProgress(17, 17)
+    fun `progress preserves runtime one based page and total`() {
+        readerPageProgress(1, 17) shouldBe ReaderPageProgress(1, 17)
+        readerPageProgress(17, 17) shouldBe ReaderPageProgress(17, 17)
     }
 
     @Test
     fun `unknown and invalid progress is omitted`() {
         readerPageProgress(-1, -1) shouldBe null
         readerPageProgress(0, 0) shouldBe null
-        readerPageProgress(17, 17) shouldBe null
+        readerPageProgress(0, 17) shouldBe null
+        readerPageProgress(18, 17) shouldBe null
     }
 
     @Test
