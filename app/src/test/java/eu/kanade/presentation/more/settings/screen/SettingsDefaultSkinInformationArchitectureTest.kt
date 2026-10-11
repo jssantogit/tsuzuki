@@ -29,10 +29,14 @@ class SettingsDefaultSkinInformationArchitectureTest {
         familyAnchors.zipWithNext().forEach { (first, second) ->
             (sections.indexOf(first) < sections.indexOf(second)).shouldBeTrue()
         }
-        (sections.indexOf("SettingsTsuzukiPersonalizationsScreen") <
-            sections.indexOf("SettingsTsuzukiReadingHubScreen")).shouldBeTrue()
-        (sections.indexOf("SettingsTsuzukiProvidersScreen") <
-            sections.indexOf("SettingsTrackingScreen")).shouldBeTrue()
+        (
+            sections.indexOf("SettingsTsuzukiPersonalizationsScreen") <
+                sections.indexOf("SettingsTsuzukiReadingHubScreen")
+            ).shouldBeTrue()
+        (
+            sections.indexOf("SettingsTsuzukiProvidersScreen") <
+                sections.indexOf("SettingsTrackingScreen")
+            ).shouldBeTrue()
     }
 
     @Test
