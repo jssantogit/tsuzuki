@@ -8,9 +8,56 @@ import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalLibraryEntry
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.LibraryStatus
+import tachiyomi.domain.tsuzuki.profile.model.countCompletedTitles
 import tachiyomi.domain.tsuzuki.profile.model.countCurrentlyReading
 
 class ProfileReadingProjectionTest {
+
+    @Test
+    fun `local completed counts`() {
+        countCompletedTitles(listOf(title("local", LibraryStatus.COMPLETED))) shouldBe 1
+    }
+
+    @Test
+    fun `external only completed counts`() {
+        countCompletedTitles(listOf(title("external", external = listOf("mal" to LibraryStatus.COMPLETED)))) shouldBe 1
+    }
+
+    @Test
+    fun `local and external completion counts one canonical title`() {
+        countCompletedTitles(
+            listOf(title("shared", LibraryStatus.COMPLETED, listOf("mal" to LibraryStatus.COMPLETED))),
+        ) shouldBe 1
+    }
+
+    @Test
+    fun `multiple external completions count one canonical title`() {
+        countCompletedTitles(
+            listOf(
+                title("shared", external = listOf("mal" to LibraryStatus.COMPLETED, "kitsu" to LibraryStatus.COMPLETED)),
+            ),
+        ) shouldBe 1
+    }
+
+    @Test
+    fun `non completed statuses and absent memberships do not count`() {
+        val statuses = listOf(LibraryStatus.READING, LibraryStatus.PLANNING, LibraryStatus.ON_HOLD, LibraryStatus.DROPPED)
+        countCompletedTitles(statuses.map { title(it.name, it, listOf("mal" to it)) }) shouldBe 0
+        countCompletedTitles(listOf(title("absent", external = listOf("mal" to null)))) shouldBe 0
+        countCompletedTitles(emptyList()) shouldBe 0
+    }
+
+    @Test
+    fun `conflicting origins count completion once when any origin is completed`() {
+        countCompletedTitles(
+            listOf(
+                title("one", LibraryStatus.READING, listOf("mal" to LibraryStatus.COMPLETED)),
+                title("two", LibraryStatus.COMPLETED, listOf("kitsu" to LibraryStatus.PLANNING)),
+                title("three", external = listOf("mal" to LibraryStatus.COMPLETED, "kitsu" to LibraryStatus.READING)),
+                title("four", LibraryStatus.READING),
+            ),
+        ) shouldBe 3
+    }
 
     @Test
     fun `local reading counts`() {

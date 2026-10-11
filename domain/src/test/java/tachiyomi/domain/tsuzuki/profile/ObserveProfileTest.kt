@@ -38,6 +38,7 @@ class ObserveProfileTest {
         snapshot.displayName shouldBe null
         snapshot.avatarUrl shouldBe null
         snapshot.reading.currentlyReading shouldBe 0
+        snapshot.reading.completedTitles shouldBe 0
         snapshot.reading.chaptersRead shouldBe 0L
         snapshot.reading.pagesRead shouldBe null
         snapshot.supportsPersonalFavorites shouldBe false
@@ -100,6 +101,31 @@ class ObserveProfileTest {
         snapshots.last().trackers shouldBe fixture.trackers.value
         fixture.librarySubscriptions shouldBe 1
         fixture.progressSubscriptions shouldBe 1
+    }
+
+    @Test
+    fun `completion changes update snapshot without changing reading or chapters`() = runTest {
+        val fixture = Fixture()
+        val snapshots = mutableListOf<ProfileSnapshot>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            fixture.interactor.subscribe().collect { snapshots.add(it) }
+        }
+        runCurrent()
+        fixture.library.value = listOf(
+            UnifiedLibraryTitle(
+                title = CanonicalTitle("title", "Title", CanonicalIdentityState.RESOLVED, 0L, 0L),
+                localEntry = CanonicalLibraryEntry("title", LibraryStatus.COMPLETED, true, 0L, 0L),
+                externalMemberships = emptyList(),
+            ),
+        )
+        runCurrent()
+        snapshots.last().reading.completedTitles shouldBe 1
+        snapshots.last().reading.currentlyReading shouldBe 0
+        snapshots.last().reading.chaptersRead shouldBe 0L
+        fixture.library.value = emptyList()
+        runCurrent()
+        snapshots.last().reading.completedTitles shouldBe 0
+        fixture.librarySubscriptions shouldBe 1
     }
 
     @Test
