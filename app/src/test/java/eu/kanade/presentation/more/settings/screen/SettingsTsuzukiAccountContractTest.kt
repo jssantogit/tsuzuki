@@ -23,7 +23,7 @@ class SettingsTsuzukiAccountContractTest {
         source shouldContain "screenModel.login"
         source shouldContain "screenModel.register"
         source shouldContain "screenModel.sendPasswordRecovery"
-        source shouldContain "screenModel.syncNow"
+        source shouldContain "screenModel::syncNow"
         source shouldContain "screenModel.logout"
     }
 
