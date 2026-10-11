@@ -132,6 +132,11 @@ class SettingsDefaultSkinInformationArchitectureTest {
                 "subtitle = \"Criar, restaurar e agendar backups\"",
                 "title = \"Exportar biblioteca\"",
                 "subtitle = \"CSV com título, autor e artista\"",
+                "subtitle = \"Escolha os componentes antes de salvar o arquivo\"",
+                "subtitle = \"Valida o backup antes de escolher o que restaurar\"",
+                "\"Arquivos temporários podem ser criados durante aquisições e processamento. \"",
+                "title = \"Exportar CSV\"",
+                "subtitle = \"Título é obrigatório para incluir autor ou artista\"",
             ),
             "SettingsSecurityScreen.kt" to listOf(
                 "Text(\"Permitir P2P direto?\")",
@@ -139,12 +144,14 @@ class SettingsDefaultSkinInformationArchitectureTest {
                 "Text(\"Permitir\")",
                 "title = \"Privacidade de rede\"",
                 "title = \"Permitir P2P direto\"",
+                "subtitle = \"Permite conexões P2P diretas quando um Provider precisar.",
                 "title = \"Dados e telemetria\"",
             ),
             "SettingsTsuzukiLogsScreen.kt" to listOf(
                 "title = { Text(\"Limpar logs?\") }",
                 "Text(\"Cancelar\")",
                 "Text(\"Limpar\")",
+                "\"Isso remove os diagnósticos do Tsuzuki e o último crash salvo. \"",
                 "title = \"O arquivo compartilhado pode conter dados de diagnóstico do dispositivo e do app.",
             ),
         )
