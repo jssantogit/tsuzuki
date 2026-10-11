@@ -1007,7 +1007,11 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_entry_no_account">Ainda não tem uma conta?</string>
     <string name="tsuzuki_entry_have_account">Já tem uma conta?</string>
     <string name="tsuzuki_entry_password_updated">Sua senha foi atualizada.</string>
-    <string name="tsuzuki_search_provider_prompt">Ative um Provider compatível para buscar no catálogo.</string>
+    <string name="tsuzuki_search_provider_prompt">Ative ou instale um Provider compatível para pesquisar obras.</string>
+    <string name="tsuzuki_search_no_provider">Nenhum Provider com busca de catálogo está ativo</string>
+    <string name="tsuzuki_search_empty">Nenhum resultado encontrado\nTente outra busca.</string>
+    <string name="tsuzuki_search_error">Não foi possível concluir a busca\nTente novamente.</string>
+    <string name="tsuzuki_search_retry">Tentar novamente</string>
     <string name="tsuzuki_search_configure_providers">Configurar Providers</string>
     <string name="tsuzuki_home_hero_position">Destaque %1$d de %2$d</string>
     <string name="tsuzuki_home_page">Página %d</string>

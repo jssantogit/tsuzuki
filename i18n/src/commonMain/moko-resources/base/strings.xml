@@ -947,7 +947,11 @@
     <string name="tsuzuki_entry_no_account">New to Tsuzuki?</string>
     <string name="tsuzuki_entry_have_account">Already have an account?</string>
     <string name="tsuzuki_entry_password_updated">Your password has been updated.</string>
-    <string name="tsuzuki_search_provider_prompt">Enable a compatible Provider to search the catalog.</string>
+    <string name="tsuzuki_search_provider_prompt">Enable or install a compatible Provider to search for titles.</string>
+    <string name="tsuzuki_search_no_provider">No Provider with catalog search is active</string>
+    <string name="tsuzuki_search_empty">No results found\nTry another search.</string>
+    <string name="tsuzuki_search_error">Could not complete the search\nPlease try again.</string>
+    <string name="tsuzuki_search_retry">Try again</string>
     <string name="tsuzuki_search_configure_providers">Configure Providers</string>
     <string name="tsuzuki_home_hero_position">Highlight %1$d of %2$d</string>
     <string name="tsuzuki_home_page">Page %d</string>

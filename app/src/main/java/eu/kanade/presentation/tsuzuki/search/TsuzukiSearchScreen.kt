@@ -164,14 +164,14 @@ fun TsuzukiSearchScreen(
 
                 is SearchState.Empty -> {
                     MessageContent(
-                        message = "Nenhum resultado para “${state.query}”.",
+                        message = stringResource(MR.strings.tsuzuki_search_empty),
                     )
                 }
 
                 is SearchState.Error -> {
                     MessageContent(
-                        message = state.error.message ?: "A busca falhou.",
-                        action = "Tentar novamente",
+                        message = stringResource(MR.strings.tsuzuki_search_error),
+                        action = stringResource(MR.strings.tsuzuki_search_retry),
                         onAction = {
                             val retryQuery = state.query
                             if (retryQuery == null) {
@@ -206,6 +206,12 @@ private fun NeedsIntegrationContent(
                     onClear = null,
                 )
             }
+        }
+        item {
+            Text(
+                text = stringResource(MR.strings.tsuzuki_search_no_provider),
+                style = MaterialTheme.typography.titleMedium,
+            )
         }
         item {
             Text(
