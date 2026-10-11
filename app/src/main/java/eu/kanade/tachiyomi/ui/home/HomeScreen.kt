@@ -21,8 +21,8 @@ import eu.kanade.presentation.util.Screen
 import eu.kanade.presentation.util.isTabletUi
 import eu.kanade.tachiyomi.ui.library.LibraryTab
 import eu.kanade.tachiyomi.ui.tsuzuki.home.TsuzukiHomeTab
+import eu.kanade.tachiyomi.ui.tsuzuki.profile.TsuzukiProfileTab
 import eu.kanade.tachiyomi.ui.tsuzuki.search.TsuzukiSearchTab
-import eu.kanade.tachiyomi.ui.tsuzuki.settings.TsuzukiSettingsTab
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -47,7 +47,7 @@ object HomeScreen : Screen() {
         TsuzukiHomeTab,
         TsuzukiSearchTab,
         LibraryTab,
-        TsuzukiSettingsTab,
+        TsuzukiProfileTab,
     )
 
     @Composable

@@ -2,8 +2,8 @@ package eu.kanade.tachiyomi.ui.home
 
 import eu.kanade.tachiyomi.ui.library.LibraryTab
 import eu.kanade.tachiyomi.ui.tsuzuki.home.TsuzukiHomeTab
+import eu.kanade.tachiyomi.ui.tsuzuki.profile.TsuzukiProfileTab
 import eu.kanade.tachiyomi.ui.tsuzuki.search.TsuzukiSearchTab
-import eu.kanade.tachiyomi.ui.tsuzuki.settings.TsuzukiSettingsTab
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
@@ -11,13 +11,18 @@ import org.junit.jupiter.api.Test
 class TsuzukiNavigationContractTest {
 
     @Test
-    fun `primary shell contains exactly Home Search Library Settings`() {
+    fun `primary shell contains exactly Home Search Library Profile`() {
         HomeScreen.tabs shouldContainExactly listOf(
             TsuzukiHomeTab,
             TsuzukiSearchTab,
             LibraryTab,
-            TsuzukiSettingsTab,
+            TsuzukiProfileTab,
         )
+    }
+
+    @Test
+    fun `settings is no longer a root destination`() {
+        HomeScreen.tabs.any { it::class.simpleName == "TsuzukiSettingsTab" } shouldBe false
     }
 
     @Test

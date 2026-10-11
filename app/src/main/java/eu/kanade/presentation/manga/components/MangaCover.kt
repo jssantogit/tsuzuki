@@ -40,6 +40,7 @@ enum class MangaCover(val ratio: Float) {
         shape: Shape = MaterialTheme.shapes.extraSmall,
         onClick: (() -> Unit)? = null,
         onLoadEvent: ((MangaCoverLoadEvent) -> Unit)? = null,
+        contentScale: ContentScale = ContentScale.Crop,
     ) {
         val candidates = remember(data, fallbackData) {
             coverCandidates(data, fallbackData)
@@ -87,7 +88,7 @@ enum class MangaCover(val ratio: Float) {
                         Modifier
                     },
                 ),
-            contentScale = ContentScale.Crop,
+            contentScale = contentScale,
         )
     }
 }

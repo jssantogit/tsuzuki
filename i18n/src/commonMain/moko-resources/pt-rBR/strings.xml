@@ -971,10 +971,27 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="drive_sync_failed_to_start">Não foi possível executar a sincronização do Drive.</string>
 
     <string name="tsuzuki_account_title">Conta</string>
+    <string name="tsuzuki_profile_settings">Configurações</string>
+    <string name="tsuzuki_profile_avatar_description">Perfil da conta</string>
+    <string name="tsuzuki_profile_guest">Visitante</string>
+    <string name="tsuzuki_profile_guest_action">Entrar ou criar conta</string>
+    <string name="tsuzuki_profile_confirmation_title">Confirme seu e-mail</string>
+    <string name="tsuzuki_profile_confirmation_action">Continuar com esta conta</string>
+    <string name="tsuzuki_profile_loading">Carregando perfil</string>
+    <string name="tsuzuki_profile_completed_titles">Concluídas</string>
+    <string name="tsuzuki_profile_chapters_read">Capítulos</string>
+    <string name="tsuzuki_profile_pages_read">Páginas</string>
+    <string name="tsuzuki_profile_continue_reading">Lendo agora</string>
+    <string name="tsuzuki_profile_reading_checkpoint">Capítulo %s · ponto de leitura salvo</string>
+    <string name="tsuzuki_profile_tracking">Acompanhamento</string>
+    <string name="tsuzuki_profile_open_tracking">Gerenciar acompanhamento</string>
+    <string name="tsuzuki_profile_tracking_summary">%1$d conectados · %2$d cadastrados</string>
+    <string name="tsuzuki_profile_pager_position">Item %1$d de %2$d</string>
     <string name="tsuzuki_integrations_title">Integrações</string>
     <string name="tsuzuki_navigation_back">Voltar</string>
     <string name="tsuzuki_navigation_home">Início</string>
     <string name="tsuzuki_navigation_search">Busca</string>
+    <string name="tsuzuki_navigation_profile">Perfil</string>
     <string name="tsuzuki_integration_fallback_title">Integração</string>
     <string name="tsuzuki_addons_title">Add-ons</string>
     <string name="tsuzuki_personalizations_title">Personalizações</string>
