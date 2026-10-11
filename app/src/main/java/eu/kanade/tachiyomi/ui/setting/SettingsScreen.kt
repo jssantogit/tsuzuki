@@ -34,19 +34,13 @@ class SettingsScreen(
     override fun Content() {
         val parentNavigator = LocalNavigator.currentOrThrow
 
-        // Destination 3 used to expose the public Add-ons surface. Keep the numeric/external
-        // compatibility contract, but land directly on the canonical Providers surface.
-        if (destination == Destination.Providers.id) {
-            SettingsTsuzukiProvidersScreen().Content()
-            return
-        }
-
         if (!isTabletUi()) {
             Navigator(
                 screen = when (destination) {
                     Destination.About.id -> AboutScreen
                     Destination.DataAndStorage.id -> SettingsDataScreen
                     Destination.Tracking.id -> SettingsTrackingScreen
+                    Destination.Providers.id -> SettingsTsuzukiProvidersScreen()
                     else -> SettingsMainScreen
                 },
                 onBackPressed = null,
@@ -68,6 +62,7 @@ class SettingsScreen(
                     Destination.About.id -> AboutScreen
                     Destination.DataAndStorage.id -> SettingsDataScreen
                     Destination.Tracking.id -> SettingsTrackingScreen
+                    Destination.Providers.id -> SettingsTsuzukiProvidersScreen()
                     else -> SettingsAppearanceScreen
                 },
                 onBackPressed = null,
