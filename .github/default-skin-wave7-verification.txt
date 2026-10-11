@@ -1,0 +1,5 @@
+Wave 7 Settings final verification snapshot
+source_branch=design/default-skin-consolidation
+source_head=accbe9d4fe277c2f4206a72aeb993d670f35ca28
+scope=full
+apk=not requested
