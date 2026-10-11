@@ -44,7 +44,7 @@ import eu.kanade.presentation.more.settings.screen.about.AboutScreen
 import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
 import mihon.icons.materialsymbols.MaterialSymbols
-import mihon.icons.materialsymbols.automirroredrounded.ChevronRight
+import mihon.icons.materialsymbols.automirroredrounded.ArrowRight
 import mihon.icons.materialsymbols.automirroredrounded.ChromeReaderMode
 import mihon.icons.materialsymbols.rounded.Code
 import mihon.icons.materialsymbols.rounded.Download
@@ -261,7 +261,7 @@ object SettingsMainScreen : Screen() {
                 }
             }
             Icon(
-                imageVector = MaterialSymbols.AutoMirroredRounded.ChevronRight,
+                imageVector = MaterialSymbols.AutoMirroredRounded.ArrowRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
