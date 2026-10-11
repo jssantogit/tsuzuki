@@ -1,6 +1,5 @@
 package eu.kanade.presentation.tsuzuki.profile
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,22 +19,17 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -44,6 +38,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.manga.components.MangaCover
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinCard
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinColors
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSectionLabel
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.rounded.Person
 import mihon.icons.materialsymbols.rounded.Settings
@@ -64,18 +63,7 @@ fun TsuzukiProfileScreen(
     onContinueReading: (HomeContinueReadingItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val lightSurface = colorScheme.surface.luminance() > 0.5f
-    val colors = remember(lightSurface, colorScheme) {
-        ProfileColors(
-            background = if (lightSurface) Color(0xFFF7F7F8) else colorScheme.background,
-            surface = if (lightSurface) Color.White else colorScheme.surface,
-            foreground = if (lightSurface) Color(0xFF17181A) else colorScheme.onBackground,
-            secondary = if (lightSurface) Color(0xFF50565C) else colorScheme.onSurfaceVariant,
-            accent = if (lightSurface) Color(0xFF275A80) else colorScheme.primary,
-            divider = if (lightSurface) Color(0xFFDDE0E3) else colorScheme.outlineVariant,
-        )
-    }
+    val colors = defaultSkinColors()
     val readingItems = remember(continueReading) { continueReading.take(MAX_PROFILE_READING_ITEMS) }
     val pagerState = rememberPagerState(pageCount = { readingItems.size })
     val scrollState = rememberScrollState()
@@ -83,7 +71,7 @@ fun TsuzukiProfileScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.background),
+            .background(colors.canvas),
         contentAlignment = Alignment.TopCenter,
     ) {
         Column(
@@ -91,7 +79,7 @@ fun TsuzukiProfileScreen(
                 .widthIn(max = PROFILE_CONTENT_MAX_WIDTH)
                 .fillMaxWidth()
                 .verticalScroll(scrollState)
-                .padding(bottom = 28.dp),
+                .padding(bottom = 32.dp),
         ) {
             Row(
                 modifier = Modifier
@@ -104,8 +92,8 @@ fun TsuzukiProfileScreen(
                     Icon(
                         imageVector = MaterialSymbols.Rounded.Settings,
                         contentDescription = stringResource(MR.strings.tsuzuki_profile_settings),
-                        tint = colors.secondary,
-                        modifier = Modifier.size(23.dp),
+                        tint = colors.foreground,
+                        modifier = Modifier.size(22.dp),
                     )
                 }
                 Spacer(Modifier.weight(1f))
@@ -118,20 +106,20 @@ fun TsuzukiProfileScreen(
                 onAccount = onAccount,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 12.dp, start = 24.dp, end = 24.dp),
+                    .padding(top = 16.dp, start = 24.dp, end = 24.dp),
             )
 
             if (snapshot == null) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 28.dp, bottom = 16.dp),
+                        .padding(top = 32.dp, bottom = 16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = colors.accent,
+                            modifier = Modifier.size(22.dp),
+                            color = colors.foreground,
                             strokeWidth = 2.dp,
                         )
                         Text(
@@ -148,19 +136,20 @@ fun TsuzukiProfileScreen(
                     colors = colors,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 32.dp, start = 24.dp, end = 24.dp),
+                        .padding(top = 36.dp, start = 24.dp, end = 24.dp),
                 )
             }
 
             if (readingItems.isNotEmpty()) {
                 ProfileSectionTitle(
                     title = stringResource(MR.strings.tsuzuki_profile_continue_reading),
-                    colors = colors,
-                    modifier = Modifier.padding(top = 36.dp, start = 24.dp, end = 24.dp, bottom = 12.dp),
+                    modifier = Modifier.padding(top = 40.dp, start = 24.dp, end = 24.dp, bottom = 12.dp),
                 )
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
                     pageSpacing = 12.dp,
                     key = { page -> readingItems[page].canonicalTitleId },
                 ) { page ->
@@ -195,7 +184,7 @@ fun TsuzukiProfileScreen(
                     onClick = onTracking,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = if (readingItems.isEmpty()) 36.dp else 34.dp)
+                        .padding(top = if (readingItems.isEmpty()) 40.dp else 36.dp)
                         .padding(horizontal = 24.dp),
                 )
             }
@@ -206,7 +195,7 @@ fun TsuzukiProfileScreen(
 @Composable
 private fun IdentityHeader(
     account: AccountState?,
-    colors: ProfileColors,
+    colors: DefaultSkinColors,
     onAccount: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -216,7 +205,7 @@ private fun IdentityHeader(
     ) {
         Box(
             modifier = Modifier
-                .size(104.dp)
+                .size(96.dp)
                 .clip(CircleShape)
                 .background(colors.surface),
             contentAlignment = Alignment.Center,
@@ -225,7 +214,7 @@ private fun IdentityHeader(
                 imageVector = MaterialSymbols.Rounded.Person,
                 contentDescription = stringResource(MR.strings.tsuzuki_profile_avatar_description),
                 tint = colors.secondary,
-                modifier = Modifier.size(46.dp),
+                modifier = Modifier.size(42.dp),
             )
         }
 
@@ -236,16 +225,17 @@ private fun IdentityHeader(
                     text = stringResource(MR.strings.tsuzuki_profile_guest),
                     color = colors.foreground,
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 16.dp),
+                    modifier = Modifier.padding(top = 18.dp),
                 )
-                Button(
+                DefaultSkinPrimaryButton(
+                    text = stringResource(MR.strings.tsuzuki_profile_guest_action),
                     onClick = onAccount,
-                    modifier = Modifier.padding(top = 16.dp),
-                ) {
-                    Text(stringResource(MR.strings.tsuzuki_profile_guest_action))
-                }
+                    modifier = Modifier
+                        .padding(top = 16.dp)
+                        .widthIn(min = 184.dp),
+                )
             }
             is AccountState.Authenticated -> {
                 Text(
@@ -255,7 +245,7 @@ private fun IdentityHeader(
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 16.dp),
+                    modifier = Modifier.padding(top = 18.dp),
                 )
             }
             is AccountState.EmailConfirmationRequired -> {
@@ -263,9 +253,9 @@ private fun IdentityHeader(
                     text = stringResource(MR.strings.tsuzuki_profile_confirmation_title),
                     color = colors.foreground,
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 16.dp),
+                    modifier = Modifier.padding(top = 18.dp),
                 )
                 Text(
                     text = account.email,
@@ -276,12 +266,13 @@ private fun IdentityHeader(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 6.dp),
                 )
-                Button(
+                DefaultSkinPrimaryButton(
+                    text = stringResource(MR.strings.tsuzuki_profile_confirmation_action),
                     onClick = onAccount,
-                    modifier = Modifier.padding(top = 16.dp),
-                ) {
-                    Text(stringResource(MR.strings.tsuzuki_profile_confirmation_action))
-                }
+                    modifier = Modifier
+                        .padding(top = 16.dp)
+                        .widthIn(min = 184.dp),
+                )
             }
         }
     }
@@ -290,7 +281,7 @@ private fun IdentityHeader(
 @Composable
 private fun ProfileStatistics(
     snapshot: ProfileSnapshot,
-    colors: ProfileColors,
+    colors: DefaultSkinColors,
     modifier: Modifier = Modifier,
 ) {
     val completedLabel = stringResource(MR.strings.tsuzuki_profile_completed_titles)
@@ -299,9 +290,7 @@ private fun ProfileStatistics(
     val metrics = buildList {
         add(completedLabel to snapshot.reading.completedTitles.toString())
         add(chaptersLabel to snapshot.reading.chaptersRead.toString())
-        snapshot.reading.pagesRead?.let { pages ->
-            add(pagesLabel to pages.toString())
-        }
+        snapshot.reading.pagesRead?.let { pages -> add(pagesLabel to pages.toString()) }
     }
 
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -312,7 +301,7 @@ private fun ProfileStatistics(
                         .padding(horizontal = 12.dp)
                         .width(1.dp)
                         .height(34.dp)
-                        .background(colors.divider),
+                        .background(colors.outline),
                 )
             }
             Column(
@@ -324,7 +313,7 @@ private fun ProfileStatistics(
                     text = value,
                     color = colors.foreground,
                     style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     textAlign = TextAlign.Center,
                     softWrap = false,
@@ -341,38 +330,23 @@ private fun ProfileStatistics(
 }
 
 @Composable
-private fun ProfileSectionTitle(
-    title: String,
-    colors: ProfileColors,
-    modifier: Modifier = Modifier,
-) {
-    Text(
-        text = title,
-        color = colors.foreground,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        modifier = modifier,
-    )
+private fun ProfileSectionTitle(title: String, modifier: Modifier = Modifier) {
+    DefaultSkinSectionLabel(text = title, modifier = modifier)
 }
 
 @Composable
 private fun ContinueReadingCard(
     item: HomeContinueReadingItem,
-    colors: ProfileColors,
+    colors: DefaultSkinColors,
     accessibilityPosition: String,
     onClick: () -> Unit,
 ) {
-    Surface(
+    DefaultSkinCard(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 156.dp)
             .semantics { stateDescription = accessibilityPosition },
-        shape = RoundedCornerShape(14.dp),
-        color = colors.surface,
-        contentColor = colors.foreground,
-        border = BorderStroke(1.dp, colors.divider.copy(alpha = 0.72f)),
-        shadowElevation = 0.dp,
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -417,7 +391,7 @@ private fun ContinueReadingCard(
 private fun PagerIndicator(
     count: Int,
     selected: Int,
-    colors: ProfileColors,
+    colors: DefaultSkinColors,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -430,7 +404,7 @@ private fun PagerIndicator(
                 modifier = Modifier
                     .size(if (index == selected) 7.dp else 6.dp)
                     .clip(CircleShape)
-                    .background(if (index == selected) colors.accent else colors.divider),
+                    .background(if (index == selected) colors.foreground else colors.outline),
             )
         }
     }
@@ -439,7 +413,7 @@ private fun PagerIndicator(
 @Composable
 private fun TrackingSummary(
     trackers: List<ProfileTrackerState>,
-    colors: ProfileColors,
+    colors: DefaultSkinColors,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -453,54 +427,38 @@ private fun TrackingSummary(
     Column(modifier = modifier) {
         ProfileSectionTitle(
             title = stringResource(MR.strings.tsuzuki_profile_tracking),
-            colors = colors,
             modifier = Modifier.padding(bottom = 12.dp),
         )
-        Surface(
-            onClick = onClick,
-            shape = RoundedCornerShape(14.dp),
-            color = colors.surface,
-            contentColor = colors.foreground,
-            border = BorderStroke(1.dp, colors.divider.copy(alpha = 0.72f)),
-            shadowElevation = 0.dp,
-        ) {
+        DefaultSkinCard(onClick = onClick) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    .padding(horizontal = 18.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (connectedNames.isNotBlank()) {
                     Text(
                         text = connectedNames,
                         color = colors.foreground,
                         style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
                     )
                 }
                 Text(
                     text = statusSummary,
                     color = colors.secondary,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.bodySmall,
                 )
                 Text(
                     text = stringResource(MR.strings.tsuzuki_profile_open_tracking),
-                    color = colors.accent,
+                    color = colors.foreground,
                     style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
         }
     }
 }
-
-private data class ProfileColors(
-    val background: Color,
-    val surface: Color,
-    val foreground: Color,
-    val secondary: Color,
-    val accent: Color,
-    val divider: Color,
-)
 
 private const val MAX_PROFILE_READING_ITEMS = 5
 private val PROFILE_CONTENT_MAX_WIDTH = 720.dp
