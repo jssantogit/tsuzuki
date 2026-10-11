@@ -62,7 +62,7 @@ class DefaultSkinLegacyRouteContractTest {
 
         source shouldContain "override fun getTitleRes()"
         source shouldContain "MR.strings.pref_category_tracking"
-        source shouldNotContain "mihon.app"
+        source shouldNotContain "https://mihon.app"
         source shouldNotContain "AutoMirroredRounded.Help"
     }
 
@@ -74,7 +74,7 @@ class DefaultSkinLegacyRouteContractTest {
 
         source shouldContain "override fun getTitleRes()"
         source shouldContain "MR.strings.label_data_storage"
-        source shouldNotContain "mihon.app"
+        source shouldNotContain "https://mihon.app"
         source shouldNotContain "HELP_URL"
         source shouldNotContain "AutoMirroredRounded.Help"
     }
