@@ -32,5 +32,6 @@
 
     <string name="tsuzuki_logs_clear_confirm_title">Clear logs?</string>
     <string name="tsuzuki_logs_clear_confirm_message">This removes Tsuzuki diagnostics and the last saved crash. The system logcat is not cleared.</string>
+    <string name="tsuzuki_action_clear">Clear</string>
     <string name="tsuzuki_logs_share_privacy">The shared file may contain device and app diagnostic data. Review the destination before sending it.</string>
 </resources>
