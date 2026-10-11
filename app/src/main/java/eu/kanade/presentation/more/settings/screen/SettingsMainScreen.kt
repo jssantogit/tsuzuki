@@ -1,27 +1,37 @@
 package eu.kanade.presentation.more.settings.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.ColorUtils
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -31,7 +41,6 @@ import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.screen.about.AboutScreen
-import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
 import mihon.icons.materialsymbols.MaterialSymbols
@@ -90,14 +99,36 @@ object SettingsMainScreen : Screen() {
         navigateUp: (() -> Unit)?,
     ) {
         val navigator = LocalNavigator.currentOrThrow
-        val containerColor = if (twoPane) getPalerSurface() else MaterialTheme.colorScheme.surface
+        val containerColor = if (twoPane) getPalerSurface() else MaterialTheme.colorScheme.surfaceContainerLowest
         val topBarState = rememberTopAppBarState()
+        val flatItems = sections.flatMap { it.items }
+        val selectedClass = if (twoPane) navigator.items.firstOrNull()?.let { it::class } else null
+        val state = rememberLazyListState()
+
+        LaunchedEffect(selectedClass) {
+            if (selectedClass == null) return@LaunchedEffect
+            val selectedFlatIndex = flatItems.indexOfFirst { it.screen::class == selectedClass }
+            if (selectedFlatIndex < 0) return@LaunchedEffect
+
+            var precedingRows = 0
+            var targetListIndex = 1 // large title
+            sections.forEach { section ->
+                val sectionIndex = section.items.indexOfFirst { it.screen::class == selectedClass }
+                if (sectionIndex >= 0) {
+                    targetListIndex += precedingRows
+                    return@forEach
+                }
+                // Section label + grouped surface.
+                precedingRows += 2
+            }
+            state.animateScrollToItem(targetListIndex.coerceAtLeast(0))
+        }
 
         Scaffold(
             topBarScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(topBarState),
             topBar = { scrollBehavior ->
                 AppBar(
-                    title = stringResource(MR.strings.label_settings),
+                    title = "",
                     navigateUp = navigateUp,
                     actions = {
                         AppBarActions(
@@ -115,71 +146,136 @@ object SettingsMainScreen : Screen() {
             },
             containerColor = containerColor,
             content = { contentPadding ->
-                val state = rememberLazyListState()
-                val flatItems = sections.flatMap { it.items }
-                val indexSelected = if (twoPane) {
-                    flatItems.indexOfFirst { it.screen::class == navigator.items.first()::class }
-                        .also {
-                            LaunchedEffect(Unit) {
-                                if (it >= 0) state.animateScrollToItem(it)
-                            }
-                        }
-                } else {
-                    null
-                }
-
                 LazyColumn(
                     state = state,
-                    contentPadding = contentPadding,
+                    modifier = Modifier.padding(contentPadding),
                 ) {
-                    var flatIndex = 0
+                    item(key = "settings_title") {
+                        Text(
+                            text = stringResource(MR.strings.label_settings),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp),
+                        )
+                    }
+
                     sections.forEach { section ->
-                        item(key = "section_${section.title}") {
+                        item(key = "section_label_${section.title}") {
                             Text(
-                                text = section.title,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 4.dp),
+                                text = section.title.uppercase(),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
                             )
                         }
-                        itemsIndexed(
-                            items = section.items,
-                            key = { _, item -> item.hashCode() },
-                        ) { _, item ->
-                            val selected = indexSelected == flatIndex
-                            flatIndex += 1
-                            var modifier: Modifier = Modifier
-                            var contentColor = LocalContentColor.current
-                            if (twoPane) {
-                                modifier = Modifier
-                                    .padding(horizontal = 8.dp)
-                                    .clip(RoundedCornerShape(24.dp))
-                                    .then(
-                                        if (selected) {
-                                            Modifier.background(
-                                                MaterialTheme.colorScheme.surfaceVariant,
-                                            )
-                                        } else {
-                                            Modifier
-                                        },
-                                    )
-                                if (selected) contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                            CompositionLocalProvider(LocalContentColor provides contentColor) {
-                                TextPreferenceWidget(
-                                    modifier = modifier,
-                                    title = stringResource(item.titleRes),
-                                    subtitle = item.formatSubtitle(),
-                                    icon = item.icon,
-                                    onPreferenceClick = { navigator.navigate(item.screen, twoPane) },
-                                )
-                            }
+                        item(key = "section_card_${section.title}") {
+                            SettingsSectionCard(
+                                section = section,
+                                selectedClass = selectedClass,
+                                onClick = { navigator.navigate(it.screen, twoPane) },
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+                            )
                         }
                     }
                 }
             },
         )
+    }
+
+    @Composable
+    private fun SettingsSectionCard(
+        section: Section,
+        selectedClass: kotlin.reflect.KClass<out VoyagerScreen>?,
+        onClick: (Item) -> Unit,
+        modifier: Modifier = Modifier,
+    ) {
+        Surface(
+            modifier = modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp,
+        ) {
+            Column {
+                section.items.forEachIndexed { index, item ->
+                    val selected = selectedClass != null && item.screen::class == selectedClass
+                    SettingsNavigationRow(
+                        item = item,
+                        selected = selected,
+                        onClick = { onClick(item) },
+                    )
+                    if (index < section.items.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 72.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun SettingsNavigationRow(
+        item: Item,
+        selected: Boolean,
+        onClick: () -> Unit,
+    ) {
+        val rowColor = if (selected) {
+            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f)
+        } else {
+            Color.Transparent
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(rowColor)
+                .clickable(onClick = onClick)
+                .sizeIn(minHeight = 64.dp)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Surface(
+                modifier = Modifier.size(40.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = item.icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(item.titleRes),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                item.formatSubtitle()?.takeIf(String::isNotBlank)?.let { subtitle ->
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Text(
+                text = "›",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.clearAndSetSemantics { },
+            )
+        }
     }
 
     private fun Navigator.navigate(screen: VoyagerScreen, twoPane: Boolean) {
@@ -234,14 +330,14 @@ object SettingsMainScreen : Screen() {
                     screen = SettingsTsuzukiProvidersScreen(),
                 ),
                 Item(
-                    titleRes = MR.strings.tsuzuki_addons_title,
-                    icon = MaterialSymbols.Rounded.Code,
-                    screen = SettingsTsuzukiAddonsScreen,
+                    titleRes = MR.strings.pref_category_tracking,
+                    icon = MaterialSymbols.Rounded.Explore,
+                    screen = SettingsTrackingScreen,
                 ),
             ),
         ),
         Section(
-            title = "Avançado",
+            title = "Downloads",
             items = listOf(
                 Item(
                     titleRes = MR.strings.pref_category_downloads,
@@ -249,11 +345,46 @@ object SettingsMainScreen : Screen() {
                     icon = MaterialSymbols.Rounded.Download,
                     screen = SettingsDownloadScreen,
                 ),
+            ),
+        ),
+        Section(
+            title = "Dados e armazenamento",
+            items = listOf(
+                Item(
+                    titleRes = MR.strings.label_data_storage,
+                    icon = MaterialSymbols.Rounded.Info,
+                    screen = SettingsDataScreen,
+                ),
+            ),
+        ),
+        Section(
+            title = "Privacidade e segurança",
+            items = listOf(
+                Item(
+                    titleRes = MR.strings.pref_category_security,
+                    icon = MaterialSymbols.Rounded.Security,
+                    screen = SettingsSecurityScreen,
+                ),
+            ),
+        ),
+        Section(
+            title = "Diagnóstico",
+            items = listOf(
+                Item(
+                    titleRes = MR.strings.pref_debug_info,
+                    icon = MaterialSymbols.Rounded.Code,
+                    screen = SettingsTsuzukiDiagnosticsScreen,
+                ),
+            ),
+        ),
+        Section(
+            title = "Avançado",
+            items = listOf(
                 Item(
                     titleRes = MR.strings.pref_category_advanced,
                     subtitleRes = MR.strings.pref_advanced_summary,
                     icon = MaterialSymbols.Rounded.Code,
-                    screen = SettingsTsuzukiAdvancedHubScreen,
+                    screen = SettingsAdvancedScreen,
                 ),
             ),
         ),
