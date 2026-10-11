@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -25,10 +27,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -189,6 +193,81 @@ fun DefaultSkinTextAction(
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.SemiBold,
     )
+}
+
+@Composable
+fun DefaultSkinChoiceChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = defaultSkinColors()
+    Surface(
+        modifier = modifier.clickable(role = Role.Button, onClick = onClick),
+        shape = DefaultSkinShape.Pill,
+        color = if (selected) colors.accent else colors.surface,
+        contentColor = if (selected) colors.onAccent else colors.foreground,
+        border = BorderStroke(1.dp, if (selected) colors.accent else colors.outline),
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+fun DefaultSkinTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = true,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    supportingText: String? = null,
+) {
+    val colors = defaultSkinColors()
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = label,
+            color = colors.secondary,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+        )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = DefaultSkinShape.Control,
+            color = colors.surface,
+            border = BorderStroke(1.dp, colors.outline),
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp,
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp)
+                    .padding(horizontal = 16.dp, vertical = 15.dp),
+                singleLine = singleLine,
+                keyboardOptions = keyboardOptions,
+                visualTransformation = visualTransformation,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.foreground),
+                cursorBrush = SolidColor(colors.foreground),
+            )
+        }
+        supportingText?.takeIf(String::isNotBlank)?.let {
+            Text(text = it, color = colors.secondary, style = MaterialTheme.typography.bodySmall)
+        }
+    }
 }
 
 @Composable
