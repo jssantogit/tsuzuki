@@ -25,10 +25,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.more.settings.LocalPreferenceEnabled
 import eu.kanade.presentation.more.settings.LocalPreferenceHighlighted
 import eu.kanade.presentation.more.settings.LocalPreferenceMinHeight
 import kotlinx.coroutines.delay
@@ -44,12 +46,14 @@ internal fun BasePreferenceWidget(
     widget: @Composable (() -> Unit)? = null,
 ) {
     val highlighted = LocalPreferenceHighlighted.current
+    val enabled = LocalPreferenceEnabled.current
     val minHeight = LocalPreferenceMinHeight.current
     Row(
         modifier = modifier
             .highlightBackground(highlighted)
+            .alpha(if (enabled) 1f else 0.38f)
             .sizeIn(minHeight = minHeight)
-            .clickable(enabled = onClick != null, onClick = { onClick?.invoke() })
+            .clickable(enabled = enabled && onClick != null, onClick = { onClick?.invoke() })
             .fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
