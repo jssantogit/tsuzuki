@@ -62,7 +62,19 @@ class DefaultSkinLegacyRouteContractTest {
 
         source shouldContain "getTitleRes() = MR.strings.pref_category_tracking"
         source shouldNotContain "mihon.app"
-        source shouldNotContain "Icons.Outlined.Help"
+        source shouldNotContain "AutoMirroredRounded.Help"
+    }
+
+    @Test
+    fun `canonical Data does not route users to Mihon storage documentation`() {
+        val source = readAppSource(
+            "eu/kanade/presentation/more/settings/screen/SettingsDataScreen.kt",
+        )
+
+        source shouldContain "getTitleRes() = MR.strings.label_data_storage"
+        source shouldNotContain "mihon.app"
+        source shouldNotContain "HELP_URL"
+        source shouldNotContain "AutoMirroredRounded.Help"
     }
 
     @Test
