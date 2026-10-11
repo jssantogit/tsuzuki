@@ -2,7 +2,9 @@ package eu.kanade.tachiyomi.ui.home
 
 import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiProvidersScreen
 import eu.kanade.tachiyomi.ui.library.LibraryTab
+import eu.kanade.tachiyomi.ui.tsuzuki.collections.FolderCatalogScreen
 import eu.kanade.tachiyomi.ui.tsuzuki.home.TsuzukiHomeTab
+import eu.kanade.tachiyomi.ui.tsuzuki.home.homeFolderDestination
 import eu.kanade.tachiyomi.ui.tsuzuki.profile.TsuzukiProfileTab
 import eu.kanade.tachiyomi.ui.tsuzuki.search.TsuzukiSearchTab
 import eu.kanade.tachiyomi.ui.tsuzuki.search.searchProvidersDestination
@@ -36,5 +38,10 @@ class TsuzukiNavigationContractTest {
     @Test
     fun `Search Providers action opens the public Providers settings destination`() {
         searchProvidersDestination()::class shouldBe SettingsTsuzukiProvidersScreen::class
+    }
+
+    @Test
+    fun `Home folder uses the shared Collections consumption destination`() {
+        homeFolderDestination("collection-1", "folder-1")::class shouldBe FolderCatalogScreen::class
     }
 }

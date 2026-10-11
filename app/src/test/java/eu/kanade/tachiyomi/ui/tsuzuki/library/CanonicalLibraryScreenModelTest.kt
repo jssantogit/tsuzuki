@@ -487,6 +487,89 @@ class CanonicalLibraryScreenModelTest {
         flags = 0L,
     )
 
+    @Test
+    fun `empty inventory is distinct from query with no results`() = runTest(testDispatcher) {
+        val repo = FakeCanonicalLibraryRepository()
+        val model = libraryModel(repo)
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().totalItemCount shouldBe 0
+        repo.emitItems(listOf(canonicalItem("one", "Frieren")))
+        model.search("missing")
+        advanceUntilIdle()
+        val filtered = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>()
+        filtered.items shouldBe emptyList()
+        filtered.totalItemCount shouldBe 1
+        filtered.searchQuery shouldBe "missing"
+    }
+
+    @Test
+    fun `advanced filters and search preserve original inventory count`() = runTest(testDispatcher) {
+        val repo = FakeCanonicalLibraryRepository()
+        repo.emitItems(listOf(canonicalItem("one", "Frieren"), canonicalItem("two", "Dungeon Meshi")))
+        val model = libraryModel(repo)
+        model.search("Frieren")
+        model.selectCategory(99L)
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().totalItemCount shouldBe 2
+        model.selectCategory(null)
+        model.search(null)
+        advanceUntilIdle()
+        val restored = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>()
+        restored.items.map { it.canonicalTitleId } shouldBe listOf("one", "two")
+        restored.totalItemCount shouldBe 2
+    }
+
+    @Test
+    fun `clearing advanced filters preserves status and search`() = runTest(testDispatcher) {
+        val repo = FakeCanonicalLibraryRepository()
+        repo.emitItems(listOf(canonicalItem("one", "Frieren")))
+        val model = libraryModel(repo)
+        model.selectStatus(LibraryStatus.READING)
+        model.search("Frieren")
+        model.selectOrigin("kitsu")
+        model.selectProviderList("custom")
+        model.selectCategory(42L)
+        model.toggleFormat(tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat.MANGA)
+        model.clearAdvancedFilters()
+        advanceUntilIdle()
+        val state = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>()
+        state.searchQuery shouldBe "Frieren"
+        state.filters shouldBe CanonicalLibraryFilterState(status = LibraryStatus.READING)
+        state.items.map { it.canonicalTitleId } shouldBe listOf("one")
+    }
+
+    @Test
+    fun `exiting contextual search preserves status and advanced choices`() = runTest(testDispatcher) {
+        val repo = FakeCanonicalLibraryRepository()
+        val model = libraryModel(repo)
+        model.selectStatus(LibraryStatus.PLANNING)
+        model.selectOrigin("kitsu")
+        model.selectCategory(42L)
+        model.search("missing")
+        model.search(null)
+        advanceUntilIdle()
+        val state = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>()
+        state.searchQuery shouldBe null
+        state.filters shouldBe CanonicalLibraryFilterState(
+            status = LibraryStatus.PLANNING,
+            origin = "kitsu",
+            categoryId = 42L,
+        )
+    }
+
+    private fun libraryModel(repo: FakeCanonicalLibraryRepository) = CanonicalLibraryScreenModel(
+        observeCanonicalLibrary = ObserveCanonicalLibrary(repo),
+        setCanonicalLibraryStatus = SetCanonicalLibraryStatus(repo),
+        removeUnifiedLibraryTitle = RemoveUnifiedLibraryTitle(
+            getFavoriteMihonMangaIds = { emptyList() },
+            setMihonFavorite = { _, _ -> true },
+            removeCanonical = repo::remove,
+        ),
+        migrateMihonLibraryToCanonical = FakeMigrateMihonLibraryToCanonical(),
+        resolveCanonicalReadingStart = FakeCanonicalReadingStartResolver(),
+        canonicalReadingRepository = FakeCanonicalReadingRepository(),
+    )
+
     private fun canonicalItem(
         id: String,
         title: String,
