@@ -54,6 +54,14 @@ class DefaultSkinLegacyRouteContractTest {
         source shouldNotContain "MR.strings.label_extensions"
     }
 
+    @Test
+    fun `retired Add-ons and duplicate Advanced screens have no production references`() {
+        val production = readAllAppSources()
+
+        production shouldNotContain "SettingsTsuzukiAddonsScreen"
+        production shouldNotContain "SettingsTsuzukiAdvancedHubScreen"
+    }
+
     private fun readAppSource(relativePath: String): String {
         val candidates = listOf(
             Path.of("src/main/java/$relativePath"),
@@ -62,5 +70,23 @@ class DefaultSkinLegacyRouteContractTest {
         val path = candidates.firstOrNull(Files::exists)
             ?: error("$relativePath was not found from ${Path.of("").toAbsolutePath()}")
         return Files.readString(path)
+    }
+
+    private fun readAllAppSources(): String {
+        val roots = listOf(
+            Path.of("src/main/java"),
+            Path.of("app/src/main/java"),
+        )
+        val root = roots.firstOrNull(Files::exists)
+            ?: error("App source root was not found from ${Path.of("").toAbsolutePath()}")
+
+        return Files.walk(root).use { paths ->
+            paths
+                .filter { Files.isRegularFile(it) && it.toString().endsWith(".kt") }
+                .sorted()
+                .map(Files::readString)
+                .toList()
+                .joinToString(separator = "\n")
+        }
     }
 }
