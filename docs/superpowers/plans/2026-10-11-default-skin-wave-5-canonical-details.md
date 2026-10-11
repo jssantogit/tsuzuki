@@ -2,7 +2,7 @@
 
 Baseline: `799984804d8db70598e84cfd1dc90a52f6129069`.
 Branch: `design/default-skin-consolidation`; local and fetched remote match baseline.
-Status: RED reproduced; minimal behavioral implementation under CI verification.
+Status: behavioral GREEN confirmed; approved presentation promotion in progress.
 
 Promote only Canonical Details against the approved design.md and canonical-details
 mockup/assets. Current runtime owns identity, metadata, chapter inventory, progress,
@@ -74,3 +74,8 @@ skipped compile is not executed test/Android behavior. No phone automation/live 
   empty inventory lost resume signals, and an empty progressive stage unloaded
   valid chapter rows. The previously diagnosed fixture was the fourth failure.
   All three production corrections remain scoped to the existing ScreenModel.
+- `54bcaf243`: CI `38138486075` passed Format, App Tsuzuki and CI Gate after
+  those corrections. Android Kotlin compilation ran inside the App test job;
+  standalone compile, release/native packaging, migrations and backend jobs were
+  planner-skipped. This GREEN releases the approved visual promotion.
+- New test inventory: 34 App tests and one Domain reading characterization.
