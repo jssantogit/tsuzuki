@@ -51,6 +51,24 @@ Unsupported values:
 
 - Required gate: CI v2.1 affected mode, planner-selected jobs.
 - RED: commit `784f550e6`, [CI run 38099554623](https://github.com/jssantogit/tsuzuki/actions/runs/38099554623). Format passed; domain/data/app test compilation failed because the Profile APIs and read-chapter aggregate did not exist yet. This is compile-time RED, not executed failing assertions.
-- GREEN: pending.
-- Domain/API review: pending.
+- Implementation CI: [38099845391](https://github.com/jssantogit/tsuzuki/actions/runs/38099845391), commit `4d696985e`. Domain/Data Tsuzuki tests, Format and SQLDelight migrations passed. App production compilation passed; App test compilation revealed the mock helper must return `BaseTracker`, matching the actual inferred registry list type. Correction cycle 1 changes only that test helper type; final affected gate pending.
+- Domain/API review: independent review found no actionable defects. Full diff and semantic-guard searches confirmed no email inference, checkpoint statistics, legacy Favorites semantics, generic completion timestamps, new tracker auth, second library projection, or ScreenModel traversal.
 - Provider/P2P and root navigation: must remain unchanged.
+
+## Implemented API and test coverage
+
+- `ObserveProfile.subscribe(): Flow<ProfileSnapshot>` composes existing account state,
+  a distinct currently-reading count, SQL read-chapter count and tracker projection.
+  Each subscription is cold and cancellation releases its upstream collectors.
+- `ProfileSnapshot` contains `AccountState`, `ProfileReadingStats`, and a list of
+  `ProfileTrackerState(id, name, isLoggedIn)`. `EmailConfirmationRequired` is retained.
+- Fixed unavailable getters: `displayName`, `avatarUrl`, `pagesRead` return null;
+  `supportsPersonalFavorites` and `supportsCompletionHistory` return false. They
+  expose no empty-but-authoritative collections and cannot accept fixture values.
+- `ProfileTrackerSourceImpl` contributes the read-only domain port through Metro,
+  maps each registered tracker's existing login Flow, and has no credential writes.
+- 16 new tests across `ProfileReadingProjectionTest` (6), `ObserveProfileTest` (5),
+  `ProfileTrackerSourceImplTest` (3), and `CanonicalReadingRepositoryImplTest` (2).
+  Coverage includes measured zero, local/external deduplication, reactive persisted
+  updates, repeated upserts, guest/logout/confirmation, unavailable capabilities,
+  registered/disconnected trackers, login/logout changes and upstream cancellation.

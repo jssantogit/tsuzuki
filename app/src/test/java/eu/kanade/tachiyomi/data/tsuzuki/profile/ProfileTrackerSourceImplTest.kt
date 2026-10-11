@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.data.tsuzuki.profile
 
-import eu.kanade.tachiyomi.data.track.Tracker
+import eu.kanade.tachiyomi.data.track.BaseTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -52,7 +52,7 @@ class ProfileTrackerSourceImplTest {
         ProfileTrackerSourceImpl(manager).observe().first() shouldBe emptyList()
     }
 
-    private fun tracker(id: Long, name: String, connection: MutableStateFlow<Boolean>): Tracker = mockk {
+    private fun tracker(id: Long, name: String, connection: MutableStateFlow<Boolean>): BaseTracker = mockk {
         every { this@mockk.id } returns id
         every { this@mockk.name } returns name
         every { isLoggedInFlow } returns connection
