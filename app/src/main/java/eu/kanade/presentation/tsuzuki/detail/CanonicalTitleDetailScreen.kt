@@ -4,20 +4,26 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -40,6 +46,7 @@ import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,6 +58,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -64,14 +72,15 @@ import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreenState
 import kotlinx.coroutines.launch
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.automirroredrounded.ArrowBack
+import mihon.icons.materialsymbols.automirroredrounded.Sort
 import mihon.icons.materialsymbols.rounded.MoreVert
 import mihon.icons.materialsymbols.rounded.Search
-import mihon.icons.materialsymbols.rounded.Sort
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
 private enum class DetailsSheet { SORT, JUMP, SOURCES }
 private const val FULL_CHAPTER_FIRST_ITEM = 3
+private val CHAPTER_SCRUBBER_LANE_WIDTH = 112.dp
 
 @Composable
 fun CanonicalTitleDetailScreen(
@@ -91,7 +100,10 @@ fun CanonicalTitleDetailScreen(
     } else {
         MaterialTheme.colorScheme.background
     }
-    Box(modifier.fillMaxSize().background(background).navigationBarsPadding()) {
+    Box(
+        modifier.fillMaxSize().background(background)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).navigationBarsPadding(),
+    ) {
         when (state) {
             CanonicalTitleScreenState.Loading -> {
                 CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -184,7 +196,10 @@ private fun LoadedDetails(
                                 style = MaterialTheme.typography.titleLarge,
                             )
                             IconButton(onClick = { sheet = DetailsSheet.SORT }) {
-                                Icon(MaterialSymbols.Rounded.Sort, stringResource(MR.strings.tsuzuki_details_sort))
+                                Icon(
+                                    MaterialSymbols.AutoMirroredRounded.Sort,
+                                    stringResource(MR.strings.tsuzuki_details_sort),
+                                )
                             }
                             IconButton(onClick = { sheet = DetailsSheet.JUMP }) {
                                 Icon(MaterialSymbols.Rounded.Search, stringResource(MR.strings.tsuzuki_details_jump))
@@ -205,7 +220,7 @@ private fun LoadedDetails(
                             onDownload,
                             modifier = Modifier.padding(
                                 start = 16.dp,
-                                end = if (showChapterScrubber(chapters.size)) 88.dp else 16.dp,
+                                end = if (showChapterScrubber(chapters.size)) CHAPTER_SCRUBBER_LANE_WIDTH else 16.dp,
                             ),
                         )
                     }
@@ -216,18 +231,27 @@ private fun LoadedDetails(
             listState.firstVisibleItemIndex >= 2
         ) {
             var dragging by remember { mutableStateOf(false) }
+            var bubbleHeightPx by remember { mutableIntStateOf(0) }
             val slider = rememberSliderState(value = 0f, trackRange = 0f..1f)
             val firstIndex = (listState.firstVisibleItemIndex - FULL_CHAPTER_FIRST_ITEM).coerceIn(0, chapters.lastIndex)
             LaunchedEffect(firstIndex, dragging) {
                 if (!dragging) slider.value = firstIndex.toFloat() / chapters.lastIndex
             }
             val selected = chapterAtScrubberPosition(chapters, slider.value)
+            val selectedLabel = selected?.let { detailsChapterLabel(it) }.orEmpty()
             val scrubberLabel = stringResource(MR.strings.tsuzuki_details_scrubber)
-            Box(Modifier.align(Alignment.CenterEnd).width(88.dp).fillMaxHeight(0.55f)) {
+            BoxWithConstraints(
+                Modifier.align(Alignment.CenterEnd).width(CHAPTER_SCRUBBER_LANE_WIDTH).fillMaxHeight(0.55f),
+            ) {
+                val bubbleHeight = with(density) { bubbleHeightPx.toDp() }
+                val bubbleTravel = (maxHeight - bubbleHeight).coerceAtLeast(0.dp)
+                val bubbleOffset = ((maxHeight - 48.dp) * slider.value + 24.dp - bubbleHeight / 2)
+                    .coerceIn(0.dp, bubbleTravel)
                 if (dragging && selected != null) {
                     Text(
-                        detailsChapterLabel(selected),
-                        modifier = Modifier.align(Alignment.CenterStart).width(64.dp)
+                        selectedLabel,
+                        modifier = Modifier.align(Alignment.TopStart).offset(y = bubbleOffset).width(64.dp)
+                            .onSizeChanged { bubbleHeightPx = it.height }
                             .background(
                                 MaterialTheme.colorScheme.inverseSurface,
                                 MaterialTheme.shapes.small,
@@ -241,7 +265,7 @@ private fun LoadedDetails(
                     modifier = Modifier.align(Alignment.CenterEnd).width(48.dp).fillMaxHeight()
                         .semantics {
                             contentDescription = scrubberLabel
-                            stateDescription = selected?.chapter?.displayNumber.orEmpty()
+                            stateDescription = selectedLabel
                         },
                     onValueChange = {
                         dragging = true
@@ -389,7 +413,7 @@ private fun DetailsToolbar(
                 MaterialTheme.shapes.large,
             ),
         ) {
-            Icon(MaterialSymbols.AutoMirrored.Rounded.ArrowBack, stringResource(MR.strings.tsuzuki_details_back))
+            Icon(MaterialSymbols.AutoMirroredRounded.ArrowBack, stringResource(MR.strings.tsuzuki_details_back))
         }
         Box {
             IconButton(

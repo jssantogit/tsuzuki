@@ -79,3 +79,26 @@ skipped compile is not executed test/Android behavior. No phone automation/live 
   standalone compile, release/native packaging, migrations and backend jobs were
   planner-skipped. This GREEN releases the approved visual promotion.
 - New test inventory: 34 App tests and one Domain reading characterization.
+- `abfc809ed`: initial approved visual promotion. CI `38139419035` passed
+  Format but stopped at Android compilation: nested maxWidth DSL receiver,
+  incorrect Sort icon namespace and incorrect AutoMirrored Back namespace.
+  No unit tests ran in that attempt. A single focused API correction batch follows.
+
+### Impeccable source gate
+
+Compared design.md, index.html and canonical-details.js/css against the promoted
+Hero, chapter components and lower-region wiring after behavioral GREEN.
+Covered progress/never-started, all ratings, editorial, full list, scrubber,
+artwork absence/failure, no chapters and degraded refresh; Recommendations is
+omitted because runtime has no owner, rather than treated as fixture evidence.
+
+Bounded corrections: application theme selection rather than device theme,
+native icon/API receivers, faithful rating scales and overflow cue, Webtoon
+editorial format preservation, scrubber bubble/track separation and vertical
+tracking, read chapters receding instead of current markers, pending-download
+and special-chapter accessibility, horizontal safe areas and jump IME/focus.
+No domain/sourcing/Reader changes. Final CI and source confirmation pending.
+
+Physical Android remains required to accept actual font scaling, TalkBack,
+long-work drag/scroll, image quality, system chrome/insets and Reader navigation.
+No emulator/instrumented behavior was executed during this wave.

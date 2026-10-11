@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -77,8 +78,9 @@ internal fun ContextualChapterRail(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(chapters, key = { it.chapter.id }) { item ->
-                    val current = state.activeChapterId == item.chapter.id
                     val progress = chapterProgressState(item)
+                    val current =
+                        state.activeChapterId == item.chapter.id && progress != CanonicalChapterProgressState.READ
                     val description = chapterStateDescription(item, current)
                     Column(
                         Modifier.width(128.dp).heightIn(min = 104.dp)
@@ -136,14 +138,16 @@ internal fun ContextualChapterRail(
 @Composable
 internal fun DetailsChapterRow(
     item: CanonicalChapterDetailItem,
-    current: Boolean,
+    activeChapter: Boolean,
     downloading: Boolean,
     onOpen: (String) -> Unit,
     onDownload: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val progress = chapterProgressState(item)
+    val current = activeChapter && progress != CanonicalChapterProgressState.READ
     val description = chapterStateDescription(item, current)
+    val downloadingLabel = stringResource(MR.strings.tsuzuki_details_downloading)
     Column(modifier) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 76.dp)
@@ -190,7 +194,16 @@ internal fun DetailsChapterRow(
                 }
                 if (progress == CanonicalChapterProgressState.PARTIAL) PartialChapterMarker()
             }
-            IconButton(onClick = { onDownload(item.chapter.id) }, enabled = !item.downloaded && !downloading) {
+            IconButton(
+                onClick = { onDownload(item.chapter.id) },
+                enabled = !item.downloaded && !downloading,
+                modifier = Modifier.semantics {
+                    if (downloading) {
+                        contentDescription = downloadingLabel
+                        stateDescription = downloadingLabel
+                    }
+                },
+            ) {
                 if (downloading) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else {

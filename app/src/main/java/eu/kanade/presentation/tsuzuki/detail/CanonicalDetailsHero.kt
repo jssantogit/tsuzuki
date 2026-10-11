@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -35,11 +36,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
@@ -48,6 +53,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.manga.components.MangaCoverLoadEvent
@@ -88,7 +94,10 @@ internal fun CanonicalDetailsHero(
     }
     var artworkFailed by remember(state.coverUrl, state.sourceCover) { mutableStateOf(false) }
     val hasArtwork = !artworkFailed && (!state.coverUrl.isNullOrBlank() || state.sourceCover != null)
+    val ratingsState = rememberLazyListState()
+    val layoutDirection = LocalLayoutDirection.current
     BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val artworkLead = (maxWidth * 0.43f).coerceIn(120.dp, 224.dp)
         if (hasArtwork) {
             Box(Modifier.matchParentSize().clearAndSetSemantics {}) {
                 MangaCover.Square(
@@ -117,7 +126,7 @@ internal fun CanonicalDetailsHero(
             }
         }
         Column(Modifier.fillMaxWidth().statusBarsPadding().padding(top = 56.dp, bottom = 16.dp)) {
-            Spacer(Modifier.height((maxWidth * 0.43f).coerceIn(120.dp, 224.dp)))
+            Spacer(Modifier.height(artworkLead))
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -161,7 +170,38 @@ internal fun CanonicalDetailsHero(
             }
             if (state.tsuzukiRating != null || state.ratings.isNotEmpty()) {
                 LazyRow(
-                    Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp),
+                    Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp).drawWithContent {
+                        drawContent()
+                        val cueWidth = 12.dp.toPx()
+                        val leftCue = if (layoutDirection == LayoutDirection.Ltr) {
+                            ratingsState.canScrollBackward
+                        } else {
+                            ratingsState.canScrollForward
+                        }
+                        val rightCue = if (layoutDirection == LayoutDirection.Ltr) {
+                            ratingsState.canScrollForward
+                        } else {
+                            ratingsState.canScrollBackward
+                        }
+                        if (leftCue) {
+                            drawRect(
+                                Brush.horizontalGradient(listOf(background, Color.Transparent), 0f, cueWidth),
+                                size = Size(cueWidth, size.height),
+                            )
+                        }
+                        if (rightCue) {
+                            drawRect(
+                                Brush.horizontalGradient(
+                                    listOf(Color.Transparent, background),
+                                    size.width - cueWidth,
+                                    size.width,
+                                ),
+                                topLeft = Offset(size.width - cueWidth, 0f),
+                                size = Size(cueWidth, size.height),
+                            )
+                        }
+                    },
+                    state = ratingsState,
                     horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
                 ) {
@@ -363,6 +403,7 @@ private fun EditorialSection(title: String, text: String) {
 @Composable
 private fun editorialFormatLabel(value: String?): String? = when (value) {
     "MANGA" -> stringResource(MR.strings.tsuzuki_details_format_manga)
+    "WEBTOON" -> stringResource(MR.strings.tsuzuki_details_format_webtoon)
     "ONE_SHOT" -> stringResource(MR.strings.tsuzuki_details_format_one_shot)
     "MANHWA" -> stringResource(MR.strings.tsuzuki_details_format_manhwa)
     "MANHUA" -> stringResource(MR.strings.tsuzuki_details_format_manhua)

@@ -1491,6 +1491,7 @@
     <string name="tsuzuki_details_format_manhua">Manhua</string>
     <string name="tsuzuki_details_format_doujin">Doujinshi</string>
     <string name="tsuzuki_details_format_novel">Novel</string>
+    <string name="tsuzuki_details_format_webtoon">Webtoon</string>
     <string name="tsuzuki_details_volumes">%1$d volumes</string>
     <string name="tsuzuki_details_dates">Publication dates</string>
     <string name="tsuzuki_details_provider_choose">Choose a reading Provider</string>

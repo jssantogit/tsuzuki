@@ -1229,6 +1229,7 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_details_format_manhua">Manhua</string>
     <string name="tsuzuki_details_format_doujin">Doujinshi</string>
     <string name="tsuzuki_details_format_novel">Novel</string>
+    <string name="tsuzuki_details_format_webtoon">Webtoon</string>
     <string name="tsuzuki_details_volumes">%1$d volumes</string>
     <string name="tsuzuki_details_dates">Datas de publicação</string>
     <string name="tsuzuki_details_provider_choose">Escolher um Provider de leitura</string>
