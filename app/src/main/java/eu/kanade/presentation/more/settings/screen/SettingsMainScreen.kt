@@ -221,7 +221,7 @@ object SettingsMainScreen : Screen() {
                 Item(
                     titleRes = MR.strings.tsuzuki_providers_title,
                     icon = MaterialSymbols.Rounded.Explore,
-                    screen = SettingsTsuzukiProvidersScreen(),
+                    screen = SettingsTsuzukiProvidersDefaultSkinScreen(),
                 ),
             ),
         ),
