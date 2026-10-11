@@ -151,15 +151,16 @@ fun DefaultSkinSecondaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     val colors = defaultSkinColors()
     Surface(
         modifier = modifier
             .heightIn(min = 52.dp)
-            .clickable(role = Role.Button, onClick = onClick),
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         shape = DefaultSkinShape.Control,
-        color = colors.surface,
-        contentColor = colors.foreground,
+        color = if (enabled) colors.surface else colors.surfaceMuted,
+        contentColor = if (enabled) colors.foreground else colors.secondary,
         border = BorderStroke(1.dp, colors.outline),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
@@ -182,14 +183,15 @@ fun DefaultSkinTextAction(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     val colors = defaultSkinColors()
     Text(
         text = text,
         modifier = modifier
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 10.dp),
-        color = colors.foreground,
+        color = if (enabled) colors.foreground else colors.secondary.copy(alpha = 0.55f),
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.SemiBold,
     )
@@ -217,6 +219,32 @@ fun DefaultSkinChoiceChip(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+fun DefaultSkinTag(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    val colors = defaultSkinColors()
+    Surface(
+        modifier = modifier,
+        shape = DefaultSkinShape.Pill,
+        color = colors.surfaceMuted,
+        contentColor = colors.foreground,
+        border = BorderStroke(1.dp, colors.outline.copy(alpha = 0.8f)),
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
