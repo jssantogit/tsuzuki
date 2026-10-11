@@ -22,6 +22,7 @@ data class ProfileSnapshot(
 data class ProfileReadingStats(
     val currentlyReading: Int,
     val chaptersRead: Long,
+    val completedTitles: Int,
 ) {
     /** Resume checkpoints cannot measure lifetime page consumption. Null means unavailable. */
     val pagesRead: Long? get() = null
@@ -36,4 +37,8 @@ data class ProfileTrackerState(
 /** UnifiedLibraryTitle already represents exactly one canonical title across all origins. */
 fun countCurrentlyReading(titles: List<UnifiedLibraryTitle>): Int = titles.count {
     LibraryStatus.READING in it.statusesForOrigin(null)
+}
+
+fun countCompletedTitles(titles: List<UnifiedLibraryTitle>): Int = titles.count {
+    LibraryStatus.COMPLETED in it.statusesForOrigin(null)
 }

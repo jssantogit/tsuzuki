@@ -34,14 +34,18 @@ class ProfileReadingProjectionTest {
     fun `multiple external completions count one canonical title`() {
         countCompletedTitles(
             listOf(
-                title("shared", external = listOf("mal" to LibraryStatus.COMPLETED, "kitsu" to LibraryStatus.COMPLETED)),
+                title(
+                    "shared",
+                    external = listOf("mal" to LibraryStatus.COMPLETED, "kitsu" to LibraryStatus.COMPLETED),
+                ),
             ),
         ) shouldBe 1
     }
 
     @Test
     fun `non completed statuses and absent memberships do not count`() {
-        val statuses = listOf(LibraryStatus.READING, LibraryStatus.PLANNING, LibraryStatus.ON_HOLD, LibraryStatus.DROPPED)
+        val statuses =
+            listOf(LibraryStatus.READING, LibraryStatus.PLANNING, LibraryStatus.ON_HOLD, LibraryStatus.DROPPED)
         countCompletedTitles(statuses.map { title(it.name, it, listOf("mal" to it)) }) shouldBe 0
         countCompletedTitles(listOf(title("absent", external = listOf("mal" to null)))) shouldBe 0
         countCompletedTitles(emptyList()) shouldBe 0

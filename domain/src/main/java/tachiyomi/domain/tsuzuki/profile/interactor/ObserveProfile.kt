@@ -9,6 +9,7 @@ import tachiyomi.domain.tsuzuki.account.repository.AccountRepository
 import tachiyomi.domain.tsuzuki.library.interactor.ObserveUnifiedLibrary
 import tachiyomi.domain.tsuzuki.profile.model.ProfileReadingStats
 import tachiyomi.domain.tsuzuki.profile.model.ProfileSnapshot
+import tachiyomi.domain.tsuzuki.profile.model.countCompletedTitles
 import tachiyomi.domain.tsuzuki.profile.model.countCurrentlyReading
 import tachiyomi.domain.tsuzuki.profile.service.ProfileTrackerSource
 import tachiyomi.domain.tsuzuki.reader.repository.CanonicalReadingRepository
@@ -23,13 +24,19 @@ class ObserveProfile(
     /** Cold Flow: the caller owns collection and cancellation; no eager jobs or remote refreshes. */
     fun subscribe(): Flow<ProfileSnapshot> = combine(
         accountRepository.state,
-        observeUnifiedLibrary.subscribe().map(::countCurrentlyReading).distinctUntilChanged(),
+        observeUnifiedLibrary.subscribe().map { titles ->
+            countCurrentlyReading(titles) to countCompletedTitles(titles)
+        }.distinctUntilChanged(),
         readingRepository.observeReadChapterCount().distinctUntilChanged(),
         trackerSource.observe(),
-    ) { account, currentlyReading, chaptersRead, trackers ->
+    ) { account, titleCounts, chaptersRead, trackers ->
         ProfileSnapshot(
             account = account,
-            reading = ProfileReadingStats(currentlyReading, chaptersRead),
+            reading = ProfileReadingStats(
+                currentlyReading = titleCounts.first,
+                chaptersRead = chaptersRead,
+                completedTitles = titleCounts.second,
+            ),
             trackers = trackers,
         )
     }.distinctUntilChanged()
