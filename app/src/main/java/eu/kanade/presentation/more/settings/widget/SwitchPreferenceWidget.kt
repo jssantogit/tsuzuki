@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.PreviewLightDark
+import eu.kanade.presentation.more.settings.LocalPreferenceEnabled
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.rounded.Preview
@@ -21,6 +22,7 @@ fun SwitchPreferenceWidget(
     checked: Boolean = false,
     onCheckedChanged: (Boolean) -> Unit,
 ) {
+    val enabled = LocalPreferenceEnabled.current
     TextPreferenceWidget(
         modifier = modifier,
         title = title,
@@ -30,6 +32,7 @@ fun SwitchPreferenceWidget(
             Switch(
                 checked = checked,
                 onCheckedChange = null,
+                enabled = enabled,
                 modifier = Modifier.padding(start = TrailingWidgetBuffer),
             )
         },
