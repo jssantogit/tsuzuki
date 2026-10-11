@@ -32,12 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-/**
- * Shared visual language for the approved Default Skin.
- *
- * Material components remain implementation primitives, but public Tsuzuki surfaces should use
- * these semantic values/compositions instead of inheriting the default Material 3 presentation.
- */
+/** Shared visual language for the approved Default Skin. */
 @Immutable
 data class DefaultSkinColors(
     val canvas: Color,
@@ -95,10 +90,7 @@ object DefaultSkinShape {
 }
 
 @Composable
-fun DefaultSkinPageTitle(
-    text: String,
-    modifier: Modifier = Modifier,
-) {
+fun DefaultSkinPageTitle(text: String, modifier: Modifier = Modifier) {
     val colors = defaultSkinColors()
     Text(
         text = text,
@@ -110,10 +102,7 @@ fun DefaultSkinPageTitle(
 }
 
 @Composable
-fun DefaultSkinSectionLabel(
-    text: String,
-    modifier: Modifier = Modifier,
-) {
+fun DefaultSkinSectionLabel(text: String, modifier: Modifier = Modifier) {
     val colors = defaultSkinColors()
     Text(
         text = text.uppercase(),
@@ -157,6 +146,7 @@ fun DefaultSkinPrimaryButton(
 fun DefaultSkinCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    selected: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val colors = defaultSkinColors()
@@ -173,9 +163,9 @@ fun DefaultSkinCard(
     Surface(
         modifier = modifier.then(clickableModifier),
         shape = DefaultSkinShape.Card,
-        color = colors.surface,
+        color = if (selected) colors.surfaceMuted else colors.surface,
         contentColor = colors.foreground,
-        border = BorderStroke(1.dp, colors.outline.copy(alpha = 0.65f)),
+        border = BorderStroke(1.dp, colors.outline.copy(alpha = if (selected) 1f else 0.65f)),
         shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         content = content,
@@ -189,12 +179,14 @@ fun DefaultSkinNavigationRow(
     icon: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    selected: Boolean = false,
     trailing: @Composable (RowScope.() -> Unit)? = null,
 ) {
     val colors = defaultSkinColors()
     DefaultSkinCard(
         modifier = modifier.fillMaxWidth(),
         onClick = onClick,
+        selected = selected,
     ) {
         Row(
             modifier = Modifier
