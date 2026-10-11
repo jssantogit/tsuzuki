@@ -22,12 +22,15 @@ class DefaultSkinVisualContractTest {
     @Test
     fun `promoted root surfaces consume shared Default Skin primitives`() {
         readSource("entry/TsuzukiEntryScreen.kt") shouldContain "defaultSkinColors()"
+        readSource("home/TsuzukiHomeScreen.kt") shouldContain "defaultSkinColors()"
         readSource("search/TsuzukiSearchScreen.kt") shouldContain "defaultSkinColors()"
         readSource("profile/TsuzukiProfileScreen.kt") shouldContain "defaultSkinColors()"
         readSource("library/CanonicalLibraryScreen.kt") shouldContain "defaultSkinColors()"
         readSettingsSource("SettingsMainScreen.kt") shouldContain "defaultSkinColors()"
         readSettingsSource("SettingsTsuzukiIntegrationsScreen.kt") shouldContain "defaultSkinColors()"
         providerLanding() shouldContain "defaultSkinColors()"
+        providerDetail() shouldContain "defaultSkinColors()"
+        trackingService() shouldContain "defaultSkinColors()"
     }
 
     @Test
@@ -38,11 +41,22 @@ class DefaultSkinVisualContractTest {
             readSource("library/CanonicalLibraryScreen.kt"),
             readSettingsSource("SettingsTsuzukiIntegrationsScreen.kt"),
             providerLanding(),
+            trackingService(),
         )
 
         files.forEach { source -> source shouldNotContain "OutlinedTextField(" }
         readSource("entry/TsuzukiEntryScreen.kt") shouldContain "BasicTextField("
         readSource("search/TsuzukiSearchScreen.kt") shouldContain "BasicTextField("
+    }
+
+    @Test
+    fun `Home actions use Default Skin hierarchy instead of stock Material buttons`() {
+        val home = readSource("home/TsuzukiHomeScreen.kt")
+
+        home shouldContain "DefaultSkinPrimaryButton("
+        home shouldContain "DefaultSkinSecondaryButton("
+        home shouldNotContain "OutlinedButton("
+        home shouldNotContain "Button("
     }
 
     @Test
@@ -55,14 +69,21 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
-    fun `integrations and provider landing use promoted page composition instead of stock app bars`() {
+    fun `integrations and Provider family use promoted page composition instead of stock app bars`() {
         val integrations = readSettingsSource("SettingsTsuzukiIntegrationsScreen.kt")
         val providers = providerLanding()
+        val detail = providerDetail()
+        val tracking = trackingService()
 
         integrations shouldContain "DefaultSkinPageTitle("
         providers shouldContain "DefaultSkinPageTitle("
+        detail shouldContain "DefaultSkinPageTitle("
+        tracking shouldContain "DefaultSkinPageTitle("
         integrations shouldNotContain "TopAppBar("
         providers shouldNotContain "TopAppBar("
+        detail shouldNotContain "TopAppBar("
+        tracking shouldNotContain "TopAppBar("
+        tracking shouldNotContain "ListItem("
     }
 
     @Test
@@ -82,7 +103,16 @@ class DefaultSkinVisualContractTest {
 
         providers shouldContain "filter { it.descriptor.origin is ProviderOrigin.Repository }"
         providers shouldNotContain "builtinIntegrationProviderRegistry"
+        providers shouldContain "SettingsTsuzukiProviderDetailDefaultSkinScreen("
         readSettingsSource("SettingsMainScreen.kt") shouldContain "SettingsTsuzukiProvidersDefaultSkinScreen()"
+    }
+
+    @Test
+    fun `tracking Provider recovery stays on the promoted Provider surface`() {
+        val tracking = trackingService()
+
+        tracking shouldContain "SettingsTsuzukiProvidersDefaultSkinScreen()"
+        tracking shouldNotContain "SettingsTsuzukiProvidersScreen()"
     }
 
     @Test
@@ -95,6 +125,10 @@ class DefaultSkinVisualContractTest {
     }
 
     private fun providerLanding(): String = readSettingsSource("SettingsTsuzukiProvidersDefaultSkinScreen.kt")
+
+    private fun providerDetail(): String = readSettingsSource("SettingsTsuzukiProviderDetailDefaultSkinScreen.kt")
+
+    private fun trackingService(): String = readSettingsSource("SettingsTsuzukiTrackingServiceScreen.kt")
 
     private fun readSource(relativePath: String): String = readFirst(
         Path.of("src/main/java/eu/kanade/presentation/tsuzuki/$relativePath"),
