@@ -10,29 +10,31 @@ import java.nio.file.Path
 class SettingsDefaultSkinInformationArchitectureTest {
 
     @Test
-    fun `settings expose approved public families in canonical order`() {
-        val source = readSettingsMainSource()
-        val families = listOf(
-            "Conta",
-            "Geral",
-            "Conteúdo",
-            "Downloads",
-            "Dados e armazenamento",
-            "Privacidade e segurança",
-            "Diagnóstico",
-            "Avançado",
-            "Sobre",
+    fun `settings expose approved public families in canonical route order`() {
+        val source = readSource("SettingsMainScreen.kt")
+        val routes = listOf(
+            "SettingsTsuzukiAccountScreen",
+            "SettingsTsuzukiPersonalizationsScreen",
+            "SettingsTsuzukiReadingHubScreen",
+            "SettingsTsuzukiProvidersScreen",
+            "SettingsTrackingScreen",
+            "SettingsDownloadScreen",
+            "SettingsDataScreen",
+            "SettingsSecurityScreen",
+            "SettingsTsuzukiDiagnosticsScreen",
+            "SettingsAdvancedScreen",
+            "AboutScreen",
         )
 
-        families.forEach(source::shouldContain)
-        families.zipWithNext().forEach { (first, second) ->
+        routes.forEach(source::shouldContain)
+        routes.zipWithNext().forEach { (first, second) ->
             (source.indexOf(first) < source.indexOf(second)).shouldBeTrue()
         }
     }
 
     @Test
     fun `settings route canonical families to existing runtime owners`() {
-        val source = readSettingsMainSource()
+        val source = readSource("SettingsMainScreen.kt")
 
         source shouldContain "SettingsDownloadScreen"
         source shouldContain "SettingsDataScreen"
@@ -44,17 +46,53 @@ class SettingsDefaultSkinInformationArchitectureTest {
 
     @Test
     fun `addons are not a public Settings family`() {
-        val source = readSettingsMainSource()
+        val source = readSource("SettingsMainScreen.kt")
         source shouldNotContain "SettingsTsuzukiAddonsScreen"
     }
 
-    private fun readSettingsMainSource(): String {
+    @Test
+    fun `reading hub reuses localized reader and library contracts`() {
+        val source = readSource("SettingsTsuzukiReadingHubScreen.kt")
+
+        source shouldContain "MR.strings.tsuzuki_reading_settings_title"
+        source shouldContain "MR.strings.pref_category_reader"
+        source shouldContain "MR.strings.pref_reader_summary"
+        source shouldContain "MR.strings.pref_category_library"
+        source shouldContain "MR.strings.pref_library_summary"
+        source shouldNotContain "title = \"Leitura\""
+        source shouldNotContain "title = \"Leitor\""
+        source shouldNotContain "title = \"Comportamento da biblioteca\""
+    }
+
+    @Test
+    fun `diagnostics hub reuses localized log and debug contracts`() {
+        val source = readSource("SettingsTsuzukiDiagnosticsScreen.kt")
+
+        source shouldContain "MR.strings.tsuzuki_logs_title"
+        source shouldContain "MR.strings.tsuzuki_logs_summary"
+        source shouldContain "MR.strings.pref_debug_info"
+        source shouldNotContain "title = \"Logs\""
+        source shouldNotContain "title = \"Informações técnicas\""
+    }
+
+    @Test
+    fun `personalization hub reuses localized appearance contracts`() {
+        val source = readSource("SettingsTsuzukiPersonalizationsScreen.kt")
+
+        source shouldContain "MR.strings.tsuzuki_personalizations_title"
+        source shouldContain "MR.strings.pref_category_appearance"
+        source shouldContain "MR.strings.pref_appearance_summary"
+        source shouldNotContain "title = \"Personalização\""
+        source shouldNotContain "title = \"Aparência\""
+    }
+
+    private fun readSource(fileName: String): String {
         val candidates = listOf(
-            Path.of("src/main/java/eu/kanade/presentation/more/settings/screen/SettingsMainScreen.kt"),
-            Path.of("app/src/main/java/eu/kanade/presentation/more/settings/screen/SettingsMainScreen.kt"),
+            Path.of("src/main/java/eu/kanade/presentation/more/settings/screen/$fileName"),
+            Path.of("app/src/main/java/eu/kanade/presentation/more/settings/screen/$fileName"),
         )
         val source = candidates.firstOrNull(Files::exists)
-            ?: error("SettingsMainScreen.kt was not found from ${Path.of("").toAbsolutePath()}")
+            ?: error("$fileName was not found from ${Path.of("").toAbsolutePath()}")
         return Files.readString(source)
     }
 }
