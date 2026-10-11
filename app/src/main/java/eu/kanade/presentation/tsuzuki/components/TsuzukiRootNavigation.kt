@@ -37,8 +37,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.Role
@@ -57,22 +55,18 @@ fun TsuzukiRootNavigationScaffold(
     val rail = navigationSuiteType == NavigationSuiteType.NavigationRail
     val insets = if (rail) NavigationRailDefaults.windowInsets else NavigationBarDefaults.windowInsets
     var navigationBarHeight by remember { mutableIntStateOf(0) }
-    // Keep dark/AMOLED colors native; the neutral light palette belongs only to this shell.
-    val surface = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
-        Color.White
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
+    val colors = defaultSkinColors()
+
     Surface(
-        color = NavigationSuiteScaffoldDefaults.containerColor,
-        contentColor = NavigationSuiteScaffoldDefaults.contentColor,
+        color = colors.canvas,
+        contentColor = colors.foreground,
     ) {
         NavigationSuiteScaffoldLayout(
             navigationSuiteType = navigationSuiteType,
             state = state,
             navigationSuite = {
                 if (rail) {
-                    NavigationRail(containerColor = surface) {
+                    NavigationRail(containerColor = colors.surface) {
                         Column(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.Center,
@@ -83,16 +77,18 @@ fun TsuzukiRootNavigationScaffold(
                 } else {
                     Surface(
                         modifier = Modifier.onSizeChanged { navigationBarHeight = it.height },
-                        color = surface,
+                        color = colors.surface,
+                        shadowElevation = 0.dp,
+                        tonalElevation = 0.dp,
                     ) {
                         Column {
-                            HorizontalDivider(color = rootDividerColor())
+                            HorizontalDivider(color = colors.outline.copy(alpha = 0.7f))
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .windowInsetsPadding(insets)
                                     .selectableGroup()
-                                    .padding(horizontal = 8.dp),
+                                    .padding(horizontal = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 navigationItems(Modifier.weight(1f))
@@ -101,13 +97,20 @@ fun TsuzukiRootNavigationScaffold(
                     }
                 }
             },
+            navigationSuiteColors = NavigationSuiteScaffoldDefaults.colors(
+                navigationBarContainerColor = colors.surface,
+                navigationRailContainerColor = colors.surface,
+                navigationDrawerContainerColor = colors.surface,
+                navigationBarContentColor = colors.foreground,
+                navigationRailContentColor = colors.foreground,
+                navigationDrawerContentColor = colors.foreground,
+            ),
         ) {
             val consumedInsets = if (state.currentValue == NavigationSuiteScaffoldValue.Hidden && !state.isAnimating) {
                 WindowInsets(0, 0, 0, 0)
             } else if (rail) {
                 insets.only(WindowInsetsSides.Start)
             } else {
-                // The layout already reserves this measured height, including the system safe area.
                 WindowInsets(bottom = navigationBarHeight)
             }
             Box(Modifier.consumeWindowInsets(consumedInsets)) { content() }
@@ -124,10 +127,8 @@ fun TsuzukiRootNavigationItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val light = MaterialTheme.colorScheme.surface.luminance() > 0.5f
-    val primary = if (light) Color(0xFF17181A) else MaterialTheme.colorScheme.onSurface
-    val secondary = if (light) Color(0xFF50565C) else MaterialTheme.colorScheme.onSurfaceVariant
-    val foreground = if (selected) primary else secondary
+    val colors = defaultSkinColors()
+    val foreground = if (selected) colors.foreground else colors.secondary
     val iconContent: @Composable () -> Unit = {
         Icon(painter = icon, contentDescription = null, modifier = Modifier.size(21.dp), tint = foreground)
     }
@@ -151,7 +152,13 @@ fun TsuzukiRootNavigationItem(
             onClick = onClick,
             icon = iconContent,
             label = labelContent,
-            colors = NavigationRailItemDefaults.colors(indicatorColor = Color.Transparent),
+            colors = NavigationRailItemDefaults.colors(
+                indicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                selectedIconColor = colors.foreground,
+                selectedTextColor = colors.foreground,
+                unselectedIconColor = colors.secondary,
+                unselectedTextColor = colors.secondary,
+            ),
         )
     } else {
         Column(
@@ -166,11 +173,4 @@ fun TsuzukiRootNavigationItem(
             labelContent()
         }
     }
-}
-
-@Composable
-private fun rootDividerColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
-    Color(0xFFD6D9DC)
-} else {
-    MaterialTheme.colorScheme.outlineVariant
 }
