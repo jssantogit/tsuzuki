@@ -85,17 +85,17 @@ object SettingsDataScreen : SearchableSettings {
                     ),
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(MR.strings.pref_storage_usage),
-                        subtitle = "Espaço disponível, cache e arquivos temporários",
+                        subtitle = stringResource(MR.strings.tsuzuki_storage_usage_summary),
                         onClick = { navigator.push(StorageUsageScreen) },
                     ),
                     Preference.PreferenceItem.TextPreference(
-                        title = "Backup e restauração",
-                        subtitle = "Criar, restaurar e agendar backups",
+                        title = stringResource(MR.strings.label_backup),
+                        subtitle = stringResource(MR.strings.tsuzuki_backup_settings_summary),
                         onClick = { navigator.push(BackupAndRestoreScreen) },
                     ),
                     Preference.PreferenceItem.TextPreference(
-                        title = "Exportar biblioteca",
-                        subtitle = "CSV com título, autor e artista",
+                        title = stringResource(MR.strings.tsuzuki_export_library_title),
+                        subtitle = stringResource(MR.strings.tsuzuki_export_library_summary),
                         onClick = { navigator.push(ExportLibraryScreen) },
                     ),
                 ),
@@ -252,12 +252,12 @@ object SettingsDataScreen : SearchableSettings {
             preferenceItems = listOf(
                 Preference.PreferenceItem.TextPreference(
                     title = stringResource(MR.strings.pref_create_backup),
-                    subtitle = "Escolha os componentes antes de salvar o arquivo",
+                    subtitle = stringResource(MR.strings.tsuzuki_backup_create_summary),
                     onClick = { navigator.push(CreateBackupScreen()) },
                 ),
                 Preference.PreferenceItem.TextPreference(
                     title = stringResource(MR.strings.pref_restore_backup),
-                    subtitle = "Valida o backup antes de escolher o que restaurar",
+                    subtitle = stringResource(MR.strings.tsuzuki_backup_restore_summary),
                     onClick = {
                         if (!BackupRestoreJob.isRunning(context.workManager)) {
                             if (DeviceUtil.isMiui && DeviceUtil.isMiuiOptimizationDisabled()) {
@@ -340,8 +340,7 @@ object SettingsDataScreen : SearchableSettings {
                     title = stringResource(MR.strings.pref_auto_clear_chapter_cache),
                 ),
                 Preference.PreferenceItem.InfoPreference(
-                    "Arquivos temporários podem ser criados durante aquisições e processamento. " +
-                        "Eles não representam consentimento P2P nem uma rota de Provider.",
+                    stringResource(MR.strings.tsuzuki_storage_temporary_info),
                 ),
             ),
         )
@@ -400,8 +399,8 @@ object SettingsDataScreen : SearchableSettings {
         }
 
         return Preference.PreferenceItem.TextPreference(
-            title = "Exportar CSV",
-            subtitle = "Título é obrigatório para incluir autor ou artista",
+            title = stringResource(MR.strings.tsuzuki_export_csv_title),
+            subtitle = stringResource(MR.strings.tsuzuki_export_csv_summary),
             onClick = { showDialog = true },
         )
     }
