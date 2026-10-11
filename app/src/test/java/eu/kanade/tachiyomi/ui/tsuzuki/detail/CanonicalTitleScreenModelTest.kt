@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.tsuzuki.detail
 
+import eu.kanade.presentation.tsuzuki.detail.contextualChapters
 import eu.kanade.tachiyomi.data.tsuzuki.diagnostics.RecordingChapterInventoryDiagnostics
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -40,6 +41,7 @@ import tachiyomi.domain.tsuzuki.chapter.interactor.MaterializeInferredChapter
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.interactor.inferredChapterId
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.download.interactor.DownloadCanonicalChapter
@@ -119,6 +121,27 @@ class CanonicalTitleScreenModelTest {
         model.start("title")
         advanceUntilIdle()
         model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>().hasReadingProgress shouldBe false
+    }
+
+    @Test
+    fun `timestamp-only late chapter does not move the never-started contextual rail`() = runTest(dispatcher) {
+        val chapters = (1..9).map { index ->
+            readingChapter("chapter-$index", index.toString()).copy(
+                type = CanonicalChapterType.REGULAR,
+                baseNumber = index,
+            )
+        }
+        val model = readingModel(
+            chapters = FakeChapterRepository(chapters),
+            progress = listOf(CanonicalChapterProgress("chapter-8", updatedAt = 999)),
+        )
+        model.start("title")
+        advanceUntilIdle()
+        val loaded = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        loaded.hasReadingProgress shouldBe false
+        loaded.activeChapterId shouldBe null
+        contextualChapters(loaded.chapters, loaded.activeChapterId).map { it.chapter.id } shouldBe
+            listOf("chapter-1", "chapter-2", "chapter-3", "chapter-4", "chapter-5")
     }
 
     @Test
@@ -248,6 +271,63 @@ class CanonicalTitleScreenModelTest {
     }
 
     @Test
+    fun `degraded empty inventory preserves resume context when reusing previous real chapters`() = runTest(
+        dispatcher,
+    ) {
+        val chapters = FakeChapterRepository(listOf(readingChapter("active-real", "10.5")))
+        val metadata = emptyMetadataResolver()
+        val model = readingModel(
+            chapters = chapters,
+            progress = listOf(CanonicalChapterProgress("active-real", lastPageRead = 4, lastVariantId = "variant")),
+            metadata = metadata,
+        )
+        model.start("title")
+        advanceUntilIdle()
+        val previous = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        previous.hasReadingProgress shouldBe true
+        previous.activeChapterId shouldBe "active-real"
+
+        chapters.inventoryTemporarilyUnavailable = true
+        coEvery { metadata.execute("title", any()) } returns Result.failure(IllegalStateException("offline"))
+        model.refresh()
+        advanceUntilIdle()
+        val degraded = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        degraded.chapters shouldBe previous.chapters
+        degraded.hasReadingProgress shouldBe true
+        degraded.activeChapterId shouldBe "active-real"
+        (degraded.refreshError != null) shouldBe true
+    }
+
+    @Test
+    fun `empty progressive chapter refresh stage does not unload valid reading context`() = runTest(dispatcher) {
+        val chapters = FakeChapterRepository(listOf(readingChapter("active-real", "10.5")))
+        val refresh = mockk<RefreshChapterEvidence>()
+        coEvery { refresh.executeProgressively("title", any(), any()) } returns Result.success(Unit)
+        val model = readingModel(
+            chapters = chapters,
+            progress = listOf(CanonicalChapterProgress("active-real", lastPageRead = 4, lastVariantId = "variant")),
+            chapterRefresh = refresh,
+        )
+        model.start("title")
+        advanceUntilIdle()
+        val previous = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        chapters.inventoryTemporarilyUnavailable = true
+        var stage: CanonicalTitleScreenState.Loaded? = null
+        coEvery { refresh.executeProgressively("title", true, any()) } coAnswers {
+            thirdArg<suspend () -> Unit>().invoke()
+            stage = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+            Result.failure(IllegalStateException("chapter inventory unavailable"))
+        }
+        model.refresh()
+        advanceUntilIdle()
+        stage?.chapters shouldBe previous.chapters
+        val degraded = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        degraded.chapters shouldBe previous.chapters
+        degraded.hasReadingProgress shouldBe true
+        degraded.activeChapterId shouldBe "active-real"
+    }
+
+    @Test
     fun `initial unavailable title is recoverable by refreshing the same canonical work`() = runTest(dispatcher) {
         val titles = mockk<CanonicalTitleRepository>()
         coEvery { titles.getById("title") } returnsMany listOf(
@@ -285,6 +365,7 @@ class CanonicalTitleScreenModelTest {
         resolver: CanonicalReadingStartResolver = mockk(relaxed = true),
         metadata: ResolveCanonicalMetadata = emptyMetadataResolver(),
         titles: CanonicalTitleRepository = FakeTitleRepository(),
+        chapterRefresh: RefreshChapterEvidence? = null,
     ): CanonicalTitleScreenModel {
         val downloads = mockk<CanonicalDownloadRepository>()
         coEvery { downloads.getChapterIdsByCanonicalTitle(any()) } returns emptySet()
@@ -305,7 +386,7 @@ class CanonicalTitleScreenModelTest {
             reportedChapterCountRepository = FakeReportedChapterCountRepository(),
             addonRepository = FakeAddonRepository(),
             refreshReportedChapterCounts = metadataRefresh(),
-            refreshChapterEvidence = refresh,
+            refreshChapterEvidence = chapterRefresh ?: refresh,
             resolveCanonicalMetadata = metadata,
             resolveCanonicalSourceManga = mockk(relaxed = true),
             resolveCanonicalArtwork = mockk(relaxed = true),
@@ -1248,9 +1329,17 @@ class CanonicalTitleScreenModelTest {
         private val variants: Map<String, List<ChapterVariant>> = emptyMap(),
     ) : CanonicalChapterRepository {
         private val chapters = initial.associateByTo(linkedMapOf()) { it.id }
+        var inventoryTemporarilyUnavailable: Boolean = false
 
         override suspend fun getByCanonicalTitleId(canonicalTitleId: String): List<CanonicalChapter> =
-            chapters.values.filter { it.canonicalTitleId == canonicalTitleId }
+            if (inventoryTemporarilyUnavailable) {
+                emptyList()
+            } else {
+                chapters.values.filter {
+                    it.canonicalTitleId ==
+                        canonicalTitleId
+                }
+            }
         override fun observeByCanonicalTitleId(canonicalTitleId: String): Flow<List<CanonicalChapter>> =
             MutableStateFlow(chapters.values.filter { it.canonicalTitleId == canonicalTitleId })
         override suspend fun getById(id: String): CanonicalChapter? = chapters[id]

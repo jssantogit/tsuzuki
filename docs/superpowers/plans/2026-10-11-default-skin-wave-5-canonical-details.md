@@ -2,7 +2,7 @@
 
 Baseline: `799984804d8db70598e84cfd1dc90a52f6129069`.
 Branch: `design/default-skin-consolidation`; local and fetched remote match baseline.
-Status: discovery complete; behavioral RED contracts pending CI.
+Status: RED reproduced; minimal behavioral implementation under CI verification.
 
 Promote only Canonical Details against the approved design.md and canonical-details
 mockup/assets. Current runtime owns identity, metadata, chapter inventory, progress,
@@ -51,3 +51,17 @@ state during enrichment/degradation; total initial failure stays recoverable.
 Local SDK is absent: default Android SDK path missing and environment variables unset.
 Local Android compilation cannot be claimed. CI is authoritative; planner-only green or
 skipped compile is not executed test/Android behavior. No phone automation/live probes.
+
+### RED evidence
+
+- `2f6ec3a14`: CI `38136815213` executed 548 App Tsuzuki tests, with exactly
+  two new refresh regressions failing: useful synopsis became null after failed
+  enrichment; a thrown secondary failure replaced Loaded with Error. Format and
+  Domain Tsuzuki passed, including the irregular-identity reading characterization.
+- `8b8f22bf3`: CI `38137206178` confirmed compile-time RED for absent chapter
+  presentation APIs, progress/read CTA state/actions and Providers routing/copy.
+  Format passed; new assertion contracts could not run before implementation.
+- `8c27536de`: minimal production implementation published for behavioral GREEN.
+  Visual composition remains unchanged until this gate passes.
+- Local focused Gradle attempt stopped at missing SDK location, before Android
+  compilation/tests. Cached ktlint formatting and diff checks ran successfully.
