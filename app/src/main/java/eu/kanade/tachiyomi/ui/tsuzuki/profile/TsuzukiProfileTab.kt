@@ -10,8 +10,8 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import dev.zacsweers.metrox.viewmodel.metroViewModel
-import eu.kanade.presentation.more.settings.screen.SettingsTrackingScreen
 import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiAccountScreen
+import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiIntegrationsScreen
 import eu.kanade.presentation.tsuzuki.profile.TsuzukiProfileScreen
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
@@ -43,7 +43,7 @@ data object TsuzukiProfileTab : Tab {
             continueReading = state.continueReading,
             onSettings = { navigator.push(SettingsScreen()) },
             onAccount = { navigator.push(SettingsTsuzukiAccountScreen) },
-            onTracking = { navigator.push(SettingsTrackingScreen) },
+            onTracking = { navigator.push(SettingsTsuzukiIntegrationsScreen()) },
             onContinueReading = { item ->
                 context.startActivity(ReaderActivity.newCanonicalIntent(context, item.canonicalChapterId))
             },
