@@ -81,7 +81,7 @@ object HomeScreen : Screen() {
                     navigationSuiteType = navigationSuiteType,
                     state = navigationSuiteState,
                     navigationItems = { itemModifier ->
-                        tabs.fastForEach { NavigationSuiteItem(it, navigationSuiteType, itemModifier) }
+                        tabs.fastForEach { RootNavigationItem(it, navigationSuiteType, itemModifier) }
                     },
                 ) {
                     AnimatedContent(
@@ -133,7 +133,7 @@ object HomeScreen : Screen() {
     }
 
     @Composable
-    private fun NavigationSuiteItem(
+    private fun RootNavigationItem(
         tab: eu.kanade.presentation.util.Tab,
         navigationSuiteType: NavigationSuiteType,
         modifier: Modifier,

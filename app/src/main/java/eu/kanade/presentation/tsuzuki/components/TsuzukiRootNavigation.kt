@@ -31,11 +31,16 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldValue
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,6 +56,7 @@ fun TsuzukiRootNavigationScaffold(
 ) {
     val rail = navigationSuiteType == NavigationSuiteType.NavigationRail
     val insets = if (rail) NavigationRailDefaults.windowInsets else NavigationBarDefaults.windowInsets
+    var navigationBarHeight by remember { mutableIntStateOf(0) }
     // Keep dark/AMOLED colors native; the neutral light palette belongs only to this shell.
     val surface = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
         Color.White
@@ -75,7 +81,10 @@ fun TsuzukiRootNavigationScaffold(
                         }
                     }
                 } else {
-                    Surface(color = surface) {
+                    Surface(
+                        modifier = Modifier.onSizeChanged { navigationBarHeight = it.height },
+                        color = surface,
+                    ) {
                         Column {
                             HorizontalDivider(color = rootDividerColor())
                             Row(
@@ -95,8 +104,11 @@ fun TsuzukiRootNavigationScaffold(
         ) {
             val consumedInsets = if (state.currentValue == NavigationSuiteScaffoldValue.Hidden && !state.isAnimating) {
                 WindowInsets(0, 0, 0, 0)
+            } else if (rail) {
+                insets.only(WindowInsetsSides.Start)
             } else {
-                insets.only(if (rail) WindowInsetsSides.Start else WindowInsetsSides.Bottom)
+                // The layout already reserves this measured height, including the system safe area.
+                WindowInsets(bottom = navigationBarHeight)
             }
             Box(Modifier.consumeWindowInsets(consumedInsets)) { content() }
         }
