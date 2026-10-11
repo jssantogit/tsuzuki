@@ -1,6 +1,6 @@
 # Default Skin Wave 1.5: Perfil runtime foundation
 
-Status: in progress, tests defined; RED CI pending.
+Status: implementation added; GREEN CI pending.
 Branch: `design/default-skin-consolidation`
 Starting HEAD: `f5156380fe619857988be96e9273cd7123b1428e`
 
@@ -50,7 +50,7 @@ Unsupported values:
 ## Verification record
 
 - Required gate: CI v2.1 affected mode, planner-selected jobs.
-- RED: pending.
+- RED: commit `784f550e6`, [CI run 38099554623](https://github.com/jssantogit/tsuzuki/actions/runs/38099554623). Format passed; domain/data/app test compilation failed because the Profile APIs and read-chapter aggregate did not exist yet. This is compile-time RED, not executed failing assertions.
 - GREEN: pending.
 - Domain/API review: pending.
 - Provider/P2P and root navigation: must remain unchanged.
