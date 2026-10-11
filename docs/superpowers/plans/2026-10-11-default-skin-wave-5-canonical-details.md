@@ -2,7 +2,8 @@
 
 Baseline: `799984804d8db70598e84cfd1dc90a52f6129069`.
 Branch: `design/default-skin-consolidation`; local and fetched remote match baseline.
-Status: behavioral GREEN confirmed; approved presentation promotion in progress.
+Status: implementation complete; final affected CI and Impeccable source gate passed.
+Physical Android experience acceptance remains outstanding.
 
 Promote only Canonical Details against the approved design.md and canonical-details
 mockup/assets. Current runtime owns identity, metadata, chapter inventory, progress,
@@ -97,8 +98,15 @@ native icon/API receivers, faithful rating scales and overflow cue, Webtoon
 editorial format preservation, scrubber bubble/track separation and vertical
 tracking, read chapters receding instead of current markers, pending-download
 and special-chapter accessibility, horizontal safe areas and jump IME/focus.
-No domain/sourcing/Reader changes. Final CI and source confirmation pending.
+No domain/sourcing/Reader changes. Source confirmation completed after the correction
+batch. Final CI `38140023931` passed against `f5d2b1200167b67fa44d794edd041e7089eb9acc`:
+580 App Tsuzuki tests passed; app Android Kotlin and unit-test Kotlin compilation ran
+inside that test job. Format and CI Gate passed. Standalone compile, release/native
+packaging, migrations and backend remained planner-skipped. No extra broad test run
+was needed after this gate.
 
 Physical Android remains required to accept actual font scaling, TalkBack,
 long-work drag/scroll, image quality, system chrome/insets and Reader navigation.
 No emulator/instrumented behavior was executed during this wave.
+
+Final evidence and acceptance limits: `docs/design/default-skin/wave-5-canonical-details-report.md`.
