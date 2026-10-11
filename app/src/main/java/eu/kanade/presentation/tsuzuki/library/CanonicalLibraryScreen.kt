@@ -299,7 +299,9 @@ private fun CanonicalLibraryStatusFilters(
                         Modifier
                             .fillMaxWidth()
                             .height(2.dp)
-                            .background(if (selected) colors.foreground else androidx.compose.ui.graphics.Color.Transparent),
+                            .background(
+                                if (selected) colors.foreground else androidx.compose.ui.graphics.Color.Transparent,
+                            ),
                     )
                 }
             }
@@ -505,8 +507,11 @@ private fun LibraryEmptyState(
     ) {
         Text(
             text = stringResource(
-                if (state.totalItemCount == 0) MR.strings.tsuzuki_library_empty
-                else MR.strings.tsuzuki_library_no_results,
+                if (state.totalItemCount == 0) {
+                    MR.strings.tsuzuki_library_empty
+                } else {
+                    MR.strings.tsuzuki_library_no_results
+                },
             ),
             color = colors.foreground,
             style = MaterialTheme.typography.titleMedium,
