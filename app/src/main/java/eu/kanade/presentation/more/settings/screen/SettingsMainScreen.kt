@@ -1,39 +1,20 @@
 package eu.kanade.presentation.more.settings.screen
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.ColorUtils
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -41,6 +22,11 @@ import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.screen.about.AboutScreen
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinNavigationRow
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPageTitle
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSectionLabel
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
 import mihon.icons.materialsymbols.MaterialSymbols
@@ -63,35 +49,13 @@ object SettingsMainScreen : Screen() {
     @Composable
     override fun Content() {
         val backPress = LocalBackPress.currentOrThrow
-        Content(
-            twoPane = false,
-            navigateUp = backPress,
-        )
-    }
-
-    @Composable
-    private fun getPalerSurface(): Color {
-        val surface = MaterialTheme.colorScheme.surface
-        val dark = isSystemInDarkTheme()
-        return remember(surface, dark) {
-            val arr = FloatArray(3)
-            ColorUtils.colorToHSL(surface.toArgb(), arr)
-            arr[2] = if (dark) {
-                arr[2] - 0.05f
-            } else {
-                arr[2] + 0.02f
-            }.coerceIn(0f, 1f)
-            Color.hsl(arr[0], arr[1], arr[2])
-        }
+        Content(twoPane = false, navigateUp = backPress)
     }
 
     @Composable
     fun Content(twoPane: Boolean) {
         val backPress = LocalBackPress.currentOrThrow
-        Content(
-            twoPane = twoPane,
-            navigateUp = backPress,
-        )
+        Content(twoPane = twoPane, navigateUp = backPress)
     }
 
     @Composable
@@ -100,7 +64,7 @@ object SettingsMainScreen : Screen() {
         navigateUp: (() -> Unit)?,
     ) {
         val navigator = LocalNavigator.currentOrThrow
-        val containerColor = if (twoPane) getPalerSurface() else MaterialTheme.colorScheme.surfaceContainerLowest
+        val colors = defaultSkinColors()
         val topBarState = rememberTopAppBarState()
         val selectedClass = if (twoPane) navigator.items.firstOrNull()?.let { it::class } else null
         val state = rememberLazyListState()
@@ -110,9 +74,7 @@ object SettingsMainScreen : Screen() {
             val selectedSection = sections.indexOfFirst { section ->
                 section.items.any { it.screen::class == selectedClass }
             }
-            if (selectedSection >= 0) {
-                state.animateScrollToItem(1 + selectedSection * 2)
-            }
+            if (selectedSection >= 0) state.animateScrollToItem(1 + selectedSection * 2)
         }
 
         Scaffold(
@@ -135,140 +97,70 @@ object SettingsMainScreen : Screen() {
                     scrollBehavior = scrollBehavior,
                 )
             },
-            containerColor = containerColor,
+            containerColor = colors.canvas,
             content = { contentPadding ->
                 LazyColumn(
                     state = state,
                     modifier = Modifier.padding(contentPadding),
                 ) {
                     item(key = "settings_title") {
-                        Text(
+                        DefaultSkinPageTitle(
                             text = stringResource(MR.strings.label_settings),
-                            style = MaterialTheme.typography.displaySmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp),
+                            modifier = Modifier.padding(
+                                start = DefaultSkinSpacing.PageHorizontal,
+                                end = DefaultSkinSpacing.PageHorizontal,
+                                top = 8.dp,
+                                bottom = 32.dp,
+                            ),
                         )
                     }
 
                     sections.forEach { section ->
                         item(key = "section_label_${section.key}") {
-                            Text(
-                                text = stringResource(section.titleRes).uppercase(),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
+                            DefaultSkinSectionLabel(
+                                text = stringResource(section.titleRes),
+                                modifier = Modifier.padding(
+                                    start = DefaultSkinSpacing.PageHorizontal,
+                                    end = DefaultSkinSpacing.PageHorizontal,
+                                    bottom = 10.dp,
+                                ),
                             )
                         }
                         item(key = "section_card_${section.key}") {
-                            SettingsSectionCard(
-                                section = section,
-                                selectedClass = selectedClass,
-                                onClick = { navigator.navigate(it.screen, twoPane) },
-                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
-                            )
+                            Column(
+                                modifier = Modifier.padding(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    bottom = DefaultSkinSpacing.Section,
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                section.items.forEach { item ->
+                                    val selected = selectedClass != null && item.screen::class == selectedClass
+                                    DefaultSkinNavigationRow(
+                                        title = stringResource(item.titleRes),
+                                        subtitle = item.formatSubtitle(),
+                                        icon = item.icon,
+                                        selected = selected,
+                                        onClick = { navigator.navigate(item.screen, twoPane) },
+                                        trailing = {
+                                            Icon(
+                                                imageVector = MaterialSymbols.AutoMirroredRounded.ArrowRight,
+                                                contentDescription = null,
+                                                tint = colors.secondary,
+                                                modifier = Modifier
+                                                    .size(19.dp)
+                                                    .clearAndSetSemantics { },
+                                            )
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             },
         )
-    }
-
-    @Composable
-    private fun SettingsSectionCard(
-        section: Section,
-        selectedClass: kotlin.reflect.KClass<out VoyagerScreen>?,
-        onClick: (Item) -> Unit,
-        modifier: Modifier = Modifier,
-    ) {
-        Surface(
-            modifier = modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 1.dp,
-        ) {
-            Column {
-                section.items.forEachIndexed { index, item ->
-                    val selected = selectedClass != null && item.screen::class == selectedClass
-                    SettingsNavigationRow(
-                        item = item,
-                        selected = selected,
-                        onClick = { onClick(item) },
-                    )
-                    if (index < section.items.lastIndex) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 72.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun SettingsNavigationRow(
-        item: Item,
-        selected: Boolean,
-        onClick: () -> Unit,
-    ) {
-        val rowColor = if (selected) {
-            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f)
-        } else {
-            Color.Transparent
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(rowColor)
-                .clickable(onClick = onClick)
-                .sizeIn(minHeight = 64.dp)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Surface(
-                modifier = Modifier.size(40.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = item.icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(item.titleRes),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                item.formatSubtitle()?.takeIf(String::isNotBlank)?.let { subtitle ->
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            Icon(
-                imageVector = MaterialSymbols.AutoMirroredRounded.ArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .size(20.dp)
-                    .clearAndSetSemantics { },
-            )
-        }
     }
 
     private fun Navigator.navigate(screen: VoyagerScreen, twoPane: Boolean) {
