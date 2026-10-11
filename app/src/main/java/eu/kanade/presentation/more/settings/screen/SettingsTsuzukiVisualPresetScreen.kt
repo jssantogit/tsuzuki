@@ -27,8 +27,10 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.util.Screen
+import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.ScrollbarLazyColumn
 import tachiyomi.presentation.core.components.material.Scaffold
+import tachiyomi.presentation.core.i18n.stringResource
 
 object SettingsTsuzukiVisualPresetScreen : Screen() {
 
@@ -48,7 +50,7 @@ object SettingsTsuzukiVisualPresetScreen : Screen() {
             ScrollbarLazyColumn(contentPadding = contentPadding) {
                 item(key = "visual_preset_title") {
                     Text(
-                        text = "Preset visual",
+                        text = stringResource(MR.strings.tsuzuki_visual_preset_title),
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -58,7 +60,7 @@ object SettingsTsuzukiVisualPresetScreen : Screen() {
 
                 item(key = "visual_preset_label") {
                     Text(
-                        text = "PRESET ATUAL",
+                        text = stringResource(MR.strings.tsuzuki_visual_preset_current).uppercase(),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -94,14 +96,14 @@ object SettingsTsuzukiVisualPresetScreen : Screen() {
                                         color = MaterialTheme.colorScheme.onSurface,
                                     )
                                     Text(
-                                        text = "A prévia acompanha o tema atual sem criar outro preset.",
+                                        text = stringResource(MR.strings.tsuzuki_visual_preset_summary),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                                 Spacer(Modifier.width(12.dp))
                                 Text(
-                                    text = "Selecionado",
+                                    text = stringResource(MR.strings.selected),
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
