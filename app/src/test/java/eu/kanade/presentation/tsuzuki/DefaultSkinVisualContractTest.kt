@@ -37,6 +37,7 @@ class DefaultSkinVisualContractTest {
             readSource("search/TsuzukiSearchScreen.kt"),
             readSource("library/CanonicalLibraryScreen.kt"),
             readSettingsSource("SettingsTsuzukiIntegrationsScreen.kt"),
+            providerLanding(),
         )
 
         files.forEach { source -> source shouldNotContain "OutlinedTextField(" }
@@ -76,6 +77,15 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
+    fun `provider landing does not surface metadata integration registrations`() {
+        val providers = providerLanding()
+
+        providers shouldContain "filter { it.descriptor.origin is ProviderOrigin.Repository }"
+        providers shouldNotContain "builtinIntegrationProviderRegistry"
+        readSettingsSource("SettingsMainScreen.kt") shouldContain "SettingsTsuzukiProvidersDefaultSkinScreen()"
+    }
+
+    @Test
     fun `search empty state stays owned by metadata integrations`() {
         val search = readSource("search/TsuzukiSearchScreen.kt")
 
@@ -84,8 +94,7 @@ class DefaultSkinVisualContractTest {
         search shouldNotContain "tsuzuki_search_configure_providers"
     }
 
-    private fun providerLanding(): String = readSettingsSource("SettingsTsuzukiProvidersScreen.kt")
-        .substringBefore("class SettingsTsuzukiProviderDetailScreen")
+    private fun providerLanding(): String = readSettingsSource("SettingsTsuzukiProvidersDefaultSkinScreen.kt")
 
     private fun readSource(relativePath: String): String = readFirst(
         Path.of("src/main/java/eu/kanade/presentation/tsuzuki/$relativePath"),
