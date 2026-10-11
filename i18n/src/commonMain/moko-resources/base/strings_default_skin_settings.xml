@@ -26,6 +26,8 @@
     <string name="tsuzuki_network_privacy_title">Network privacy</string>
     <string name="tsuzuki_direct_p2p_confirm_title">Allow direct P2P?</string>
     <string name="tsuzuki_direct_p2p_confirm_message">Direct P2P connections can expose your IP address to other network participants. Enable it only if you understand and accept that exposure.</string>
+    <string name="tsuzuki_action_allow">Allow</string>
+    <string name="tsuzuki_direct_p2p_summary">Allows direct P2P connections when a Provider needs them. Your IP address may be visible to other network participants.</string>
     <string name="tsuzuki_telemetry_title">Data and telemetry</string>
 
     <string name="tsuzuki_logs_clear_confirm_title">Clear logs?</string>
