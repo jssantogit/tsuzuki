@@ -45,6 +45,18 @@ class DefaultSkinIntegrationProviderSeparationContractTest {
     }
 
     @Test
+    fun `content settings expose integrations and providers as separate destinations`() {
+        val mainSource = readSource(
+            "app/src/main/java/eu/kanade/presentation/more/settings/screen/SettingsMainScreen.kt",
+            "src/main/java/eu/kanade/presentation/more/settings/screen/SettingsMainScreen.kt",
+        )
+
+        mainSource shouldContain "screen = SettingsTsuzukiIntegrationsScreen()"
+        mainSource shouldContain "screen = SettingsTsuzukiProvidersScreen()"
+        mainSource shouldNotContain "screen = SettingsTrackingScreen"
+    }
+
+    @Test
     fun `integration configuration and provider platform keep distinct runtime owners`() {
         val integrationSource = readSource(
             "app/src/main/java/eu/kanade/presentation/more/settings/screen/SettingsTsuzukiIntegrationsScreen.kt",
