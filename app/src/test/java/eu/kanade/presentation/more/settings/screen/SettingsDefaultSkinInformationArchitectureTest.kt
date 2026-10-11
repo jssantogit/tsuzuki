@@ -94,6 +94,17 @@ class SettingsDefaultSkinInformationArchitectureTest {
     }
 
     @Test
+    fun `settings navigation indicators use the RTL aware material icon`() {
+        val root = readSource("SettingsMainScreen.kt")
+        val nested = readSource("DefaultSkinSettingsNavigation.kt")
+
+        root shouldContain "MaterialSymbols.AutoMirroredRounded.ArrowRight"
+        nested shouldContain "MaterialSymbols.AutoMirroredRounded.ArrowRight"
+        root shouldNotContain "text = \"›\""
+        nested shouldNotContain "text = \"›\""
+    }
+
+    @Test
     fun `promoted Settings surfaces keep public copy in resources`() {
         val hardcodedCopyByFile = mapOf(
             "SettingsMainScreen.kt" to listOf(
@@ -106,6 +117,9 @@ class SettingsDefaultSkinInformationArchitectureTest {
                 "title = \"Diagnóstico\"",
                 "title = \"Avançado\"",
                 "title = \"Sobre\"",
+                "text = \"›\"",
+            ),
+            "DefaultSkinSettingsNavigation.kt" to listOf(
                 "text = \"›\"",
             ),
             "SettingsTsuzukiPersonalizationsScreen.kt" to listOf(
