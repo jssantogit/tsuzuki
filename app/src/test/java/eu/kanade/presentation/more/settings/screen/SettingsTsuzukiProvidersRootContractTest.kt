@@ -1,4 +1,4 @@
-package eu.kanade.presentation.more.settings.screen
+package eu.kanade.tachiyomi.ui.tsuzuki.settings
 
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain

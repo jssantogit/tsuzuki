@@ -1,5 +1,7 @@
-package eu.kanade.presentation.more.settings.screen
+package eu.kanade.tachiyomi.ui.tsuzuki.settings
 
+import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiAccountFormMode
+import eu.kanade.presentation.more.settings.screen.showsPassword
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.string.shouldContain
