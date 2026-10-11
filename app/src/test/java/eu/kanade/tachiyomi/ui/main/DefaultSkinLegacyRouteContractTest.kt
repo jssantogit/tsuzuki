@@ -107,7 +107,7 @@ class DefaultSkinLegacyRouteContractTest {
             paths
                 .filter { Files.isRegularFile(it) && it.toString().endsWith(".kt") }
                 .sorted()
-                .map(Files::readString)
+                .map { Files.readString(it) }
                 .toList()
                 .joinToString(separator = "\n")
         }
