@@ -42,6 +42,18 @@ class DefaultSkinLegacyRouteContractTest {
         storesSource shouldNotContain "viewModel.addFromDeeplink(url)"
     }
 
+    @Test
+    fun `tracking missing source recovery opens Providers instead of Add-ons`() {
+        val source = readAppSource(
+            "eu/kanade/presentation/more/settings/screen/SettingsTsuzukiTrackingServiceScreen.kt",
+        )
+
+        source shouldContain "navigator.push(SettingsTsuzukiProvidersScreen())"
+        source shouldContain "MR.strings.tsuzuki_providers_title"
+        source shouldNotContain "SettingsTsuzukiAddonsScreen"
+        source shouldNotContain "MR.strings.label_extensions"
+    }
+
     private fun readAppSource(relativePath: String): String {
         val candidates = listOf(
             Path.of("src/main/java/$relativePath"),
