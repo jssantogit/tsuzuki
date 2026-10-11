@@ -21,7 +21,7 @@ object SettingsTsuzukiPersonalizationsScreen : Screen() {
                 DefaultSkinSettingsNavGroup(
                     items = listOf(
                         DefaultSkinSettingsNavItem(
-                            title = "Preset visual",
+                            title = stringResource(MR.strings.tsuzuki_visual_preset_title),
                             subtitle = "Tsuzuki Default Skin",
                             onClick = { navigator.push(SettingsTsuzukiVisualPresetScreen) },
                         ),
@@ -31,8 +31,8 @@ object SettingsTsuzukiPersonalizationsScreen : Screen() {
                             onClick = { navigator.push(SettingsAppearanceScreen) },
                         ),
                         DefaultSkinSettingsNavItem(
-                            title = "Collections",
-                            subtitle = "Organize coleções, pastas e listas exibidas pelo Tsuzuki",
+                            title = stringResource(MR.strings.tsuzuki_collections_settings_title),
+                            subtitle = stringResource(MR.strings.tsuzuki_collections_settings_summary),
                             onClick = { navigator.push(CollectionsScreen()) },
                         ),
                     ),
