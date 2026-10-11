@@ -143,6 +143,55 @@ fun DefaultSkinPrimaryButton(
 }
 
 @Composable
+fun DefaultSkinSecondaryButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = defaultSkinColors()
+    Surface(
+        modifier = modifier
+            .heightIn(min = 52.dp)
+            .clickable(role = Role.Button, onClick = onClick),
+        shape = DefaultSkinShape.Control,
+        color = colors.surface,
+        contentColor = colors.foreground,
+        border = BorderStroke(1.dp, colors.outline),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+fun DefaultSkinTextAction(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = defaultSkinColors()
+    Text(
+        text = text,
+        modifier = modifier
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        color = colors.foreground,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+    )
+}
+
+@Composable
 fun DefaultSkinCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
