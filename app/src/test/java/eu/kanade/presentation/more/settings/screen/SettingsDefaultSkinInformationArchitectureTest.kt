@@ -16,6 +16,7 @@ class SettingsDefaultSkinInformationArchitectureTest {
         val familyAnchors = listOf(
             "SettingsTsuzukiAccountScreen",
             "SettingsTsuzukiPersonalizationsScreen",
+            "SettingsTsuzukiIntegrationsScreen",
             "SettingsTsuzukiProvidersScreen",
             "SettingsDownloadScreen",
             "SettingsDataScreen",
@@ -34,9 +35,10 @@ class SettingsDefaultSkinInformationArchitectureTest {
                 sections.indexOf("SettingsTsuzukiReadingHubScreen")
             ).shouldBeTrue()
         (
-            sections.indexOf("SettingsTsuzukiProvidersScreen") <
-                sections.indexOf("SettingsTrackingScreen")
+            sections.indexOf("SettingsTsuzukiIntegrationsScreen") <
+                sections.indexOf("SettingsTsuzukiProvidersScreen")
             ).shouldBeTrue()
+        sections shouldNotContain "screen = SettingsTrackingScreen"
     }
 
     @Test
