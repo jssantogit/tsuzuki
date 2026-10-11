@@ -18,13 +18,13 @@ class DefaultSkinLegacyRouteContractTest {
     }
 
     @Test
-    fun `legacy destination id three canonicalizes directly to Providers`() {
+    fun `legacy destination id three canonicalizes to Providers inside Settings navigator`() {
         val source = readAppSource("eu/kanade/tachiyomi/ui/setting/SettingsScreen.kt")
 
         source shouldContain "data object Providers : Destination(3)"
         source shouldContain "val TsuzukiAddons: Destination get() = Providers"
-        source shouldContain "if (destination == Destination.Providers.id)"
-        source shouldContain "SettingsTsuzukiProvidersScreen().Content()"
+        source shouldContain "Destination.Providers.id -> SettingsTsuzukiProvidersScreen()"
+        source shouldNotContain "SettingsTsuzukiProvidersScreen().Content()"
         source shouldNotContain "SettingsTsuzukiAddonsScreen"
     }
 
