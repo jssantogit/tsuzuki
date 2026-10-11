@@ -101,27 +101,17 @@ object SettingsMainScreen : Screen() {
         val navigator = LocalNavigator.currentOrThrow
         val containerColor = if (twoPane) getPalerSurface() else MaterialTheme.colorScheme.surfaceContainerLowest
         val topBarState = rememberTopAppBarState()
-        val flatItems = sections.flatMap { it.items }
         val selectedClass = if (twoPane) navigator.items.firstOrNull()?.let { it::class } else null
         val state = rememberLazyListState()
 
         LaunchedEffect(selectedClass) {
             if (selectedClass == null) return@LaunchedEffect
-            val selectedFlatIndex = flatItems.indexOfFirst { it.screen::class == selectedClass }
-            if (selectedFlatIndex < 0) return@LaunchedEffect
-
-            var precedingRows = 0
-            var targetListIndex = 1 // large title
-            sections.forEach { section ->
-                val sectionIndex = section.items.indexOfFirst { it.screen::class == selectedClass }
-                if (sectionIndex >= 0) {
-                    targetListIndex += precedingRows
-                    return@forEach
-                }
-                // Section label + grouped surface.
-                precedingRows += 2
+            val selectedSection = sections.indexOfFirst { section ->
+                section.items.any { it.screen::class == selectedClass }
             }
-            state.animateScrollToItem(targetListIndex.coerceAtLeast(0))
+            if (selectedSection >= 0) {
+                state.animateScrollToItem(1 + selectedSection * 2)
+            }
         }
 
         Scaffold(
