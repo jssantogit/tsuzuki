@@ -34,7 +34,9 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.RefreshChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.interactor.MaterializeInferredChapter
+import tachiyomi.domain.tsuzuki.chapter.interactor.OpenCanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.interactor.buildCanonicalChapterOutline
+import tachiyomi.domain.tsuzuki.chapter.interactor.isVisibleCanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.content.ContentOption
@@ -342,8 +344,7 @@ class CanonicalTitleScreenModel(
     }
 
     private suspend fun materializeIfRequired(row: CanonicalChapterDetailItem): CanonicalChapter {
-        if (!row.inferredFromCount) return row.chapter
-        val resolved = materializeInferredChapter.execute(row.chapter)
+        val resolved = OpenCanonicalChapter(materializeInferredChapter).execute(row.chapter)
         if (resolved.id != row.chapter.id) {
             val state = _state.value as? CanonicalTitleScreenState.Loaded
             if (state != null) {
@@ -659,12 +660,7 @@ class CanonicalTitleScreenModel(
         val details = chapters.mapNotNull { chapter ->
             val progress = progressByChapter[chapter.id]
             val downloaded = chapter.id in canonicalDownloadIds
-            if (
-                chapter.confirmation != CanonicalChapterConfirmation.CONFIRMED &&
-                chapter.id !in supportedChapterIds &&
-                progress == null &&
-                !downloaded
-            ) {
+            if (!isVisibleCanonicalChapter(chapter, progress != null, chapter.id in supportedChapterIds, downloaded)) {
                 null
             } else {
                 CanonicalChapterDetailItem(

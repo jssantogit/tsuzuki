@@ -7,12 +7,17 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
+import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
+import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
+import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceSupportSnapshot
 import tachiyomi.domain.tsuzuki.chapter.interactor.OpenCanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
+import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
 import tachiyomi.domain.tsuzuki.home.interactor.OpenHomeHero
 import tachiyomi.domain.tsuzuki.interactor.MaterializeCanonicalTitleFromCatalog
+import tachiyomi.domain.tsuzuki.metadata.ReportedChapterCount
 import tachiyomi.domain.tsuzuki.metadata.repository.ReportedChapterCountRepository
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
@@ -20,6 +25,31 @@ import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterProgress
 import tachiyomi.domain.tsuzuki.reader.repository.CanonicalReadingRepository
 
 class OpenHomeHeroTest {
+    @Test
+    fun `first readable chapter follows canonical ordering rather than repository order`() = runTest {
+        val fixture = Fixture()
+        fixture.chapters = fixture.chapters.reversed()
+        fixture.open.execute(fixture.item) shouldBe "resolved-c1"
+    }
+
+    @Test
+    fun `count derived first slot goes through the canonical gateway`() = runTest {
+        val fixture = Fixture()
+        fixture.chapters = emptyList()
+        coEvery { fixture.counts.getByTitle("title") } returns listOf(ReportedChapterCount("title", "kitsu", 2, 1L))
+        fixture.open.execute(fixture.item) shouldBe "resolved-tsuzuki:count:title:1"
+        coVerify { fixture.gateway.execute(match { it.id == "tsuzuki:count:title:1" }) }
+    }
+
+    @Test
+    fun `unsupported unconfirmed chapter is not offered as a read target`() = runTest {
+        val fixture = Fixture()
+        fixture.chapters =
+            listOf(fixture.chapters.first().copy(confirmation = CanonicalChapterConfirmation.PROVISIONAL))
+        fixture.open.execute(fixture.item) shouldBe null
+        coVerify(exactly = 0) { fixture.gateway.execute(any()) }
+    }
+
     @Test
     fun `read prefers newest resumable progress and ignores completed history`() = runTest {
         val fixture = Fixture()
@@ -69,15 +99,28 @@ class OpenHomeHeroTest {
             coEvery { getProgressByCanonicalTitleId("title") } answers { progress }
         }
         val counts = mockk<ReportedChapterCountRepository> { coEvery { getByTitle("title") } returns emptyList() }
-        val gateway = mockk<OpenCanonicalChapter> {
-            coEvery { execute(any()) } answers { "resolved-${firstArg<CanonicalChapter>().id}" }
+        val evidence = mockk<ChapterEvidenceRepository> {
+            coEvery { getSupportSnapshot("title") } returns ChapterEvidenceSupportSnapshot()
         }
-        val open = OpenHomeHero(materialize, chapterRepository, reading, counts, gateway)
+        val downloads = mockk<CanonicalDownloadRepository> {
+            coEvery { getChapterIdsByCanonicalTitle("title") } returns emptySet()
+        }
+        val gateway = mockk<OpenCanonicalChapter> {
+            coEvery { execute(any()) } answers {
+                firstArg<CanonicalChapter>().copy(id = "resolved-${firstArg<CanonicalChapter>().id}")
+            }
+        }
+        val open = OpenHomeHero(materialize, chapterRepository, reading, counts, gateway, evidence, downloads)
     }
 
     companion object {
         private fun chapter(id: String, number: Int) = CanonicalChapter(
-            id, "title", "$number", type = CanonicalChapterType.REGULAR, baseNumber = number,
+            id,
+            "title",
+            "$number",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = number,
+            confirmation = CanonicalChapterConfirmation.CONFIRMED,
         )
     }
 }

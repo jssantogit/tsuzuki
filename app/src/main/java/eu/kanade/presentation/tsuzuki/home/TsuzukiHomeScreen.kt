@@ -3,26 +3,28 @@ package eu.kanade.presentation.tsuzuki.home
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +38,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -53,7 +57,9 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticTrace
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticWorkflow
 import tachiyomi.domain.tsuzuki.home.model.HomeContinueReadingItem
 import tachiyomi.domain.tsuzuki.home.model.HomeSection
+import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
+import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 fun TsuzukiHomeScreen(
@@ -73,27 +79,28 @@ fun TsuzukiHomeScreen(
                 .fillMaxSize()
                 .padding(paddingValues),
             contentPadding = PaddingValues(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+            verticalArrangement = Arrangement.spacedBy(32.dp),
         ) {
-            if (state.heroes.isNotEmpty()) {
+            val heroes = state.heroes.take(MAX_HERO_ITEMS)
+            if (heroes.isNotEmpty()) {
                 item(key = "home_hero") {
                     HomeHeroCarousel(
-                        items = state.heroes,
+                        items = heroes,
                         onRead = onHeroRead,
                         onDetails = onHeroDetails,
                     )
                 }
-            } else {
-                item(key = "home_header") {
-                    HomeHeader()
+            } else if (state.continueReading.isNotEmpty() || state.sections.isNotEmpty()) {
+                item(key = "home_safe_top") {
+                    Spacer(Modifier.statusBarsPadding())
                 }
             }
 
-            state.continueReading.firstOrNull()?.let { item ->
+            if (state.continueReading.isNotEmpty()) {
                 item(key = "continue_reading") {
-                    ContinueReadingCard(
-                        item = item,
-                        onClick = { onContinueReading(item) },
+                    ContinueReadingSection(
+                        items = state.continueReading,
+                        onContinueReading = onContinueReading,
                     )
                 }
             }
@@ -101,31 +108,21 @@ fun TsuzukiHomeScreen(
             state.sections.forEach { section ->
                 when (section) {
                     is HomeSection.CollectionSection -> {
-                        item(key = "collection_${section.collectionId}") {
-                            CollectionHomeSection(
-                                section = section,
-                                onFolder = { folderId ->
-                                    onFolder(section.collectionId, folderId)
-                                },
-                            )
+                        if (section.folders.isNotEmpty()) {
+                            item(key = "collection_${section.collectionId}") {
+                                CollectionHomeSection(
+                                    section = section,
+                                    onFolder = { folderId ->
+                                        onFolder(section.collectionId, folderId)
+                                    },
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     }
-}
-
-@Composable
-private fun HomeHeader() {
-    Text(
-        text = "Início",
-        style = MaterialTheme.typography.headlineSmall,
-        fontWeight = FontWeight.Medium,
-        modifier = Modifier
-            .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-    )
 }
 
 @Composable
@@ -166,17 +163,6 @@ private fun HomeHeroCarousel(
                 onDetails = { onDetails(item) },
             )
         }
-
-        Text(
-            text = "Início",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Medium,
-            color = Color.White,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-        )
     }
 }
 
@@ -189,6 +175,7 @@ private fun HomeHero(
     onDetails: () -> Unit,
 ) {
     val background = MaterialTheme.colorScheme.background
+    val foreground = MaterialTheme.colorScheme.onBackground
     val metadata = buildList {
         if (item.format != CatalogItemFormat.UNKNOWN) {
             add(
@@ -228,9 +215,12 @@ private fun HomeHero(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0.0f to Color.Black.copy(alpha = 0.18f),
-                        0.34f to Color.Transparent,
-                        0.70f to Color.Black.copy(alpha = 0.48f),
+                        0.0f to Color.Black.copy(alpha = 0.22f),
+                        0.18f to Color.Transparent,
+                        0.32f to background.copy(alpha = 0.08f),
+                        0.47f to background.copy(alpha = 0.65f),
+                        0.62f to background.copy(alpha = 0.91f),
+                        0.83f to background.copy(alpha = 0.98f),
                         1.0f to background,
                     ),
                 ),
@@ -240,14 +230,14 @@ private fun HomeHero(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = 20.dp, vertical = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (metadata.isNotBlank()) {
                 Text(
                     text = metadata,
                     style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.82f),
+                    color = foreground.copy(alpha = 0.88f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -255,10 +245,10 @@ private fun HomeHero(
 
             Text(
                 text = item.title,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
-                maxLines = 2,
+                color = foreground,
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
 
@@ -268,7 +258,7 @@ private fun HomeHero(
                     Text(
                         text = synopsis,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.82f),
+                        color = foreground.copy(alpha = 0.88f),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -295,14 +285,53 @@ private fun HomeHero(
             }
 
             if (itemCount > 1) {
-                Text(
-                    text = (0 until itemCount).joinToString("  ") { index ->
-                        if (index == activeIndex) "●" else "•"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.76f),
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                val carouselPosition = stringResource(
+                    MR.strings.tsuzuki_home_hero_position,
+                    activeIndex + 1,
+                    itemCount,
                 )
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .semantics { stateDescription = carouselPosition },
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    repeat(itemCount) { index ->
+                        Box(
+                            modifier = Modifier
+                                .size(if (index == activeIndex) 16.dp else 6.dp, 6.dp)
+                                .background(
+                                    foreground.copy(alpha = if (index == activeIndex) 0.94f else 0.42f),
+                                    CircleShape,
+                                ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContinueReadingSection(
+    items: List<HomeContinueReadingItem>,
+    onContinueReading: (HomeContinueReadingItem) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(
+            text = stringResource(MR.strings.tsuzuki_home_continue_reading),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(items, key = HomeContinueReadingItem::canonicalTitleId) { item ->
+                ContinueReadingCard(item) { onContinueReading(item) }
             }
         }
     }
@@ -322,40 +351,50 @@ private fun ContinueReadingCard(
             subsystem = DiagnosticSubsystem.IMAGE,
         )
     }
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clickable(onClick = onClick),
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.width(304.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        tonalElevation = 1.dp,
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(14.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             MangaCover.Book(
                 data = item.coverUrl ?: item.sourceCover,
                 fallbackData = listOf(item.sourceCover, item.sourceCover?.url),
                 contentDescription = item.title,
-                modifier = Modifier.width(96.dp),
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.width(68.dp),
                 onLoadEvent = { trace.recordArtworkLoad(it) },
             )
             Column(
+                modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    text = "Continuar lendo",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
                     text = item.title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "Capítulo ${item.chapterDisplayNumber}",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = "Cap. ${item.chapterDisplayNumber}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (item.lastPageRead > 0) {
+                    Text(
+                        text = stringResource(MR.strings.tsuzuki_home_page, item.lastPageRead),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
@@ -394,6 +433,7 @@ private fun CollectionHomeSection(
     }
 }
 
-private const val HERO_ASPECT_RATIO = 0.78f
+private const val HERO_ASPECT_RATIO = 0.71f
 private const val HERO_ROTATION_INTERVAL_MILLIS = 8_000L
 private const val HERO_CROSSFADE_MILLIS = 650
+private const val MAX_HERO_ITEMS = 4

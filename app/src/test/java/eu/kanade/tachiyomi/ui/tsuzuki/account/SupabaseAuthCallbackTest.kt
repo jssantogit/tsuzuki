@@ -43,7 +43,9 @@ class SupabaseAuthCallbackTest {
         server.enqueue(sessionResponse())
 
         acceptSupabaseAuthCallback(
-            mapOf("type" to "recovery", "token_hash" to "test-hash"), service, repository,
+            mapOf("type" to "recovery", "token_hash" to "test-hash"),
+            service,
+            repository,
         ) shouldBe MainActivity.ACTION_TSUZUKI_PASSWORD_RECOVERY
 
         store.load()?.accessToken shouldBe "accepted-access"
@@ -58,7 +60,9 @@ class SupabaseAuthCallbackTest {
         server.enqueue(sessionResponse())
 
         acceptSupabaseAuthCallback(
-            mapOf("type" to "signup", "token_hash" to "test-hash"), service, repository,
+            mapOf("type" to "signup", "token_hash" to "test-hash"),
+            service,
+            repository,
         ) shouldBe Intent.ACTION_APPLICATION_PREFERENCES
     }
 
@@ -67,7 +71,9 @@ class SupabaseAuthCallbackTest {
         server.enqueue(sessionResponse())
 
         acceptSupabaseAuthCallback(
-            mapOf("type" to "email_change", "token_hash" to "test-hash"), service, repository,
+            mapOf("type" to "email_change", "token_hash" to "test-hash"),
+            service,
+            repository,
         ) shouldBe Intent.ACTION_APPLICATION_PREFERENCES
     }
 
@@ -79,10 +85,13 @@ class SupabaseAuthCallbackTest {
 
         acceptSupabaseAuthCallback(
             mapOf(
-                "type" to "recovery", "access_token" to "accepted-access",
-                "refresh_token" to "accepted-refresh", "expires_in" to "3600",
+                "type" to "recovery",
+                "access_token" to "accepted-access",
+                "refresh_token" to "accepted-refresh",
+                "expires_in" to "3600",
             ),
-            service, repository,
+            service,
+            repository,
         ) shouldBe MainActivity.ACTION_TSUZUKI_PASSWORD_RECOVERY
 
         val verify = server.takeRequest()
@@ -98,7 +107,9 @@ class SupabaseAuthCallbackTest {
 
         val result = runCatching {
             acceptSupabaseAuthCallback(
-                mapOf("type" to "recovery", "token_hash" to "bad-hash"), service, repository,
+                mapOf("type" to "recovery", "token_hash" to "bad-hash"),
+                service,
+                repository,
             )
         }
 
@@ -116,7 +127,9 @@ class SupabaseAuthCallbackTest {
 
         runCatching {
             acceptSupabaseAuthCallback(
-                mapOf("type" to "recovery", "token_hash" to "test-hash"), service, repository,
+                mapOf("type" to "recovery", "token_hash" to "test-hash"),
+                service,
+                repository,
             )
         }.getOrNull() shouldBe null
         store.load() shouldBe null

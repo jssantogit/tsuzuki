@@ -164,6 +164,8 @@ class TsuzukiAccountScreenModelTest {
         override suspend fun sendPasswordRecovery(email: String): Result<Unit> =
             Result.success(Unit)
 
+        override suspend fun updatePassword(password: String) = error("not used")
+
         override suspend fun refreshSession(): Result<AccountState> =
             Result.success(mutableState.value)
 

@@ -25,6 +25,7 @@ import tachiyomi.domain.tsuzuki.home.interactor.GetConfiguredHomeSections
 import tachiyomi.domain.tsuzuki.home.interactor.GetHomeHero
 import tachiyomi.domain.tsuzuki.home.interactor.ObserveContinueReadingArtwork
 import tachiyomi.domain.tsuzuki.home.interactor.ObserveHomeContinueReading
+import tachiyomi.domain.tsuzuki.home.interactor.OpenHomeHero
 import tachiyomi.domain.tsuzuki.home.model.HomeContinueReadingItem
 import tachiyomi.domain.tsuzuki.home.model.HomeSection
 import tachiyomi.domain.tsuzuki.home.repository.ContinueReadingVisibilityRepository
@@ -43,6 +44,8 @@ data class TsuzukiHomeScreenState(
 
 sealed interface TsuzukiHomeEvent {
     data class OpenCanonicalTitle(val canonicalTitleId: String) : TsuzukiHomeEvent
+    data class OpenReader(val canonicalChapterId: String) : TsuzukiHomeEvent
+    data object ReadingUnavailable : TsuzukiHomeEvent
 }
 
 @Inject
@@ -59,6 +62,7 @@ class TsuzukiHomeScreenModel(
     private val materializeCanonicalTitleFromCatalog: MaterializeCanonicalTitleFromCatalog,
     private val resolveCanonicalSourceManga: ResolveCanonicalSourceManga,
     private val titleArtworkRepository: TitleArtworkRepository,
+    private val openHomeHero: OpenHomeHero,
 ) : ViewModel() {
 
     private val eventChannel = Channel<TsuzukiHomeEvent>(Channel.BUFFERED)
@@ -145,6 +149,21 @@ class TsuzukiHomeScreenModel(
                 throw error
             } catch (_: Throwable) {
                 // A failed catalog materialization must not destabilize Home.
+            }
+        }
+    }
+
+    fun readCatalogItem(item: CatalogItem) {
+        viewModelScope.launch {
+            try {
+                val chapterId = openHomeHero.execute(item)
+                eventChannel.send(
+                    chapterId?.let { TsuzukiHomeEvent.OpenReader(it) } ?: TsuzukiHomeEvent.ReadingUnavailable,
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                eventChannel.send(TsuzukiHomeEvent.ReadingUnavailable)
             }
         }
     }

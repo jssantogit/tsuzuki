@@ -25,6 +25,7 @@ import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.home.interactor.GetConfiguredHomeSections
 import tachiyomi.domain.tsuzuki.home.interactor.GetHomeHero
 import tachiyomi.domain.tsuzuki.home.interactor.ObserveHomeContinueReading
+import tachiyomi.domain.tsuzuki.home.interactor.OpenHomeHero
 import tachiyomi.domain.tsuzuki.home.model.HomeContinueReadingItem
 import tachiyomi.domain.tsuzuki.home.model.HomeSection
 import tachiyomi.domain.tsuzuki.home.repository.ContinueReadingVisibilityRepository
@@ -240,6 +241,38 @@ class TsuzukiHomeScreenModelTest {
     }
 
     @Test
+    fun `hero read emits reader only through canonical opening instead of details action`() = runTest(dispatcher) {
+        val item = CatalogItem("kitsu", "123", "Title")
+        val read = mockk<OpenHomeHero> { coEvery { execute(item) } returns "resolved-chapter" }
+        val details = mockk<MaterializeCanonicalTitleFromCatalog>()
+        val model = createModel(
+            continueReading = MutableStateFlow(emptyList()),
+            sections = MutableStateFlow(emptyList()),
+            materializer = details,
+            heroReader = read,
+        )
+        model.readCatalogItem(item)
+        advanceUntilIdle()
+        model.events.first() shouldBe TsuzukiHomeEvent.OpenReader("resolved-chapter")
+        coVerify(exactly = 1) { read.execute(item) }
+        coVerify(exactly = 0) { details.execute(any()) }
+    }
+
+    @Test
+    fun `hero without readable chapter emits safe failure rather than reader or details`() = runTest(dispatcher) {
+        val item = CatalogItem("kitsu", "123", "Title")
+        val read = mockk<OpenHomeHero> { coEvery { execute(item) } returns null }
+        val model = createModel(
+            continueReading = MutableStateFlow(emptyList()),
+            sections = MutableStateFlow(emptyList()),
+            heroReader = read,
+        )
+        model.readCatalogItem(item)
+        advanceUntilIdle()
+        model.events.first() shouldBe TsuzukiHomeEvent.ReadingUnavailable
+    }
+
+    @Test
     fun `configured Home catalog item opens canonical detail identity`() = runTest(dispatcher) {
         val catalogItem = CatalogItem(
             provider = "kitsu",
@@ -279,6 +312,7 @@ class TsuzukiHomeScreenModelTest {
         libraryItems: MutableStateFlow<List<CanonicalLibraryItem>> = MutableStateFlow(emptyList()),
         legacyImporter: ImportLegacyCanonicalProgress = mockk(relaxed = true),
         homeHero: GetHomeHero = defaultHomeHero(),
+        heroReader: OpenHomeHero = mockk(relaxed = true),
     ): TsuzukiHomeScreenModel {
         val observeHome = mockk<ObserveHomeContinueReading>()
         every { observeHome.subscribe() } returns continueReading
@@ -303,6 +337,7 @@ class TsuzukiHomeScreenModelTest {
             materializeCanonicalTitleFromCatalog = materializer,
             resolveCanonicalSourceManga = sourceMangaResolver,
             titleArtworkRepository = artworkRepository,
+            openHomeHero = heroReader,
         )
     }
 

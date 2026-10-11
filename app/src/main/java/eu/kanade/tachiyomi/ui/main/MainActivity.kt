@@ -87,6 +87,7 @@ import eu.kanade.tachiyomi.ui.more.NewUpdateScreen
 import eu.kanade.tachiyomi.ui.more.OnboardingScreen
 import eu.kanade.tachiyomi.ui.setting.SettingsScreen
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreen
+import eu.kanade.tachiyomi.ui.tsuzuki.entry.TsuzukiResetPasswordScreen
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.isBenchmarkBuildType
 import eu.kanade.tachiyomi.util.system.isNavigationBarNeedsScrim
@@ -328,7 +329,11 @@ class MainActivity : BaseActivity() {
         val navigator = LocalNavigator.currentOrThrow
 
         LaunchedEffect(Unit) {
-            if (!preferences.shownOnboardingFlow.get() && navigator.lastItem !is OnboardingScreen) {
+            if (
+                !preferences.shownOnboardingFlow.get() &&
+                navigator.lastItem !is OnboardingScreen &&
+                navigator.lastItem !is TsuzukiResetPasswordScreen
+            ) {
                 navigator.push(OnboardingScreen())
             }
         }
@@ -579,6 +584,13 @@ class MainActivity : BaseActivity() {
                 navigator.push(DownloadQueueScreen)
                 null
             }
+            ACTION_TSUZUKI_PASSWORD_RECOVERY -> {
+                // Consume the callback so activity recreation cannot replay password recovery.
+                intent.action = null
+                navigator.popUntilRoot()
+                navigator.push(TsuzukiResetPasswordScreen)
+                null
+            }
             Intent.ACTION_APPLICATION_PREFERENCES -> {
                 navigator.popUntilRoot()
                 val destination = SettingsScreen.Destination.fromId(
@@ -642,6 +654,8 @@ class MainActivity : BaseActivity() {
 
         internal const val ACTION_OPEN_CANONICAL_TITLE =
             "eu.kanade.tachiyomi.internal.OPEN_CANONICAL_TITLE"
+        internal const val ACTION_TSUZUKI_PASSWORD_RECOVERY =
+            "eu.kanade.tachiyomi.internal.TSUZUKI_PASSWORD_RECOVERY"
         internal const val ACTION_FIND_OR_ADD_READING_SOURCE =
             "eu.kanade.tachiyomi.internal.FIND_OR_ADD_READING_SOURCE"
         internal const val EXTRA_CANONICAL_TITLE_ID =

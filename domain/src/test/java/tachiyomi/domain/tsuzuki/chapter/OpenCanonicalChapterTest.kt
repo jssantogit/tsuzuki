@@ -16,12 +16,16 @@ class OpenCanonicalChapterTest {
     @Test
     fun `inferred slot is materialized before its resolved identity reaches reader`() = runTest {
         val slot = CanonicalChapter(
-            inferredChapterId("title", 1), "title", "1", type = CanonicalChapterType.REGULAR, baseNumber = 1,
+            inferredChapterId("title", 1),
+            "title",
+            "1",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 1,
         )
         val materialize = mockk<MaterializeInferredChapter> {
             coEvery { execute(slot) } returns slot.copy(id = "persisted-chapter")
         }
-        OpenCanonicalChapter(materialize).execute(slot) shouldBe "persisted-chapter"
+        OpenCanonicalChapter(materialize).execute(slot).id shouldBe "persisted-chapter"
         coVerify(exactly = 1) { materialize.execute(slot) }
     }
 
@@ -29,7 +33,7 @@ class OpenCanonicalChapterTest {
     fun `real canonical chapter retains its identity without inferred materialization`() = runTest {
         val chapter = CanonicalChapter("chapter", "title", "1")
         val materialize = mockk<MaterializeInferredChapter>()
-        OpenCanonicalChapter(materialize).execute(chapter) shouldBe "chapter"
+        OpenCanonicalChapter(materialize).execute(chapter).id shouldBe "chapter"
         coVerify(exactly = 0) { materialize.execute(any()) }
     }
 }
