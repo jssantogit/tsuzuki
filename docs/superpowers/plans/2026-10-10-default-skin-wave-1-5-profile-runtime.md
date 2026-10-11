@@ -1,6 +1,6 @@
 # Default Skin Wave 1.5: Perfil runtime foundation
 
-Status: implementation added; GREEN CI pending.
+Status: complete; affected CI accepted after one focused test correction.
 Branch: `design/default-skin-consolidation`
 Starting HEAD: `f5156380fe619857988be96e9273cd7123b1428e`
 
@@ -51,9 +51,9 @@ Unsupported values:
 
 - Required gate: CI v2.1 affected mode, planner-selected jobs.
 - RED: commit `784f550e6`, [CI run 38099554623](https://github.com/jssantogit/tsuzuki/actions/runs/38099554623). Format passed; domain/data/app test compilation failed because the Profile APIs and read-chapter aggregate did not exist yet. This is compile-time RED, not executed failing assertions.
-- Implementation CI: [38099845391](https://github.com/jssantogit/tsuzuki/actions/runs/38099845391), commit `4d696985e`. Domain/Data Tsuzuki tests, Format and SQLDelight migrations passed. App production compilation passed; App test compilation revealed the mock helper must return `BaseTracker`, matching the actual inferred registry list type. Correction cycle 1 changes only that test helper type; final affected gate pending.
+- Implementation CI: [38099845391](https://github.com/jssantogit/tsuzuki/actions/runs/38099845391), commit `4d696985e`. Domain/Data Tsuzuki tests, Format and SQLDelight migrations passed. App production compilation passed; App test compilation revealed the mock helper must return `BaseTracker`, matching the actual inferred registry list type. Correction cycle 1 changes only that test helper type; final affected gate passed in [38100131203](https://github.com/jssantogit/tsuzuki/actions/runs/38100131203) at `f05edcb90`. App Tsuzuki tests, Format and CI Gate passed. Production code is unchanged from the Domain/Data/migrations-verified `4d696985e` revision.
 - Domain/API review: independent review found no actionable defects. Full diff and semantic-guard searches confirmed no email inference, checkpoint statistics, legacy Favorites semantics, generic completion timestamps, new tracker auth, second library projection, or ScreenModel traversal.
-- Provider/P2P and root navigation: must remain unchanged.
+- Provider/P2P, UI/root navigation, account/auth and persistence schema: unchanged, verified by full diff review and semantic-guard searches.
 
 ## Implemented API and test coverage
 
@@ -72,3 +72,29 @@ Unsupported values:
   Coverage includes measured zero, local/external deduplication, reactive persisted
   updates, repeated upserts, guest/logout/confirmation, unavailable capabilities,
   registered/disconnected trackers, login/logout changes and upstream cancellation.
+
+## Executed verification
+
+CI executes Gradle; no local Gradle or APK was requested. Commands and results:
+
+- `./gradlew :domain:testDebugUnitTest --tests '*tsuzuki*'`: PASS at `4d696985e`.
+- `./gradlew :data:testDebugUnitTest --tests '*tsuzuki*'`: PASS at `4d696985e`.
+- `./gradlew :app:testDebugUnitTest --tests '*tsuzuki*'`: PASS at `f05edcb90`,
+  including test compilation/execution after the mock-type correction. Existing
+  account and unified-library contracts are covered by these affected shards.
+- `./gradlew spotlessCheck`: PASS on both implementation and corrected test revisions.
+- `./gradlew verifySqlDelightMigration`: PASS at `4d696985e`.
+- Test tasks compiled their affected production modules; App production Kotlin
+  compiled successfully. Dedicated release/native/Android jobs were not selected.
+- `git diff --check`: PASS. Baseline-to-final scope review: 12 files, no Provider/P2P,
+  UI, account/auth, new migration or backend schema changes.
+
+Commits: `784f550e6` tests/plan; `4d696985e` implementation; `f05edcb90` test-type
+correction; final documentation commit records this acceptance without code changes.
+No product-semantic discrepancies required widening the wave. Repository details
+requiring adaptation were the app-layer tracker registry, its `BaseTracker` type,
+and compatibility with existing reading-repository fakes.
+
+Next: a separately authorized Perfil UI wave can consume this read model. It must
+collapse unsupported modules and must not synthesize their values. Settings remains
+the fourth root; no APK was generated and no Provider/P2P behavior was touched.
