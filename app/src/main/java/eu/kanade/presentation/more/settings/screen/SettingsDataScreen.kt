@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -25,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.core.net.toUri
@@ -328,7 +330,7 @@ object SettingsDataScreen : SearchableSettings {
                     BasePreferenceWidget(
                         subcomponent = {
                             StorageInfo(
-                                modifier = androidx.compose.ui.Modifier.padding(horizontal = PrefsHorizontalPadding),
+                                modifier = Modifier.padding(horizontal = PrefsHorizontalPadding),
                             )
                         },
                     )
