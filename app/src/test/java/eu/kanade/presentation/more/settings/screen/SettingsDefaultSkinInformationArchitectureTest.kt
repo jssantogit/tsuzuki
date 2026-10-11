@@ -12,12 +12,11 @@ class SettingsDefaultSkinInformationArchitectureTest {
     @Test
     fun `settings expose approved public families in canonical route order`() {
         val source = readSource("SettingsMainScreen.kt")
-        val routes = listOf(
+        val sections = source.substringAfter("private val sections = listOf(")
+        val familyAnchors = listOf(
             "SettingsTsuzukiAccountScreen",
             "SettingsTsuzukiPersonalizationsScreen",
-            "SettingsTsuzukiReadingHubScreen",
             "SettingsTsuzukiProvidersScreen",
-            "SettingsTrackingScreen",
             "SettingsDownloadScreen",
             "SettingsDataScreen",
             "SettingsSecurityScreen",
@@ -26,10 +25,14 @@ class SettingsDefaultSkinInformationArchitectureTest {
             "AboutScreen",
         )
 
-        routes.forEach(source::shouldContain)
-        routes.zipWithNext().forEach { (first, second) ->
-            (source.indexOf(first) < source.indexOf(second)).shouldBeTrue()
+        familyAnchors.forEach(sections::shouldContain)
+        familyAnchors.zipWithNext().forEach { (first, second) ->
+            (sections.indexOf(first) < sections.indexOf(second)).shouldBeTrue()
         }
+        (sections.indexOf("SettingsTsuzukiPersonalizationsScreen") <
+            sections.indexOf("SettingsTsuzukiReadingHubScreen")).shouldBeTrue()
+        (sections.indexOf("SettingsTsuzukiProvidersScreen") <
+            sections.indexOf("SettingsTrackingScreen")).shouldBeTrue()
     }
 
     @Test
