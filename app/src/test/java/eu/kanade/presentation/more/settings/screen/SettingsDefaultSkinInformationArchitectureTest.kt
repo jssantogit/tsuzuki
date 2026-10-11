@@ -114,6 +114,13 @@ class SettingsDefaultSkinInformationArchitectureTest {
     }
 
     @Test
+    fun `logs clear dialog keeps the approved compact action copy`() {
+        val source = readSource("SettingsTsuzukiLogsScreen.kt")
+
+        source shouldContain "Text(stringResource(MR.strings.tsuzuki_action_clear))"
+    }
+
+    @Test
     fun `promoted Settings surfaces keep public copy in resources`() {
         val hardcodedCopyByFile = mapOf(
             "SettingsMainScreen.kt" to listOf(
