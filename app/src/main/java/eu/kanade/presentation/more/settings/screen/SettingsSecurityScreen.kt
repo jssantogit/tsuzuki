@@ -62,7 +62,7 @@ object SettingsSecurityScreen : SearchableSettings {
                             scope.launch { directP2pPreference.set(true) }
                         },
                     ) {
-                        Text(stringResource(MR.strings.tsuzuki_provider_direct_p2p))
+                        Text(stringResource(MR.strings.tsuzuki_action_allow))
                     }
                 },
             )
@@ -150,7 +150,7 @@ object SettingsSecurityScreen : SearchableSettings {
                 Preference.PreferenceItem.SwitchPreference(
                     preference = directP2pPreference,
                     title = stringResource(MR.strings.tsuzuki_provider_direct_p2p),
-                    subtitle = stringResource(MR.strings.tsuzuki_provider_direct_p2p_warning),
+                    subtitle = stringResource(MR.strings.tsuzuki_direct_p2p_summary),
                     onValueChanged = { enabled ->
                         if (!enabled) {
                             true
