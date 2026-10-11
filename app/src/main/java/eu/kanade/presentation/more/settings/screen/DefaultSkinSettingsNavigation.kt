@@ -1,30 +1,14 @@
 package eu.kanade.presentation.more.settings.screen
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import eu.kanade.presentation.components.AppBar
-import mihon.icons.materialsymbols.MaterialSymbols
-import mihon.icons.materialsymbols.automirroredrounded.ArrowRight
+import eu.kanade.presentation.more.settings.components.SettingsCanvas
+import eu.kanade.presentation.more.settings.components.SettingsGroup
+import eu.kanade.presentation.more.settings.components.SettingsGroupDivider
+import eu.kanade.presentation.more.settings.components.SettingsNavigationRow
+import eu.kanade.presentation.more.settings.components.SettingsPageHeader
 import tachiyomi.presentation.core.components.ScrollbarLazyColumn
-import tachiyomi.presentation.core.components.material.Scaffold
 
 internal data class DefaultSkinSettingsNavItem(
     val title: String,
@@ -43,101 +27,31 @@ internal fun DefaultSkinSettingsNavigationScreen(
     navigateUp: () -> Unit,
     groups: List<DefaultSkinSettingsNavGroup>,
 ) {
-    Scaffold(
-        topBar = { scrollBehavior ->
-            AppBar(
-                title = "",
-                navigateUp = navigateUp,
-                scrollBehavior = scrollBehavior,
-            )
-        },
-    ) { contentPadding ->
-        ScrollbarLazyColumn(contentPadding = contentPadding) {
+    SettingsCanvas {
+        ScrollbarLazyColumn(modifier = Modifier.fillMaxSize()) {
             item(key = "default_skin_navigation_title") {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp),
+                SettingsPageHeader(
+                    title = title,
+                    navigateUp = navigateUp,
                 )
             }
 
             groups.forEachIndexed { groupIndex, group ->
-                group.title?.takeIf(String::isNotBlank)?.let { groupTitle ->
-                    item(key = "group_label_${groupIndex}_$groupTitle") {
-                        Text(
-                            text = groupTitle.uppercase(),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
-                        )
-                    }
-                }
-
                 item(key = "group_surface_$groupIndex") {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 1.dp,
-                    ) {
-                        Column {
-                            group.items.forEachIndexed { itemIndex, item ->
-                                DefaultSkinSettingsNavRow(item)
-                                if (itemIndex < group.items.lastIndex) {
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(start = 16.dp),
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-                                    )
-                                }
+                    SettingsGroup(title = group.title) {
+                        group.items.forEachIndexed { itemIndex, item ->
+                            SettingsNavigationRow(
+                                title = item.title,
+                                subtitle = item.subtitle,
+                                onClick = item.onClick,
+                            )
+                            if (itemIndex < group.items.lastIndex) {
+                                SettingsGroupDivider()
                             }
                         }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun DefaultSkinSettingsNavRow(item: DefaultSkinSettingsNavItem) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = item.onClick)
-            .sizeIn(minHeight = 64.dp)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            item.subtitle?.takeIf(String::isNotBlank)?.let { subtitle ->
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        Icon(
-            imageVector = MaterialSymbols.AutoMirroredRounded.ArrowRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .size(20.dp)
-                .clearAndSetSemantics { },
-        )
     }
 }

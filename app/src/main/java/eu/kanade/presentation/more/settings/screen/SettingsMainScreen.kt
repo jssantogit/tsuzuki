@@ -1,36 +1,27 @@
 package eu.kanade.presentation.more.settings.screen
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Icon
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.icerock.moko.resources.StringResource
-import eu.kanade.presentation.components.AppBar
-import eu.kanade.presentation.components.AppBarActions
+import eu.kanade.presentation.more.settings.components.SettingsCanvas
+import eu.kanade.presentation.more.settings.components.SettingsGroup
+import eu.kanade.presentation.more.settings.components.SettingsGroupDivider
+import eu.kanade.presentation.more.settings.components.SettingsNavigationRow
+import eu.kanade.presentation.more.settings.components.SettingsPageHeader
 import eu.kanade.presentation.more.settings.screen.about.AboutScreen
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinNavigationRow
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinPageTitle
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinSectionLabel
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
-import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
 import mihon.icons.materialsymbols.MaterialSymbols
-import mihon.icons.materialsymbols.automirroredrounded.ArrowRight
 import mihon.icons.materialsymbols.automirroredrounded.ChromeReaderMode
 import mihon.icons.materialsymbols.rounded.Code
 import mihon.icons.materialsymbols.rounded.Download
@@ -40,7 +31,6 @@ import mihon.icons.materialsymbols.rounded.Palette
 import mihon.icons.materialsymbols.rounded.Search
 import mihon.icons.materialsymbols.rounded.Security
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import cafe.adriel.voyager.core.screen.Screen as VoyagerScreen
 
@@ -64,8 +54,6 @@ object SettingsMainScreen : Screen() {
         navigateUp: (() -> Unit)?,
     ) {
         val navigator = LocalNavigator.currentOrThrow
-        val colors = defaultSkinColors()
-        val topBarState = rememberTopAppBarState()
         val selectedClass = if (twoPane) navigator.items.firstOrNull()?.let { it::class } else null
         val state = rememberLazyListState()
 
@@ -74,93 +62,50 @@ object SettingsMainScreen : Screen() {
             val selectedSection = sections.indexOfFirst { section ->
                 section.items.any { it.screen::class == selectedClass }
             }
-            if (selectedSection >= 0) state.animateScrollToItem(1 + selectedSection * 2)
+            if (selectedSection >= 0) state.animateScrollToItem(1 + selectedSection)
         }
 
-        Scaffold(
-            topBarScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(topBarState),
-            topBar = { scrollBehavior ->
-                AppBar(
-                    title = "",
-                    navigateUp = navigateUp,
-                    actions = {
-                        AppBarActions(
-                            listOf(
-                                AppBar.Action(
-                                    title = stringResource(MR.strings.action_search),
-                                    icon = MaterialSymbols.Rounded.Search,
-                                    onClick = { navigator.navigate(SettingsSearchScreen(), twoPane) },
-                                ),
-                            ),
-                        )
-                    },
-                    scrollBehavior = scrollBehavior,
-                )
-            },
-            containerColor = colors.canvas,
-            content = { contentPadding ->
-                LazyColumn(
-                    state = state,
-                    modifier = Modifier.padding(contentPadding),
-                ) {
-                    item(key = "settings_title") {
-                        DefaultSkinPageTitle(
-                            text = stringResource(MR.strings.label_settings),
-                            modifier = Modifier.padding(
-                                start = DefaultSkinSpacing.PageHorizontal,
-                                end = DefaultSkinSpacing.PageHorizontal,
-                                top = 8.dp,
-                                bottom = 32.dp,
-                            ),
-                        )
-                    }
+        SettingsCanvas {
+            LazyColumn(
+                state = state,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                item(key = "settings_header") {
+                    SettingsPageHeader(
+                        title = stringResource(MR.strings.label_settings),
+                        navigateUp = navigateUp,
+                        actions = {
+                            IconButton(onClick = { navigator.navigate(SettingsSearchScreen(), twoPane) }) {
+                                Icon(
+                                    imageVector = MaterialSymbols.Rounded.Search,
+                                    contentDescription = stringResource(MR.strings.action_search),
+                                )
+                            }
+                        },
+                    )
+                }
 
-                    sections.forEach { section ->
-                        item(key = "section_label_${section.key}") {
-                            DefaultSkinSectionLabel(
-                                text = stringResource(section.titleRes),
-                                modifier = Modifier.padding(
-                                    start = DefaultSkinSpacing.PageHorizontal,
-                                    end = DefaultSkinSpacing.PageHorizontal,
-                                    bottom = 10.dp,
-                                ),
-                            )
-                        }
-                        item(key = "section_card_${section.key}") {
-                            Column(
-                                modifier = Modifier.padding(
-                                    start = 16.dp,
-                                    end = 16.dp,
-                                    bottom = DefaultSkinSpacing.Section,
-                                ),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                section.items.forEach { item ->
-                                    val selected = selectedClass != null && item.screen::class == selectedClass
-                                    DefaultSkinNavigationRow(
-                                        title = stringResource(item.titleRes),
-                                        subtitle = item.formatSubtitle(),
-                                        icon = item.icon,
-                                        selected = selected,
-                                        onClick = { navigator.navigate(item.screen, twoPane) },
-                                        trailing = {
-                                            Icon(
-                                                imageVector = MaterialSymbols.AutoMirroredRounded.ArrowRight,
-                                                contentDescription = null,
-                                                tint = colors.secondary,
-                                                modifier = Modifier
-                                                    .size(19.dp)
-                                                    .clearAndSetSemantics { },
-                                            )
-                                        },
-                                    )
+                sections.forEach { section ->
+                    item(key = "section_${section.key}") {
+                        SettingsGroup(title = stringResource(section.titleRes)) {
+                            section.items.forEachIndexed { index, item ->
+                                val selected = selectedClass != null && item.screen::class == selectedClass
+                                SettingsNavigationRow(
+                                    title = stringResource(item.titleRes),
+                                    subtitle = item.formatSubtitle(),
+                                    icon = item.icon,
+                                    selected = selected,
+                                    onClick = { navigator.navigate(item.screen, twoPane) },
+                                )
+                                if (index < section.items.lastIndex) {
+                                    SettingsGroupDivider()
                                 }
                             }
                         }
                     }
                 }
-            },
-        )
+            }
+        }
     }
 
     private fun Navigator.navigate(screen: VoyagerScreen, twoPane: Boolean) {

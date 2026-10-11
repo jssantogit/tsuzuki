@@ -26,11 +26,12 @@ class DefaultSkinVisualContractTest {
         readSource("search/TsuzukiSearchScreen.kt") shouldContain "defaultSkinColors()"
         readSource("profile/TsuzukiProfileScreen.kt") shouldContain "defaultSkinColors()"
         readSource("library/CanonicalLibraryScreen.kt") shouldContain "defaultSkinColors()"
-        readSettingsSource("SettingsMainScreen.kt") shouldContain "defaultSkinColors()"
+        readSettingsSource("SettingsMainScreen.kt") shouldContain "SettingsCanvas("
         readSettingsSource("SettingsTsuzukiIntegrationsScreen.kt") shouldContain "defaultSkinColors()"
         providerLanding() shouldContain "defaultSkinColors()"
         providerDetail() shouldContain "defaultSkinColors()"
         trackingService() shouldContain "defaultSkinColors()"
+        readSettingsComponentSource("SettingsPresentation.kt") shouldContain "defaultSkinColors()"
     }
 
     @Test
@@ -129,6 +130,11 @@ class DefaultSkinVisualContractTest {
     private fun providerDetail(): String = readSettingsSource("SettingsTsuzukiProviderDetailDefaultSkinScreen.kt")
 
     private fun trackingService(): String = readSettingsSource("SettingsTsuzukiTrackingServiceScreen.kt")
+
+    private fun readSettingsComponentSource(fileName: String): String = readFirst(
+        Path.of("src/main/java/eu/kanade/presentation/more/settings/components/$fileName"),
+        Path.of("app/src/main/java/eu/kanade/presentation/more/settings/components/$fileName"),
+    )
 
     private fun readSource(relativePath: String): String = readFirst(
         Path.of("src/main/java/eu/kanade/presentation/tsuzuki/$relativePath"),

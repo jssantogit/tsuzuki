@@ -1,6 +1,7 @@
 package eu.kanade.presentation.more.settings.screen
 
 import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.Test
@@ -99,11 +100,84 @@ class SettingsDefaultSkinInformationArchitectureTest {
     fun `settings navigation indicators use the RTL aware material icon`() {
         val root = readSource("SettingsMainScreen.kt")
         val nested = readSource("DefaultSkinSettingsNavigation.kt")
+        val presentation = readSettingsComponentSource("SettingsPresentation.kt")
 
-        root shouldContain "MaterialSymbols.AutoMirroredRounded.ArrowRight"
-        nested shouldContain "MaterialSymbols.AutoMirroredRounded.ArrowRight"
+        presentation shouldContain "MaterialSymbols.AutoMirroredRounded.ArrowRight"
         root shouldNotContain "text = \"›\""
         nested shouldNotContain "text = \"›\""
+    }
+
+    @Test
+    fun `settings root uses shared grouped rows without card per destination`() {
+        val root = readSource("SettingsMainScreen.kt")
+
+        root shouldContain "SettingsCanvas("
+        root shouldContain "SettingsPageHeader("
+        root shouldContain "SettingsGroup("
+        root shouldContain "SettingsNavigationRow("
+        root shouldContain "sections.forEach { section ->"
+        root shouldContain "SettingsGroup(title = stringResource(section.titleRes)) {"
+        root shouldContain "section.items.forEachIndexed { index, item ->"
+        root shouldContain "if (index < section.items.lastIndex) {"
+        root shouldContain "SettingsGroupDivider()"
+        root shouldNotContain "DefaultSkinNavigationRow("
+        root shouldNotContain "AppBar("
+        root shouldNotContain "topBar ="
+    }
+
+    @Test
+    fun `nested settings navigation shares the grouped page and row composition`() {
+        val nested = readSource("DefaultSkinSettingsNavigation.kt")
+
+        nested shouldContain "SettingsCanvas("
+        nested shouldContain "SettingsPageHeader("
+        nested shouldContain "SettingsGroup("
+        nested shouldContain "SettingsNavigationRow("
+        nested shouldContain "group.items.forEachIndexed { itemIndex, item ->"
+        nested shouldContain "if (itemIndex < group.items.lastIndex) {"
+        nested shouldContain "SettingsGroupDivider()"
+        nested shouldNotContain "DefaultSkinSettingsNavRow("
+        nested shouldNotContain "MaterialTheme.colorScheme."
+        nested shouldNotContain "tonalElevation ="
+    }
+
+    @Test
+    fun `settings shells and groups use semantic Default Skin roles`() {
+        val presentation = readSettingsComponentSource("SettingsPresentation.kt")
+        val root = readSource("SettingsMainScreen.kt")
+        val nested = readSource("DefaultSkinSettingsNavigation.kt")
+        val preferenceScaffold = readPreferenceSource("PreferenceScaffold.kt")
+        val preferenceScreen = readPreferenceSource("PreferenceScreen.kt")
+        val groupPresentation = presentation
+            .substringAfter("internal fun SettingsGroup(")
+            .substringBefore("internal fun SettingsGroupDivider(")
+        val rowPresentation = presentation
+            .substringAfter("internal fun SettingsNavigationRow(")
+
+        listOf(root, nested, preferenceScaffold, preferenceScreen).forEach { source ->
+            source shouldNotContain "MaterialTheme.colorScheme."
+            source shouldNotContain "tonalElevation ="
+        }
+        preferenceScaffold shouldNotContain "Scaffold("
+        preferenceScaffold shouldNotContain "AppBar("
+        preferenceScreen shouldContain "SettingsCanvas("
+        preferenceScreen shouldContain "SettingsGroup("
+
+        presentation shouldContain ".background(color = colors.canvas)"
+        presentation shouldContain ".windowInsetsPadding(WindowInsets.systemBars)"
+        presentation shouldContain "color = colors.surface"
+        presentation shouldContain "colors.foreground"
+        presentation shouldContain "colors.secondary"
+        presentation shouldContain "colors.outline"
+        presentation shouldContain "HorizontalDivider("
+        presentation shouldContain "shape = DefaultSkinShape.Card"
+        presentation shouldContain "shadowElevation = 0.dp"
+        presentation shouldContain "tonalElevation = 0.dp"
+        groupPresentation.split("Surface(").size shouldBe 2
+        groupPresentation shouldContain "Column(content = content)"
+        rowPresentation shouldNotContain "Surface("
+        rowPresentation shouldContain ".heightIn(min = 48.dp)"
+        rowPresentation shouldContain ".clickable(role = Role.Button, onClick = onClick)"
     }
 
     @Test
@@ -198,6 +272,26 @@ class SettingsDefaultSkinInformationArchitectureTest {
         val candidates = listOf(
             Path.of("src/main/java/eu/kanade/presentation/more/settings/screen/$fileName"),
             Path.of("app/src/main/java/eu/kanade/presentation/more/settings/screen/$fileName"),
+        )
+        val source = candidates.firstOrNull(Files::exists)
+            ?: error("$fileName was not found from ${Path.of("").toAbsolutePath()}")
+        return Files.readString(source)
+    }
+
+    private fun readPreferenceSource(fileName: String): String {
+        val candidates = listOf(
+            Path.of("src/main/java/eu/kanade/presentation/more/settings/$fileName"),
+            Path.of("app/src/main/java/eu/kanade/presentation/more/settings/$fileName"),
+        )
+        val source = candidates.firstOrNull(Files::exists)
+            ?: error("$fileName was not found from ${Path.of("").toAbsolutePath()}")
+        return Files.readString(source)
+    }
+
+    private fun readSettingsComponentSource(fileName: String): String {
+        val candidates = listOf(
+            Path.of("src/main/java/eu/kanade/presentation/more/settings/components/$fileName"),
+            Path.of("app/src/main/java/eu/kanade/presentation/more/settings/components/$fileName"),
         )
         val source = candidates.firstOrNull(Files::exists)
             ?: error("$fileName was not found from ${Path.of("").toAbsolutePath()}")
