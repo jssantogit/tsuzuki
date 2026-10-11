@@ -243,7 +243,11 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
                     rollbackProviderIds = rollbackProviderIds,
                     operationKeys = operations,
                     onOpen = { registration ->
-                        navigator.push(SettingsTsuzukiProviderDetailScreen(registration.descriptor.id.value))
+                        navigator.push(
+                            SettingsTsuzukiProviderDetailDefaultSkinScreen(
+                                registration.descriptor.id.value,
+                            ),
+                        )
                     },
                     onEnabledChange = { registration, enabled ->
                         scope.launch {
