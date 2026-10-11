@@ -67,21 +67,18 @@ class SettingsSearchScreen : Screen() {
         val focusRequester = remember { FocusRequester() }
         val listState = rememberLazyListState()
 
-        // Hide keyboard on change screen
         DisposableEffect(Unit) {
             onDispose {
                 softKeyboardController?.hide()
             }
         }
 
-        // Hide keyboard on outside text field is touched
         LaunchedEffect(listState.isScrollInProgress) {
             if (listState.isScrollInProgress) {
                 focusManager.clearFocus()
             }
         }
 
-        // Request text field focus on launch
         LaunchedEffect(focusRequester) {
             focusRequester.requestFocus()
         }
@@ -169,9 +166,7 @@ private fun SearchResult(
         value = index.asSequence()
             .flatMap { settingsData ->
                 settingsData.contents.asSequence()
-                    // Only search from enabled prefs and one with valid title
                     .filter { it.enabled && it.title.isNotBlank() }
-                    // Flatten items contained inside *enabled* PreferenceGroup
                     .flatMap { p ->
                         when (p) {
                             is Preference.PreferenceGroup -> {
@@ -186,15 +181,12 @@ private fun SearchResult(
                             is Preference.PreferenceItem<*, *> -> sequenceOf(null to p)
                         }
                     }
-                    // Don't show info preference
                     .filterNot { it.second is Preference.PreferenceItem.InfoPreference }
-                    // Filter by search query
                     .filter { (_, p) ->
                         val inTitle = p.title.contains(searchKey, true)
                         val inSummary = p.subtitle?.contains(searchKey, true) ?: false
                         inTitle || inSummary
                     }
-                    // Map result data
                     .map { (categoryTitle, p) ->
                         SearchResultItem(
                             route = settingsData.route,
@@ -208,7 +200,7 @@ private fun SearchResult(
                         )
                     }
             }
-            .take(10) // Just take top 10 result for quicker result
+            .take(10)
             .toList()
     }
 
@@ -276,10 +268,8 @@ private fun getLocalizedBreadcrumb(path: String, node: String?, isLtr: Boolean):
         path
     } else {
         if (isLtr) {
-            // This locale reads left to right.
             "$path > $node"
         } else {
-            // This locale reads right to left.
             "$node < $path"
         }
     }
@@ -291,7 +281,6 @@ private val settingScreens = listOf(
     SettingsReaderScreen,
     SettingsDownloadScreen,
     SettingsTrackingScreen,
-    SettingsBrowseScreen,
     SettingsDataScreen,
     SettingsSecurityScreen,
     SettingsTsuzukiLogsScreen,
