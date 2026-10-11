@@ -400,7 +400,14 @@ private fun ApplicationCredentialsConfiguration(
                     editedClientSecret = savedClientSecret
                 },
                 modifier = Modifier.alpha(
-                    if (editedClientId.trim() != savedClientId || editedClientSecret.trim() != savedClientSecret) 1f else 0.45f,
+                    if (
+                        editedClientId.trim() != savedClientId ||
+                        editedClientSecret.trim() != savedClientSecret
+                    ) {
+                        1f
+                    } else {
+                        0.45f
+                    },
                 ),
             )
         }
