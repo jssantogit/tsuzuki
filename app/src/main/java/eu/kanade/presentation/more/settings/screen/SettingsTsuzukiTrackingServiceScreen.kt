@@ -135,8 +135,8 @@ class SettingsTsuzukiTrackingServiceScreen(
                 onConfigureSource = { source ->
                     navigator.push(SourcePreferencesScreen(source.id))
                 },
-                onOpenExtensions = {
-                    navigator.push(SettingsTsuzukiAddonsScreen)
+                onOpenProviders = {
+                    navigator.push(SettingsTsuzukiProvidersScreen())
                 },
                 modifier = Modifier.padding(contentPadding),
             )
@@ -149,7 +149,7 @@ private fun TrackingServiceContent(
     tracker: Tracker,
     acceptedSources: List<Source>,
     onConfigureSource: (Source) -> Unit,
-    onOpenExtensions: () -> Unit,
+    onOpenProviders: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -295,8 +295,8 @@ private fun TrackingServiceContent(
                             )
                         },
                         trailingContent = {
-                            TextButton(onClick = onOpenExtensions) {
-                                Text(stringResource(MR.strings.label_extensions))
+                            TextButton(onClick = onOpenProviders) {
+                                Text(stringResource(MR.strings.tsuzuki_providers_title))
                             }
                         },
                     )
