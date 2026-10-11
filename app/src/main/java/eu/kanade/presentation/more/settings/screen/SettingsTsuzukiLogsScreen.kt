@@ -51,16 +51,11 @@ object SettingsTsuzukiLogsScreen : SearchableSettings {
         if (showClearConfirmation) {
             AlertDialog(
                 onDismissRequest = { showClearConfirmation = false },
-                title = { Text("Limpar logs?") },
-                text = {
-                    Text(
-                        "Isso remove os diagnósticos do Tsuzuki e o último crash salvo. " +
-                            "O logcat do sistema não é apagado.",
-                    )
-                },
+                title = { Text(stringResource(MR.strings.tsuzuki_logs_clear_confirm_title)) },
+                text = { Text(stringResource(MR.strings.tsuzuki_logs_clear_confirm_message)) },
                 dismissButton = {
                     TextButton(onClick = { showClearConfirmation = false }) {
-                        Text("Cancelar")
+                        Text(stringResource(MR.strings.action_cancel))
                     }
                 },
                 confirmButton = {
@@ -80,7 +75,7 @@ object SettingsTsuzukiLogsScreen : SearchableSettings {
                             }
                         },
                     ) {
-                        Text("Limpar")
+                        Text(stringResource(MR.strings.tsuzuki_logs_clear))
                     }
                 },
             )
@@ -122,8 +117,7 @@ object SettingsTsuzukiLogsScreen : SearchableSettings {
                 onClick = { showClearConfirmation = true },
             ),
             Preference.PreferenceItem.InfoPreference(
-                title = "O arquivo compartilhado pode conter dados de diagnóstico do dispositivo e do app. " +
-                    "Revise o destino antes de enviar.",
+                title = stringResource(MR.strings.tsuzuki_logs_share_privacy),
             ),
             Preference.PreferenceItem.TextPreference(
                 title = stringResource(MR.strings.tsuzuki_logs_share),
