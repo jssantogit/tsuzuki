@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tsuzuki_settings_section_content">Conteúdo</string>
+    <string name="tsuzuki_settings_section_privacy_security">Privacidade e segurança</string>
+    <string name="tsuzuki_settings_section_diagnostics">Diagnóstico</string>
+
+    <string name="tsuzuki_visual_preset_title">Preset visual</string>
+    <string name="tsuzuki_visual_preset_current">Preset atual</string>
+    <string name="tsuzuki_visual_preset_summary">A prévia acompanha o tema atual sem criar outro preset.</string>
+    <string name="tsuzuki_collections_settings_title">Collections</string>
+    <string name="tsuzuki_collections_settings_summary">Organize coleções, pastas e listas exibidas pelo Tsuzuki</string>
+
+    <string name="tsuzuki_download_network_files">Rede e arquivos</string>
+    <string name="tsuzuki_download_performance">Performance</string>
+
+    <string name="tsuzuki_storage_usage_summary">Espaço disponível, cache e arquivos temporários</string>
+    <string name="tsuzuki_backup_settings_summary">Criar, restaurar e agendar backups</string>
+    <string name="tsuzuki_export_library_title">Exportar biblioteca</string>
+    <string name="tsuzuki_export_library_summary">CSV com título, autor e artista</string>
+    <string name="tsuzuki_backup_create_summary">Escolha os componentes antes de salvar o arquivo</string>
+    <string name="tsuzuki_backup_restore_summary">Valida o backup antes de escolher o que restaurar</string>
+    <string name="tsuzuki_storage_temporary_info">Arquivos temporários podem ser criados durante aquisições e processamento. Eles não representam consentimento P2P nem uma rota de Provider.</string>
+    <string name="tsuzuki_export_csv_title">Exportar CSV</string>
+    <string name="tsuzuki_export_csv_summary">Título é obrigatório para incluir autor ou artista</string>
+
+    <string name="tsuzuki_network_privacy_title">Privacidade de rede</string>
+    <string name="tsuzuki_direct_p2p_confirm_title">Permitir P2P direto?</string>
+    <string name="tsuzuki_direct_p2p_confirm_message">Conexões P2P diretas podem expor seu endereço IP para outros participantes da rede. Permita apenas se você entende e aceita essa exposição.</string>
+    <string name="tsuzuki_telemetry_title">Dados e telemetria</string>
+
+    <string name="tsuzuki_logs_clear_confirm_title">Limpar logs?</string>
+    <string name="tsuzuki_logs_clear_confirm_message">Isso remove os diagnósticos do Tsuzuki e o último crash salvo. O logcat do sistema não é apagado.</string>
+    <string name="tsuzuki_logs_share_privacy">O arquivo compartilhado pode conter dados de diagnóstico do dispositivo e do app. Revise o destino antes de enviar.</string>
+</resources>
