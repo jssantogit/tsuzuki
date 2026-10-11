@@ -75,7 +75,7 @@ object SettingsTsuzukiLogsScreen : SearchableSettings {
                             }
                         },
                     ) {
-                        Text(stringResource(MR.strings.tsuzuki_logs_clear))
+                        Text(stringResource(MR.strings.tsuzuki_action_clear))
                     }
                 },
             )
