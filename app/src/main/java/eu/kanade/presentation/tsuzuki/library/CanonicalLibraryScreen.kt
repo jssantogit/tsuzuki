@@ -17,30 +17,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,6 +54,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.manga.components.MangaCover
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinChoiceChip
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPageTitle
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSectionLabel
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextField
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.tsuzuki.recordArtworkLoad
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.tsuzuki.library.CanonicalLibraryCardModel
@@ -78,7 +77,6 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticWorkflow
 import tachiyomi.domain.tsuzuki.library.model.LOCAL_LIBRARY_ORIGIN
 import tachiyomi.domain.tsuzuki.model.LibraryStatus
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.LoadingScreen
 
@@ -104,7 +102,7 @@ fun CanonicalLibraryScreen(
     modifier: Modifier = Modifier,
 ) {
     var filterSheetVisible by remember { mutableStateOf(false) }
-
+    val colors = defaultSkinColors()
     val successState = state as? CanonicalLibraryScreenState.Success
     val advancedFilterCount = successState?.filters?.let { filters ->
         (if (filters.origin != null) 1 else 0) +
@@ -113,91 +111,55 @@ fun CanonicalLibraryScreen(
             (if (filters.categoryId != null) 1 else 0)
     } ?: 0
 
-    Scaffold(
-        modifier = modifier,
-        topBar = {
-            CanonicalLibraryHeader(
-                title = title,
-                query = successState?.searchQuery,
-                navigateUp = navigateUp,
-                onQueryChange = onSearchQueryChange,
-                advancedFilterCount = advancedFilterCount,
-                onShowFilters = { filterSheetVisible = true },
-            )
-        },
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-        ) {
-            when (state) {
-                CanonicalLibraryScreenState.Loading -> LoadingScreen()
-                is CanonicalLibraryScreenState.Success -> {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        CanonicalLibraryStatusFilters(
-                            selectedStatus = state.filters.status,
-                            onStatusFilterChange = onStatusFilterChange,
-                        )
-                        CanonicalLibraryActiveFilters(
-                            state = state,
-                            categories = categories,
-                            onClearOrigin = { onOriginFilterChange(null) },
-                            onClearProviderList = { onProviderListFilterChange(null) },
-                            onToggleFormat = onToggleFormatFilter,
-                            onClearCategory = { onCategoryFilterChange(null) },
-                            onShowAll = { filterSheetVisible = true },
-                        )
-                        if (state.items.isEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f),
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxSize().padding(28.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center,
-                                ) {
-                                    Text(
-                                        text = stringResource(
-                                            if (state.totalItemCount == 0) {
-                                                MR.strings.tsuzuki_library_empty
-                                            } else {
-                                                MR.strings.tsuzuki_library_no_results
-                                            },
-                                        ),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = TextAlign.Center,
-                                    )
-                                    if (state.totalItemCount > 0) {
-                                        if (!state.searchQuery.isNullOrEmpty()) {
-                                            TextButton(onClick = { onSearchQueryChange("") }) {
-                                                Text(stringResource(MR.strings.tsuzuki_library_clear_search))
-                                            }
-                                        }
-                                        if (advancedFilterCount > 0) {
-                                            TextButton(onClick = onClearAdvancedFilters) {
-                                                Text(stringResource(MR.strings.tsuzuki_library_clear_filters))
-                                            }
-                                        }
-                                        if (state.filters.status != null) {
-                                            TextButton(onClick = { onStatusFilterChange(null) }) {
-                                                Text(stringResource(MR.strings.all))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            CanonicalLibraryList(
-                                items = state.items,
-                                onOpenItem = onOpenItem,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                    }
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colors.canvas),
+    ) {
+        CanonicalLibraryHeader(
+            title = title,
+            query = successState?.searchQuery,
+            navigateUp = navigateUp,
+            onQueryChange = onSearchQueryChange,
+            advancedFilterCount = advancedFilterCount,
+            onShowFilters = { filterSheetVisible = true },
+        )
+
+        when (state) {
+            CanonicalLibraryScreenState.Loading -> Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) { LoadingScreen() }
+
+            is CanonicalLibraryScreenState.Success -> {
+                CanonicalLibraryStatusFilters(
+                    selectedStatus = state.filters.status,
+                    onStatusFilterChange = onStatusFilterChange,
+                )
+                CanonicalLibraryActiveFilters(
+                    state = state,
+                    categories = categories,
+                    onClearOrigin = { onOriginFilterChange(null) },
+                    onClearProviderList = { onProviderListFilterChange(null) },
+                    onToggleFormat = onToggleFormatFilter,
+                    onClearCategory = { onCategoryFilterChange(null) },
+                    onShowAll = { filterSheetVisible = true },
+                )
+                if (state.items.isEmpty()) {
+                    LibraryEmptyState(
+                        state = state,
+                        advancedFilterCount = advancedFilterCount,
+                        onSearchQueryChange = onSearchQueryChange,
+                        onClearAdvancedFilters = onClearAdvancedFilters,
+                        onStatusFilterChange = onStatusFilterChange,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    CanonicalLibraryList(
+                        items = state.items,
+                        onOpenItem = onOpenItem,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
         }
@@ -226,65 +188,72 @@ private fun CanonicalLibraryHeader(
     advancedFilterCount: Int,
     onShowFilters: () -> Unit,
 ) {
+    val colors = defaultSkinColors()
     BackHandler(enabled = query != null) { onQueryChange(null) }
     Row(
-        modifier = Modifier.statusBarsPadding().fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 16.dp),
+        modifier = Modifier
+            .statusBarsPadding()
+            .fillMaxWidth()
+            .padding(
+                start = DefaultSkinSpacing.PageHorizontal,
+                end = DefaultSkinSpacing.PageHorizontal,
+                top = 14.dp,
+                bottom = 12.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (query != null || navigateUp != null) {
             IconButton(onClick = { if (query != null) onQueryChange(null) else navigateUp?.invoke() }) {
-                Icon(MaterialSymbols.AutoMirroredRounded.ArrowBack, stringResource(MR.strings.action_close))
+                Icon(
+                    MaterialSymbols.AutoMirroredRounded.ArrowBack,
+                    stringResource(MR.strings.action_close),
+                    tint = colors.foreground,
+                )
             }
         }
         if (query == null) {
-            Text(
-                title,
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
+            DefaultSkinPageTitle(title, modifier = Modifier.weight(1f))
             IconButton(onClick = { onQueryChange("") }) {
-                Icon(painterResource(R.drawable.ic_search_24dp), stringResource(MR.strings.tsuzuki_library_search))
+                Icon(
+                    painterResource(R.drawable.ic_search_24dp),
+                    stringResource(MR.strings.tsuzuki_library_search),
+                    tint = colors.foreground,
+                )
             }
         } else {
             val focusRequester = remember { FocusRequester() }
             LaunchedEffect(Unit) { focusRequester.requestFocus() }
-            OutlinedTextField(
+            DefaultSkinTextField(
                 value = query,
-                onValueChange = onQueryChange,
+                onValueChange = { onQueryChange(it) },
+                label = stringResource(MR.strings.tsuzuki_library_search),
                 modifier = Modifier.weight(1f).focusRequester(focusRequester),
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                placeholder = { Text(stringResource(MR.strings.tsuzuki_library_search)) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                trailingIcon = if (query.isNotEmpty()) {
-                    {
-                        IconButton(onClick = { onQueryChange("") }) {
-                            Icon(
-                                painterResource(R.drawable.ic_close_24dp),
-                                stringResource(MR.strings.tsuzuki_library_clear_search),
-                            )
-                        }
-                    }
-                } else {
-                    null
-                },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
             )
+            if (query.isNotEmpty()) {
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_library_clear_search),
+                    onClick = { onQueryChange("") },
+                )
+            }
         }
         IconButton(onClick = onShowFilters) {
             BadgedBox(
                 badge = {
                     if (advancedFilterCount > 0) {
                         Badge(
-                            containerColor = MaterialTheme.colorScheme.onBackground,
-                            contentColor = MaterialTheme.colorScheme.background,
+                            containerColor = colors.accent,
+                            contentColor = colors.onAccent,
                         ) { Text(advancedFilterCount.toString()) }
                     }
                 },
             ) {
-                Icon(MaterialSymbols.Rounded.FilterList, stringResource(MR.strings.tsuzuki_library_filters))
+                Icon(
+                    MaterialSymbols.Rounded.FilterList,
+                    stringResource(MR.strings.tsuzuki_library_filters),
+                    tint = colors.foreground,
+                )
             }
         }
     }
@@ -295,18 +264,27 @@ private fun CanonicalLibraryStatusFilters(
     selectedStatus: LibraryStatus?,
     onStatusFilterChange: (LibraryStatus?) -> Unit,
 ) {
+    val colors = defaultSkinColors()
     Column {
         Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 32.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(start = DefaultSkinSpacing.PageHorizontal, end = 32.dp),
             horizontalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             val statuses = listOf<LibraryStatus?>(null) + LibraryStatus.entries
             statuses.forEach { status ->
                 val selected = selectedStatus == status
                 Column(
-                    modifier = Modifier.width(IntrinsicSize.Min).heightIn(min = 48.dp)
-                        .selectable(selected = selected, role = Role.Tab, onClick = { onStatusFilterChange(status) }),
+                    modifier = Modifier
+                        .width(IntrinsicSize.Min)
+                        .heightIn(min = 48.dp)
+                        .selectable(
+                            selected = selected,
+                            role = Role.Tab,
+                            onClick = { onStatusFilterChange(status) },
+                        ),
                     verticalArrangement = Arrangement.Bottom,
                 ) {
                     Text(
@@ -314,33 +292,23 @@ private fun CanonicalLibraryStatusFilters(
                         modifier = Modifier.padding(top = 12.dp, bottom = 10.dp),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.onBackground
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        color = if (selected) colors.foreground else colors.secondary,
                         maxLines = 1,
                     )
                     Box(
-                        Modifier.fillMaxWidth().height(2.dp).background(
-                            if (selected) {
-                                MaterialTheme.colorScheme.onBackground
-                            } else {
-                                androidx.compose.ui.graphics.Color.Transparent
-                            },
-                        ),
+                        Modifier
+                            .fillMaxWidth()
+                            .height(2.dp)
+                            .background(if (selected) colors.foreground else androidx.compose.ui.graphics.Color.Transparent),
                     )
                 }
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        HorizontalDivider(color = colors.outline.copy(alpha = 0.65f))
     }
 }
 
-private data class ActiveFilter(
-    val label: String,
-    val clear: () -> Unit,
-)
+private data class ActiveFilter(val label: String, val clear: () -> Unit)
 
 @Composable
 private fun CanonicalLibraryActiveFilters(
@@ -354,28 +322,21 @@ private fun CanonicalLibraryActiveFilters(
 ) {
     val filters = state.filters
     val active = buildList {
-        filters.origin?.let { origin ->
-            add(ActiveFilter(origin.libraryOriginLabel(), onClearOrigin))
-        }
+        filters.origin?.let { add(ActiveFilter(it.libraryOriginLabel(), onClearOrigin)) }
         filters.listKey?.let { listKey ->
-            val title = state.availableProviderLists
-                .firstOrNull { it.key == listKey }
-                ?.title
-                ?: listKey
-            add(ActiveFilter(title, onClearProviderList))
+            add(
+                ActiveFilter(
+                    state.availableProviderLists.firstOrNull { it.key == listKey }?.title ?: listKey,
+                    onClearProviderList,
+                ),
+            )
         }
-        filters.formats
-            .sortedBy(CatalogItemFormat::ordinal)
-            .forEach { format ->
-                add(ActiveFilter(format.libraryFormatLabel()) { onToggleFormat(format) })
-            }
+        filters.formats.sortedBy(CatalogItemFormat::ordinal).forEach { format ->
+            add(ActiveFilter(format.libraryFormatLabel()) { onToggleFormat(format) })
+        }
         filters.categoryId?.let { categoryId ->
-            val label = categories
-                .firstOrNull { it.id == categoryId }
-                ?.visualName
-                ?: if (categoryId ==
-                    Category.UNCATEGORIZED_ID
-                ) {
+            val label = categories.firstOrNull { it.id == categoryId }?.visualName
+                ?: if (categoryId == Category.UNCATEGORIZED_ID) {
                     stringResource(MR.strings.tsuzuki_library_uncategorized)
                 } else {
                     stringResource(MR.strings.tsuzuki_library_category)
@@ -383,7 +344,6 @@ private fun CanonicalLibraryActiveFilters(
             add(ActiveFilter(label, onClearCategory))
         }
     }
-
     if (active.isEmpty()) return
 
     val visible = active.take(2)
@@ -391,29 +351,19 @@ private fun CanonicalLibraryActiveFilters(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 2.dp),
+            .padding(horizontal = DefaultSkinSpacing.PageHorizontal, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         visible.forEach { filter ->
-            SuggestionChip(
-                modifier = Modifier.weight(1f, fill = false),
+            DefaultSkinChoiceChip(
+                text = filter.label,
+                selected = false,
                 onClick = filter.clear,
-                label = { Text(filter.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_close_24dp),
-                        contentDescription = stringResource(MR.strings.action_remove),
-                        modifier = Modifier.size(16.dp),
-                    )
-                },
             )
         }
         if (hiddenCount > 0) {
-            SuggestionChip(
-                onClick = onShowAll,
-                label = { Text("+$hiddenCount") },
-            )
+            DefaultSkinChoiceChip(text = "+$hiddenCount", selected = false, onClick = onShowAll)
         }
     }
 }
@@ -430,99 +380,97 @@ private fun CanonicalLibraryFilterSheet(
     onCategoryFilterChange: (Long?) -> Unit,
     onClearAdvancedFilters: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    val colors = defaultSkinColors()
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = colors.canvas,
+        contentColor = colors.foreground,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = DefaultSkinSpacing.PageHorizontal)
                 .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(DefaultSkinSpacing.Section),
         ) {
-            Text(stringResource(MR.strings.tsuzuki_library_filters), style = MaterialTheme.typography.titleLarge)
+            DefaultSkinPageTitle(stringResource(MR.strings.tsuzuki_library_filters))
 
             FilterSection(stringResource(MR.strings.tsuzuki_library_origin)) {
-                FilterChip(
+                DefaultSkinChoiceChip(
+                    text = stringResource(MR.strings.all),
                     selected = state.filters.origin == null,
                     onClick = { onOriginFilterChange(null) },
-                    label = { Text(stringResource(MR.strings.all)) },
                 )
-                state.availableOrigins
-                    .sortedBy(String::libraryOriginLabel)
-                    .forEach { origin ->
-                        FilterChip(
-                            selected = state.filters.origin == origin,
-                            onClick = { onOriginFilterChange(origin) },
-                            label = { Text(origin.libraryOriginLabel()) },
-                        )
-                    }
+                state.availableOrigins.sortedBy(String::libraryOriginLabel).forEach { origin ->
+                    DefaultSkinChoiceChip(
+                        text = origin.libraryOriginLabel(),
+                        selected = state.filters.origin == origin,
+                        onClick = { onOriginFilterChange(origin) },
+                    )
+                }
             }
 
             if (state.availableProviderLists.isNotEmpty()) {
                 FilterSection(stringResource(MR.strings.tsuzuki_library_list)) {
-                    FilterChip(
+                    DefaultSkinChoiceChip(
+                        text = stringResource(MR.strings.all),
                         selected = state.filters.listKey == null,
                         onClick = { onProviderListFilterChange(null) },
-                        label = { Text(stringResource(MR.strings.all)) },
                     )
                     state.availableProviderLists.forEach { list ->
-                        FilterChip(
+                        DefaultSkinChoiceChip(
+                            text = list.title,
                             selected = state.filters.listKey == list.key,
                             onClick = { onProviderListFilterChange(list.key) },
-                            label = { Text(list.title) },
                         )
                     }
                 }
             }
 
             FilterSection(stringResource(MR.strings.tsuzuki_library_format)) {
-                state.availableFormats
-                    .sortedBy(CatalogItemFormat::ordinal)
-                    .forEach { format ->
-                        FilterChip(
-                            selected = format in state.filters.formats,
-                            onClick = { onToggleFormatFilter(format) },
-                            label = { Text(format.libraryFormatLabel()) },
-                        )
-                    }
+                state.availableFormats.sortedBy(CatalogItemFormat::ordinal).forEach { format ->
+                    DefaultSkinChoiceChip(
+                        text = format.libraryFormatLabel(),
+                        selected = format in state.filters.formats,
+                        onClick = { onToggleFormatFilter(format) },
+                    )
+                }
             }
 
             FilterSection(stringResource(MR.strings.tsuzuki_library_category)) {
-                FilterChip(
+                DefaultSkinChoiceChip(
+                    text = stringResource(MR.strings.all),
                     selected = state.filters.categoryId == null,
                     onClick = { onCategoryFilterChange(null) },
-                    label = { Text(stringResource(MR.strings.all)) },
                 )
-                FilterChip(
+                DefaultSkinChoiceChip(
+                    text = stringResource(MR.strings.tsuzuki_library_uncategorized),
                     selected = state.filters.categoryId == Category.UNCATEGORIZED_ID,
                     onClick = { onCategoryFilterChange(Category.UNCATEGORIZED_ID) },
-                    label = { Text(stringResource(MR.strings.tsuzuki_library_uncategorized)) },
                 )
-                categories
-                    .filter { it.id != Category.UNCATEGORIZED_ID }
-                    .forEach { category ->
-                        FilterChip(
-                            selected = state.filters.categoryId == category.id,
-                            onClick = { onCategoryFilterChange(category.id) },
-                            label = { Text(category.visualName) },
-                        )
-                    }
+                categories.filter { it.id != Category.UNCATEGORIZED_ID }.forEach { category ->
+                    DefaultSkinChoiceChip(
+                        text = category.visualName,
+                        selected = state.filters.categoryId == category.id,
+                        onClick = { onCategoryFilterChange(category.id) },
+                    )
+                }
             }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(
-                    onClick = {
-                        onClearAdvancedFilters()
-                    },
-                ) {
-                    Text(stringResource(MR.strings.tsuzuki_library_clear_filters))
-                }
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(MR.strings.tsuzuki_library_done))
-                }
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_library_clear_filters),
+                    onClick = onClearAdvancedFilters,
+                )
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_library_done),
+                    onClick = onDismiss,
+                )
             }
         }
     }
@@ -530,22 +478,60 @@ private fun CanonicalLibraryFilterSheet(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FilterSection(
-    title: String,
-    content: @Composable () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            title,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+private fun FilterSection(title: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        DefaultSkinSectionLabel(title)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            content()
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) { content() }
+    }
+}
+
+@Composable
+private fun LibraryEmptyState(
+    state: CanonicalLibraryScreenState.Success,
+    advancedFilterCount: Int,
+    onSearchQueryChange: (String?) -> Unit,
+    onClearAdvancedFilters: () -> Unit,
+    onStatusFilterChange: (LibraryStatus?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = defaultSkinColors()
+    Column(
+        modifier = modifier.fillMaxWidth().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = stringResource(
+                if (state.totalItemCount == 0) MR.strings.tsuzuki_library_empty
+                else MR.strings.tsuzuki_library_no_results,
+            ),
+            color = colors.foreground,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+        )
+        if (state.totalItemCount > 0) {
+            if (!state.searchQuery.isNullOrEmpty()) {
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_library_clear_search),
+                    onClick = { onSearchQueryChange("") },
+                )
+            }
+            if (advancedFilterCount > 0) {
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_library_clear_filters),
+                    onClick = onClearAdvancedFilters,
+                )
+            }
+            if (state.filters.status != null) {
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.all),
+                    onClick = { onStatusFilterChange(null) },
+                )
+            }
         }
     }
 }
@@ -564,10 +550,7 @@ private fun CanonicalLibraryList(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        items(
-            items = items,
-            key = CanonicalLibraryCardModel::canonicalTitleId,
-        ) { item ->
+        items(items = items, key = CanonicalLibraryCardModel::canonicalTitleId) { item ->
             val trace = remember(item.canonicalTitleId, recorder.sessionId) {
                 DiagnosticTrace.start(
                     recorder = recorder,
