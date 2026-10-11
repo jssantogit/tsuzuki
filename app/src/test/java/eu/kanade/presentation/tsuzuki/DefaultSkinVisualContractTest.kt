@@ -26,7 +26,7 @@ class DefaultSkinVisualContractTest {
         readSource("search/TsuzukiSearchScreen.kt") shouldContain "defaultSkinColors()"
         readSource("profile/TsuzukiProfileScreen.kt") shouldContain "defaultSkinColors()"
         readSource("library/CanonicalLibraryScreen.kt") shouldContain "defaultSkinColors()"
-        readSettingsSource("SettingsMainScreen.kt") shouldContain "SettingsCanvas("
+        readSettingsSource("SettingsMainScreen.kt") shouldContain "SettingsCanvas {"
         readSettingsSource("SettingsTsuzukiIntegrationsScreen.kt") shouldContain "defaultSkinColors()"
         providerLanding() shouldContain "defaultSkinColors()"
         providerDetail() shouldContain "defaultSkinColors()"

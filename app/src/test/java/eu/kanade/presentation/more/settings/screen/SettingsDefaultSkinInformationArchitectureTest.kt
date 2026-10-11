@@ -111,7 +111,7 @@ class SettingsDefaultSkinInformationArchitectureTest {
     fun `settings root uses shared grouped rows without card per destination`() {
         val root = readSource("SettingsMainScreen.kt")
 
-        root shouldContain "SettingsCanvas("
+        root shouldContain "SettingsCanvas {"
         root shouldContain "SettingsPageHeader("
         root shouldContain "SettingsGroup("
         root shouldContain "SettingsNavigationRow("
@@ -129,7 +129,7 @@ class SettingsDefaultSkinInformationArchitectureTest {
     fun `nested settings navigation shares the grouped page and row composition`() {
         val nested = readSource("DefaultSkinSettingsNavigation.kt")
 
-        nested shouldContain "SettingsCanvas("
+        nested shouldContain "SettingsCanvas {"
         nested shouldContain "SettingsPageHeader("
         nested shouldContain "SettingsGroup("
         nested shouldContain "SettingsNavigationRow("
@@ -148,6 +148,7 @@ class SettingsDefaultSkinInformationArchitectureTest {
         val nested = readSource("DefaultSkinSettingsNavigation.kt")
         val preferenceScaffold = readPreferenceSource("PreferenceScaffold.kt")
         val preferenceScreen = readPreferenceSource("PreferenceScreen.kt")
+        val preferenceScaffoldImplementation = preferenceScaffold.substringAfter("fun PreferenceScaffold(")
         val groupPresentation = presentation
             .substringAfter("internal fun SettingsGroup(")
             .substringBefore("internal fun SettingsGroupDivider(")
@@ -158,7 +159,7 @@ class SettingsDefaultSkinInformationArchitectureTest {
             source shouldNotContain "MaterialTheme.colorScheme."
             source shouldNotContain "tonalElevation ="
         }
-        preferenceScaffold shouldNotContain "Scaffold("
+        preferenceScaffoldImplementation shouldNotContain "Scaffold("
         preferenceScaffold shouldNotContain "AppBar("
         preferenceScreen shouldContain "SettingsCanvas("
         preferenceScreen shouldContain "SettingsGroup("
