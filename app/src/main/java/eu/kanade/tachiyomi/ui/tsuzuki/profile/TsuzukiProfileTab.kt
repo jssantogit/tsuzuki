@@ -10,12 +10,12 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import dev.zacsweers.metrox.viewmodel.metroViewModel
-import eu.kanade.presentation.more.settings.screen.SettingsMainScreen
 import eu.kanade.presentation.more.settings.screen.SettingsTrackingScreen
 import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiAccountScreen
 import eu.kanade.presentation.tsuzuki.profile.TsuzukiProfileScreen
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import eu.kanade.tachiyomi.ui.setting.SettingsScreen
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.rounded.Person
 import tachiyomi.i18n.MR
@@ -41,7 +41,7 @@ data object TsuzukiProfileTab : Tab {
         TsuzukiProfileScreen(
             snapshot = state.snapshot,
             continueReading = state.continueReading,
-            onSettings = { navigator.push(SettingsMainScreen) },
+            onSettings = { navigator.push(SettingsScreen()) },
             onAccount = { navigator.push(SettingsTsuzukiAccountScreen) },
             onTracking = { navigator.push(SettingsTrackingScreen) },
             onContinueReading = { item ->
