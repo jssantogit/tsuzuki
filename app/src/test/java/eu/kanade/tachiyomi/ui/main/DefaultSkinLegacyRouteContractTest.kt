@@ -55,6 +55,17 @@ class DefaultSkinLegacyRouteContractTest {
     }
 
     @Test
+    fun `canonical Tracking does not route users to Mihon documentation`() {
+        val source = readAppSource(
+            "eu/kanade/presentation/more/settings/screen/SettingsTrackingScreen.kt",
+        )
+
+        source shouldContain "getTitleRes() = MR.strings.pref_category_tracking"
+        source shouldNotContain "mihon.app"
+        source shouldNotContain "Icons.Outlined.Help"
+    }
+
+    @Test
     fun `retired Add-ons and duplicate Advanced screens have no production references`() {
         val production = readAllAppSources()
 
