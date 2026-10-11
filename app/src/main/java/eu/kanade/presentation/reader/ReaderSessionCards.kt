@@ -39,12 +39,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import eu.kanade.tachiyomi.ui.reader.ReaderRecovery
 import eu.kanade.tachiyomi.ui.reader.ReaderVisualProtection
+import eu.kanade.tachiyomi.ui.reader.readerChapterPosition
 import eu.kanade.tachiyomi.ui.reader.resolveReaderChapterJump
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.rounded.Check
@@ -97,7 +99,13 @@ fun ReaderContextCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(title, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = title,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
                         androidx.compose.material3.TextButton(
                             onClick = onDismiss,
                             modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp),
@@ -122,9 +130,9 @@ fun ColumnScope.ReaderChaptersCard(
     var jump by remember { mutableStateOf("") }
     var jumpNotFound by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    val currentIndex = chapters.indexOfFirst { it.id == currentChapterId }
+    val currentIndex = readerChapterPosition(chapters, currentChapterId)
     LaunchedEffect(chapters, currentChapterId) {
-        if (currentIndex >= 0) listState.scrollToItem(currentIndex)
+        if (chapters.isNotEmpty()) listState.scrollToItem(currentIndex)
     }
 
     if (loading && chapters.isEmpty()) {
@@ -227,9 +235,11 @@ fun ReaderBrightnessCard(
 }
 
 @Composable
-fun ReaderFitCard(options: List<Pair<Int, String>>, selected: Int, onSelect: (Int) -> Unit) {
-    Column {
-        options.forEach { (value, label) ->
+fun ColumnScope.ReaderFitCard(options: List<Pair<Int, String>>, selected: Int, onSelect: (Int) -> Unit) {
+    LazyColumn(
+        modifier = Modifier.weight(1f, fill = false).heightIn(max = 280.dp),
+    ) {
+        items(options, key = { it.first }) { (value, label) ->
             Row(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(
                     selected = value == selected,
@@ -265,9 +275,11 @@ fun ReaderCropCard(enabled: Boolean, onToggle: () -> Unit) {
 }
 
 @Composable
-fun ReaderProtectionCard(mode: ReaderVisualProtection, onSelect: (ReaderVisualProtection) -> Unit) {
-    Column {
-        ReaderVisualProtection.entries.forEach { option ->
+fun ColumnScope.ReaderProtectionCard(mode: ReaderVisualProtection, onSelect: (ReaderVisualProtection) -> Unit) {
+    LazyColumn(
+        modifier = Modifier.weight(1f, fill = false).heightIn(max = 280.dp),
+    ) {
+        items(ReaderVisualProtection.entries, key = { it.name }) { option ->
             val label = when (option) {
                 ReaderVisualProtection.OFF -> MR.strings.tsuzuki_reader_off
                 ReaderVisualProtection.WARM -> MR.strings.tsuzuki_reader_warm

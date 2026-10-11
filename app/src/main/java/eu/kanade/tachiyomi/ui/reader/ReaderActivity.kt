@@ -468,11 +468,13 @@ class ReaderActivity : BaseActivity() {
                 val preference = state.dialog as ReaderViewModel.Dialog.SetPreferredLanguage
                 AlertDialog(
                     onDismissRequest = viewModel::closeDialog,
-                    title = { Text("Preferred language") },
+                    title = { Text(stringResource(MR.strings.tsuzuki_reader_preferred_language)) },
                     text = {
                         Text(
-                            "Use ${preference.selection.option.language} as the preferred " +
-                                "language for this manga?",
+                            stringResource(
+                                MR.strings.tsuzuki_reader_preferred_language_message,
+                                preference.selection.option.language.orEmpty(),
+                            ),
                         )
                     },
                     confirmButton = {

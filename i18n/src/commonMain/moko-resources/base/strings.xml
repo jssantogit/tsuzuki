@@ -927,6 +927,8 @@
     <string name="tsuzuki_reader_loading">Loading</string>
     <string name="tsuzuki_reader_sources_linked">Sources linked. Checking chapter availability.</string>
     <string name="tsuzuki_reader_preferred_provider">Use this Provider as the preferred reading source for this work?</string>
+    <string name="tsuzuki_reader_preferred_language">Preferred language</string>
+    <string name="tsuzuki_reader_preferred_language_message">Use %1$s as the preferred reading language for this work?</string>
     <string name="tsuzuki_content_selector_title">Choose reading source</string>
     <string name="tsuzuki_content_no_options">No reading options found</string>
     <string name="tsuzuki_content_selector_error">Unable to load reading options</string>

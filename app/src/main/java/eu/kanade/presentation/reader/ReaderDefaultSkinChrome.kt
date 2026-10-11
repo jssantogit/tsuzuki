@@ -1,6 +1,7 @@
 package eu.kanade.presentation.reader
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -28,11 +30,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -47,10 +51,7 @@ import eu.kanade.tachiyomi.ui.reader.ReaderSessionTool
 import eu.kanade.tachiyomi.ui.reader.availableReaderTools
 import eu.kanade.tachiyomi.ui.reader.readerPageProgress
 import mihon.icons.materialsymbols.MaterialSymbols
-import mihon.icons.materialsymbols.automirrored.rounded.ArrowBack
-import mihon.icons.materialsymbols.rounded.Brush
-import mihon.icons.materialsymbols.rounded.FlipToBack
-import mihon.icons.materialsymbols.rounded.Image
+import mihon.icons.materialsymbols.automirroredrounded.ArrowBack
 import mihon.icons.materialsymbols.rounded.Newspaper
 import mihon.icons.materialsymbols.rounded.Public
 import mihon.icons.materialsymbols.rounded.SkipNext
@@ -312,9 +313,7 @@ private fun ReaderToolButton(tool: ReaderSessionTool, enabled: Boolean, selected
         ReaderSessionTool.CHAPTERS -> MaterialSymbols.Rounded.Newspaper
         ReaderSessionTool.PREVIOUS -> MaterialSymbols.Rounded.SkipPrevious
         ReaderSessionTool.NEXT -> MaterialSymbols.Rounded.SkipNext
-        ReaderSessionTool.BRIGHTNESS -> MaterialSymbols.Rounded.Brush
-        ReaderSessionTool.FIT -> MaterialSymbols.Rounded.FlipToBack
-        ReaderSessionTool.CROP -> MaterialSymbols.Rounded.Image
+        ReaderSessionTool.BRIGHTNESS, ReaderSessionTool.FIT, ReaderSessionTool.CROP -> null
         ReaderSessionTool.SOURCE -> MaterialSymbols.Rounded.Public
         ReaderSessionTool.KEEP_SCREEN_ON -> MaterialSymbols.Rounded.StayCurrentPortrait
         ReaderSessionTool.VISUAL_PROTECTION -> MaterialSymbols.Rounded.Visibility
@@ -332,14 +331,18 @@ private fun ReaderToolButton(tool: ReaderSessionTool, enabled: Boolean, selected
             MaterialTheme.colorScheme.onSecondaryContainer
         } else {
             MaterialTheme.colorScheme.onSurface
-        },
+        }.copy(alpha = if (enabled) 1f else 0.38f),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            if (icon == null) {
+                ReaderToolGlyph(tool)
+            } else {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            }
             Text(label, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 1)
             if (selected) {
                 Box(
@@ -349,6 +352,66 @@ private fun ReaderToolButton(tool: ReaderSessionTool, enabled: Boolean, selected
                         .background(MaterialTheme.colorScheme.onSecondaryContainer),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ReaderToolGlyph(tool: ReaderSessionTool) {
+    val color = LocalContentColor.current
+    Canvas(Modifier.size(20.dp)) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.5.dp.toPx()
+        when (tool) {
+            ReaderSessionTool.BRIGHTNESS -> {
+                drawCircle(color, radius = w * 0.19f)
+                val rays = listOf(
+                    Offset(0.5f, 0.04f) to Offset(0.5f, 0.19f),
+                    Offset(0.5f, 0.81f) to Offset(0.5f, 0.96f),
+                    Offset(0.04f, 0.5f) to Offset(0.19f, 0.5f),
+                    Offset(0.81f, 0.5f) to Offset(0.96f, 0.5f),
+                    Offset(0.18f, 0.18f) to Offset(0.29f, 0.29f),
+                    Offset(0.71f, 0.71f) to Offset(0.82f, 0.82f),
+                    Offset(0.18f, 0.82f) to Offset(0.29f, 0.71f),
+                    Offset(0.71f, 0.29f) to Offset(0.82f, 0.18f),
+                )
+                rays.forEach { (start, end) ->
+                    drawLine(
+                        color,
+                        Offset(start.x * w, start.y * h),
+                        Offset(end.x * w, end.y * h),
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round,
+                    )
+                }
+            }
+            ReaderSessionTool.CROP -> {
+                drawLine(color, Offset(w * 0.18f, h * 0.55f), Offset(w * 0.18f, h * 0.18f), stroke)
+                drawLine(color, Offset(w * 0.18f, h * 0.18f), Offset(w * 0.55f, h * 0.18f), stroke)
+                drawLine(color, Offset(w * 0.82f, h * 0.45f), Offset(w * 0.82f, h * 0.82f), stroke)
+                drawLine(color, Offset(w * 0.82f, h * 0.82f), Offset(w * 0.45f, h * 0.82f), stroke)
+            }
+            ReaderSessionTool.FIT -> {
+                val corners = listOf(
+                    Offset(w * 0.18f, h * 0.38f) to Offset(w * 0.18f, h * 0.18f),
+                    Offset(w * 0.18f, h * 0.18f) to Offset(w * 0.38f, h * 0.18f),
+                    Offset(w * 0.62f, h * 0.18f) to Offset(w * 0.82f, h * 0.18f),
+                    Offset(w * 0.82f, h * 0.18f) to Offset(w * 0.82f, h * 0.38f),
+                    Offset(w * 0.18f, h * 0.62f) to Offset(w * 0.18f, h * 0.82f),
+                    Offset(w * 0.18f, h * 0.82f) to Offset(w * 0.38f, h * 0.82f),
+                    Offset(w * 0.62f, h * 0.82f) to Offset(w * 0.82f, h * 0.82f),
+                    Offset(w * 0.82f, h * 0.62f) to Offset(w * 0.82f, h * 0.82f),
+                )
+                corners.forEach { (start, end) -> drawLine(color, start, end, strokeWidth = stroke) }
+                drawLine(color, Offset(w * 0.28f, h * 0.5f), Offset(w * 0.43f, h * 0.5f), stroke)
+                drawLine(color, Offset(w * 0.37f, h * 0.43f), Offset(w * 0.44f, h * 0.5f), stroke)
+                drawLine(color, Offset(w * 0.37f, h * 0.57f), Offset(w * 0.44f, h * 0.5f), stroke)
+                drawLine(color, Offset(w * 0.72f, h * 0.5f), Offset(w * 0.57f, h * 0.5f), stroke)
+                drawLine(color, Offset(w * 0.63f, h * 0.43f), Offset(w * 0.56f, h * 0.5f), stroke)
+                drawLine(color, Offset(w * 0.63f, h * 0.57f), Offset(w * 0.56f, h * 0.5f), stroke)
+            }
+            else -> Unit
         }
     }
 }

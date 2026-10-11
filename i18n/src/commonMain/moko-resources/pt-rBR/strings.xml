@@ -1280,4 +1280,6 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_reader_loading">Carregando</string>
     <string name="tsuzuki_reader_sources_linked">Fontes vinculadas. Verificando disponibilidade do capítulo.</string>
     <string name="tsuzuki_reader_preferred_provider">Usar este Provider como fonte de leitura preferida para esta obra?</string>
+    <string name="tsuzuki_reader_preferred_language">Idioma preferido</string>
+    <string name="tsuzuki_reader_preferred_language_message">Usar %1$s como idioma de leitura preferido para esta obra?</string>
 </resources>

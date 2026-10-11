@@ -2,6 +2,7 @@ package eu.kanade.presentation.reader
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -31,7 +32,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
-fun ReaderSourceCard(
+fun ColumnScope.ReaderSourceCard(
     state: ContentSelectorScreenState,
     activeOptionKey: String?,
     activeContentLabel: String?,
@@ -43,7 +44,7 @@ fun ReaderSourceCard(
     selectionInProgress: Boolean = false,
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         activeContentLabel?.takeIf(String::isNotBlank)?.let { label ->
@@ -86,6 +87,7 @@ fun ReaderSourceCard(
                     UnavailableActions(
                         onRetry = onRetry,
                         onFindSource = { onFindSource(state.canonicalTitleId) },
+                        enabled = !selectionInProgress,
                     )
                 } else {
                     Text(
@@ -96,6 +98,7 @@ fun ReaderSourceCard(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .weight(1f, fill = false)
                             .heightIn(max = 280.dp),
                     ) {
                         items(state.options, key = { it.option.key }) { option ->
@@ -143,6 +146,7 @@ fun ReaderSourceCard(
                     }
                     OutlinedButton(
                         modifier = Modifier.fillMaxWidth(),
+                        enabled = !selectionInProgress,
                         onClick = { onFindSource(state.canonicalTitleId) },
                     ) {
                         Text(stringResource(MR.strings.tsuzuki_reader_find_source))
@@ -161,6 +165,7 @@ fun ReaderSourceCard(
                     UnavailableActions(
                         onRetry = onRetry,
                         onFindSource = { onFindSource(canonicalTitleId) },
+                        enabled = !selectionInProgress,
                     )
                 }
             }
@@ -169,7 +174,7 @@ fun ReaderSourceCard(
 }
 
 @Composable
-fun ReaderBindingCard(
+fun ColumnScope.ReaderBindingCard(
     state: ContentBindingLinkState,
     onSelectProvider: (AddonId) -> Unit,
     onConfirm: (ScoredSourceCandidate) -> Unit,
@@ -177,7 +182,7 @@ fun ReaderBindingCard(
     onBack: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         when (state) {
@@ -201,6 +206,7 @@ fun ReaderBindingCard(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .weight(1f, fill = false)
                             .heightIn(max = 280.dp),
                     ) {
                         items(state.enabled, key = { it.id.value }) { addon ->
@@ -223,6 +229,7 @@ fun ReaderBindingCard(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .weight(1f, fill = false)
                             .heightIn(max = 280.dp),
                     ) {
                         items(
@@ -311,6 +318,7 @@ private fun LoadingState() {
 private fun UnavailableActions(
     onRetry: () -> Unit,
     onFindSource: () -> Unit,
+    enabled: Boolean,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -318,10 +326,10 @@ private fun UnavailableActions(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onRetry) {
+            Button(onClick = onRetry, enabled = enabled) {
                 Text(stringResource(MR.strings.tsuzuki_reader_retry))
             }
-            OutlinedButton(onClick = onFindSource) {
+            OutlinedButton(onClick = onFindSource, enabled = enabled) {
                 Text(stringResource(MR.strings.tsuzuki_reader_find_source))
             }
         }

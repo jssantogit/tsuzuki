@@ -13,3 +13,8 @@ RED: `c462d0ec3`, CI `38142794145`: Format passed; App compilation reached
 the new tests and failed on the absent session/chapter/recovery APIs as expected.
 The runtime uses one-based currentPage; the test and slider adapter preserve it.
 Local focused Gradle stopped before Android compilation at missing SDK location.
+
+`e861bd071`, CI `38143608465`: Format passed; Android compile stopped at the
+Back icon namespace and missing clip import. Correction cycle 1 fixes those APIs,
+retains bounded card lists/actions under small windows, and completes public copy.
+No viewer/loader/Provider/P2P/security implementation changed.
