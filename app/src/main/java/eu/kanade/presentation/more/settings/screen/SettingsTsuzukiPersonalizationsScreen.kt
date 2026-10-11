@@ -5,6 +5,8 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionsScreen
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 object SettingsTsuzukiPersonalizationsScreen : Screen() {
 
@@ -13,7 +15,7 @@ object SettingsTsuzukiPersonalizationsScreen : Screen() {
         val navigator = LocalNavigator.currentOrThrow
 
         DefaultSkinSettingsNavigationScreen(
-            title = "Personalização",
+            title = stringResource(MR.strings.tsuzuki_personalizations_title),
             navigateUp = navigator::pop,
             groups = listOf(
                 DefaultSkinSettingsNavGroup(
@@ -24,8 +26,8 @@ object SettingsTsuzukiPersonalizationsScreen : Screen() {
                             onClick = { navigator.push(SettingsTsuzukiVisualPresetScreen) },
                         ),
                         DefaultSkinSettingsNavItem(
-                            title = "Aparência",
-                            subtitle = "Tema, idioma visual, data e hora",
+                            title = stringResource(MR.strings.pref_category_appearance),
+                            subtitle = stringResource(MR.strings.pref_appearance_summary),
                             onClick = { navigator.push(SettingsAppearanceScreen) },
                         ),
                         DefaultSkinSettingsNavItem(
