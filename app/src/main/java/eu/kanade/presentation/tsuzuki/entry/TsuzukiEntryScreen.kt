@@ -1,6 +1,5 @@
 package eu.kanade.presentation.tsuzuki.entry
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,20 +18,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,8 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -53,7 +46,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinColors
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSecondaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.tsuzuki.entry.TsuzukiEntryCompletion
 import eu.kanade.tachiyomi.ui.tsuzuki.entry.TsuzukiEntryError
@@ -85,11 +83,11 @@ fun TsuzukiEntryScreen(
     onSendRecovery: (String) -> Unit = {},
     onUpdatePassword: (String, String) -> Unit = { _, _ -> },
 ) {
-    val colors = rememberEntryColors()
+    val colors = defaultSkinColors()
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.background)
+            .background(colors.canvas)
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .imePadding(),
         contentAlignment = Alignment.TopCenter,
@@ -121,7 +119,7 @@ fun TsuzukiEntryScreen(
 
 @Composable
 private fun WelcomeContent(
-    colors: EntryColors,
+    colors: DefaultSkinColors,
     onCreateAccount: () -> Unit,
     onSignIn: () -> Unit,
     onGuest: () -> Unit,
@@ -131,7 +129,7 @@ private fun WelcomeContent(
             .widthIn(max = 440.dp)
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 28.dp),
+            .padding(horizontal = 28.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -140,10 +138,10 @@ private fun WelcomeContent(
             contentDescription = stringResource(MR.strings.tsuzuki_entry_brand_description),
             tint = colors.foreground,
             modifier = Modifier
-                .fillMaxWidth(0.78f)
-                .height(72.dp),
+                .fillMaxWidth(0.72f)
+                .height(68.dp),
         )
-        Spacer(Modifier.height(30.dp))
+        Spacer(Modifier.height(34.dp))
         Text(
             text = stringResource(MR.strings.tsuzuki_entry_welcome_message),
             style = MaterialTheme.typography.titleMedium,
@@ -151,42 +149,24 @@ private fun WelcomeContent(
             textAlign = TextAlign.Center,
             modifier = Modifier.widthIn(max = 320.dp),
         )
-        Spacer(Modifier.height(48.dp))
-        Button(
+        Spacer(Modifier.height(52.dp))
+        DefaultSkinPrimaryButton(
+            text = stringResource(MR.strings.tsuzuki_entry_create_account),
             onClick = onCreateAccount,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 52.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = primaryButtonColors(colors),
-        ) {
-            Text(stringResource(MR.strings.tsuzuki_entry_create_account))
-        }
+            modifier = Modifier.fillMaxWidth(),
+        )
         Spacer(Modifier.height(12.dp))
-        OutlinedButton(
+        DefaultSkinSecondaryButton(
+            text = stringResource(MR.strings.tsuzuki_entry_sign_in),
             onClick = onSignIn,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 52.dp),
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, colors.divider),
-            colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = colors.surface,
-                contentColor = colors.foreground,
-            ),
-        ) {
-            Text(stringResource(MR.strings.tsuzuki_entry_sign_in))
-        }
+            modifier = Modifier.fillMaxWidth(),
+        )
         Spacer(Modifier.height(8.dp))
-        TextButton(
+        DefaultSkinTextAction(
+            text = stringResource(MR.strings.tsuzuki_entry_continue_as_guest),
             onClick = onGuest,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp),
-            colors = ButtonDefaults.textButtonColors(contentColor = colors.accent),
-        ) {
-            Text(stringResource(MR.strings.tsuzuki_entry_continue_as_guest))
-        }
+            modifier = Modifier.heightIn(min = 48.dp),
+        )
     }
 }
 
@@ -194,7 +174,7 @@ private fun WelcomeContent(
 private fun AuthContent(
     page: TsuzukiEntryPage,
     state: TsuzukiEntryState,
-    colors: EntryColors,
+    colors: DefaultSkinColors,
     onBack: () -> Unit,
     onSignIn: () -> Unit,
     onCreateAccount: () -> Unit,
@@ -221,27 +201,20 @@ private fun AuthContent(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp)
-            .padding(top = 8.dp, bottom = 28.dp),
+            .padding(top = 8.dp, bottom = 32.dp),
     ) {
-        IconButton(
-            onClick = onBack,
-            modifier = Modifier
-                .size(48.dp),
-        ) {
+        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
             Icon(
                 imageVector = MaterialSymbols.AutoMirroredRounded.ArrowBack,
                 contentDescription = stringResource(MR.strings.tsuzuki_navigation_back),
                 tint = colors.foreground,
             )
         }
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(28.dp))
         Text(
             text = stringResource(page.titleResource()),
-            style = MaterialTheme.typography.headlineLarge.copy(
-                fontSize = 36.sp,
-                lineHeight = 43.sp,
-            ),
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.displaySmall,
+            fontWeight = FontWeight.SemiBold,
             color = colors.foreground,
         )
         Spacer(Modifier.height(10.dp))
@@ -250,7 +223,7 @@ private fun AuthContent(
             style = MaterialTheme.typography.bodyLarge,
             color = colors.secondary,
         )
-        Spacer(Modifier.height(30.dp))
+        Spacer(Modifier.height(34.dp))
 
         if (isCompleted) {
             Text(
@@ -270,17 +243,12 @@ private fun AuthContent(
                     color = colors.foreground,
                 )
             }
-            Spacer(Modifier.height(20.dp))
-            Button(
+            Spacer(Modifier.height(22.dp))
+            DefaultSkinPrimaryButton(
+                text = stringResource(MR.strings.tsuzuki_entry_back_to_sign_in),
                 onClick = onSignIn,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 52.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = primaryButtonColors(colors),
-            ) {
-                Text(stringResource(MR.strings.tsuzuki_entry_back_to_sign_in))
-            }
+                modifier = Modifier.fillMaxWidth(),
+            )
             return@Column
         }
 
@@ -317,13 +285,11 @@ private fun AuthContent(
                         null
                     },
                 )
-                TextButton(
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_entry_forgot_password),
                     onClick = onForgotPassword,
                     modifier = Modifier.align(Alignment.End),
-                    colors = ButtonDefaults.textButtonColors(contentColor = colors.accent),
-                ) {
-                    Text(stringResource(MR.strings.tsuzuki_entry_forgot_password))
-                }
+                )
             }
 
             TsuzukiEntryPage.REGISTER -> EntryField(
@@ -406,8 +372,9 @@ private fun AuthContent(
             )
         }
 
-        Spacer(Modifier.height(20.dp))
-        Button(
+        Spacer(Modifier.height(22.dp))
+        DefaultSkinPrimaryButton(
+            text = stringResource(page.actionResource(state.isWorking)),
             onClick = {
                 when (page) {
                     TsuzukiEntryPage.LOGIN -> onLogin(email, password)
@@ -418,17 +385,17 @@ private fun AuthContent(
                 }
             },
             enabled = !state.isWorking,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 52.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = primaryButtonColors(colors),
-        ) {
-            if (state.isWorking) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.size(10.dp))
-            }
-            Text(stringResource(page.actionResource(state.isWorking)))
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (state.isWorking) {
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 10.dp)
+                    .size(18.dp),
+                color = colors.secondary,
+                strokeWidth = 2.dp,
+            )
         }
 
         if (page == TsuzukiEntryPage.LOGIN || page == TsuzukiEntryPage.REGISTER) {
@@ -449,20 +416,16 @@ private fun AuthContent(
                     color = colors.secondary,
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                TextButton(
+                DefaultSkinTextAction(
+                    text = stringResource(
+                        if (page == TsuzukiEntryPage.LOGIN) {
+                            MR.strings.tsuzuki_entry_create_account
+                        } else {
+                            MR.strings.tsuzuki_entry_sign_in
+                        },
+                    ),
                     onClick = if (page == TsuzukiEntryPage.LOGIN) onCreateAccount else onSignIn,
-                    colors = ButtonDefaults.textButtonColors(contentColor = colors.accent),
-                ) {
-                    Text(
-                        stringResource(
-                            if (page == TsuzukiEntryPage.LOGIN) {
-                                MR.strings.tsuzuki_entry_create_account
-                            } else {
-                                MR.strings.tsuzuki_entry_sign_in
-                            },
-                        ),
-                    )
-                }
+                )
             }
         }
     }
@@ -470,7 +433,7 @@ private fun AuthContent(
 
 @Composable
 private fun EntryField(
-    colors: EntryColors,
+    colors: DefaultSkinColors,
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
@@ -480,49 +443,59 @@ private fun EntryField(
     passwordVisible: Boolean = false,
     onTogglePassword: () -> Unit = {},
 ) {
-    Column {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            label = { Text(label) },
-            singleLine = true,
-            isError = error != null,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = colors.accent,
-                focusedLabelColor = colors.accent,
-                focusedContainerColor = colors.surface,
-                unfocusedContainerColor = colors.surface,
-                errorContainerColor = colors.surface,
-            ),
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-            visualTransformation = if (isPassword && !passwordVisible) {
-                PasswordVisualTransformation()
-            } else {
-                VisualTransformation.None
-            },
-            trailingIcon = if (isPassword) {
-                {
-                    TextButton(
-                        onClick = onTogglePassword,
-                        colors = ButtonDefaults.textButtonColors(contentColor = colors.accent),
-                    ) {
-                        Text(
-                            stringResource(
-                                if (passwordVisible) {
-                                    MR.strings.tsuzuki_entry_hide_password
-                                } else {
-                                    MR.strings.tsuzuki_entry_show_password
-                                },
-                            ),
-                        )
-                    }
-                }
-            } else {
-                null
-            },
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = label,
+            color = if (error == null) colors.secondary else MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium,
         )
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 54.dp),
+            shape = DefaultSkinShape.Control,
+            color = colors.surface,
+            contentColor = colors.foreground,
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                if (error == null) colors.outline else MaterialTheme.colorScheme.error,
+            ),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 16.dp, end = if (isPassword) 4.dp else 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.foreground),
+                    cursorBrush = SolidColor(colors.foreground),
+                    keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+                    visualTransformation = if (isPassword && !passwordVisible) {
+                        PasswordVisualTransformation()
+                    } else {
+                        VisualTransformation.None
+                    },
+                )
+                if (isPassword) {
+                    DefaultSkinTextAction(
+                        text = stringResource(
+                            if (passwordVisible) {
+                                MR.strings.tsuzuki_entry_hide_password
+                            } else {
+                                MR.strings.tsuzuki_entry_show_password
+                            },
+                        ),
+                        onClick = onTogglePassword,
+                    )
+                }
+            }
+        }
         if (error != null) {
             Text(
                 text = error,
@@ -530,41 +503,11 @@ private fun EntryField(
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier
                     .semantics { liveRegion = LiveRegionMode.Polite }
-                    .padding(start = 16.dp, top = 4.dp),
+                    .padding(start = 4.dp),
             )
         }
     }
 }
-
-@Composable
-private fun rememberEntryColors(): EntryColors {
-    val scheme = MaterialTheme.colorScheme
-    val lightSurface = scheme.surface.luminance() > 0.5f
-    return EntryColors(
-        background = if (lightSurface) Color(0xFFF7F7F8) else scheme.background,
-        surface = if (lightSurface) Color.White else scheme.surface,
-        foreground = if (lightSurface) Color(0xFF17181A) else scheme.onBackground,
-        secondary = if (lightSurface) Color(0xFF50565C) else scheme.onSurfaceVariant,
-        accent = if (lightSurface) Color(0xFF275A80) else scheme.primary,
-        divider = if (lightSurface) Color(0xFFD6D9DC) else scheme.outlineVariant,
-    )
-}
-
-private data class EntryColors(
-    val background: Color,
-    val surface: Color,
-    val foreground: Color,
-    val secondary: Color,
-    val accent: Color,
-    val divider: Color,
-)
-
-@Composable
-private fun primaryButtonColors(colors: EntryColors) =
-    ButtonDefaults.buttonColors(
-        containerColor = colors.foreground,
-        contentColor = colors.background,
-    )
 
 private fun TsuzukiEntryPage.titleResource() = when (this) {
     TsuzukiEntryPage.WELCOME -> MR.strings.tsuzuki_entry_welcome_title
