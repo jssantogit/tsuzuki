@@ -38,7 +38,7 @@ object SettingsDownloadScreen : SearchableSettings {
         val parallelPageLimit by downloadPreferences.parallelPageLimit.collectAsState()
         return listOf(
             Preference.PreferenceGroup(
-                title = "Rede e arquivos",
+                title = stringResource(MR.strings.tsuzuki_download_network_files),
                 preferenceItems = listOf(
                     Preference.PreferenceItem.SwitchPreference(
                         preference = downloadPreferences.downloadOnlyOverWifi,
@@ -56,7 +56,7 @@ object SettingsDownloadScreen : SearchableSettings {
                 ),
             ),
             Preference.PreferenceGroup(
-                title = "Performance",
+                title = stringResource(MR.strings.tsuzuki_download_performance),
                 preferenceItems = listOf(
                     Preference.PreferenceItem.SliderPreference(
                         value = parallelSourceLimit,
