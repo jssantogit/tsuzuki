@@ -400,7 +400,7 @@ private fun CanonicalLibraryActiveFilters(
                 modifier = Modifier.weight(1f, fill = false),
                 onClick = filter.clear,
                 label = { Text(filter.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                trailingIcon = {
+                icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_close_24dp),
                         contentDescription = stringResource(MR.strings.action_remove),
