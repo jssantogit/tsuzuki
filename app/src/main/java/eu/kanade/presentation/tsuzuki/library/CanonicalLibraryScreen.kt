@@ -51,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -273,7 +274,16 @@ private fun CanonicalLibraryHeader(
             )
         }
         IconButton(onClick = onShowFilters) {
-            BadgedBox(badge = { if (advancedFilterCount > 0) Badge { Text(advancedFilterCount.toString()) } }) {
+            BadgedBox(
+                badge = {
+                    if (advancedFilterCount > 0) {
+                        Badge(
+                            containerColor = MaterialTheme.colorScheme.onBackground,
+                            contentColor = MaterialTheme.colorScheme.background,
+                        ) { Text(advancedFilterCount.toString()) }
+                    }
+                },
+            ) {
                 Icon(MaterialSymbols.Rounded.FilterList, stringResource(MR.strings.tsuzuki_library_filters))
             }
         }
@@ -387,8 +397,16 @@ private fun CanonicalLibraryActiveFilters(
     ) {
         visible.forEach { filter ->
             SuggestionChip(
+                modifier = Modifier.weight(1f, fill = false),
                 onClick = filter.clear,
-                label = { Text("${filter.label} ×") },
+                label = { Text(filter.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                trailingIcon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_close_24dp),
+                        contentDescription = stringResource(MR.strings.action_remove),
+                        modifier = Modifier.size(16.dp),
+                    )
+                },
             )
         }
         if (hiddenCount > 0) {
@@ -562,6 +580,7 @@ private fun CanonicalLibraryList(
                 data = item.coverUrl ?: item.sourceCover ?: item.localCoverUrl,
                 fallbackData = listOf(item.sourceCover, item.sourceCover?.url, item.localCoverUrl),
                 contentDescription = item.title,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(role = Role.Button) { onOpenItem(item) },

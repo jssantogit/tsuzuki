@@ -1,6 +1,7 @@
-package eu.kanade.tachiyomi.ui.home
+package eu.kanade.tachiyomi.ui.tsuzuki.home
 
 import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiProvidersScreen
+import eu.kanade.tachiyomi.ui.home.HomeScreen
 import eu.kanade.tachiyomi.ui.library.LibraryTab
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.FolderCatalogScreen
 import eu.kanade.tachiyomi.ui.tsuzuki.home.TsuzukiHomeTab

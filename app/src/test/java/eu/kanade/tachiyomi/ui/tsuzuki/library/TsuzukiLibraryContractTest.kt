@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.ui.library
+package eu.kanade.tachiyomi.ui.tsuzuki.library
 
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreen
 import eu.kanade.tachiyomi.ui.tsuzuki.library.CanonicalLibraryCardModel
