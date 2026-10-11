@@ -21,10 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,6 +43,11 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.tsuzuki.collections.FolderTile
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinCard
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSecondaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.tsuzuki.recordArtworkLoad
 import eu.kanade.tachiyomi.ui.tsuzuki.home.TsuzukiHomeScreenState
 import kotlinx.coroutines.delay
@@ -71,16 +73,19 @@ fun TsuzukiHomeScreen(
     onFolder: (collectionId: String, folderId: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = defaultSkinColors()
     Scaffold(
         modifier = modifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        containerColor = colors.canvas,
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .background(colors.canvas)
                 .padding(paddingValues),
             contentPadding = PaddingValues(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(32.dp),
+            verticalArrangement = Arrangement.spacedBy(DefaultSkinSpacing.Section),
         ) {
             val heroes = state.heroes.take(MAX_HERO_ITEMS)
             if (heroes.isNotEmpty()) {
@@ -113,9 +118,7 @@ fun TsuzukiHomeScreen(
                             item(key = "collection_${section.collectionId}") {
                                 CollectionHomeSection(
                                     section = section,
-                                    onFolder = { folderId ->
-                                        onFolder(section.collectionId, folderId)
-                                    },
+                                    onFolder = { folderId -> onFolder(section.collectionId, folderId) },
                                 )
                             }
                         }
@@ -137,7 +140,6 @@ private fun HomeHeroCarousel(
     LaunchedEffect(items) {
         activeIndex = 0
         if (items.size <= 1) return@LaunchedEffect
-
         while (true) {
             delay(HERO_ROTATION_INTERVAL_MILLIS)
             activeIndex = (activeIndex + 1) % items.size
@@ -145,7 +147,6 @@ private fun HomeHeroCarousel(
     }
 
     val activeItem = items[activeIndex.coerceIn(items.indices)]
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -175,8 +176,7 @@ private fun HomeHero(
     onRead: () -> Unit,
     onDetails: () -> Unit,
 ) {
-    val background = MaterialTheme.colorScheme.background
-    val foreground = MaterialTheme.colorScheme.onBackground
+    val colors = defaultSkinColors()
     val metadata = buildList {
         if (item.format != CatalogItemFormat.UNKNOWN) {
             add(
@@ -186,9 +186,7 @@ private fun HomeHero(
                     .replaceFirstChar { it.uppercase() },
             )
         }
-        item.genres.firstOrNull()
-            ?.takeIf(String::isNotBlank)
-            ?.let(::add)
+        item.genres.firstOrNull()?.takeIf(String::isNotBlank)?.let(::add)
         if (item.status != CatalogItemStatus.UNKNOWN) {
             add(
                 item.status.name
@@ -202,7 +200,7 @@ private fun HomeHero(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(background),
+            .background(colors.canvas),
     ) {
         AsyncImage(
             model = item.bannerUrl ?: item.coverUrl,
@@ -210,7 +208,6 @@ private fun HomeHero(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
         )
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -218,73 +215,64 @@ private fun HomeHero(
                     Brush.verticalGradient(
                         0.0f to Color.Black.copy(alpha = 0.22f),
                         0.18f to Color.Transparent,
-                        0.32f to background.copy(alpha = 0.08f),
-                        0.47f to background.copy(alpha = 0.65f),
-                        0.62f to background.copy(alpha = 0.91f),
-                        0.83f to background.copy(alpha = 0.98f),
-                        1.0f to background,
+                        0.32f to colors.canvas.copy(alpha = 0.08f),
+                        0.47f to colors.canvas.copy(alpha = 0.65f),
+                        0.62f to colors.canvas.copy(alpha = 0.91f),
+                        0.83f to colors.canvas.copy(alpha = 0.98f),
+                        1.0f to colors.canvas,
                     ),
                 ),
         )
-
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 24.dp),
+                .padding(horizontal = DefaultSkinSpacing.PageHorizontal, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (metadata.isNotBlank()) {
                 Text(
                     text = metadata,
                     style = MaterialTheme.typography.labelMedium,
-                    color = foreground.copy(alpha = 0.88f),
+                    color = colors.secondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-
             Text(
                 text = item.title,
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
-                color = foreground,
+                color = colors.foreground,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
-
-            item.synopsis
-                ?.takeIf(String::isNotBlank)
-                ?.let { synopsis ->
-                    Text(
-                        text = synopsis,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = foreground.copy(alpha = 0.88f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
+            item.synopsis?.takeIf(String::isNotBlank)?.let { synopsis ->
+                Text(
+                    text = synopsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.secondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Button(
+                DefaultSkinPrimaryButton(
+                    text = stringResource(MR.strings.tsuzuki_home_read),
                     onClick = onRead,
                     modifier = Modifier.weight(1f),
-                ) {
-                    Text("Ler")
-                }
-                OutlinedButton(
+                )
+                DefaultSkinSecondaryButton(
+                    text = stringResource(MR.strings.tsuzuki_home_details),
                     onClick = onDetails,
                     modifier = Modifier.weight(1f),
-                ) {
-                    Text("Detalhes")
-                }
+                )
             }
-
             if (itemCount > 1) {
                 val carouselPosition = stringResource(
                     MR.strings.tsuzuki_home_hero_position,
@@ -303,7 +291,7 @@ private fun HomeHero(
                             modifier = Modifier
                                 .size(if (index == activeIndex) 16.dp else 6.dp, 6.dp)
                                 .background(
-                                    foreground.copy(alpha = if (index == activeIndex) 0.94f else 0.42f),
+                                    colors.foreground.copy(alpha = if (index == activeIndex) 0.94f else 0.42f),
                                     CircleShape,
                                 ),
                         )
@@ -319,16 +307,17 @@ private fun ContinueReadingSection(
     items: List<HomeContinueReadingItem>,
     onContinueReading: (HomeContinueReadingItem) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    val colors = defaultSkinColors()
+    Column(verticalArrangement = Arrangement.spacedBy(DefaultSkinSpacing.Group)) {
         Text(
             text = stringResource(MR.strings.tsuzuki_home_continue_reading),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 16.dp),
+            color = colors.foreground,
+            modifier = Modifier.padding(horizontal = DefaultSkinSpacing.PageHorizontal),
         )
-
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
+            contentPadding = PaddingValues(horizontal = DefaultSkinSpacing.PageHorizontal),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(items, key = HomeContinueReadingItem::canonicalTitleId) { item ->
@@ -344,6 +333,7 @@ private fun ContinueReadingCard(
     onClick: () -> Unit,
 ) {
     val recorder = LocalContext.current.appGraph.structuredDiagnosticRecorder
+    val colors = defaultSkinColors()
     val trace = remember(item.canonicalTitleId, recorder.sessionId) {
         DiagnosticTrace.start(
             recorder = recorder,
@@ -352,13 +342,9 @@ private fun ContinueReadingCard(
             subsystem = DiagnosticSubsystem.IMAGE,
         )
     }
-    Surface(
+    DefaultSkinCard(
         onClick = onClick,
         modifier = Modifier.width(304.dp),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        tonalElevation = 1.dp,
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -381,19 +367,20 @@ private fun ContinueReadingCard(
                     text = item.title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
+                    color = colors.foreground,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "Cap. ${item.chapterDisplayNumber}",
+                    text = stringResource(MR.strings.tsuzuki_details_chapter_label, item.chapterDisplayNumber),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = colors.secondary,
                 )
                 if (item.lastPageRead > 0) {
                     Text(
                         text = stringResource(MR.strings.tsuzuki_home_page, item.lastPageRead),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = colors.secondary,
                     )
                 }
             }
@@ -406,6 +393,7 @@ private fun CollectionHomeSection(
     section: HomeSection.CollectionSection,
     onFolder: (folderId: String) -> Unit,
 ) {
+    val colors = defaultSkinColors()
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -414,11 +402,11 @@ private fun CollectionHomeSection(
             text = section.title,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 16.dp),
+            color = colors.foreground,
+            modifier = Modifier.padding(horizontal = DefaultSkinSpacing.PageHorizontal),
         )
-
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
+            contentPadding = PaddingValues(horizontal = DefaultSkinSpacing.PageHorizontal),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(
