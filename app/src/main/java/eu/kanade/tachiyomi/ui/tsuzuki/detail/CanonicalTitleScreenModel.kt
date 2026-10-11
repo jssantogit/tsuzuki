@@ -618,8 +618,10 @@ class CanonicalTitleScreenModel(
         val latest = (_state.value as? CanonicalTitleScreenState.Loaded)
             ?.takeIf { it.title.id == canonicalTitleId }
             ?: return
+        val retainObservedChapters = staged.chapters.none { !it.inferredFromCount } &&
+            latest.chapters.any { !it.inferredFromCount }
         _state.value = latest.copy(
-            chapters = staged.chapters,
+            chapters = if (retainObservedChapters) latest.chapters else staged.chapters,
             addonCoverage = staged.addonCoverage,
             isRefreshing = true,
             refreshError = current.refreshError,
@@ -655,12 +657,14 @@ class CanonicalTitleScreenModel(
                 progress.read || progress.lastPageRead > 0 || !progress.lastVariantId.isNullOrBlank()
             } == true
         }
-        val activeChapterId = (
-            GetCanonicalReadingStart(
-                canonicalChapterRepository,
-                canonicalReadingRepository,
-            ).execute(canonicalTitleId) as? CanonicalReadingStart.Ready
-            )?.canonicalChapterId
+        val activeChapterId = if (hasReadingProgress) {
+            (
+                GetCanonicalReadingStart(canonicalChapterRepository, canonicalReadingRepository)
+                    .execute(canonicalTitleId) as? CanonicalReadingStart.Ready
+                )?.canonicalChapterId
+        } else {
+            null
+        }
         val canonicalDownloadIds = canonicalDownloadRepository
             .getChapterIdsByCanonicalTitle(canonicalTitleId)
         val reportedCounts = reportedChapterCountRepository.getByTitle(canonicalTitleId)
@@ -844,26 +848,32 @@ class CanonicalTitleScreenModel(
 
     private fun CanonicalTitleScreenState.Loaded.preserveUsableContent(
         previous: CanonicalTitleScreenState.Loaded,
-    ): CanonicalTitleScreenState.Loaded = copy(
-        coverUrl = coverUrl ?: previous.coverUrl,
-        sourceCover = sourceCover ?: previous.sourceCover,
-        author = author ?: previous.author,
-        description = description ?: previous.description,
-        genres = genres.ifEmpty { previous.genres },
-        tags = tags.ifEmpty { previous.tags },
-        editorialStatus = editorialStatus ?: previous.editorialStatus,
-        editorialFormat = editorialFormat ?: previous.editorialFormat,
-        ratingValue = ratingValue ?: previous.ratingValue,
-        ratingMaxValue = ratingMaxValue ?: previous.ratingMaxValue,
-        ratingVoteCount = ratingVoteCount ?: previous.ratingVoteCount,
-        ratings = ratings.ifEmpty { previous.ratings },
-        tsuzukiRating = tsuzukiRating ?: previous.tsuzukiRating,
-        startDate = startDate ?: previous.startDate,
-        endDate = endDate ?: previous.endDate,
-        editorialVolumeCount = editorialVolumeCount ?: previous.editorialVolumeCount,
-        metadataSources = metadataSources.ifEmpty { previous.metadataSources },
-        chapters = chapters.ifEmpty { previous.chapters },
-    )
+    ): CanonicalTitleScreenState.Loaded {
+        val retainObservedChapters = chapters.none { !it.inferredFromCount } &&
+            previous.chapters.any { !it.inferredFromCount }
+        return copy(
+            coverUrl = coverUrl ?: previous.coverUrl,
+            sourceCover = sourceCover ?: previous.sourceCover,
+            author = author ?: previous.author,
+            description = description ?: previous.description,
+            genres = genres.ifEmpty { previous.genres },
+            tags = tags.ifEmpty { previous.tags },
+            editorialStatus = editorialStatus ?: previous.editorialStatus,
+            editorialFormat = editorialFormat ?: previous.editorialFormat,
+            ratingValue = ratingValue ?: previous.ratingValue,
+            ratingMaxValue = ratingMaxValue ?: previous.ratingMaxValue,
+            ratingVoteCount = ratingVoteCount ?: previous.ratingVoteCount,
+            ratings = ratings.ifEmpty { previous.ratings },
+            tsuzukiRating = tsuzukiRating ?: previous.tsuzukiRating,
+            startDate = startDate ?: previous.startDate,
+            endDate = endDate ?: previous.endDate,
+            editorialVolumeCount = editorialVolumeCount ?: previous.editorialVolumeCount,
+            metadataSources = metadataSources.ifEmpty { previous.metadataSources },
+            chapters = if (retainObservedChapters) previous.chapters else chapters,
+            hasReadingProgress = if (retainObservedChapters) previous.hasReadingProgress else hasReadingProgress,
+            activeChapterId = if (retainObservedChapters) previous.activeChapterId else activeChapterId,
+        )
+    }
 
     private fun recordUiDiagnosticSnapshot(
         state: CanonicalTitleScreenState.Loaded,

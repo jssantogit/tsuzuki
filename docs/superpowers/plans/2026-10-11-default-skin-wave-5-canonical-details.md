@@ -65,3 +65,12 @@ skipped compile is not executed test/Android behavior. No phone automation/live 
   Visual composition remains unchanged until this gate passes.
 - Local focused Gradle attempt stopped at missing SDK location, before Android
   compilation/tests. Cached ktlint formatting and diff checks ran successfully.
+- CI `38137792867` compiled Android and executed 577 App Tsuzuki tests. One
+  absence-artwork fixture failed because relaxed mocks returned an empty string;
+  the fixture now explicitly returns null for absent artwork and source fallback.
+  Assertions and production semantics remain intact.
+- `a502a2799`: CI `38138121132` executed 580 tests and reproduced three additional
+  regressions: timestamp-only progress shifted never-started context, degraded
+  empty inventory lost resume signals, and an empty progressive stage unloaded
+  valid chapter rows. The previously diagnosed fixture was the fourth failure.
+  All three production corrections remain scoped to the existing ScreenModel.

@@ -373,6 +373,10 @@ class CanonicalTitleScreenModelTest {
         coEvery { refresh.executeProgressively(any(), any(), any()) } returns Result.success(Unit)
         val reading = mockk<CanonicalReadingRepository>()
         coEvery { reading.getProgressByCanonicalTitleId(any()) } returns progress
+        val artwork = mockk<ResolveCanonicalArtwork>()
+        coEvery { artwork.execute(any()) } returns null
+        val source = mockk<ResolveCanonicalSourceManga>()
+        coEvery { source.execute(any(), any()) } returns null
         return CanonicalTitleScreenModel(
             canonicalTitleRepository = titles,
             canonicalLibraryRepository = FakeLibraryRepository(),
@@ -388,8 +392,8 @@ class CanonicalTitleScreenModelTest {
             refreshReportedChapterCounts = metadataRefresh(),
             refreshChapterEvidence = chapterRefresh ?: refresh,
             resolveCanonicalMetadata = metadata,
-            resolveCanonicalSourceManga = mockk(relaxed = true),
-            resolveCanonicalArtwork = mockk(relaxed = true),
+            resolveCanonicalSourceManga = source,
+            resolveCanonicalArtwork = artwork,
             resolveCanonicalReadingStart = resolver,
         )
     }
