@@ -44,6 +44,7 @@ import eu.kanade.presentation.more.settings.screen.about.AboutScreen
 import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
 import mihon.icons.materialsymbols.MaterialSymbols
+import mihon.icons.materialsymbols.automirroredrounded.ChevronRight
 import mihon.icons.materialsymbols.automirroredrounded.ChromeReaderMode
 import mihon.icons.materialsymbols.rounded.Code
 import mihon.icons.materialsymbols.rounded.Download
@@ -151,16 +152,16 @@ object SettingsMainScreen : Screen() {
                     }
 
                     sections.forEach { section ->
-                        item(key = "section_label_${section.title}") {
+                        item(key = "section_label_${section.key}") {
                             Text(
-                                text = section.title.uppercase(),
+                                text = stringResource(section.titleRes).uppercase(),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
                             )
                         }
-                        item(key = "section_card_${section.title}") {
+                        item(key = "section_card_${section.key}") {
                             SettingsSectionCard(
                                 section = section,
                                 selectedClass = selectedClass,
@@ -259,11 +260,13 @@ object SettingsMainScreen : Screen() {
                     )
                 }
             }
-            Text(
-                text = "›",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clearAndSetSemantics { },
+            Icon(
+                imageVector = MaterialSymbols.AutoMirroredRounded.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .size(20.dp)
+                    .clearAndSetSemantics { },
             )
         }
     }
@@ -281,13 +284,15 @@ object SettingsMainScreen : Screen() {
     )
 
     private data class Section(
-        val title: String,
+        val key: String,
+        val titleRes: StringResource,
         val items: List<Item>,
     )
 
     private val sections = listOf(
         Section(
-            title = "Conta",
+            key = "account",
+            titleRes = MR.strings.tsuzuki_account_title,
             items = listOf(
                 Item(
                     titleRes = MR.strings.tsuzuki_account_title,
@@ -297,7 +302,8 @@ object SettingsMainScreen : Screen() {
             ),
         ),
         Section(
-            title = "Geral",
+            key = "general",
+            titleRes = MR.strings.pref_category_general,
             items = listOf(
                 Item(
                     titleRes = MR.strings.tsuzuki_personalizations_title,
@@ -312,7 +318,8 @@ object SettingsMainScreen : Screen() {
             ),
         ),
         Section(
-            title = "Conteúdo",
+            key = "content",
+            titleRes = MR.strings.tsuzuki_settings_section_content,
             items = listOf(
                 Item(
                     titleRes = MR.strings.tsuzuki_providers_title,
@@ -327,7 +334,8 @@ object SettingsMainScreen : Screen() {
             ),
         ),
         Section(
-            title = "Downloads",
+            key = "downloads",
+            titleRes = MR.strings.pref_category_downloads,
             items = listOf(
                 Item(
                     titleRes = MR.strings.pref_category_downloads,
@@ -338,7 +346,8 @@ object SettingsMainScreen : Screen() {
             ),
         ),
         Section(
-            title = "Dados e armazenamento",
+            key = "data_storage",
+            titleRes = MR.strings.label_data_storage,
             items = listOf(
                 Item(
                     titleRes = MR.strings.label_data_storage,
@@ -348,7 +357,8 @@ object SettingsMainScreen : Screen() {
             ),
         ),
         Section(
-            title = "Privacidade e segurança",
+            key = "privacy_security",
+            titleRes = MR.strings.tsuzuki_settings_section_privacy_security,
             items = listOf(
                 Item(
                     titleRes = MR.strings.pref_category_security,
@@ -358,7 +368,8 @@ object SettingsMainScreen : Screen() {
             ),
         ),
         Section(
-            title = "Diagnóstico",
+            key = "diagnostics",
+            titleRes = MR.strings.tsuzuki_settings_section_diagnostics,
             items = listOf(
                 Item(
                     titleRes = MR.strings.pref_debug_info,
@@ -368,7 +379,8 @@ object SettingsMainScreen : Screen() {
             ),
         ),
         Section(
-            title = "Avançado",
+            key = "advanced",
+            titleRes = MR.strings.pref_category_advanced,
             items = listOf(
                 Item(
                     titleRes = MR.strings.pref_category_advanced,
@@ -379,7 +391,8 @@ object SettingsMainScreen : Screen() {
             ),
         ),
         Section(
-            title = "Sobre",
+            key = "about",
+            titleRes = MR.strings.pref_category_about,
             items = listOf(
                 Item(
                     titleRes = MR.strings.pref_category_about,
