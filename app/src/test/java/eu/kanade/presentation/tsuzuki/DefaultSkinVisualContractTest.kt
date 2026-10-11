@@ -27,7 +27,7 @@ class DefaultSkinVisualContractTest {
         readSource("library/CanonicalLibraryScreen.kt") shouldContain "defaultSkinColors()"
         readSettingsSource("SettingsMainScreen.kt") shouldContain "defaultSkinColors()"
         readSettingsSource("SettingsTsuzukiIntegrationsScreen.kt") shouldContain "defaultSkinColors()"
-        readSettingsSource("SettingsTsuzukiProvidersScreen.kt") shouldContain "defaultSkinColors()"
+        providerLanding() shouldContain "defaultSkinColors()"
     }
 
     @Test
@@ -54,9 +54,9 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
-    fun `integrations and providers use promoted page composition instead of settings list scaffolds`() {
+    fun `integrations and provider landing use promoted page composition instead of stock app bars`() {
         val integrations = readSettingsSource("SettingsTsuzukiIntegrationsScreen.kt")
-        val providers = readSettingsSource("SettingsTsuzukiProvidersScreen.kt")
+        val providers = providerLanding()
 
         integrations shouldContain "DefaultSkinPageTitle("
         providers shouldContain "DefaultSkinPageTitle("
@@ -65,13 +65,14 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
-    fun `providers do not expose the rejected global acquisition route`() {
-        val providers = readSettingsSource("SettingsTsuzukiProvidersScreen.kt")
+    fun `provider landing keeps approved selectors and hides rejected global acquisition`() {
+        val providers = providerLanding()
 
         providers shouldNotContain "SettingsTsuzukiTorrentAcquisitionScreen()"
         providers shouldNotContain "tsuzuki_provider_acquisition_title"
         providers shouldContain "tsuzuki_providers_installed"
         providers shouldContain "tsuzuki_providers_discover"
+        providers shouldContain "tsuzuki_providers_repositories"
     }
 
     @Test
@@ -82,6 +83,9 @@ class DefaultSkinVisualContractTest {
         search shouldContain "tsuzuki_search_configure_integrations"
         search shouldNotContain "tsuzuki_search_configure_providers"
     }
+
+    private fun providerLanding(): String = readSettingsSource("SettingsTsuzukiProvidersScreen.kt")
+        .substringBefore("class SettingsTsuzukiProviderDetailScreen")
 
     private fun readSource(relativePath: String): String = readFirst(
         Path.of("src/main/java/eu/kanade/presentation/tsuzuki/$relativePath"),
