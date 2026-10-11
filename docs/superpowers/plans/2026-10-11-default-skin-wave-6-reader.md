@@ -18,3 +18,7 @@ Local focused Gradle stopped before Android compilation at missing SDK location.
 Back icon namespace and missing clip import. Correction cycle 1 fixes those APIs,
 retains bounded card lists/actions under small windows, and completes public copy.
 No viewer/loader/Provider/P2P/security implementation changed.
+
+`9d0a2f51e`, CI `38144018395`: Format passed; compilation exposed the remaining
+missing background import in the selected-state marker. Correction cycle 2 adds
+that import only. No new feature or broader cleanup is included in this retry.
