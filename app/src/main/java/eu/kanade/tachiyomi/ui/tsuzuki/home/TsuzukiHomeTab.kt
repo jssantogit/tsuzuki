@@ -17,6 +17,8 @@ import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreen
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 data object TsuzukiHomeTab : Tab {
 
@@ -24,7 +26,7 @@ data object TsuzukiHomeTab : Tab {
         @Composable
         get() = TabOptions(
             index = 0u,
-            title = "Home",
+            title = stringResource(MR.strings.tsuzuki_navigation_home),
             icon = painterResource(R.drawable.ic_tsuzuki_home_24dp),
         )
 

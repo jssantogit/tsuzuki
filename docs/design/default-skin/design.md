@@ -4,7 +4,7 @@
 
 **Settings milestone: visually complete, approved and closed.** This document consolidates the approved direction, including the final Settings work and the earlier Default Skin families. It supersedes contradictory iteration notes. Approval concerns architecture, presentation and relationships; it does not certify Android implementation, exact reusable tokens, accessibility or physical-device behavior.
 
-The [editable mockup](mockups/index.html) and [usage notes](mockups/README.md) preserve the existing source. The initial board presents the five Entry Flow frames, including password reset. Home, Reader, Canonical Details and earlier boards remain accessible as references. Search is approved; Canonical Details, Reader, Home and Entry Flow remain pending human visual review. [Earlier detailed reference](references/history/default-skin-before-settings-closure.md) preserves pre-closure material; it is historical where newer decisions supersede it.
+The [editable mockup](mockups/index.html) and [usage notes](mockups/README.md) preserve the existing source. The initial board presents the five Entry Flow frames, including password reset. Home, Reader, Canonical Details and earlier boards remain accessible as references. Search, Canonical Details, Reader, Home and Entry Flow are visually approved. [Earlier detailed reference](references/history/default-skin-before-settings-closure.md) preserves pre-closure material; it is historical where newer decisions supersede it.
 
 ## Identity and product boundaries
 
@@ -178,7 +178,7 @@ Legacy onboarding is intentionally absent until rewritten for Tsuzuki concepts. 
 
 ## Canonical Details — visual review
 
-**Refined board materialized; awaiting human review. Not visually closed.** Design, mockup and documentation only; no Android, identity or Reader implementation changes.
+**Refined board visually approved and closed.** Design, mockup and documentation only; no Android, identity or Reader implementation changes.
 
 ### Approved architecture and runtime boundary
 
@@ -228,7 +228,7 @@ Keep useful Hero, metadata and chapters during background enrichment and seconda
 
 Focused frames: A reading in progress with official title-logo; B never started; C all ratings/overflow; D editorial Details; E Recommendations; F continuous chapter list with read/current/unread and partial progress; G active scrubber; H no dedicated backdrop/textual title; I no chapters; J degraded refresh with useful content retained. Search remains an accessible approved reference; the previously approved Biblioteca polish remains preserved.
 
-- **Approved visual contract:** deep navigation, stable Hero and three modes, reading priority, compact membership action, canonical identity invariants and Search's compact card family. This single-artwork/editorial-pair refinement is materialized for human review and does not close the surface automatically.
+- **Approved visual contract:** deep navigation, stable Hero and three modes, reading priority, compact membership action, canonical identity invariants and Search's compact card family. This single-artwork/editorial-pair refinement is visually approved.
 - **Fixture-only demonstration:** real-work artwork, title-logo, illustrative native ratings, Library membership, progress, synthetic irregular chapter collection and related-work choices. They do not establish catalogue availability, identity verification or Provider support.
 - **Runtime capability TBD:** trustworthy Provider-neutral artwork/title-logo sourcing and recommendation sourcing/deduplication/ranking. Official adaptation art does not assert manga metadata sourcing.
 - **Future implementation concern:** Android tokens, safe insets, contrast over asynchronously changing artwork, font scaling, focus/semantics, virtualized chapter rows, accessible scrubber and preserving useful content during progressive updates.
@@ -244,13 +244,13 @@ No new Settings exploration is required by this milestone. The next meaningful U
 
 
 
-### Bounded Canonical Details refinement — pending visual review
+### Bounded Canonical Details refinement — visually approved
 
-Architecture and identity hierarchy remain unchanged. The Hero fade retains more artwork behind the title before dissolving into the exact neutral background. The no-backdrop fixture uses its existing cover as a softly blurred atmospheric source, with no foreground cover or invented artwork. Compact chapter cards keep their 128px width with a shorter 104px minimum height. Frame D opens scrolled to the existing Details mode so synopsis, creation and publication information can actually be reviewed; the same Hero remains mounted above. The active scrubber shows the real destination label live beside the thumb, hides it on release and recenters by collection position, including fractional/special/gapped chapters. These refinements remain pending human review; no Android implementation is implied.
+Architecture and identity hierarchy remain unchanged. The Hero fade retains more artwork behind the title before dissolving into the exact neutral background. The no-backdrop fixture uses its existing cover as a softly blurred atmospheric source, with no foreground cover or invented artwork. Compact chapter cards keep their 128px width with a shorter 104px minimum height. Frame D opens scrolled to the existing Details mode so synopsis, creation and publication information can actually be reviewed; the same Hero remains mounted above. The active scrubber shows the real destination label live beside the thumb, hides it on release and recenters by collection position, including fractional/special/gapped chapters. These refinements are visually approved; no Android implementation is implied.
 
 ## Reader — session surface / visual review
 
-**Conceptual contract approved in the brief; board materialized for human review. Reader is not visually closed. This round does not implement Android.**
+**Conceptual contract and visual board approved. Reader is visually closed. This round does not implement Android.**
 
 Reader is a deep, reading-first surface without bottom navigation. Center tap reveals floating overlays without changing canvas geometry. Full-width top/footer bars are superseded: a circular back bubble, a flexible title/chapter pill filling the available middle space and a right-side eye bubble for reading protection form the top composition. Visual protection is a session page-tint/comfort tool, not a lock or visibility toggle. The top eye bubble and last tools-rail item open the same small tonal-choice card and reflect its selected state.
 
@@ -273,9 +273,9 @@ Individual-page failure uses a bounded floating recovery card on the canvas, nev
 Thirteen frames: clean canvas; visible chrome; action rail scrolled; brightness; chapters; source choice; page failure; source failure with alternative; P2P requirement; fit; crop; screen-on/protection active. Fictional Travessia is authored illustrative content, not a real manga page, catalog promise or canonical identity. Chapter numbers, Provider Aurora / Provider Nami / Provider Sora, PT-BR / PT-PT labels and healthy source alternatives are fictional fixtures. They assert neither real Provider existence nor compatibility/verified chapter evidence. Brightness, crop, fit, jumps and retry are local simulations. Collection-based jump does not certify chapter availability; production must resolve real collection identities, fractional/special/gapped chapters.
 
 ### Status
-Reader modules preserve previous boards and provide a presentation-only return to the prior board. Android, Search, Settings, Providers and Canonical Details contracts remain unchanged. Visual closure requires human approval; native protection, actual brightness, source recovery and permission behavior remain implementation work. No preview, rendering or post-write checks are claimed.
+Reader modules preserve previous boards and provide a presentation-only return to the prior board. Android, Search, Settings, Providers and Canonical Details contracts remain unchanged. Visual closure is approved; native protection, actual brightness, source recovery and permission behavior remain implementation work. No preview, rendering or post-write checks are claimed.
 
-Light-theme refinement: contextual cards remain white with a subtle border and soft shadow. Opening a tool card adds a 32% dark neutral scrim over the rest of the Reader; closing it restores the undimmed canvas and chrome. The top back, title/chapter and eye-protection controls share a 48 px base height. The bottom tools pill uses 16 px horizontal and 4 px vertical inner padding, 20 px icons and 13 px labels with 16 px line height; each action retains a 48 px minimum touch height. Its scrollbar stays hidden and touch/trackpad/mouse scrolling remains available. A 16 px gap separates progress and tools pills. Architecture and Android remain unchanged; the visual board still requires human review.
+Light-theme refinement: contextual cards remain white with a subtle border and soft shadow. Opening a tool card adds a 32% dark neutral scrim over the rest of the Reader; closing it restores the undimmed canvas and chrome. The top back, title/chapter and eye-protection controls share a 48 px base height. The bottom tools pill uses 16 px horizontal and 4 px vertical inner padding, 20 px icons and 13 px labels with 16 px line height; each action retains a 48 px minimum touch height. Its scrollbar stays hidden and touch/trackpad/mouse scrolling remains available. A 16 px gap separates progress and tools pills. Architecture and Android remain unchanged; the visual board is approved.
 
 
 ### Reader — final visual polish
@@ -287,14 +287,14 @@ Proteção visual means a session page-comfort tint, never a padlock, content lo
 
 Capítulos contains a vertically scrollable collection around the selected chapter, including a fractional entry, a special and a numbering gap. The secondary jump resolves an existing collection identity instead of synthesizing an integer chapter. Sources use distinct Provider / language / current-or-available rows, with concise selection marks. Aurora, Nami and Sora are fictional demonstration Providers, not compatibility evidence. Local page recovery overlays the retained illustrative page instead of replacing it; source recovery preserves loaded content and P2P remains explicit and actionable.
 
-Reader still requires human visual approval. Android, runtime, persistent Settings and previous boards are unchanged. Native comfort-filter implementation and runtime source/recovery availability remain implementation work; this pass establishes only the visual contract and local fixtures.
+Reader is visually approved. Android, runtime, persistent Settings and previous boards are unchanged. Native comfort-filter implementation and runtime source/recovery availability remain implementation work; this pass establishes only the visual contract and local fixtures.
 
 
 Reader — listas compactas: remover chevrons das opções de capítulos, fontes e ajuste. Proteção visual não repete olhos nas opções; somente a opção selecionada mostra check. O olho permanece como identificação da ferramenta no chrome.
 
 ## Home: refinamento da transição profunda
 
-Esta seção consolida o contrato de Home desta rodada e substitui propostas anteriores incompatíveis. A arquitetura foi definida pelo brief; os onze frames refinados ainda dependem de revisão humana. Não há implementação Android ou mudança de runtime.
+Esta seção consolida o contrato de Home desta rodada e substitui propostas anteriores incompatíveis. A arquitetura foi definida pelo brief; os onze frames refinados estão visualmente aprovados. Não há implementação Android ou mudança de runtime.
 
 ### Composição modular
 
@@ -332,7 +332,7 @@ Onze frames: Home completa; transição do Hero; Continue lendo focado; várias 
 
 Artworks oficiais já localizados: One Piece, Toei, https://www.toei-animation.com/wp-content/uploads/2019/02/one_piece_product.jpg ; Fullmetal Alchemist, https://www.fullmetalalchemistusa.com/img/top/bg/character.png ; logo, https://www.fullmetalalchemistusa.com/img/common/header/logo.png . Capas locais reaproveitadas de assets/perfil e assets/search, com suas fontes mantidas nas notas anteriores. No exemplo sem backdrop dedicado, a capa é usada somente como matéria-prima atmosférica do Hero, sem poster duplicado.
 
-As obras, posições de leitura e Collections são fixtures de design. Não comprovam catálogo oficial, disponibilidade em Provider, identidade derivada do mockup ou origem futura de artwork. Home refinada permanece pendente de revisão visual humana. Reader, Search, Canonical Details e Settings permanecem como referências sem alteração de seus módulos.
+As obras, posições de leitura e Collections são fixtures de design. Não comprovam catálogo oficial, disponibilidade em Provider, identidade derivada do mockup ou origem futura de artwork. Home refinada está visualmente aprovada. Reader, Search, Canonical Details e Settings permanecem como referências sem alteração de seus módulos.
 
 ## Home — polish final do contrato visual
 
@@ -346,7 +346,7 @@ Os tiles de Folder continuam 16:9, sem capas, contagens ou metadata, com nome ab
 
 O fade chega exatamente a #f7f7f8 e protege a zona textual com uma camada clara suficiente, preservando a região superior expressiva. Perfis locais de artwork claro, escuro e colorido ajustam o início e a intensidade do fade; o crop continua limitado ao artwork decorativo. O perfil conservador cobre artwork sem classificação. São regras visuais do mockup; classificação automática de imagens no runtime não foi implementada. Detalhes importantes da imagem podem exigir ajuste de posição focal por asset, sem deslocar a identidade ou inventar um poster separado.
 
-Home permanece em revisão humana. Esta rodada altera apenas mockup e documentação; Android, runtime, Providers e Settings não foram modificados.
+Home está visualmente aprovado. Esta rodada altera apenas mockup e documentação; Android, runtime, Providers e Settings não foram modificados.
 
 
 ### Continue lendo — correção do componente horizontal
@@ -383,7 +383,7 @@ Cinco frames conectados em `assets/entry-flow.js` e `assets/entry-flow.css`, int
 
 Validação local ocorre ao sair do campo ou enviar, com sumário acionável, foco e mensagem junto ao campo. Envio tem estado de processamento, seguido de Home no login ou de mensagem de confirmação/recuperação. Todas as respostas são fixtures: não criam conta, não enviam email, não validam credenciais com servidor. Nao persistir email ou senha. Apenas um marcador demonstrativo de entrada concluida pode existir em sessionStorage; o board continua apresentando Welcome para revisão e não constitui a inicialização real do app.
 
-Boards anteriores permanecem acessíveis pela ação externa de referencia, que não faz parte da interface do produto. Nenhum Android, runtime de auth, Provider ou Settings foi alterado. **Entry Flow aguarda revisão visual humana.** Requisitos e comportamentos reais de backend permanecem autoridade da implementação existente.
+Boards anteriores permanecem acessíveis pela ação externa de referencia, que não faz parte da interface do produto. Nenhum Android, runtime de auth, Provider ou Settings foi alterado. **Entry Flow está visualmente aprovado.** Requisitos e comportamentos reais de backend permanecem autoridade da implementação existente.
 
 ### Redefinir senha — etapa após o link de recuperação
 
@@ -393,4 +393,4 @@ O frame representa a chegada por um link válido de recuperação. A confirmaç�
 
 ## Consolidação para versionamento
 
-Esta consolidação reúne os refinamentos de Biblioteca, Search, Canonical Details, Reader, Home e Entry Flow, incluindo Redefinir senha. O título redundante Obras foi removido do catálogo de pasta demonstrativo, conforme solicitado. Search permanece aprovado como referência; Canonical Details, Reader, Home e Entry Flow ainda aguardam revisão visual humana. O commit de design não representa aprovação dessas superfícies nem implementação de Android, autenticação, recomendações ou ferramentas reais de leitura.
+Esta consolidação reúne os refinamentos de Biblioteca, Search, Canonical Details, Reader, Home e Entry Flow, incluindo Redefinir senha. O título redundante Obras foi removido do catálogo de pasta demonstrativo, conforme solicitado. Search, Canonical Details, Reader, Home e Entry Flow estão visualmente aprovados. A aprovação visual não representa implementação de Android, autenticação, recomendações ou ferramentas reais de leitura.
