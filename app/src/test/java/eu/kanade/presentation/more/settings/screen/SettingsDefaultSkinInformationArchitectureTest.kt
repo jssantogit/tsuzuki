@@ -105,6 +105,15 @@ class SettingsDefaultSkinInformationArchitectureTest {
     }
 
     @Test
+    fun `privacy keeps the approved direct P2P consent copy contract`() {
+        val source = readSource("SettingsSecurityScreen.kt")
+
+        source shouldContain "MR.strings.tsuzuki_action_allow"
+        source shouldContain "MR.strings.tsuzuki_direct_p2p_summary"
+        source shouldNotContain "MR.strings.tsuzuki_provider_direct_p2p_warning"
+    }
+
+    @Test
     fun `promoted Settings surfaces keep public copy in resources`() {
         val hardcodedCopyByFile = mapOf(
             "SettingsMainScreen.kt" to listOf(
