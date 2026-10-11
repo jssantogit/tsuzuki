@@ -55,8 +55,8 @@ class DefaultSkinVisualContractTest {
 
         home shouldContain "DefaultSkinPrimaryButton("
         home shouldContain "DefaultSkinSecondaryButton("
-        home shouldNotContain "OutlinedButton("
-        home shouldNotContain "Button("
+        home shouldNotContain "import androidx.compose.material3.Button"
+        home shouldNotContain "import androidx.compose.material3.OutlinedButton"
     }
 
     @Test
