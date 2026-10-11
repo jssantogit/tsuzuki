@@ -60,7 +60,8 @@ class DefaultSkinLegacyRouteContractTest {
             "eu/kanade/presentation/more/settings/screen/SettingsTrackingScreen.kt",
         )
 
-        source shouldContain "getTitleRes() = MR.strings.pref_category_tracking"
+        source shouldContain "override fun getTitleRes()"
+        source shouldContain "MR.strings.pref_category_tracking"
         source shouldNotContain "mihon.app"
         source shouldNotContain "AutoMirroredRounded.Help"
     }
@@ -71,7 +72,8 @@ class DefaultSkinLegacyRouteContractTest {
             "eu/kanade/presentation/more/settings/screen/SettingsDataScreen.kt",
         )
 
-        source shouldContain "getTitleRes() = MR.strings.label_data_storage"
+        source shouldContain "override fun getTitleRes()"
+        source shouldContain "MR.strings.label_data_storage"
         source shouldNotContain "mihon.app"
         source shouldNotContain "HELP_URL"
         source shouldNotContain "AutoMirroredRounded.Help"
