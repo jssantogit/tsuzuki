@@ -2,40 +2,44 @@ package eu.kanade.presentation.more.settings
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.fastForEachIndexed
 import eu.kanade.presentation.more.settings.screen.SearchableSettings
-import eu.kanade.presentation.more.settings.widget.PreferenceGroupHeader
 import kotlinx.coroutines.delay
 import tachiyomi.presentation.core.components.ScrollbarLazyColumn
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Preference Screen composable which contains a list of [Preference] items
- * @param items [Preference] items which should be displayed on the preference screen. An item can be a single [PreferenceItem] or a group ([Preference.PreferenceGroup])
- * @param modifier [Modifier] to be applied to the preferenceScreen layout
+ * Default Skin preference surface.
+ *
+ * Groups remain data-driven by the existing Settings runtime. This layer only owns hierarchy,
+ * spacing and grouping so preference persistence and side effects stay with their current owners.
  */
 @Composable
 fun PreferenceScreen(
     items: List<Preference>,
     modifier: Modifier = Modifier,
+    title: String? = null,
     contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
-    val state = rememberLazyListState()
+    val state = androidx.compose.foundation.lazy.rememberLazyListState()
     val highlightKey = SearchableSettings.highlightKey
     if (highlightKey != null) {
         LaunchedEffect(Unit) {
-            val i = items.findHighlightedIndex(highlightKey)
+            val i = items.findHighlightedGroupIndex(highlightKey)
             if (i >= 0) {
                 delay(0.5.seconds)
-                state.animateScrollToItem(i)
+                state.animateScrollToItem(i + if (title.isNullOrBlank()) 0 else 1)
             }
             SearchableSettings.highlightKey = null
         }
@@ -46,52 +50,98 @@ fun PreferenceScreen(
         state = state,
         contentPadding = contentPadding,
     ) {
-        items.fastForEachIndexed { i, preference ->
-            when (preference) {
-                // Create Preference Group
-                is Preference.PreferenceGroup -> {
-                    if (!preference.enabled) return@fastForEachIndexed
+        if (!title.isNullOrBlank()) {
+            item(key = "default_skin_settings_title") {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp),
+                )
+            }
+        }
 
-                    item {
-                        Column {
-                            PreferenceGroupHeader(title = preference.title)
-                        }
-                    }
-                    items(preference.preferenceItems) { item ->
-                        PreferenceItem(
-                            item = item,
+        items.forEachIndexed { index, preference ->
+            when (preference) {
+                is Preference.PreferenceGroup -> {
+                    if (!preference.enabled) return@forEachIndexed
+                    item(key = "group_${index}_${preference.title}") {
+                        DefaultSkinPreferenceGroup(
+                            group = preference,
                             highlightKey = highlightKey,
                         )
                     }
-                    item {
-                        if (i < items.lastIndex) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-                    }
                 }
 
-                // Create Preference Item
-                is Preference.PreferenceItem<*, *> -> item {
-                    PreferenceItem(
-                        item = preference,
-                        highlightKey = highlightKey,
-                    )
+                is Preference.PreferenceItem<*, *> -> {
+                    item(key = "preference_${index}_${preference.title}") {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 1.dp,
+                        ) {
+                            PreferenceItem(
+                                item = preference,
+                                highlightKey = highlightKey,
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-private fun List<Preference>.findHighlightedIndex(highlightKey: String): Int {
-    return flatMap {
-        if (it is Preference.PreferenceGroup) {
-            buildList<String?> {
-                add(null) // Header
-                addAll(it.preferenceItems.map { groupItem -> groupItem.title })
-                add(null) // Spacer
-            }
-        } else {
-            listOf(it.title)
+@Composable
+private fun DefaultSkinPreferenceGroup(
+    group: Preference.PreferenceGroup,
+    highlightKey: String?,
+) {
+    Column(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+    ) {
+        if (group.title.isNotBlank()) {
+            Text(
+                text = group.title.uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
+            )
         }
-    }.indexOfFirst { it == highlightKey }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp,
+        ) {
+            Column {
+                group.preferenceItems.forEachIndexed { index, item ->
+                    PreferenceItem(
+                        item = item,
+                        highlightKey = highlightKey,
+                    )
+                    if (index < group.preferenceItems.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 16.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun List<Preference>.findHighlightedGroupIndex(highlightKey: String): Int {
+    return indexOfFirst { preference ->
+        when (preference) {
+            is Preference.PreferenceGroup -> preference.preferenceItems.any { it.title == highlightKey }
+            is Preference.PreferenceItem<*, *> -> preference.title == highlightKey
+        }
+    }
 }
