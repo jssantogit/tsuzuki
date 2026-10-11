@@ -322,14 +322,14 @@ object SettingsMainScreen : Screen() {
             titleRes = MR.strings.tsuzuki_settings_section_content,
             items = listOf(
                 Item(
+                    titleRes = MR.strings.tsuzuki_integrations_title,
+                    icon = MaterialSymbols.Rounded.Explore,
+                    screen = SettingsTsuzukiIntegrationsScreen(),
+                ),
+                Item(
                     titleRes = MR.strings.tsuzuki_providers_title,
                     icon = MaterialSymbols.Rounded.Explore,
                     screen = SettingsTsuzukiProvidersScreen(),
-                ),
-                Item(
-                    titleRes = MR.strings.pref_category_tracking,
-                    icon = MaterialSymbols.Rounded.Explore,
-                    screen = SettingsTrackingScreen,
                 ),
             ),
         ),
