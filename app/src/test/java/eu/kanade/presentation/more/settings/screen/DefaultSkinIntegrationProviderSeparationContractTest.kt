@@ -45,7 +45,7 @@ class DefaultSkinIntegrationProviderSeparationContractTest {
     }
 
     @Test
-    fun `integration configuration and provider platform keep distinct UI ownership`() {
+    fun `integration configuration and provider platform keep distinct runtime owners`() {
         val integrationSource = readSource(
             "app/src/main/java/eu/kanade/presentation/more/settings/screen/SettingsTsuzukiIntegrationsScreen.kt",
             "src/main/java/eu/kanade/presentation/more/settings/screen/SettingsTsuzukiIntegrationsScreen.kt",
@@ -55,7 +55,8 @@ class DefaultSkinIntegrationProviderSeparationContractTest {
             "src/main/java/eu/kanade/presentation/more/settings/screen/SettingsTsuzukiProvidersScreen.kt",
         )
 
-        integrationSource shouldNotContain "MR.strings.tsuzuki_integration_use_provider"
+        integrationSource shouldContain "TsuzukiIntegrationsSettingsScreenModel"
+        integrationSource shouldNotContain "providerRepositoryManager"
         providerSource shouldContain "providerRepositoryManager"
         providerSource shouldContain "providerRegistry"
     }
