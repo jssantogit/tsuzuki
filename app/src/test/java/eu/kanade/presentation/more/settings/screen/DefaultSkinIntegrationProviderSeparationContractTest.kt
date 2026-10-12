@@ -61,10 +61,13 @@ class DefaultSkinIntegrationProviderSeparationContractTest {
             "app/src/main/java/eu/kanade/presentation/more/settings/screen/SettingsMainScreen.kt",
             "src/main/java/eu/kanade/presentation/more/settings/screen/SettingsMainScreen.kt",
         )
+        val contentSection = mainSource
+            .substringAfter("key = \"content\"")
+            .substringBefore("key = \"downloads\"")
 
         mainSource shouldContain "screen = SettingsTsuzukiIntegrationsScreen()"
         mainSource shouldContain "screen = SettingsTsuzukiProvidersDefaultSkinScreen()"
-        mainSource shouldNotContain "screen = SettingsTrackingScreen"
+        contentSection shouldNotContain "screen = SettingsTrackingScreen"
     }
 
     @Test

@@ -16,7 +16,10 @@ class SettingsDefaultSkinInformationArchitectureTest {
         val sections = source.substringAfter("private val sections = listOf(")
         val familyAnchors = listOf(
             "SettingsTsuzukiAccountScreen",
+            "SettingsTrackingScreen",
             "SettingsTsuzukiPersonalizationsScreen",
+            "SettingsTsuzukiReadingHubScreen",
+            "SettingsLibraryScreen",
             "SettingsTsuzukiIntegrationsScreen",
             "SettingsTsuzukiProvidersDefaultSkinScreen",
             "SettingsDownloadScreen",
@@ -32,14 +35,21 @@ class SettingsDefaultSkinInformationArchitectureTest {
             (sections.indexOf(first) < sections.indexOf(second)).shouldBeTrue()
         }
         (
+            sections.indexOf("SettingsTsuzukiAccountScreen") <
+                sections.indexOf("SettingsTrackingScreen")
+            ).shouldBeTrue()
+        (
             sections.indexOf("SettingsTsuzukiPersonalizationsScreen") <
                 sections.indexOf("SettingsTsuzukiReadingHubScreen")
+            ).shouldBeTrue()
+        (
+            sections.indexOf("SettingsTsuzukiReadingHubScreen") <
+                sections.indexOf("SettingsLibraryScreen")
             ).shouldBeTrue()
         (
             sections.indexOf("SettingsTsuzukiIntegrationsScreen") <
                 sections.indexOf("SettingsTsuzukiProvidersDefaultSkinScreen")
             ).shouldBeTrue()
-        sections shouldNotContain "screen = SettingsTrackingScreen"
     }
 
     @Test

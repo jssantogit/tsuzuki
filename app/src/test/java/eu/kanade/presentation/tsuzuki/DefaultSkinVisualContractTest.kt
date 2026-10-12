@@ -116,6 +116,125 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
+    fun `settings routes keep tracking with account and library with general reading`() {
+        val settings = readSettingsSource("SettingsMainScreen.kt")
+        val sections = settings.substringAfter("private val sections = listOf(")
+        val account = sections.substringAfter("key = \"account\"").substringBefore("key = \"general\"")
+        val general = sections.substringAfter("key = \"general\"").substringBefore("key = \"content\"")
+
+        account shouldContain "SettingsTsuzukiAccountScreen"
+        account shouldContain "SettingsTrackingScreen"
+        (account.indexOf("SettingsTsuzukiAccountScreen") < account.indexOf("SettingsTrackingScreen")) shouldBe true
+
+        general shouldContain "SettingsTsuzukiPersonalizationsScreen"
+        general shouldContain "SettingsTsuzukiReadingHubScreen"
+        general shouldContain "SettingsLibraryScreen"
+        listOf(
+            "SettingsTsuzukiPersonalizationsScreen",
+            "SettingsTsuzukiReadingHubScreen",
+            "SettingsLibraryScreen",
+        ).zipWithNext().forEach { (first, second) ->
+            (general.indexOf(first) < general.indexOf(second)) shouldBe true
+        }
+    }
+
+    @Test
+    fun `personalizations link only to real localized destinations`() {
+        val source = readSettingsSource("SettingsTsuzukiPersonalizationsScreen.kt")
+
+        source shouldContain "MR.strings.tsuzuki_visual_preset_summary"
+        source shouldContain "SettingsTsuzukiVisualPresetScreen"
+        source shouldContain "SettingsAppearanceScreen"
+        source shouldContain "CollectionsScreen()"
+        source shouldNotContain "Tsuzuki Default Skin"
+        source shouldNotContain "TsuzukiHomeScreen"
+    }
+
+    @Test
+    fun `appearance theme mode remains a localized preference and theme previews keep selection chrome`() {
+        val appearance = readSettingsSource("SettingsAppearanceScreen.kt")
+            .substringAfter("private fun getThemeGroup(")
+            .substringBefore("private fun getDisplayGroup(")
+        val preview = readSettingsWidgetSource("AppThemePreferenceWidget.kt")
+        val themesList = sourceBlockStartingAt(preview, "private fun AppThemesList(")
+        val previewItem = sourceBlockStartingAt(preview, "fun AppThemePreviewItem(")
+        val previewBorderStart = previewItem.indexOf(".border(")
+        val previewBorderEnd = previewItem.indexOf(".padding(4.dp)", previewBorderStart)
+        val previewBorder = previewItem.substring(previewBorderStart, previewBorderEnd)
+        val baseSettings = readSettingsResource("base/strings_default_skin_settings.xml")
+        val portugueseSettings = readSettingsResource("pt-rBR/strings_default_skin_settings.xml")
+
+        appearance shouldContain "Preference.PreferenceItem.ListPreference("
+        appearance shouldContain "preference = themeModePref"
+        appearance shouldContain "title = stringResource(MR.strings.tsuzuki_theme_mode_title)"
+        appearance shouldContain "entries = linkedMapOf("
+        listOf(
+            "ThemeMode.SYSTEM to stringResource(MR.strings.theme_system)",
+            "ThemeMode.LIGHT to stringResource(MR.strings.theme_light)",
+            "ThemeMode.DARK to stringResource(MR.strings.theme_dark)",
+        ).zipWithNext().forEach { (first, second) ->
+            (appearance.indexOf(first) < appearance.indexOf(second)) shouldBe true
+        }
+        appearance shouldContain "setAppCompatDelegateThemeMode(it)"
+        appearance shouldContain "AppThemePreferenceWidget("
+        appearance shouldContain "title = stringResource(MR.strings.pref_app_theme)"
+        appearance shouldContain "ActivityCompat.recreate(it)"
+        appearance shouldNotContain "AppThemeModePreferenceWidget("
+        baseSettings shouldContain "<string name=\"tsuzuki_theme_mode_title\">Theme mode</string>"
+        portugueseSettings shouldContain "<string name=\"tsuzuki_theme_mode_title\">Modo do tema</string>"
+
+        val selectionColorsIndex = themesList.indexOf("val selectionColors = defaultSkinColors()")
+        val previewThemeIndex = themesList.indexOf("TachiyomiTheme(")
+        (selectionColorsIndex >= 0 && selectionColorsIndex < previewThemeIndex) shouldBe true
+        themesList shouldContain "selectionColor = selectionColors.accent"
+        themesList shouldContain "unselectedBorderColor = selectionColors.outline"
+        previewItem shouldContain "selectionColor: Color"
+        previewItem shouldContain "unselectedBorderColor: Color"
+        previewBorder shouldContain "selectionColor"
+        previewBorder shouldContain "unselectedBorderColor"
+        previewBorder shouldNotContain "MaterialTheme.colorScheme.primary"
+        previewItem shouldContain "tint = selectionColor"
+        previewItem shouldContain "MaterialTheme.colorScheme.primary"
+        previewItem shouldContain "MaterialTheme.colorScheme.tertiary"
+    }
+
+    @Test
+    fun `settings search uses promoted grouped controls and preserves search behavior`() {
+        val search = readSettingsSource("SettingsSearchScreen.kt")
+        val searchField = sourceBlockStartingAt(search, "Surface(")
+        val searchableResults = sourceBlockStartingAt(search, "private fun SearchResult(")
+
+        search shouldContain "SettingsCanvas {"
+        search shouldContain "SettingsPageHeader("
+        search shouldContain "BasicTextField("
+        search shouldContain "DefaultSkinShape.Control"
+        search shouldContain "rememberTextFieldState()"
+        search shouldContain "focusRequester.requestFocus()"
+        search shouldContain "runOnEnterKeyPressed(action = focusManager::clearFocus)"
+        search shouldContain "softKeyboardController?.hide()"
+        search shouldContain "SearchableSettings.highlightKey = result.highlightKey"
+        search shouldContain "navigator.replace(result.route)"
+        search shouldContain "getIndex()"
+        search shouldContain "settingScreens"
+        search shouldContain "getLocalizedBreadcrumb("
+        search shouldContain "if (isLtr)"
+        search shouldContain "\"\$node < \$path\""
+        search shouldNotContain "Scaffold("
+        search shouldNotContain "TopAppBar("
+        search shouldNotContain "EmptyScreen("
+        searchField shouldContain "BasicTextField("
+        searchField shouldContain "textFieldState.text.isEmpty()"
+        searchableResults shouldContain "filterNot { it.second is Preference.PreferenceItem.InfoPreference }"
+        searchableResults shouldContain ".take(10)"
+        searchableResults shouldContain "item(key = \"settings_search_results\")"
+        searchableResults shouldContain "SettingsGroup {"
+        searchableResults.split("item(key = \"settings_search_results\")").size shouldBe 2
+        searchableResults.split("SettingsGroup {").size shouldBe 2
+        searchableResults shouldNotContain "groupBy"
+        searchableResults shouldContain "SettingsNavigationRow("
+    }
+
+    @Test
     fun `library advanced filters use Default Skin controls instead of stock filter chips`() {
         val library = readSource("library/CanonicalLibraryScreen.kt")
 
@@ -224,6 +343,16 @@ class DefaultSkinVisualContractTest {
     private fun readSettingsComponentSource(fileName: String): String = readFirst(
         Path.of("src/main/java/eu/kanade/presentation/more/settings/components/$fileName"),
         Path.of("app/src/main/java/eu/kanade/presentation/more/settings/components/$fileName"),
+    )
+
+    private fun readSettingsWidgetSource(fileName: String): String = readFirst(
+        Path.of("src/main/java/eu/kanade/presentation/more/settings/widget/$fileName"),
+        Path.of("app/src/main/java/eu/kanade/presentation/more/settings/widget/$fileName"),
+    )
+
+    private fun readSettingsResource(fileName: String): String = readFirst(
+        Path.of("../i18n/src/commonMain/moko-resources/$fileName"),
+        Path.of("i18n/src/commonMain/moko-resources/$fileName"),
     )
 
     private fun readSource(relativePath: String): String = readFirst(

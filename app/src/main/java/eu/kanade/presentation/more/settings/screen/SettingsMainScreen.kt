@@ -136,6 +136,11 @@ object SettingsMainScreen : Screen() {
                     icon = MaterialSymbols.Rounded.Security,
                     screen = SettingsTsuzukiAccountScreen,
                 ),
+                Item(
+                    titleRes = MR.strings.pref_category_tracking,
+                    icon = MaterialSymbols.Rounded.Security,
+                    screen = SettingsTrackingScreen,
+                ),
             ),
         ),
         Section(
@@ -151,6 +156,12 @@ object SettingsMainScreen : Screen() {
                     titleRes = MR.strings.tsuzuki_reading_settings_title,
                     icon = MaterialSymbols.AutoMirroredRounded.ChromeReaderMode,
                     screen = SettingsTsuzukiReadingHubScreen,
+                ),
+                Item(
+                    titleRes = MR.strings.pref_category_library,
+                    subtitleRes = MR.strings.pref_library_summary,
+                    icon = MaterialSymbols.AutoMirroredRounded.ChromeReaderMode,
+                    screen = SettingsLibraryScreen,
                 ),
             ),
         ),

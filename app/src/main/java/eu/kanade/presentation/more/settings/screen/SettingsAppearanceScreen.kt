@@ -16,7 +16,6 @@ import eu.kanade.domain.ui.model.ThemeMode
 import eu.kanade.domain.ui.model.setAppCompatDelegateThemeMode
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.appearance.AppLanguageScreen
-import eu.kanade.presentation.more.settings.widget.AppThemeModePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.AppThemePreferenceWidget
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.datetime.TimeZone
@@ -63,18 +62,23 @@ object SettingsAppearanceScreen : SearchableSettings {
         return Preference.PreferenceGroup(
             title = stringResource(MR.strings.pref_category_theme),
             preferenceItems = listOf(
+                Preference.PreferenceItem.ListPreference(
+                    preference = themeModePref,
+                    entries = linkedMapOf(
+                        ThemeMode.SYSTEM to stringResource(MR.strings.theme_system),
+                        ThemeMode.LIGHT to stringResource(MR.strings.theme_light),
+                        ThemeMode.DARK to stringResource(MR.strings.theme_dark),
+                    ),
+                    title = stringResource(MR.strings.tsuzuki_theme_mode_title),
+                    onValueChanged = {
+                        setAppCompatDelegateThemeMode(it)
+                        true
+                    },
+                ),
                 Preference.PreferenceItem.CustomPreference(
                     title = stringResource(MR.strings.pref_app_theme),
                 ) {
                     Column {
-                        AppThemeModePreferenceWidget(
-                            value = themeMode,
-                            onItemClick = {
-                                themeModePref.set(it)
-                                setAppCompatDelegateThemeMode(it)
-                            },
-                        )
-
                         AppThemePreferenceWidget(
                             value = appTheme,
                             amoled = amoled,

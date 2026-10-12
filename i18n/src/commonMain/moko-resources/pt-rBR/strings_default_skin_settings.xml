@@ -8,6 +8,7 @@
     <string name="tsuzuki_visual_preset_title">Preset visual</string>
     <string name="tsuzuki_visual_preset_current">Preset atual</string>
     <string name="tsuzuki_visual_preset_summary">A prévia acompanha o tema atual sem criar outro preset.</string>
+    <string name="tsuzuki_theme_mode_title">Modo do tema</string>
     <string name="tsuzuki_collections_settings_title">Collections</string>
     <string name="tsuzuki_collections_settings_summary">Organize coleções, pastas e listas exibidas pelo Tsuzuki</string>
 

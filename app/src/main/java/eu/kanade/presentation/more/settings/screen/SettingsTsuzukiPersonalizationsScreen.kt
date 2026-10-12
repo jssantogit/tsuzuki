@@ -22,7 +22,7 @@ object SettingsTsuzukiPersonalizationsScreen : Screen() {
                     items = listOf(
                         DefaultSkinSettingsNavItem(
                             title = stringResource(MR.strings.tsuzuki_visual_preset_title),
-                            subtitle = "Tsuzuki Default Skin",
+                            subtitle = stringResource(MR.strings.tsuzuki_visual_preset_summary),
                             onClick = { navigator.push(SettingsTsuzukiVisualPresetScreen) },
                         ),
                         DefaultSkinSettingsNavItem(

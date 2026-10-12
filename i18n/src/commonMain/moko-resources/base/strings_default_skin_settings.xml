@@ -8,6 +8,7 @@
     <string name="tsuzuki_visual_preset_title">Visual preset</string>
     <string name="tsuzuki_visual_preset_current">Current preset</string>
     <string name="tsuzuki_visual_preset_summary">The preview follows the current theme without creating another preset.</string>
+    <string name="tsuzuki_theme_mode_title">Theme mode</string>
     <string name="tsuzuki_collections_settings_title">Collections</string>
     <string name="tsuzuki_collections_settings_summary">Organize collections, folders, and lists shown by Tsuzuki</string>
 

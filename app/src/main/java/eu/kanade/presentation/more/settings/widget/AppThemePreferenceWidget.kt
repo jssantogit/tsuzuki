@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.PreviewLightDark
@@ -44,6 +45,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.theme.TachiyomiTheme
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.isDynamicColorAvailable
 import mihon.icons.materialsymbols.MaterialSymbols
@@ -84,6 +86,7 @@ private fun AppThemesList(
         AppTheme.entries
             .filterNot { it.titleRes == null || (it == AppTheme.MONET && !DeviceUtil.isDynamicColorAvailable) }
     }
+    val selectionColors = defaultSkinColors()
     LazyRow(
         contentPadding = PaddingValues(horizontal = PrefsHorizontalPadding),
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
@@ -103,6 +106,8 @@ private fun AppThemesList(
                 ) {
                     AppThemePreviewItem(
                         selected = currentTheme == appTheme,
+                        selectionColor = selectionColors.accent,
+                        unselectedBorderColor = selectionColors.outline,
                         onClick = {
                             onItemClick(appTheme)
                             (context as? Activity)?.let { ActivityCompat.recreate(it) }
@@ -130,6 +135,8 @@ private fun AppThemesList(
 @Composable
 fun AppThemePreviewItem(
     selected: Boolean,
+    selectionColor: Color,
+    unselectedBorderColor: Color,
     onClick: () -> Unit,
 ) {
     Column(
@@ -139,9 +146,9 @@ fun AppThemePreviewItem(
             .border(
                 width = 4.dp,
                 color = if (selected) {
-                    MaterialTheme.colorScheme.primary
+                    selectionColor
                 } else {
-                    DividerDefaults.color
+                    unselectedBorderColor
                 },
                 shape = RoundedCornerShape(17.dp),
             )
@@ -177,7 +184,7 @@ fun AppThemePreviewItem(
                     Icon(
                         imageVector = MaterialSymbols.RoundedFilled.CheckCircle,
                         contentDescription = stringResource(MR.strings.selected),
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = selectionColor,
                     )
                 }
             }
