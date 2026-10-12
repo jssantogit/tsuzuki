@@ -455,7 +455,9 @@ private fun SearchCompactCard(
             data = item.coverUrl,
             contentDescription = item.title,
             contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(color = colors.surfaceMuted, shape = MaterialTheme.shapes.extraSmall),
         )
         Text(
             text = item.title,

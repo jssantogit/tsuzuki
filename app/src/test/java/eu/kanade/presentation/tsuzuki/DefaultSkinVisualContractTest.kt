@@ -126,6 +126,23 @@ class DefaultSkinVisualContractTest {
         search shouldNotContain "tsuzuki_search_configure_providers"
     }
 
+    @Test
+    fun `search compact cards retain a backed fit book cover without nested interaction`() {
+        val search = readSource("search/TsuzukiSearchScreen.kt")
+        val compactCard = search.substringAfter("private fun SearchCompactCard(").substringBefore("\n@OptIn")
+        val cover = compactCard.substringAfter("MangaCover.Book(").substringBefore("\n        )")
+
+        compactCard shouldContain ".width(148.dp)"
+        compactCard shouldContain "MangaCover.Book("
+        compactCard shouldContain "contentDescription = item.title"
+        compactCard shouldContain "ContentScale.Fit"
+        compactCard shouldNotContain "ContentScale.Crop"
+        compactCard shouldContain ".background(color = colors.surfaceMuted, shape = MaterialTheme.shapes.extraSmall)"
+        cover shouldNotContain "onClick ="
+        cover shouldNotContain ".clickable("
+        readMangaCoverSource() shouldContain "Book(2f / 3f)"
+    }
+
     private fun providerLanding(): String = readSettingsSource("SettingsTsuzukiProvidersDefaultSkinScreen.kt")
 
     private fun providerDetail(): String = readSettingsSource("SettingsTsuzukiProviderDetailDefaultSkinScreen.kt")
@@ -140,6 +157,11 @@ class DefaultSkinVisualContractTest {
     private fun readSource(relativePath: String): String = readFirst(
         Path.of("src/main/java/eu/kanade/presentation/tsuzuki/$relativePath"),
         Path.of("app/src/main/java/eu/kanade/presentation/tsuzuki/$relativePath"),
+    )
+
+    private fun readMangaCoverSource(): String = readFirst(
+        Path.of("src/main/java/eu/kanade/presentation/manga/components/MangaCover.kt"),
+        Path.of("app/src/main/java/eu/kanade/presentation/manga/components/MangaCover.kt"),
     )
 
     private fun readSettingsSource(fileName: String): String = readFirst(
