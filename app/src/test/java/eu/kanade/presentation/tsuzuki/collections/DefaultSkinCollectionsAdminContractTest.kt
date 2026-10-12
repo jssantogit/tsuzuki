@@ -12,6 +12,8 @@ class DefaultSkinCollectionsAdminContractTest {
     @Test
     fun `root composition owns Collections chrome and keeps open edit and reorder owners`() {
         val source = readAppSource("collections/CollectionsScreen.kt")
+        val rootUi = source.substringAfter("if (!fullScreenEditorRendered) {")
+            .substringBefore("deleteTarget?.let { target ->")
 
         source shouldContain "CollectionsAdminRootPage("
         source shouldContain "tsuzuki_collections_admin_title"
@@ -24,10 +26,10 @@ class DefaultSkinCollectionsAdminContractTest {
         source shouldContain "CollectionsAction.DuplicateCollection(graph.collection.id)"
         source shouldContain "onImportRequest"
         source shouldContain "onExportRequest"
-        source shouldNotContain "Scaffold("
-        source shouldNotContain "AlertDialog("
-        source shouldNotContain "AppBar("
-        source shouldNotContain "title = \"\""
+        rootUi shouldNotContain "Scaffold("
+        rootUi shouldNotContain "AlertDialog("
+        rootUi shouldNotContain "AppBar("
+        rootUi shouldNotContain "title = \"\""
     }
 
     @Test
@@ -73,16 +75,22 @@ class DefaultSkinCollectionsAdminContractTest {
 
     @Test
     fun `destructive sheet confirms once and preserves built in hide ownership`() {
-        val source = readAppSource("collections/CollectionsScreen.kt")
+        val root = readAppSource("collections/CollectionsScreen.kt")
+        val editor = readAppSource("collections/CollectionEditorScreens.kt")
+        val confirmation = root.substringAfter("deleteTarget?.let { target ->")
 
-        source shouldContain "CollectionsAction.DeleteCollection"
-        source shouldContain "CollectionsAction.DeleteFolder"
-        source shouldContain "CollectionsAction.DeleteList"
-        source shouldContain "CollectionOrigin.SYSTEM"
-        source shouldContain "onAction(target.action)"
-        source shouldContain "dismissLabel = stringResource(MR.strings.action_cancel)"
-        source shouldContain "onDismiss = { deleteTarget = null }"
-        source.countOccurrences("onAction(target.action)") shouldBe 1
+        root shouldContain "CollectionsAction.DeleteCollection(collection.id)"
+        editor shouldContain "action = CollectionsAction.DeleteFolder(model.folder.id)"
+        editor shouldContain "systemOwned = model.folder.origin == CollectionOrigin.SYSTEM"
+        editor shouldContain "action = CollectionsAction.DeleteList(list.id)"
+        editor shouldContain "systemOwned = list.origin == CollectionOrigin.SYSTEM"
+        root shouldContain "onDelete = { deleteTarget = it }"
+        confirmation shouldContain "CollectionsAdminSheet("
+        confirmation shouldNotContain "AlertDialog("
+        confirmation shouldContain "onAction(target.action)"
+        confirmation shouldContain "dismissLabel = stringResource(MR.strings.action_cancel)"
+        confirmation shouldContain "onDismiss = { deleteTarget = null }"
+        confirmation.countOccurrences("onAction(target.action)") shouldBe 1
     }
 
     @Test
