@@ -36,12 +36,4 @@
     <string name="tsuzuki_collections_admin_delete_list_message">Esta lista será excluída.</string>
     <string name="tsuzuki_collections_admin_hide_list_title">Ocultar lista integrada?</string>
     <string name="tsuzuki_collections_admin_hide_list_message">Esta lista ficará oculta neste dispositivo.</string>
-    <plurals name="tsuzuki_collections_admin_folder_count">
-        <item quantity="one">%1$d pasta</item>
-        <item quantity="other">%1$d pastas</item>
-    </plurals>
-    <plurals name="tsuzuki_collections_admin_list_count">
-        <item quantity="one">%1$d lista</item>
-        <item quantity="other">%1$d listas</item>
-    </plurals>
 </resources>

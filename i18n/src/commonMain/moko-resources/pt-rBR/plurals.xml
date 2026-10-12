@@ -115,4 +115,12 @@
         <item quantity="many">%1$d atualizações falharam</item>
         <item quantity="other">%1$d atualizações falharam</item>
     </plurals>
+    <plurals name="tsuzuki_collections_admin_folder_count">
+        <item quantity="one">%1$d pasta</item>
+        <item quantity="other">%1$d pastas</item>
+    </plurals>
+    <plurals name="tsuzuki_collections_admin_list_count">
+        <item quantity="one">%1$d lista</item>
+        <item quantity="other">%1$d listas</item>
+    </plurals>
 </resources>

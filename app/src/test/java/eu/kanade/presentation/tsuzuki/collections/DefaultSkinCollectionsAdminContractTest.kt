@@ -143,6 +143,8 @@ class DefaultSkinCollectionsAdminContractTest {
         val presentation = readAppSource("collections/CollectionsAdminPresentation.kt")
         val base = readResource("base/strings_default_skin_collections.xml")
         val ptBr = readResource("pt-rBR/strings_default_skin_collections.xml")
+        val basePlurals = readResource("base/plurals.xml")
+        val ptBrPlurals = readResource("pt-rBR/plurals.xml")
 
         presentation shouldContain "defaultSkinColors()"
         presentation shouldContain "DefaultSkinPageTitle("
@@ -205,8 +207,18 @@ class DefaultSkinCollectionsAdminContractTest {
         ptBr shouldContain ">Nova subpasta</string>"
         ptBr shouldContain ">LISTAS</string>"
         ptBr shouldContain ">Adicionar lista</string>"
-        base shouldContain "<plurals name=\"tsuzuki_collections_admin_folder_count\">"
-        ptBr shouldContain "<plurals name=\"tsuzuki_collections_admin_list_count\">"
+        listOf(basePlurals, ptBrPlurals).forEach { plurals ->
+            plurals shouldContain "<plurals name=\"tsuzuki_collections_admin_folder_count\">"
+            plurals shouldContain "<plurals name=\"tsuzuki_collections_admin_list_count\">"
+        }
+        basePlurals shouldContain "<item quantity=\"one\">%1\$d folder</item>"
+        basePlurals shouldContain "<item quantity=\"other\">%1\$d folders</item>"
+        basePlurals shouldContain "<item quantity=\"one\">%1\$d list</item>"
+        basePlurals shouldContain "<item quantity=\"other\">%1\$d lists</item>"
+        ptBrPlurals shouldContain "<item quantity=\"one\">%1\$d pasta</item>"
+        ptBrPlurals shouldContain "<item quantity=\"other\">%1\$d pastas</item>"
+        ptBrPlurals shouldContain "<item quantity=\"one\">%1\$d lista</item>"
+        ptBrPlurals shouldContain "<item quantity=\"other\">%1\$d listas</item>"
     }
 
     private fun readAppSource(relativePath: String): String = readFirst(

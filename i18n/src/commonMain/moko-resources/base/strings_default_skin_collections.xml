@@ -36,12 +36,4 @@
     <string name="tsuzuki_collections_admin_delete_list_message">This list will be deleted.</string>
     <string name="tsuzuki_collections_admin_hide_list_title">Hide built-in list?</string>
     <string name="tsuzuki_collections_admin_hide_list_message">This list will be hidden on this device.</string>
-    <plurals name="tsuzuki_collections_admin_folder_count">
-        <item quantity="one">%1$d folder</item>
-        <item quantity="other">%1$d folders</item>
-    </plurals>
-    <plurals name="tsuzuki_collections_admin_list_count">
-        <item quantity="one">%1$d list</item>
-        <item quantity="other">%1$d lists</item>
-    </plurals>
 </resources>
