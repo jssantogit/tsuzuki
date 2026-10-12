@@ -23,7 +23,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalChapterDetailItem
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreenState
 import mihon.icons.materialsymbols.MaterialSymbols
@@ -59,9 +59,11 @@ internal fun ContextualChapterRail(
                 style = MaterialTheme.typography.titleLarge,
             )
             if (chapters.isNotEmpty()) {
-                TextButton(onClick = onAll) {
-                    Text(stringResource(MR.strings.tsuzuki_details_view_all))
-                }
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_details_view_all),
+                    onClick = onAll,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
             }
         }
         if (chapters.isEmpty()) {
@@ -70,7 +72,11 @@ internal fun ContextualChapterRail(
                     stringResource(MR.strings.tsuzuki_details_no_chapters),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                TextButton(onClick = onProviders) { Text(stringResource(MR.strings.tsuzuki_details_providers)) }
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_details_providers),
+                    onClick = onProviders,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
             }
         } else {
             LazyRow(

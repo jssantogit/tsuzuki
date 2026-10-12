@@ -6,9 +6,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,6 +40,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.manga.components.MangaCover
@@ -85,7 +87,7 @@ fun TsuzukiHomeScreen(
                 .background(colors.canvas)
                 .padding(paddingValues),
             contentPadding = PaddingValues(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(DefaultSkinSpacing.Section),
+            verticalArrangement = Arrangement.Top,
         ) {
             val heroes = state.heroes.take(MAX_HERO_ITEMS)
             if (heroes.isNotEmpty()) {
@@ -96,31 +98,53 @@ fun TsuzukiHomeScreen(
                         onDetails = onHeroDetails,
                     )
                 }
-            } else if (state.continueReading.isNotEmpty() || state.sections.isNotEmpty()) {
-                item(key = "home_safe_top") {
-                    Spacer(Modifier.statusBarsPadding())
-                }
             }
 
+            var previousModuleExists = false
             if (state.continueReading.isNotEmpty()) {
+                val firstModule = !previousModuleExists
+                val moduleTopSpacing = homeModuleTopSpacing(
+                    previousModuleExists = previousModuleExists,
+                    heroPrecedesModule = heroes.isNotEmpty() && firstModule,
+                )
+                val addStatusBarInset = heroes.isEmpty() && firstModule
                 item(key = "continue_reading") {
-                    ContinueReadingSection(
-                        items = state.continueReading,
-                        onContinueReading = onContinueReading,
-                    )
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .then(if (addStatusBarInset) Modifier.statusBarsPadding() else Modifier)
+                            .padding(top = moduleTopSpacing),
+                    ) {
+                        ContinueReadingSection(items = state.continueReading, onContinueReading = onContinueReading)
+                    }
                 }
+                previousModuleExists = true
             }
 
             state.sections.forEach { section ->
                 when (section) {
                     is HomeSection.CollectionSection -> {
                         if (section.folders.isNotEmpty()) {
+                            val firstModule = !previousModuleExists
+                            val moduleTopSpacing = homeModuleTopSpacing(
+                                previousModuleExists = previousModuleExists,
+                                heroPrecedesModule = heroes.isNotEmpty() && firstModule,
+                            )
+                            val addStatusBarInset = heroes.isEmpty() && firstModule
                             item(key = "collection_${section.collectionId}") {
-                                CollectionHomeSection(
-                                    section = section,
-                                    onFolder = { folderId -> onFolder(section.collectionId, folderId) },
-                                )
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .then(if (addStatusBarInset) Modifier.statusBarsPadding() else Modifier)
+                                        .padding(top = moduleTopSpacing),
+                                ) {
+                                    CollectionHomeSection(
+                                        section = section,
+                                        onFolder = { folderId -> onFolder(section.collectionId, folderId) },
+                                    )
+                                }
                             }
+                            previousModuleExists = true
                         }
                     }
                 }
@@ -169,6 +193,7 @@ private fun HomeHeroCarousel(
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun HomeHero(
     item: CatalogItem,
     activeIndex: Int,
@@ -256,21 +281,21 @@ private fun HomeHero(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Row(
+            FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                maxItemsInEachRow = 2,
             ) {
                 DefaultSkinPrimaryButton(
                     text = stringResource(MR.strings.tsuzuki_home_read),
                     onClick = onRead,
-                    modifier = Modifier.weight(1f),
                 )
                 DefaultSkinSecondaryButton(
                     text = stringResource(MR.strings.tsuzuki_home_details),
                     onClick = onDetails,
-                    modifier = Modifier.weight(1f),
                 )
             }
             if (itemCount > 1) {
@@ -420,6 +445,12 @@ private fun CollectionHomeSection(
             }
         }
     }
+}
+
+internal fun homeModuleTopSpacing(previousModuleExists: Boolean, heroPrecedesModule: Boolean): Dp = when {
+    previousModuleExists -> DefaultSkinSpacing.Section
+    heroPrecedesModule -> DefaultSkinSpacing.Group
+    else -> 0.dp
 }
 
 private const val HERO_ASPECT_RATIO = 0.71f

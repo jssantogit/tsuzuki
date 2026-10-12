@@ -1,5 +1,9 @@
 package eu.kanade.presentation.tsuzuki
 
+import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
+import eu.kanade.presentation.tsuzuki.home.homeModuleTopSpacing
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.Test
@@ -59,6 +63,56 @@ class DefaultSkinVisualContractTest {
         home shouldContain "DefaultSkinSecondaryButton("
         home shouldNotContain "import androidx.compose.material3.Button"
         home shouldNotContain "import androidx.compose.material3.OutlinedButton"
+    }
+
+    @Test
+    fun `canonical details hero keeps one artwork layer in the title transition without a phantom read spacer`() {
+        val hero = readSource("detail/CanonicalDetailsHero.kt")
+        val atmosphere = sourceBlockStartingAt(
+            hero,
+            "Box(Modifier.fillMaxWidth().background(background))",
+        )
+        val artworkIndex = atmosphere.indexOf("MangaCover.Square(")
+        val titleIndex = atmosphere.indexOf("state.title.displayTitle")
+
+        hero.split("MangaCover.Square(").size shouldBe 2
+        hero shouldNotContain "AsyncImage("
+        hero shouldNotContain "MangaCover.Book("
+        (artworkIndex >= 0 && titleIndex > artworkIndex) shouldBe true
+        atmosphere shouldNotContain "if (state.tsuzukiRating"
+        (hero.indexOf("if (state.tsuzukiRating") > hero.indexOf("state.title.displayTitle")) shouldBe true
+        hero shouldNotContain "Spacer(Modifier.weight(1f))"
+        hero shouldNotContain "Arrangement.End"
+    }
+
+    @Test
+    fun `canonical chapter actions and Home hero controls stay on the Default Skin`() {
+        val chapters = readSource("detail/CanonicalDetailsChapterComponents.kt")
+        val home = readSource("home/TsuzukiHomeScreen.kt")
+        val homeHero = home.substringAfter("private fun HomeHero(")
+            .substringBefore("\nprivate fun ContinueReadingSection")
+
+        chapters shouldContain "DefaultSkinTextAction("
+        chapters shouldNotContain "TextButton("
+        homeHero shouldContain "FlowRow("
+        homeHero shouldNotContain "Modifier.weight(1f)"
+        home shouldNotContain "home_safe_top"
+    }
+
+    @Test
+    fun `Home keeps its first post-hero gap compact and ordinary module gaps intact`() {
+        homeModuleTopSpacing(
+            previousModuleExists = false,
+            heroPrecedesModule = true,
+        ) shouldBe DefaultSkinSpacing.Group
+        homeModuleTopSpacing(
+            previousModuleExists = true,
+            heroPrecedesModule = false,
+        ) shouldBe DefaultSkinSpacing.Section
+        homeModuleTopSpacing(
+            previousModuleExists = false,
+            heroPrecedesModule = false,
+        ) shouldBe 0.dp
     }
 
     @Test
@@ -148,6 +202,24 @@ class DefaultSkinVisualContractTest {
     private fun providerDetail(): String = readSettingsSource("SettingsTsuzukiProviderDetailDefaultSkinScreen.kt")
 
     private fun trackingService(): String = readSettingsSource("SettingsTsuzukiTrackingServiceScreen.kt")
+
+    private fun sourceBlockStartingAt(source: String, marker: String): String {
+        val markerStart = source.indexOf(marker)
+        require(markerStart >= 0) { "Source block marker was not found: $marker" }
+        val openingBrace = source.indexOf('{', markerStart + marker.length)
+        require(openingBrace >= 0) { "Source block opening brace was not found: $marker" }
+        var depth = 0
+        for (index in openingBrace until source.length) {
+            when (source[index]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return source.substring(openingBrace + 1, index)
+                }
+            }
+        }
+        error("Source block closing brace was not found: $marker")
+    }
 
     private fun readSettingsComponentSource(fileName: String): String = readFirst(
         Path.of("src/main/java/eu/kanade/presentation/more/settings/components/$fileName"),

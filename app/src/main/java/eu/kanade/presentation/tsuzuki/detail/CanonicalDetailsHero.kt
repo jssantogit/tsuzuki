@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -106,79 +105,88 @@ internal fun CanonicalDetailsHero(
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val artworkLead = canonicalDetailsArtworkLead(maxWidth)
         Column(Modifier.fillMaxWidth().background(background).padding(bottom = 16.dp)) {
-            if (hasArtwork) {
-                Box(
-                    Modifier.fillMaxWidth().height(toolbarLeadHeight + artworkLead).clearAndSetSemantics {},
-                ) {
-                    MangaCover.Square(
-                        data = state.coverUrl ?: state.sourceCover,
-                        fallbackData = listOf(state.sourceCover, state.sourceCover?.url),
-                        modifier = Modifier.fillMaxSize(),
-                        shape = RectangleShape,
-                        contentScale = ContentScale.Crop,
-                        onLoadEvent = { event ->
-                            trace.recordArtworkLoad(event)
-                            if (event is MangaCoverLoadEvent.Failed && !event.willFallback) artworkFailed = true
-                        },
-                    )
+            Box(Modifier.fillMaxWidth().background(background)) {
+                if (hasArtwork) {
                     Box(
-                        Modifier.fillMaxSize().background(
-                            Brush.verticalGradient(
-                                0f to background.copy(alpha = 0.08f),
-                                0.30f to background.copy(alpha = 0.15f),
-                                0.50f to background.copy(alpha = 0.50f),
-                                0.74f to background.copy(alpha = 0.86f),
-                                1f to background,
-                            ),
-                        ),
-                    )
-                }
-            } else {
-                Spacer(Modifier.height(toolbarLeadHeight))
-            }
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    state.title.displayTitle,
-                    Modifier.fillMaxWidth().semantics { heading() },
-                    color = skinColors.foreground,
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                )
-                val year = state.startDate?.takeIf { it.length >= 4 && it.take(4).all(Char::isDigit) }?.take(4)
-                val format = editorialFormatLabel(state.editorialFormat)
-                if (year != null || format != null) {
-                    FlowRow(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .height(toolbarLeadHeight + artworkLead)
+                            .clearAndSetSemantics {},
                     ) {
-                        year?.let {
-                            Text(it, color = skinColors.foreground, style = MaterialTheme.typography.bodyLarge)
-                        }
-                        format?.let {
-                            Text(it, color = skinColors.foreground, style = MaterialTheme.typography.bodyLarge)
-                        }
+                        MangaCover.Square(
+                            data = state.coverUrl ?: state.sourceCover,
+                            fallbackData = listOf(state.sourceCover, state.sourceCover?.url),
+                            modifier = Modifier.fillMaxSize(),
+                            shape = RectangleShape,
+                            contentScale = ContentScale.Crop,
+                            onLoadEvent = { event ->
+                                trace.recordArtworkLoad(event)
+                                if (event is MangaCoverLoadEvent.Failed && !event.willFallback) artworkFailed = true
+                            },
+                        )
+                        Box(
+                            Modifier.fillMaxSize().background(
+                                Brush.verticalGradient(
+                                    0f to background.copy(alpha = 0.08f),
+                                    0.30f to background.copy(alpha = 0.15f),
+                                    0.50f to background.copy(alpha = 0.50f),
+                                    0.74f to background.copy(alpha = 0.86f),
+                                    1f to background,
+                                ),
+                            ),
+                        )
                     }
                 }
-                editorialStatusLabel(state.editorialStatus)?.let {
-                    Text(
-                        it,
-                        color = skinColors.secondary,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                val contentTop = if (hasArtwork) {
+                    toolbarLeadHeight + artworkLead * 0.68f
+                } else {
+                    toolbarLeadHeight
                 }
-                if (state.genres.isNotEmpty()) {
-                    FlowRow(
-                        Modifier.fillMaxWidth().padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        state.genres.forEach { Text(it, color = skinColors.secondary) }
+                Column(
+                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = contentTop),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        state.title.displayTitle,
+                        Modifier.fillMaxWidth().semantics { heading() },
+                        color = skinColors.foreground,
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
+                    val year = state.startDate?.takeIf { it.length >= 4 && it.take(4).all(Char::isDigit) }?.take(4)
+                    val format = editorialFormatLabel(state.editorialFormat)
+                    if (year != null || format != null) {
+                        FlowRow(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            year?.let {
+                                Text(it, color = skinColors.foreground, style = MaterialTheme.typography.bodyLarge)
+                            }
+                            format?.let {
+                                Text(it, color = skinColors.foreground, style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                    }
+                    editorialStatusLabel(state.editorialStatus)?.let {
+                        Text(
+                            it,
+                            color = skinColors.secondary,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    if (state.genres.isNotEmpty()) {
+                        FlowRow(
+                            Modifier.fillMaxWidth().padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            state.genres.forEach { Text(it, color = skinColors.secondary) }
+                        }
                     }
                 }
             }
@@ -289,8 +297,6 @@ internal fun CanonicalDetailsHero(
                             enabled = !state.readingStartInProgress,
                             modifier = Modifier.weight(1f),
                         )
-                    } else {
-                        Spacer(Modifier.weight(1f))
                     }
                     IconButton(
                         onClick = if (state.libraryEntry == null) onAddToLibrary else onRemoveFromLibrary,
