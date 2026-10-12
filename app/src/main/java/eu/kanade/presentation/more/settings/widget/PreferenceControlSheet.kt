@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import mihon.icons.materialsymbols.MaterialSymbols
+import mihon.icons.materialsymbols.rounded.Check
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

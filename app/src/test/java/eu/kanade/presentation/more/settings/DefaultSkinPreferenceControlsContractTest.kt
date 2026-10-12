@@ -76,6 +76,10 @@ class DefaultSkinPreferenceControlsContractTest {
         slider shouldContain "defaultSkinColors()"
         slider shouldContain "colors.accent"
         slider shouldContain "colors.outline"
+        slider shouldContain "value: Int"
+        slider shouldContain "valueRange: IntProgression"
+        slider shouldContain "onValueChange: (Int) -> Unit"
+        slider shouldContain "performHapticFeedback(HapticFeedbackType.TextHandleMove)"
         slider shouldNotContain "TextOverflow.Ellipsis"
     }
 
