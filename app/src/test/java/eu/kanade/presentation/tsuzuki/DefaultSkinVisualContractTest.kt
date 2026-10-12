@@ -46,7 +46,8 @@ class DefaultSkinVisualContractTest {
         )
 
         files.forEach { source -> source shouldNotContain "OutlinedTextField(" }
-        readSource("entry/TsuzukiEntryScreen.kt") shouldContain "BasicTextField("
+        readSource("entry/TsuzukiEntryScreen.kt") shouldContain "DefaultSkinFormField("
+        readSource("components/DefaultSkinPrimitives.kt") shouldContain "BasicTextField("
         readSource("search/TsuzukiSearchScreen.kt") shouldContain "BasicTextField("
     }
 
