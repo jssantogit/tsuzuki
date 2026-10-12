@@ -223,7 +223,7 @@ internal fun CollectionsAdminNameField(
         value = value,
         onValueChange = onValueChange,
         label = label,
-        singleLine = false,
+        singleLine = true,
     )
 }
 

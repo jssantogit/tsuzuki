@@ -229,6 +229,16 @@ class DefaultSkinCollectionsAdminContractTest {
         ptBrPlurals shouldContain "<item quantity=\"other\">%1\$d listas</item>"
     }
 
+    @Test
+    fun `Collections admin name field is single line`() {
+        val presentation = readAppSource("collections/CollectionsAdminPresentation.kt")
+        val nameField = presentation.substringAfter("internal fun CollectionsAdminNameField")
+            .substringBefore("internal fun CollectionsAdminSectionHeader")
+
+        nameField shouldContain "singleLine = true"
+        nameField shouldNotContain "singleLine = false"
+    }
+
     private fun readAppSource(relativePath: String): String = readFirst(
         Path.of("src/main/java/eu/kanade/presentation/tsuzuki/$relativePath"),
         Path.of("app/src/main/java/eu/kanade/presentation/tsuzuki/$relativePath"),
