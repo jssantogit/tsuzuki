@@ -376,7 +376,7 @@ private fun ConnectedAccountContent(
         }
     }
 
-    SettingsGroup(title = stringResource(MR.strings.drive_sync_status)) {
+    SettingsGroup(title = stringResource(MR.strings.tsuzuki_account_sync_section)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

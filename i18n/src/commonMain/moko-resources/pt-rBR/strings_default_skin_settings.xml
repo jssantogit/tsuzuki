@@ -3,6 +3,7 @@
     <string name="tsuzuki_settings_section_content">Conteúdo</string>
     <string name="tsuzuki_settings_section_privacy_security">Privacidade e segurança</string>
     <string name="tsuzuki_settings_section_diagnostics">Diagnóstico</string>
+    <string name="tsuzuki_account_sync_section">Sincronização</string>
 
     <string name="tsuzuki_visual_preset_title">Preset visual</string>
     <string name="tsuzuki_visual_preset_current">Preset atual</string>
