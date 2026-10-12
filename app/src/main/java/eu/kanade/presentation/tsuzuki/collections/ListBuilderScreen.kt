@@ -48,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -862,7 +863,7 @@ private fun DescriptorFilterControl(
                         .heightIn(min = 48.dp)
                         .semantics {
                             role = Role.Button
-                            selected = selected
+                            this.selected = selected
                         },
                 )
             } else {
