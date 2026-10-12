@@ -5,18 +5,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -27,6 +27,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -35,10 +38,13 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.icerock.moko.resources.StringResource
 import dev.zacsweers.metrox.viewmodel.metroViewModel
+import eu.kanade.presentation.more.settings.components.SettingsCanvas
+import eu.kanade.presentation.more.settings.components.SettingsGroup
+import eu.kanade.presentation.more.settings.components.SettingsGroupDivider
+import eu.kanade.presentation.more.settings.components.SettingsNavigationRow
+import eu.kanade.presentation.more.settings.components.SettingsPageHeader
+import eu.kanade.presentation.more.settings.widget.SettingsPreferenceSwitchIndicator
 import eu.kanade.presentation.track.components.TrackLogoIcon
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinCard
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinPageTitle
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinSectionLabel
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextField
@@ -53,6 +59,8 @@ import eu.kanade.tachiyomi.ui.tsuzuki.settings.TsuzukiIntegrationSettingsItem
 import eu.kanade.tachiyomi.ui.tsuzuki.settings.TsuzukiIntegrationsSettingsScreenModel
 import eu.kanade.tachiyomi.ui.tsuzuki.settings.TsuzukiIntegrationsSettingsState
 import mihon.app.di.appGraph
+import mihon.icons.materialsymbols.MaterialSymbols
+import mihon.icons.materialsymbols.automirroredrounded.ArrowRight
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationCategory
 import tachiyomi.i18n.MR
@@ -67,51 +75,48 @@ class SettingsTsuzukiIntegrationsScreen : Screen() {
         val state by screenModel.state.collectAsStateWithLifecycle()
         val colors = defaultSkinColors()
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(colors.canvas)
-                .statusBarsPadding(),
-        ) {
-            IntegrationHeader(
-                title = stringResource(MR.strings.tsuzuki_integrations_title),
-                onBack = navigator::pop,
-            )
+        SettingsCanvas {
+            Column(modifier = Modifier.fillMaxSize()) {
+                SettingsPageHeader(
+                    title = stringResource(MR.strings.tsuzuki_integrations_title),
+                    navigateUp = navigator::pop,
+                )
 
-            when (val current = state) {
-                TsuzukiIntegrationsSettingsState.Loading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = colors.foreground)
+                when (val current = state) {
+                    TsuzukiIntegrationsSettingsState.Loading -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = colors.foreground)
+                        }
                     }
-                }
 
-                is TsuzukiIntegrationsSettingsState.Loaded -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            start = DefaultSkinSpacing.PageHorizontal,
-                            end = DefaultSkinSpacing.PageHorizontal,
-                            bottom = 32.dp,
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(DefaultSkinSpacing.Row),
-                    ) {
-                        IntegrationCategory.entries.forEach { category ->
-                            val categoryItems = current.items.filter { it.category == category }
-                            if (categoryItems.isEmpty()) return@forEach
-                            item(key = "header_${category.name}") {
-                                DefaultSkinSectionLabel(
-                                    text = stringResource(category.labelRes()),
-                                    modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
-                                )
-                            }
-                            items(items = categoryItems, key = { it.id.value }) { item ->
-                                IntegrationSettingRow(
-                                    item = item,
-                                    onEnabledChange = { screenModel.setEnabled(item.id, it) },
-                                    onOpen = {
-                                        navigator.push(SettingsTsuzukiIntegrationDetailScreen(item.id.value))
-                                    },
-                                )
+                    is TsuzukiIntegrationsSettingsState.Loaded -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = DefaultSkinSpacing.Section),
+                        ) {
+                            IntegrationCategory.entries.forEach { category ->
+                                val categoryItems = current.items.filter { it.category == category }
+                                if (categoryItems.isEmpty()) return@forEach
+                                item(key = "category_${category.name}") {
+                                    SettingsGroup(title = stringResource(category.labelRes())) {
+                                        categoryItems.forEachIndexed { index, item ->
+                                            IntegrationSettingRow(
+                                                item = item,
+                                                onEnabledChange = {
+                                                    screenModel.setEnabled(item.id, it)
+                                                },
+                                                onOpen = {
+                                                    navigator.push(
+                                                        SettingsTsuzukiIntegrationDetailScreen(item.id.value),
+                                                    )
+                                                },
+                                            )
+                                            if (index < categoryItems.lastIndex) {
+                                                SettingsGroupDivider()
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -142,141 +147,141 @@ class SettingsTsuzukiIntegrationDetailScreen(
             mutableStateOf((tracker as? MyAnimeList)?.hasClientId() ?: true)
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(colors.canvas)
-                .statusBarsPadding(),
-        ) {
-            IntegrationHeader(
-                title = item?.label ?: stringResource(MR.strings.tsuzuki_integration_fallback_title),
-                onBack = navigator::pop,
-            )
+        SettingsCanvas {
+            Column(modifier = Modifier.fillMaxSize()) {
+                SettingsPageHeader(
+                    title = item?.label ?: stringResource(MR.strings.tsuzuki_integration_fallback_title),
+                    navigateUp = navigator::pop,
+                )
 
-            if (item == null) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = colors.foreground)
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        start = DefaultSkinSpacing.PageHorizontal,
-                        end = DefaultSkinSpacing.PageHorizontal,
-                        bottom = 32.dp,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(DefaultSkinSpacing.Row),
-                ) {
-                    providerDescriptionRes(item.id.value)?.let { description ->
-                        item(key = "provider_summary") {
-                            ProviderSummary(
-                                tracker = tracker,
-                                description = stringResource(description),
-                            )
-                        }
+                if (item == null) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = colors.foreground)
                     }
-
-                    when (item.id.value) {
-                        "mal" -> item(key = "mal_client_id") {
-                            MalClientIdConfiguration(
-                                tracker = tracker as? MyAnimeList,
-                                onConfiguredChanged = { configured ->
-                                    malClientIdConfigured = configured
-                                    if (!configured && item.enabled) screenModel.setEnabled(item.id, false)
-                                },
-                            )
-                        }
-                        "shikimori" -> item(key = "shikimori_oauth_app") {
-                            ShikimoriCredentialsConfiguration(tracker as? Shikimori)
-                        }
-                        "hikka" -> item(key = "hikka_oauth_app") {
-                            HikkaCredentialsConfiguration(tracker as? Hikka)
-                        }
-                    }
-
-                    if (item.configurableCapabilities.isNotEmpty()) {
-                        item(key = "configuration_label") {
-                            DefaultSkinSectionLabel(stringResource(MR.strings.action_settings))
-                        }
-                        item(key = "integration_enabled") {
-                            IntegrationToggleCard(
-                                title = if (item.id.value == "tsuzuki") {
-                                    stringResource(MR.strings.tsuzuki_integration_enable_tsuzuki)
-                                } else {
-                                    stringResource(MR.strings.tsuzuki_integration_use_provider, item.label)
-                                },
-                                checked = item.enabled,
-                                enabled = item.id.value != "mal" || malClientIdConfigured || item.enabled,
-                                onCheckedChange = { screenModel.setEnabled(item.id, it) },
-                            )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = DefaultSkinSpacing.Section),
+                    ) {
+                        providerDescriptionRes(item.id.value)?.let { description ->
+                            item(key = "provider_summary") {
+                                SettingsGroup {
+                                    ProviderSummary(
+                                        tracker = tracker,
+                                        description = stringResource(description),
+                                    )
+                                }
+                            }
                         }
 
-                        val configurable = item.capabilities.filter { it in item.configurableCapabilities }
-                        items(items = configurable, key = { it.name }) { capability ->
-                            IntegrationToggleCard(
-                                title = stringResource(capability.labelRes()),
-                                checked = item.capabilityEnabled[capability] ?: true,
-                                enabled = item.enabled,
-                                onCheckedChange = {
-                                    screenModel.setCapabilityEnabled(item.id, capability, it)
-                                },
-                                modifier = Modifier.alpha(if (item.enabled) 1f else 0.45f),
-                            )
+                        when (item.id.value) {
+                            "mal" -> item(key = "mal_client_id") {
+                                SettingsGroup(title = stringResource(MR.strings.tsuzuki_mal_client_id_title)) {
+                                    MalClientIdConfiguration(
+                                        tracker = tracker as? MyAnimeList,
+                                        onConfiguredChanged = { configured ->
+                                            malClientIdConfigured = configured
+                                            if (!configured && item.enabled) {
+                                                screenModel.setEnabled(item.id, false)
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                            "shikimori" -> item(key = "shikimori_oauth_app") {
+                                SettingsGroup {
+                                    ShikimoriCredentialsConfiguration(tracker as? Shikimori)
+                                }
+                            }
+                            "hikka" -> item(key = "hikka_oauth_app") {
+                                SettingsGroup {
+                                    HikkaCredentialsConfiguration(tracker as? Hikka)
+                                }
+                            }
                         }
-                    }
 
-                    if (item.id.value == "tsuzuki") {
-                        item(key = "tracking_behavior") {
-                            IntegrationActionCard(
-                                title = stringResource(MR.strings.tsuzuki_integrations_tracking_behavior_title),
-                                summary = stringResource(MR.strings.tsuzuki_integrations_tracking_behavior_summary),
-                                action = stringResource(MR.strings.action_settings),
-                                onClick = { navigator.push(SettingsTsuzukiTrackingBehaviorScreen) },
-                            )
+                        if (item.configurableCapabilities.isNotEmpty()) {
+                            item(key = "integration_settings") {
+                                SettingsGroup(title = stringResource(MR.strings.action_settings)) {
+                                    IntegrationToggleRow(
+                                        title = if (item.id.value == "tsuzuki") {
+                                            stringResource(MR.strings.tsuzuki_integration_enable_tsuzuki)
+                                        } else {
+                                            stringResource(MR.strings.tsuzuki_integration_use_provider, item.label)
+                                        },
+                                        checked = item.enabled,
+                                        enabled = item.id.value != "mal" || malClientIdConfigured || item.enabled,
+                                        onCheckedChange = { screenModel.setEnabled(item.id, it) },
+                                    )
+
+                                    val configurable = item.capabilities.filter {
+                                        it in item.configurableCapabilities
+                                    }
+                                    configurable.forEach { capability ->
+                                        SettingsGroupDivider()
+                                        IntegrationToggleRow(
+                                            title = stringResource(capability.labelRes()),
+                                            checked = item.capabilityEnabled[capability] ?: true,
+                                            enabled = item.enabled,
+                                            onCheckedChange = {
+                                                screenModel.setCapabilityEnabled(item.id, capability, it)
+                                            },
+                                            modifier = Modifier.alpha(if (item.enabled) 1f else 0.45f),
+                                        )
+                                    }
+                                }
+                            }
                         }
-                    }
 
-                    if (item.restrictedCapabilities.isNotEmpty()) {
-                        item(key = "restricted_summary") {
-                            IntegrationInfoCard(
-                                title = stringResource(MR.strings.tsuzuki_integration_catalog_unavailable),
-                                summary = stringResource(MR.strings.tsuzuki_integration_catalog_unavailable_summary),
-                            )
+                        if (item.id.value == "tsuzuki") {
+                            item(key = "tracking_behavior") {
+                                SettingsGroup {
+                                    IntegrationActionRow(
+                                        title = stringResource(
+                                            MR.strings.tsuzuki_integrations_tracking_behavior_title,
+                                        ),
+                                        summary = stringResource(
+                                            MR.strings.tsuzuki_integrations_tracking_behavior_summary,
+                                        ),
+                                        onClick = { navigator.push(SettingsTsuzukiTrackingBehaviorScreen) },
+                                    )
+                                }
+                            }
                         }
-                    }
 
-                    if (item.supportsTracking && item.legacyTrackerId != null) {
-                        item(key = "account_tracking") {
-                            IntegrationActionCard(
-                                title = stringResource(MR.strings.tsuzuki_integration_account_tracking),
-                                summary = stringResource(
-                                    MR.strings.tsuzuki_integration_account_tracking_summary,
-                                    item.label,
-                                ),
-                                action = stringResource(MR.strings.action_settings),
-                                onClick = {
-                                    navigator.push(SettingsTsuzukiTrackingServiceScreen(item.legacyTrackerId))
-                                },
-                            )
+                        if (item.restrictedCapabilities.isNotEmpty()) {
+                            item(key = "restricted_summary") {
+                                SettingsGroup {
+                                    IntegrationInfoRow(
+                                        title = stringResource(MR.strings.tsuzuki_integration_catalog_unavailable),
+                                        summary = stringResource(
+                                            MR.strings.tsuzuki_integration_catalog_unavailable_summary,
+                                        ),
+                                    )
+                                }
+                            }
+                        }
+
+                        if (item.supportsTracking && item.legacyTrackerId != null) {
+                            item(key = "account_tracking") {
+                                SettingsGroup {
+                                    IntegrationActionRow(
+                                        title = stringResource(MR.strings.tsuzuki_integration_account_tracking),
+                                        summary = stringResource(
+                                            MR.strings.tsuzuki_integration_account_tracking_summary,
+                                            item.label,
+                                        ),
+                                        onClick = {
+                                            navigator.push(SettingsTsuzukiTrackingServiceScreen(item.legacyTrackerId))
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun IntegrationHeader(title: String, onBack: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = DefaultSkinSpacing.PageHorizontal, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        DefaultSkinTextAction(stringResource(MR.strings.tsuzuki_navigation_back), onBack)
-        DefaultSkinPageTitle(title, modifier = Modifier.weight(1f))
     }
 }
 
@@ -289,40 +294,32 @@ private fun MalClientIdConfiguration(
     var clientId by remember(tracker) { mutableStateOf(savedClientId) }
     val colors = defaultSkinColors()
 
-    DefaultSkinCard(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                stringResource(MR.strings.tsuzuki_mal_client_id_title),
-                color = colors.foreground,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                stringResource(MR.strings.tsuzuki_mal_client_id_summary),
-                color = colors.secondary,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            DefaultSkinTextField(
-                value = clientId,
-                onValueChange = { clientId = it },
-                label = stringResource(MR.strings.tsuzuki_mal_client_id_title),
-                supportingText = stringResource(MR.strings.tsuzuki_mal_client_id_setup),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            DefaultSkinTextAction(
-                text = stringResource(MR.strings.action_save),
-                onClick = {
-                    tracker?.setClientId(clientId)
-                    savedClientId = tracker?.getClientId().orEmpty()
-                    clientId = savedClientId
-                    onConfiguredChanged(savedClientId.isNotBlank())
-                },
-                modifier = Modifier.alpha(if (tracker != null && clientId.trim() != savedClientId) 1f else 0.45f),
-            )
-        }
+    Column(
+        modifier = Modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            stringResource(MR.strings.tsuzuki_mal_client_id_summary),
+            color = colors.secondary,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        DefaultSkinTextField(
+            value = clientId,
+            onValueChange = { clientId = it },
+            label = stringResource(MR.strings.tsuzuki_mal_client_id_title),
+            supportingText = stringResource(MR.strings.tsuzuki_mal_client_id_setup),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        DefaultSkinTextAction(
+            text = stringResource(MR.strings.action_save),
+            onClick = {
+                tracker?.setClientId(clientId)
+                savedClientId = tracker?.getClientId().orEmpty()
+                clientId = savedClientId
+                onConfiguredChanged(savedClientId.isNotBlank())
+            },
+            modifier = Modifier.alpha(if (tracker != null && clientId.trim() != savedClientId) 1f else 0.45f),
+        )
     }
 }
 
@@ -370,67 +367,63 @@ private fun ApplicationCredentialsConfiguration(
     var editedClientSecret by remember(clientSecret) { mutableStateOf(clientSecret) }
     val colors = defaultSkinColors()
 
-    DefaultSkinCard(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(summary, color = colors.secondary, style = MaterialTheme.typography.bodyMedium)
-            DefaultSkinTextField(
-                value = editedClientId,
-                onValueChange = { editedClientId = it },
-                label = clientIdLabel,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            DefaultSkinTextField(
-                value = editedClientSecret,
-                onValueChange = { editedClientSecret = it },
-                label = clientSecretLabel,
-                modifier = Modifier.fillMaxWidth(),
-                visualTransformation = PasswordVisualTransformation(),
-                supportingText = setup,
-            )
-            DefaultSkinTextAction(
-                text = stringResource(MR.strings.action_save),
-                onClick = {
-                    onSave(editedClientId, editedClientSecret)
-                    savedClientId = editedClientId.trim()
-                    savedClientSecret = editedClientSecret.trim()
-                    editedClientId = savedClientId
-                    editedClientSecret = savedClientSecret
+    Column(
+        modifier = Modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(summary, color = colors.secondary, style = MaterialTheme.typography.bodyMedium)
+        DefaultSkinTextField(
+            value = editedClientId,
+            onValueChange = { editedClientId = it },
+            label = clientIdLabel,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        DefaultSkinTextField(
+            value = editedClientSecret,
+            onValueChange = { editedClientSecret = it },
+            label = clientSecretLabel,
+            modifier = Modifier.fillMaxWidth(),
+            visualTransformation = PasswordVisualTransformation(),
+            supportingText = setup,
+        )
+        DefaultSkinTextAction(
+            text = stringResource(MR.strings.action_save),
+            onClick = {
+                onSave(editedClientId, editedClientSecret)
+                savedClientId = editedClientId.trim()
+                savedClientSecret = editedClientSecret.trim()
+                editedClientId = savedClientId
+                editedClientSecret = savedClientSecret
+            },
+            modifier = Modifier.alpha(
+                if (
+                    editedClientId.trim() != savedClientId ||
+                    editedClientSecret.trim() != savedClientSecret
+                ) {
+                    1f
+                } else {
+                    0.45f
                 },
-                modifier = Modifier.alpha(
-                    if (
-                        editedClientId.trim() != savedClientId ||
-                        editedClientSecret.trim() != savedClientSecret
-                    ) {
-                        1f
-                    } else {
-                        0.45f
-                    },
-                ),
-            )
-        }
+            ),
+        )
     }
 }
 
 @Composable
 private fun ProviderSummary(tracker: Tracker?, description: String) {
     val colors = defaultSkinColors()
-    DefaultSkinCard(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            tracker?.let { TrackLogoIcon(it) }
-            Text(
-                text = description,
-                modifier = Modifier.weight(1f),
-                color = colors.secondary,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
+    Row(
+        modifier = Modifier.padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        tracker?.let { TrackLogoIcon(it) }
+        Text(
+            text = description,
+            modifier = Modifier.weight(1f),
+            color = colors.secondary,
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 
@@ -447,12 +440,17 @@ private fun IntegrationSettingRow(
     }
     val malClientIdConfigured = (tracker as? MyAnimeList)?.hasClientId() ?: true
 
-    DefaultSkinCard(modifier = Modifier.fillMaxWidth(), onClick = onOpen) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 72.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 72.dp)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .weight(1f)
+                .clickable(role = Role.Button, onClick = onOpen)
+                .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -475,19 +473,26 @@ private fun IntegrationSettingRow(
                     )
                 }
             }
-            if (item.configurableCapabilities.isNotEmpty()) {
-                Switch(
-                    checked = item.enabled,
-                    onCheckedChange = onEnabledChange,
-                    enabled = item.enabled || malClientIdConfigured,
-                )
-            }
+            Icon(
+                imageVector = MaterialSymbols.AutoMirroredRounded.ArrowRight,
+                contentDescription = null,
+                tint = colors.secondary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        if (item.configurableCapabilities.isNotEmpty()) {
+            IntegrationSwitch(
+                checked = item.enabled,
+                enabled = item.enabled || malClientIdConfigured,
+                label = item.label,
+                onCheckedChange = onEnabledChange,
+            )
         }
     }
 }
 
 @Composable
-private fun IntegrationToggleCard(
+private fun IntegrationToggleRow(
     title: String,
     checked: Boolean,
     enabled: Boolean,
@@ -495,50 +500,75 @@ private fun IntegrationToggleCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
-    DefaultSkinCard(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(title, modifier = Modifier.weight(1f), color = colors.foreground)
-            Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
-        }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 64.dp)
+            .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            color = colors.foreground,
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        IntegrationSwitch(
+            checked = checked,
+            enabled = enabled,
+            label = title,
+            onCheckedChange = onCheckedChange,
+        )
     }
 }
 
 @Composable
-private fun IntegrationInfoCard(title: String, summary: String) {
+private fun IntegrationSwitch(
+    checked: Boolean,
+    enabled: Boolean,
+    label: String,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .semantics { contentDescription = label }
+            .toggleable(
+                value = checked,
+                enabled = enabled,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        SettingsPreferenceSwitchIndicator(checked = checked, enabled = enabled)
+    }
+}
+
+@Composable
+private fun IntegrationInfoRow(title: String, summary: String) {
     val colors = defaultSkinColors()
-    DefaultSkinCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, color = colors.foreground, fontWeight = FontWeight.Medium)
-            Text(summary, color = colors.secondary, style = MaterialTheme.typography.bodySmall)
-        }
+    Column(
+        modifier = Modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(title, color = colors.foreground, fontWeight = FontWeight.Medium)
+        Text(summary, color = colors.secondary, style = MaterialTheme.typography.bodySmall)
     }
 }
 
 @Composable
-private fun IntegrationActionCard(
+private fun IntegrationActionRow(
     title: String,
     summary: String,
-    action: String,
     onClick: () -> Unit,
 ) {
-    val colors = defaultSkinColors()
-    DefaultSkinCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, color = colors.foreground, fontWeight = FontWeight.Medium)
-                Text(summary, color = colors.secondary, style = MaterialTheme.typography.bodySmall)
-            }
-            Text(action, color = colors.foreground, style = MaterialTheme.typography.labelLarge)
-        }
-    }
+    SettingsNavigationRow(
+        title = title,
+        subtitle = summary,
+        onClick = onClick,
+    )
 }
 
 private fun IntegrationCategory.labelRes(): StringResource = when (this) {

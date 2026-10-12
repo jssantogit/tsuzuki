@@ -83,6 +83,8 @@ class DefaultSkinIntegrationProviderSeparationContractTest {
 
         integrationSource shouldContain "TsuzukiIntegrationsSettingsScreenModel"
         integrationSource shouldNotContain "providerRepositoryManager"
+        integrationSource shouldNotContain "providerRegistry"
+        integrationSource shouldContain "IntegrationCategory.entries"
         providerSource shouldContain "providerRepositoryManager"
         providerSource shouldContain "providerRegistry"
     }

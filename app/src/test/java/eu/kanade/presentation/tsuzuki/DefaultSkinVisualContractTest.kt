@@ -253,7 +253,8 @@ class DefaultSkinVisualContractTest {
         val detail = providerDetail()
         val tracking = trackingService()
 
-        integrations shouldContain "DefaultSkinPageTitle("
+        integrations shouldContain "SettingsPageHeader("
+        integrations shouldNotContain "DefaultSkinPageTitle("
         providers shouldContain "DefaultSkinPageTitle("
         detail shouldContain "DefaultSkinPageTitle("
         tracking shouldContain "DefaultSkinPageTitle("
@@ -262,6 +263,73 @@ class DefaultSkinVisualContractTest {
         detail shouldNotContain "TopAppBar("
         tracking shouldNotContain "TopAppBar("
         tracking shouldNotContain "ListItem("
+    }
+
+    @Test
+    fun `integration settings use grouped rows and independent skin toggles`() {
+        val source = readSettingsSource("SettingsTsuzukiIntegrationsScreen.kt")
+        val landing = source.substringAfter("class SettingsTsuzukiIntegrationsScreen")
+            .substringBefore("class SettingsTsuzukiIntegrationDetailScreen")
+        val detail = source.substringAfter("class SettingsTsuzukiIntegrationDetailScreen")
+            .substringBefore("@Composable\nprivate fun MalClientIdConfiguration")
+        val integrationRow = sourceBlockStartingAt(source, "private fun IntegrationSettingRow(")
+        val toggleRow = sourceBlockStartingAt(source, "private fun IntegrationToggleRow(")
+        val switchControl = sourceBlockStartingAt(source, "private fun IntegrationSwitch(")
+        val actionRow = sourceBlockStartingAt(source, "private fun IntegrationActionRow(")
+
+        landing shouldContain "SettingsCanvas {"
+        landing shouldContain "SettingsPageHeader("
+        landing shouldContain "IntegrationCategory.entries.forEach { category ->"
+        landing shouldContain "SettingsGroup(title = stringResource(category.labelRes()))"
+        landing shouldContain "categoryItems.forEachIndexed"
+        landing shouldContain "SettingsGroupDivider()"
+        landing.split("SettingsGroup(title = stringResource(category.labelRes()))").size shouldBe 2
+
+        detail shouldContain "SettingsCanvas {"
+        detail shouldContain "SettingsPageHeader("
+        detail shouldContain "SettingsGroup("
+        detail shouldNotContain "IntegrationHeader("
+
+        integrationRow shouldContain ".weight(1f)"
+        integrationRow shouldContain ".clickable(role = Role.Button, onClick = onOpen)"
+        integrationRow shouldContain "IntegrationSwitch("
+        integrationRow shouldContain "item.id.value == \"mal\" && !malClientIdConfigured"
+        integrationRow shouldContain "onCheckedChange = onEnabledChange"
+        integrationRow shouldNotContain "DefaultSkinCard("
+        integrationRow shouldNotContain ".toggleable("
+        integrationRow.split(".clickable(").size shouldBe 2
+
+        toggleRow shouldContain "IntegrationSwitch("
+        toggleRow shouldNotContain "DefaultSkinCard("
+        toggleRow shouldNotContain ".clickable("
+
+        switchControl shouldContain ".toggleable("
+        switchControl shouldContain "value = checked"
+        switchControl shouldContain "role = Role.Switch"
+        switchControl shouldContain "onValueChange = onCheckedChange"
+        switchControl shouldContain "SettingsPreferenceSwitchIndicator(checked = checked, enabled = enabled)"
+        switchControl.split(".toggleable(").size shouldBe 2
+
+        actionRow shouldContain "SettingsNavigationRow("
+        actionRow shouldNotContain "trailing ="
+
+        source shouldNotContain "DefaultSkinCard("
+        source shouldNotContain "androidx.compose.material3.Switch"
+        source shouldContain "if (!configured && item.enabled)"
+        source shouldContain "screenModel.setEnabled(item.id, false)"
+        source shouldContain "screenModel.setEnabled(item.id, it)"
+        source shouldContain "screenModel.setCapabilityEnabled(item.id, capability, it)"
+        source shouldContain "item.id.value != \"mal\" || malClientIdConfigured || item.enabled"
+        source shouldContain "item.restrictedCapabilities.isNotEmpty()"
+        source shouldContain "item.supportsTracking && item.legacyTrackerId != null"
+        source shouldContain "tracker as? MyAnimeList"
+        source shouldContain "tracker as? Shikimori"
+        source shouldContain "tracker as? Hikka"
+        source shouldContain "PasswordVisualTransformation()"
+        source shouldContain "DefaultSkinTextField("
+        source shouldContain "item.configurableCapabilities.isNotEmpty()"
+        source shouldContain "SettingsTsuzukiTrackingBehaviorScreen"
+        source shouldContain "SettingsTsuzukiTrackingServiceScreen(item.legacyTrackerId)"
     }
 
     @Test
