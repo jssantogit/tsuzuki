@@ -56,7 +56,7 @@ class DefaultSkinPreferenceControlsContractTest {
         base shouldContain "role = Role.Switch"
         switch shouldContain "toggleableState = checked"
         switch shouldContain "SettingsPreferenceSwitchIndicator(checked = checked, enabled = enabled)"
-        switch shouldContain "onClick = { onCheckedChanged(!checked) }"
+        switch shouldContain "onPreferenceClick = { onCheckedChanged(!checked) }"
         switch shouldContain "defaultSkinColors()"
         switch shouldContain "colors.accent"
         switch shouldContain "colors.onAccent"
