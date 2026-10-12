@@ -1,7 +1,5 @@
 package eu.kanade.presentation.more.settings
 
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -9,21 +7,16 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.structuralEqualityPolicy
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.more.settings.widget.EditTextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.InfoWidget
 import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.MultiSelectListPreferenceWidget
-import eu.kanade.presentation.more.settings.widget.PrefsHorizontalPadding
-import eu.kanade.presentation.more.settings.widget.PrefsVerticalPadding
+import eu.kanade.presentation.more.settings.widget.SliderPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.SwitchPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
-import eu.kanade.presentation.more.settings.widget.TitleFontSize
 import eu.kanade.presentation.more.settings.widget.TrackingPreferenceWidget
 import kotlinx.coroutines.launch
-import tachiyomi.presentation.core.components.BaseSliderItem
 import tachiyomi.presentation.core.util.collectAsState
 
 val LocalPreferenceHighlighted = compositionLocalOf(structuralEqualityPolicy()) { false }
@@ -73,27 +66,20 @@ internal fun PreferenceItem(
                 )
             }
             is Preference.PreferenceItem.SliderPreference -> {
-                BaseSliderItem(
+                SliderPreferenceWidget(
                     value = item.value,
                     valueRange = item.valueRange,
                     steps = item.steps,
                     title = item.title,
                     subtitle = item.subtitle,
                     valueString = item.valueString.takeUnless { it.isNullOrEmpty() } ?: item.value.toString(),
-                    onChange = {
+                    onValueChange = {
                         if (item.enabled) {
                             scope.launch {
                                 item.onValueChanged(it)
                             }
                         }
                     },
-                    titleStyle = MaterialTheme.typography.titleLarge.copy(fontSize = TitleFontSize),
-                    modifier = Modifier
-                        .alpha(if (item.enabled) 1f else 0.38f)
-                        .padding(
-                            horizontal = PrefsHorizontalPadding,
-                            vertical = PrefsVerticalPadding,
-                        ),
                 )
             }
             is Preference.PreferenceItem.ListPreference<*> -> {
