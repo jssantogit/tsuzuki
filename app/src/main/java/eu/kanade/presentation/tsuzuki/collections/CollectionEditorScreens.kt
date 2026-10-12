@@ -435,7 +435,7 @@ internal fun FolderEditorScreen(
             is FolderListEditorTarget.EditPersisted -> ListEditorState.from(target.list)
         }
         ListBuilderScreen(
-            title = if (target is FolderListEditorTarget.New) "New List" else "Edit List",
+            mode = if (target is FolderListEditorTarget.New) ListBuilderMode.CREATE else ListBuilderMode.EDIT,
             initial = initial,
             providerDescriptors = providerDescriptors,
             providerCapabilities = providerCapabilities,

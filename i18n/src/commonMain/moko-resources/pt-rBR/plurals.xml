@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <plurals name="tsuzuki_list_builder_active_filter_count">
+        <item quantity="one">%d filtro ativo</item>
+        <item quantity="other">%d filtros ativos</item>
+    </plurals>
+    <plurals name="tsuzuki_list_builder_selected_count">
+        <item quantity="one">%d seleção</item>
+        <item quantity="other">%d seleções</item>
+    </plurals>
     <plurals name="lock_after_mins">
         <item quantity="one">Após %1$s minuto</item>
         <item quantity="many">Após %1$s minutos</item>

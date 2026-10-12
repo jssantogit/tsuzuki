@@ -192,7 +192,7 @@ fun CollectionsScreen(
 
         is EditorDialog.CreateList -> {
             ListBuilderScreen(
-                title = "New List",
+                mode = ListBuilderMode.CREATE,
                 initial = ListEditorState.empty(),
                 providerDescriptors = readyState?.providerDescriptors.orEmpty(),
                 providerCapabilities = readyState?.providerCapabilities.orEmpty(),
@@ -227,7 +227,7 @@ fun CollectionsScreen(
 
         is EditorDialog.EditList -> {
             ListBuilderScreen(
-                title = "Edit List",
+                mode = ListBuilderMode.EDIT,
                 initial = ListEditorState.from(currentEditor.list),
                 providerDescriptors = readyState?.providerDescriptors.orEmpty(),
                 providerCapabilities = readyState?.providerCapabilities.orEmpty(),

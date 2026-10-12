@@ -3,28 +3,38 @@ package eu.kanade.presentation.tsuzuki.collections
 // Structural List Builder V2: Quick Builder + Advanced.
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -34,8 +44,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import eu.kanade.presentation.components.AppBar
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import eu.kanade.presentation.manga.components.MangaCover
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinChoiceChip
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextField
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionDraftPreviewState
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionFilterLookupKey
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionFilterLookupState
@@ -56,10 +81,18 @@ import tachiyomi.domain.tsuzuki.collections.query.QueryExpression
 import tachiyomi.domain.tsuzuki.collections.query.QueryField
 import tachiyomi.domain.tsuzuki.collections.query.QueryOperator
 import tachiyomi.domain.tsuzuki.collections.query.QueryValue
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.pluralStringResource
+import tachiyomi.presentation.core.i18n.stringResource
+
+internal enum class ListBuilderMode {
+    CREATE,
+    EDIT,
+}
 
 @Composable
 internal fun ListBuilderScreen(
-    title: String,
+    mode: ListBuilderMode,
     initial: ListEditorState,
     providerDescriptors: List<CollectionProviderDescriptor> = emptyList(),
     providerCapabilities: Map<String, ProviderQueryCapabilities> = emptyMap(),
@@ -73,7 +106,7 @@ internal fun ListBuilderScreen(
     var editor by remember(initial) { mutableStateOf(initial) }
     var advanced by remember(initial) { mutableStateOf(false) }
     var pendingSwitch by remember(initial) { mutableStateOf<CollectionProviderSwitchPlan.Ready?>(null) }
-    var blockedSwitchMessage by remember(initial) { mutableStateOf<String?>(null) }
+    var blockedSwitch by remember(initial) { mutableStateOf(false) }
     val draft = editor.toDraftOrNull()
 
     LaunchedEffect(draft) {
@@ -121,8 +154,7 @@ internal fun ListBuilderScreen(
             )
         ) {
             is CollectionProviderSwitchPlan.Blocked -> {
-                blockedSwitchMessage =
-                    "This imported query is too complex to translate safely. Reset its filters before changing source."
+                blockedSwitch = true
             }
             is CollectionProviderSwitchPlan.Ready -> {
                 if (plan.requiresConfirmation) {
@@ -135,84 +167,71 @@ internal fun ListBuilderScreen(
     }
 
     pendingSwitch?.let { plan ->
-        AlertDialog(
-            onDismissRequest = { pendingSwitch = null },
-            title = { Text("Change catalog source?") },
-            text = {
-                val removed = buildList {
-                    addAll(plan.removedExpressions.map(QueryExpression::toCanonicalString))
-                    plan.removedSort?.let { add("Sort: ${it.cacheKey}") }
-                }
-                Text(
-                    "The target provider cannot execute these filters/sort with the same semantics: " +
-                        removed.joinToString() +
-                        ". They will be removed only if you confirm.",
-                )
+        val targetName = providerDescriptors
+            .firstOrNull { it.providerId == plan.targetProviderId }
+            ?.displayName
+            ?: providerDisplayName(plan.targetProviderId)
+        val sourceDescriptor = providerDescriptors.firstOrNull { it.providerId == editor.providerId }
+        val losses = plan.removedExpressions.map { it.localizedSummary(sourceDescriptor) } +
+            listOfNotNull(plan.removedSort?.let { sourceDescriptor.localizedSortDisplayName(it) })
+        CollectionsAdminSheet(
+            title = stringResource(MR.strings.tsuzuki_list_builder_switch_title),
+            message = stringResource(
+                MR.strings.tsuzuki_list_builder_switch_message,
+                targetName,
+                losses.joinToString(separator = ", "),
+            ),
+            confirmLabel = stringResource(MR.strings.tsuzuki_list_builder_switch_action),
+            dismissLabel = stringResource(MR.strings.tsuzuki_list_builder_cancel),
+            onConfirm = {
+                pendingSwitch = null
+                applyProviderSwitch(plan)
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        pendingSwitch = null
-                        applyProviderSwitch(plan)
-                    },
-                ) {
-                    Text("Change source")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingSwitch = null }) {
-                    Text("Cancel")
-                }
-            },
+            onDismiss = { pendingSwitch = null },
         )
     }
 
-    blockedSwitchMessage?.let { message ->
-        AlertDialog(
-            onDismissRequest = { blockedSwitchMessage = null },
-            title = { Text("Source change blocked") },
-            text = { Text(message) },
-            confirmButton = {
-                TextButton(onClick = { blockedSwitchMessage = null }) {
-                    Text("OK")
-                }
-            },
+    if (blockedSwitch) {
+        CollectionsAdminSheet(
+            title = stringResource(MR.strings.tsuzuki_list_builder_switch_blocked_title),
+            message = stringResource(MR.strings.tsuzuki_list_builder_switch_blocked_message),
+            confirmLabel = stringResource(MR.strings.tsuzuki_list_builder_ok),
+            onConfirm = { blockedSwitch = false },
+            onDismiss = { blockedSwitch = false },
         )
     }
 
-    Scaffold(
-        topBar = {
-            AppBar(
-                title = if (advanced) "Advanced Filters" else title,
-                navigateUp = {
-                    if (advanced) {
-                        advanced = false
-                    } else {
-                        onClose()
-                    }
-                },
-            )
+    val headerTitle = if (advanced) {
+        stringResource(MR.strings.tsuzuki_list_builder_advanced_title)
+    } else {
+        stringResource(
+            when (mode) {
+                ListBuilderMode.CREATE -> MR.strings.tsuzuki_list_builder_create_title
+                ListBuilderMode.EDIT -> MR.strings.tsuzuki_list_builder_edit_title
+            },
+        )
+    }
+    val footerLabel = when {
+        advanced -> stringResource(MR.strings.tsuzuki_list_builder_apply_filters)
+        mode == ListBuilderMode.CREATE -> stringResource(MR.strings.tsuzuki_list_builder_create_action)
+        else -> stringResource(MR.strings.tsuzuki_list_builder_save_action)
+    }
+
+    CollectionsAdminEditorPage(
+        title = headerTitle,
+        onBack = {
+            if (advanced) advanced = false else onClose()
         },
-        bottomBar = {
-            EditorBottomBar(
-                label = if (advanced) {
-                    "Apply filters"
-                } else if (title == "New List") {
-                    "Create List"
-                } else {
-                    "Save changes"
-                },
-                enabled = advanced || draft != null,
-                onClick = {
-                    if (advanced) {
-                        advanced = false
-                    } else {
-                        draft?.let(onConfirm)
-                    }
-                },
-            )
+        footerLabel = footerLabel,
+        footerEnabled = advanced || draft != null,
+        onFooterClick = {
+            if (advanced) {
+                advanced = false
+            } else {
+                draft?.let(onConfirm)
+            }
         },
-    ) { padding ->
+    ) {
         if (advanced) {
             AdvancedListFilters(
                 editor = editor,
@@ -221,8 +240,7 @@ internal fun ListBuilderScreen(
                 filterLookupStates = filterLookupStates,
                 onFilterLookup = onFilterLookup,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                    .weight(1f),
             )
         } else {
             QuickListBuilder(
@@ -235,8 +253,7 @@ internal fun ListBuilderScreen(
                 filterLookupStates = filterLookupStates,
                 onFilterLookup = onFilterLookup,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                    .weight(1f),
             )
         }
     }
@@ -257,6 +274,8 @@ private fun QuickListBuilder(
     val descriptor = providerDescriptors.firstOrNull { it.providerId == editor.providerId }
     val quickFilters = descriptor?.filters?.filter { it.placement == FilterPlacement.QUICK }.orEmpty()
     val sortOptions = descriptor?.uiSortSelections().orEmpty()
+    val hasAdvanced = !editor.filtersEditable ||
+        descriptor?.filters?.any { it.placement == FilterPlacement.ADVANCED } == true
 
     LazyColumn(
         modifier = modifier,
@@ -269,44 +288,50 @@ private fun QuickListBuilder(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item(key = "basic") {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                EditorSectionLabel("BASIC")
-                EditorSurface {
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = editor.title,
-                        onValueChange = { onEditorChange(editor.copy(title = it)) },
-                        label = { Text("List name") },
-                        singleLine = true,
-                    )
-                    BuilderDropdown(
-                        label = "Display",
-                        current = editor.layoutType ?: "Default",
-                        options = listOf("Default", "Grid", "List"),
-                        display = { it },
-                        onSelect = { selected ->
-                            onEditorChange(
-                                editor.copy(
-                                    layoutType = selected.lowercase().takeUnless { it == "default" },
-                                ),
-                            )
-                        },
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
+            BuilderGroup(title = stringResource(MR.strings.tsuzuki_list_builder_basic)) {
+                CollectionsAdminNameField(
+                    value = editor.title,
+                    label = stringResource(MR.strings.tsuzuki_list_builder_name),
+                    onValueChange = { onEditorChange(editor.copy(title = it)) },
+                )
+                Text(
+                    text = stringResource(MR.strings.tsuzuki_list_builder_display),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                val layoutOptions = listOf("default", "grid", "list")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    layoutOptions.forEach { option ->
+                        DefaultSkinChoiceChip(
+                            text = stringResource(
+                                when (option) {
+                                    "grid" -> MR.strings.tsuzuki_list_builder_display_grid
+                                    "list" -> MR.strings.tsuzuki_list_builder_display_list
+                                    else -> MR.strings.tsuzuki_list_builder_display_default
+                                },
+                            ),
+                            selected = (editor.layoutType ?: "default") == option,
+                            onClick = {
+                                onEditorChange(editor.copy(layoutType = option.takeUnless { it == "default" }))
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .semantics {
+                                    role = Role.Button
+                                    selected = (editor.layoutType ?: "default") == option
+                                },
+                        )
+                    }
                 }
             }
         }
 
         item(key = "source") {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                EditorSectionLabel("SOURCE")
-                EditorSurface {
-                    val sources = listBuilderProviderIds(
-                        descriptors = providerDescriptors,
-                        currentProviderId = editor.providerId,
-                    )
+            BuilderGroup(title = stringResource(MR.strings.tsuzuki_list_builder_catalog_source)) {
+                val sources = listBuilderProviderIds(providerDescriptors, editor.providerId)
+                if (editor.filtersEditable) {
                     BuilderDropdown(
-                        label = "Catalog source",
+                        label = stringResource(MR.strings.tsuzuki_list_builder_catalog_source),
                         current = editor.providerId,
                         options = sources,
                         display = { providerId ->
@@ -316,43 +341,44 @@ private fun QuickListBuilder(
                                 ?: providerDisplayName(providerId)
                         },
                         onSelect = onProviderSelect,
-                        enabled = editor.filtersEditable && sources.isNotEmpty(),
+                        enabled = sources.isNotEmpty(),
                     )
-                    if (descriptor == null) {
-                        Text(
-                            text = "This provider is not currently registered for Collections execution. " +
-                                "The saved definition is preserved, but Preview cannot execute it.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
+                } else {
+                    BuilderReadOnlyValue(
+                        label = stringResource(MR.strings.tsuzuki_list_builder_catalog_source),
+                        value = descriptor?.displayName
+                            ?: providerDisplayName(editor.providerId),
+                    )
+                }
+                if (descriptor == null) {
+                    Text(
+                        text = stringResource(MR.strings.tsuzuki_list_builder_unregistered_source),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = defaultSkinColors().secondary,
+                    )
                 }
             }
         }
 
         if (!editor.filtersEditable) {
             item(key = "preserved_query_notice") {
-                EditorSurface {
+                BuilderSurface {
                     Text(
-                        text = "Advanced imported query",
+                        text = stringResource(MR.strings.tsuzuki_list_builder_preserved_title),
                         style = MaterialTheme.typography.titleSmall,
                     )
                     Text(
-                        text = "This List contains a query the visual builder cannot represent safely. " +
-                            "Its filters and source will be preserved exactly. You can still rename the List, change sort, or display.",
+                        text = stringResource(MR.strings.tsuzuki_list_builder_preserved_quick_message),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
+                        color = defaultSkinColors().secondary,
                     )
                 }
             }
         }
 
-        item(key = "quick_filters") {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                EditorSectionLabel("QUICK FILTERS")
-                EditorSurface {
+        if (quickFilters.isNotEmpty() && editor.filtersEditable) {
+            item(key = "quick_filters") {
+                BuilderGroup(title = stringResource(MR.strings.tsuzuki_list_builder_available_filters)) {
                     quickFilters.forEach { capability ->
                         DescriptorFilterControl(
                             capability = capability,
@@ -360,29 +386,24 @@ private fun QuickListBuilder(
                             onEditorChange = onEditorChange,
                             filterLookupStates = filterLookupStates,
                             onFilterLookup = onFilterLookup,
-                            modifier = Modifier.padding(top = 10.dp),
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
+                }
+            }
+        }
 
-                    if (sortOptions.isNotEmpty()) {
-                        val selectedSort = editor.sort.takeIf { it in sortOptions } ?: sortOptions.first()
-                        BuilderDropdown(
-                            label = "Sort",
-                            current = selectedSort,
-                            options = sortOptions,
-                            display = { sort -> descriptor?.sortDisplayName(sort) ?: sortDisplayName(sort) },
-                            onSelect = { onEditorChange(editor.copy(sort = it)) },
-                            modifier = Modifier.padding(top = 10.dp),
-                        )
-                    }
-
-                    if (quickFilters.isEmpty() && sortOptions.isEmpty()) {
-                        Text(
-                            text = "This provider does not expose Quick filters.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+        if (sortOptions.isNotEmpty()) {
+            item(key = "sort") {
+                BuilderGroup(title = stringResource(MR.strings.tsuzuki_list_builder_sort)) {
+                    val selectedSort = editor.sort.takeIf { it in sortOptions } ?: sortOptions.first()
+                    BuilderDropdown(
+                        label = stringResource(MR.strings.tsuzuki_list_builder_sort),
+                        current = selectedSort,
+                        options = sortOptions,
+                        display = { sort -> descriptor.localizedSortDisplayName(sort) },
+                        onSelect = { onEditorChange(editor.copy(sort = it)) },
+                    )
                 }
             }
         }
@@ -390,113 +411,115 @@ private fun QuickListBuilder(
         item(key = "active_filters") {
             ActiveFiltersCard(
                 editor = editor,
+                descriptor = descriptor,
                 onEditorChange = onEditorChange,
             )
         }
 
-        item(key = "advanced") {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onAdvanced),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
-                shape = MaterialTheme.shapes.extraLarge,
-            ) {
-                Row(
-                    modifier = Modifier.padding(18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
+        if (hasAdvanced) {
+            item(key = "advanced") {
+                CollectionsAdminSurface(onClick = onAdvanced) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         Text(
-                            text = "Advanced filters",
+                            text = stringResource(MR.strings.tsuzuki_list_builder_advanced_title),
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Text(
-                            text = if (editor.filtersEditable) {
-                                "Genres, chapters, volumes, ratings, and provider-specific options."
-                            } else {
-                                "Inspect the preserved query state without rewriting it."
-                            },
+                            text = stringResource(
+                                if (editor.filtersEditable) {
+                                    MR.strings.tsuzuki_list_builder_advanced_description
+                                } else {
+                                    MR.strings.tsuzuki_list_builder_advanced_preserved_description
+                                },
+                            ),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 2.dp),
+                            color = defaultSkinColors().secondary,
                         )
                     }
-                    Text(
-                        text = "›",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
         }
 
         item(key = "preview") {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                EditorSectionLabel("PREVIEW")
-                EditorSurface {
-                    val activeCount = editor.activeFilterCount()
+            BuilderGroup(title = stringResource(MR.strings.tsuzuki_list_builder_preview)) {
+                val activeCount = editor.currentQuery()?.predicateCount() ?: 0
+                if (activeCount == 0) {
                     Text(
-                        text = if (activeCount == 0) {
-                            "No filters applied"
-                        } else {
-                            "$activeCount active filter${if (activeCount == 1) "" else "s"}"
-                        },
+                        text = stringResource(MR.strings.tsuzuki_list_builder_no_filters),
                         style = MaterialTheme.typography.titleSmall,
                     )
-                    when (previewState) {
-                        CollectionDraftPreviewState.Idle -> {
+                } else {
+                    Text(
+                        text = pluralStringResource(
+                            MR.plurals.tsuzuki_list_builder_active_filter_count,
+                            activeCount,
+                            activeCount,
+                        ),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                }
+                when (previewState) {
+                    CollectionDraftPreviewState.Idle -> {
+                        Text(
+                            text = stringResource(MR.strings.tsuzuki_list_builder_preview_idle),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = defaultSkinColors().secondary,
+                        )
+                    }
+                    CollectionDraftPreviewState.Loading -> {
+                        Text(
+                            text = stringResource(MR.strings.tsuzuki_list_builder_preview_loading),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = defaultSkinColors().secondary,
+                        )
+                    }
+                    is CollectionDraftPreviewState.Content -> {
+                        if (previewState.items.isEmpty()) {
                             Text(
-                                text = "Preview becomes available when the current draft is executable.",
+                                text = stringResource(MR.strings.tsuzuki_list_builder_preview_empty),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp),
+                                color = defaultSkinColors().secondary,
                             )
-                        }
-                        CollectionDraftPreviewState.Loading -> {
-                            Text(
-                                text = "Loading preview…",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
-                        is CollectionDraftPreviewState.Content -> {
-                            if (previewState.items.isEmpty()) {
-                                Text(
-                                    text = "No matching titles in this bounded preview window.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 4.dp),
-                                )
-                            } else {
-                                previewState.items.take(PREVIEW_TITLE_LIMIT).forEach { item ->
-                                    Text(
-                                        text = item.title,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        modifier = Modifier.padding(top = 4.dp),
-                                    )
+                        } else {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                items(previewState.items.take(PREVIEW_TITLE_LIMIT)) { item ->
+                                    Column(
+                                        modifier = Modifier.width(88.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        MangaCover.Book(
+                                            data = item.coverUrl,
+                                            contentDescription = item.title,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            contentScale = ContentScale.Fit,
+                                        )
+                                        Text(
+                                            text = item.title,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
                                 }
                             }
-                            if (previewState.scanBudgetReason != null) {
-                                Text(
-                                    text = "Preview scan limit reached; more remote candidates remain.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 6.dp),
-                                )
-                            }
                         }
-                        is CollectionDraftPreviewState.Error -> {
+                        if (previewState.scanBudgetReason != null) {
                             Text(
-                                text = previewState.message,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(top = 4.dp),
+                                text = stringResource(MR.strings.tsuzuki_list_builder_preview_scan_limited),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = defaultSkinColors().secondary,
                             )
                         }
+                    }
+                    is CollectionDraftPreviewState.Error -> {
+                        Text(
+                            text = previewState.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             }
@@ -525,25 +548,21 @@ private fun AdvancedListFilters(
     ) {
         if (!editor.filtersEditable) {
             item(key = "locked") {
-                EditorSurface {
+                BuilderSurface {
                     Text(
-                        text = "Filters preserved exactly",
+                        text = stringResource(MR.strings.tsuzuki_list_builder_preserved_title),
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        text = "This imported query uses boolean or provider-specific semantics " +
-                            "outside the current visual builder. Tsuzuki will keep the original AST unchanged " +
-                            "rather than silently simplifying it.",
+                        text = stringResource(MR.strings.tsuzuki_list_builder_preserved_advanced_message),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
+                        color = defaultSkinColors().secondary,
                     )
                     editor.preservedQuery?.let {
                         Text(
                             text = it.toCanonicalString(),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 12.dp),
+                            color = defaultSkinColors().secondary,
                         )
                     }
                 }
@@ -555,7 +574,7 @@ private fun AdvancedListFilters(
 
             if (advancedCapabilities.isNotEmpty()) {
                 item(key = "provider_options") {
-                    AdvancedSection("FILTERS") {
+                    AdvancedSection(stringResource(MR.strings.tsuzuki_list_builder_advanced_filters)) {
                         advancedCapabilities.forEachIndexed { index, capability ->
                             DescriptorFilterControl(
                                 capability = capability,
@@ -569,18 +588,6 @@ private fun AdvancedListFilters(
                     }
                 }
             }
-
-            if (advancedCapabilities.isEmpty()) {
-                item(key = "no_advanced") {
-                    EditorSurface {
-                        Text(
-                            text = "This provider has no additional verified Advanced filters.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
         }
     }
 }
@@ -591,105 +598,171 @@ private fun AdvancedSection(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        EditorSectionLabel(title)
-        EditorSurface(content = content)
+        CollectionsAdminSectionHeader(title)
+        BuilderSurface(content = content)
     }
 }
 
 @Composable
 private fun ActiveFiltersCard(
     editor: ListEditorState,
+    descriptor: CollectionProviderDescriptor?,
     onEditorChange: (ListEditorState) -> Unit,
 ) {
     val filters = buildList {
         editor.status?.let {
-            add(ActiveFilter(it.prettyEnumName()) { onEditorChange(editor.copy(status = null)) })
+            add(
+                ActiveFilter(
+                    "${stringResource(MR.strings.tsuzuki_list_builder_field_status)}: ${it.prettyEnumName()}",
+                ) {
+                    onEditorChange(editor.copy(status = null))
+                },
+            )
         }
         editor.format?.let {
-            add(ActiveFilter(it.prettyEnumName()) { onEditorChange(editor.copy(format = null)) })
+            add(
+                ActiveFilter(
+                    "${stringResource(MR.strings.tsuzuki_list_builder_field_work_type)}: ${it.prettyEnumName()}",
+                ) {
+                    onEditorChange(editor.copy(format = null))
+                },
+            )
         }
         editor.includeGenre.takeIf(String::isNotBlank)?.let {
-            add(ActiveFilter("Genre: $it") { onEditorChange(editor.copy(includeGenre = "")) })
+            add(
+                ActiveFilter("${stringResource(MR.strings.tsuzuki_list_builder_field_genre)}: $it") {
+                    onEditorChange(editor.copy(includeGenre = ""))
+                },
+            )
         }
         editor.excludeGenre.takeIf(String::isNotBlank)?.let {
-            add(ActiveFilter("Exclude genre: $it") { onEditorChange(editor.copy(excludeGenre = "")) })
+            add(
+                ActiveFilter(
+                    stringResource(
+                        MR.strings.tsuzuki_list_builder_excluded_value,
+                        stringResource(MR.strings.tsuzuki_list_builder_field_genre),
+                        it,
+                    ),
+                ) { onEditorChange(editor.copy(excludeGenre = "")) },
+            )
         }
         editor.includeTag.takeIf(String::isNotBlank)?.let {
-            add(ActiveFilter("Tag: $it") { onEditorChange(editor.copy(includeTag = "")) })
+            add(
+                ActiveFilter("${stringResource(MR.strings.tsuzuki_list_builder_field_tag)}: $it") {
+                    onEditorChange(editor.copy(includeTag = ""))
+                },
+            )
         }
         editor.excludeTag.takeIf(String::isNotBlank)?.let {
-            add(ActiveFilter("Exclude tag: $it") { onEditorChange(editor.copy(excludeTag = "")) })
+            add(
+                ActiveFilter(
+                    stringResource(
+                        MR.strings.tsuzuki_list_builder_excluded_value,
+                        stringResource(MR.strings.tsuzuki_list_builder_field_tag),
+                        it,
+                    ),
+                ) { onEditorChange(editor.copy(excludeTag = "")) },
+            )
         }
         editor.minScore.takeIf(String::isNotBlank)?.let {
-            add(ActiveFilter("Rating ≥ $it") { onEditorChange(editor.copy(minScore = "")) })
+            add(
+                ActiveFilter("${stringResource(MR.strings.tsuzuki_list_builder_field_rating)} ≥ $it") {
+                    onEditorChange(editor.copy(minScore = ""))
+                },
+            )
         }
         editor.minChapters.takeIf(String::isNotBlank)?.let {
-            add(ActiveFilter("Chapters ≥ $it") { onEditorChange(editor.copy(minChapters = "")) })
+            add(
+                ActiveFilter("${stringResource(MR.strings.tsuzuki_list_builder_field_chapters)} ≥ $it") {
+                    onEditorChange(editor.copy(minChapters = ""))
+                },
+            )
         }
         editor.minVolumes.takeIf(String::isNotBlank)?.let {
-            add(ActiveFilter("Volumes ≥ $it") { onEditorChange(editor.copy(minVolumes = "")) })
+            add(
+                ActiveFilter("${stringResource(MR.strings.tsuzuki_list_builder_field_volumes)} ≥ $it") {
+                    onEditorChange(editor.copy(minVolumes = ""))
+                },
+            )
         }
         editor.extraTerms.forEach { expression ->
             add(
-                ActiveFilter(expression.toCanonicalString()) {
+                ActiveFilter(expression.localizedSummary(descriptor)) {
                     onEditorChange(editor.copy(extraTerms = editor.extraTerms - expression))
                 },
             )
         }
+        if (!editor.filtersEditable) {
+            editor.preservedQuery?.let { expression ->
+                add(ActiveFilter(expression.localizedSummary(descriptor)) {})
+            }
+        }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            EditorSectionLabel("ACTIVE FILTERS")
-            Text(
-                text = filters.size.toString(),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 6.dp),
-            )
-            if (filters.isNotEmpty() && editor.filtersEditable) {
-                TextButton(
-                    onClick = {
-                        onEditorChange(
-                            editor.copy(
-                                status = null,
-                                format = null,
-                                includeGenre = "",
-                                excludeGenre = "",
-                                includeTag = "",
-                                excludeTag = "",
-                                minScore = "",
-                                minChapters = "",
-                                minVolumes = "",
-                                extraTerms = emptyList(),
-                            ),
-                        )
-                    },
-                    modifier = Modifier.padding(start = 8.dp),
-                ) {
-                    Text("Clear all")
+        CollectionsAdminSectionHeader(
+            title = stringResource(MR.strings.tsuzuki_list_builder_active_filters),
+            actionLabel = if (filters.isNotEmpty() && editor.filtersEditable) {
+                stringResource(MR.strings.tsuzuki_list_builder_clear_all)
+            } else {
+                null
+            },
+            onAction = if (filters.isNotEmpty() && editor.filtersEditable) {
+                {
+                    onEditorChange(
+                        editor.copy(
+                            status = null,
+                            format = null,
+                            includeGenre = "",
+                            excludeGenre = "",
+                            includeTag = "",
+                            excludeTag = "",
+                            minScore = "",
+                            minChapters = "",
+                            minVolumes = "",
+                            extraTerms = emptyList(),
+                        ),
+                    )
                 }
-            }
-        }
-        EditorSurface {
+            } else {
+                null
+            },
+        )
+        BuilderSurface {
             if (filters.isEmpty()) {
                 Text(
-                    text = if (editor.filtersEditable) "No active filters" else "Imported query preserved",
+                    text = stringResource(
+                        if (editor.filtersEditable) {
+                            MR.strings.tsuzuki_list_builder_no_active_filters
+                        } else {
+                            MR.strings.tsuzuki_list_builder_preserved_title
+                        },
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = defaultSkinColors().secondary,
                 )
             } else {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(filters, key = ActiveFilter::label) { filter ->
-                        FilterChip(
-                            selected = true,
-                            enabled = editor.filtersEditable,
-                            onClick = filter.onClear,
-                            label = { Text(filter.label) },
-                        )
+                        if (editor.filtersEditable) {
+                            DefaultSkinChoiceChip(
+                                text = filter.label,
+                                selected = true,
+                                onClick = filter.onClear,
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .semantics { selected = true },
+                            )
+                        } else {
+                            Text(
+                                text = filter.label,
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = defaultSkinColors().secondary,
+                            )
+                        }
                     }
                 }
             }
@@ -722,7 +795,10 @@ private fun DescriptorFilterControl(
                 if (capability.multiValueMode == MultiValueMode.INCLUDE_EXCLUDE) {
                     Column(modifier = modifier) {
                         DescriptorStaticDropdown(
-                            label = "Include ${capability.id.prettyEnumName()}",
+                            label = stringResource(
+                                MR.strings.tsuzuki_list_builder_include_field,
+                                capability.localizedLabel(),
+                            ),
                             options = options,
                             predicate = positivePredicate,
                             editor = editor,
@@ -731,7 +807,10 @@ private fun DescriptorFilterControl(
                             onEditorChange = onEditorChange,
                         )
                         DescriptorStaticDropdown(
-                            label = "Exclude ${capability.id.prettyEnumName()}",
+                            label = stringResource(
+                                MR.strings.tsuzuki_list_builder_exclude_field,
+                                capability.localizedLabel(),
+                            ),
                             options = options,
                             predicate = negativePredicate,
                             editor = editor,
@@ -743,7 +822,7 @@ private fun DescriptorFilterControl(
                     }
                 } else {
                     DescriptorStaticDropdown(
-                        label = capability.id.prettyEnumName(),
+                        label = capability.localizedLabel(),
                         options = options,
                         predicate = positivePredicate,
                         editor = editor,
@@ -758,29 +837,41 @@ private fun DescriptorFilterControl(
 
         FilterValueSource.BooleanToggle -> {
             val selected = (positivePredicate?.value as? QueryValue.BooleanValue)?.value == true
-            FilterChip(
-                selected = selected,
-                onClick = {
-                    onEditorChange(
-                        editor.replaceFieldTerm(
-                            field = capability.field,
-                            negated = false,
-                            predicate = if (selected) {
-                                null
-                            } else {
-                                QueryExpression.Predicate(
-                                    field = capability.field,
-                                    operator = capability.preferredScalarOperator(),
-                                    value = QueryValue.of(true),
-                                )
-                            },
-                        ),
-                    )
-                },
-                enabled = editor.filtersEditable,
-                label = { Text(capability.id.prettyEnumName()) },
-                modifier = modifier,
-            )
+            if (editor.filtersEditable) {
+                DefaultSkinChoiceChip(
+                    text = capability.localizedLabel(),
+                    selected = selected,
+                    onClick = {
+                        onEditorChange(
+                            editor.replaceFieldTerm(
+                                field = capability.field,
+                                negated = false,
+                                predicate = if (selected) {
+                                    null
+                                } else {
+                                    QueryExpression.Predicate(
+                                        field = capability.field,
+                                        operator = capability.preferredScalarOperator(),
+                                        value = QueryValue.of(true),
+                                    )
+                                },
+                            ),
+                        )
+                    },
+                    modifier = modifier
+                        .heightIn(min = 48.dp)
+                        .semantics {
+                            role = Role.Button
+                            selected = selected
+                        },
+                )
+            } else {
+                BuilderReadOnlyValue(
+                    label = capability.localizedLabel(),
+                    value = positivePredicate?.value?.localizedLabel()
+                        ?: stringResource(MR.strings.tsuzuki_list_builder_any),
+                )
+            }
         }
 
         FilterValueSource.IntegerRange,
@@ -788,13 +879,13 @@ private fun DescriptorFilterControl(
         -> {
             val range = positivePredicate.toNumericBounds()
             Column(modifier = modifier) {
-                Text(capability.id.prettyEnumName(), style = MaterialTheme.typography.labelMedium)
+                Text(capability.localizedLabel(), style = MaterialTheme.typography.labelMedium)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     BuilderNumericField(
-                        label = "Min",
+                        label = stringResource(MR.strings.tsuzuki_list_builder_minimum),
                         value = range.first,
                         enabled = editor.filtersEditable,
                         allowDecimal = source == FilterValueSource.DecimalRange,
@@ -814,7 +905,7 @@ private fun DescriptorFilterControl(
                         modifier = Modifier.weight(1f),
                     )
                     BuilderNumericField(
-                        label = "Max",
+                        label = stringResource(MR.strings.tsuzuki_list_builder_maximum),
                         value = range.second,
                         enabled = editor.filtersEditable,
                         allowDecimal = source == FilterValueSource.DecimalRange,
@@ -840,41 +931,47 @@ private fun DescriptorFilterControl(
         FilterValueSource.DateRange -> {
             val range = positivePredicate.toStringBounds()
             Column(modifier = modifier) {
-                Text(capability.id.prettyEnumName(), style = MaterialTheme.typography.labelMedium)
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = range.first,
-                    onValueChange = { value ->
-                        onEditorChange(
-                            editor.replaceFieldTerm(
-                                field = capability.field,
-                                negated = false,
-                                predicate = capability.stringRangeExpression(value, range.second),
-                            ),
-                        )
-                    },
-                    enabled = editor.filtersEditable,
-                    label = { Text("From (YYYY-MM-DD)") },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    value = range.second,
-                    onValueChange = { value ->
-                        onEditorChange(
-                            editor.replaceFieldTerm(
-                                field = capability.field,
-                                negated = false,
-                                predicate = capability.stringRangeExpression(range.first, value),
-                            ),
-                        )
-                    },
-                    enabled = editor.filtersEditable,
-                    label = { Text("To (YYYY-MM-DD)") },
-                    singleLine = true,
-                )
+                Text(capability.localizedLabel(), style = MaterialTheme.typography.labelMedium)
+                if (editor.filtersEditable) {
+                    DefaultSkinTextField(
+                        value = range.first,
+                        onValueChange = { value ->
+                            onEditorChange(
+                                editor.replaceFieldTerm(
+                                    field = capability.field,
+                                    negated = false,
+                                    predicate = capability.stringRangeExpression(value, range.second),
+                                ),
+                            )
+                        },
+                        label = stringResource(MR.strings.tsuzuki_list_builder_from_date),
+                        singleLine = true,
+                    )
+                    DefaultSkinTextField(
+                        modifier = Modifier.padding(top = 8.dp),
+                        value = range.second,
+                        onValueChange = { value ->
+                            onEditorChange(
+                                editor.replaceFieldTerm(
+                                    field = capability.field,
+                                    negated = false,
+                                    predicate = capability.stringRangeExpression(range.first, value),
+                                ),
+                            )
+                        },
+                        label = stringResource(MR.strings.tsuzuki_list_builder_to_date),
+                        singleLine = true,
+                    )
+                } else {
+                    BuilderReadOnlyValue(
+                        label = stringResource(MR.strings.tsuzuki_list_builder_from_date),
+                        value = range.first,
+                    )
+                    BuilderReadOnlyValue(
+                        label = stringResource(MR.strings.tsuzuki_list_builder_to_date),
+                        value = range.second,
+                    )
+                }
             }
         }
 
@@ -882,7 +979,10 @@ private fun DescriptorFilterControl(
             if (capability.multiValueMode == MultiValueMode.INCLUDE_EXCLUDE) {
                 Column(modifier = modifier) {
                     DescriptorTextField(
-                        label = "Include ${capability.id.prettyEnumName()}",
+                        label = stringResource(
+                            MR.strings.tsuzuki_list_builder_include_field,
+                            capability.localizedLabel(),
+                        ),
                         value = (positivePredicate?.value as? QueryValue.StringValue)?.value.orEmpty(),
                         editor = editor,
                         capability = capability,
@@ -890,7 +990,10 @@ private fun DescriptorFilterControl(
                         onEditorChange = onEditorChange,
                     )
                     DescriptorTextField(
-                        label = "Exclude ${capability.id.prettyEnumName()}",
+                        label = stringResource(
+                            MR.strings.tsuzuki_list_builder_exclude_field,
+                            capability.localizedLabel(),
+                        ),
                         value = (negativePredicate?.value as? QueryValue.StringValue)?.value.orEmpty(),
                         editor = editor,
                         capability = capability,
@@ -901,7 +1004,7 @@ private fun DescriptorFilterControl(
                 }
             } else {
                 DescriptorTextField(
-                    label = capability.id.prettyEnumName(),
+                    label = capability.localizedLabel(),
                     value = (positivePredicate?.value as? QueryValue.StringValue)?.value.orEmpty(),
                     editor = editor,
                     capability = capability,
@@ -942,16 +1045,20 @@ private fun DescriptorStaticDropdown(
     onEditorChange: (ListEditorState) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val current = (predicate?.value as? QueryValue.StringValue)?.value ?: "Any"
+    val current = (predicate?.value as? QueryValue.StringValue)?.value
     BuilderDropdown(
         label = label,
         current = current,
-        options = listOf("Any") + options.map { it.second },
+        options = listOf<String?>(null) + options.map { it.second },
         display = { value ->
-            if (value == "Any") value else options.firstOrNull { it.second == value }?.first ?: value
+            if (value == null) {
+                stringResource(MR.strings.tsuzuki_list_builder_any)
+            } else {
+                options.firstOrNull { it.second == value }?.first ?: value
+            }
         },
         onSelect = { selected ->
-            val predicateExpression = selected.takeUnless { it == "Any" }?.let { value ->
+            val predicateExpression = selected?.let { value ->
                 QueryExpression.Predicate(
                     field = capability.field,
                     operator = capability.preferredScalarOperator(),
@@ -981,29 +1088,32 @@ private fun DescriptorTextField(
     onEditorChange: (ListEditorState) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    OutlinedTextField(
-        modifier = modifier.fillMaxWidth(),
-        value = value,
-        onValueChange = { candidate ->
-            val predicate = candidate.trim().takeIf(String::isNotEmpty)?.let {
-                QueryExpression.Predicate(
-                    field = capability.field,
-                    operator = capability.preferredScalarOperator(),
-                    value = QueryValue.of(it),
+    if (editor.filtersEditable) {
+        DefaultSkinTextField(
+            modifier = modifier.fillMaxWidth(),
+            value = value,
+            onValueChange = { candidate ->
+                val predicate = candidate.trim().takeIf(String::isNotEmpty)?.let {
+                    QueryExpression.Predicate(
+                        field = capability.field,
+                        operator = capability.preferredScalarOperator(),
+                        value = QueryValue.of(it),
+                    )
+                }
+                onEditorChange(
+                    editor.replaceFieldTerm(
+                        field = capability.field,
+                        negated = negated,
+                        predicate = predicate,
+                    ),
                 )
-            }
-            onEditorChange(
-                editor.replaceFieldTerm(
-                    field = capability.field,
-                    negated = negated,
-                    predicate = predicate,
-                ),
-            )
-        },
-        enabled = editor.filtersEditable,
-        label = { Text(label) },
-        singleLine = true,
-    )
+            },
+            label = label,
+            singleLine = true,
+        )
+    } else {
+        BuilderReadOnlyValue(label, value)
+    }
 }
 
 @Composable
@@ -1019,131 +1129,395 @@ private fun RemoteLookupFilterControl(
     onFilterLookup: (String, String, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var query by remember(providerId, source.lookupId) { mutableStateOf("") }
+    var transaction by remember(providerId, source.lookupId) {
+        mutableStateOf<RemoteLookupSheetState?>(null)
+    }
+    val includeValues = positivePredicates.map { it.value }
+    val excludeValues = negativePredicates.map { it.value }
+    val label = capability.localizedLabel()
 
-    LaunchedEffect(providerId, source.lookupId, query) {
-        onFilterLookup(providerId, source.lookupId, query)
+    LaunchedEffect(providerId, source.lookupId, transaction?.query, transaction?.isOpen) {
+        transaction?.takeIf(RemoteLookupSheetState::isOpen)?.let { open ->
+            onFilterLookup(providerId, source.lookupId, open.query)
+        }
+    }
+    BackHandler(enabled = transaction?.isOpen == true) {
+        transaction = transaction?.cancel()
     }
 
-    Column(modifier = modifier) {
-        OutlinedTextField(
-            modifier = Modifier.fillMaxWidth(),
-            value = query,
-            onValueChange = { query = it },
-            enabled = editor.filtersEditable,
-            label = { Text("Search ${capability.id.prettyEnumName()}") },
-            singleLine = true,
-        )
-
-        when (lookupState) {
-            null,
-            CollectionFilterLookupState.Idle,
-            -> Unit
-
-            is CollectionFilterLookupState.Loading -> {
-                Text(
-                    text = "Loading options…",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp),
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable(
+                    enabled = editor.filtersEditable,
+                    role = Role.Button,
+                    onClick = { transaction = RemoteLookupSheetState.open(editor, capability) },
                 )
-            }
-
-            is CollectionFilterLookupState.Error -> {
-                Text(
-                    text = lookupState.message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-            }
-
-            is CollectionFilterLookupState.Ready -> {
-                if (lookupState.options.isEmpty()) {
-                    Text(
-                        text = "No matching options",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val selectedCount = includeValues.size + excludeValues.size
+            Text(
+                text = if (selectedCount == 0) {
+                    stringResource(MR.strings.tsuzuki_list_builder_lookup_empty_selection)
                 } else {
-                    val positiveValues = positivePredicates.map { it.value }.toSet()
-                    val negativeValues = negativePredicates.map { it.value }.toSet()
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(top = 8.dp),
-                    ) {
-                        items(lookupState.options, key = { option -> option.id }) { option ->
-                            val selectedPositive = option.value in positiveValues
-                            FilterChip(
-                                selected = selectedPositive,
-                                enabled = editor.filtersEditable,
-                                onClick = {
-                                    val predicate = if (selectedPositive) {
-                                        null
-                                    } else {
-                                        QueryExpression.Predicate(
-                                            field = capability.field,
-                                            operator = capability.preferredScalarOperator(),
-                                            value = option.value,
-                                        )
-                                    }
-                                    onEditorChange(
-                                        if (capability.multiValueMode == MultiValueMode.ALL) {
-                                            editor.toggleFieldPredicate(
-                                                field = capability.field,
-                                                negated = false,
-                                                predicate = QueryExpression.Predicate(
-                                                    field = capability.field,
-                                                    operator = capability.preferredScalarOperator(),
-                                                    value = option.value,
-                                                ),
-                                            )
-                                        } else {
-                                            editor.replaceFieldTerm(
-                                                field = capability.field,
-                                                negated = false,
-                                                predicate = predicate,
-                                            )
-                                        },
-                                    )
-                                },
-                                label = { Text(option.label) },
-                            )
+                    pluralStringResource(
+                        MR.plurals.tsuzuki_list_builder_selected_count,
+                        selectedCount,
+                        selectedCount,
+                    )
+                },
+                modifier = Modifier.weight(1f),
+                color = if (editor.filtersEditable) {
+                    defaultSkinColors().foreground
+                } else {
+                    defaultSkinColors().secondary
+                },
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                text = stringResource(MR.strings.tsuzuki_list_builder_change_action),
+                color = defaultSkinColors().accent,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+    }
 
-                            if (capability.multiValueMode == MultiValueMode.INCLUDE_EXCLUDE) {
-                                val selectedNegative = option.value in negativeValues
-                                FilterChip(
-                                    selected = selectedNegative,
-                                    enabled = editor.filtersEditable,
-                                    onClick = {
-                                        val predicate = if (selectedNegative) {
-                                            null
-                                        } else {
-                                            QueryExpression.Predicate(
-                                                field = capability.field,
-                                                operator = capability.preferredScalarOperator(),
-                                                value = option.value,
-                                            )
-                                        }
-                                        onEditorChange(
-                                            editor.replaceFieldTerm(
-                                                field = capability.field,
-                                                negated = true,
-                                                predicate = predicate,
-                                            ),
-                                        )
-                                    },
-                                    label = { Text("Exclude ${option.label}") },
+    transaction?.takeIf(RemoteLookupSheetState::isOpen)?.let { open ->
+        RemoteLookupFilterSheet(
+            title = label,
+            capability = capability,
+            state = open,
+            lookupState = lookupState,
+            onStateChange = { transaction = it },
+            onDismiss = { transaction = null },
+            onApply = {
+                val current = transaction?.takeIf(RemoteLookupSheetState::isOpen)
+                if (current != null) {
+                    transaction = null
+                    current.apply(editor, capability, onEditorChange)
+                }
+            },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RemoteLookupFilterSheet(
+    title: String,
+    capability: CollectionFilterCapability,
+    state: RemoteLookupSheetState,
+    lookupState: CollectionFilterLookupState?,
+    onStateChange: (RemoteLookupSheetState) -> Unit,
+    onDismiss: () -> Unit,
+    onApply: () -> Unit,
+) {
+    val colors = defaultSkinColors()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val canExclude = capability.multiValueMode == MultiValueMode.INCLUDE_EXCLUDE
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = colors.surface,
+        contentColor = colors.foreground,
+        scrimColor = colors.foreground.copy(alpha = 0.32f),
+        tonalElevation = 0.dp,
+        dragHandle = null,
+    ) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val contentMaxHeight = minOf(maxHeight * 0.9f, 640.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = contentMaxHeight)
+                    .imePadding()
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 12.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Surface(
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    color = colors.outline,
+                    shape = RoundedCornerShape(2.dp),
+                ) {
+                    Spacer(Modifier.size(width = 34.dp, height = 4.dp))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = title,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    DefaultSkinTextAction(
+                        text = stringResource(MR.strings.tsuzuki_list_builder_clear),
+                        onClick = { onStateChange(state.clearDraft()) },
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    )
+                }
+                DefaultSkinTextField(
+                    value = state.query,
+                    onValueChange = { onStateChange(state.search(it)) },
+                    label = stringResource(
+                        MR.strings.tsuzuki_list_builder_lookup_search,
+                        capability.localizedLabel(),
+                    ),
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .heightIn(max = 360.dp),
+                ) {
+                    when (lookupState) {
+                        null,
+                        CollectionFilterLookupState.Idle,
+                        -> Text(
+                            text = stringResource(MR.strings.tsuzuki_list_builder_lookup_search_prompt),
+                            color = colors.secondary,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        is CollectionFilterLookupState.Loading -> Text(
+                            text = stringResource(MR.strings.tsuzuki_list_builder_lookup_loading),
+                            color = colors.secondary,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        is CollectionFilterLookupState.Error -> Text(
+                            text = lookupState.message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        is CollectionFilterLookupState.Ready -> {
+                            if (lookupState.options.isEmpty()) {
+                                Text(
+                                    text = stringResource(MR.strings.tsuzuki_list_builder_lookup_no_results),
+                                    color = colors.secondary,
+                                    style = MaterialTheme.typography.bodyMedium,
                                 )
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    items(lookupState.options, key = { option -> option.id }) { option ->
+                                        val included = option.value in state.draft.includeValues
+                                        val excluded = option.value in state.draft.excludeValues
+                                        Column(modifier = Modifier.fillMaxWidth()) {
+                                            Text(
+                                                text = option.label,
+                                                modifier = Modifier.padding(vertical = 8.dp),
+                                                style = MaterialTheme.typography.bodyLarge,
+                                            )
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            ) {
+                                                DefaultSkinChoiceChip(
+                                                    text = stringResource(MR.strings.tsuzuki_list_builder_neutral),
+                                                    selected = !included && !excluded,
+                                                    onClick = { onStateChange(state.neutral(option.value)) },
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .heightIn(min = 48.dp)
+                                                        .semantics {
+                                                            role = Role.Button
+                                                            selected = !included && !excluded
+                                                        },
+                                                )
+                                                DefaultSkinChoiceChip(
+                                                    text = stringResource(MR.strings.tsuzuki_list_builder_include),
+                                                    selected = included,
+                                                    onClick = {
+                                                        onStateChange(state.include(option.value, capability))
+                                                    },
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .heightIn(min = 48.dp)
+                                                        .semantics {
+                                                            role = Role.Button
+                                                            selected = included
+                                                        },
+                                                )
+                                                if (canExclude) {
+                                                    DefaultSkinChoiceChip(
+                                                        text = stringResource(MR.strings.tsuzuki_list_builder_exclude),
+                                                        selected = excluded,
+                                                        onClick = {
+                                                            onStateChange(state.exclude(option.value, capability))
+                                                        },
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .heightIn(min = 48.dp)
+                                                            .semantics {
+                                                                role = Role.Button
+                                                                selected = excluded
+                                                            },
+                                                    )
+                                                }
+                                            }
+                                            HorizontalDivider(color = colors.outline)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DefaultSkinTextAction(
+                        text = stringResource(MR.strings.tsuzuki_list_builder_cancel),
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                    )
+                    DefaultSkinPrimaryButton(
+                        text = stringResource(MR.strings.tsuzuki_list_builder_apply),
+                        onClick = onApply,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
         }
     }
 }
+
+internal data class RemoteLookupSelection(
+    val value: QueryValue,
+    val operator: QueryOperator,
+)
+
+internal data class RemoteLookupDraft(
+    val includes: List<RemoteLookupSelection> = emptyList(),
+    val excludes: List<RemoteLookupSelection> = emptyList(),
+) {
+    val includeValues: List<QueryValue>
+        get() = includes.map(RemoteLookupSelection::value)
+
+    val excludeValues: List<QueryValue>
+        get() = excludes.map(RemoteLookupSelection::value)
+
+    fun neutral(value: QueryValue): RemoteLookupDraft = copy(
+        includes = includes.filterNot { it.value == value },
+        excludes = excludes.filterNot { it.value == value },
+    )
+
+    fun include(value: QueryValue, capability: CollectionFilterCapability): RemoteLookupDraft {
+        val operator = capability.preferredScalarOperator()
+        return if (capability.multiValueMode == MultiValueMode.ALL) {
+            val selected = includes.any { it.value == value && it.operator == operator }
+            copy(
+                includes = if (selected) {
+                    includes.filterNot { it.value == value && it.operator == operator }
+                } else {
+                    includes + RemoteLookupSelection(value, operator)
+                },
+            )
+        } else if (includes.any { it.value == value }) {
+            copy(includes = emptyList())
+        } else {
+            copy(includes = listOf(RemoteLookupSelection(value, operator)))
+        }
+    }
+
+    fun exclude(value: QueryValue, capability: CollectionFilterCapability): RemoteLookupDraft {
+        if (capability.multiValueMode != MultiValueMode.INCLUDE_EXCLUDE) return this
+        return if (excludes.any { it.value == value }) {
+            copy(excludes = emptyList())
+        } else {
+            copy(excludes = listOf(RemoteLookupSelection(value, capability.preferredScalarOperator())))
+        }
+    }
+
+    fun clear(): RemoteLookupDraft = RemoteLookupDraft()
+
+    companion object {
+        fun from(
+            includes: List<QueryExpression.Predicate>,
+            excludes: List<QueryExpression.Predicate>,
+        ): RemoteLookupDraft = RemoteLookupDraft(
+            includes = includes.map { RemoteLookupSelection(it.value, it.operator) },
+            excludes = excludes.map { RemoteLookupSelection(it.value, it.operator) },
+        )
+    }
+}
+
+internal data class RemoteLookupSheetState(
+    val draft: RemoteLookupDraft,
+    val query: String = "",
+    val isOpen: Boolean = true,
+) {
+    fun search(query: String): RemoteLookupSheetState = if (isOpen) copy(query = query) else this
+
+    fun neutral(value: QueryValue): RemoteLookupSheetState = if (isOpen) {
+        copy(draft = draft.neutral(value))
+    } else {
+        this
+    }
+
+    fun include(value: QueryValue, capability: CollectionFilterCapability): RemoteLookupSheetState = if (isOpen) {
+        copy(draft = draft.include(value, capability))
+    } else {
+        this
+    }
+
+    fun exclude(value: QueryValue, capability: CollectionFilterCapability): RemoteLookupSheetState = if (isOpen) {
+        copy(draft = draft.exclude(value, capability))
+    } else {
+        this
+    }
+
+    fun clearDraft(): RemoteLookupSheetState = if (isOpen) copy(draft = draft.clear()) else this
+
+    fun cancel(): RemoteLookupSheetState = copy(isOpen = false)
+
+    fun apply(
+        editor: ListEditorState,
+        capability: CollectionFilterCapability,
+        onEditorChange: (ListEditorState) -> Unit,
+    ): RemoteLookupSheetState {
+        if (!isOpen) return this
+        onEditorChange(editor.withLookupDraft(capability, draft))
+        return copy(isOpen = false)
+    }
+
+    companion object {
+        fun open(editor: ListEditorState, capability: CollectionFilterCapability): RemoteLookupSheetState =
+            RemoteLookupSheetState(
+                draft = RemoteLookupDraft.from(
+                    includes = editor.simplePredicates(capability.field, negated = false),
+                    excludes = editor.simplePredicates(capability.field, negated = true),
+                ),
+            )
+    }
+}
+
+private fun ListEditorState.withLookupDraft(
+    capability: CollectionFilterCapability,
+    draft: RemoteLookupDraft,
+): ListEditorState = replaceFieldTerms(
+    field = capability.field,
+    negated = false,
+    predicates = draft.includes.map { selection ->
+        QueryExpression.Predicate(capability.field, selection.operator, selection.value)
+    },
+).replaceFieldTerms(
+    field = capability.field,
+    negated = true,
+    predicates = draft.excludes.map { selection ->
+        QueryExpression.Predicate(capability.field, selection.operator, selection.value)
+    },
+)
 
 internal fun CollectionProviderDescriptor.uiSortSelections(): List<CollectionSortSelection> =
     sorts.flatMap { capability ->
@@ -1171,21 +1545,6 @@ internal fun CollectionProviderDescriptor.uiSortSelections(): List<CollectionSor
             )
         }
     }.distinct()
-
-private fun CollectionProviderDescriptor.sortDisplayName(
-    selection: CollectionSortSelection,
-): String {
-    val capability = sorts.firstOrNull { it.key == selection.key }
-        ?: return sortDisplayName(selection)
-    return when (capability.directionMode) {
-        SortDirectionMode.ASC_DESC -> when (selection.direction) {
-            CollectionSortDirection.DESC -> "${capability.label} (High to Low)"
-            CollectionSortDirection.ASC -> "${capability.label} (Low to High)"
-            null -> capability.label
-        }
-        else -> capability.label
-    }
-}
 
 internal fun listBuilderProviderIds(
     descriptors: List<CollectionProviderDescriptor>,
@@ -1402,48 +1761,119 @@ private fun <T> BuilderDropdown(
     label: String,
     current: T,
     options: List<T>,
-    display: (T) -> String,
+    display: @Composable (T) -> String,
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val colors = defaultSkinColors()
+    val shape = eu.kanade.presentation.tsuzuki.components.DefaultSkinShape.Control
 
-    Column(modifier = modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
+            color = colors.secondary,
         )
-        TextButton(
-            onClick = { if (enabled) expanded = true },
-            enabled = enabled,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
+        androidx.compose.foundation.layout.Box {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clip(shape)
+                    .background(if (enabled) colors.surface else colors.surfaceMuted)
+                    .border(1.dp, colors.outline, shape)
+                    .clickable(
+                        enabled = enabled,
+                        role = Role.Button,
+                        onClick = { expanded = true },
+                    )
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = display(current),
                     modifier = Modifier.weight(1f),
+                    color = if (enabled) colors.foreground else colors.secondary,
+                    style = MaterialTheme.typography.bodyLarge,
                 )
-                Text("⌄")
-            }
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(display(option)) },
-                    onClick = {
-                        expanded = false
-                        onSelect(option)
-                    },
+                Text(
+                    text = stringResource(MR.strings.tsuzuki_list_builder_change_action),
+                    color = colors.accent,
+                    style = MaterialTheme.typography.labelLarge,
                 )
             }
+            if (expanded) {
+                Popup(
+                    alignment = Alignment.TopEnd,
+                    onDismissRequest = { expanded = false },
+                    properties = PopupProperties(focusable = true),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .widthIn(min = 176.dp, max = 320.dp)
+                            .heightIn(max = 360.dp)
+                            .verticalScroll(rememberScrollState())
+                            .shadow(8.dp, shape)
+                            .background(colors.surface, shape)
+                            .border(1.dp, colors.outline, shape)
+                            .padding(vertical = 4.dp),
+                    ) {
+                        options.forEach { option ->
+                            Text(
+                                text = display(option),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clickable(
+                                        enabled = enabled,
+                                        role = Role.Button,
+                                        onClick = {
+                                            expanded = false
+                                            onSelect(option)
+                                        },
+                                    )
+                                    .semantics { selected = option == current }
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                color = colors.foreground,
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun BuilderGroup(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        CollectionsAdminSectionHeader(title)
+        BuilderSurface(content)
+    }
+}
+
+@Composable
+private fun BuilderSurface(content: @Composable ColumnScope.() -> Unit) {
+    CollectionsAdminSurface {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun BuilderReadOnlyValue(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = defaultSkinColors().secondary)
+        Text(value, style = MaterialTheme.typography.bodyLarge, color = defaultSkinColors().foreground)
     }
 }
 
@@ -1456,21 +1886,27 @@ private fun BuilderNumericField(
     enabled: Boolean = true,
     allowDecimal: Boolean = false,
 ) {
-    OutlinedTextField(
-        modifier = modifier.fillMaxWidth(),
-        value = value,
-        enabled = enabled,
-        onValueChange = { candidate ->
-            val valid = if (allowDecimal) {
-                candidate.isEmpty() || candidate.toDoubleOrNull() != null
-            } else {
-                candidate.isEmpty() || candidate.toLongOrNull() != null
-            }
-            if (valid) onValueChange(candidate)
-        },
-        label = { Text(label) },
-        singleLine = true,
-    )
+    if (enabled) {
+        DefaultSkinTextField(
+            modifier = modifier.fillMaxWidth(),
+            value = value,
+            onValueChange = { candidate ->
+                val valid = if (allowDecimal) {
+                    candidate.isEmpty() || candidate.toDoubleOrNull() != null
+                } else {
+                    candidate.isEmpty() || candidate.toLongOrNull() != null
+                }
+                if (valid) onValueChange(candidate)
+            },
+            label = label,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = if (allowDecimal) KeyboardType.Decimal else KeyboardType.Number,
+            ),
+        )
+    } else {
+        BuilderReadOnlyValue(label, value)
+    }
 }
 
 private data class ActiveFilter(
@@ -1478,41 +1914,179 @@ private data class ActiveFilter(
     val onClear: () -> Unit,
 )
 
-private fun ListEditorState.activeFilterCount(): Int = listOf(
-    status,
-    format,
-    includeGenre.takeIf(String::isNotBlank),
-    excludeGenre.takeIf(String::isNotBlank),
-    includeTag.takeIf(String::isNotBlank),
-    excludeTag.takeIf(String::isNotBlank),
-    minScore.takeIf(String::isNotBlank),
-    minChapters.takeIf(String::isNotBlank),
-    minVolumes.takeIf(String::isNotBlank),
-).count { it != null } + extraTerms.size
-
-private fun providerDisplayName(providerId: String): String = providerId.prettyEnumName()
-
-private fun sortDisplayName(sort: CollectionSortSelection): String {
-    val key = sort.key
-    return when (key) {
-        CollectionSortKey.Standard.POPULARITY -> when (sort.direction) {
-            CollectionSortDirection.DESC -> "Popularity (High to Low)"
-            CollectionSortDirection.ASC -> "Popularity (Low to High)"
-            null -> "Popularity"
-        }
-        CollectionSortKey.Standard.RATING -> when (sort.direction) {
-            CollectionSortDirection.DESC -> "Rating (High to Low)"
-            CollectionSortDirection.ASC -> "Rating (Low to High)"
-            null -> "Rating"
-        }
-        CollectionSortKey.Standard.UPDATED -> when (sort.direction) {
-            CollectionSortDirection.DESC -> "Recently Updated"
-            CollectionSortDirection.ASC -> "Oldest Updated"
-            null -> "Updated"
-        }
-        CollectionSortKey.Standard.RELEVANCE -> "Relevance"
-        is CollectionSortKey.Provider -> key.nativeId.prettyEnumName()
+@Composable
+private fun providerDisplayName(providerId: String): String = when (providerId.lowercase()) {
+    "kitsu" -> stringResource(MR.strings.tsuzuki_list_builder_provider_kitsu)
+    "mangadex" -> stringResource(MR.strings.tsuzuki_list_builder_provider_mangadex)
+    "mangaupdates" -> stringResource(MR.strings.tsuzuki_list_builder_provider_mangaupdates)
+    "myanimelist", "mal" -> stringResource(MR.strings.tsuzuki_list_builder_provider_mal)
+    "bangumi" -> stringResource(MR.strings.tsuzuki_list_builder_provider_bangumi)
+    "shikimori" -> stringResource(MR.strings.tsuzuki_list_builder_provider_shikimori)
+    else -> if (providerId.isNotBlank()) {
+        providerId
+    } else {
+        stringResource(MR.strings.tsuzuki_list_builder_other_catalog)
     }
+}
+
+@Composable
+private fun CollectionProviderDescriptor?.localizedSortDisplayName(
+    selection: CollectionSortSelection,
+): String {
+    val capability = this?.sorts?.firstOrNull { it.key == selection.key }
+    val label = capability?.label ?: when (selection.key) {
+        CollectionSortKey.Standard.POPULARITY -> stringResource(MR.strings.tsuzuki_list_builder_sort_popularity)
+        CollectionSortKey.Standard.RATING -> stringResource(MR.strings.tsuzuki_list_builder_sort_rating)
+        CollectionSortKey.Standard.UPDATED -> stringResource(MR.strings.tsuzuki_list_builder_sort_updated)
+        CollectionSortKey.Standard.RELEVANCE -> stringResource(MR.strings.tsuzuki_list_builder_sort_relevance)
+        is CollectionSortKey.Provider -> stringResource(MR.strings.tsuzuki_list_builder_provider_sort)
+    }
+    if (capability != null && capability.directionMode != SortDirectionMode.ASC_DESC) return label
+    return when (selection.direction) {
+        CollectionSortDirection.DESC -> stringResource(
+            MR.strings.tsuzuki_list_builder_sort_high_to_low,
+            label,
+        )
+        CollectionSortDirection.ASC -> stringResource(
+            MR.strings.tsuzuki_list_builder_sort_low_to_high,
+            label,
+        )
+        null -> label
+    }
+}
+
+@Composable
+private fun CollectionFilterCapability.localizedLabel(): String = when (val queryField = field) {
+    is QueryField.Standard -> queryField.localizedLabel()
+    is QueryField.Custom -> id
+}
+
+@Composable
+private fun QueryField.Standard.localizedLabel(): String = when (this) {
+    QueryField.Standard.STATUS -> stringResource(MR.strings.tsuzuki_list_builder_field_status)
+    QueryField.Standard.WORK_TYPE -> stringResource(MR.strings.tsuzuki_list_builder_field_work_type)
+    QueryField.Standard.START_YEAR,
+    QueryField.Standard.RELEASE_YEAR,
+    -> stringResource(MR.strings.tsuzuki_list_builder_field_year)
+    QueryField.Standard.START_DATE -> stringResource(MR.strings.tsuzuki_list_builder_field_start_date)
+    QueryField.Standard.END_DATE -> stringResource(MR.strings.tsuzuki_list_builder_field_end_date)
+    QueryField.Standard.CHAPTER_COUNT -> stringResource(MR.strings.tsuzuki_list_builder_field_chapters)
+    QueryField.Standard.VOLUME_COUNT -> stringResource(MR.strings.tsuzuki_list_builder_field_volumes)
+    QueryField.Standard.GENRE -> stringResource(MR.strings.tsuzuki_list_builder_field_genre)
+    QueryField.Standard.TAG -> stringResource(MR.strings.tsuzuki_list_builder_field_tag)
+    QueryField.Standard.CATEGORY -> stringResource(MR.strings.tsuzuki_list_builder_field_category)
+    QueryField.Standard.DEMOGRAPHIC -> stringResource(MR.strings.tsuzuki_list_builder_field_demographic)
+    QueryField.Standard.COUNTRY -> stringResource(MR.strings.tsuzuki_list_builder_field_country)
+    QueryField.Standard.AUTHOR -> stringResource(MR.strings.tsuzuki_list_builder_field_author)
+    QueryField.Standard.ARTIST -> stringResource(MR.strings.tsuzuki_list_builder_field_artist)
+    QueryField.Standard.PUBLISHER -> stringResource(MR.strings.tsuzuki_list_builder_field_publisher)
+    QueryField.Standard.MAGAZINE -> stringResource(MR.strings.tsuzuki_list_builder_field_magazine)
+    QueryField.Standard.SCORE,
+    QueryField.Standard.RATING,
+    -> stringResource(MR.strings.tsuzuki_list_builder_field_rating)
+    QueryField.Standard.POPULARITY -> stringResource(MR.strings.tsuzuki_list_builder_field_popularity)
+    QueryField.Standard.FAVORITES -> stringResource(MR.strings.tsuzuki_list_builder_field_favorites)
+    QueryField.Standard.RANK -> stringResource(MR.strings.tsuzuki_list_builder_field_rank)
+    QueryField.Standard.IN_LIBRARY -> stringResource(MR.strings.tsuzuki_list_builder_field_in_library)
+    QueryField.Standard.UNREAD_CHAPTERS -> stringResource(MR.strings.tsuzuki_list_builder_field_unread_chapters)
+    QueryField.Standard.HAS_NEW_CHAPTERS -> stringResource(MR.strings.tsuzuki_list_builder_field_new_chapters)
+    QueryField.Standard.READ_STATUS -> stringResource(MR.strings.tsuzuki_list_builder_field_read_status)
+    QueryField.Standard.HAS_READING_SOURCE -> stringResource(MR.strings.tsuzuki_list_builder_field_reading_source)
+}
+
+@Composable
+private fun QueryExpression.localizedSummary(descriptor: CollectionProviderDescriptor?): String = when (this) {
+    is QueryExpression.Predicate -> {
+        val fieldLabel = descriptor?.filters?.firstOrNull { it.field == field }?.localizedLabel()
+            ?: localizedFieldLabel(field)
+        val valueLabel = value.localizedLabel()
+        when (operator) {
+            QueryOperator.EQUALS -> stringResource(
+                MR.strings.tsuzuki_list_builder_summary_equals,
+                fieldLabel,
+                valueLabel,
+            )
+            QueryOperator.NOT_EQUALS -> stringResource(
+                MR.strings.tsuzuki_list_builder_summary_not_equals,
+                fieldLabel,
+                valueLabel,
+            )
+            QueryOperator.IN -> stringResource(MR.strings.tsuzuki_list_builder_summary_in, fieldLabel, valueLabel)
+            QueryOperator.CONTAINS -> stringResource(
+                MR.strings.tsuzuki_list_builder_summary_contains,
+                fieldLabel,
+                valueLabel,
+            )
+            QueryOperator.GREATER_THAN -> stringResource(
+                MR.strings.tsuzuki_list_builder_summary_greater,
+                fieldLabel,
+                valueLabel,
+            )
+            QueryOperator.GREATER_OR_EQUAL -> stringResource(
+                MR.strings.tsuzuki_list_builder_summary_at_least,
+                fieldLabel,
+                valueLabel,
+            )
+            QueryOperator.LESS_THAN -> stringResource(
+                MR.strings.tsuzuki_list_builder_summary_less,
+                fieldLabel,
+                valueLabel,
+            )
+            QueryOperator.LESS_OR_EQUAL -> stringResource(
+                MR.strings.tsuzuki_list_builder_summary_at_most,
+                fieldLabel,
+                valueLabel,
+            )
+            QueryOperator.BETWEEN -> stringResource(
+                MR.strings.tsuzuki_list_builder_summary_between,
+                fieldLabel,
+                valueLabel,
+            )
+        }
+    }
+    is QueryExpression.Not -> stringResource(
+        MR.strings.tsuzuki_list_builder_summary_excluded,
+        expression.localizedSummary(descriptor),
+    )
+    is QueryExpression.All ->
+        expressions
+            .map { it.localizedSummary(descriptor) }
+            .joinToString(", ")
+    is QueryExpression.Any ->
+        expressions
+            .map { it.localizedSummary(descriptor) }
+            .joinToString(
+                separator = stringResource(MR.strings.tsuzuki_list_builder_or_separator),
+            )
+}
+
+@Composable
+private fun localizedFieldLabel(field: QueryField): String = when (field) {
+    is QueryField.Standard -> field.localizedLabel()
+    is QueryField.Custom -> field.identifier
+}
+
+@Composable
+private fun QueryValue.localizedLabel(): String = when (this) {
+    is QueryValue.StringValue -> value
+    is QueryValue.IntegerValue -> value.toString()
+    is QueryValue.DoubleValue -> value.toString()
+    is QueryValue.BooleanValue -> stringResource(
+        if (value) MR.strings.tsuzuki_list_builder_yes else MR.strings.tsuzuki_list_builder_no,
+    )
+    is QueryValue.ListValue ->
+        values
+            .map { it.localizedLabel() }
+            .joinToString(", ")
+    is QueryValue.RangeValue -> "${lower.localizedLabel()} – ${upper.localizedLabel()}"
+    is QueryValue.RelativeTemporal -> stringResource(MR.strings.tsuzuki_list_builder_relative_date)
+}
+
+private fun QueryExpression.predicateCount(): Int = when (this) {
+    is QueryExpression.Predicate -> 1
+    is QueryExpression.Not -> expression.predicateCount()
+    is QueryExpression.All -> expressions.sumOf(QueryExpression::predicateCount)
+    is QueryExpression.Any -> expressions.sumOf(QueryExpression::predicateCount)
 }
 
 private fun String.prettyEnumName(): String = lowercase()

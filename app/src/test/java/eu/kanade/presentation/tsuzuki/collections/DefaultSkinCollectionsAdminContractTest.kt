@@ -10,6 +10,55 @@ import java.nio.file.Path
 class DefaultSkinCollectionsAdminContractTest {
 
     @Test
+    fun `list builder uses explicit localized modes and transactional Default Skin controls`() {
+        val builder = readAppSource("collections/ListBuilderScreen.kt")
+        val advanced = builder.substringAfter("private fun AdvancedListFilters(")
+            .substringBefore("private fun AdvancedSection(")
+        val lookupControl = builder.substringAfter("private fun RemoteLookupFilterControl(")
+            .substringBefore("@OptIn(ExperimentalMaterial3Api::class)")
+        val lookupApply = lookupControl.substringAfter("onApply = {")
+            .substringBefore("            },")
+        val editorTests = readAppTest("CollectionListEditorTest.kt")
+
+        builder shouldContain "internal enum class ListBuilderMode"
+        builder shouldContain "ListBuilderMode.CREATE -> MR.strings.tsuzuki_list_builder_create_title"
+        builder shouldContain "ListBuilderMode.EDIT -> MR.strings.tsuzuki_list_builder_edit_title"
+        builder shouldContain "descriptor?.filters?.filter { it.placement == FilterPlacement.QUICK }"
+        builder shouldContain "if (quickFilters.isNotEmpty() && editor.filtersEditable)"
+        builder shouldContain "it.placement == FilterPlacement.ADVANCED"
+        builder shouldContain "CollectionProviderSwitchPlanner.plan("
+        builder shouldContain "if (plan.requiresConfirmation)"
+        builder shouldContain "is CollectionProviderSwitchPlan.Blocked"
+        builder shouldContain "RemoteLookupSheetState.open(editor, capability)"
+        lookupApply shouldContain "val current = transaction?.takeIf(RemoteLookupSheetState::isOpen)"
+        lookupApply shouldContain "current.apply(editor, capability, onEditorChange)"
+        (
+            lookupApply.indexOf("transaction = null") <
+                lookupApply.indexOf("current.apply(editor, capability, onEditorChange)")
+            ) shouldBe true
+        builder shouldContain "onDismiss = { transaction = null }"
+        builder shouldContain ".imePadding()"
+        builder shouldContain "selected = included"
+        builder shouldContain "is QueryField.Custom -> id"
+        builder shouldContain "is QueryField.Custom -> field.identifier"
+        builder shouldContain "if (providerId.isNotBlank())"
+        builder shouldContain ".verticalScroll(rememberScrollState())"
+        builder shouldContain "previewState.items.take(PREVIEW_TITLE_LIMIT)"
+        builder shouldContain "MangaCover.Book("
+        builder shouldContain "data = item.coverUrl"
+        builder shouldNotContain "mockup"
+        builder shouldNotContain "DropdownMenu("
+        advanced shouldContain "text = it.toCanonicalString()"
+        editorTests shouldContain "advanced any query is preserved exactly when visual editor cannot represent it"
+        editorTests shouldContain "draft.query shouldBe query"
+        builder shouldNotContain "New List"
+        builder shouldNotContain "Edit List"
+        builder shouldNotContain "Scaffold("
+        builder shouldNotContain "AlertDialog("
+        builder shouldNotContain "OutlinedTextField("
+    }
+
+    @Test
     fun `root composition owns Collections chrome and keeps open edit and reorder owners`() {
         val source = readAppSource("collections/CollectionsScreen.kt")
         val rootUi = source.substringAfter("if (!fullScreenEditorRendered) {")
@@ -52,7 +101,8 @@ class DefaultSkinCollectionsAdminContractTest {
         source shouldContain "CollectionsAction.ReorderLists("
         source shouldContain "draftLists = draftLists + DraftListEntry("
         source shouldContain "onSubmitDraft?.invoke("
-        source shouldContain "title = if (target is FolderListEditorTarget.New) \"New List\" else \"Edit List\""
+        source shouldContain
+            "mode = if (target is FolderListEditorTarget.New) ListBuilderMode.CREATE else ListBuilderMode.EDIT"
         source shouldContain ".weight(1f)"
         val folderCard = source.substringAfter("private fun EditorFolderCard")
             .substringBefore("@Composable\nprivate fun EditorListCard")
@@ -142,8 +192,9 @@ class DefaultSkinCollectionsAdminContractTest {
             root shouldNotContain kotlinLiteral
             editor shouldNotContain kotlinLiteral
         }
-        // The ListBuilder titles are routing sentinels and intentionally stay unchanged.
-        editor shouldContain "title = if (target is FolderListEditorTarget.New) \"New List\" else \"Edit List\""
+        // Create/edit mode owns localized presentation and remains independent of display text.
+        editor shouldContain
+            "mode = if (target is FolderListEditorTarget.New) ListBuilderMode.CREATE else ListBuilderMode.EDIT"
     }
 
     @Test
@@ -242,6 +293,11 @@ class DefaultSkinCollectionsAdminContractTest {
     private fun readAppSource(relativePath: String): String = readFirst(
         Path.of("src/main/java/eu/kanade/presentation/tsuzuki/$relativePath"),
         Path.of("app/src/main/java/eu/kanade/presentation/tsuzuki/$relativePath"),
+    )
+
+    private fun readAppTest(relativePath: String): String = readFirst(
+        Path.of("src/test/java/eu/kanade/presentation/tsuzuki/collections/$relativePath"),
+        Path.of("app/src/test/java/eu/kanade/presentation/tsuzuki/collections/$relativePath"),
     )
 
     private fun readResource(relativePath: String): String = readFirst(
