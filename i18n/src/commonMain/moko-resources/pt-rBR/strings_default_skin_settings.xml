@@ -4,9 +4,20 @@
     <string name="tsuzuki_settings_section_privacy_security">Privacidade e segurança</string>
     <string name="tsuzuki_settings_section_diagnostics">Diagnóstico</string>
     <string name="tsuzuki_account_sync_section">Sincronização</string>
+    <string name="tsuzuki_settings_group_account">Conta</string>
+    <string name="tsuzuki_settings_group_experience">Experiência</string>
+    <string name="tsuzuki_settings_group_content">Conteúdo</string>
+    <string name="tsuzuki_settings_group_data">Dados</string>
+    <string name="tsuzuki_settings_group_system">Sistema</string>
+    <string name="tsuzuki_settings_group_about">Sobre</string>
+    <string name="tsuzuki_integration_status_disabled">Desativada</string>
+    <string name="tsuzuki_integration_status_not_configured">Não configurada</string>
+    <string name="tsuzuki_integration_status_configured">Configurada</string>
+    <string name="tsuzuki_integration_status_active">Ativa</string>
 
     <string name="tsuzuki_visual_preset_title">Preset visual</string>
     <string name="tsuzuki_visual_preset_current">Preset atual</string>
+    <string name="tsuzuki_visual_preset_name">Tsuzuki Default Skin</string>
     <string name="tsuzuki_visual_preset_summary">A prévia acompanha o tema atual sem criar outro preset.</string>
     <string name="tsuzuki_theme_mode_title">Modo do tema</string>
     <string name="tsuzuki_collections_settings_title">Collections</string>

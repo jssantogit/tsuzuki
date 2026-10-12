@@ -1,20 +1,18 @@
 package eu.kanade.presentation.more.settings.screen
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -25,11 +23,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.more.settings.components.SettingsCanvas
+import eu.kanade.presentation.more.settings.components.SettingsGroup
+import eu.kanade.presentation.more.settings.components.SettingsGroupDivider
+import eu.kanade.presentation.more.settings.components.SettingsPageHeader
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.util.Screen
+import mihon.icons.materialsymbols.MaterialSymbols
+import mihon.icons.materialsymbols.roundedfilled.CheckCircle
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.ScrollbarLazyColumn
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 
 object SettingsTsuzukiVisualPresetScreen : Screen() {
@@ -37,77 +40,56 @@ object SettingsTsuzukiVisualPresetScreen : Screen() {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val colors = defaultSkinColors()
 
-        Scaffold(
-            topBar = { scrollBehavior ->
-                AppBar(
-                    title = "",
-                    navigateUp = navigator::pop,
-                    scrollBehavior = scrollBehavior,
-                )
-            },
-        ) { contentPadding ->
-            ScrollbarLazyColumn(contentPadding = contentPadding) {
-                item(key = "visual_preset_title") {
-                    Text(
-                        text = stringResource(MR.strings.tsuzuki_visual_preset_title),
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp),
+        SettingsCanvas {
+            LazyColumn {
+                item(key = "visual_preset_header") {
+                    SettingsPageHeader(
+                        title = stringResource(MR.strings.tsuzuki_visual_preset_title),
+                        navigateUp = navigator::pop,
                     )
                 }
 
-                item(key = "visual_preset_label") {
-                    Text(
-                        text = stringResource(MR.strings.tsuzuki_visual_preset_current).uppercase(),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
-                    )
-                }
-
-                item(key = "default_skin_preset") {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .semantics { selected = true },
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 1.dp,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)),
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                item(key = "visual_preset_group") {
+                    SettingsGroup(title = stringResource(MR.strings.tsuzuki_visual_preset_current)) {
+                        DefaultSkinSchematicPreview(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            colors = colors,
+                        )
+                        SettingsGroupDivider()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .semantics { selected = true }
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            DefaultSkinSchematicPreview()
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp),
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Tsuzuki Default Skin",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        text = stringResource(MR.strings.tsuzuki_visual_preset_summary),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Spacer(Modifier.width(12.dp))
                                 Text(
-                                    text = stringResource(MR.strings.selected),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    text = stringResource(MR.strings.tsuzuki_visual_preset_name),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = colors.foreground,
+                                )
+                                Text(
+                                    text = stringResource(MR.strings.tsuzuki_visual_preset_summary),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.secondary,
                                 )
                             }
+                            Icon(
+                                imageVector = MaterialSymbols.RoundedFilled.CheckCircle,
+                                contentDescription = stringResource(MR.strings.selected),
+                                tint = colors.accent,
+                                modifier = Modifier.size(22.dp),
+                            )
                         }
                     }
                 }
@@ -117,69 +99,56 @@ object SettingsTsuzukiVisualPresetScreen : Screen() {
 }
 
 @Composable
-private fun DefaultSkinSchematicPreview() {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(176.dp),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+private fun DefaultSkinSchematicPreview(
+    modifier: Modifier = Modifier,
+    colors: eu.kanade.presentation.tsuzuki.components.DefaultSkinColors,
+) {
+    Column(
+        modifier = modifier
+            .background(colors.canvas, DefaultSkinShape.Control)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.46f)
+                .height(12.dp)
+                .background(colors.foreground.copy(alpha = 0.82f), RoundedCornerShape(5.dp)),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.28f)
+                .height(6.dp)
+                .background(colors.secondary.copy(alpha = 0.5f), RoundedCornerShape(4.dp)),
+        )
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.surface, DefaultSkinShape.Control)
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.46f)
-                    .height(16.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f),
-                        shape = RoundedCornerShape(5.dp),
-                    ),
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.28f)
-                    .height(7.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
-                        shape = RoundedCornerShape(4.dp),
-                    ),
-            )
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 1.dp,
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    PreviewRow(long = true)
-                    PreviewRow(long = false)
-                }
-            }
+            PreviewRow(long = true, colors = colors)
+            PreviewRow(long = false, colors = colors)
         }
     }
 }
 
 @Composable
-private fun PreviewRow(long: Boolean) {
+private fun PreviewRow(
+    long: Boolean,
+    colors: eu.kanade.presentation.tsuzuki.components.DefaultSkinColors,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(28.dp)
-                .background(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(8.dp),
-                ),
+                .size(26.dp)
+                .background(colors.surfaceMuted, DefaultSkinShape.Control),
         )
-        Spacer(Modifier.width(10.dp))
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -187,20 +156,14 @@ private fun PreviewRow(long: Boolean) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth(if (long) 0.72f else 0.52f)
-                    .height(7.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
-                        shape = RoundedCornerShape(4.dp),
-                    ),
+                    .height(6.dp)
+                    .background(colors.foreground.copy(alpha = 0.72f), RoundedCornerShape(4.dp)),
             )
             Box(
                 modifier = Modifier
                     .fillMaxWidth(if (long) 0.48f else 0.36f)
                     .height(5.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-                        shape = RoundedCornerShape(4.dp),
-                    ),
+                    .background(colors.secondary.copy(alpha = 0.42f), RoundedCornerShape(4.dp)),
             )
         }
     }

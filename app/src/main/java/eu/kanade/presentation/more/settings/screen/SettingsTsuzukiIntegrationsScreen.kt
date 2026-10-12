@@ -19,7 +19,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -33,6 +35,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -74,6 +79,16 @@ class SettingsTsuzukiIntegrationsScreen : Screen() {
         val screenModel = metroViewModel<TsuzukiIntegrationsSettingsScreenModel>()
         val state by screenModel.state.collectAsStateWithLifecycle()
         val colors = defaultSkinColors()
+        val lifecycleOwner = LocalLifecycleOwner.current
+        var statusRefreshToken by remember { mutableIntStateOf(0) }
+
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) statusRefreshToken++
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
 
         SettingsCanvas {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -102,9 +117,7 @@ class SettingsTsuzukiIntegrationsScreen : Screen() {
                                         categoryItems.forEachIndexed { index, item ->
                                             IntegrationSettingRow(
                                                 item = item,
-                                                onEnabledChange = {
-                                                    screenModel.setEnabled(item.id, it)
-                                                },
+                                                statusRefreshToken = statusRefreshToken,
                                                 onOpen = {
                                                     navigator.push(
                                                         SettingsTsuzukiIntegrationDetailScreen(item.id.value),
@@ -427,67 +440,92 @@ private fun ProviderSummary(tracker: Tracker?, description: String) {
     }
 }
 
+internal enum class IntegrationRootStatus {
+    DISABLED,
+    NOT_CONFIGURED,
+    CONFIGURED,
+    ACTIVE,
+}
+
+internal fun integrationRootStatus(
+    enabled: Boolean,
+    hasRequiredConfiguration: Boolean?,
+): IntegrationRootStatus = when {
+    !enabled -> IntegrationRootStatus.DISABLED
+    hasRequiredConfiguration == false -> IntegrationRootStatus.NOT_CONFIGURED
+    hasRequiredConfiguration == true -> IntegrationRootStatus.CONFIGURED
+    else -> IntegrationRootStatus.ACTIVE
+}
+
 @Composable
 private fun IntegrationSettingRow(
     item: TsuzukiIntegrationSettingsItem,
-    onEnabledChange: (Boolean) -> Unit,
+    statusRefreshToken: Int,
     onOpen: () -> Unit,
 ) {
     val context = LocalContext.current
     val colors = defaultSkinColors()
-    val tracker = remember(item.legacyTrackerId) {
+    val tracker = remember(item.legacyTrackerId, statusRefreshToken) {
         item.legacyTrackerId?.let { context.appGraph.trackerManager.get(it) }
     }
-    val malClientIdConfigured = (tracker as? MyAnimeList)?.hasClientId() ?: true
+    val hasRequiredConfiguration = when (item.id.value) {
+        "mal" -> (tracker as? MyAnimeList)?.hasClientId() == true
+        "shikimori" -> (tracker as? Shikimori)?.hasApplicationCredentials() == true
+        "hikka" -> (tracker as? Hikka)?.hasApplicationCredentials() == true
+        else -> null
+    }
+    val status = integrationRootStatus(item.enabled, hasRequiredConfiguration)
+    val statusLabel = when (status) {
+        IntegrationRootStatus.DISABLED -> MR.strings.tsuzuki_integration_status_disabled
+        IntegrationRootStatus.NOT_CONFIGURED -> MR.strings.tsuzuki_integration_status_not_configured
+        IntegrationRootStatus.CONFIGURED -> MR.strings.tsuzuki_integration_status_configured
+        IntegrationRootStatus.ACTIVE -> MR.strings.tsuzuki_integration_status_active
+    }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 72.dp),
+            .heightIn(min = 72.dp)
+            .clickable(role = Role.Button, onClick = onOpen)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .clickable(role = Role.Button, onClick = onOpen)
-                .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
+        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
             when {
                 item.id.value == "tsuzuki" -> IntegrationBrandIcon(providerId = "tsuzuki", size = 32.dp)
                 tracker != null -> TrackLogoIcon(tracker)
                 else -> Box(
                     modifier = Modifier
                         .size(32.dp)
-                        .background(colors.surfaceMuted, androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                        .background(
+                            colors.surfaceMuted,
+                            androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                        ),
                 )
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(item.label, color = colors.foreground, fontWeight = FontWeight.Medium)
-                if (item.id.value == "mal" && !malClientIdConfigured) {
-                    Text(
-                        stringResource(MR.strings.tsuzuki_mal_client_id_required),
-                        color = colors.secondary,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(item.label, color = colors.foreground, fontWeight = FontWeight.Medium)
+            Text(
+                stringResource(statusLabel),
+                color = colors.secondary,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (item.id.value == "mal" && hasRequiredConfiguration != true) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_mal_client_id_required),
+                    color = colors.secondary,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
-            Icon(
-                imageVector = MaterialSymbols.AutoMirroredRounded.ArrowRight,
-                contentDescription = null,
-                tint = colors.secondary,
-                modifier = Modifier.size(20.dp),
-            )
         }
-        if (item.configurableCapabilities.isNotEmpty()) {
-            IntegrationSwitch(
-                checked = item.enabled,
-                enabled = item.enabled || malClientIdConfigured,
-                label = item.label,
-                onCheckedChange = onEnabledChange,
-            )
-        }
+        Icon(
+            imageVector = MaterialSymbols.AutoMirroredRounded.ArrowRight,
+            contentDescription = null,
+            tint = colors.secondary,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 

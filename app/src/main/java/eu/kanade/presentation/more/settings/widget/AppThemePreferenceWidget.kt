@@ -37,6 +37,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
@@ -45,6 +49,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.theme.TachiyomiTheme
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.isDynamicColorAvailable
@@ -63,12 +68,14 @@ internal fun AppThemePreferenceWidget(
     value: AppTheme,
     amoled: Boolean,
     onItemClick: (AppTheme) -> Unit,
+    compactPreview: Boolean = false,
 ) {
     BasePreferenceWidget(
         subcomponent = {
             AppThemesList(
                 currentTheme = value,
                 amoled = amoled,
+                compactPreview = compactPreview,
                 onItemClick = onItemClick,
             )
         },
@@ -79,6 +86,7 @@ internal fun AppThemePreferenceWidget(
 private fun AppThemesList(
     currentTheme: AppTheme,
     amoled: Boolean,
+    compactPreview: Boolean = false,
     onItemClick: (AppTheme) -> Unit,
 ) {
     val context = LocalContext.current
@@ -104,15 +112,26 @@ private fun AppThemesList(
                     appTheme = appTheme,
                     amoled = amoled,
                 ) {
-                    AppThemePreviewItem(
-                        selected = currentTheme == appTheme,
-                        selectionColor = selectionColors.accent,
-                        unselectedBorderColor = selectionColors.outline,
-                        onClick = {
-                            onItemClick(appTheme)
-                            (context as? Activity)?.let { ActivityCompat.recreate(it) }
-                        },
-                    )
+                    val onClick: () -> Unit = {
+                        onItemClick(appTheme)
+                        (context as? Activity)?.let { ActivityCompat.recreate(it) }
+                    }
+                    if (compactPreview) {
+                        AppThemePalettePreview(
+                            themeName = stringResource(appTheme.titleRes!!),
+                            selected = currentTheme == appTheme,
+                            selectionColor = selectionColors.accent,
+                            unselectedBorderColor = selectionColors.outline,
+                            onClick = onClick,
+                        )
+                    } else {
+                        AppThemePhonePreviewItem(
+                            selected = currentTheme == appTheme,
+                            selectionColor = selectionColors.accent,
+                            unselectedBorderColor = selectionColors.outline,
+                            onClick = onClick,
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -133,7 +152,7 @@ private fun AppThemesList(
 }
 
 @Composable
-fun AppThemePreviewItem(
+private fun AppThemePhonePreviewItem(
     selected: Boolean,
     selectionColor: Color,
     unselectedBorderColor: Color,
@@ -260,6 +279,128 @@ fun AppThemePreviewItem(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AppThemePalettePreview(
+    themeName: String,
+    selected: Boolean,
+    selectionColor: Color,
+    unselectedBorderColor: Color,
+    onClick: () -> Unit,
+) {
+    val frameShape = DefaultSkinShape.Control
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1.28f)
+            .border(
+                width = if (selected) 2.dp else 1.dp,
+                color = if (selected) selectionColor else unselectedBorderColor,
+                shape = frameShape,
+            )
+            .clip(frameShape)
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(role = Role.RadioButton, onClick = onClick)
+            .semantics {
+                contentDescription = themeName
+                this.selected = selected
+            }
+            .padding(10.dp),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(7.dp)
+                        .background(
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                            RoundedCornerShape(4.dp),
+                        ),
+                )
+                if (selected) {
+                    Icon(
+                        imageVector = MaterialSymbols.RoundedFilled.CheckCircle,
+                        contentDescription = null,
+                        tint = selectionColor,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+            AppThemePaletteSample(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                listOf(
+                    MaterialTheme.colorScheme.primary,
+                    MaterialTheme.colorScheme.secondary,
+                    MaterialTheme.colorScheme.tertiary,
+                ).forEach { color ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(8.dp)
+                            .background(color, RoundedCornerShape(5.dp)),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppThemePaletteSample(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(9.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .weight(0.8f)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer),
+        )
+        Column(
+            modifier = Modifier
+                .weight(1.2f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .height(6.dp)
+                    .background(
+                        MaterialTheme.colorScheme.onSurface,
+                        RoundedCornerShape(4.dp),
+                    ),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            )
         }
     }
 }

@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -53,7 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import eu.kanade.presentation.manga.components.MangaCover
+import eu.kanade.presentation.manga.components.MangaCoverFrame
 import eu.kanade.presentation.manga.components.MangaCoverLoadEvent
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
@@ -112,9 +113,10 @@ internal fun CanonicalDetailsHero(
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
                             .height(toolbarLeadHeight + artworkLead)
+                            .clipToBounds()
                             .clearAndSetSemantics {},
                     ) {
-                        MangaCover.Square(
+                        MangaCoverFrame(
                             data = state.coverUrl ?: state.sourceCover,
                             fallbackData = listOf(state.sourceCover, state.sourceCover?.url),
                             modifier = Modifier.fillMaxSize(),
@@ -129,20 +131,17 @@ internal fun CanonicalDetailsHero(
                             Modifier.fillMaxSize().background(
                                 Brush.verticalGradient(
                                     0f to background.copy(alpha = 0.08f),
-                                    0.30f to background.copy(alpha = 0.15f),
-                                    0.50f to background.copy(alpha = 0.50f),
-                                    0.74f to background.copy(alpha = 0.86f),
+                                    0.30f to background.copy(alpha = 0.24f),
+                                    0.50f to background.copy(alpha = 0.74f),
+                                    0.74f to background.copy(alpha = 0.96f),
                                     1f to background,
                                 ),
                             ),
                         )
                     }
                 }
-                val contentTop = if (hasArtwork) {
-                    toolbarLeadHeight + artworkLead * 0.68f
-                } else {
-                    toolbarLeadHeight
-                }
+                val contentTop = toolbarLeadHeight +
+                    if (hasArtwork) artworkLead - DefaultSkinSpacing.Section * 2 else 0.dp
                 Column(
                     Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = contentTop),
                     horizontalAlignment = Alignment.CenterHorizontally,

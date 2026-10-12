@@ -20,13 +20,27 @@ class SettingsVisualPresetContractTest {
     fun `visual preset represents only the current Default Skin without inventing a catalog`() {
         val source = readSource("SettingsTsuzukiVisualPresetScreen.kt")
 
-        source shouldContain "Tsuzuki Default Skin"
+        source shouldContain "MR.strings.tsuzuki_visual_preset_name"
         source shouldContain "MR.strings.selected"
         source shouldContain "MR.strings.tsuzuki_visual_preset_summary"
         source shouldNotContain "Download"
         source shouldNotContain "Install"
         source shouldNotContain "Marketplace"
         source shouldNotContain "PreferenceStore"
+    }
+
+    @Test
+    fun `visual preset uses the shared Settings shell and semantic presentation`() {
+        val source = readSource("SettingsTsuzukiVisualPresetScreen.kt")
+
+        source shouldContain "SettingsCanvas {"
+        source shouldContain "SettingsPageHeader("
+        source shouldContain "SettingsGroup(title = stringResource(MR.strings.tsuzuki_visual_preset_current))"
+        source shouldContain "defaultSkinColors()"
+        source shouldNotContain "Scaffold("
+        source shouldNotContain "AppBar("
+        source shouldNotContain "tonalElevation ="
+        source shouldNotContain "MaterialTheme.colorScheme.primary"
     }
 
     private fun readSource(fileName: String): String {

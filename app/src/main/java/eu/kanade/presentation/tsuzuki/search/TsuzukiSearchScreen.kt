@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -22,7 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -35,10 +35,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -47,6 +52,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.manga.components.MangaCover
+import eu.kanade.presentation.manga.components.MangaCoverFrame
+import eu.kanade.presentation.manga.components.MangaCoverLoadEvent
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinCard
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPageTitle
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
@@ -451,13 +458,10 @@ private fun SearchCompactCard(
             .width(148.dp)
             .clickable(role = Role.Button, onClick = onClick),
     ) {
-        MangaCover.Book(
+        SearchCompactArtwork(
             data = item.coverUrl,
-            contentDescription = item.title,
-            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(color = colors.surfaceMuted, shape = MaterialTheme.shapes.extraSmall),
+            title = item.title,
+            modifier = Modifier.fillMaxWidth(),
         )
         Text(
             text = item.title,
@@ -481,6 +485,71 @@ private fun SearchCompactCard(
                 modifier = Modifier.padding(top = 3.dp),
             )
         }
+    }
+}
+
+@Composable
+private fun SearchCompactArtwork(
+    data: String?,
+    title: String,
+    modifier: Modifier = Modifier,
+) {
+    val colors = defaultSkinColors()
+    val decorativeArtworkAvailable = remember(data) { mutableStateOf(!data.isNullOrBlank()) }
+    Box(
+        modifier = modifier
+            .aspectRatio(MangaCover.Book.ratio)
+            .clip(DefaultSkinShape.Control)
+            .background(colors.surfaceMuted),
+    ) {
+        if (decorativeArtworkAvailable.value) {
+            DecorativeSearchArtwork(
+                data = data,
+                modifier = Modifier.fillMaxSize(),
+                surfaceMuted = colors.surfaceMuted,
+                artworkAvailable = decorativeArtworkAvailable,
+            )
+        }
+        MangaCover.Book(
+            data = data,
+            contentDescription = title,
+            shape = DefaultSkinShape.Control,
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+@Composable
+private fun DecorativeSearchArtwork(
+    data: String?,
+    modifier: Modifier,
+    surfaceMuted: androidx.compose.ui.graphics.Color,
+    artworkAvailable: MutableState<Boolean>,
+) {
+    val onLoadEvent: (MangaCoverLoadEvent) -> Unit = remember(artworkAvailable) {
+        { event ->
+            if (event is MangaCoverLoadEvent.Failed && !event.willFallback) {
+                artworkAvailable.value = false
+            }
+        }
+    }
+    Box(modifier = modifier) {
+        MangaCoverFrame(
+            data = data,
+            contentDescription = null,
+            shape = RectangleShape,
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(0.32f),
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            onLoadEvent = onLoadEvent,
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(surfaceMuted.copy(alpha = 0.68f)),
+        )
     }
 }
 

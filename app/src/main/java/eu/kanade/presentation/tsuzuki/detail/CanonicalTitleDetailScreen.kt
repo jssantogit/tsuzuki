@@ -57,7 +57,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -67,6 +66,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalChapterDetailItem
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreenState
 import kotlinx.coroutines.launch
@@ -95,11 +95,7 @@ fun CanonicalTitleDetailScreen(
     onOpenProvidersSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val background = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
-        Color(0xFFF7F7F8)
-    } else {
-        MaterialTheme.colorScheme.background
-    }
+    val background = defaultSkinColors().canvas
     Box(
         modifier.fillMaxSize().background(background)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).navigationBarsPadding(),

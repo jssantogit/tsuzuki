@@ -1,7 +1,10 @@
 package eu.kanade.presentation.tsuzuki
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinColors
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
+import eu.kanade.presentation.tsuzuki.components.defaultSkinPalette
 import eu.kanade.presentation.tsuzuki.home.homeModuleTopSpacing
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -13,14 +16,27 @@ import java.nio.file.Path
 class DefaultSkinVisualContractTest {
 
     @Test
-    fun `shared Default Skin owns the approved neutral palette`() {
-        val source = readSource("components/DefaultSkinPrimitives.kt")
-
-        source shouldContain "0xFFF5F3EC"
-        source shouldContain "0xFF0B0C0D"
-        source shouldContain "0xFF242628"
-        source shouldContain "0xFFC9CCCE"
-        source shouldNotContain "0xFF275A80"
+    fun `shared Default Skin separates neutral interface roles from brand Paper`() {
+        defaultSkinPalette(isLight = true) shouldBe DefaultSkinColors(
+            canvas = Color(0xFFF7F7F8),
+            surface = Color(0xFFFFFFFF),
+            surfaceMuted = Color(0xFFE8EAED),
+            foreground = Color(0xFF17181A),
+            secondary = Color(0xFF50565C),
+            outline = Color(0xFFD6D9DC),
+            accent = Color(0xFF17181A),
+            onAccent = Color(0xFFFFFFFF),
+        )
+        defaultSkinPalette(isLight = false) shouldBe DefaultSkinColors(
+            canvas = Color(0xFF0B0C0D),
+            surface = Color(0xFF1C1E1F),
+            surfaceMuted = Color(0xFF2B2D2E),
+            foreground = Color(0xFFF5F5F5),
+            secondary = Color(0xFFADB2B6),
+            outline = Color(0xFF303234),
+            accent = Color(0xFFF5F5F5),
+            onAccent = Color(0xFF0B0C0D),
+        )
     }
 
     @Test
@@ -66,23 +82,42 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
-    fun `canonical details hero keeps one artwork layer in the title transition without a phantom read spacer`() {
+    fun `canonical details hero uses caller owned artwork bounds and flowing title content`() {
         val hero = readSource("detail/CanonicalDetailsHero.kt")
+        val screen = readSource("detail/CanonicalTitleDetailScreen.kt")
         val atmosphere = sourceBlockStartingAt(
             hero,
             "Box(Modifier.fillMaxWidth().background(background))",
         )
-        val artworkIndex = atmosphere.indexOf("MangaCover.Square(")
+        val artworkIndex = atmosphere.indexOf("MangaCoverFrame(")
         val titleIndex = atmosphere.indexOf("state.title.displayTitle")
 
-        hero.split("MangaCover.Square(").size shouldBe 2
-        hero shouldNotContain "AsyncImage("
+        hero shouldNotContain "MangaCover.Square("
         hero shouldNotContain "MangaCover.Book("
+        hero shouldContain "MangaCoverFrame("
+        hero shouldContain ".clipToBounds()"
+        hero shouldNotContain "artworkLead * 0.68f"
         (artworkIndex >= 0 && titleIndex > artworkIndex) shouldBe true
+        atmosphere shouldContain "toolbarLeadHeight +"
+        atmosphere shouldContain "Brush.verticalGradient("
+        atmosphere shouldNotContain "MangaCover.Square("
         atmosphere shouldNotContain "if (state.tsuzukiRating"
         (hero.indexOf("if (state.tsuzukiRating") > hero.indexOf("state.title.displayTitle")) shouldBe true
+        screen shouldContain "defaultSkinColors().canvas"
+        screen shouldNotContain "luminance()"
         hero shouldNotContain "Spacer(Modifier.weight(1f))"
         hero shouldNotContain "Arrangement.End"
+    }
+
+    @Test
+    fun `MangaCover ratio wrappers delegate to a caller bounds renderer`() {
+        val source = readMangaCoverSource()
+        val frameRenderer = sourceBlockStartingAt(source, "internal fun MangaCoverFrame(")
+        val ratioWrapper = sourceBlockStartingAt(source, "operator fun invoke(")
+
+        ratioWrapper shouldContain "modifier = modifier.aspectRatio(ratio)"
+        frameRenderer shouldContain ".clip(shape)"
+        frameRenderer shouldNotContain "aspectRatio("
     }
 
     @Test
@@ -116,25 +151,29 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
-    fun `settings routes keep tracking with account and library with general reading`() {
+    fun `settings routes keep approved destinations in their visual macrogroups`() {
         val settings = readSettingsSource("SettingsMainScreen.kt")
-        val sections = settings.substringAfter("private val sections = listOf(")
-        val account = sections.substringAfter("key = \"account\"").substringBefore("key = \"general\"")
-        val general = sections.substringAfter("key = \"general\"").substringBefore("key = \"content\"")
+        val groups = settings.substringAfter("private val settingsGroups = listOf(")
+        val account = groups.substringAfter("key = \"account\"").substringBefore("key = \"experience\"")
+        val experience = groups.substringAfter("key = \"experience\"").substringBefore("key = \"content\"")
+        listOf("account", "experience", "content", "data", "system", "about").forEach { key ->
+            groups shouldContain "key = \"$key\""
+        }
+        groups.split("SettingsMacroGroup(").size shouldBe 7
 
         account shouldContain "SettingsTsuzukiAccountScreen"
         account shouldContain "SettingsTrackingScreen"
         (account.indexOf("SettingsTsuzukiAccountScreen") < account.indexOf("SettingsTrackingScreen")) shouldBe true
 
-        general shouldContain "SettingsTsuzukiPersonalizationsScreen"
-        general shouldContain "SettingsTsuzukiReadingHubScreen"
-        general shouldContain "SettingsLibraryScreen"
+        experience shouldContain "SettingsTsuzukiPersonalizationsScreen"
+        experience shouldContain "SettingsTsuzukiReadingHubScreen"
+        experience shouldContain "SettingsLibraryScreen"
         listOf(
             "SettingsTsuzukiPersonalizationsScreen",
             "SettingsTsuzukiReadingHubScreen",
             "SettingsLibraryScreen",
         ).zipWithNext().forEach { (first, second) ->
-            (general.indexOf(first) < general.indexOf(second)) shouldBe true
+            (experience.indexOf(first) < experience.indexOf(second)) shouldBe true
         }
     }
 
@@ -157,13 +196,8 @@ class DefaultSkinVisualContractTest {
             .substringBefore("private fun getDisplayGroup(")
         val preview = readSettingsWidgetSource("AppThemePreferenceWidget.kt")
         val themesList = sourceBlockStartingAt(preview, "private fun AppThemesList(")
-        val previewItem = sourceBlockStartingAt(preview, "fun AppThemePreviewItem(")
-        val previewItemSignature = preview
-            .substringAfter("fun AppThemePreviewItem(")
-            .substringBefore(") {")
-        val previewBorderStart = previewItem.indexOf(".border(")
-        val previewBorderEnd = previewItem.indexOf(".padding(4.dp)", previewBorderStart)
-        val previewBorder = previewItem.substring(previewBorderStart, previewBorderEnd)
+        val compactPreview = sourceBlockStartingAt(preview, "private fun AppThemePalettePreview(")
+        val previewSample = sourceBlockStartingAt(preview, "private fun AppThemePaletteSample(")
         val baseSettings = readSettingsResource("base/strings_default_skin_settings.xml")
         val portugueseSettings = readSettingsResource("pt-rBR/strings_default_skin_settings.xml")
 
@@ -180,6 +214,7 @@ class DefaultSkinVisualContractTest {
         }
         appearance shouldContain "setAppCompatDelegateThemeMode(it)"
         appearance shouldContain "AppThemePreferenceWidget("
+        appearance shouldContain "compactPreview = true"
         appearance shouldContain "title = stringResource(MR.strings.pref_app_theme)"
         appearance shouldContain "ActivityCompat.recreate(it)"
         appearance shouldNotContain "AppThemeModePreferenceWidget("
@@ -191,14 +226,21 @@ class DefaultSkinVisualContractTest {
         (selectionColorsIndex >= 0 && selectionColorsIndex < previewThemeIndex) shouldBe true
         themesList shouldContain "selectionColor = selectionColors.accent"
         themesList shouldContain "unselectedBorderColor = selectionColors.outline"
-        previewItemSignature shouldContain "selectionColor: Color"
-        previewItemSignature shouldContain "unselectedBorderColor: Color"
-        previewBorder shouldContain "selectionColor"
-        previewBorder shouldContain "unselectedBorderColor"
-        previewBorder shouldNotContain "MaterialTheme.colorScheme.primary"
-        previewItem shouldContain "tint = selectionColor"
-        previewItem shouldContain "MaterialTheme.colorScheme.primary"
-        previewItem shouldContain "MaterialTheme.colorScheme.tertiary"
+        themesList shouldContain "AppThemePalettePreview("
+        compactPreview shouldContain "selectionColor"
+        compactPreview shouldContain "unselectedBorderColor"
+        compactPreview shouldContain "Role.RadioButton"
+        compactPreview shouldContain "contentDescription = themeName"
+        compactPreview shouldContain "this.selected = selected"
+        compactPreview shouldContain "contentDescription = null"
+        compactPreview shouldNotContain "aspectRatio(9f / 16f)"
+        compactPreview shouldNotContain "MangaCover.Book"
+        previewSample shouldContain "MaterialTheme.colorScheme.primary"
+        previewSample shouldContain "MaterialTheme.colorScheme.surfaceVariant"
+        previewSample shouldContain "MaterialTheme.colorScheme.primaryContainer"
+        previewSample shouldContain "MaterialTheme.colorScheme.surfaceContainerHigh"
+        previewSample shouldNotContain "AppBar"
+        preview shouldNotContain "MaterialTheme.colorScheme.primary.copy(alpha"
     }
 
     @Test
@@ -346,11 +388,17 @@ class DefaultSkinVisualContractTest {
 
         integrationRow shouldContain ".weight(1f)"
         integrationRow shouldContain ".clickable(role = Role.Button, onClick = onOpen)"
-        integrationRow shouldContain "IntegrationSwitch("
-        integrationRow shouldContain "item.id.value == \"mal\" && !malClientIdConfigured"
-        integrationRow shouldContain "onCheckedChange = onEnabledChange"
+        integrationRow shouldContain "integrationRootStatus("
+        integrationRow shouldContain "IntegrationBrandIcon("
+        integrationRow shouldNotContain "IntegrationSwitch("
+        integrationRow shouldNotContain "onEnabledChange"
         integrationRow shouldNotContain "DefaultSkinCard("
         integrationRow shouldNotContain ".toggleable("
+        integrationRow shouldContain "IntegrationRootStatus.NOT_CONFIGURED"
+        integrationRow shouldContain "MR.strings.tsuzuki_integration_status_not_configured"
+        integrationRow shouldContain "(tracker as? MyAnimeList)?.hasClientId() == true"
+        integrationRow shouldContain "(tracker as? Shikimori)?.hasApplicationCredentials() == true"
+        integrationRow shouldContain "(tracker as? Hikka)?.hasApplicationCredentials() == true"
         integrationRow.split(".clickable(").size shouldBe 2
 
         toggleRow shouldContain "IntegrationSwitch("
@@ -425,19 +473,27 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
-    fun `search compact cards retain a backed fit book cover without nested interaction`() {
+    fun `search compact cards keep Fit foreground with subdued frame scoped artwork atmosphere`() {
         val search = readSource("search/TsuzukiSearchScreen.kt")
         val compactCard = search.substringAfter("private fun SearchCompactCard(").substringBefore("\n@OptIn")
-        val cover = compactCard.substringAfter("MangaCover.Book(").substringBefore("\n        )")
+        val artwork = sourceBlockStartingAt(search, "private fun SearchCompactArtwork(")
+        val atmosphere = sourceBlockStartingAt(search, "private fun DecorativeSearchArtwork(")
 
         compactCard shouldContain ".width(148.dp)"
-        compactCard shouldContain "MangaCover.Book("
-        compactCard shouldContain "contentDescription = item.title"
-        compactCard shouldContain "ContentScale.Fit"
-        compactCard shouldNotContain "ContentScale.Crop"
-        compactCard shouldContain ".background(color = colors.surfaceMuted, shape = MaterialTheme.shapes.extraSmall)"
-        cover shouldNotContain "onClick ="
-        cover shouldNotContain ".clickable("
+        compactCard shouldContain "SearchCompactArtwork("
+        artwork shouldContain "aspectRatio(MangaCover.Book.ratio)"
+        artwork shouldContain "MangaCover.Book("
+        artwork shouldContain "contentDescription = title"
+        artwork shouldContain "ContentScale.Fit"
+        artwork shouldNotContain "ContentScale.Crop"
+        artwork shouldContain "background(colors.surfaceMuted)"
+        atmosphere shouldContain "MangaCoverFrame("
+        atmosphere shouldContain "contentScale = androidx.compose.ui.layout.ContentScale.Crop"
+        atmosphere shouldContain "contentDescription = null"
+        atmosphere shouldContain "surfaceMuted"
+        atmosphere shouldContain "alpha("
+        artwork shouldNotContain "onClick ="
+        artwork shouldNotContain ".clickable("
         readMangaCoverSource() shouldContain "Book(2f / 3f)"
     }
 

@@ -59,10 +59,10 @@ object SettingsMainScreen : Screen() {
 
         LaunchedEffect(selectedClass) {
             if (selectedClass == null) return@LaunchedEffect
-            val selectedSection = sections.indexOfFirst { section ->
-                section.items.any { it.screen::class == selectedClass }
+            val selectedGroup = settingsGroups.indexOfFirst { group ->
+                group.items.any { it.screen::class == selectedClass }
             }
-            if (selectedSection >= 0) state.animateScrollToItem(1 + selectedSection)
+            if (selectedGroup >= 0) state.animateScrollToItem(1 + selectedGroup)
         }
 
         SettingsCanvas {
@@ -85,10 +85,10 @@ object SettingsMainScreen : Screen() {
                     )
                 }
 
-                sections.forEach { section ->
-                    item(key = "section_${section.key}") {
-                        SettingsGroup(title = stringResource(section.titleRes)) {
-                            section.items.forEachIndexed { index, item ->
+                settingsGroups.forEach { group ->
+                    item(key = "section_${group.key}") {
+                        SettingsGroup(title = stringResource(group.titleRes)) {
+                            group.items.forEachIndexed { index, item ->
                                 val selected = selectedClass != null && item.screen::class == selectedClass
                                 SettingsNavigationRow(
                                     title = stringResource(item.titleRes),
@@ -97,7 +97,7 @@ object SettingsMainScreen : Screen() {
                                     selected = selected,
                                     onClick = { navigator.navigate(item.screen, twoPane) },
                                 )
-                                if (index < section.items.lastIndex) {
+                                if (index < group.items.lastIndex) {
                                     SettingsGroupDivider()
                                 }
                             }
@@ -120,16 +120,16 @@ object SettingsMainScreen : Screen() {
         val screen: VoyagerScreen,
     )
 
-    private data class Section(
+    private data class SettingsMacroGroup(
         val key: String,
         val titleRes: StringResource,
         val items: List<Item>,
     )
 
-    private val sections = listOf(
-        Section(
+    private val settingsGroups = listOf(
+        SettingsMacroGroup(
             key = "account",
-            titleRes = MR.strings.tsuzuki_account_title,
+            titleRes = MR.strings.tsuzuki_settings_group_account,
             items = listOf(
                 Item(
                     titleRes = MR.strings.tsuzuki_account_title,
@@ -143,9 +143,9 @@ object SettingsMainScreen : Screen() {
                 ),
             ),
         ),
-        Section(
-            key = "general",
-            titleRes = MR.strings.pref_category_general,
+        SettingsMacroGroup(
+            key = "experience",
+            titleRes = MR.strings.tsuzuki_settings_group_experience,
             items = listOf(
                 Item(
                     titleRes = MR.strings.tsuzuki_personalizations_title,
@@ -165,9 +165,9 @@ object SettingsMainScreen : Screen() {
                 ),
             ),
         ),
-        Section(
+        SettingsMacroGroup(
             key = "content",
-            titleRes = MR.strings.tsuzuki_settings_section_content,
+            titleRes = MR.strings.tsuzuki_settings_group_content,
             items = listOf(
                 Item(
                     titleRes = MR.strings.tsuzuki_integrations_title,
@@ -181,9 +181,9 @@ object SettingsMainScreen : Screen() {
                 ),
             ),
         ),
-        Section(
-            key = "downloads",
-            titleRes = MR.strings.pref_category_downloads,
+        SettingsMacroGroup(
+            key = "data",
+            titleRes = MR.strings.tsuzuki_settings_group_data,
             items = listOf(
                 Item(
                     titleRes = MR.strings.pref_category_downloads,
@@ -191,12 +191,6 @@ object SettingsMainScreen : Screen() {
                     icon = MaterialSymbols.Rounded.Download,
                     screen = SettingsDownloadScreen,
                 ),
-            ),
-        ),
-        Section(
-            key = "data_storage",
-            titleRes = MR.strings.label_data_storage,
-            items = listOf(
                 Item(
                     titleRes = MR.strings.label_data_storage,
                     icon = MaterialSymbols.Rounded.Info,
@@ -204,32 +198,20 @@ object SettingsMainScreen : Screen() {
                 ),
             ),
         ),
-        Section(
-            key = "privacy_security",
-            titleRes = MR.strings.tsuzuki_settings_section_privacy_security,
+        SettingsMacroGroup(
+            key = "system",
+            titleRes = MR.strings.tsuzuki_settings_group_system,
             items = listOf(
                 Item(
                     titleRes = MR.strings.pref_category_security,
                     icon = MaterialSymbols.Rounded.Security,
                     screen = SettingsSecurityScreen,
                 ),
-            ),
-        ),
-        Section(
-            key = "diagnostics",
-            titleRes = MR.strings.tsuzuki_settings_section_diagnostics,
-            items = listOf(
                 Item(
                     titleRes = MR.strings.pref_debug_info,
                     icon = MaterialSymbols.Rounded.Code,
                     screen = SettingsTsuzukiDiagnosticsScreen,
                 ),
-            ),
-        ),
-        Section(
-            key = "advanced",
-            titleRes = MR.strings.pref_category_advanced,
-            items = listOf(
                 Item(
                     titleRes = MR.strings.pref_category_advanced,
                     subtitleRes = MR.strings.pref_advanced_summary,
@@ -238,9 +220,9 @@ object SettingsMainScreen : Screen() {
                 ),
             ),
         ),
-        Section(
+        SettingsMacroGroup(
             key = "about",
-            titleRes = MR.strings.pref_category_about,
+            titleRes = MR.strings.tsuzuki_settings_group_about,
             items = listOf(
                 Item(
                     titleRes = MR.strings.pref_category_about,

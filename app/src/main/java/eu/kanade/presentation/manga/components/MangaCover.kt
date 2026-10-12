@@ -42,55 +42,78 @@ enum class MangaCover(val ratio: Float) {
         onLoadEvent: ((MangaCoverLoadEvent) -> Unit)? = null,
         contentScale: ContentScale = ContentScale.Crop,
     ) {
-        val candidates = remember(data, fallbackData) {
-            coverCandidates(data, fallbackData)
-        }
-        var candidateIndex by remember(candidates) { mutableIntStateOf(0) }
-        val errorPainter = rememberResourceBitmapPainter(id = R.drawable.cover_error)
-        val currentCandidate = candidates.getOrNull(candidateIndex)
-        remember(candidateIndex, candidates, onLoadEvent) {
-            onLoadEvent?.invoke(
-                MangaCoverLoadEvent.Attempt(
-                    candidateIndex = candidateIndex,
-                    candidateCount = candidates.size,
-                    requestDataPresent = currentCandidate != null,
-                ),
-            )
-            Unit
-        }
-
-        AsyncImage(
-            model = currentCandidate,
-            placeholder = ColorPainter(CoverPlaceholderColor),
-            error = errorPainter,
-            fallback = errorPainter,
-            onError = {
-                val willFallback = candidateIndex < candidates.lastIndex
-                onLoadEvent?.invoke(MangaCoverLoadEvent.Failed(candidateIndex, willFallback))
-                if (willFallback) {
-                    candidateIndex += 1
-                }
-            },
-            onSuccess = {
-                onLoadEvent?.invoke(MangaCoverLoadEvent.Succeeded(candidateIndex))
-            },
+        MangaCoverFrame(
+            data = data,
+            fallbackData = fallbackData,
+            modifier = modifier.aspectRatio(ratio),
             contentDescription = contentDescription,
-            modifier = modifier
-                .aspectRatio(ratio)
-                .clip(shape)
-                .then(
-                    if (onClick != null) {
-                        Modifier.clickable(
-                            role = Role.Button,
-                            onClick = onClick,
-                        )
-                    } else {
-                        Modifier
-                    },
-                ),
+            shape = shape,
+            onClick = onClick,
+            onLoadEvent = onLoadEvent,
             contentScale = contentScale,
         )
     }
+}
+
+/** Draws cover artwork into bounds owned by the caller, without imposing an aspect ratio. */
+@Composable
+internal fun MangaCoverFrame(
+    data: Any?,
+    fallbackData: List<Any?> = emptyList(),
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    shape: Shape = MaterialTheme.shapes.extraSmall,
+    onClick: (() -> Unit)? = null,
+    onLoadEvent: ((MangaCoverLoadEvent) -> Unit)? = null,
+    contentScale: ContentScale = ContentScale.Crop,
+) {
+    val candidates = remember(data, fallbackData) {
+        coverCandidates(data, fallbackData)
+    }
+    var candidateIndex by remember(candidates) { mutableIntStateOf(0) }
+    val errorPainter = rememberResourceBitmapPainter(id = R.drawable.cover_error)
+    val currentCandidate = candidates.getOrNull(candidateIndex)
+    remember(candidateIndex, candidates, onLoadEvent) {
+        onLoadEvent?.invoke(
+            MangaCoverLoadEvent.Attempt(
+                candidateIndex = candidateIndex,
+                candidateCount = candidates.size,
+                requestDataPresent = currentCandidate != null,
+            ),
+        )
+        Unit
+    }
+
+    AsyncImage(
+        model = currentCandidate,
+        placeholder = ColorPainter(CoverPlaceholderColor),
+        error = errorPainter,
+        fallback = errorPainter,
+        onError = {
+            val willFallback = candidateIndex < candidates.lastIndex
+            onLoadEvent?.invoke(MangaCoverLoadEvent.Failed(candidateIndex, willFallback))
+            if (willFallback) {
+                candidateIndex += 1
+            }
+        },
+        onSuccess = {
+            onLoadEvent?.invoke(MangaCoverLoadEvent.Succeeded(candidateIndex))
+        },
+        contentDescription = contentDescription,
+        modifier = modifier
+            .clip(shape)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        role = Role.Button,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                },
+            ),
+        contentScale = contentScale,
+    )
 }
 
 private val CoverPlaceholderColor = Color(0x1F888888)

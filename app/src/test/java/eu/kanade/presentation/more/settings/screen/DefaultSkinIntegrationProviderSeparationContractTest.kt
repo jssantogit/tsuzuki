@@ -63,7 +63,7 @@ class DefaultSkinIntegrationProviderSeparationContractTest {
         )
         val contentSection = mainSource
             .substringAfter("key = \"content\"")
-            .substringBefore("key = \"downloads\"")
+            .substringBefore("key = \"data\"")
 
         mainSource shouldContain "screen = SettingsTsuzukiIntegrationsScreen()"
         mainSource shouldContain "screen = SettingsTsuzukiProvidersDefaultSkinScreen()"

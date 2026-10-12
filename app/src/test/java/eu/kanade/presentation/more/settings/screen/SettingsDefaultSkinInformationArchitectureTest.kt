@@ -1,6 +1,7 @@
 package eu.kanade.presentation.more.settings.screen
 
 import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
@@ -11,9 +12,14 @@ import java.nio.file.Path
 class SettingsDefaultSkinInformationArchitectureTest {
 
     @Test
-    fun `settings expose approved public families in canonical route order`() {
+    fun `settings preserve real routes under the six approved visual macrogroups`() {
         val source = readSource("SettingsMainScreen.kt")
-        val sections = source.substringAfter("private val sections = listOf(")
+        val groups = source.substringAfter("private val settingsGroups = listOf(")
+        val groupKeys = Regex("SettingsMacroGroup\\(\\s*key = \"([^\"]+)\"")
+            .findAll(groups)
+            .map { it.groupValues[1] }
+            .toList()
+        groupKeys shouldContainExactly listOf("account", "experience", "content", "data", "system", "about")
         val familyAnchors = listOf(
             "SettingsTsuzukiAccountScreen",
             "SettingsTrackingScreen",
@@ -30,25 +36,25 @@ class SettingsDefaultSkinInformationArchitectureTest {
             "AboutScreen",
         )
 
-        familyAnchors.forEach(sections::shouldContain)
+        familyAnchors.forEach(groups::shouldContain)
         familyAnchors.zipWithNext().forEach { (first, second) ->
-            (sections.indexOf(first) < sections.indexOf(second)).shouldBeTrue()
+            (groups.indexOf(first) < groups.indexOf(second)).shouldBeTrue()
         }
         (
-            sections.indexOf("SettingsTsuzukiAccountScreen") <
-                sections.indexOf("SettingsTrackingScreen")
+            groups.indexOf("SettingsTsuzukiAccountScreen") <
+                groups.indexOf("SettingsTrackingScreen")
             ).shouldBeTrue()
         (
-            sections.indexOf("SettingsTsuzukiPersonalizationsScreen") <
-                sections.indexOf("SettingsTsuzukiReadingHubScreen")
+            groups.indexOf("SettingsTsuzukiPersonalizationsScreen") <
+                groups.indexOf("SettingsTsuzukiReadingHubScreen")
             ).shouldBeTrue()
         (
-            sections.indexOf("SettingsTsuzukiReadingHubScreen") <
-                sections.indexOf("SettingsLibraryScreen")
+            groups.indexOf("SettingsTsuzukiReadingHubScreen") <
+                groups.indexOf("SettingsLibraryScreen")
             ).shouldBeTrue()
         (
-            sections.indexOf("SettingsTsuzukiIntegrationsScreen") <
-                sections.indexOf("SettingsTsuzukiProvidersDefaultSkinScreen")
+            groups.indexOf("SettingsTsuzukiIntegrationsScreen") <
+                groups.indexOf("SettingsTsuzukiProvidersDefaultSkinScreen")
             ).shouldBeTrue()
     }
 
@@ -125,11 +131,13 @@ class SettingsDefaultSkinInformationArchitectureTest {
         root shouldContain "SettingsPageHeader("
         root shouldContain "SettingsGroup("
         root shouldContain "SettingsNavigationRow("
-        root shouldContain "sections.forEach { section ->"
-        root shouldContain "SettingsGroup(title = stringResource(section.titleRes)) {"
-        root shouldContain "section.items.forEachIndexed { index, item ->"
-        root shouldContain "if (index < section.items.lastIndex) {"
+        root shouldContain "settingsGroups.forEach { group ->"
+        root shouldContain "SettingsGroup(title = stringResource(group.titleRes)) {"
+        root shouldContain "group.items.forEachIndexed { index, item ->"
+        root shouldContain "if (index < group.items.lastIndex) {"
         root shouldContain "SettingsGroupDivider()"
+        root shouldContain "SettingsMacroGroup("
+        root shouldNotContain "private val sections = listOf("
         root shouldNotContain "DefaultSkinNavigationRow("
         root shouldNotContain "AppBar("
         root shouldNotContain "topBar ="
@@ -220,6 +228,12 @@ class SettingsDefaultSkinInformationArchitectureTest {
                 "title = \"Diagnóstico\"",
                 "title = \"Avançado\"",
                 "title = \"Sobre\"",
+                "title = \"CONTA\"",
+                "title = \"EXPERIÊNCIA\"",
+                "title = \"CONTEÚDO\"",
+                "title = \"DADOS\"",
+                "title = \"SISTEMA\"",
+                "title = \"SOBRE\"",
                 "text = \"›\"",
             ),
             "DefaultSkinSettingsNavigation.kt" to listOf(
@@ -238,6 +252,7 @@ class SettingsDefaultSkinInformationArchitectureTest {
                 "text = \"PRESET ATUAL\"",
                 "text = \"A prévia acompanha o tema atual sem criar outro preset.\"",
                 "text = \"Selecionado\"",
+                "text = \"Tsuzuki Default Skin\"",
             ),
             "SettingsDownloadScreen.kt" to listOf(
                 "title = \"Rede e arquivos\"",

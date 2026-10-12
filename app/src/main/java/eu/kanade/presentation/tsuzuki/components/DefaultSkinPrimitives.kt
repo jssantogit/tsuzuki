@@ -60,32 +60,34 @@ data class DefaultSkinColors(
 fun defaultSkinColors(): DefaultSkinColors {
     val scheme = MaterialTheme.colorScheme
     val light = scheme.surface.luminance() > 0.5f
-    return remember(scheme, light) {
-        if (light) {
-            DefaultSkinColors(
-                canvas = Color(0xFFF5F3EC),
-                surface = Color(0xFFFFFFFF),
-                surfaceMuted = Color(0xFFECEAE4),
-                foreground = Color(0xFF0B0C0D),
-                secondary = Color(0xFF5D6164),
-                outline = Color(0xFFC9CCCE),
-                accent = Color(0xFF242628),
-                onAccent = Color(0xFFF5F3EC),
-            )
-        } else {
-            DefaultSkinColors(
-                canvas = Color(0xFF0B0C0D),
-                surface = Color(0xFF151719),
-                surfaceMuted = Color(0xFF242628),
-                foreground = Color(0xFFF5F3EC),
-                secondary = Color(0xFFC9CCCE),
-                outline = Color(0xFF3A3D40),
-                accent = Color(0xFFF5F3EC),
-                onAccent = Color(0xFF0B0C0D),
-            )
-        }
-    }
+    return remember(scheme, light) { defaultSkinPalette(light) }
 }
+
+/** Neutral interface roles stay independent from the Ink/Paper brand identity. */
+internal fun defaultSkinPalette(isLight: Boolean): DefaultSkinColors =
+    if (isLight) {
+        DefaultSkinColors(
+            canvas = Color(0xFFF7F7F8),
+            surface = Color(0xFFFFFFFF),
+            surfaceMuted = Color(0xFFE8EAED),
+            foreground = Color(0xFF17181A),
+            secondary = Color(0xFF50565C),
+            outline = Color(0xFFD6D9DC),
+            accent = Color(0xFF17181A),
+            onAccent = Color(0xFFFFFFFF),
+        )
+    } else {
+        DefaultSkinColors(
+            canvas = Color(0xFF0B0C0D),
+            surface = Color(0xFF1C1E1F),
+            surfaceMuted = Color(0xFF2B2D2E),
+            foreground = Color(0xFFF5F5F5),
+            secondary = Color(0xFFADB2B6),
+            outline = Color(0xFF303234),
+            accent = Color(0xFFF5F5F5),
+            onAccent = Color(0xFF0B0C0D),
+        )
+    }
 
 object DefaultSkinSpacing {
     val PageHorizontal = 20.dp
