@@ -1,0 +1,47 @@
+<resources>
+    <string name="tsuzuki_collections_admin_title">Collections</string>
+    <string name="tsuzuki_collections_admin_back">Voltar</string>
+    <string name="tsuzuki_collections_admin_basic">BÁSICO</string>
+    <string name="tsuzuki_collections_admin_new_collection">Nova coleção</string>
+    <string name="tsuzuki_collections_admin_edit_collection">Editar coleção</string>
+    <string name="tsuzuki_collections_admin_collection_name">Nome da coleção</string>
+    <string name="tsuzuki_collections_admin_folders">PASTAS</string>
+    <string name="tsuzuki_collections_admin_add_folder">Adicionar pasta</string>
+    <string name="tsuzuki_collections_admin_create_collection">Criar coleção</string>
+    <string name="tsuzuki_collections_admin_save_changes">Salvar alterações</string>
+    <string name="tsuzuki_collections_admin_new_folder">Nova pasta</string>
+    <string name="tsuzuki_collections_admin_new_subfolder">Nova subpasta</string>
+    <string name="tsuzuki_collections_admin_edit_folder">Editar pasta</string>
+    <string name="tsuzuki_collections_admin_folder_name">Nome da pasta</string>
+    <string name="tsuzuki_collections_admin_create_folder">Criar pasta</string>
+    <string name="tsuzuki_collections_admin_lists">LISTAS</string>
+    <string name="tsuzuki_collections_admin_add_list">Adicionar lista</string>
+    <string name="tsuzuki_collections_admin_no_lists">Nenhuma lista ainda</string>
+    <string name="tsuzuki_collections_admin_folder_actions">Ações da pasta</string>
+    <string name="tsuzuki_collections_admin_list_actions">Ações da lista</string>
+    <string name="tsuzuki_collections_admin_edit_list">Editar lista</string>
+    <string name="tsuzuki_collections_admin_reorder">Arraste para reordenar</string>
+    <string name="tsuzuki_collections_admin_remove_draft">Remover</string>
+    <string name="tsuzuki_collections_admin_copy_name">%1$s (cópia)</string>
+    <string name="tsuzuki_collections_admin_ok">OK</string>
+    <string name="tsuzuki_collections_admin_working">Processando dados das Collections…</string>
+    <string name="tsuzuki_collections_admin_import_success_title">Importação concluída</string>
+    <string name="tsuzuki_collections_admin_import_success_message">%1$d Collections, %2$d pastas e %3$d listas; %4$d IDs ajustados.</string>
+    <string name="tsuzuki_collections_admin_transfer_error_title">Erro em Collections</string>
+    <string name="tsuzuki_collections_admin_delete_folder_title">Excluir pasta?</string>
+    <string name="tsuzuki_collections_admin_delete_folder_message">A pasta e suas listas serão excluídas.</string>
+    <string name="tsuzuki_collections_admin_hide_folder_title">Ocultar pasta integrada?</string>
+    <string name="tsuzuki_collections_admin_hide_folder_message">Esta pasta ficará oculta neste dispositivo.</string>
+    <string name="tsuzuki_collections_admin_delete_list_title">Excluir lista?</string>
+    <string name="tsuzuki_collections_admin_delete_list_message">Esta lista será excluída.</string>
+    <string name="tsuzuki_collections_admin_hide_list_title">Ocultar lista integrada?</string>
+    <string name="tsuzuki_collections_admin_hide_list_message">Esta lista ficará oculta neste dispositivo.</string>
+    <plurals name="tsuzuki_collections_admin_folder_count">
+        <item quantity="one">%1$d pasta</item>
+        <item quantity="other">%1$d pastas</item>
+    </plurals>
+    <plurals name="tsuzuki_collections_admin_list_count">
+        <item quantity="one">%1$d lista</item>
+        <item quantity="other">%1$d listas</item>
+    </plurals>
+</resources>

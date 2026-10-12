@@ -1,0 +1,47 @@
+<resources>
+    <string name="tsuzuki_collections_admin_title">Collections</string>
+    <string name="tsuzuki_collections_admin_back">Back</string>
+    <string name="tsuzuki_collections_admin_basic">BASIC</string>
+    <string name="tsuzuki_collections_admin_new_collection">New Collection</string>
+    <string name="tsuzuki_collections_admin_edit_collection">Edit Collection</string>
+    <string name="tsuzuki_collections_admin_collection_name">Collection name</string>
+    <string name="tsuzuki_collections_admin_folders">FOLDERS</string>
+    <string name="tsuzuki_collections_admin_add_folder">Add folder</string>
+    <string name="tsuzuki_collections_admin_create_collection">Create collection</string>
+    <string name="tsuzuki_collections_admin_save_changes">Save changes</string>
+    <string name="tsuzuki_collections_admin_new_folder">New folder</string>
+    <string name="tsuzuki_collections_admin_new_subfolder">New subfolder</string>
+    <string name="tsuzuki_collections_admin_edit_folder">Edit folder</string>
+    <string name="tsuzuki_collections_admin_folder_name">Folder name</string>
+    <string name="tsuzuki_collections_admin_create_folder">Create folder</string>
+    <string name="tsuzuki_collections_admin_lists">LISTS</string>
+    <string name="tsuzuki_collections_admin_add_list">Add list</string>
+    <string name="tsuzuki_collections_admin_no_lists">No lists yet</string>
+    <string name="tsuzuki_collections_admin_folder_actions">Folder actions</string>
+    <string name="tsuzuki_collections_admin_list_actions">List actions</string>
+    <string name="tsuzuki_collections_admin_edit_list">Edit list</string>
+    <string name="tsuzuki_collections_admin_reorder">Drag to reorder</string>
+    <string name="tsuzuki_collections_admin_remove_draft">Remove</string>
+    <string name="tsuzuki_collections_admin_copy_name">%1$s copy</string>
+    <string name="tsuzuki_collections_admin_ok">OK</string>
+    <string name="tsuzuki_collections_admin_working">Working…</string>
+    <string name="tsuzuki_collections_admin_import_success_title">Import complete</string>
+    <string name="tsuzuki_collections_admin_import_success_message">%1$d Collections, %2$d folders, %3$d lists; %4$d IDs remapped.</string>
+    <string name="tsuzuki_collections_admin_transfer_error_title">Collections error</string>
+    <string name="tsuzuki_collections_admin_delete_folder_title">Delete folder?</string>
+    <string name="tsuzuki_collections_admin_delete_folder_message">The folder and its Lists will be deleted.</string>
+    <string name="tsuzuki_collections_admin_hide_folder_title">Hide built-in folder?</string>
+    <string name="tsuzuki_collections_admin_hide_folder_message">This folder will be hidden on this device.</string>
+    <string name="tsuzuki_collections_admin_delete_list_title">Delete list?</string>
+    <string name="tsuzuki_collections_admin_delete_list_message">This list will be deleted.</string>
+    <string name="tsuzuki_collections_admin_hide_list_title">Hide built-in list?</string>
+    <string name="tsuzuki_collections_admin_hide_list_message">This list will be hidden on this device.</string>
+    <plurals name="tsuzuki_collections_admin_folder_count">
+        <item quantity="one">%1$d folder</item>
+        <item quantity="other">%1$d folders</item>
+    </plurals>
+    <plurals name="tsuzuki_collections_admin_list_count">
+        <item quantity="one">%1$d list</item>
+        <item quantity="other">%1$d lists</item>
+    </plurals>
+</resources>
