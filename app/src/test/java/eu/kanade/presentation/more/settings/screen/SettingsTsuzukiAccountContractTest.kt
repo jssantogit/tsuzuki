@@ -46,7 +46,7 @@ class SettingsTsuzukiAccountContractTest {
     fun `account uses shared settings shell and grouped default skin surfaces`() {
         val source = readAccountScreenSource()
 
-        source shouldContain "SettingsCanvas("
+        source shouldContain "SettingsCanvas {"
         source shouldContain "SettingsPageHeader("
         source shouldContain "SettingsGroup(title = stringResource(mode.groupTitleResource()))"
         source shouldContain "SettingsGroup(title = stringResource(MR.strings.tsuzuki_account_title))"
