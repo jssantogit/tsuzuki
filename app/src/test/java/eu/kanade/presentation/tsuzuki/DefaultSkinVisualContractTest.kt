@@ -158,6 +158,9 @@ class DefaultSkinVisualContractTest {
         val preview = readSettingsWidgetSource("AppThemePreferenceWidget.kt")
         val themesList = sourceBlockStartingAt(preview, "private fun AppThemesList(")
         val previewItem = sourceBlockStartingAt(preview, "fun AppThemePreviewItem(")
+        val previewItemSignature = preview
+            .substringAfter("fun AppThemePreviewItem(")
+            .substringBefore(") {")
         val previewBorderStart = previewItem.indexOf(".border(")
         val previewBorderEnd = previewItem.indexOf(".padding(4.dp)", previewBorderStart)
         val previewBorder = previewItem.substring(previewBorderStart, previewBorderEnd)
@@ -188,8 +191,8 @@ class DefaultSkinVisualContractTest {
         (selectionColorsIndex >= 0 && selectionColorsIndex < previewThemeIndex) shouldBe true
         themesList shouldContain "selectionColor = selectionColors.accent"
         themesList shouldContain "unselectedBorderColor = selectionColors.outline"
-        previewItem shouldContain "selectionColor: Color"
-        previewItem shouldContain "unselectedBorderColor: Color"
+        previewItemSignature shouldContain "selectionColor: Color"
+        previewItemSignature shouldContain "unselectedBorderColor: Color"
         previewBorder shouldContain "selectionColor"
         previewBorder shouldContain "unselectedBorderColor"
         previewBorder shouldNotContain "MaterialTheme.colorScheme.primary"
