@@ -62,6 +62,7 @@ jobs:
           python3 .github/scripts/test_apk_lane.py
           python3 .github/scripts/test_extension_fixture.py
           python3 .github/scripts/test_identity_contract.py
+          python3 .github/scripts/test_inherited_application_updater_removal.py
           python3 .github/scripts/identity_contract.py
 
       - name: Resolve verification scope
