@@ -30,8 +30,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -123,6 +129,7 @@ fun DefaultSkinPrimaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    leadingContent: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val colors = defaultSkinColors()
     Button(
@@ -138,11 +145,17 @@ fun DefaultSkinPrimaryButton(
         ),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp),
     ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            leadingContent?.invoke(this)
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
     }
 }
 
@@ -294,6 +307,90 @@ fun DefaultSkinTextField(
         }
         supportingText?.takeIf(String::isNotBlank)?.let {
             Text(text = it, color = colors.secondary, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+fun DefaultSkinFormField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    keyboardType: KeyboardType,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    error: String? = null,
+    isPassword: Boolean = false,
+    passwordVisible: Boolean = false,
+    passwordToggleLabel: String? = null,
+    onTogglePassword: () -> Unit = {},
+) {
+    val colors = defaultSkinColors()
+    val errorColor = MaterialTheme.colorScheme.error
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = label,
+            color = if (error == null) colors.secondary else errorColor,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium,
+        )
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 54.dp),
+            shape = DefaultSkinShape.Control,
+            color = colors.surface,
+            contentColor = colors.foreground,
+            border = BorderStroke(1.dp, if (error == null) colors.outline else errorColor),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 16.dp, end = if (isPassword) 4.dp else 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics {
+                            contentDescription = label
+                            if (error != null) this.error(error)
+                        },
+                    enabled = enabled,
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.foreground),
+                    cursorBrush = SolidColor(colors.foreground),
+                    keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+                    visualTransformation = if (isPassword && !passwordVisible) {
+                        PasswordVisualTransformation()
+                    } else {
+                        VisualTransformation.None
+                    },
+                )
+                if (isPassword && passwordToggleLabel != null) {
+                    DefaultSkinTextAction(
+                        text = passwordToggleLabel,
+                        onClick = onTogglePassword,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        enabled = enabled,
+                    )
+                }
+            }
+        }
+        error?.let {
+            Text(
+                text = it,
+                color = errorColor,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .semantics { liveRegion = LiveRegionMode.Polite }
+                    .padding(start = 4.dp),
+            )
         }
     }
 }

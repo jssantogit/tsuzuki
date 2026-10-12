@@ -18,14 +18,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -35,18 +32,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinColors
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinFormField
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSecondaryButton
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
@@ -253,8 +247,7 @@ private fun AuthContent(
         }
 
         if (page == TsuzukiEntryPage.LOGIN || page == TsuzukiEntryPage.REGISTER) {
-            EntryField(
-                colors = colors,
+            DefaultSkinFormField(
                 label = stringResource(MR.strings.tsuzuki_entry_email),
                 value = email,
                 onValueChange = { email = it },
@@ -270,14 +263,20 @@ private fun AuthContent(
 
         when (page) {
             TsuzukiEntryPage.LOGIN -> {
-                EntryField(
-                    colors = colors,
+                DefaultSkinFormField(
                     label = stringResource(MR.strings.tsuzuki_entry_password),
                     value = password,
                     onValueChange = { password = it },
                     keyboardType = KeyboardType.Password,
                     isPassword = true,
                     passwordVisible = passwordVisible,
+                    passwordToggleLabel = stringResource(
+                        if (passwordVisible) {
+                            MR.strings.tsuzuki_entry_hide_password
+                        } else {
+                            MR.strings.tsuzuki_entry_show_password
+                        },
+                    ),
                     onTogglePassword = { passwordVisible = !passwordVisible },
                     error = if (state.error == TsuzukiEntryError.INVALID_INPUT && password.isBlank()) {
                         stringResource(MR.strings.tsuzuki_entry_error_password)
@@ -292,14 +291,20 @@ private fun AuthContent(
                 )
             }
 
-            TsuzukiEntryPage.REGISTER -> EntryField(
-                colors = colors,
+            TsuzukiEntryPage.REGISTER -> DefaultSkinFormField(
                 label = stringResource(MR.strings.tsuzuki_entry_password),
                 value = password,
                 onValueChange = { password = it },
                 keyboardType = KeyboardType.Password,
                 isPassword = true,
                 passwordVisible = passwordVisible,
+                passwordToggleLabel = stringResource(
+                    if (passwordVisible) {
+                        MR.strings.tsuzuki_entry_hide_password
+                    } else {
+                        MR.strings.tsuzuki_entry_show_password
+                    },
+                ),
                 onTogglePassword = { passwordVisible = !passwordVisible },
                 error = if (state.error == TsuzukiEntryError.INVALID_INPUT && password.isBlank()) {
                     stringResource(MR.strings.tsuzuki_entry_error_password)
@@ -308,8 +313,7 @@ private fun AuthContent(
                 },
             )
 
-            TsuzukiEntryPage.RECOVERY -> EntryField(
-                colors = colors,
+            TsuzukiEntryPage.RECOVERY -> DefaultSkinFormField(
                 label = stringResource(MR.strings.tsuzuki_entry_email),
                 value = email,
                 onValueChange = { email = it },
@@ -322,14 +326,20 @@ private fun AuthContent(
             )
 
             TsuzukiEntryPage.RESET_PASSWORD -> {
-                EntryField(
-                    colors = colors,
+                DefaultSkinFormField(
                     label = stringResource(MR.strings.tsuzuki_entry_new_password),
                     value = password,
                     onValueChange = { password = it },
                     keyboardType = KeyboardType.Password,
                     isPassword = true,
                     passwordVisible = passwordVisible,
+                    passwordToggleLabel = stringResource(
+                        if (passwordVisible) {
+                            MR.strings.tsuzuki_entry_hide_password
+                        } else {
+                            MR.strings.tsuzuki_entry_show_password
+                        },
+                    ),
                     onTogglePassword = { passwordVisible = !passwordVisible },
                     error = if (state.error == TsuzukiEntryError.INVALID_INPUT && password.isBlank()) {
                         stringResource(MR.strings.tsuzuki_entry_error_password)
@@ -338,14 +348,20 @@ private fun AuthContent(
                     },
                 )
                 Spacer(Modifier.height(18.dp))
-                EntryField(
-                    colors = colors,
+                DefaultSkinFormField(
                     label = stringResource(MR.strings.tsuzuki_entry_confirm_new_password),
                     value = confirmation,
                     onValueChange = { confirmation = it },
                     keyboardType = KeyboardType.Password,
                     isPassword = true,
                     passwordVisible = confirmationVisible,
+                    passwordToggleLabel = stringResource(
+                        if (confirmationVisible) {
+                            MR.strings.tsuzuki_entry_hide_password
+                        } else {
+                            MR.strings.tsuzuki_entry_show_password
+                        },
+                    ),
                     onTogglePassword = { confirmationVisible = !confirmationVisible },
                     error = when (state.error) {
                         TsuzukiEntryError.PASSWORDS_DO_NOT_MATCH ->
@@ -427,84 +443,6 @@ private fun AuthContent(
                     onClick = if (page == TsuzukiEntryPage.LOGIN) onCreateAccount else onSignIn,
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun EntryField(
-    colors: DefaultSkinColors,
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    keyboardType: KeyboardType,
-    error: String? = null,
-    isPassword: Boolean = false,
-    passwordVisible: Boolean = false,
-    onTogglePassword: () -> Unit = {},
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            text = label,
-            color = if (error == null) colors.secondary else MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Medium,
-        )
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 54.dp),
-            shape = DefaultSkinShape.Control,
-            color = colors.surface,
-            contentColor = colors.foreground,
-            border = androidx.compose.foundation.BorderStroke(
-                1.dp,
-                if (error == null) colors.outline else MaterialTheme.colorScheme.error,
-            ),
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
-        ) {
-            Row(
-                modifier = Modifier.padding(start = 16.dp, end = if (isPassword) 4.dp else 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                BasicTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.foreground),
-                    cursorBrush = SolidColor(colors.foreground),
-                    keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-                    visualTransformation = if (isPassword && !passwordVisible) {
-                        PasswordVisualTransformation()
-                    } else {
-                        VisualTransformation.None
-                    },
-                )
-                if (isPassword) {
-                    DefaultSkinTextAction(
-                        text = stringResource(
-                            if (passwordVisible) {
-                                MR.strings.tsuzuki_entry_hide_password
-                            } else {
-                                MR.strings.tsuzuki_entry_show_password
-                            },
-                        ),
-                        onClick = onTogglePassword,
-                    )
-                }
-            }
-        }
-        if (error != null) {
-            Text(
-                text = error,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier
-                    .semantics { liveRegion = LiveRegionMode.Polite }
-                    .padding(start = 4.dp),
-            )
         }
     }
 }
