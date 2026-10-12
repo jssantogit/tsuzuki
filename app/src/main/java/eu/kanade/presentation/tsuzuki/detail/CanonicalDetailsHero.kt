@@ -10,25 +10,22 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -53,10 +51,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.manga.components.MangaCoverLoadEvent
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.tsuzuki.integration.IntegrationBrandIcon
 import eu.kanade.presentation.tsuzuki.integration.ratingScaleLabel
 import eu.kanade.presentation.tsuzuki.recordArtworkLoad
@@ -96,37 +100,42 @@ internal fun CanonicalDetailsHero(
     val hasArtwork = !artworkFailed && (!state.coverUrl.isNullOrBlank() || state.sourceCover != null)
     val ratingsState = rememberLazyListState()
     val layoutDirection = LocalLayoutDirection.current
+    val skinColors = defaultSkinColors()
+    val density = LocalDensity.current
+    val toolbarLeadHeight = with(density) { WindowInsets.statusBars.getTop(this).toDp() } + 56.dp
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val artworkLead = (maxWidth * 0.43f).coerceIn(120.dp, 224.dp)
-        if (hasArtwork) {
-            Box(Modifier.matchParentSize().clearAndSetSemantics {}) {
-                MangaCover.Square(
-                    data = state.coverUrl ?: state.sourceCover,
-                    fallbackData = listOf(state.sourceCover, state.sourceCover?.url),
-                    modifier = Modifier.fillMaxSize(),
-                    shape = RectangleShape,
-                    contentScale = ContentScale.Crop,
-                    onLoadEvent = { event ->
-                        trace.recordArtworkLoad(event)
-                        if (event is MangaCoverLoadEvent.Failed && !event.willFallback) artworkFailed = true
-                    },
-                )
+        val artworkLead = canonicalDetailsArtworkLead(maxWidth)
+        Column(Modifier.fillMaxWidth().background(background).padding(bottom = 16.dp)) {
+            if (hasArtwork) {
                 Box(
-                    Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(
-                            0f to background.copy(alpha = 0.08f),
-                            0.30f to background.copy(alpha = 0.15f),
-                            0.50f to background.copy(alpha = 0.50f),
-                            0.74f to background.copy(alpha = 0.86f),
-                            0.98f to background,
-                            1f to background,
+                    Modifier.fillMaxWidth().height(toolbarLeadHeight + artworkLead).clearAndSetSemantics {},
+                ) {
+                    MangaCover.Square(
+                        data = state.coverUrl ?: state.sourceCover,
+                        fallbackData = listOf(state.sourceCover, state.sourceCover?.url),
+                        modifier = Modifier.fillMaxSize(),
+                        shape = RectangleShape,
+                        contentScale = ContentScale.Crop,
+                        onLoadEvent = { event ->
+                            trace.recordArtworkLoad(event)
+                            if (event is MangaCoverLoadEvent.Failed && !event.willFallback) artworkFailed = true
+                        },
+                    )
+                    Box(
+                        Modifier.fillMaxSize().background(
+                            Brush.verticalGradient(
+                                0f to background.copy(alpha = 0.08f),
+                                0.30f to background.copy(alpha = 0.15f),
+                                0.50f to background.copy(alpha = 0.50f),
+                                0.74f to background.copy(alpha = 0.86f),
+                                1f to background,
+                            ),
                         ),
-                    ),
-                )
+                    )
+                }
+            } else {
+                Spacer(Modifier.height(toolbarLeadHeight))
             }
-        }
-        Column(Modifier.fillMaxWidth().statusBarsPadding().padding(top = 56.dp, bottom = 16.dp)) {
-            Spacer(Modifier.height(artworkLead))
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -135,6 +144,7 @@ internal fun CanonicalDetailsHero(
                 Text(
                     state.title.displayTitle,
                     Modifier.fillMaxWidth().semantics { heading() },
+                    color = skinColors.foreground,
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
@@ -147,14 +157,18 @@ internal fun CanonicalDetailsHero(
                         horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        year?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
-                        format?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
+                        year?.let {
+                            Text(it, color = skinColors.foreground, style = MaterialTheme.typography.bodyLarge)
+                        }
+                        format?.let {
+                            Text(it, color = skinColors.foreground, style = MaterialTheme.typography.bodyLarge)
+                        }
                     }
                 }
                 editorialStatusLabel(state.editorialStatus)?.let {
                     Text(
                         it,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = skinColors.secondary,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -164,7 +178,7 @@ internal fun CanonicalDetailsHero(
                         horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        state.genres.forEach { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        state.genres.forEach { Text(it, color = skinColors.secondary) }
                     }
                 }
             }
@@ -213,11 +227,12 @@ internal fun CanonicalDetailsHero(
                             ) {
                                 Image(
                                     painterResource(R.drawable.tsuzuki_rating),
-                                    "Tsuzuki Rating",
+                                    stringResource(MR.strings.tsuzuki_details_tsuzuki_rating),
                                     Modifier.size(20.dp),
                                 )
                                 Text(
                                     ratingScaleLabel("tsuzuki", rating.value, rating.maxValue),
+                                    color = skinColors.foreground,
                                     fontWeight = FontWeight.Bold,
                                 )
                             }
@@ -232,6 +247,7 @@ internal fun CanonicalDetailsHero(
                             IntegrationBrandIcon(providerId = rating.providerId, size = 20.dp)
                             Text(
                                 ratingScaleLabel(rating.providerId, rating.value, rating.maxValue),
+                                color = skinColors.foreground,
                                 fontWeight = FontWeight.Bold,
                             )
                         }
@@ -245,38 +261,34 @@ internal fun CanonicalDetailsHero(
                 state.description?.takeIf(String::isNotBlank)?.let {
                     Text(
                         it,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = skinColors.secondary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    TextButton(onClick = onSynopsis) { Text(stringResource(MR.strings.tsuzuki_details_read_synopsis)) }
+                    DefaultSkinTextAction(
+                        text = stringResource(MR.strings.tsuzuki_details_read_synopsis),
+                        onClick = onSynopsis,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    )
                 }
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(DefaultSkinSpacing.Row),
                 ) {
                     if (state.hasReadableChapters) {
-                        Button(
+                        DefaultSkinPrimaryButton(
+                            text = stringResource(
+                                if (state.hasReadingProgress) {
+                                    MR.strings.tsuzuki_details_continue_reading
+                                } else {
+                                    MR.strings.tsuzuki_details_start_reading
+                                },
+                            ),
                             onClick = onReadTitle,
                             enabled = !state.readingStartInProgress,
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.onSurface,
-                                contentColor = MaterialTheme.colorScheme.surface,
-                            ),
-                        ) {
-                            Text(
-                                stringResource(
-                                    if (state.hasReadingProgress) {
-                                        MR.strings.tsuzuki_details_continue_reading
-                                    } else {
-                                        MR.strings.tsuzuki_details_start_reading
-                                    },
-                                ),
-                            )
-                        }
+                            modifier = Modifier.weight(1f),
+                        )
                     } else {
                         Spacer(Modifier.weight(1f))
                     }
@@ -287,11 +299,11 @@ internal fun CanonicalDetailsHero(
                             if (state.libraryEntry ==
                                 null
                             ) {
-                                MaterialTheme.colorScheme.surface
+                                skinColors.surface
                             } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
+                                skinColors.surfaceMuted
                             },
-                            RoundedCornerShape(12.dp),
+                            DefaultSkinShape.Control,
                         ).semantics { selected = state.libraryEntry != null },
                     ) {
                         Icon(
@@ -311,19 +323,30 @@ internal fun CanonicalDetailsHero(
                                     MR.strings.tsuzuki_details_remove_library
                                 },
                             ),
+                            tint = skinColors.foreground,
                         )
                     }
                 }
-                if (state.isRefreshing) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+                if (state.isRefreshing) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().height(2.dp),
+                        color = skinColors.accent,
+                        trackColor = skinColors.surfaceMuted,
+                    )
+                }
                 if (state.refreshError != null) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider(color = skinColors.outline)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             stringResource(MR.strings.tsuzuki_details_refresh_error),
                             Modifier.weight(1f),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = skinColors.secondary,
                         )
-                        TextButton(onClick = onRefresh) { Text(stringResource(MR.strings.action_retry)) }
+                        DefaultSkinTextAction(
+                            text = stringResource(MR.strings.action_retry),
+                            onClick = onRefresh,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        )
                     }
                 }
                 if (state.libraryMutationError !=
@@ -354,6 +377,8 @@ internal fun CanonicalDetailsHero(
         }
     }
 }
+
+internal fun canonicalDetailsArtworkLead(maxWidth: Dp): Dp = (maxWidth * 0.43f).coerceIn(120.dp, 224.dp)
 
 @Composable
 internal fun DetailsEditorial(state: CanonicalTitleScreenState.Loaded) {

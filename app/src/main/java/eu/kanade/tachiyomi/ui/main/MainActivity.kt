@@ -83,7 +83,6 @@ import eu.kanade.tachiyomi.extension.api.ExtensionApi
 import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
 import eu.kanade.tachiyomi.ui.download.DownloadQueueScreen
 import eu.kanade.tachiyomi.ui.home.HomeScreen
-import eu.kanade.tachiyomi.ui.more.NewUpdateScreen
 import eu.kanade.tachiyomi.ui.more.OnboardingScreen
 import eu.kanade.tachiyomi.ui.setting.SettingsScreen
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreen
@@ -91,7 +90,6 @@ import eu.kanade.tachiyomi.ui.tsuzuki.entry.TsuzukiResetPasswordScreen
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.isBenchmarkBuildType
 import eu.kanade.tachiyomi.util.system.isNavigationBarNeedsScrim
-import eu.kanade.tachiyomi.util.system.updaterEnabled
 import eu.kanade.tachiyomi.util.view.setComposeContent
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
@@ -110,7 +108,6 @@ import tachiyomi.core.common.Constants
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.library.service.LibraryPreferences
-import tachiyomi.domain.release.interactor.GetApplicationRelease
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
@@ -246,7 +243,7 @@ class MainActivity : BaseActivity() {
                 HandleOnNewIntent(context = context, navigator = navigator)
 
                 if (!isBenchmarkBuildType) {
-                    if (isLaunch) CheckForUpdates()
+                    if (isLaunch) CheckForExtensionUpdates()
                     ShowOnboarding()
                     ShowDonationCampaign()
                 }
@@ -290,31 +287,8 @@ class MainActivity : BaseActivity() {
     }
 
     @Composable
-    private fun CheckForUpdates() {
+    private fun CheckForExtensionUpdates() {
         val context = LocalContext.current
-        val navigator = LocalNavigator.currentOrThrow
-
-        // App updates
-        LaunchedEffect(Unit) {
-            if (updaterEnabled) {
-                try {
-                    val result = context.appGraph.updateChecker.checkForUpdate()
-                    if (result is GetApplicationRelease.Result.NewUpdate) {
-                        val updateScreen = NewUpdateScreen(
-                            versionName = result.release.version,
-                            changelogInfo = result.release.info,
-                            releaseLink = result.release.releaseLink,
-                            downloadLink = result.release.downloadLink,
-                        )
-                        navigator.push(updateScreen)
-                    }
-                } catch (e: Exception) {
-                    logcat(LogPriority.ERROR, e)
-                }
-            }
-        }
-
-        // Extensions updates
         LaunchedEffect(Unit) {
             try {
                 extensionApi.checkForUpdates(context)
