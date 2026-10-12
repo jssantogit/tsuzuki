@@ -247,6 +247,60 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
+    fun `library search mode keeps its own inline field and selectable status rail`() {
+        val library = readSource("library/CanonicalLibraryScreen.kt")
+        val header = sourceBlockStartingAt(library, "private fun CanonicalLibraryHeader(")
+        val statusRail = sourceBlockStartingAt(library, "private fun CanonicalLibraryStatusFilters(")
+        val clearSearch = sourceBlockStartingAt(header, "if (query.isNotEmpty())")
+
+        header shouldContain "BackHandler(enabled = query != null) { onQueryChange(null) }"
+        header shouldContain "if (query == null)"
+        header shouldContain "DefaultSkinPageTitle(title, modifier = Modifier.weight(1f))"
+        header shouldContain "val focusRequester = remember { FocusRequester() }"
+        header shouldContain "LaunchedEffect(Unit) { focusRequester.requestFocus() }"
+        header shouldContain "BasicTextField("
+        header shouldContain "singleLine = true"
+        header shouldContain "value = query"
+        header shouldContain "onValueChange = onQueryChange"
+        header shouldContain "KeyboardOptions(imeAction = ImeAction.Search)"
+        header shouldContain "cursorBrush = SolidColor(colors.accent)"
+        header shouldContain "val searchLabel = stringResource(MR.strings.tsuzuki_library_search)"
+        header shouldContain "contentDescription = searchLabel"
+        header shouldContain "shape = DefaultSkinShape.Control"
+        header shouldContain "colors.outline"
+        header shouldContain "color = colors.surface"
+        header shouldContain "color = colors.foreground"
+        header shouldContain "color = colors.secondary"
+        header shouldContain "maxLines = 1"
+        header shouldContain "overflow = TextOverflow.Ellipsis"
+        header shouldContain "if (query.isNotEmpty())"
+        header shouldContain "contentDescription = stringResource(MR.strings.tsuzuki_library_clear_search)"
+        header shouldContain "onClick = { onQueryChange(\"\") }"
+        header shouldContain "IconButton(onClick = onShowFilters)"
+        header shouldNotContain "KeyboardActions("
+        header shouldNotContain "DefaultSkinTextField("
+        header shouldNotContain "DefaultSkinTextAction("
+        clearSearch shouldContain "IconButton(onClick = { onQueryChange(\"\") })"
+        clearSearch shouldNotContain "onQueryChange(null)"
+
+        library shouldContain "val colors = defaultSkinColors()"
+        library shouldContain "val advancedFilterCount = successState?.filters?.let { filters ->"
+        library shouldContain "if (advancedFilterCount > 0)"
+        library shouldContain "CanonicalLibraryFilterSheet("
+        library shouldContain "CanonicalLibraryActiveFilters("
+        library shouldNotContain "SearchToolbar("
+        library shouldNotContain "TopAppBar("
+        library shouldContain "onQueryChange = onSearchQueryChange"
+        library shouldContain "searchMode = successState?.searchQuery != null"
+        statusRail shouldContain "listOf<LibraryStatus?>(null) + LibraryStatus.entries"
+        statusRail shouldContain ".horizontalScroll(rememberScrollState())"
+        statusRail shouldContain "top = if (searchMode) DefaultSkinSpacing.Row else 0.dp"
+        statusRail shouldContain "style = if (searchMode) {"
+        statusRail shouldContain "selected = selected"
+        statusRail shouldContain "role = Role.Tab"
+    }
+
+    @Test
     fun `integrations and Provider family use promoted page composition instead of stock app bars`() {
         val integrations = readSettingsSource("SettingsTsuzukiIntegrationsScreen.kt")
         val providers = providerLanding()

@@ -1,6 +1,7 @@
 package eu.kanade.presentation.tsuzuki.library
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -24,6 +26,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -32,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,10 +48,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -57,9 +65,9 @@ import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinChoiceChip
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPageTitle
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSectionLabel
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextField
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.tsuzuki.recordArtworkLoad
 import eu.kanade.tachiyomi.R
@@ -135,6 +143,7 @@ fun CanonicalLibraryScreen(
                 CanonicalLibraryStatusFilters(
                     selectedStatus = state.filters.status,
                     onStatusFilterChange = onStatusFilterChange,
+                    searchMode = successState?.searchQuery != null,
                 )
                 CanonicalLibraryActiveFilters(
                     state = state,
@@ -222,20 +231,68 @@ private fun CanonicalLibraryHeader(
                 )
             }
         } else {
+            val searchLabel = stringResource(MR.strings.tsuzuki_library_search)
             val focusRequester = remember { FocusRequester() }
             LaunchedEffect(Unit) { focusRequester.requestFocus() }
-            DefaultSkinTextField(
-                value = query,
-                onValueChange = { onQueryChange(it) },
-                label = stringResource(MR.strings.tsuzuki_library_search),
-                modifier = Modifier.weight(1f).focusRequester(focusRequester),
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
-            )
-            if (query.isNotEmpty()) {
-                DefaultSkinTextAction(
-                    text = stringResource(MR.strings.tsuzuki_library_clear_search),
-                    onClick = { onQueryChange("") },
-                )
+            Surface(
+                modifier = Modifier.weight(1f),
+                shape = DefaultSkinShape.Control,
+                color = colors.surface,
+                contentColor = colors.foreground,
+                border = BorderStroke(1.dp, colors.outline),
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .padding(start = 12.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_search_24dp),
+                        contentDescription = null,
+                        tint = colors.secondary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    BasicTextField(
+                        value = query,
+                        onValueChange = onQueryChange,
+                        modifier = Modifier
+                            .weight(1f)
+                            .focusRequester(focusRequester)
+                            .semantics { contentDescription = searchLabel },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.foreground),
+                        cursorBrush = SolidColor(colors.accent),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        decorationBox = { innerTextField ->
+                            Box(contentAlignment = Alignment.CenterStart) {
+                                if (query.isEmpty()) {
+                                    Text(
+                                        text = searchLabel,
+                                        color = colors.secondary,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        },
+                    )
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { onQueryChange("") }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_close_24dp),
+                                contentDescription = stringResource(MR.strings.tsuzuki_library_clear_search),
+                                tint = colors.secondary,
+                            )
+                        }
+                    }
+                }
             }
         }
         IconButton(onClick = onShowFilters) {
@@ -263,6 +320,7 @@ private fun CanonicalLibraryHeader(
 private fun CanonicalLibraryStatusFilters(
     selectedStatus: LibraryStatus?,
     onStatusFilterChange: (LibraryStatus?) -> Unit,
+    searchMode: Boolean,
 ) {
     val colors = defaultSkinColors()
     Column {
@@ -270,7 +328,11 @@ private fun CanonicalLibraryStatusFilters(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(start = DefaultSkinSpacing.PageHorizontal, end = 32.dp),
+                .padding(
+                    start = DefaultSkinSpacing.PageHorizontal,
+                    end = 32.dp,
+                    top = if (searchMode) DefaultSkinSpacing.Row else 0.dp,
+                ),
             horizontalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             val statuses = listOf<LibraryStatus?>(null) + LibraryStatus.entries
@@ -290,7 +352,11 @@ private fun CanonicalLibraryStatusFilters(
                     Text(
                         text = status?.libraryLabel() ?: stringResource(MR.strings.all),
                         modifier = Modifier.padding(top = 12.dp, bottom = 10.dp),
-                        style = MaterialTheme.typography.labelLarge,
+                        style = if (searchMode) {
+                            MaterialTheme.typography.labelMedium
+                        } else {
+                            MaterialTheme.typography.labelLarge
+                        },
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                         color = if (selected) colors.foreground else colors.secondary,
                         maxLines = 1,
