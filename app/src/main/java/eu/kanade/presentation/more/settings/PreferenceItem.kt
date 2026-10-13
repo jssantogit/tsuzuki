@@ -7,6 +7,8 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.structuralEqualityPolicy
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.more.settings.widget.EditTextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.InfoWidget
@@ -52,6 +54,7 @@ internal fun PreferenceItem(
             is Preference.PreferenceItem.SwitchPreference -> {
                 val value by item.preference.collectAsState()
                 SwitchPreferenceWidget(
+                    modifier = item.testTag?.let { Modifier.testTag(it) } ?: Modifier,
                     title = item.title,
                     subtitle = item.subtitle,
                     icon = item.icon,
@@ -90,6 +93,7 @@ internal fun PreferenceItem(
                     subtitle = item.internalSubtitleProvider(value, item.entries),
                     icon = item.icon,
                     entries = item.entries,
+                    testTag = item.testTag,
                     onValueChange = { newValue ->
                         scope.launch {
                             if (item.internalOnValueChanged(newValue!!)) {

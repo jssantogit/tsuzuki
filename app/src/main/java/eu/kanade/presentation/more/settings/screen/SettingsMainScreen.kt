@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -87,7 +88,11 @@ object SettingsMainScreen : Screen() {
 
                 settingsGroups.forEach { group ->
                     item(key = "section_${group.key}") {
-                        SettingsGroup(title = stringResource(group.titleRes)) {
+                        SettingsGroup(
+                            title = stringResource(group.titleRes),
+                            surfaceTestTag = "settings_surface_${group.key}",
+                            headingTestTag = "settings_heading_${group.key}",
+                        ) {
                             group.items.forEachIndexed { index, item ->
                                 val selected = selectedClass != null && item.screen::class == selectedClass
                                 SettingsNavigationRow(
@@ -95,10 +100,15 @@ object SettingsMainScreen : Screen() {
                                     subtitle = item.formatSubtitle(),
                                     icon = item.icon,
                                     selected = selected,
+                                    modifier = Modifier.testTag("settings_destination_${item.visualKey}"),
                                     onClick = { navigator.navigate(item.screen, twoPane) },
                                 )
                                 if (index < group.items.lastIndex) {
-                                    SettingsGroupDivider()
+                                    SettingsGroupDivider(
+                                        modifier = Modifier.testTag(
+                                            "settings_divider_${group.key}_after_${item.visualKey}",
+                                        ),
+                                    )
                                 }
                             }
                         }
@@ -113,6 +123,7 @@ object SettingsMainScreen : Screen() {
     }
 
     private data class Item(
+        val visualKey: String,
         val titleRes: StringResource,
         val subtitleRes: StringResource? = null,
         val formatSubtitle: @Composable () -> String? = { subtitleRes?.let { stringResource(it) } },
@@ -132,11 +143,13 @@ object SettingsMainScreen : Screen() {
             titleRes = MR.strings.tsuzuki_settings_group_account,
             items = listOf(
                 Item(
+                    visualKey = "account",
                     titleRes = MR.strings.tsuzuki_account_title,
                     icon = MaterialSymbols.Rounded.Security,
                     screen = SettingsTsuzukiAccountScreen,
                 ),
                 Item(
+                    visualKey = "tracking",
                     titleRes = MR.strings.pref_category_tracking,
                     icon = MaterialSymbols.Rounded.Security,
                     screen = SettingsTrackingScreen,
@@ -148,16 +161,19 @@ object SettingsMainScreen : Screen() {
             titleRes = MR.strings.tsuzuki_settings_group_experience,
             items = listOf(
                 Item(
+                    visualKey = "personalization",
                     titleRes = MR.strings.tsuzuki_personalizations_title,
                     icon = MaterialSymbols.Rounded.Palette,
                     screen = SettingsTsuzukiPersonalizationsScreen,
                 ),
                 Item(
+                    visualKey = "reading",
                     titleRes = MR.strings.tsuzuki_reading_settings_title,
                     icon = MaterialSymbols.AutoMirroredRounded.ChromeReaderMode,
                     screen = SettingsTsuzukiReadingHubScreen,
                 ),
                 Item(
+                    visualKey = "library",
                     titleRes = MR.strings.pref_category_library,
                     subtitleRes = MR.strings.pref_library_summary,
                     icon = MaterialSymbols.AutoMirroredRounded.ChromeReaderMode,
@@ -170,11 +186,13 @@ object SettingsMainScreen : Screen() {
             titleRes = MR.strings.tsuzuki_settings_group_content,
             items = listOf(
                 Item(
+                    visualKey = "integrations",
                     titleRes = MR.strings.tsuzuki_integrations_title,
                     icon = MaterialSymbols.Rounded.Explore,
                     screen = SettingsTsuzukiIntegrationsScreen(),
                 ),
                 Item(
+                    visualKey = "providers",
                     titleRes = MR.strings.tsuzuki_providers_title,
                     icon = MaterialSymbols.Rounded.Explore,
                     screen = SettingsTsuzukiProvidersDefaultSkinScreen(),
@@ -186,12 +204,14 @@ object SettingsMainScreen : Screen() {
             titleRes = MR.strings.tsuzuki_settings_group_data,
             items = listOf(
                 Item(
+                    visualKey = "downloads",
                     titleRes = MR.strings.pref_category_downloads,
                     subtitleRes = MR.strings.pref_downloads_summary,
                     icon = MaterialSymbols.Rounded.Download,
                     screen = SettingsDownloadScreen,
                 ),
                 Item(
+                    visualKey = "data_storage",
                     titleRes = MR.strings.label_data_storage,
                     icon = MaterialSymbols.Rounded.Info,
                     screen = SettingsDataScreen,
@@ -203,16 +223,19 @@ object SettingsMainScreen : Screen() {
             titleRes = MR.strings.tsuzuki_settings_group_system,
             items = listOf(
                 Item(
+                    visualKey = "security",
                     titleRes = MR.strings.pref_category_security,
                     icon = MaterialSymbols.Rounded.Security,
                     screen = SettingsSecurityScreen,
                 ),
                 Item(
+                    visualKey = "diagnostics",
                     titleRes = MR.strings.pref_debug_info,
                     icon = MaterialSymbols.Rounded.Code,
                     screen = SettingsTsuzukiDiagnosticsScreen,
                 ),
                 Item(
+                    visualKey = "advanced",
                     titleRes = MR.strings.pref_category_advanced,
                     subtitleRes = MR.strings.pref_advanced_summary,
                     icon = MaterialSymbols.Rounded.Code,
@@ -225,6 +248,7 @@ object SettingsMainScreen : Screen() {
             titleRes = MR.strings.tsuzuki_settings_group_about,
             items = listOf(
                 Item(
+                    visualKey = "about",
                     titleRes = MR.strings.pref_category_about,
                     formatSubtitle = {
                         "${stringResource(MR.strings.app_name)} ${AboutScreen.getVersionName(withBuildDate = false)}"

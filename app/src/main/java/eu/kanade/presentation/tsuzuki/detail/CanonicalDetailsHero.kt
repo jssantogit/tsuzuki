@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
@@ -86,6 +87,7 @@ internal fun CanonicalDetailsHero(
     onRemoveFromLibrary: () -> Unit,
     onRefresh: () -> Unit,
     onSynopsis: () -> Unit,
+    onArtworkLoadEvent: ((MangaCoverLoadEvent) -> Unit)? = null,
 ) {
     val recorder = LocalContext.current.appGraph.structuredDiagnosticRecorder
     val trace = remember(state.title.id, recorder.sessionId) {
@@ -103,7 +105,7 @@ internal fun CanonicalDetailsHero(
     val skinColors = defaultSkinColors()
     val density = LocalDensity.current
     val toolbarLeadHeight = with(density) { WindowInsets.statusBars.getTop(this).toDp() } + 56.dp
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    BoxWithConstraints(Modifier.fillMaxWidth().testTag("canonical_details_hero_content")) {
         val artworkLead = canonicalDetailsArtworkLead(maxWidth)
         Column(Modifier.fillMaxWidth().background(background).padding(bottom = 16.dp)) {
             Box(Modifier.fillMaxWidth().background(background)) {
@@ -114,29 +116,34 @@ internal fun CanonicalDetailsHero(
                             .fillMaxWidth()
                             .height(toolbarLeadHeight + artworkLead)
                             .clipToBounds()
+                            .testTag("canonical_details_hero_frame")
                             .clearAndSetSemantics {},
                     ) {
                         MangaCoverFrame(
                             data = state.coverUrl ?: state.sourceCover,
                             fallbackData = listOf(state.sourceCover, state.sourceCover?.url),
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier.fillMaxSize().testTag("canonical_details_hero_artwork"),
                             shape = RectangleShape,
                             contentScale = ContentScale.Crop,
                             onLoadEvent = { event ->
                                 trace.recordArtworkLoad(event)
                                 if (event is MangaCoverLoadEvent.Failed && !event.willFallback) artworkFailed = true
+                                onArtworkLoadEvent?.invoke(event)
                             },
                         )
                         Box(
-                            Modifier.fillMaxSize().background(
-                                Brush.verticalGradient(
-                                    0f to background.copy(alpha = 0.08f),
-                                    0.30f to background.copy(alpha = 0.24f),
-                                    0.50f to background.copy(alpha = 0.74f),
-                                    0.74f to background.copy(alpha = 0.96f),
-                                    1f to background,
-                                ),
-                            ),
+                            Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        0f to background.copy(alpha = 0.08f),
+                                        0.30f to background.copy(alpha = 0.24f),
+                                        0.50f to background.copy(alpha = 0.74f),
+                                        0.74f to background.copy(alpha = 0.96f),
+                                        1f to background,
+                                    ),
+                                )
+                                .testTag("canonical_details_hero_fade"),
                         )
                     }
                 }
@@ -149,7 +156,7 @@ internal fun CanonicalDetailsHero(
                 ) {
                     Text(
                         state.title.displayTitle,
-                        Modifier.fillMaxWidth().semantics { heading() },
+                        Modifier.fillMaxWidth().semantics { heading() }.testTag("canonical_details_hero_title"),
                         color = skinColors.foreground,
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
@@ -159,7 +166,7 @@ internal fun CanonicalDetailsHero(
                     val format = editorialFormatLabel(state.editorialFormat)
                     if (year != null || format != null) {
                         FlowRow(
-                            Modifier.fillMaxWidth(),
+                            Modifier.fillMaxWidth().testTag("canonical_details_hero_metadata"),
                             horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {

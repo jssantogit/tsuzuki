@@ -11,6 +11,11 @@ on:
         options:
           - affected
           - full
+      default_skin_rendered:
+        description: Run opt-in Default Skin rendered layout/semantics suite on disposable Android emulator
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -63,6 +68,7 @@ jobs:
           python3 .github/scripts/test_extension_fixture.py
           python3 .github/scripts/test_identity_contract.py
           python3 .github/scripts/test_inherited_application_updater_removal.py
+          python3 -B .github/scripts/test_default_skin_rendered_evidence.py
           python3 .github/scripts/identity_contract.py
 
       - name: Resolve verification scope
@@ -390,6 +396,49 @@ jobs:
       - name: Compile release
         run: ./gradlew assembleRelease -Penable-updater
 
+  default-skin-rendered:
+    name: Default Skin rendered validation
+    if: ${{ inputs.default_skin_rendered }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run deterministic Default Skin instrumentation and collect evidence
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_default_skin_rendered_validation.sh
+
+      - name: Upload rendered and measured evidence (not a golden approval)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: default-skin-rendered-${{ github.sha }}
+          path: .github/results/default-skin-rendered/**
+          if-no-files-found: error
+          retention-days: 7
+
   gate:
     name: CI Gate
     if: always()
@@ -402,6 +451,7 @@ jobs:
       - supabase
       - native-package
       - release
+      - default-skin-rendered
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -416,6 +466,7 @@ jobs:
           SUPABASE: ${{ needs.supabase.result }}
           NATIVE: ${{ needs.native-package.result }}
           RELEASE: ${{ needs.release.result }}
+          DEFAULT_SKIN_RENDERED: ${{ needs.default-skin-rendered.result }}
         run: |
           failed=0
 
@@ -441,5 +492,6 @@ jobs:
           check_result "Supabase Backend" "$SUPABASE"
           check_result "Native Package Gate" "$NATIVE"
           check_result "Release Compile" "$RELEASE"
+          check_result "Default Skin rendered validation" "$DEFAULT_SKIN_RENDERED"
 
           exit "$failed"

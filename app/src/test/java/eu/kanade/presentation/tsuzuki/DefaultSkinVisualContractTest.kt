@@ -368,8 +368,8 @@ class DefaultSkinVisualContractTest {
             .substringBefore("class SettingsTsuzukiIntegrationDetailScreen")
         val detail = source.substringAfter("class SettingsTsuzukiIntegrationDetailScreen")
             .substringBefore("@Composable\nprivate fun MalClientIdConfiguration")
-        val integrationRow = sourceBlockStartingAt(source, "private fun IntegrationSettingRow(")
-        val toggleRow = sourceBlockStartingAt(source, "private fun IntegrationToggleRow(")
+        val integrationRow = sourceBlockStartingAt(source, "internal fun IntegrationSettingRow(")
+        val toggleRow = sourceBlockStartingAt(source, "internal fun IntegrationToggleRow(")
         val switchControl = sourceBlockStartingAt(source, "private fun IntegrationSwitch(")
         val actionRow = sourceBlockStartingAt(source, "private fun IntegrationActionRow(")
 
@@ -475,8 +475,8 @@ class DefaultSkinVisualContractTest {
     @Test
     fun `search compact cards keep Fit foreground with subdued frame scoped artwork atmosphere`() {
         val search = readSource("search/TsuzukiSearchScreen.kt")
-        val compactCard = search.substringAfter("private fun SearchCompactCard(").substringBefore("\n@OptIn")
-        val artwork = sourceBlockStartingAt(search, "private fun SearchCompactArtwork(")
+        val compactCard = search.substringAfter("internal fun SearchCompactCard(").substringBefore("\n@OptIn")
+        val artwork = sourceBlockStartingAt(search, "internal fun SearchCompactArtwork(")
         val atmosphere = sourceBlockStartingAt(search, "private fun DecorativeSearchArtwork(")
 
         compactCard shouldContain ".width(148.dp)"

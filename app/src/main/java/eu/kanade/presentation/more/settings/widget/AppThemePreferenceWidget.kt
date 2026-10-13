@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -119,6 +120,7 @@ private fun AppThemesList(
                     }
                     if (compactPreview) {
                         AppThemePalettePreview(
+                            stableThemeKey = appTheme.name.lowercase(),
                             themeName = stringResource(appTheme.titleRes!!),
                             selected = currentTheme == appTheme,
                             selectionColor = selectionColors.accent,
@@ -286,6 +288,7 @@ private fun AppThemePhonePreviewItem(
 
 @Composable
 private fun AppThemePalettePreview(
+    stableThemeKey: String,
     themeName: String,
     selected: Boolean,
     selectionColor: Color,
@@ -309,6 +312,7 @@ private fun AppThemePalettePreview(
                 contentDescription = themeName
                 this.selected = selected
             }
+            .testTag("appearance_theme_preview_$stableThemeKey")
             .padding(10.dp),
     ) {
         Column(

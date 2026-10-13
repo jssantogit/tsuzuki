@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -109,6 +110,8 @@ internal fun SettingsPageHeader(
 internal fun SettingsGroup(
     title: String? = null,
     modifier: Modifier = Modifier,
+    surfaceTestTag: String? = null,
+    headingTestTag: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = defaultSkinColors()
@@ -121,11 +124,15 @@ internal fun SettingsGroup(
         title?.takeIf(String::isNotBlank)?.let { groupTitle ->
             DefaultSkinSectionLabel(
                 text = groupTitle,
-                modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
+                modifier = Modifier
+                    .padding(start = 4.dp, end = 4.dp, bottom = 8.dp)
+                    .then(headingTestTag?.let(Modifier::testTag) ?: Modifier),
             )
         }
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(surfaceTestTag?.let(Modifier::testTag) ?: Modifier),
             shape = DefaultSkinShape.Card,
             color = colors.surface,
             contentColor = colors.foreground,

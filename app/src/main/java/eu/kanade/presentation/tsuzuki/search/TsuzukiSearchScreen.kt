@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -447,21 +448,26 @@ private fun CatalogItems(
 }
 
 @Composable
-private fun SearchCompactCard(
+internal fun SearchCompactCard(
     item: CatalogItem,
     onClick: () -> Unit,
     year: String? = null,
+    onForegroundLoadEvent: ((MangaCoverLoadEvent) -> Unit)? = null,
+    onAtmosphereLoadEvent: ((MangaCoverLoadEvent) -> Unit)? = null,
 ) {
     val colors = defaultSkinColors()
     Column(
         modifier = Modifier
             .width(148.dp)
-            .clickable(role = Role.Button, onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick)
+            .testTag("search_compact_card"),
     ) {
         SearchCompactArtwork(
             data = item.coverUrl,
             title = item.title,
             modifier = Modifier.fillMaxWidth(),
+            onForegroundLoadEvent = onForegroundLoadEvent,
+            onAtmosphereLoadEvent = onAtmosphereLoadEvent,
         )
         Text(
             text = item.title,
@@ -489,10 +495,12 @@ private fun SearchCompactCard(
 }
 
 @Composable
-private fun SearchCompactArtwork(
+internal fun SearchCompactArtwork(
     data: String?,
     title: String,
     modifier: Modifier = Modifier,
+    onForegroundLoadEvent: ((MangaCoverLoadEvent) -> Unit)? = null,
+    onAtmosphereLoadEvent: ((MangaCoverLoadEvent) -> Unit)? = null,
 ) {
     val colors = defaultSkinColors()
     val decorativeArtworkAvailable = remember(data) { mutableStateOf(!data.isNullOrBlank()) }
@@ -500,14 +508,16 @@ private fun SearchCompactArtwork(
         modifier = modifier
             .aspectRatio(MangaCover.Book.ratio)
             .clip(DefaultSkinShape.Control)
-            .background(colors.surfaceMuted),
+            .background(colors.surfaceMuted)
+            .testTag("search_compact_artwork_frame"),
     ) {
         if (decorativeArtworkAvailable.value) {
             DecorativeSearchArtwork(
                 data = data,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().testTag("search_compact_artwork_atmosphere"),
                 surfaceMuted = colors.surfaceMuted,
                 artworkAvailable = decorativeArtworkAvailable,
+                onLoadEvent = onAtmosphereLoadEvent,
             )
         }
         MangaCover.Book(
@@ -515,7 +525,8 @@ private fun SearchCompactArtwork(
             contentDescription = title,
             shape = DefaultSkinShape.Control,
             contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().testTag("search_compact_artwork_foreground"),
+            onLoadEvent = onForegroundLoadEvent,
         )
     }
 }
@@ -526,12 +537,14 @@ private fun DecorativeSearchArtwork(
     modifier: Modifier,
     surfaceMuted: androidx.compose.ui.graphics.Color,
     artworkAvailable: MutableState<Boolean>,
+    onLoadEvent: ((MangaCoverLoadEvent) -> Unit)?,
 ) {
-    val onLoadEvent: (MangaCoverLoadEvent) -> Unit = remember(artworkAvailable) {
+    val recordLoadEvent: (MangaCoverLoadEvent) -> Unit = remember(artworkAvailable, onLoadEvent) {
         { event ->
             if (event is MangaCoverLoadEvent.Failed && !event.willFallback) {
                 artworkAvailable.value = false
             }
+            onLoadEvent?.invoke(event)
         }
     }
     Box(modifier = modifier) {
@@ -543,7 +556,7 @@ private fun DecorativeSearchArtwork(
                 .fillMaxSize()
                 .alpha(0.32f),
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-            onLoadEvent = onLoadEvent,
+            onLoadEvent = recordLoadEvent,
         )
         Box(
             modifier = Modifier

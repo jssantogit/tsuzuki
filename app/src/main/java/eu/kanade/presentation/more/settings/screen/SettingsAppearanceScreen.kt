@@ -70,6 +70,7 @@ object SettingsAppearanceScreen : SearchableSettings {
                         ThemeMode.DARK to stringResource(MR.strings.theme_dark),
                     ),
                     title = stringResource(MR.strings.tsuzuki_theme_mode_title),
+                    testTag = "appearance_theme_mode",
                     onValueChanged = {
                         setAppCompatDelegateThemeMode(it)
                         true
@@ -91,6 +92,7 @@ object SettingsAppearanceScreen : SearchableSettings {
                     preference = amoledPref,
                     title = stringResource(MR.strings.pref_dark_theme_pure_black),
                     enabled = themeMode != ThemeMode.LIGHT,
+                    testTag = "appearance_amoled",
                     onValueChanged = {
                         (context as? Activity)?.let { ActivityCompat.recreate(it) }
                         true

@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -225,6 +226,7 @@ class SettingsTsuzukiIntegrationDetailScreen(
                                         checked = item.enabled,
                                         enabled = item.id.value != "mal" || malClientIdConfigured || item.enabled,
                                         onCheckedChange = { screenModel.setEnabled(item.id, it) },
+                                        testTag = "integration_detail_enablement",
                                     )
 
                                     val configurable = item.capabilities.filter {
@@ -240,6 +242,7 @@ class SettingsTsuzukiIntegrationDetailScreen(
                                                 screenModel.setCapabilityEnabled(item.id, capability, it)
                                             },
                                             modifier = Modifier.alpha(if (item.enabled) 1f else 0.45f),
+                                            testTag = "integration_detail_capability_${capability.name.lowercase()}",
                                         )
                                     }
                                 }
@@ -458,7 +461,7 @@ internal fun integrationRootStatus(
 }
 
 @Composable
-private fun IntegrationSettingRow(
+internal fun IntegrationSettingRow(
     item: TsuzukiIntegrationSettingsItem,
     statusRefreshToken: Int,
     onOpen: () -> Unit,
@@ -487,6 +490,7 @@ private fun IntegrationSettingRow(
             .fillMaxWidth()
             .heightIn(min = 72.dp)
             .clickable(role = Role.Button, onClick = onOpen)
+            .testTag("integration_root_row_${item.id.value}")
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -509,6 +513,7 @@ private fun IntegrationSettingRow(
             Text(item.label, color = colors.foreground, fontWeight = FontWeight.Medium)
             Text(
                 stringResource(statusLabel),
+                modifier = Modifier.testTag("integration_status_${item.id.value}"),
                 color = colors.secondary,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -530,12 +535,13 @@ private fun IntegrationSettingRow(
 }
 
 @Composable
-private fun IntegrationToggleRow(
+internal fun IntegrationToggleRow(
     title: String,
     checked: Boolean,
     enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    testTag: String? = null,
 ) {
     val colors = defaultSkinColors()
     Row(
@@ -557,6 +563,7 @@ private fun IntegrationToggleRow(
             enabled = enabled,
             label = title,
             onCheckedChange = onCheckedChange,
+            testTag = testTag,
         )
     }
 }
@@ -567,10 +574,12 @@ private fun IntegrationSwitch(
     enabled: Boolean,
     label: String,
     onCheckedChange: (Boolean) -> Unit,
+    testTag: String? = null,
 ) {
     Box(
         modifier = Modifier
             .size(48.dp)
+            .then(testTag?.let(Modifier::testTag) ?: Modifier)
             .semantics { contentDescription = label }
             .toggleable(
                 value = checked,
