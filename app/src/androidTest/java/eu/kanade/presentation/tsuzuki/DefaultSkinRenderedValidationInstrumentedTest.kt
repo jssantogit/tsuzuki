@@ -6,7 +6,10 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
+import android.view.PixelCopy
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.layout.Column
@@ -65,9 +68,13 @@ import tachiyomi.domain.tsuzuki.integration.model.IntegrationCategory
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.i18n.MR
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.security.MessageDigest
 import java.util.Collections
+import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -81,6 +88,8 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         get() = InstrumentationRegistry.getInstrumentation()
 
     companion object {
+        private val renderedRunId = UUID.randomUUID().toString()
+
         @JvmStatic
         @BeforeClass
         fun clearOwnedEvidenceDirectoryOnce() {
@@ -116,7 +125,7 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             val terminalLoadEvents = CountDownLatch(if (data == null) 0 else 2)
             val cardClicks = AtomicInteger()
             instrumentation.runOnMainSync {
-                activity.setValidationContent {
+                activity.setValidationContent(sceneId = "search-${fixture.name}") {
                     Column(Modifier.fillMaxWidth()) {
                         SearchCompactCard(
                             item = CatalogItem(
@@ -190,31 +199,41 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 assertTrue("Decorative artwork must remain semantics-free", it.contentDescription.isEmpty())
             }
             assertRatio(frame.layoutBounds, 2f / 3f)
-            if (fixture.name == "wide") {
-                val location = screenLocation(activity)
-                val centerY = location[1] + frame.layoutBounds.center.y.toInt()
-                val leftMarker = AndroidColor.rgb(246, 49, 166)
-                val rightMarker = AndroidColor.rgb(25, 221, 242)
-                val leftX = location[0] + (frame.layoutBounds.left + frame.layoutBounds.width * 0.12f).toInt()
-                val rightX = location[0] + (frame.layoutBounds.left + frame.layoutBounds.width * 0.88f).toInt()
-                val markerPixels = awaitScreenPixels(activity, listOf(leftX to centerY, rightX to centerY)) { pixels ->
-                    pixels == listOf(leftMarker, rightMarker)
-                }
-                assertEquals(
-                    "Fit must preserve the complete source's left and right markers",
-                    listOf(leftMarker, rightMarker),
-                    markerPixels,
-                )
-                measurements += listOf(
-                    "wide-markers",
-                    Integer.toHexString(markerPixels[0]),
-                    Integer.toHexString(markerPixels[1]),
-                ).joinToString(",")
-            }
-
             val screenshot = File(artifactDirectory, "search-${fixture.name}.png")
-            saveScreenshot(screenshot)
-            assertTrue("Expected a non-empty screenshot for ${fixture.name}", screenshot.length() > 0L)
+            val markerPixels = captureRenderedState(
+                activity = activity,
+                destination = screenshot,
+                expectedTheme = activity.validationThemeForEvidence,
+                fixtureId = fixture.name,
+                expectedSceneId = "search-${fixture.name}",
+                targetTag = "search_compact_card",
+                identityTags = listOf(
+                    "search_compact_card",
+                    "search_compact_artwork_frame",
+                    "search_compact_artwork_foreground",
+                ),
+                requiredSemanticText = "fixture:${fixture.name}",
+            ) { bitmap, windowOrigin, _ ->
+                if (fixture.name == "wide") {
+                    val leftMarker = AndroidColor.rgb(246, 49, 166)
+                    val rightMarker = AndroidColor.rgb(25, 221, 242)
+                    val centerY = windowOrigin[1] + frame.layoutBounds.center.y.toInt()
+                    val leftX = windowOrigin[0] + (frame.layoutBounds.left + frame.layoutBounds.width * 0.12f).toInt()
+                    val rightX = windowOrigin[0] + (frame.layoutBounds.left + frame.layoutBounds.width * 0.88f).toInt()
+                    val markers = mapOf(
+                        "foreground-left-marker" to PixelProbe(leftX, centerY, bitmap.getPixel(leftX, centerY)),
+                        "foreground-right-marker" to PixelProbe(rightX, centerY, bitmap.getPixel(rightX, centerY)),
+                    )
+                    measurements += listOf(
+                        "wide-markers",
+                        Integer.toHexString(markers.getValue("foreground-left-marker").color),
+                        Integer.toHexString(markers.getValue("foreground-right-marker").color),
+                    ).joinToString(",")
+                    markers
+                } else {
+                    emptyMap()
+                }
+            }
             measurements += listOf(
                 fixture.name,
                 frame.bounds.toCsv(),
@@ -288,18 +307,27 @@ class DefaultSkinRenderedValidationInstrumentedTest {
 
         listOf(false, true).forEach { dark ->
             instrumentation.runOnMainSync {
-                activity.setValidationContent(dark = dark) {
+                activity.setValidationContent(sceneId = "settings-root-${if (dark) "dark" else "light"}", dark = dark) {
                     Navigator(screen = SettingsMainScreen, onBackPressed = null) { _ ->
                         SettingsMainScreen.Content(twoPane = false, navigateUp = null)
                     }
                 }
             }
             awaitSemantics(activity) { nodes -> nodes.any { it.tag == "settings_heading_account" } }
-            if (!dark) {
-                saveScreenshot(File(artifactDirectory, "settings-light.png"))
-            } else {
-                saveScreenshot(File(artifactDirectory, "settings-dark.png"))
-            }
+            captureRenderedState(
+                activity = activity,
+                destination = File(artifactDirectory, if (dark) "settings-dark.png" else "settings-light.png"),
+                expectedTheme = if (dark) "dark" else "light",
+                fixtureId = "settings-root",
+                expectedSceneId = "settings-root-${if (dark) "dark" else "light"}",
+                targetTag = "settings_surface_account",
+                identityTags = listOf(
+                    "settings_heading_account",
+                    "settings_surface_account",
+                    "settings_destination_account",
+                    "settings_destination_tracking",
+                ),
+            )
 
             repeat(18) {
                 val nodes = semanticsNodes(activity)
@@ -406,7 +434,7 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             PaletteFixture("dark", true, 0xFF0B0C0D.toInt(), 0xFF1C1E1F.toInt()),
         ).forEach { fixture ->
             instrumentation.runOnMainSync {
-                activity.setValidationContent(dark = fixture.dark) {
+                activity.setValidationContent(sceneId = "palette-${fixture.name}", dark = fixture.dark) {
                     SettingsCanvas(modifier = Modifier.testTag("palette_canvas")) {
                         SettingsGroup(surfaceTestTag = "palette_surface") {
                             androidx.compose.foundation.layout.Box(
@@ -419,28 +447,37 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             val nodes = awaitSemantics(activity) { it.any { node -> node.tag == "palette_surface_probe" } }
             val canvas = nodes.singleNode("palette_canvas").bounds
             val surface = nodes.singleNode("palette_surface").bounds
-            val composeView = activity.composeView
-            val location = IntArray(2)
-            instrumentation.runOnMainSync { composeView.getLocationOnScreen(location) }
             val screenshot = File(artifactDirectory, "palette-${fixture.name}.png")
-            val canvasX = location[0] + canvas.left.toInt() + 2
-            val canvasY = location[1] + canvas.center.y.toInt()
-            val surfaceX = location[0] + surface.right.toInt() - 3
-            val surfaceY = location[1] + surface.center.y.toInt()
-            val pixels = awaitStableScreenshot(
+            val pixels = captureRenderedState(
+                activity = activity,
                 destination = screenshot,
-                samplePoints = listOf(canvasX to canvasY, surfaceX to surfaceY),
-            )
-            val canvasPixel = pixels[0]
-            val surfacePixel = pixels[1]
+                expectedTheme = fixture.name,
+                fixtureId = "semantic-palette-roles",
+                expectedSceneId = "palette-${fixture.name}",
+                targetTag = "palette_canvas",
+                identityTags = listOf("palette_canvas", "palette_surface", "palette_surface_probe"),
+            ) { bitmap, windowOrigin, _ ->
+                val canvasX = windowOrigin[0] + canvas.left.toInt() + 2
+                val canvasY = windowOrigin[1] + canvas.center.y.toInt()
+                val surfaceX = windowOrigin[0] + surface.right.toInt() - 3
+                val surfaceY = windowOrigin[1] + surface.center.y.toInt()
+                mapOf(
+                    "canvas" to PixelProbe(canvasX, canvasY, bitmap.getPixel(canvasX, canvasY)),
+                    "surface" to PixelProbe(surfaceX, surfaceY, bitmap.getPixel(surfaceX, surfaceY)),
+                )
+            }
+            val canvasProbe = pixels.getValue("canvas")
+            val surfaceProbe = pixels.getValue("surface")
+            val canvasPixel = canvasProbe.color
+            val surfacePixel = surfaceProbe.color
             paletteMeasurements += listOf(
                 fixture.name,
                 Integer.toHexString(canvasPixel),
                 Integer.toHexString(surfacePixel),
                 canvas.toCsv(),
                 surface.toCsv(),
-                "$canvasX;$canvasY",
-                "$surfaceX;$surfaceY",
+                "${canvasProbe.x};${canvasProbe.y}",
+                "${surfaceProbe.x};${surfaceProbe.y}",
             ).joinToString(",")
             writeMeasurements(
                 "palette-measurements.csv",
@@ -451,8 +488,8 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                         "surface-pixel",
                         "canvas-bounds",
                         "surface-bounds",
-                        "canvas-screen-point",
-                        "surface-screen-point",
+                    "canvas-window-point",
+                    "surface-window-point",
                     ).joinToString(","),
                 ) + paletteMeasurements,
             )
@@ -468,13 +505,26 @@ class DefaultSkinRenderedValidationInstrumentedTest {
     @Test
     fun appearanceUsesCompactAccessibleThemeSamplesAndKeepsThemeModeSeparate() = withHost { activity ->
         val artifactDirectory = artifactDirectory()
+        val observedPreviewProperties = linkedMapOf<String, NodeSnapshot>()
         listOf(false, true).forEach { dark ->
             instrumentation.runOnMainSync {
-                activity.setValidationContent(dark = dark) {
+                activity.setValidationContent(
+                    sceneId = "appearance-theme-previews-${if (dark) "dark" else "light"}",
+                    dark = dark,
+                ) {
                     Navigator(screen = SettingsAppearanceScreen, onBackPressed = null) { _ ->
                         SettingsAppearanceScreen.Content()
                     }
                 }
+            }
+            if (fixture.name == "wide") {
+                val leftMarker = AndroidColor.rgb(246, 49, 166)
+                val rightMarker = AndroidColor.rgb(25, 221, 242)
+                assertEquals(
+                    "Fit must preserve the complete source's left and right markers",
+                    listOf(leftMarker, rightMarker),
+                    markerPixels.values.map { it.color },
+                )
             }
             val nodes = awaitSemantics(activity) { snapshot ->
                 snapshot.count { it.tag.startsWith("appearance_theme_preview_") } >= 2
@@ -482,23 +532,34 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             val previews = nodes.filter { it.tag.startsWith("appearance_theme_preview_") }
             assertTrue("Appearance should offer multiple real themes", previews.size >= 2)
             previews.forEach { preview ->
+                observedPreviewProperties[preview.tag] = preview
                 val ratio = preview.layoutBounds.width / preview.layoutBounds.height
                 assertTrue("Theme sample ${preview.tag} should be compact landscape, ratio=$ratio", ratio > 1f)
                 assertTrue(
                     "Theme sample must not dominate the viewport: ${preview.tag}",
                     preview.layoutBounds.height < activity.composeView.height * 0.30f,
                 )
-                val correspondingChoice = nodes.filter { candidate ->
-                    candidate.role == Role.RadioButton && rectsOverlap(candidate.bounds, preview.bounds)
-                }
-                assertTrue("Theme preview is missing radio semantics: ${preview.tag}", correspondingChoice.isNotEmpty())
+                assertEquals(
+                    "Theme preview ${preview.tag} role=${preview.role} selected=${preview.selected} " +
+                        "click=${preview.hasClickAction} name=${preview.contentDescription}",
+                    Role.RadioButton,
+                    preview.role,
+                )
+                assertTrue(
+                    "Theme preview ${preview.tag} must remain selectable; " +
+                        "role=${preview.role} selected=${preview.selected} name=${preview.contentDescription}",
+                    preview.hasClickAction,
+                )
+                assertNotNull(
+                    "Theme preview ${preview.tag} must expose selected state; role=${preview.role}",
+                    preview.selected,
+                )
                 assertTrue(
                     "Theme preview must announce a real theme name",
-                    correspondingChoice.any { it.contentDescription.isNotEmpty() },
+                    preview.contentDescription.isNotEmpty(),
                 )
-                assertTrue("Theme preview must remain selectable", correspondingChoice.any { it.hasClickAction })
             }
-            val selectedChoices = nodes.filter { it.role == Role.RadioButton && it.selected == true }
+            val selectedChoices = previews.filter { it.selected == true }
             assertEquals("Exactly one real theme should be selected", 1, selectedChoices.size)
             val themeModeTag = nodes.singleNode("appearance_theme_mode")
             assertTrue(
@@ -512,37 +573,64 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 "Appearance must retain its real switch preferences, including AMOLED",
                 nodes.any { it.role == Role.Switch },
             )
-            saveScreenshot(File(artifactDirectory, if (dark) "appearance-dark.png" else "appearance-light.png"))
+            val selectedPreview = previews.single { it.selected == true }
+            captureRenderedState(
+                activity = activity,
+                destination = File(artifactDirectory, if (dark) "appearance-dark.png" else "appearance-light.png"),
+                expectedTheme = if (dark) "dark" else "light",
+                fixtureId = "appearance-theme-previews",
+                expectedSceneId = "appearance-theme-previews-${if (dark) "dark" else "light"}",
+                targetTag = selectedPreview.tag,
+                identityTags = listOf(selectedPreview.tag, "appearance_theme_mode", "appearance_amoled"),
+            )
 
-            val expectedThemeKeys = AppTheme.entries
+            val availableThemes = AppTheme.entries
                 .filterNot { it.titleRes == null || (it == AppTheme.MONET && !DeviceUtil.isDynamicColorAvailable) }
-                .map { it.name.lowercase() }
-                .toSet()
+            val expectedThemeKeys = availableThemes.map { it.name.lowercase() }.toSet()
             val observedThemeKeys = mutableSetOf<String>()
-            val device = UiDevice.getInstance(instrumentation)
-            var visible = nodes.filter { it.tag.startsWith("appearance_theme_preview_") }
-            repeat(10) {
-                observedThemeKeys += visible.map { it.tag.removePrefix("appearance_theme_preview_") }
-                if (observedThemeKeys.containsAll(expectedThemeKeys)) return@repeat
-                val firstPreview = visible.firstOrNull() ?: return@repeat
-                val root = activity.composeView
-                val location = screenLocation(activity)
-                val y = location[1] + firstPreview.bounds.center.y.toInt()
-                device.swipe(
-                    location[0] + (root.width * 0.88f).toInt(),
-                    y,
-                    location[0] + (root.width * 0.16f).toInt(),
-                    y,
-                    14,
+            availableThemes.forEachIndexed { index, theme ->
+                val previewTag = "appearance_theme_preview_${theme.name.lowercase()}"
+                assertTrue(
+                    "Appearance theme rail must expose indexed horizontal scrolling",
+                    scrollHorizontalThemeRailToIndex(activity, index),
                 )
-                instrumentation.waitForIdleSync()
-                visible = semanticsNodes(activity).filter { it.tag.startsWith("appearance_theme_preview_") }
+                val previewNodes = awaitSemantics(activity) { snapshot ->
+                    snapshot.any { it.tag == previewTag }
+                }
+                val preview = previewNodes.singleNode(previewTag)
+                observedPreviewProperties[preview.tag] = preview
+                observedThemeKeys += theme.name.lowercase()
+                assertEquals(
+                    "Preview ${preview.tag} must expose radio-button semantics",
+                    Role.RadioButton,
+                    preview.role,
+                )
+                assertTrue("Preview ${preview.tag} must remain clickable", preview.hasClickAction)
+                assertNotNull("Preview ${preview.tag} must expose selected state", preview.selected)
+                assertTrue("Preview ${preview.tag} must announce its theme", preview.contentDescription.isNotEmpty())
             }
             assertEquals(
                 "Every available real theme must remain represented/selectable",
                 expectedThemeKeys,
                 observedThemeKeys,
             )
+            if (!dark) {
+                val tealTag = "appearance_theme_preview_tealturquoise"
+                val tealPreview = observedPreviewProperties[tealTag]
+                    ?: throw AssertionError("The real Teal Turquoise preview was never exposed: $tealTag")
+                assertEquals(
+                    "Exact Teal Turquoise preview semantics; selected=${tealPreview.selected}, " +
+                        "click=${tealPreview.hasClickAction}, name=${tealPreview.contentDescription}",
+                    Role.RadioButton,
+                    tealPreview.role,
+                )
+                assertTrue("Exact Teal Turquoise preview must remain selectable", tealPreview.hasClickAction)
+                assertNotNull("Exact Teal Turquoise preview must expose selection", tealPreview.selected)
+                assertTrue(
+                    "Exact Teal Turquoise preview must announce its real name",
+                    tealPreview.contentDescription.isNotEmpty(),
+                )
+            }
         }
 
         val preferences = activity.appGraph.uiPreferences
@@ -557,14 +645,17 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         try {
             preferences.themeDarkAmoled.set(true)
             instrumentation.runOnMainSync {
-                activity.setValidationContent(dark = false) {
+                activity.setValidationContent(sceneId = "appearance-mode-system-light") {
                     Navigator(screen = SettingsAppearanceScreen, onBackPressed = null) { _ ->
                         SettingsAppearanceScreen.Content()
                     }
                 }
             }
             ThemeMode.entries.forEach { mode ->
-                preferences.themeMode.set(mode)
+                instrumentation.runOnMainSync {
+                    preferences.themeMode.set(mode)
+                    activity.markValidationScene("appearance-mode-${mode.name.lowercase()}")
+                }
                 val modeNodes = awaitSemantics(activity) { snapshot ->
                     snapshot.any { it.tag == "appearance_theme_mode" } &&
                         snapshot.any { modeLabels.getValue(mode) in it.text }
@@ -595,7 +686,16 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                     amoled.toggleableState,
                 )
                 assertEquals("AMOLED is disabled only for Light mode", mode != ThemeMode.LIGHT, amoled.enabled)
-                saveScreenshot(File(artifactDirectory, "appearance-mode-${mode.name.lowercase()}.png"))
+                captureRenderedState(
+                    activity = activity,
+                    destination = File(artifactDirectory, "appearance-mode-${mode.name.lowercase()}.png"),
+                    expectedTheme = "light",
+                    fixtureId = "theme-mode-${mode.name.lowercase()}",
+                    expectedSceneId = "appearance-mode-${mode.name.lowercase()}",
+                    targetTag = "appearance_theme_mode",
+                    identityTags = listOf("appearance_theme_mode", "appearance_amoled", selectedPreview.tag),
+                    requiredSemanticText = modeLabels.getValue(mode),
+                )
 
                 val location = screenLocation(activity)
                 UiDevice.getInstance(instrumentation).click(
@@ -629,9 +729,22 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         }
         writeMeasurements(
             "appearance-measurements.csv",
-            listOf("preview,ratio,bounds,selected") + semanticsNodes(activity)
-                .filter { it.tag.startsWith("appearance_theme_preview_") }
-                .map { "${it.tag},${it.bounds.width / it.bounds.height},${it.bounds.toCsv()},${it.selected}" },
+            listOf(
+                "preview,ratio,visible-bounds,unclipped-bounds,viewport-clipped,role,selected,click,accessible-name",
+            ) +
+                observedPreviewProperties.values.map {
+                    listOf(
+                        it.tag,
+                        "${it.layoutBounds.width / it.layoutBounds.height}",
+                        it.bounds.toCsv(),
+                        it.layoutBounds.toCsv(),
+                        (it.bounds != it.layoutBounds).toString(),
+                        it.role,
+                        it.selected,
+                        it.hasClickAction,
+                        it.contentDescription.joinToString("|"),
+                    ).joinToString(",")
+                },
         )
     }
 
@@ -647,7 +760,7 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             val kitsuActive = integrationItem("kitsu", enabled = true)
             val komgaDisabled = integrationItem("komga", enabled = false)
             instrumentation.runOnMainSync {
-                activity.setValidationContent {
+                activity.setValidationContent(sceneId = "integrations-runtime-statuses") {
                     SettingsCanvas {
                         SettingsGroup(title = "Fixture integrations") {
                             listOf(malIncomplete, kitsuActive, komgaDisabled).forEach { item ->
@@ -683,7 +796,22 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 },
             )
             assertTrue("No enablement switch may be exposed on root", rootNodes.none { it.role == Role.Switch })
-            saveScreenshot(File(artifactDirectory(), "integrations-root.png"))
+            captureRenderedState(
+                activity = activity,
+                destination = File(artifactDirectory(), "integrations-root.png"),
+                expectedTheme = "light",
+                fixtureId = "integrations-runtime-statuses",
+                expectedSceneId = "integrations-runtime-statuses",
+                targetTag = "integration_root_row_kitsu",
+                identityTags = listOf(
+                    "integration_root_row_mal",
+                    "integration_status_mal",
+                    "integration_root_row_kitsu",
+                    "integration_status_kitsu",
+                    "integration_root_row_komga",
+                    "integration_status_komga",
+                ),
+            )
             val rootRow = rootNodes.singleNode("integration_root_row_kitsu")
             val location = screenLocation(activity)
             UiDevice.getInstance(instrumentation).click(
@@ -698,7 +826,7 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             val configuredStatusLabel =
                 activity.stringResource(MR.strings.tsuzuki_integration_status_configured)
             instrumentation.runOnMainSync {
-                activity.setValidationContent {
+                activity.setValidationContent(sceneId = "integrations-mal-configured") {
                     SettingsCanvas {
                         SettingsGroup(title = "Configured integration") {
                             IntegrationSettingRow(malConfigured, statusRefreshToken = 1) {}
@@ -721,12 +849,21 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 "Configured root still has no enablement switch",
                 configuredNodes.none { it.role == Role.Switch },
             )
-            saveScreenshot(File(artifactDirectory(), "integrations-mal-configured.png"))
+            captureRenderedState(
+                activity = activity,
+                destination = File(artifactDirectory(), "integrations-mal-configured.png"),
+                expectedTheme = "light",
+                fixtureId = "integrations-mal-configured",
+                expectedSceneId = "integrations-mal-configured",
+                targetTag = "integration_root_row_mal",
+                identityTags = listOf("integration_root_row_mal", "integration_status_mal"),
+                requiredSemanticText = configuredStatusLabel,
+            )
 
             val changed = CountDownLatch(1)
             val changeValue = AtomicReference<Boolean>()
             instrumentation.runOnMainSync {
-                activity.setValidationContent {
+                activity.setValidationContent(sceneId = "integration-detail-disabled-switch") {
                     SettingsCanvas {
                         SettingsGroup {
                             IntegrationToggleRow(
@@ -746,7 +883,15 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             val detailNodes = awaitSemantics(activity) { nodes ->
                 nodes.any { it.tag == "integration_detail_enablement" } && nodes.any { it.role == Role.Switch }
             }
-            saveScreenshot(File(artifactDirectory(), "integrations-detail.png"))
+            captureRenderedState(
+                activity = activity,
+                destination = File(artifactDirectory(), "integrations-detail.png"),
+                expectedTheme = "light",
+                fixtureId = "integration-detail-disabled-switch",
+                expectedSceneId = "integration-detail-disabled-switch",
+                targetTag = "integration_detail_enablement",
+                identityTags = listOf("integration_detail_enablement"),
+            )
             val switchTag = detailNodes.singleNode("integration_detail_enablement")
             val switchNode = detailNodes.single { it.role == Role.Switch && rectsOverlap(it.bounds, switchTag.bounds) }
             assertTrue("Detail enablement must be a toggle action", switchNode.hasClickAction)
@@ -842,7 +987,7 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 editorialStatus = "Ongoing",
             )
             instrumentation.runOnMainSync {
-                activity.setValidationContent(dark = fixture.dark) {
+                activity.setValidationContent(sceneId = "details-${fixture.name}", dark = fixture.dark) {
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         CanonicalDetailsHero(
                             state = state,
@@ -914,27 +1059,47 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                     "Decorative Hero image must not expose duplicate semantics",
                     artwork?.contentDescription.isNullOrEmpty(),
                 )
-                if (fixture.name == "short-dark" || fixture.name == "long-light") {
-                    val location = screenLocation(activity)
-                    val sampleX = location[0] + (frame.layoutBounds.left + frame.layoutBounds.width / 2f).toInt()
-                    val sampleY = location[1] + (frame.layoutBounds.top + frame.layoutBounds.height * 0.12f).toInt()
-                    val sample = awaitScreenPixels(activity, listOf(sampleX to sampleY)) { pixels ->
-                        val color = pixels.single()
-                        if (fixture.name == "short-dark") {
-                            AndroidColor.red(color) in 20..100 && AndroidColor.green(color) in 20..100
-                        } else {
-                            AndroidColor.red(color) > 180 &&
-                                AndroidColor.green(color) in 140..235 &&
-                                AndroidColor.blue(color) > 150
-                        }
-                    }.single()
-                    measurements += "${fixture.name}-painted-artwork,${Integer.toHexString(sample)}"
-                }
             }
 
             val screenshot = File(artifactDirectory, "details-${fixture.name}.png")
-            saveScreenshot(screenshot)
-            assertTrue("Expected a non-empty Details render for ${fixture.name}", screenshot.length() > 0L)
+            val probes = captureRenderedState(
+                activity = activity,
+                destination = screenshot,
+                expectedTheme = if (fixture.dark) "dark" else "light",
+                fixtureId = fixture.name,
+                expectedSceneId = "details-${fixture.name}",
+                targetTag = "canonical_details_hero_content",
+                identityTags = listOf(
+                    "canonical_details_hero_content",
+                    "canonical_details_hero_title",
+                    "canonical_details_hero_metadata",
+                ),
+                requiredSemanticText = fixture.title,
+            ) { bitmap, windowOrigin, _ ->
+                if (frame != null && (fixture.name == "short-dark" || fixture.name == "long-light")) {
+                    val sampleX = windowOrigin[0] + (frame.layoutBounds.left + frame.layoutBounds.width / 2f).toInt()
+                    val sampleY = windowOrigin[1] + (frame.layoutBounds.top + frame.layoutBounds.height * 0.12f).toInt()
+                    mapOf("painted-artwork" to PixelProbe(sampleX, sampleY, bitmap.getPixel(sampleX, sampleY)))
+                } else {
+                    emptyMap()
+                }
+            }
+            probes["painted-artwork"]?.let { probe ->
+                if (fixture.name == "short-dark") {
+                    assertTrue(
+                        "Dark Hero fixture must paint dark artwork, actual=${Integer.toHexString(probe.color)}",
+                        AndroidColor.red(probe.color) in 20..100 && AndroidColor.green(probe.color) in 20..100,
+                    )
+                } else {
+                    assertTrue(
+                        "Light Hero fixture must paint light artwork, actual=${Integer.toHexString(probe.color)}",
+                        AndroidColor.red(probe.color) > 180 &&
+                            AndroidColor.green(probe.color) in 140..235 &&
+                            AndroidColor.blue(probe.color) > 150,
+                    )
+                }
+                measurements += "${fixture.name}-painted-artwork,${Integer.toHexString(probe.color)}"
+            }
             measurements += listOf(
                 fixture.name,
                 hero.layoutBounds.toCsv(),
@@ -1010,6 +1175,25 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         return result
     }
 
+    private fun scrollHorizontalThemeRailToIndex(activity: DefaultSkinValidationActivity, index: Int): Boolean {
+        var scrolled = false
+        instrumentation.runOnMainSync {
+            val scrollableNodes = activity.findViewRootForTest().semanticsOwner
+                .getAllSemanticsNodes(mergingEnabled = false)
+                .filter { node ->
+                    node.config.contains(SemanticsProperties.HorizontalScrollAxisRange) &&
+                        node.config.contains(SemanticsActions.ScrollToIndex)
+                }
+            if (scrollableNodes.size == 1) {
+                scrolled = scrollableNodes.single()
+                    .config[SemanticsActions.ScrollToIndex]
+                    .action
+                    ?.invoke(index) == true
+            }
+        }
+        return scrolled
+    }
+
     private fun DefaultSkinValidationActivity.findViewRootForTest(): ViewRootForTest {
         fun find(view: View): ViewRootForTest? {
             if (view is ViewRootForTest) return view
@@ -1022,6 +1206,352 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         }
         return requireNotNull(find(window.decorView)) { "Compose ViewRootForTest was not attached" }
     }
+
+    private fun captureRenderedState(
+        activity: DefaultSkinValidationActivity,
+        destination: File,
+        expectedTheme: String,
+        fixtureId: String,
+        expectedSceneId: String,
+        targetTag: String,
+        identityTags: List<String>,
+        requiredSemanticText: String? = null,
+        pixelProbes: (Bitmap, IntArray, Rect) -> Map<String, PixelProbe> = { _, _, _ -> emptyMap() },
+    ): Map<String, PixelProbe> {
+        fun matches(nodes: List<NodeSnapshot>): Boolean {
+            val tags = nodes.map { it.tag }.toSet()
+            val texts = nodes.flatMap { it.text + it.contentDescription }
+            return identityTags.all { it in tags } &&
+                (requiredSemanticText == null || requiredSemanticText in texts)
+        }
+
+        var sceneTag = ""
+        var sceneGeneration = -1
+        var activeSceneId = ""
+        instrumentation.runOnMainSync {
+            sceneTag = activity.validationSceneTagForEvidence
+            sceneGeneration = activity.validationSceneGeneration
+            activeSceneId = activity.validationSceneIdForEvidence
+        }
+        assertEquals("Capture request must name the active host fixture", expectedSceneId, activeSceneId)
+        val before = awaitSemantics(activity) { nodes ->
+            matches(nodes) && nodes.any { it.tag == sceneTag } && renderedTheme(nodes) == expectedTheme
+        }
+        val targetBefore = before.singleNode(targetTag)
+        val actualThemeBefore = renderedTheme(before)
+        var hostRequestedTheme = ""
+        var windowOrigin = IntArray(2)
+        var bitmapWidth = 0
+        var bitmapHeight = 0
+        instrumentation.runOnMainSync {
+            hostRequestedTheme = activity.validationThemeForEvidence
+            val composeView = activity.composeView
+            assertTrue("Rendered capture requires hardware acceleration", composeView.isHardwareAccelerated)
+            composeView.getLocationInWindow(windowOrigin)
+            bitmapWidth = activity.window.decorView.width
+            bitmapHeight = activity.window.decorView.height
+        }
+        assertEquals("Host theme request must agree with rendered configuration", expectedTheme, hostRequestedTheme)
+        assertTrue("Window capture has no measured bounds", bitmapWidth > 0 && bitmapHeight > 0)
+
+        val frameCommitted = CountDownLatch(1)
+        instrumentation.runOnMainSync {
+            val view = activity.composeView
+            val observer = view.viewTreeObserver
+            assertTrue("Compose ViewTreeObserver is not alive", observer.isAlive)
+            observer.registerFrameCommitCallback { frameCommitted.countDown() }
+            view.invalidate()
+        }
+        val frameCommittedInTime = frameCommitted.await(5, TimeUnit.SECONDS)
+        if (!frameCommittedInTime) {
+            val diagnostics = writeHostTimeoutDiagnostics(activity, before)
+            throw AssertionError("Timed out waiting for a committed frame for $fixtureId; $diagnostics")
+        }
+
+        val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
+        try {
+            val copied = CountDownLatch(1)
+            val pixelCopyResult = AtomicInteger(Int.MIN_VALUE)
+            PixelCopy.request(
+                activity.window,
+                bitmap,
+                { result ->
+                    pixelCopyResult.set(result)
+                    copied.countDown()
+                },
+                Handler(Looper.getMainLooper()),
+            )
+            assertTrue(
+                "Timed out copying committed window pixels for $fixtureId",
+                copied.await(5, TimeUnit.SECONDS),
+            )
+            assertEquals("PixelCopy failed for $fixtureId", PixelCopy.SUCCESS, pixelCopyResult.get())
+
+            val after = semanticsNodes(activity)
+            assertTrue("Semantic state changed during capture for $fixtureId", matches(after))
+            assertTrue(
+                "Committed frame does not contain the expected scene tag for $fixtureId",
+                after.any { it.tag == sceneTag },
+            )
+            val actualThemeAfter = renderedTheme(after)
+            var sceneIdAfter = ""
+            var sceneGenerationAfter = -1
+            var themeAfter = ""
+            instrumentation.runOnMainSync {
+                sceneIdAfter = activity.validationSceneIdForEvidence
+                sceneGenerationAfter = activity.validationSceneGeneration
+                themeAfter = activity.validationThemeForEvidence
+            }
+            assertEquals("Active scene changed during capture for $fixtureId", expectedSceneId, sceneIdAfter)
+            assertEquals(
+                "Scene generation changed during capture for $fixtureId",
+                sceneGeneration,
+                sceneGenerationAfter,
+            )
+            assertEquals("Host theme changed during capture for $fixtureId", hostRequestedTheme, themeAfter)
+            assertEquals("Rendered theme changed during capture for $fixtureId", actualThemeBefore, actualThemeAfter)
+            assertEquals(
+                "Rendered theme does not match requested fixture for $fixtureId",
+                expectedTheme,
+                actualThemeAfter,
+            )
+            val targetAfter = after.singleNode(targetTag)
+            val beforeIdentity = semanticIdentity(
+                before,
+                identityTags,
+                requiredSemanticText,
+                sceneTag,
+                sceneGeneration,
+                actualThemeBefore,
+            )
+            val afterIdentity = semanticIdentity(
+                after,
+                identityTags,
+                requiredSemanticText,
+                sceneTag,
+                sceneGeneration,
+                actualThemeAfter,
+            )
+            assertEquals("Capture identity changed across frame commit for $fixtureId", beforeIdentity, afterIdentity)
+            assertEquals("Target role changed during capture", targetBefore.role, targetAfter.role)
+            assertEquals("Target selection changed during capture", targetBefore.selected, targetAfter.selected)
+            assertEquals(
+                "Target click semantics changed during capture",
+                targetBefore.hasClickAction,
+                targetAfter.hasClickAction,
+            )
+
+            val targetInWindow = Rect(
+                (targetAfter.bounds.left + windowOrigin[0]).coerceAtLeast(0f),
+                (targetAfter.bounds.top + windowOrigin[1]).coerceAtLeast(0f),
+                (targetAfter.bounds.right + windowOrigin[0]).coerceAtMost(bitmap.width.toFloat()),
+                (targetAfter.bounds.bottom + windowOrigin[1]).coerceAtMost(bitmap.height.toFloat()),
+            )
+            assertTrue(
+                "Visible target does not intersect the captured app window: $targetInWindow",
+                targetInWindow.width > 1f && targetInWindow.height > 1f,
+            )
+            val contentSamples = sampleRenderedPixels(bitmap, targetInWindow)
+            val contentColors = contentSamples.map { it.color }.toSet()
+            val probes = pixelProbes(bitmap, windowOrigin, targetAfter.bounds)
+            probes.forEach { (name, probe) ->
+                assertTrue(
+                    "Pixel probe $name is outside captured window ${bitmap.width}x${bitmap.height}",
+                    probe.x in 0 until bitmap.width && probe.y in 0 until bitmap.height,
+                )
+            }
+
+            destination.parentFile?.mkdirs()
+            FileOutputStream(destination).use { output ->
+                assertTrue(
+                    "PNG encoding failed for $fixtureId",
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, output),
+                )
+            }
+            assertTrue("Expected a non-empty committed render for $fixtureId", destination.length() > 0L)
+            writeCaptureSidecar(
+                destination = destination,
+                expectedTheme = expectedTheme,
+                actualTheme = actualThemeBefore,
+                hostRequestedTheme = hostRequestedTheme,
+                fixtureId = fixtureId,
+                sceneId = expectedSceneId,
+                sceneTag = sceneTag,
+                sceneGeneration = sceneGeneration,
+                targetTag = targetTag,
+                identityTags = identityTags,
+                beforeIdentity = beforeIdentity,
+                afterIdentity = afterIdentity,
+                target = targetAfter,
+                windowOrigin = windowOrigin,
+                bitmap = bitmap,
+                targetInWindow = targetInWindow,
+                contentSamples = contentSamples,
+                probes = probes,
+            )
+            assertTrue(
+                "Capture target has no rendered content in its app-window region; target=$targetInWindow",
+                contentColors.size >= 2,
+            )
+            return probes
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    private fun semanticIdentity(
+        nodes: List<NodeSnapshot>,
+        identityTags: List<String>,
+        requiredSemanticText: String?,
+        sceneTag: String,
+        sceneGeneration: Int,
+        actualTheme: String,
+    ): String {
+        val relevant = nodes.filter { it.tag in identityTags }.sortedBy { it.tag }
+        assertEquals("Each captured semantic tag must identify one node", identityTags.size, relevant.size)
+        return buildString {
+            append("scene=").append(sceneTag).append('#').append(sceneGeneration)
+                .append(";theme=").append(actualTheme)
+                .append(";required=").append(requiredSemanticText.orEmpty()).append('|')
+            relevant.forEach { node ->
+                append(node.tag).append(':')
+                    .append(node.role).append(':')
+                    .append(node.selected).append(':')
+                    .append(node.hasClickAction).append(':')
+                    .append(node.text.joinToString("\u001f")).append(':')
+                    .append(node.contentDescription.joinToString("\u001f")).append(':')
+                    .append(node.layoutBounds.toCsv()).append(':')
+                    .append(node.bounds.toCsv()).append('|')
+            }
+        }
+    }
+
+    private fun renderedTheme(nodes: List<NodeSnapshot>): String {
+        val markers = nodes.map { it.tag }
+            .filter { it.startsWith("validation_rendered_theme_") }
+            .map { it.removePrefix("validation_rendered_theme_") }
+        assertEquals("Validation host must expose one theme derived from LocalConfiguration", 1, markers.size)
+        return markers.single()
+    }
+
+    private fun sampleRenderedPixels(bitmap: Bitmap, bounds: Rect): List<PixelProbe> {
+        val left = bounds.left.toInt().coerceIn(0, bitmap.width - 1)
+        val top = bounds.top.toInt().coerceIn(0, bitmap.height - 1)
+        val right = bounds.right.toInt().coerceIn(left + 1, bitmap.width)
+        val bottom = bounds.bottom.toInt().coerceIn(top + 1, bitmap.height)
+        val samples = mutableListOf<PixelProbe>()
+        for (row in 0..4) {
+            for (column in 0..4) {
+                val x = (left + ((right - left - 1) * (column + 0.5f) / 5f).toInt()).coerceIn(left, right - 1)
+                val y = (top + ((bottom - top - 1) * (row + 0.5f) / 5f).toInt()).coerceIn(top, bottom - 1)
+                samples += PixelProbe(x, y, bitmap.getPixel(x, y))
+            }
+        }
+        return samples
+    }
+
+    private fun writeCaptureSidecar(
+        destination: File,
+        expectedTheme: String,
+        actualTheme: String,
+        hostRequestedTheme: String,
+        fixtureId: String,
+        sceneId: String,
+        sceneTag: String,
+        sceneGeneration: Int,
+        targetTag: String,
+        identityTags: List<String>,
+        beforeIdentity: String,
+        afterIdentity: String,
+        target: NodeSnapshot,
+        windowOrigin: IntArray,
+        bitmap: Bitmap,
+        targetInWindow: Rect,
+        contentSamples: List<PixelProbe>,
+        probes: Map<String, PixelProbe>,
+    ) {
+        fun rectJson(rect: Rect) = JSONObject()
+            .put("left", rect.left)
+            .put("top", rect.top)
+            .put("right", rect.right)
+            .put("bottom", rect.bottom)
+
+        val probeJson = JSONObject()
+        probes.forEach { (name, probe) ->
+            probeJson.put(
+                name,
+                JSONObject()
+                    .put("x", probe.x)
+                    .put("y", probe.y)
+                    .put("color", "%08x".format(java.util.Locale.ROOT, probe.color)),
+            )
+        }
+        val identityTagJson = JSONArray().apply { identityTags.forEach { put(it) } }
+        val uniqueContentColors = contentSamples.map { it.color }.toSet()
+        val colorJson = JSONArray().apply {
+            uniqueContentColors.forEach { put("%08x".format(java.util.Locale.ROOT, it)) }
+        }
+        val contentSamplesJson = JSONArray().apply {
+            contentSamples.forEach { sample ->
+                put(
+                    JSONObject()
+                        .put("x", sample.x)
+                        .put("y", sample.y)
+                        .put("color", "%08x".format(java.util.Locale.ROOT, sample.color)),
+                )
+            }
+        }
+        val sidecar = JSONObject()
+            .put("runId", renderedRunId)
+            .put("stateId", destination.nameWithoutExtension)
+            .put("png", destination.name)
+            .put("expectedTheme", expectedTheme)
+            .put("actualTheme", actualTheme)
+            .put("hostRequestedTheme", hostRequestedTheme)
+            .put("fixtureId", fixtureId)
+            .put("sceneId", sceneId)
+            .put("sceneTag", sceneTag)
+            .put("sceneGeneration", sceneGeneration)
+            .put("targetTag", targetTag)
+            .put("identityTags", identityTagJson)
+            .put("semanticIdentityBefore", beforeIdentity)
+            .put("semanticIdentityAfter", afterIdentity)
+            .put("targetRole", target.role?.toString().orEmpty())
+            .put("targetSelected", target.selected ?: JSONObject.NULL)
+            .put("targetHasClickAction", target.hasClickAction)
+            .put("targetText", JSONArray().apply { target.text.forEach { put(it) } })
+            .put("targetContentDescription", JSONArray().apply { target.contentDescription.forEach { put(it) } })
+            .put("targetVisibleBoundsRoot", rectJson(target.bounds))
+            .put("targetRawBoundsRoot", rectJson(target.layoutBounds))
+            .put("composeOriginInWindow", JSONArray().put(windowOrigin[0]).put(windowOrigin[1]))
+            .put(
+                "targetRawBoundsWindow",
+                rectJson(
+                    Rect(
+                        target.layoutBounds.left + windowOrigin[0],
+                        target.layoutBounds.top + windowOrigin[1],
+                        target.layoutBounds.right + windowOrigin[0],
+                        target.layoutBounds.bottom + windowOrigin[1],
+                    ),
+                ),
+            )
+            .put("targetBoundsWindow", rectJson(targetInWindow))
+            .put("bitmapWidth", bitmap.width)
+            .put("bitmapHeight", bitmap.height)
+            .put("capturePath", "PixelCopy.Window")
+            .put("hardwareAccelerated", true)
+            .put("contentColors", colorJson)
+            .put("contentColorSampleCount", uniqueContentColors.size)
+            .put("contentPixelSamples", contentSamplesJson)
+            .put("pixelProbes", probeJson)
+            .put("pngSha256", destination.readBytes().sha256())
+        File(destination.parentFile, "${destination.nameWithoutExtension}.json").writeText(sidecar.toString(2))
+    }
+
+    private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256").digest(this)
+        .joinToString("") { "%02x".format(java.util.Locale.ROOT, it) }
+
+    private data class PixelProbe(val x: Int, val y: Int, val color: Int)
 
     private fun List<NodeSnapshot>.singleNode(tag: String): NodeSnapshot =
         single { it.tag == tag }
@@ -1148,7 +1678,7 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         val stem = "diagnostic-host-${SystemClock.uptimeMillis()}"
         val screenshot = File(directory, "$stem.png")
         val screenshotResult = runCatching {
-            saveScreenshot(screenshot)
+            saveDiagnosticScreenshot(screenshot)
             screenshot.absolutePath
         }.getOrElse { "failed:${it.javaClass.simpleName}:${it.message}" }
         val details = listOf(
@@ -1161,79 +1691,6 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         ).joinToString("\n")
         File(directory, "$stem.txt").writeText(details)
         return details.replace('\n', ';')
-    }
-
-    private fun awaitScreenPixels(
-        activity: DefaultSkinValidationActivity,
-        points: List<Pair<Int, Int>>,
-        predicate: (List<Int>) -> Boolean,
-    ): List<Int> {
-        val deadline = SystemClock.uptimeMillis() + 5_000
-        var latest = emptyList<Int>()
-        while (SystemClock.uptimeMillis() < deadline) {
-            instrumentation.waitForIdleSync()
-            val bitmap = requireNotNull(UiDevice.getInstance(instrumentation).takeScreenshot())
-            try {
-                latest = points.map { (x, y) ->
-                    assertTrue(
-                        "Pixel sample ($x,$y) must be inside screenshot ${bitmap.width}x${bitmap.height}",
-                        x in 0 until bitmap.width && y in 0 until bitmap.height,
-                    )
-                    bitmap.getPixel(x, y)
-                }
-            } finally {
-                bitmap.recycle()
-            }
-            if (predicate(latest)) return latest
-            SystemClock.sleep(40)
-        }
-        assertTrue("Timed out waiting for expected painted fixture pixels; last=$latest", false)
-        return latest
-    }
-
-    private fun awaitStableScreenshot(
-        destination: File,
-        samplePoints: List<Pair<Int, Int>>,
-    ): List<Int> {
-        val deadline = SystemClock.uptimeMillis() + 5_000
-        var previous: List<Int>? = null
-        var stableFrames = 0
-        var latestPixels = emptyList<Int>()
-        var latestBitmap: Bitmap? = null
-        while (SystemClock.uptimeMillis() < deadline) {
-            instrumentation.waitForIdleSync()
-            val bitmap = requireNotNull(UiDevice.getInstance(instrumentation).takeScreenshot())
-            val pixels = samplePoints.map { (x, y) ->
-                assertTrue(
-                    "Pixel sample ($x,$y) must be inside screenshot ${bitmap.width}x${bitmap.height}",
-                    x in 0 until bitmap.width && y in 0 until bitmap.height,
-                )
-                bitmap.getPixel(x, y)
-            }
-            latestBitmap?.recycle()
-            latestBitmap = bitmap
-            latestPixels = pixels
-            stableFrames = if (pixels == previous) stableFrames + 1 else 0
-            if (stableFrames >= 2) {
-                FileOutputStream(destination).use { output ->
-                    assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
-                }
-                bitmap.recycle()
-                latestBitmap = null
-                assertTrue("Expected a non-empty settled palette screenshot", destination.length() > 0L)
-                return pixels
-            }
-            previous = pixels
-            SystemClock.sleep(40)
-        }
-        latestBitmap?.let { bitmap ->
-            FileOutputStream(destination).use { output ->
-                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
-            }
-            bitmap.recycle()
-        }
-        assertTrue("Palette pixels did not stabilize; last sample=$latestPixels", false)
-        return latestPixels
     }
 
     private fun assertRectApproximately(actual: Rect, expected: Rect) {
@@ -1262,7 +1719,7 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         mkdirs()
     }
 
-    private fun saveScreenshot(destination: File) {
+    private fun saveDiagnosticScreenshot(destination: File) {
         val bitmap = requireNotNull(UiDevice.getInstance(instrumentation).takeScreenshot())
         FileOutputStream(destination).use { output ->
             assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
