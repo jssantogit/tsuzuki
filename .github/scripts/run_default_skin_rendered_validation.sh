@@ -17,15 +17,29 @@ if (( ${#online_serials[@]} != 1 )) || [[ ! "${online_serials[0]:-}" =~ ^emulato
   exit 1
 fi
 export ANDROID_SERIAL="${online_serials[0]}"
+checkpoint_file="$results_dir/emulator-checkpoints.txt"
+checkpoint() {
+  local label="$1"
+  if ! bash .github/scripts/capture_default_skin_emulator_checkpoint.sh \
+    "$label" "$ANDROID_SERIAL" "$checkpoint_file"; then
+    printf 'CHECKPOINT=%s SNAPSHOT_HELPER=UNAVAILABLE\n' "$label" >> "$checkpoint_file" || true
+  fi
+}
 
 # Keep the disposable emulator awake and dismiss its non-secure keyguard before
 # building/running the host. The test harness still requires actual window
 # focus; this preflight does not weaken that layout/semantics gate.
 emulator_ready=1
+checkpoint A
 adb shell svc power stayon true >/dev/null || emulator_ready=0
+checkpoint B
 adb shell input keyevent KEYCODE_WAKEUP >/dev/null || emulator_ready=0
+checkpoint C
 adb shell wm dismiss-keyguard >/dev/null || emulator_ready=0
+checkpoint D
+checkpoint E
 adb shell input keyevent KEYCODE_MENU >/dev/null || emulator_ready=0
+checkpoint F
 sleep 1
 power_state="$(adb shell dumpsys power 2>&1 | tr -d '\r')"
 if ! grep -Eq 'mWakefulness=Awake|Wakefulness=Awake' <<< "$power_state"; then
@@ -42,6 +56,7 @@ printf 'EMULATOR_STAY_ON=ENABLED\nEMULATOR_WAKEFULNESS=AWAKE\n' > "$results_dir/
 
 # Inspect the generated test package pairing before any test installation/launch.
 assemble_status=0
+checkpoint G
 ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest || assemble_status=$?
 if (( assemble_status != 0 )); then
   printf 'RESULT=BUILD_FAILURE\nREASON=DEBUG_TEST_ASSEMBLY_FAILED\nGRADLE_EXIT=%s\n' "$assemble_status" > "$results_dir/run-info.txt"
@@ -127,6 +142,7 @@ fi
 # Run only this deterministic, local-fixture instrumentation suite on the disposable emulator.
 # Capture status and continue to retrieve any diagnostics/renders emitted before a test failure.
 gradle_status=0
+checkpoint H
 ./gradlew :app:connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=eu.kanade.presentation.tsuzuki.DefaultSkinRenderedValidationInstrumentedTest \
   -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \

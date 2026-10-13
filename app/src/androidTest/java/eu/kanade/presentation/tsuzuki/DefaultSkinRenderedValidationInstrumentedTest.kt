@@ -1688,6 +1688,7 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         val context = instrumentation.targetContext
         val power = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
         val keyguard = context.getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        val deviceSnapshot = timeoutDeviceSnapshot(UiDevice.getInstance(instrumentation))
         val directory = artifactDirectory()
         val stem = "diagnostic-host-${SystemClock.uptimeMillis()}"
         val screenshot = File(directory, "$stem.png")
@@ -1700,11 +1701,57 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             "screenInteractive=${power.isInteractive}",
             "keyguardLocked=${keyguard.isKeyguardLocked}",
             "deviceLocked=${keyguard.isDeviceLocked}",
+            deviceSnapshot,
             "lastTags=${latest.map { it.tag }}",
             "screenshot=$screenshotResult",
         ).joinToString("\n")
         File(directory, "$stem.txt").writeText(details)
         return details.replace('\n', ';')
+    }
+
+    private fun timeoutDeviceSnapshot(device: UiDevice): String {
+        fun shell(command: String): String = runCatching {
+            device.executeShellCommand(command).trim().take(1_600)
+        }.getOrElse { "UNAVAILABLE:${it.javaClass.simpleName}:${it.message}" }
+
+        val home = shell(
+            "cmd package resolve-activity --brief -a android.intent.action.MAIN " +
+                "-c android.intent.category.HOME",
+        ).lineSequence().lastOrNull { '/' in it }.orEmpty()
+        val homePackage = home.substringBefore('/').takeIf { it.matches(Regex("[A-Za-z0-9_.]+")) }
+        val focusedCommand = "dumpsys window windows | grep -E " +
+            "'mCurrentFocus|mFocusedApp|mFocusedWindow|mObscuringWindow' | head -n 12"
+        val activitiesCommand = "dumpsys activity activities | grep -E " +
+            "'topResumedActivity|mResumedActivity|ResumedActivity|mFocusedActivity' | head -n 16"
+        val powerCommand = "dumpsys power | grep -E " +
+            "'mWakefulness|Wakefulness|mInteractive|Display Power' | head -n 12"
+        val keyguardCommand = "dumpsys window policy | grep -E " +
+            "'mShowingLockscreen|mKeyguard|mDreamingLockscreen' | head -n 12"
+        val homeDiagnostics = if (homePackage != null) {
+            val lastAnrCommand = "dumpsys activity lastanr | grep -i -C 2 -E " +
+                "'$homePackage|ANR|not responding' | tail -n 20"
+            val logcatCommand = "logcat -b main -b system -b events -d -t 500 | grep -i -E " +
+                "'$homePackage|ActivityTaskManager|WindowManager|am_anr|InputDispatcher|not responding|launcher' " +
+                "| tail -n 50"
+            listOf(
+                "homePid=${shell("pidof $homePackage")}",
+                "homeProcesses=${shell("ps -A | grep -F $homePackage | head -n 8")}",
+                "homeExitInfo=${shell("dumpsys activity exit-info $homePackage | head -n 24")}",
+                "homeLastAnr=${shell(lastAnrCommand)}",
+                "filteredLogcat=${shell(logcatCommand)}",
+            )
+        } else {
+            listOf("homeDiagnostics=UNAVAILABLE_HOME_COMPONENT")
+        }
+        return (listOf(
+            "homeComponent=$home",
+            "focusedWindows=${shell(focusedCommand)}",
+            "topActivities=${shell(activitiesCommand)}",
+            "power=${shell(powerCommand)}",
+            "keyguard=${shell(keyguardCommand)}",
+            "deviceProvisioned=${shell("settings get global device_provisioned")}",
+            "userSetupComplete=${shell("settings get secure user_setup_complete")}",
+        ) + homeDiagnostics).joinToString("\n")
     }
 
     private fun assertRectApproximately(actual: Rect, expected: Rect) {

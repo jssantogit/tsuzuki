@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi
 
 import android.content.res.Configuration
 import android.os.Bundle
+import android.os.SystemClock
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -40,8 +42,39 @@ class DefaultSkinValidationActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        recordLifecycle("onCreate")
         composeView = ComposeView(this)
         setContentView(composeView)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        recordLifecycle("onStart")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        recordLifecycle("onResume")
+    }
+
+    override fun onPause() {
+        recordLifecycle("onPause")
+        super.onPause()
+    }
+
+    override fun onStop() {
+        recordLifecycle("onStop")
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        recordLifecycle("onDestroy")
+        super.onDestroy()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        recordLifecycle("windowFocusChanged", hasFocus)
     }
 
     fun setValidationContent(
@@ -88,5 +121,24 @@ class DefaultSkinValidationActivity : ComponentActivity() {
         validationSceneIdForEvidence = sceneId
         validationSceneGeneration += 1
         validationSceneTag = "validation_scene_${validationSceneGeneration}_$sceneId"
+        recordLifecycle("sceneUpdated")
+    }
+
+    private fun recordLifecycle(event: String, focus: Boolean = hasWindowFocus()) {
+        val line = "event=$event wallMs=${System.currentTimeMillis()} " +
+            "monotonicMs=${SystemClock.elapsedRealtime()} focus=$focus " +
+            "scene=$validationSceneIdForEvidence generation=$validationSceneGeneration " +
+            "theme=$validationThemeForEvidence"
+        Log.i(LIFECYCLE_LOG_TAG, line)
+        runCatching {
+            val file = getExternalFilesDir(null)?.resolve("default-skin-rendered/validation-host-lifecycle.log")
+                ?: return
+            file.parentFile?.mkdirs()
+            file.appendText("$line\n")
+        }
+    }
+
+    private companion object {
+        const val LIFECYCLE_LOG_TAG = "DefaultSkinValidationHost"
     }
 }

@@ -31,6 +31,10 @@ For unclipped geometry, the test snapshots `Rect(positionInRoot, size)` from eac
 
 The Settings test exercises the root composable and real routes, but it does not validate every destination's internals. Appearance renders the actual content for each Theme Mode but does not recreate the test Activity or validate platform window-bar behavior. Integrations tests the actual production root/detail row composables in isolation, not the entire screen's navigation/view-model lifecycle. Search exercises the real reusable compact card, not the discovery/search data pipeline. Details exercises the actual Hero, not the entire detail navigation/runtime screen. These are explicit test boundaries.
 
+## Emulator failure diagnostics
+
+The CI runner appends timestamped checkpoints A–H around its existing stay-awake, wake, keyguard-dismiss, menu, assembly, and instrumentation steps to `.github/results/default-skin-rendered/emulator-checkpoints.txt`. The preflight input sequence and timing are unchanged. Each checkpoint attempts a best-effort, bounded snapshot against the explicitly selected `emulator-*` serial: dynamically resolved HOME component/package, focused/resumed windows, power/keyguard/setup state, launcher process/exit-info/last-ANR data, and a filtered tail of the existing logcat buffer. Diagnostic command failures are recorded as unavailable and do not replace the build/test result; logs are never cleared. The debug-only validation Activity also records lifecycle and window-focus transitions with wall-clock and monotonic timestamps, scene ID/generation, and theme to `validation-host-lifecycle.log` and Logcat. A fixture timeout adds a bounded device-state snapshot and a diagnostic-only screenshot. These records support timeline correlation; by themselves they do not establish why a launcher or host lost focus.
+
 ## Running and reviewing evidence
 
 Run on a configured disposable emulator:
