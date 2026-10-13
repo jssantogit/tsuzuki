@@ -26,13 +26,62 @@ if (( assemble_status != 0 )); then
 fi
 sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
 aapt="$(find "$sdk_root/build-tools" -type f -name aapt -print 2>/dev/null | sort -V | tail -n 1)"
-target_apk='app/build/outputs/apk/debug/app-debug.apk'
-test_apk='app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'
-if [[ -z "$sdk_root" || -z "$aapt" || ! -f "$target_apk" || ! -f "$test_apk" ]]; then
+package_metadata="$(python3 - app/build/outputs/apk <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1]).resolve()
+matches = {"app": [], "test": []}
+for metadata_path in sorted(root.rglob("output-metadata.json")):
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        continue
+    artifact_type = metadata.get("artifactType", {}).get("type")
+    if artifact_type != "APK":
+        continue
+    relative_parts = metadata_path.relative_to(root).parts
+    package_kind = "test" if "androidTest" in relative_parts else "app"
+    variant = metadata.get("variantName")
+    if package_kind == "app" and variant != "debug":
+        continue
+    if package_kind == "test" and variant not in {"debug", "debugAndroidTest"}:
+        continue
+    # The app enables ABI splits; select only the unique unfiltered universal APK.
+    elements = [element for element in metadata.get("elements", []) if not element.get("filters", [])]
+    if len(elements) != 1 or not elements[0].get("outputFile"):
+        continue
+    apk_path = (metadata_path.parent / elements[0]["outputFile"]).resolve()
+    if not apk_path.is_relative_to(root) or not apk_path.is_file():
+        continue
+    matches[package_kind].append(apk_path)
+
+if len(matches["app"]) != 1 or len(matches["test"]) != 1:
+    print(
+        "Expected exactly one debug app APK and one debug instrumentation APK "
+        f"from output metadata; found app={len(matches['app'])}, test={len(matches['test'])}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+print(matches["app"][0])
+print(matches["test"][0])
+PY
+)"
+metadata_status=$?
+if [[ -z "$sdk_root" || -z "$aapt" || "$metadata_status" != 0 ]]; then
   printf 'RESULT=BLOCKED\nREASON=DEBUG_INSTRUMENTATION_PACKAGE_NOT_FOUND\n' > "$results_dir/run-info.txt"
   echo '::error::Could not inspect the generated debug and instrumentation packages'
   exit 1
 fi
+mapfile -t package_apks <<< "$package_metadata"
+if (( ${#package_apks[@]} != 2 )); then
+  printf 'RESULT=BLOCKED\nREASON=DEBUG_INSTRUMENTATION_PACKAGE_NOT_FOUND\n' > "$results_dir/run-info.txt"
+  echo '::error::Generated package metadata did not identify one app and one test APK'
+  exit 1
+fi
+target_apk="${package_apks[0]}"
+test_apk="${package_apks[1]}"
 target_package="$("$aapt" dump badging "$target_apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -n 1)"
 test_package="$("$aapt" dump badging "$test_apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -n 1)"
 runner='androidx.test.runner.AndroidJUnitRunner'

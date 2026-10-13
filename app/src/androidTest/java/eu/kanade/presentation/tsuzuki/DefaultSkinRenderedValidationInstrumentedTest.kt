@@ -702,9 +702,27 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 else -> {
                     val artwork = requireNotNull(fixture.artwork)
                     val dimensions = when (artwork) {
-                        "two-thirds" -> ArtworkFixture(artwork, 300, 450, whitespace = false, darkArtwork = fixture.dark)
-                        "wide" -> ArtworkFixture(artwork, 600, 200, whitespace = false, darkArtwork = fixture.dark)
-                        else -> ArtworkFixture(artwork, 200, 600, whitespace = false, darkArtwork = fixture.dark)
+                        "two-thirds" -> ArtworkFixture(
+                            artwork,
+                            300,
+                            450,
+                            whitespace = false,
+                            darkArtwork = fixture.dark,
+                        )
+                        "wide" -> ArtworkFixture(
+                            artwork,
+                            600,
+                            200,
+                            whitespace = false,
+                            darkArtwork = fixture.dark,
+                        )
+                        else -> ArtworkFixture(
+                            artwork,
+                            200,
+                            600,
+                            whitespace = false,
+                            darkArtwork = fixture.dark,
+                        )
                     }
                     createFixture(activity.cacheDir, dimensions).toURI().toString()
                 }
