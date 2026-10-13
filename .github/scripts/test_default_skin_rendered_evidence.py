@@ -50,8 +50,22 @@ class DefaultSkinRenderedEvidenceTest(unittest.TestCase):
 
     def test_zero_test_report_is_rejected(self) -> None:
         (self.junit / "TEST-empty.xml").write_text("<testsuite tests='0' />", encoding="utf-8")
-        with self.assertRaises(EvidenceError):
+        with self.assertRaises(EvidenceError) as raised:
             verify(self.junit, self.renders)
+        self.assertEqual("INFRASTRUCTURE_FAILURE", raised.exception.result)
+
+    def test_executed_instrumented_assertion_failure_is_not_an_infrastructure_failure(self) -> None:
+        self.write_evidence()
+        path = self.junit / "TEST-rendered.xml"
+        tree = ET.parse(path)
+        case = next(tree.getroot().iter("testcase"))
+        ET.SubElement(case, "failure", message="fixture assertion failed")
+        tree.write(path, encoding="utf-8", xml_declaration=True)
+
+        with self.assertRaises(EvidenceError) as raised:
+            verify(self.junit, self.renders)
+
+        self.assertEqual("VALIDATION_FAILURE", raised.exception.result)
 
     def test_incomplete_render_is_rejected(self) -> None:
         self.write_evidence()

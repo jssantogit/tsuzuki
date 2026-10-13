@@ -46,13 +46,18 @@ REQUIRED_CSVS = {
 
 
 class EvidenceError(RuntimeError):
-    pass
+    def __init__(self, message: str, result: str = "VALIDATION_FAILURE") -> None:
+        super().__init__(message)
+        self.result = result
 
 
 def verify(junit_dir: Path, render_dir: Path) -> dict[str, int]:
     junit_files = sorted(junit_dir.glob("*.xml"))
     if not junit_files:
-        raise EvidenceError("No JUnit XML was produced; instrumentation did not demonstrate execution")
+        raise EvidenceError(
+            "No JUnit XML was produced; instrumentation did not demonstrate execution",
+            "INFRASTRUCTURE_FAILURE",
+        )
 
     test_names: set[str] = set()
     test_classes: set[str] = set()
@@ -61,7 +66,10 @@ def verify(junit_dir: Path, render_dir: Path) -> dict[str, int]:
         try:
             root = ET.parse(path).getroot()
         except ET.ParseError as exc:
-            raise EvidenceError(f"Malformed JUnit XML: {path.name}: {exc}") from exc
+            raise EvidenceError(
+                f"Malformed JUnit XML: {path.name}: {exc}",
+                "INFRASTRUCTURE_FAILURE",
+            ) from exc
         for case in root.iter("testcase"):
             test_count += 1
             test_names.add(case.attrib.get("name", ""))
@@ -72,11 +80,25 @@ def verify(junit_dir: Path, render_dir: Path) -> dict[str, int]:
 
     missing_tests = sorted(REQUIRED_TESTS - test_names)
     if missing_tests:
-        raise EvidenceError(f"Required instrumented tests were not reported: {missing_tests}")
+        raise EvidenceError(
+            f"Required instrumented tests were not reported: {missing_tests}",
+            "INFRASTRUCTURE_FAILURE",
+        )
     if test_classes != {REQUIRED_TEST_CLASS}:
-        raise EvidenceError(f"Unexpected instrumented test classes: {sorted(test_classes)}")
-    if failures or errors or skipped:
-        raise EvidenceError(f"JUnit was not green: tests={test_count}, failures={failures}, errors={errors}, skipped={skipped}")
+        raise EvidenceError(
+            f"Unexpected instrumented test classes: {sorted(test_classes)}",
+            "INFRASTRUCTURE_FAILURE",
+        )
+    if failures or errors:
+        raise EvidenceError(
+            f"Instrumented assertions failed: tests={test_count}, failures={failures}, errors={errors}",
+            "VALIDATION_FAILURE",
+        )
+    if skipped:
+        raise EvidenceError(
+            f"Instrumented cases were skipped: tests={test_count}, skipped={skipped}",
+            "INFRASTRUCTURE_FAILURE",
+        )
 
     invalid_pngs: list[str] = []
     for name in sorted(REQUIRED_PNGS):
@@ -169,7 +191,7 @@ def main() -> int:
         result = verify(args.junit_dir, args.render_dir)
     except EvidenceError as exc:
         args.summary.parent.mkdir(parents=True, exist_ok=True)
-        args.summary.write_text(f"RESULT=FAIL\nREASON={exc}\n", encoding="utf-8")
+        args.summary.write_text(f"RESULT={exc.result}\nREASON={exc}\n", encoding="utf-8")
         print(f"::error::{exc}")
         return 1
     args.summary.parent.mkdir(parents=True, exist_ok=True)

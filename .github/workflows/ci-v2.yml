@@ -420,6 +420,68 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Preinstall and verify rendered-test emulator image
+        shell: bash
+        run: |
+          set -uo pipefail
+          results_dir='.github/results/default-skin-rendered'
+          mkdir -p "$results_dir"
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          package='system-images;android-35;google_apis;x86_64'
+          image_dir="$sdk_root/system-images/android-35/google_apis/x86_64"
+          sdkmanager=''
+          if [[ -n "$sdk_root" && -d "$sdk_root/cmdline-tools" ]]; then
+            sdkmanager="$(find "$sdk_root/cmdline-tools" -type f -name sdkmanager -print 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          if [[ -z "$sdk_root" || ! -x "$sdkmanager" ]]; then
+            printf 'RESULT=INFRASTRUCTURE_FAILURE\nREASON=SDKMANAGER_NOT_FOUND\n' > "$results_dir/run-info.txt"
+            echo '::error::Could not locate the Android SDK manager for the rendered-test emulator image'
+            exit 1
+          fi
+
+          package_operation_archives() {
+            if [[ -d "$sdk_root/temp" ]]; then
+              find "$sdk_root/temp" -maxdepth 1 -type f -name 'PackageOperation*.zip' -print | sort
+            fi
+          }
+
+          install_and_verify_image() {
+            attempt="$1"
+            log_file="$results_dir/sdkmanager-attempt-$attempt.log"
+            "$sdkmanager" --install "$package" > "$log_file" 2>&1
+            install_status=$?
+            if (( install_status != 0 )); then
+              cat "$log_file"
+              return "$install_status"
+            fi
+            if [[ ! -s "$image_dir/source.properties" || ! -s "$image_dir/system.img" ]]; then
+              echo 'SDK manager completed, but the emulator image is incomplete.'
+              cat "$log_file"
+              return 1
+            fi
+          }
+
+          archives_before="$(package_operation_archives)"
+          if ! install_and_verify_image 1; then
+            echo '::warning::First emulator-image install was incomplete; clearing its partial image and transient package-operation archives before one clean retry.'
+            rm -rf "$image_dir"
+            while IFS= read -r archive; do
+              [[ -z "$archive" ]] && continue
+              if ! grep -Fxq "$archive" <<< "$archives_before"; then
+                rm -f -- "$archive"
+              fi
+            done < <(package_operation_archives)
+            if ! install_and_verify_image 2; then
+              printf 'RESULT=INFRASTRUCTURE_FAILURE\nREASON=EMULATOR_IMAGE_INSTALL_FAILED_AFTER_ONE_RETRY\nPACKAGE=%s\n' \
+                "$package" > "$results_dir/run-info.txt"
+              echo '::error::Could not install and verify the rendered-test emulator image after one clean retry'
+              exit 1
+            fi
+          fi
+          printf 'SYSTEM_IMAGE=%s\nSOURCE_PROPERTIES=%s\n' \
+            "$package" "$image_dir/source.properties" > "$results_dir/emulator-image.txt"
+          echo 'Verified API 35 Google APIs x86_64 system image for the isolated rendered-test emulator.' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run deterministic Default Skin instrumentation and collect evidence
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
@@ -430,13 +492,23 @@ jobs:
           disable-animations: true
           script: bash .github/scripts/run_default_skin_rendered_validation.sh
 
+      - name: Report rendered validation outcome
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f .github/results/default-skin-rendered/run-info.txt ]]; then
+            cat .github/results/default-skin-rendered/run-info.txt
+          else
+            echo '::warning::Rendered validation produced no runner status file; inspect emulator provisioning and startup output above.'
+          fi
+
       - name: Upload rendered and measured evidence (not a golden approval)
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: default-skin-rendered-${{ github.sha }}
           path: .github/results/default-skin-rendered/**
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
 
   gate:

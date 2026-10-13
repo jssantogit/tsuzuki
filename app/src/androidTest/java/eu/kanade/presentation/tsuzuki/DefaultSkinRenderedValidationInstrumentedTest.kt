@@ -144,7 +144,10 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             }
             instrumentation.waitForIdleSync()
             if (data != null) {
-                assertTrue("Coil did not finish fixture ${fixture.name}", terminalLoadEvents.await(10, TimeUnit.SECONDS))
+                assertTrue(
+                    "Coil did not finish fixture ${fixture.name}",
+                    terminalLoadEvents.await(10, TimeUnit.SECONDS),
+                )
             }
             if (fixture.name == "failed") {
                 assertTrue(foregroundEvents.any { it is MangaCoverLoadEvent.Failed && !it.willFallback })
@@ -191,14 +194,27 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 val markerPixels = awaitScreenPixels(activity, listOf(leftX to centerY, rightX to centerY)) { pixels ->
                     pixels == listOf(leftMarker, rightMarker)
                 }
-                assertEquals("Fit must preserve the complete source's left and right markers", listOf(leftMarker, rightMarker), markerPixels)
-                measurements += "wide-markers,${Integer.toHexString(markerPixels[0])},${Integer.toHexString(markerPixels[1])}"
+                assertEquals(
+                    "Fit must preserve the complete source's left and right markers",
+                    listOf(leftMarker, rightMarker),
+                    markerPixels,
+                )
+                measurements += listOf(
+                    "wide-markers",
+                    Integer.toHexString(markerPixels[0]),
+                    Integer.toHexString(markerPixels[1]),
+                ).joinToString(",")
             }
 
             val screenshot = File(artifactDirectory, "search-${fixture.name}.png")
             saveScreenshot(screenshot)
             assertTrue("Expected a non-empty screenshot for ${fixture.name}", screenshot.length() > 0L)
-                measurements += "${fixture.name},${frame.bounds.toCsv()},${frame.layoutBounds.toCsv()},${foreground.layoutBounds.toCsv()}"
+            measurements += listOf(
+                fixture.name,
+                frame.bounds.toCsv(),
+                frame.layoutBounds.toCsv(),
+                foreground.layoutBounds.toCsv(),
+            ).joinToString(",")
 
             val location = screenLocation(activity)
             UiDevice.getInstance(instrumentation).click(
@@ -305,7 +321,13 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 }
                 if (foundRows.containsAll(expectedRows.keys)) return@repeat
                 val device = UiDevice.getInstance(instrumentation)
-                device.swipe(device.displayWidth / 2, device.displayHeight * 3 / 4, device.displayWidth / 2, device.displayHeight / 4, 12)
+                device.swipe(
+                    device.displayWidth / 2,
+                    device.displayHeight * 3 / 4,
+                    device.displayWidth / 2,
+                    device.displayHeight / 4,
+                    12,
+                )
                 instrumentation.waitForIdleSync()
             }
         }
@@ -334,9 +356,13 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             foundSurfaces,
         )
         assertEquals(7, foundDividers.size)
-        assertTrue("Need measured adjacent group and label/surface pairs", measuredInterGroupGaps.isNotEmpty() && measuredLabelSurfaceGaps.isNotEmpty())
         assertTrue(
-            "Inter-group rhythm should exceed label-to-surface gap: inter=$measuredInterGroupGaps intra=$measuredLabelSurfaceGaps",
+            "Need measured adjacent group and label/surface pairs",
+            measuredInterGroupGaps.isNotEmpty() && measuredLabelSurfaceGaps.isNotEmpty(),
+        )
+        assertTrue(
+            "Inter-group rhythm should exceed label-to-surface gap " +
+                "(inter=$measuredInterGroupGaps intra=$measuredLabelSurfaceGaps)",
             measuredInterGroupGaps.min() > measuredLabelSurfaceGaps.max(),
         )
         writeMeasurements(
@@ -347,7 +373,14 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                     val key = surface.removePrefix("settings_surface_")
                     val rows = expectedRows.filterValues { it == key }.keys.joinToString("|")
                     val dividerCount = foundDividers.count { it.startsWith("settings_divider_${key}_") }
-                    "settings_heading_$key,$surface,$rows,$dividerCount,${measuredInterGroupGaps.joinToString("|")},${measuredLabelSurfaceGaps.joinToString("|")}"
+                    listOf(
+                        "settings_heading_$key",
+                        surface,
+                        rows,
+                        dividerCount,
+                        measuredInterGroupGaps.joinToString("|"),
+                        measuredLabelSurfaceGaps.joinToString("|"),
+                    ).joinToString(",")
                 })
             },
         )
@@ -382,8 +415,12 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             val bitmap = requireNotNull(UiDevice.getInstance(instrumentation).takeScreenshot())
             try {
                 FileOutputStream(screenshot).use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-                val canvasPixel = bitmap.getPixel(location[0] + canvas.left.toInt() + 2, location[1] + canvas.center.y.toInt())
-                val surfacePixel = bitmap.getPixel(location[0] + surface.right.toInt() - 3, location[1] + surface.center.y.toInt())
+                val canvasX = location[0] + canvas.left.toInt() + 2
+                val canvasY = location[1] + canvas.center.y.toInt()
+                val surfaceX = location[0] + surface.right.toInt() - 3
+                val surfaceY = location[1] + surface.center.y.toInt()
+                val canvasPixel = bitmap.getPixel(canvasX, canvasY)
+                val surfacePixel = bitmap.getPixel(surfaceX, surfaceY)
                 assertEquals(
                     "${fixture.name} canvas sample",
                     fixture.canvasColor,
@@ -439,13 +476,22 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                     candidate.role == Role.RadioButton && rectsOverlap(candidate.bounds, preview.bounds)
                 }
                 assertTrue("Theme preview is missing radio semantics: ${preview.tag}", correspondingChoice.isNotEmpty())
-                assertTrue("Theme preview must announce a real theme name", correspondingChoice.any { it.contentDescription.isNotEmpty() })
+                assertTrue(
+                    "Theme preview must announce a real theme name",
+                    correspondingChoice.any { it.contentDescription.isNotEmpty() },
+                )
                 assertTrue("Theme preview must remain selectable", correspondingChoice.any { it.hasClickAction })
             }
             val selectedChoices = nodes.filter { it.role == Role.RadioButton && it.selected == true }
             assertEquals("Exactly one real theme should be selected", 1, selectedChoices.size)
-            assertTrue("Theme Mode must remain a separate single-choice preference", nodes.any { it.role == Role.Button && it.text.isNotEmpty() })
-            assertTrue("Appearance must retain its real switch preferences, including AMOLED", nodes.any { it.role == Role.Switch })
+            assertTrue(
+                "Theme Mode must remain a separate single-choice preference",
+                nodes.any { it.role == Role.Button && it.text.isNotEmpty() },
+            )
+            assertTrue(
+                "Appearance must retain its real switch preferences, including AMOLED",
+                nodes.any { it.role == Role.Switch },
+            )
             saveScreenshot(File(artifactDirectory, if (dark) "appearance-dark.png" else "appearance-light.png"))
 
             val expectedThemeKeys = AppTheme.entries
@@ -472,7 +518,11 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 instrumentation.waitForIdleSync()
                 visible = semanticsNodes(activity).filter { it.tag.startsWith("appearance_theme_preview_") }
             }
-            assertEquals("Every available real theme must remain represented/selectable", expectedThemeKeys, observedThemeKeys)
+            assertEquals(
+                "Every available real theme must remain represented/selectable",
+                expectedThemeKeys,
+                observedThemeKeys,
+            )
         }
 
         val preferences = activity.appGraph.uiPreferences
@@ -501,8 +551,13 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 }
                 val modeTag = modeNodes.singleNode("appearance_theme_mode")
                 val modeRow = modeNodes.singleOrNull { it.tag == "appearance_theme_mode" && it.role == Role.Button }
-                    ?: modeNodes.single { it.role == Role.Button && rectsOverlap(it.layoutBounds, modeTag.layoutBounds) }
-                assertTrue("Theme Mode is a single-choice setting", modeRow.role == Role.Button && modeRow.hasClickAction)
+                    ?: modeNodes.single {
+                        it.role == Role.Button && rectsOverlap(it.layoutBounds, modeTag.layoutBounds)
+                    }
+                assertTrue(
+                    "Theme Mode is a single-choice setting",
+                    modeRow.role == Role.Button && modeRow.hasClickAction,
+                )
                 val modeTitle = modeNodes.single { themeModeTitle in it.text }
                 assertRectContains(modeTag.layoutBounds, modeTitle.layoutBounds)
                 val currentValue = modeNodes.single { modeLabels.getValue(mode) in it.text }
@@ -510,9 +565,15 @@ class DefaultSkinRenderedValidationInstrumentedTest {
 
                 val amoledTag = modeNodes.singleNode("appearance_amoled")
                 val amoled = modeNodes.singleOrNull { it.tag == "appearance_amoled" && it.role == Role.Switch }
-                    ?: modeNodes.single { it.role == Role.Switch && rectsOverlap(it.layoutBounds, amoledTag.layoutBounds) }
+                    ?: modeNodes.single {
+                        it.role == Role.Switch && rectsOverlap(it.layoutBounds, amoledTag.layoutBounds)
+                    }
                 assertTrue("AMOLED remains an accessible preference switch", amoled.role == Role.Switch)
-                assertEquals("AMOLED's stored value survives disabled state", ToggleableState.On, amoled.toggleableState)
+                assertEquals(
+                    "AMOLED's stored value survives disabled state",
+                    ToggleableState.On,
+                    amoled.toggleableState,
+                )
                 assertEquals("AMOLED is disabled only for Light mode", mode != ThemeMode.LIGHT, amoled.enabled)
                 saveScreenshot(File(artifactDirectory, "appearance-mode-${mode.name.lowercase()}.png"))
 
@@ -582,7 +643,8 @@ class DefaultSkinRenderedValidationInstrumentedTest {
 
             val rootNodes = awaitSemantics(activity) { nodes ->
                 listOf("mal", "kitsu", "komga").all { id ->
-                    nodes.any { it.tag == "integration_root_row_$id" } && nodes.any { it.tag == "integration_status_$id" }
+                    nodes.any { it.tag == "integration_root_row_$id" } &&
+                        nodes.any { it.tag == "integration_status_$id" }
                 }
             }
             assertIntegrationStatus(activity, rootNodes, "mal", MR.strings.tsuzuki_integration_status_not_configured)
@@ -590,11 +652,15 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             assertIntegrationStatus(activity, rootNodes, "komga", MR.strings.tsuzuki_integration_status_disabled)
             assertTrue(
                 "Every Integration root row is one navigation action",
-                rootNodes.filter { it.tag.startsWith("integration_root_row_") }.all { it.hasClickAction && it.role == Role.Button },
+                rootNodes.filter { it.tag.startsWith("integration_root_row_") }.all { node ->
+                    node.hasClickAction && node.role == Role.Button
+                },
             )
             assertTrue(
                 "Status is informational text, not an interaction",
-                rootNodes.filter { it.tag.startsWith("integration_status_") }.all { !it.hasClickAction && it.text.isNotEmpty() },
+                rootNodes.filter { it.tag.startsWith("integration_status_") }.all { node ->
+                    !node.hasClickAction && node.text.isNotEmpty()
+                },
             )
             assertTrue("No enablement switch may be exposed on root", rootNodes.none { it.role == Role.Switch })
             saveScreenshot(File(artifactDirectory(), "integrations-root.png"))
@@ -622,8 +688,14 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 nodes.any { it.tag == "integration_root_row_mal" } && nodes.any { it.tag == "integration_status_mal" }
             }
             assertIntegrationStatus(activity, configuredNodes, "mal", MR.strings.tsuzuki_integration_status_configured)
-            assertTrue("Configured MAL remains a root navigation row", configuredNodes.singleNode("integration_root_row_mal").hasClickAction)
-            assertTrue("Configured root still has no enablement switch", configuredNodes.none { it.role == Role.Switch })
+            assertTrue(
+                "Configured MAL remains a root navigation row",
+                configuredNodes.singleNode("integration_root_row_mal").hasClickAction,
+            )
+            assertTrue(
+                "Configured root still has no enablement switch",
+                configuredNodes.none { it.role == Role.Switch },
+            )
             saveScreenshot(File(artifactDirectory(), "integrations-mal-configured.png"))
 
             val changed = CountDownLatch(1)
@@ -673,7 +745,7 @@ class DefaultSkinRenderedValidationInstrumentedTest {
     }
 
     @Test
-    fun canonicalDetailsHeroSharesMeasuredArtworkFadeBoundsAndFlowsLongTitleBeforeFollowingContent() = withHost { activity ->
+    fun canonicalDetailsHeroUsesSharedBoundsAndFlowsLongTitle() = withHost { activity ->
         val cases = listOf(
             HeroFixture("short-dark", "Re:Zero", dark = true, artwork = "two-thirds"),
             HeroFixture(
@@ -762,7 +834,10 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                                 }
                             },
                         )
-                        Text("First content after Hero", Modifier.padding(16.dp).then(Modifier.testTag("hero_first_post_content")))
+                        Text(
+                            "First content after Hero",
+                            Modifier.padding(16.dp).then(Modifier.testTag("hero_first_post_content")),
+                        )
                     }
                 }
             }
@@ -792,7 +867,10 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             val nextContent = nodes.singleNode("hero_first_post_content")
             assertVerticalFlow(title.layoutBounds, metadata.layoutBounds, "metadata for ${fixture.name}")
             assertVerticalFlow(metadata.layoutBounds, nextContent.layoutBounds, "post-Hero content for ${fixture.name}")
-            assertTrue("post-Hero content overlaps Hero for ${fixture.name}", nextContent.layoutBounds.top >= hero.layoutBounds.bottom - 1f)
+            assertTrue(
+                "post-Hero content overlaps Hero for ${fixture.name}",
+                nextContent.layoutBounds.top >= hero.layoutBounds.bottom - 1f,
+            )
 
             val frame = nodes.singleNodeOrNull("canonical_details_hero_frame")
             val artwork = nodes.singleNodeOrNull("canonical_details_hero_artwork")
@@ -805,7 +883,10 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 assertNotNull("Fade layer missing for ${fixture.name}", fade)
             assertRectApproximately(requireNotNull(frame).layoutBounds, requireNotNull(artwork).layoutBounds)
             assertRectApproximately(requireNotNull(frame).layoutBounds, requireNotNull(fade).layoutBounds)
-                assertTrue("Decorative Hero image must not expose duplicate semantics", artwork?.contentDescription.isNullOrEmpty())
+                assertTrue(
+                    "Decorative Hero image must not expose duplicate semantics",
+                    artwork?.contentDescription.isNullOrEmpty(),
+                )
                 if (fixture.name == "short-dark" || fixture.name == "long-light") {
                     val location = screenLocation(activity)
                     val sampleX = location[0] + (frame.layoutBounds.left + frame.layoutBounds.width / 2f).toInt()
@@ -815,7 +896,9 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                         if (fixture.name == "short-dark") {
                             AndroidColor.red(color) in 20..100 && AndroidColor.green(color) in 20..100
                         } else {
-                            AndroidColor.red(color) > 180 && AndroidColor.green(color) in 140..235 && AndroidColor.blue(color) > 150
+                            AndroidColor.red(color) > 180 &&
+                                AndroidColor.green(color) in 140..235 &&
+                                AndroidColor.blue(color) > 150
                         }
                     }.single()
                     measurements += "${fixture.name}-painted-artwork,${Integer.toHexString(sample)}"
@@ -825,7 +908,13 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             val screenshot = File(artifactDirectory, "details-${fixture.name}.png")
             saveScreenshot(screenshot)
             assertTrue("Expected a non-empty Details render for ${fixture.name}", screenshot.length() > 0L)
-            measurements += "${fixture.name},${hero.layoutBounds.toCsv()},${title.layoutBounds.toCsv()},${metadata.layoutBounds.toCsv()},${nextContent.layoutBounds.toCsv()}"
+            measurements += listOf(
+                fixture.name,
+                hero.layoutBounds.toCsv(),
+                title.layoutBounds.toCsv(),
+                metadata.layoutBounds.toCsv(),
+                nextContent.layoutBounds.toCsv(),
+            ).joinToString(",")
         }
 
         File(artifactDirectory, "details-measurements.csv").writeText(
@@ -848,7 +937,11 @@ class DefaultSkinRenderedValidationInstrumentedTest {
     private fun semanticsNodes(activity: DefaultSkinValidationActivity): List<NodeSnapshot> {
         var result = emptyList<NodeSnapshot>()
         instrumentation.runOnMainSync {
-            if (!activity.composeView.isAttachedToWindow || !activity.composeView.isLaidOut || !activity.composeView.hasWindowFocus()) {
+            if (
+                !activity.composeView.isAttachedToWindow ||
+                !activity.composeView.isLaidOut ||
+                !activity.composeView.hasWindowFocus()
+            ) {
                 return@runOnMainSync
             }
             val root = activity.findViewRootForTest()
@@ -1030,7 +1123,10 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         assertTrue("left differs: $actual vs $expected", kotlin.math.abs(actual.left - expected.left) <= tolerance)
         assertTrue("top differs: $actual vs $expected", kotlin.math.abs(actual.top - expected.top) <= tolerance)
         assertTrue("right differs: $actual vs $expected", kotlin.math.abs(actual.right - expected.right) <= tolerance)
-        assertTrue("bottom differs: $actual vs $expected", kotlin.math.abs(actual.bottom - expected.bottom) <= tolerance)
+        assertTrue(
+            "bottom differs: $actual vs $expected",
+            kotlin.math.abs(actual.bottom - expected.bottom) <= tolerance,
+        )
     }
 
     private fun assertRatio(bounds: Rect, expected: Float) {
@@ -1080,7 +1176,13 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             paint.color = AndroidColor.rgb(246, 49, 166)
             canvas.drawRect(0f, fixture.height * 0.25f, fixture.width * 0.2f, fixture.height * 0.75f, paint)
             paint.color = AndroidColor.rgb(25, 221, 242)
-            canvas.drawRect(fixture.width * 0.8f, fixture.height * 0.25f, fixture.width.toFloat(), fixture.height * 0.75f, paint)
+            canvas.drawRect(
+                fixture.width * 0.8f,
+                fixture.height * 0.25f,
+                fixture.width.toFloat(),
+                fixture.height * 0.75f,
+                paint,
+            )
         }
         val tone = if (fixture.darkArtwork) "dark" else "light"
         val markers = if (markerBands) "-markers" else ""
