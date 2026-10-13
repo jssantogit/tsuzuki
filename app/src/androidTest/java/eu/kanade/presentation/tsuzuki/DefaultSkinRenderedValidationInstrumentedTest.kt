@@ -1743,15 +1743,17 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         } else {
             listOf("homeDiagnostics=UNAVAILABLE_HOME_COMPONENT")
         }
-        return (listOf(
-            "homeComponent=$home",
-            "focusedWindows=${shell(focusedCommand)}",
-            "topActivities=${shell(activitiesCommand)}",
-            "power=${shell(powerCommand)}",
-            "keyguard=${shell(keyguardCommand)}",
-            "deviceProvisioned=${shell("settings get global device_provisioned")}",
-            "userSetupComplete=${shell("settings get secure user_setup_complete")}",
-        ) + homeDiagnostics).joinToString("\n")
+        return (
+            listOf(
+                "homeComponent=$home",
+                "focusedWindows=${shell(focusedCommand)}",
+                "topActivities=${shell(activitiesCommand)}",
+                "power=${shell(powerCommand)}",
+                "keyguard=${shell(keyguardCommand)}",
+                "deviceProvisioned=${shell("settings get global device_provisioned")}",
+                "userSetupComplete=${shell("settings get secure user_setup_complete")}",
+            ) + homeDiagnostics
+            ).joinToString("\n")
     }
 
     private fun assertRectApproximately(actual: Rect, expected: Rect) {
