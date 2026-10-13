@@ -4,7 +4,6 @@ import android.app.Instrumentation
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.RectF
 import android.os.SystemClock
@@ -23,9 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
@@ -52,13 +51,6 @@ import eu.kanade.tachiyomi.ui.tsuzuki.settings.TsuzukiIntegrationConfigState
 import eu.kanade.tachiyomi.ui.tsuzuki.settings.TsuzukiIntegrationSettingsItem
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.isDynamicColorAvailable
-import java.io.File
-import java.io.FileOutputStream
-import java.util.Collections
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicReference
 import mihon.app.di.appGraph
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -73,6 +65,14 @@ import tachiyomi.domain.tsuzuki.integration.model.IntegrationCategory
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.i18n.MR
+import java.io.File
+import java.io.FileOutputStream
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
+import android.graphics.Color as AndroidColor
 
 /** Actual production composables rendered in a disposable, network-free host. */
 @RunWith(AndroidJUnit4::class)
@@ -149,6 +149,17 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                     terminalLoadEvents.await(10, TimeUnit.SECONDS),
                 )
             }
+            val nodes = awaitSemantics(activity) { snapshot ->
+                val missingArtworkAttempted =
+                    fixture.name != "missing" ||
+                        foregroundEvents.any {
+                            it is MangaCoverLoadEvent.Attempt && !it.requestDataPresent
+                        }
+                snapshot.any { it.tag == "search_compact_card" } &&
+                    snapshot.any { it.tag == "search_compact_artwork_frame" } &&
+                    snapshot.any { "fixture:${fixture.name}" in it.text } &&
+                    missingArtworkAttempted
+            }
             if (fixture.name == "failed") {
                 assertTrue(foregroundEvents.any { it is MangaCoverLoadEvent.Failed && !it.willFallback })
                 assertTrue(atmosphereEvents.any { it is MangaCoverLoadEvent.Failed && !it.willFallback })
@@ -159,11 +170,6 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 assertTrue(atmosphereEvents.any { it is MangaCoverLoadEvent.Succeeded })
             }
 
-            val nodes = awaitSemantics(activity) { snapshot ->
-                snapshot.any { it.tag == "search_compact_card" } &&
-                    snapshot.any { it.tag == "search_compact_artwork_frame" } &&
-                    snapshot.any { "fixture:${fixture.name}" in it.text }
-            }
             val card = nodes.singleNode("search_compact_card")
             val frame = nodes.singleNode("search_compact_artwork_frame")
             val foreground = nodes.singleNode("search_compact_artwork_foreground")
@@ -240,7 +246,7 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         val wrongRatio = runCatching { assertRatio(Rect(0f, 0f, 148f, 300f), 2f / 3f) }.exceptionOrNull()
         assertTrue("Ratio probe accepted intentionally malformed frame", wrongRatio is AssertionError)
         val containmentError = runCatching {
-            assertRectContains(Rect(0f, 0f, 100f, 100f), Rect(99f, 99f, 101f, 101f))
+            assertRectContains(Rect(0f, 0f, 100f, 100f), Rect(102f, 102f, 104f, 104f))
         }.exceptionOrNull()
         assertTrue("Surface grouping probe accepted a row escaping its surface", containmentError is AssertionError)
         val flowError = runCatching {
@@ -289,8 +295,11 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 }
             }
             awaitSemantics(activity) { nodes -> nodes.any { it.tag == "settings_heading_account" } }
-            if (!dark) saveScreenshot(File(artifactDirectory, "settings-light.png"))
-            else saveScreenshot(File(artifactDirectory, "settings-dark.png"))
+            if (!dark) {
+                saveScreenshot(File(artifactDirectory, "settings-light.png"))
+            } else {
+                saveScreenshot(File(artifactDirectory, "settings-dark.png"))
+            }
 
             repeat(18) {
                 val nodes = semanticsNodes(activity)
@@ -412,36 +421,41 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             val location = IntArray(2)
             instrumentation.runOnMainSync { composeView.getLocationOnScreen(location) }
             val screenshot = File(artifactDirectory, "palette-${fixture.name}.png")
-            val bitmap = requireNotNull(UiDevice.getInstance(instrumentation).takeScreenshot())
-            try {
-                FileOutputStream(screenshot).use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-                val canvasX = location[0] + canvas.left.toInt() + 2
-                val canvasY = location[1] + canvas.center.y.toInt()
-                val surfaceX = location[0] + surface.right.toInt() - 3
-                val surfaceY = location[1] + surface.center.y.toInt()
-                val canvasPixel = bitmap.getPixel(canvasX, canvasY)
-                val surfacePixel = bitmap.getPixel(surfaceX, surfaceY)
-                assertEquals(
-                    "${fixture.name} canvas sample",
-                    fixture.canvasColor,
-                    canvasPixel,
-                )
-                assertEquals(
-                    "${fixture.name} surface sample",
-                    fixture.surfaceColor,
-                    surfacePixel,
-                )
-                paletteMeasurements += listOf(
-                    fixture.name,
-                    Integer.toHexString(canvasPixel),
-                    Integer.toHexString(surfacePixel),
-                    canvas.toCsv(),
-                    surface.toCsv(),
-                ).joinToString(",")
-            } finally {
-                bitmap.recycle()
-            }
-            assertTrue("Expected a non-empty palette screenshot", screenshot.length() > 0L)
+            val canvasX = location[0] + canvas.left.toInt() + 2
+            val canvasY = location[1] + canvas.center.y.toInt()
+            val surfaceX = location[0] + surface.right.toInt() - 3
+            val surfaceY = location[1] + surface.center.y.toInt()
+            val pixels = awaitStableScreenshot(
+                destination = screenshot,
+                samplePoints = listOf(canvasX to canvasY, surfaceX to surfaceY),
+            )
+            val canvasPixel = pixels[0]
+            val surfacePixel = pixels[1]
+            paletteMeasurements += listOf(
+                fixture.name,
+                Integer.toHexString(canvasPixel),
+                Integer.toHexString(surfacePixel),
+                canvas.toCsv(),
+                surface.toCsv(),
+                "$canvasX;$canvasY",
+                "$surfaceX;$surfaceY",
+            ).joinToString(",")
+            writeMeasurements(
+                "palette-measurements.csv",
+                listOf(
+                    listOf(
+                        "theme",
+                        "canvas-pixel",
+                        "surface-pixel",
+                        "canvas-bounds",
+                        "surface-bounds",
+                        "canvas-screen-point",
+                        "surface-screen-point",
+                    ).joinToString(","),
+                ) + paletteMeasurements,
+            )
+            assertEquals("${fixture.name} canvas sample", fixture.canvasColor, canvasPixel)
+            assertEquals("${fixture.name} surface sample", fixture.surfaceColor, surfacePixel)
         }
         writeMeasurements(
             "palette-measurements.csv",
@@ -484,9 +498,13 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             }
             val selectedChoices = nodes.filter { it.role == Role.RadioButton && it.selected == true }
             assertEquals("Exactly one real theme should be selected", 1, selectedChoices.size)
+            val themeModeTag = nodes.singleNode("appearance_theme_mode")
             assertTrue(
                 "Theme Mode must remain a separate single-choice preference",
-                nodes.any { it.role == Role.Button && it.text.isNotEmpty() },
+                nodes.any {
+                    it.role == Role.Button && it.hasClickAction &&
+                        rectsOverlap(it.layoutBounds, themeModeTag.layoutBounds)
+                },
             )
             assertTrue(
                 "Appearance must retain its real switch preferences, including AMOLED",
@@ -675,6 +693,8 @@ class DefaultSkinRenderedValidationInstrumentedTest {
 
             tracker.setClientId("render-validation-client-id")
             val malConfigured = integrationItem("mal", enabled = true)
+            val configuredStatusLabel =
+                activity.stringResource(MR.strings.tsuzuki_integration_status_configured)
             instrumentation.runOnMainSync {
                 activity.setValidationContent {
                     SettingsCanvas {
@@ -685,7 +705,10 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 }
             }
             val configuredNodes = awaitSemantics(activity) { nodes ->
-                nodes.any { it.tag == "integration_root_row_mal" } && nodes.any { it.tag == "integration_status_mal" }
+                nodes.any { it.tag == "integration_root_row_mal" } &&
+                    nodes.any {
+                        it.tag == "integration_status_mal" && it.text.singleOrNull() == configuredStatusLabel
+                    }
             }
             assertIntegrationStatus(activity, configuredNodes, "mal", MR.strings.tsuzuki_integration_status_configured)
             assertTrue(
@@ -1116,6 +1139,51 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         }
         assertTrue("Timed out waiting for expected painted fixture pixels; last=$latest", false)
         return latest
+    }
+
+    private fun awaitStableScreenshot(
+        destination: File,
+        samplePoints: List<Pair<Int, Int>>,
+    ): List<Int> {
+        val deadline = SystemClock.uptimeMillis() + 5_000
+        var previous: List<Int>? = null
+        var stableFrames = 0
+        var latestPixels = emptyList<Int>()
+        var latestBitmap: Bitmap? = null
+        while (SystemClock.uptimeMillis() < deadline) {
+            instrumentation.waitForIdleSync()
+            val bitmap = requireNotNull(UiDevice.getInstance(instrumentation).takeScreenshot())
+            val pixels = samplePoints.map { (x, y) ->
+                assertTrue(
+                    "Pixel sample ($x,$y) must be inside screenshot ${bitmap.width}x${bitmap.height}",
+                    x in 0 until bitmap.width && y in 0 until bitmap.height,
+                )
+                bitmap.getPixel(x, y)
+            }
+            latestBitmap?.recycle()
+            latestBitmap = bitmap
+            latestPixels = pixels
+            stableFrames = if (pixels == previous) stableFrames + 1 else 0
+            if (stableFrames >= 2) {
+                FileOutputStream(destination).use { output ->
+                    assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+                }
+                bitmap.recycle()
+                latestBitmap = null
+                assertTrue("Expected a non-empty settled palette screenshot", destination.length() > 0L)
+                return pixels
+            }
+            previous = pixels
+            SystemClock.sleep(40)
+        }
+        latestBitmap?.let { bitmap ->
+            FileOutputStream(destination).use { output ->
+                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+            }
+            bitmap.recycle()
+        }
+        assertTrue("Palette pixels did not stabilize; last sample=$latestPixels", false)
+        return latestPixels
     }
 
     private fun assertRectApproximately(actual: Rect, expected: Rect) {

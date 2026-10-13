@@ -107,6 +107,7 @@ fi
 gradle_status=0
 ./gradlew :app:connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=eu.kanade.presentation.tsuzuki.DefaultSkinRenderedValidationInstrumentedTest \
+  -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
   || gradle_status=$?
 
 find app/build/outputs/androidTest-results/connected/debug -type f -name '*.xml' -exec cp {} "$junit_dir/" \; 2>/dev/null || true

@@ -19,7 +19,7 @@ REQUIRED_TESTS = {
     "defaultSkinCanvasAndGroupSurfaceRenderSemanticLightAndDarkRoles",
     "appearanceUsesCompactAccessibleThemeSamplesAndKeepsThemeModeSeparate",
     "integrationRootIsNavigationOnlyWhileDetailOwnsTheEnablementSwitch",
-    "canonicalDetailsHeroSharesMeasuredArtworkFadeBoundsAndFlowsLongTitleBeforeFollowingContent",
+    "canonicalDetailsHeroUsesSharedBoundsAndFlowsLongTitle",
 }
 REQUIRED_PNGS = {
     *(f"search-{name}.png" for name in ("two-thirds", "wide", "tall", "intrinsic-whitespace", "failed", "missing")),
