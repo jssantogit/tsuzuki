@@ -18,6 +18,28 @@ if (( ${#online_serials[@]} != 1 )) || [[ ! "${online_serials[0]:-}" =~ ^emulato
 fi
 export ANDROID_SERIAL="${online_serials[0]}"
 
+# Keep the disposable emulator awake and dismiss its non-secure keyguard before
+# building/running the host. The test harness still requires actual window
+# focus; this preflight does not weaken that layout/semantics gate.
+emulator_ready=1
+adb shell svc power stayon true >/dev/null || emulator_ready=0
+adb shell input keyevent KEYCODE_WAKEUP >/dev/null || emulator_ready=0
+adb shell wm dismiss-keyguard >/dev/null || emulator_ready=0
+adb shell input keyevent KEYCODE_MENU >/dev/null || emulator_ready=0
+sleep 1
+power_state="$(adb shell dumpsys power 2>&1 | tr -d '\r')"
+if ! grep -Eq 'mWakefulness=Awake|Wakefulness=Awake' <<< "$power_state"; then
+  emulator_ready=0
+fi
+if (( emulator_ready == 0 )); then
+  printf 'RESULT=INFRASTRUCTURE_FAILURE\nREASON=EMULATOR_NOT_AWAKE_OR_UNLOCKED\n' \
+    > "$results_dir/run-info.txt"
+  printf '%s\n' "$power_state" > "$results_dir/emulator-power-state.txt"
+  echo '::error::Could not confirm the disposable emulator is awake and ready for rendering'
+  exit 1
+fi
+printf 'EMULATOR_STAY_ON=ENABLED\nEMULATOR_WAKEFULNESS=AWAKE\n' > "$results_dir/emulator-state.txt"
+
 # Inspect the generated test package pairing before any test installation/launch.
 assemble_status=0
 ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest || assemble_status=$?

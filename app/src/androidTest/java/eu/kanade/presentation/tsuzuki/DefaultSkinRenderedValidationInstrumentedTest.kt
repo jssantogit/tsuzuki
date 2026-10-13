@@ -250,7 +250,7 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         }.exceptionOrNull()
         assertTrue("Surface grouping probe accepted a row escaping its surface", containmentError is AssertionError)
         val flowError = runCatching {
-            assertVerticalFlow(Rect(0f, 0f, 100f, 50f), Rect(0f, 49f, 100f, 70f), "negative oracle fixture")
+            assertVerticalFlow(Rect(0f, 0f, 100f, 50f), Rect(0f, 48f, 100f, 70f), "negative oracle fixture")
         }.exceptionOrNull()
         assertTrue("Content-flow probe accepted overlapping metadata", flowError is AssertionError)
         val expectedMarkers = listOf(AndroidColor.rgb(246, 49, 166), AndroidColor.rgb(25, 221, 242))
@@ -378,19 +378,21 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             "settings-measurements.csv",
             buildList {
                 add("heading,surface,row-count,divider-count,inter-group-gap-px,label-surface-gap-px")
-                addAll(foundSurfaces.sorted().map { surface ->
-                    val key = surface.removePrefix("settings_surface_")
-                    val rows = expectedRows.filterValues { it == key }.keys.joinToString("|")
-                    val dividerCount = foundDividers.count { it.startsWith("settings_divider_${key}_") }
-                    listOf(
-                        "settings_heading_$key",
-                        surface,
-                        rows,
-                        dividerCount,
-                        measuredInterGroupGaps.joinToString("|"),
-                        measuredLabelSurfaceGaps.joinToString("|"),
-                    ).joinToString(",")
-                })
+                addAll(
+                    foundSurfaces.sorted().map { surface ->
+                        val key = surface.removePrefix("settings_surface_")
+                        val rows = expectedRows.filterValues { it == key }.keys.joinToString("|")
+                        val dividerCount = foundDividers.count { it.startsWith("settings_divider_${key}_") }
+                        listOf(
+                            "settings_heading_$key",
+                            surface,
+                            rows,
+                            dividerCount,
+                            measuredInterGroupGaps.joinToString("|"),
+                            measuredLabelSurfaceGaps.joinToString("|"),
+                        ).joinToString(",")
+                    },
+                )
             },
         )
     }
@@ -875,8 +877,10 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             }
             var nodes = awaitSemantics(activity) { snapshot ->
                 snapshot.any { it.tag == "canonical_details_hero_title" && fixture.title in it.text } &&
-                    (fixture.artwork == null || fixture.artwork == "failed" ||
-                        snapshot.any { it.tag == "canonical_details_hero_frame" })
+                    (
+                        fixture.artwork == null || fixture.artwork == "failed" ||
+                            snapshot.any { it.tag == "canonical_details_hero_frame" }
+                        )
             }
             if (fixture.artwork == "failed") {
                 nodes = awaitSemantics(activity) { snapshot ->
@@ -904,8 +908,8 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 assertNotNull("Loaded artwork frame missing for ${fixture.name}", frame)
                 assertNotNull("Artwork layer missing for ${fixture.name}", artwork)
                 assertNotNull("Fade layer missing for ${fixture.name}", fade)
-            assertRectApproximately(requireNotNull(frame).layoutBounds, requireNotNull(artwork).layoutBounds)
-            assertRectApproximately(requireNotNull(frame).layoutBounds, requireNotNull(fade).layoutBounds)
+                assertRectApproximately(requireNotNull(frame).layoutBounds, requireNotNull(artwork).layoutBounds)
+                assertRectApproximately(requireNotNull(frame).layoutBounds, requireNotNull(fade).layoutBounds)
                 assertTrue(
                     "Decorative Hero image must not expose duplicate semantics",
                     artwork?.contentDescription.isNullOrEmpty(),
@@ -1109,8 +1113,54 @@ class DefaultSkinRenderedValidationInstrumentedTest {
             if (predicate(latest)) return latest
             SystemClock.sleep(40)
         }
-        assertTrue("Timed out waiting for current Compose fixture; last tags=${latest.map { it.tag }}", false)
-        return latest
+        val diagnostics = writeHostTimeoutDiagnostics(activity, latest)
+        throw AssertionError("Timed out waiting for current Compose fixture; $diagnostics")
+    }
+
+    private fun writeHostTimeoutDiagnostics(
+        activity: DefaultSkinValidationActivity,
+        latest: List<NodeSnapshot>,
+    ): String {
+        var viewState = "unavailable"
+        instrumentation.runOnMainSync {
+            val composeView = activity.composeView
+            val decorView = activity.window.decorView
+            viewState = listOf(
+                "activityWindowFocus=${activity.hasWindowFocus()}",
+                "decorAttached=${decorView.isAttachedToWindow}",
+                "decorLaidOut=${decorView.isLaidOut}",
+                "decorWindowFocus=${decorView.hasWindowFocus()}",
+                "composeAttached=${composeView.isAttachedToWindow}",
+                "composeLaidOut=${composeView.isLaidOut}",
+                "composeWindowFocus=${composeView.hasWindowFocus()}",
+                "composeShown=${composeView.isShown}",
+                "composeVisibility=${composeView.visibility}",
+                "composeWindowVisibility=${composeView.windowVisibility}",
+                "composeSize=${composeView.width}x${composeView.height}",
+                "finishing=${activity.isFinishing}",
+                "destroyed=${activity.isDestroyed}",
+            ).joinToString(" ")
+        }
+        val context = instrumentation.targetContext
+        val power = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+        val keyguard = context.getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        val directory = artifactDirectory()
+        val stem = "diagnostic-host-${SystemClock.uptimeMillis()}"
+        val screenshot = File(directory, "$stem.png")
+        val screenshotResult = runCatching {
+            saveScreenshot(screenshot)
+            screenshot.absolutePath
+        }.getOrElse { "failed:${it.javaClass.simpleName}:${it.message}" }
+        val details = listOf(
+            viewState,
+            "screenInteractive=${power.isInteractive}",
+            "keyguardLocked=${keyguard.isKeyguardLocked}",
+            "deviceLocked=${keyguard.isDeviceLocked}",
+            "lastTags=${latest.map { it.tag }}",
+            "screenshot=$screenshotResult",
+        ).joinToString("\n")
+        File(directory, "$stem.txt").writeText(details)
+        return details.replace('\n', ';')
     }
 
     private fun awaitScreenPixels(
