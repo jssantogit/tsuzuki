@@ -55,6 +55,8 @@ import eu.kanade.tachiyomi.ui.tsuzuki.settings.TsuzukiIntegrationSettingsItem
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.isDynamicColorAvailable
 import mihon.app.di.appGraph
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -68,8 +70,6 @@ import tachiyomi.domain.tsuzuki.integration.model.IntegrationCategory
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.i18n.MR
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
@@ -233,6 +233,15 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 } else {
                     emptyMap()
                 }
+            }
+            if (fixture.name == "wide") {
+                val leftMarker = AndroidColor.rgb(246, 49, 166)
+                val rightMarker = AndroidColor.rgb(25, 221, 242)
+                assertEquals(
+                    "Fit must preserve the complete source's left and right markers",
+                    listOf(leftMarker, rightMarker),
+                    markerPixels.values.map { it.color },
+                )
             }
             measurements += listOf(
                 fixture.name,
@@ -479,26 +488,21 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                 "${canvasProbe.x};${canvasProbe.y}",
                 "${surfaceProbe.x};${surfaceProbe.y}",
             ).joinToString(",")
-            writeMeasurements(
-                "palette-measurements.csv",
-                listOf(
-                    listOf(
-                        "theme",
-                        "canvas-pixel",
-                        "surface-pixel",
-                        "canvas-bounds",
-                        "surface-bounds",
-                    "canvas-window-point",
-                    "surface-window-point",
-                    ).joinToString(","),
-                ) + paletteMeasurements,
-            )
             assertEquals("${fixture.name} canvas sample", fixture.canvasColor, canvasPixel)
             assertEquals("${fixture.name} surface sample", fixture.surfaceColor, surfacePixel)
         }
+        val paletteHeader = listOf(
+            "theme",
+            "canvas-pixel",
+            "surface-pixel",
+            "canvas-bounds",
+            "surface-bounds",
+            "canvas-window-point",
+            "surface-window-point",
+        ).joinToString(",")
         writeMeasurements(
             "palette-measurements.csv",
-            listOf("theme,canvas-pixel,surface-pixel,canvas-bounds,surface-bounds") + paletteMeasurements,
+            listOf(paletteHeader) + paletteMeasurements,
         )
     }
 
@@ -516,15 +520,6 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                         SettingsAppearanceScreen.Content()
                     }
                 }
-            }
-            if (fixture.name == "wide") {
-                val leftMarker = AndroidColor.rgb(246, 49, 166)
-                val rightMarker = AndroidColor.rgb(25, 221, 242)
-                assertEquals(
-                    "Fit must preserve the complete source's left and right markers",
-                    listOf(leftMarker, rightMarker),
-                    markerPixels.values.map { it.color },
-                )
             }
             val nodes = awaitSemantics(activity) { snapshot ->
                 snapshot.count { it.tag.startsWith("appearance_theme_preview_") } >= 2
@@ -636,6 +631,12 @@ class DefaultSkinRenderedValidationInstrumentedTest {
         val preferences = activity.appGraph.uiPreferences
         val previousThemeMode = preferences.themeMode.get()
         val previousAmoled = preferences.themeDarkAmoled.get()
+        val availableThemes = AppTheme.entries
+            .filterNot { it.titleRes == null || (it == AppTheme.MONET && !DeviceUtil.isDynamicColorAvailable) }
+        val selectedAppTheme = preferences.appTheme.get()
+        val selectedThemeIndex = availableThemes.indexOf(selectedAppTheme)
+        assertTrue("Current theme must be present in the real theme choices", selectedThemeIndex >= 0)
+        val selectedThemeTag = "appearance_theme_preview_${selectedAppTheme.name.lowercase()}"
         val modeLabels = mapOf(
             ThemeMode.SYSTEM to activity.stringResource(MR.strings.theme_system),
             ThemeMode.LIGHT to activity.stringResource(MR.strings.theme_light),
@@ -651,6 +652,19 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                     }
                 }
             }
+            awaitSemantics(activity) { snapshot ->
+                snapshot.any { it.tag == "appearance_theme_mode" } &&
+                    snapshot.any { it.tag.startsWith("appearance_theme_preview_") }
+            }
+            assertTrue(
+                "Appearance theme rail must expose indexed horizontal scrolling",
+                scrollHorizontalThemeRailToIndex(activity, selectedThemeIndex),
+            )
+            val selectedThemeNodes = awaitSemantics(activity) { snapshot ->
+                snapshot.any { it.tag == selectedThemeTag }
+            }
+            val selectedThemePreview = selectedThemeNodes.singleNode(selectedThemeTag)
+            assertEquals("Theme Mode previews the currently selected real theme", true, selectedThemePreview.selected)
             ThemeMode.entries.forEach { mode ->
                 instrumentation.runOnMainSync {
                     preferences.themeMode.set(mode)
@@ -693,7 +707,7 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                     fixtureId = "theme-mode-${mode.name.lowercase()}",
                     expectedSceneId = "appearance-mode-${mode.name.lowercase()}",
                     targetTag = "appearance_theme_mode",
-                    identityTags = listOf("appearance_theme_mode", "appearance_amoled", selectedPreview.tag),
+                    identityTags = listOf("appearance_theme_mode", "appearance_amoled", selectedThemeTag),
                     requiredSemanticText = modeLabels.getValue(mode),
                 )
 
