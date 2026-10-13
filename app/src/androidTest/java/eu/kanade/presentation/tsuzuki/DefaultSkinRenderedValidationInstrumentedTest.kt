@@ -51,6 +51,7 @@ import eu.kanade.tachiyomi.ui.tsuzuki.settings.TsuzukiIntegrationAuthState
 import eu.kanade.tachiyomi.ui.tsuzuki.settings.TsuzukiIntegrationConfigState
 import eu.kanade.tachiyomi.ui.tsuzuki.settings.TsuzukiIntegrationSettingsItem
 import eu.kanade.tachiyomi.util.system.DeviceUtil
+import eu.kanade.tachiyomi.util.system.isDynamicColorAvailable
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Collections
