@@ -36,7 +36,8 @@ def _valid_arm(arm: dict[str, Any] | None, expected_arm: str) -> str | None:
     if any(
         not isinstance(animation_values[name], dict)
         or animation_values[name].get("exit_code") != 0
-        or animation_values[name].get("value") in (None, "", "null")
+        or animation_values[name].get("stdout_available") is not True
+        or animation_values[name].get("value") in (None, "")
         or animation_values[name].get("provenance") != "post_observation"
         for name in required_animations
     ):

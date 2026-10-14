@@ -27,7 +27,12 @@ def valid_arm(arm: str) -> dict[str, object]:
             "runner_image_os": "Linux",
             "runner_image_version": "2026.10",
             "animation_values": {
-                name: {"exit_code": 0, "value": "1", "provenance": "post_observation"}
+                name: {
+                    "exit_code": 0,
+                    "stdout_available": True,
+                    "value": "1",
+                    "provenance": "post_observation",
+                }
                 for name in (
                     "window_animation_scale",
                     "transition_animation_scale",
@@ -227,6 +232,38 @@ class MenuABComparisonTest(unittest.TestCase):
             "provenance": "post_observation",
         }
 
+        self.assertEqual("INCONCLUSIVE", self.compare(control, treatment))
+
+    def test_successfully_unset_animation_scale_matches_between_arms(self) -> None:
+        control = valid_arm("control")
+        treatment = valid_arm("treatment")
+        unset_read = {"exit_code": 0, "stdout_available": True, "value": "null", "provenance": "post_observation"}
+        for arm in (control, treatment):
+            arm["canonical_configuration"]["animation_values"]["animator_duration_scale"] = unset_read.copy()
+
+        self.assertEqual("MENU_NOT_CAUSAL", self.compare(control, treatment))
+
+    def test_unset_scale_requires_successful_nonempty_read_and_matching_arms(self) -> None:
+        invalid_reads = [
+            {"exit_code": 0, "stdout_available": False, "value": "null", "provenance": "post_observation"},
+            {"exit_code": 0, "stdout_available": True, "value": "", "provenance": "post_observation"},
+            {"exit_code": 20, "stdout_available": True, "value": None, "provenance": "post_observation"},
+        ]
+        for invalid_read in invalid_reads:
+            control = valid_arm("control")
+            treatment = valid_arm("treatment")
+            treatment["canonical_configuration"]["animation_values"]["animator_duration_scale"] = invalid_read
+            with self.subTest(read=invalid_read):
+                self.assertEqual("INCONCLUSIVE", self.compare(control, treatment))
+
+        control = valid_arm("control")
+        treatment = valid_arm("treatment")
+        control["canonical_configuration"]["animation_values"]["animator_duration_scale"] = {
+            "exit_code": 0,
+            "stdout_available": True,
+            "value": "null",
+            "provenance": "post_observation",
+        }
         self.assertEqual("INCONCLUSIVE", self.compare(control, treatment))
 
     def test_failed_early_animation_reads_do_not_override_late_matching_values(self) -> None:
