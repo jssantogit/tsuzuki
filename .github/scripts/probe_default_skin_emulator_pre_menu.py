@@ -9,6 +9,7 @@ from collections import deque
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 import shlex
@@ -290,6 +291,253 @@ def _logcat_epoch(line: str) -> float | None:
         return float(token)
     except ValueError:
         return None
+
+
+def final_logcat_dump_coverage(
+    *,
+    exit_code: int | None,
+    stdout_available: bool,
+    stdout: str,
+    window_start_device_epoch: float | None,
+    window_end_device_epoch: float | None,
+    dump_completed_after_window: bool,
+    device_epoch_at_dump: float | None,
+) -> dict[str, Any]:
+    """Summarize final-buffer evidence without treating a quiet tail as lost coverage."""
+    epochs = [epoch for line in stdout.splitlines() if (epoch := _logcat_epoch(line)) is not None]
+    first_epoch = min(epochs) if epochs else None
+    requested_buffers = ("main", "system", "events")
+    active_buffer: str | None = None
+    first_epochs_by_buffer: dict[str, float] = {}
+    buffer_headers_seen: set[str] = set()
+    for line in stdout.splitlines():
+        header = re.fullmatch(r"-{3,}\s+beginning of (main|system|events)\s*", line.strip())
+        if header:
+            active_buffer = header.group(1)
+            buffer_headers_seen.add(active_buffer)
+            continue
+        epoch = _logcat_epoch(line)
+        if active_buffer is not None and epoch is not None:
+            first_epochs_by_buffer.setdefault(active_buffer, epoch)
+    complete_buffer_prefixes = all(
+        buffer in buffer_headers_seen
+        and isinstance(first_epochs_by_buffer.get(buffer), (int, float))
+        and first_epochs_by_buffer[buffer] <= window_start_device_epoch
+        for buffer in requested_buffers
+    ) if isinstance(window_start_device_epoch, (int, float)) else False
+    missing_or_truncated_buffers = [
+        buffer for buffer in requested_buffers
+        if buffer not in buffer_headers_seen
+        or not isinstance(first_epochs_by_buffer.get(buffer), (int, float))
+        or (
+            isinstance(window_start_device_epoch, (int, float))
+            and first_epochs_by_buffer[buffer] > window_start_device_epoch
+        )
+    ]
+    covers_start_by_buffer = {
+        buffer: (
+            isinstance(window_start_device_epoch, (int, float))
+            and isinstance(first_epochs_by_buffer.get(buffer), (int, float))
+            and first_epochs_by_buffer[buffer] <= window_start_device_epoch
+        )
+        for buffer in requested_buffers
+    }
+    covers_start = (
+        stdout_available is True
+        and exit_code == 0
+        and complete_buffer_prefixes
+    )
+    covers_end = (
+        stdout_available is True
+        and exit_code == 0
+        and dump_completed_after_window is True
+        and isinstance(device_epoch_at_dump, (int, float))
+        and isinstance(window_end_device_epoch, (int, float))
+        and device_epoch_at_dump >= window_end_device_epoch
+    )
+    stdout_nonempty = stdout_available is True and bool(stdout)
+    return {
+        "exit_code": exit_code,
+        "stdout_available": stdout_available is True,
+        "stdout_nonempty": stdout_nonempty,
+        "line_count": len(stdout.splitlines()) if stdout_available else None,
+        "epoch_line_count": len(epochs) if stdout_available else None,
+        "valid_records": len(epochs) if stdout_available else None,
+        "first_device_epoch": first_epoch,
+        "buffer_headers_seen": sorted(buffer_headers_seen),
+        "first_device_epoch_by_buffer": first_epochs_by_buffer,
+        "missing_or_truncated_buffers": missing_or_truncated_buffers,
+        "last_device_epoch": max(epochs) if epochs else None,
+        "device_epoch_at_dump": device_epoch_at_dump,
+        "dump_completed_after_window": dump_completed_after_window,
+        "coverage": {
+            "covers_start": covers_start,
+            "covers_start_by_buffer": covers_start_by_buffer,
+            "covers_end": covers_end,
+        },
+        "complete": bool(stdout_nonempty and epochs and covers_start and covers_end),
+    }
+
+
+def device_epoch_from_snapshot(snapshot: dict[str, Any]) -> float | None:
+    if snapshot.get("adb_exit_code") != 0 or snapshot.get("stdout_available") is not True:
+        return None
+    raw = section_text(snapshot.get("sections", {}), "DEVICE_EPOCH")
+    try:
+        return float(raw.strip()) if raw is not None else None
+    except ValueError:
+        return None
+
+
+def device_epoch_at_host_time(snapshot: dict[str, Any], host_monotonic_ns: int) -> float | None:
+    epoch = device_epoch_from_snapshot(snapshot)
+    started, ended = snapshot.get("started_monotonic_ns"), snapshot.get("ended_monotonic_ns")
+    if epoch is None or not isinstance(started, int) or not isinstance(ended, int):
+        return None
+    midpoint = (started + ended) // 2
+    return epoch + (host_monotonic_ns - midpoint) / 1_000_000_000
+
+
+def final_logcat_anr_records(stdout: str) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for line in stdout.splitlines():
+        if not is_anr_line(line):
+            continue
+        records.append({
+            "source": "final-logcat-dump",
+            "device_epoch": _logcat_epoch(line),
+            "timestamp_quality": "device-epoch" if _logcat_epoch(line) is not None else "unmapped",
+            "package": anr_event_package(line),
+            "line": line[:2000],
+        })
+    return records
+
+
+def adb_logcat_process_pids(ps_output: str, serial: str) -> list[int]:
+    """Return PIDs for direct adb logcat readers attached to the requested serial."""
+    matching: set[int] = set()
+    for line in ps_output.splitlines():
+        try:
+            tokens = shlex.split(line)
+            pid = int(tokens[0])
+        except (ValueError, IndexError):
+            continue
+        command = tokens[1:]
+        if not command or Path(command[0]).name != "adb":
+            continue
+        serial_index = next(
+            (index for index, token in enumerate(command[:-1]) if token == "-s" and command[index + 1] == serial),
+            None,
+        )
+        if serial_index is not None and "logcat" in command[serial_index + 2:]:
+            matching.add(pid)
+    return sorted(matching)
+
+
+def process_list_evidence(command: dict[str, Any], serial: str) -> dict[str, Any]:
+    """Parse process rows only from a successful, available ps result."""
+    exit_code = command.get("exit_code")
+    stdout_available = command.get("stdout_available") is True
+    raw_stdout = command.get("stdout", "")
+    stdout = raw_stdout.decode("utf-8", errors="replace") if isinstance(raw_stdout, bytes) else str(raw_stdout)
+    rows = [
+        line.strip()
+        for line in stdout.splitlines()
+        if re.match(r"^\s*\d+\s+\S", line)
+    ] if exit_code == 0 and stdout_available else []
+    return {
+        "exit_code": exit_code,
+        "stdout_available": stdout_available,
+        "stdout_nonempty": bool(rows),
+        "process_row_count": len(rows),
+        "process_rows": rows[:64],
+        "adb_logcat_pids": adb_logcat_process_pids("\n".join(rows), serial),
+    }
+
+
+def summarize_device_clock(command: dict[str, Any] | None) -> dict[str, Any]:
+    """Normalize a run_command result into the persisted device-clock schema."""
+    if not isinstance(command, dict):
+        return {
+            "exit_code": None,
+            "stdout_available": False,
+            "device_epoch_seconds": None,
+            "started_monotonic_ns": None,
+            "ended_monotonic_ns": None,
+        }
+    epoch: float | None = None
+    if command.get("exit_code") == 0 and command.get("stdout_available") is True:
+        try:
+            parsed = float(str(command.get("stdout", "")).strip())
+            epoch = parsed if math.isfinite(parsed) else None
+        except (TypeError, ValueError):
+            pass
+    return {
+        "exit_code": command.get("exit_code"),
+        "stdout_available": command.get("stdout_available") is True,
+        "device_epoch_seconds": epoch,
+        "started_monotonic_ns": command.get("started_monotonic_ns"),
+        "ended_monotonic_ns": command.get("ended_monotonic_ns"),
+    }
+
+
+def preboot_logcat_clock_bounds(clock_summary: dict[str, Any] | None) -> tuple[float | None, float | None]:
+    if not isinstance(clock_summary, dict):
+        return None, None
+    epoch = clock_summary.get("device_epoch_seconds")
+    if (
+        clock_summary.get("exit_code") != 0
+        or clock_summary.get("stdout_available") is not True
+        or not isinstance(epoch, (int, float))
+        or not math.isfinite(float(epoch))
+    ):
+        return None, None
+    return float(epoch) + 1.0, float(epoch) - 1.0
+
+
+def stop_optional_observer(observer: LogcatObserver | None) -> dict[str, Any] | None:
+    return observer.stop() if observer is not None else None
+
+
+def d4_observer_summary(
+    policy: str,
+    process_samples: list[dict[str, Any]],
+    expected_observer_pid: int | None,
+) -> tuple[bool | str, int | str]:
+    """Return an observed D4 reader state, preserving unknown process evidence."""
+    if not process_samples or any(
+        sample.get("exit_code") != 0
+        or sample.get("stdout_available") is not True
+        or sample.get("stdout_nonempty") is not True
+        or not isinstance(sample.get("process_row_count"), int)
+        or sample.get("process_row_count", 0) <= 0
+        or not isinstance(sample.get("adb_logcat_pids"), list)
+        for sample in process_samples
+    ):
+        return "UNKNOWN", "UNKNOWN"
+    if policy == "continuous":
+        if (
+            not isinstance(expected_observer_pid, int)
+            or any(expected_observer_pid not in sample["adb_logcat_pids"] for sample in process_samples)
+            or any(sample.get("observer_running") is not True for sample in process_samples)
+        ):
+            return "UNKNOWN", "UNKNOWN"
+        return True, expected_observer_pid
+    if policy == "deferred_final_dump":
+        pids = sorted({pid for sample in process_samples for pid in sample["adb_logcat_pids"]})
+        return (True, pids[0]) if pids else (False, "NONE")
+    return "UNKNOWN", "UNKNOWN"
+
+
+def should_capture_first_home_screenshot(mode: str, focus_state: Any, already_captured: bool) -> bool:
+    return (
+        mode in {
+            "output-control", "output-treatment",
+            "preboot-logcat-control", "preboot-logcat-treatment",
+        }
+        and focus_state == "HOME"
+        and not already_captured
+    )
 
 
 def scope_anr_events(
@@ -881,6 +1129,14 @@ def write_json(path: Path, value: Any) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def write_jsonl(path: Path, values: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "".join(json.dumps(value, sort_keys=True) + "\n" for value in values),
+        encoding="utf-8",
+    )
+
+
 def write_result(results: Path, result: dict[str, Any]) -> None:
     write_json(results / "result.json", result)
     info = [
@@ -904,7 +1160,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--metadata", type=Path, required=True)
     parser.add_argument(
         "--mode",
-        choices=("late", "control", "treatment", "output-control", "output-treatment"),
+        choices=(
+            "late", "control", "treatment", "output-control", "output-treatment",
+            "preboot-logcat-control", "preboot-logcat-treatment",
+        ),
         default="late",
     )
     return parser.parse_args()
@@ -921,7 +1180,8 @@ def main() -> int:
     equivalence = config_equivalence(metadata)
     is_menu_ab = args.mode in {"control", "treatment"}
     is_output_ab = args.mode in {"output-control", "output-treatment"}
-    is_ab = is_menu_ab or is_output_ab
+    is_logcat_ab = args.mode in {"preboot-logcat-control", "preboot-logcat-treatment"}
+    is_ab = is_menu_ab or is_output_ab or is_logcat_ab
     output_arm = args.mode.removeprefix("output-") if is_output_ab else None
     output_forwarding = metadata.get("output_forwarding") if is_output_ab else None
     mark("observer_start", timeline_path, {"serial": args.serial})
@@ -949,6 +1209,20 @@ def main() -> int:
             if isinstance(output_forwarding, dict) else None,
             "output_forwarding": output_forwarding,
         })
+    if is_logcat_ab:
+        result.update({
+            "experiment": "default_skin_emulator_preboot_logcat_d4",
+            "arm": args.mode.removeprefix("preboot-logcat-"),
+            "selected_difference_id": "D4",
+            "selected_difference_value": "continuous" if args.mode.endswith("control") else "deferred_final_dump",
+            "pre_boot_logcat_observer_enabled": "UNKNOWN",
+            "observer_pid": "UNKNOWN",
+            "launch_utc": metadata.get("launch_utc"),
+            "launch_monotonic_ns": metadata.get("launch_monotonic_ns"),
+            "emulator_pid": metadata.get("emulator_pid"),
+            "common_emulator_output": metadata.get("common_emulator_output"),
+            "bootstrap_events": metadata.get("bootstrap_events"),
+        })
     if not re.fullmatch(r"emulator-[0-9]+", args.serial):
         result["error"] = "Refusing non-emulator ADB serial."
         result["classification"] = "INCONCLUSIVE"
@@ -965,12 +1239,29 @@ def main() -> int:
         write_result(results, result)
         return 2
 
-    observer = LogcatObserver(args.serial, results / "logcat-filtered.jsonl")
-    observer.start()
-    atexit.register(observer.stop)
-    result["observer_available_at_start"] = observer.available
-    observer_started = mark("logcat_observer_started", timeline_path, {"available": observer.available})
-    result["logcat_observer_started_monotonic_ns"] = observer_started["monotonic_ns"]
+    preboot_clock: dict[str, Any] | None = None
+    if is_logcat_ab:
+        preboot_clock = run_command(
+            ["adb", "-s", args.serial, "shell", "date", "+%s"],
+            timeout_seconds=20,
+        )
+        result["commands"].append(preboot_clock)
+        result["preboot_device_clock"] = summarize_device_clock(preboot_clock)
+        result["logcat_observer_decision_monotonic_ns"] = time.monotonic_ns()
+
+    observer: LogcatObserver | None = None
+    logcat_arm = args.mode.removeprefix("preboot-logcat-") if is_logcat_ab else None
+    if not is_logcat_ab or logcat_arm == "control":
+        observer = LogcatObserver(args.serial, results / "logcat-filtered.jsonl")
+        observer.start()
+        atexit.register(observer.stop)
+        result["observer_available_at_start"] = observer.available
+        observer_started = mark("logcat_observer_started", timeline_path, {"available": observer.available})
+        result["logcat_observer_started_monotonic_ns"] = observer_started["monotonic_ns"]
+    else:
+        observer_started = mark("logcat_observer_deferred", timeline_path, {"available": False})
+        result["observer_available_at_start"] = False
+        result["logcat_observer_started_monotonic_ns"] = None
     if is_output_ab:
         result["observer_started_monotonic_ns"] = observer_started["monotonic_ns"]
         applied_ns = result.get("launch_monotonic_ns")
@@ -1025,12 +1316,18 @@ def main() -> int:
         write_json(snapshot_dir / f"{label}.json", snapshot)
         (snapshot_dir / f"{label}.txt").write_text(raw[:16000], encoding="utf-8")
         result["snapshots"].append(snapshot)
-        if (
-            is_output_ab
-            and snapshot.get("focus_state") == "HOME"
-            and "first_home" not in result.get("output_screenshots", {})
-        ):
-            capture_output_screenshot("first_home", f"{args.mode}-first-home")
+        if is_output_ab:
+            first_home_captured = "first_home" in result.get("output_screenshots", {})
+        elif is_logcat_ab:
+            first_home_captured = "first_home" in result.get("preboot_logcat", {}).get("screenshots", {})
+        else:
+            first_home_captured = False
+        if should_capture_first_home_screenshot(args.mode, snapshot.get("focus_state"), first_home_captured):
+            if is_output_ab:
+                capture_output_screenshot("first_home", f"{args.mode}-first-home")
+            else:
+                capture = take_screenshot(f"{args.mode}-first-home")
+                result["preboot_logcat"].setdefault("screenshots", {})["first_home"] = capture
         return snapshot
 
     def take_screenshot(label: str) -> dict[str, Any]:
@@ -1066,7 +1363,7 @@ def main() -> int:
         return capture
 
     def capture_anr_if_observed() -> None:
-        if not observer.anr_event.is_set():
+        if is_logcat_ab or observer is None or not observer.anr_event.is_set():
             return
         observer.anr_event.clear()
         if is_ab and not result.get("anr_screenshot_capture"):
@@ -1074,10 +1371,52 @@ def main() -> int:
             if is_output_ab:
                 result.setdefault("output_screenshots", {})["anr"] = result["anr_screenshot_capture"]
 
+    def host_logcat_process_proof(label: str) -> dict[str, Any]:
+        command = run_command(["ps", "-eo", "pid,args"], timeout_seconds=15)
+        proof = {
+            "label": label,
+            **process_list_evidence(command, args.serial),
+            "observer_pid": observer.process.pid if observer and observer.process else None,
+            "observer_running": observer.still_running() if observer else False,
+        }
+        write_json(results / f"host-logcat-process-{label}.json", proof)
+        return proof
+
+    if is_logcat_ab:
+        first_process_proof = host_logcat_process_proof("preboot")
+        result["preboot_logcat"] = {
+            "policy": "continuous" if logcat_arm == "control" else "deferred_final_dump",
+            "observer_started": logcat_arm == "control" and observer is not None,
+            "observer_started_monotonic_ns": result.get("logcat_observer_started_monotonic_ns"),
+            "observer_pid": observer.process.pid if observer and observer.process
+            else "UNKNOWN" if logcat_arm == "control" else "NONE",
+            "pre_boot_logcat_observer_enabled": "UNKNOWN",
+            "observer_decision_monotonic_ns": result.get("logcat_observer_decision_monotonic_ns"),
+            "observer_decision_epoch_exclusive": preboot_logcat_clock_bounds(
+                result.get("preboot_device_clock")
+            )[0],
+            "coverage_start_device_epoch": preboot_logcat_clock_bounds(
+                result.get("preboot_device_clock")
+            )[1],
+            "process_samples": [first_process_proof],
+            "process_proof": first_process_proof,
+            "preexisting_home_anr_status": "unknown",
+            "final_dump": None,
+        }
+        enabled, observer_pid_summary = d4_observer_summary(
+            result["preboot_logcat"]["policy"],
+            result["preboot_logcat"]["process_samples"],
+            observer.process.pid if observer and observer.process else None,
+        )
+        result["preboot_logcat"]["pre_boot_logcat_observer_enabled"] = enabled
+        result["preboot_logcat"]["observer_pid"] = observer_pid_summary
+        result["pre_boot_logcat_observer_enabled"] = enabled
+        result["observer_pid"] = observer_pid_summary
+
     boot_wait_started = time.monotonic()
     boot_complete = False
     while time.monotonic() - boot_wait_started < 600:
-        if not observer.still_running():
+        if observer is not None and not observer.still_running():
             break
         command = run_command(
             ["adb", "-s", args.serial, "shell", "getprop", "sys.boot_completed"],
@@ -1097,7 +1436,7 @@ def main() -> int:
         result["error"] = "Boot did not complete within the bounded 600-second observation window."
         result["classification"] = "INCONCLUSIVE"
         result["reason"] = result["error"]
-        result["observer"] = observer.stop()
+        result["observer"] = stop_optional_observer(observer)
         write_result(results, result)
         return 1
 
@@ -1117,7 +1456,10 @@ def main() -> int:
         menu_finish: dict[str, Any] = {}
         menu_done = threading.Event()
         menu_command = ["adb", "-s", args.serial, "shell", "input", "keyevent", "82"]
-        send_menu = args.mode in {"treatment", "output-control", "output-treatment"}
+        send_menu = args.mode in {
+            "treatment", "output-control", "output-treatment",
+            "preboot-logcat-control", "preboot-logcat-treatment",
+        }
         if send_menu:
             result["menu_attempted"] = True
             result["menu_event_count"] = 1
@@ -1197,7 +1539,11 @@ def main() -> int:
                 next_sample_ns,
                 midpoint_capture_ns if not midpoint_captured else window_end_ns,
             )
-            observer.anr_event.wait(timeout=max(0.0, (next_deadline_ns - now_ns) / 1_000_000_000))
+            wait_seconds = max(0.0, (next_deadline_ns - now_ns) / 1_000_000_000)
+            if is_logcat_ab or observer is None:
+                time.sleep(wait_seconds)
+            else:
+                observer.anr_event.wait(timeout=wait_seconds)
         take_snapshot(f"{args.mode}-final")
         capture_anr_if_observed()
         if not midpoint_captured:
@@ -1222,6 +1568,101 @@ def main() -> int:
         animation_values = canonical_animation_values(animation_reads_after_observation)
         result["animation_values_after_observation"] = animation_values
         result["animation_policy_observation"] = "Read-only values captured after the matched 15-second A/B window."
+
+        final_dump_command: dict[str, Any] | None = None
+        final_dump_text = ""
+        final_dump_summary: dict[str, Any] | None = None
+        final_dump_events: list[dict[str, Any]] = []
+        final_dump_device_clock: dict[str, Any] | None = None
+        final_process_proof: dict[str, Any] | None = None
+        observer_stop: dict[str, Any] | None = None
+        if is_logcat_ab:
+            final_process_proof = host_logcat_process_proof("post-window-before-final-dump")
+            result["preboot_logcat"]["process_samples"].append(final_process_proof)
+            result["preboot_logcat"]["process_proof"] = final_process_proof
+            result["preboot_logcat"]["observer_running_through_window"] = (
+                observer.still_running() if observer else False
+            )
+            final_dump_command = run_command(
+                [
+                    "adb", "-s", args.serial, "logcat", "-d", "-b", "main", "-b", "system",
+                    "-b", "events", "-v", "epoch",
+                ],
+                timeout_seconds=90,
+            )
+            raw_stdout = final_dump_command.get("stdout")
+            final_dump_text = raw_stdout if isinstance(raw_stdout, str) else ""
+            device_clock_after_dump_command = run_command(
+                ["adb", "-s", args.serial, "shell", "date", "+%s"],
+                timeout_seconds=20,
+            )
+            result["commands"].append(device_clock_after_dump_command)
+            try:
+                final_dump_device_epoch = (
+                    float(str(device_clock_after_dump_command["stdout"]).strip())
+                    if device_clock_after_dump_command["exit_code"] == 0
+                    and device_clock_after_dump_command["stdout_available"]
+                    else None
+                )
+            except ValueError:
+                final_dump_device_epoch = None
+            final_dump_device_clock = {
+                "exit_code": device_clock_after_dump_command["exit_code"],
+                "stdout_available": device_clock_after_dump_command["stdout_available"],
+                "device_epoch_seconds": final_dump_device_epoch,
+                "started_monotonic_ns": device_clock_after_dump_command["started_monotonic_ns"],
+                "ended_monotonic_ns": device_clock_after_dump_command["ended_monotonic_ns"],
+            }
+            final_snapshot = result["snapshots"][-1] if result["snapshots"] else {}
+            immediate_snapshot = next(
+                (
+                    snapshot for snapshot in result["snapshots"]
+                    if snapshot.get("label") == f"{args.mode}-00"
+                ),
+                {},
+            )
+            window_end_device_epoch = device_epoch_at_host_time(immediate_snapshot, window_end_ns)
+            dump_summary = final_logcat_dump_coverage(
+                exit_code=final_dump_command["exit_code"],
+                stdout_available=final_dump_command["stdout_available"],
+                stdout=final_dump_text,
+                window_start_device_epoch=result["preboot_logcat"].get("coverage_start_device_epoch"),
+                window_end_device_epoch=window_end_device_epoch,
+                dump_completed_after_window=final_dump_command["ended_monotonic_ns"] >= window_end_ns,
+                device_epoch_at_dump=final_dump_device_epoch,
+            )
+            artifact_path = results / "logcat-final-dump.txt"
+            artifact_saved = False
+            if final_dump_text and len(final_dump_text.encode("utf-8")) <= 5_000_000:
+                artifact_path.write_text(final_dump_text, encoding="utf-8")
+                artifact_saved = True
+            elif final_dump_text:
+                artifact_path.write_text(
+                    final_dump_text[:2_000_000]
+                    + "\n[bounded artifact excerpt; full command output was parsed in-memory]\n"
+                    + final_dump_text[-2_000_000:],
+                    encoding="utf-8",
+                )
+                artifact_saved = True
+            final_dump_events = final_logcat_anr_records(final_dump_text)
+            write_jsonl(results / "logcat-final-anr-events.jsonl", final_dump_events)
+            final_dump_summary = {
+                "command": final_dump_command["command"],
+                **dump_summary,
+                "stdout_bytes": len(final_dump_text.encode("utf-8")),
+                "bounded_raw_artifact": artifact_path.name if artifact_saved else None,
+                "raw_artifact_is_excerpt": len(final_dump_text.encode("utf-8")) > 5_000_000,
+                "raw_artifact_saved": artifact_saved,
+                "anr_record_count": len(final_dump_events),
+                "device_clock_after_dump": final_dump_device_clock,
+                "window_end_device_epoch_estimate": window_end_device_epoch,
+                "device_clock_source": "post-window immediate snapshot plus monotonic interpolation",
+            }
+            result["preboot_logcat"]["final_dump"] = final_dump_summary
+            result["preboot_logcat"]["device_clock_after_dump"] = final_dump_device_clock
+            if observer is not None:
+                observer_stop = observer.stop()
+
         configuration = canonical_configuration(metadata, animation_values)
         result["canonical_configuration"] = configuration
         result["canonical_configuration_sha256"] = hashlib.sha256(
@@ -1247,20 +1688,41 @@ def main() -> int:
         else:
             result["menu_command"] = {"command": [], "exit_code": None}
 
-        snapshots = [
-            snapshot
-            for snapshot in result["snapshots"]
-            if snapshot.get("started_monotonic_ns", window_end_ns + 1) <= window_end_ns
-        ]
+        snapshots = (
+            list(result["snapshots"])
+            if is_logcat_ab
+            else [
+                snapshot
+                for snapshot in result["snapshots"]
+                if snapshot.get("started_monotonic_ns", window_end_ns + 1) <= window_end_ns
+            ]
+        )
         home_packages = sorted({
             str(snapshot["home_package"])
             for snapshot in snapshots
             if snapshot.get("home_package")
         })
-        timestamped_logcat_events = timestamp_anr_events(
-            [event for event in observer.snapshot() if event["is_anr"]],
-            result["snapshots"],
-        )
+        if is_logcat_ab:
+            dump_events_for_mapping = [
+                {
+                    **event,
+                    "host_monotonic_ns": (
+                        final_dump_command["ended_monotonic_ns"]
+                        if final_dump_command is not None
+                        else None
+                    ),
+                }
+                for event in final_dump_events
+            ]
+            timestamped_logcat_events = timestamp_anr_events(
+                dump_events_for_mapping,
+                result["snapshots"],
+            )
+        else:
+            timestamped_logcat_events = timestamp_anr_events(
+                [event for event in observer.snapshot() if event["is_anr"]] if observer else [],
+                result["snapshots"],
+            )
         selected_start_ns, interval_end_ns = selected_anr_observation_window(
             is_output_ab,
             result.get("launch_monotonic_ns"),
@@ -1268,13 +1730,29 @@ def main() -> int:
             end_ns,
             window_end_ns,
         )
-        interval_events = [
-            event
-            for event in timestamped_logcat_events
-            if isinstance(event.get("mapped_host_monotonic_ns"), int)
-            and isinstance(selected_start_ns, int)
-            and selected_start_ns <= event["mapped_host_monotonic_ns"] <= interval_end_ns
-        ]
+        if is_logcat_ab:
+            start_epoch = result["preboot_logcat"].get("observer_decision_epoch_exclusive")
+            end_epoch = (
+                final_dump_summary.get("window_end_device_epoch_estimate")
+                if isinstance(final_dump_summary, dict)
+                else None
+            )
+            interval_events = [
+                event
+                for event in timestamped_logcat_events
+                if isinstance(event.get("device_epoch"), (int, float))
+                and isinstance(start_epoch, (int, float))
+                and isinstance(end_epoch, (int, float))
+                and start_epoch <= event["device_epoch"] <= end_epoch
+            ]
+        else:
+            interval_events = [
+                event
+                for event in timestamped_logcat_events
+                if isinstance(event.get("mapped_host_monotonic_ns"), int)
+                and isinstance(selected_start_ns, int)
+                and selected_start_ns <= event["mapped_host_monotonic_ns"] <= interval_end_ns
+            ]
         snapshot_events = [
             {
                 "line": line,
@@ -1297,6 +1775,14 @@ def main() -> int:
         scoped_snapshots = anr_observations["scoped_snapshots"]
         all_scoped = scope_anr_events_to_packages(timestamped_logcat_events, home_package_set)
         unresolved_snapshot_events = anr_observations["unresolved_snapshot_events"]
+        if is_logcat_ab:
+            scoped = scope_anr_events_to_packages(interval_events, home_package_set)
+            scoped_snapshots = scope_anr_events_to_packages(snapshot_events, home_package_set)
+            unresolved_snapshot_events = uncorroborated_snapshot_home_anrs(
+                snapshot_events,
+                timestamped_logcat_events,
+                home_package_set,
+            )
         result["home_packages_observed"] = home_packages
         result["focus_samples"] = [
             {
@@ -1316,8 +1802,73 @@ def main() -> int:
         result["final_home_healthy"] = final_snapshot.get("stable_pre_menu_health")
         result["home_anr_events"] = scoped["home"]
         result["other_anr_events"] = scoped["other"]
-        observer_was_running = observer.still_running()
-        observer_complete = observer_was_running and not observer.truncated and observer.events_dropped == 0
+        if is_logcat_ab:
+            observer_was_running = bool(result["preboot_logcat"].get("observer_running_through_window"))
+            enabled, observer_pid_summary = d4_observer_summary(
+                result["preboot_logcat"]["policy"],
+                result["preboot_logcat"]["process_samples"],
+                observer.process.pid if observer and observer.process else None,
+            )
+            result["preboot_logcat"]["pre_boot_logcat_observer_enabled"] = enabled
+            result["preboot_logcat"]["observer_pid"] = observer_pid_summary
+            result["pre_boot_logcat_observer_enabled"] = enabled
+            result["observer_pid"] = observer_pid_summary
+            process_ok = enabled is (logcat_arm == "control")
+            observer_complete = bool(
+                final_dump_summary
+                and final_dump_summary.get("complete") is True
+                and process_ok
+                and (observer is None or (observer_stop and observer_stop.get("available_at_stop") is True))
+            )
+            clock_epoch = (
+                result.get("preboot_device_clock", {}).get("device_epoch_seconds")
+                if isinstance(result.get("preboot_device_clock"), dict)
+                else None
+            )
+            decision_epoch = result["preboot_logcat"].get("observer_decision_epoch_exclusive")
+            unresolved_before_decision = any(
+                not isinstance(event.get("device_epoch"), (int, float))
+                or event["device_epoch"] < decision_epoch
+                for event in all_scoped["unknown"]
+                if isinstance(decision_epoch, (int, float))
+            )
+            if (
+                not final_dump_summary
+                or final_dump_summary.get("complete") is not True
+                or not isinstance(clock_epoch, (int, float))
+                or not isinstance(decision_epoch, (int, float))
+            ):
+                preexisting_status = "unknown"
+            elif any(
+                isinstance(event.get("device_epoch"), (int, float))
+                and event["device_epoch"] < clock_epoch
+                for event in all_scoped["home"]
+            ):
+                preexisting_status = "present"
+            elif unresolved_before_decision or any(
+                isinstance(event.get("device_epoch"), (int, float))
+                and event["device_epoch"] < decision_epoch
+                for event in all_scoped["home"]
+            ):
+                preexisting_status = "unknown"
+            else:
+                preexisting_status = "absent"
+            result["preboot_logcat"]["preexisting_home_anr_status"] = preexisting_status
+            result["preboot_logcat"]["process_proof_valid"] = process_ok
+            result["preboot_logcat"]["observer_stop"] = observer_stop
+            result["preboot_logcat"]["selected_device_epoch_window"] = {
+                "start_exclusive": decision_epoch,
+                "end_estimate": (
+                    final_dump_summary.get("window_end_device_epoch_estimate")
+                    if isinstance(final_dump_summary, dict)
+                    else None
+                ),
+            }
+        else:
+            observer_was_running = observer.still_running() if observer else False
+            observer_complete = bool(
+                observer_was_running and observer and not observer.truncated and observer.events_dropped == 0
+            )
         if args.mode == "treatment":
             prefix = classify_pre_menu_home_anrs(
                 timestamped_logcat_events,
@@ -1336,23 +1887,36 @@ def main() -> int:
             or scoped_snapshots["unknown"]
             or unresolved_snapshot_events
             or any(
-                event.get("mapped_host_monotonic_ns") is None
+                (event.get("device_epoch") is None if is_logcat_ab else event.get("mapped_host_monotonic_ns") is None)
                 for category in (all_scoped["home"], all_scoped["unknown"])
                 for event in category
             )
+            or is_logcat_ab and not (final_dump_summary and final_dump_summary.get("complete") is True)
         )
         result["unresolved_snapshot_home_anr_events"] = unresolved_snapshot_events
         result["home_anr"] = bool(scoped["home"])
+        if is_logcat_ab and scoped["home"]:
+            result["preboot_logcat"]["anr_screenshot"] = take_screenshot("preboot-logcat-anr")
         result["boot_path_stable"] = stable_control_boot_path(snapshots) if args.mode == "control" else None
         result["observer_available_at_decision"] = observer_was_running
         result["observer_complete"] = observer_complete
-        result["observer"] = observer.stop()
+        if not is_logcat_ab:
+            observer_stop = observer.stop() if observer else None
+        result["observer"] = observer_stop if observer else None
         result["observation"] = {
             "target_seconds": 15,
             "elapsed_seconds": elapsed_seconds(t0_ns, end_ns),
             "complete": end_ns >= window_end_ns and observer_complete,
             "snapshot_count": len(snapshots),
+            "start_monotonic_ns": t0_ns,
+            "end_monotonic_ns": end_ns,
         }
+        if is_logcat_ab:
+            result["observation_device_epoch_end"] = (
+                final_dump_summary.get("window_end_device_epoch_estimate")
+                if isinstance(final_dump_summary, dict)
+                else None
+            )
         if is_output_ab:
             result["observation"].update({
                 "start_monotonic_ns": t0_ns,
@@ -1403,7 +1967,11 @@ def main() -> int:
         result["reason"] = (
             "The arm completed its matched observation window; A/B interpretation is produced by the comparator."
             if result["observation"]["complete"]
-            else "The arm did not complete the full observation window with a live, complete log observer."
+            else (
+                "The arm lacks complete final-dump, process-policy, or observation-window evidence."
+                if is_logcat_ab
+                else "The arm did not complete the full observation window with a live, complete log observer."
+            )
         )
         write_result(results, result)
         mark("ab_arm_finished", timeline_path, {"arm": args.mode, "classification": result["classification"]})

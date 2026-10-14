@@ -633,6 +633,191 @@ chmod 755 "$SDK_ROOT/emulator/emulator"
             )
             self.assertIn(f"ANDROID_AVD_HOME={home}/.android/avd", avd_environment)
 
+class FinalLogcatEvidenceTest(unittest.TestCase):
+    @staticmethod
+    def dump(main: str, system: str, events: str) -> str:
+        return (
+            f"--------- beginning of main\n{main}"
+            f"--------- beginning of system\n{system}"
+            f"--------- beginning of events\n{events}"
+        )
+
+    def test_successful_dump_must_cover_the_full_observation_window(self) -> None:
+        summary = probe.final_logcat_dump_coverage(
+            exit_code=0,
+            stdout_available=True,
+            stdout=self.dump("100.0 I boot\n115.0 I home\n", "101.0 I system\n", "102.0 I events\n"),
+            window_start_device_epoch=105.0,
+            window_end_device_epoch=115.0,
+            dump_completed_after_window=True,
+            device_epoch_at_dump=116.0,
+        )
+
+        self.assertTrue(summary["complete"])
+        self.assertTrue(summary["coverage"]["covers_start"])
+        self.assertTrue(summary["coverage"]["covers_end"])
+
+    def test_failed_or_partial_dump_cannot_claim_absence(self) -> None:
+        summary = probe.final_logcat_dump_coverage(
+            exit_code=1,
+            stdout_available=True,
+            stdout=self.dump("100.0 I boot\n115.0 I home\n", "101.0 I system\n", "102.0 I events\n"),
+            window_start_device_epoch=105.0,
+            window_end_device_epoch=115.0,
+            dump_completed_after_window=True,
+            device_epoch_at_dump=116.0,
+        )
+        self.assertFalse(summary["complete"])
+
+    def test_successful_empty_dump_is_not_clean_evidence(self) -> None:
+        summary = probe.final_logcat_dump_coverage(
+            exit_code=0,
+            stdout_available=True,
+            stdout="",
+            window_start_device_epoch=105.0,
+            window_end_device_epoch=115.0,
+            dump_completed_after_window=True,
+            device_epoch_at_dump=116.0,
+        )
+        self.assertFalse(summary["stdout_nonempty"])
+        self.assertFalse(summary["complete"])
+
+    def test_incomplete_buffer_time_coverage_is_unknown(self) -> None:
+        summary = probe.final_logcat_dump_coverage(
+            exit_code=0,
+            stdout_available=True,
+            stdout=self.dump("110.0 I too-late\n", "111.0 I system\n", "114.0 I events\n"),
+            window_start_device_epoch=105.0,
+            window_end_device_epoch=115.0,
+            dump_completed_after_window=True,
+            device_epoch_at_dump=116.0,
+        )
+        self.assertFalse(summary["coverage"]["covers_start"])
+        self.assertTrue(summary["coverage"]["covers_end"])
+        self.assertFalse(summary["complete"])
+
+    def test_dump_must_be_observed_after_window_end(self) -> None:
+        summary = probe.final_logcat_dump_coverage(
+            exit_code=0,
+            stdout_available=True,
+            stdout=self.dump("100.0 I boot\n", "101.0 I system\n", "102.0 I events\n"),
+            window_start_device_epoch=105.0,
+            window_end_device_epoch=115.0,
+            dump_completed_after_window=False,
+            device_epoch_at_dump=116.0,
+        )
+        self.assertFalse(summary["coverage"]["covers_end"])
+        self.assertFalse(summary["complete"])
+
+    def test_dump_device_clock_must_reach_window_end_without_requiring_an_event(self) -> None:
+        summary = probe.final_logcat_dump_coverage(
+            exit_code=0,
+            stdout_available=True,
+            stdout=self.dump("100.0 I boot\n", "101.0 I system\n", "102.0 I events\n"),
+            window_start_device_epoch=105.0,
+            window_end_device_epoch=115.0,
+            dump_completed_after_window=True,
+            device_epoch_at_dump=114.0,
+        )
+        self.assertTrue(summary["stdout_nonempty"])
+        self.assertTrue(summary["coverage"]["covers_start"])
+        self.assertFalse(summary["coverage"]["covers_end"])
+        self.assertFalse(summary["complete"])
+
+    def test_old_record_in_main_does_not_cover_lost_system_and_events_buffers(self) -> None:
+        summary = probe.final_logcat_dump_coverage(
+            exit_code=0,
+            stdout_available=True,
+            stdout=self.dump("90.0 I retained-main\n", "110.0 I lost-system-prefix\n", "112.0 I lost-events-prefix\n"),
+            window_start_device_epoch=105.0,
+            window_end_device_epoch=115.0,
+            dump_completed_after_window=True,
+            device_epoch_at_dump=116.0,
+        )
+
+        self.assertFalse(summary["coverage"]["covers_start"])
+        self.assertFalse(summary["complete"])
+
+    def test_process_probe_matches_only_adb_logcat_for_the_target_serial(self) -> None:
+        processes = """\
+  100 /opt/android/platform-tools/adb -s emulator-5554 logcat -b main
+  101 adb -s emulator-5556 logcat -b main
+  102 adb -s emulator-5554 shell getprop sys.boot_completed
+  103 grep adb -s emulator-5554 logcat
+"""
+
+        self.assertEqual([100], probe.adb_logcat_process_pids(processes, "emulator-5554"))
+
+    def test_orchestration_clock_summary_uses_the_run_command_result_shape(self) -> None:
+        command = {
+            "exit_code": 0,
+            "stdout_available": True,
+            "stdout": "1791981000\n",
+            "started_monotonic_ns": 10,
+            "ended_monotonic_ns": 20,
+        }
+
+        summary = probe.summarize_device_clock(command)
+
+        self.assertEqual(1791981000.0, summary["device_epoch_seconds"])
+        self.assertEqual((1791981001.0, 1791980999.0), probe.preboot_logcat_clock_bounds(summary))
+
+    def test_unavailable_or_disabled_clock_query_has_unknown_bounds(self) -> None:
+        failed = probe.summarize_device_clock({
+            "exit_code": 1,
+            "stdout_available": True,
+            "stdout": "partial 1791981000",
+            "started_monotonic_ns": 10,
+            "ended_monotonic_ns": 20,
+        })
+
+        self.assertEqual((None, None), probe.preboot_logcat_clock_bounds(failed))
+        self.assertEqual((None, None), probe.preboot_logcat_clock_bounds(None))
+
+    def test_process_absence_requires_successful_nonempty_parsed_process_rows(self) -> None:
+        evidence = probe.process_list_evidence(
+            {
+                "exit_code": 0,
+                "stdout_available": True,
+                "stdout": "PID COMMAND\n1 init\n2 adb -s emulator-5554 logcat\n",
+            },
+            "emulator-5554",
+        )
+        self.assertTrue(evidence["stdout_nonempty"])
+        self.assertEqual(2, evidence["process_row_count"])
+        self.assertEqual([2], evidence["adb_logcat_pids"])
+
+        empty = probe.process_list_evidence(
+            {"exit_code": 0, "stdout_available": True, "stdout": ""},
+            "emulator-5554",
+        )
+        self.assertFalse(empty["stdout_nonempty"])
+        self.assertEqual(0, empty["process_row_count"])
+        self.assertEqual([], empty["adb_logcat_pids"])
+
+    def test_failed_process_list_cannot_claim_reader_absence_from_partial_output(self) -> None:
+        evidence = probe.process_list_evidence(
+            {
+                "exit_code": 1,
+                "stdout_available": True,
+                "stdout": "PID COMMAND\n1 init\n",
+            },
+            "emulator-5554",
+        )
+
+        self.assertFalse(evidence["stdout_nonempty"])
+        self.assertEqual(0, evidence["process_row_count"])
+        self.assertEqual([], evidence["adb_logcat_pids"])
+
+    def test_first_home_screenshot_is_captured_once_for_both_d4_arms(self) -> None:
+        for mode in ("preboot-logcat-control", "preboot-logcat-treatment"):
+            self.assertTrue(probe.should_capture_first_home_screenshot(mode, "HOME", False))
+            self.assertFalse(probe.should_capture_first_home_screenshot(mode, "HOME", True))
+            self.assertFalse(probe.should_capture_first_home_screenshot(mode, "UNKNOWN", False))
+
+    def test_treatment_boot_timeout_can_stop_without_an_observer(self) -> None:
+        self.assertIsNone(probe.stop_optional_observer(None))
+
 
 if __name__ == "__main__":
     unittest.main()

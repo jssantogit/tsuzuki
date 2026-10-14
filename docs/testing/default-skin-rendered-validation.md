@@ -61,6 +61,14 @@ The combined artifact emits `difference-matrix.json` and human-readable `differe
 
 The opt-in pair is one experiment. Review the consolidated artifact’s arm evidence, environment normalization, timeline, captures, selected-difference record, and comparator result together. Stop after the first pair; do not repeat with modified startup/configuration to seek a preferred result.
 
+### Pre-boot Logcat observer A/B experiment (D4)
+
+`CI v2.1` has an isolated opt-in `default_skin_emulator_preboot_logcat_d4` pair. Both fresh-AVD arms use the same frozen emulator profile, SDK/runtime setup, preboot read-only environment probes, immediate single MENU input, monotonic polling/snapshot/capture schedule, 15-second outcome window, and one `adb logcat -d` final dump after that window. The control additionally starts the existing continuous Logcat observer after ADB transport and before `sys.boot_completed`; the treatment does not start a continuous reader and waits until the common final dump. No observer events wake or change the shared sampling schedule. The final dump is requested identically for all three buffers (`main`, `system`, and `events`) in both arms.
+
+The final-dump validator requires successful nonempty output and a timestamped retained prefix for each requested buffer that reaches the D4 decision boundary. A single old record from one buffer cannot stand in for a truncated prefix in another. Window-end coverage comes from a successful dump acquired after the measured window plus a successful device-clock sample at dump completion; an idle buffer need not contain an event at the final instant. Missing buffer headers/records, failed or empty commands, incomplete clock coverage, an incomplete control observer, or unresolved/unmapped HOME ANR evidence yields `INCONCLUSIVE`. The control is `BOOT_PATH_UNSTABLE` if a scoped HOME ANR is observed. Only a time-mapped treatment HOME ANR after D4 selection, with an otherwise complete matched protocol and healthy control, can be labeled `DIFFERENCE_CAUSAL`; both healthy arms with complete evidence and no scoped HOME ANR are `DIFFERENCE_NOT_CAUSAL`. This is a single diagnostic pair, not a retry loop or product fix.
+
+The arm artifacts contain the bounded final dump/evidence summary, per-buffer first retained epochs, observer/process proof, snapshots and screenshots. The comparator bundle records the classification and reason. Treat the classification as evidence about this one emulator startup path only; do not infer physical-device or Default Skin acceptance from it.
+
 ## Running and reviewing evidence
 
 Run on a configured disposable emulator:
