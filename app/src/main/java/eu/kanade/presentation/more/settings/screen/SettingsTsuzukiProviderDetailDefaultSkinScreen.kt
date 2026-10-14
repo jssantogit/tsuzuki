@@ -1,6 +1,7 @@
 package eu.kanade.presentation.more.settings.screen
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -278,7 +279,7 @@ class SettingsTsuzukiProviderDetailDefaultSkinScreen(
                                             SettingsPreferenceSwitchIndicator(checked = selected, enabled = canChange)
                                         }
                                     }
-                                    if (index < descriptor.contentLanguages.lastIndex) SettingsGroupDivider()
+                                    if (index < descriptor.contentLanguages.size - 1) SettingsGroupDivider()
                                 }
                             }
                         }
