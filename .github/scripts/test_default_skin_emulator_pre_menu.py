@@ -5,6 +5,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -194,6 +197,46 @@ class ProbeClassificationTest(unittest.TestCase):
         health = probe.snapshot_health(sections)
 
         self.assertIsNone(health["home_process_alive"])
+
+    @unittest.skipUnless(shutil.which("bash"), "Bash is required to exercise the SDK bootstrap script")
+    def test_sdk_install_runs_before_emulator_binary_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            script_path = root / ".github/scripts/probe_default_skin_emulator_pre_menu.sh"
+            script_path.parent.mkdir(parents=True)
+            shutil.copy2(ROOT / ".github/scripts/probe_default_skin_emulator_pre_menu.sh", script_path)
+
+            sdk_root = root / "sdk"
+            tools = sdk_root / "cmdline-tools/1/bin"
+            tools.mkdir(parents=True)
+            marker = root / "sdkmanager-invoked.txt"
+            sdkmanager = tools / "sdkmanager"
+            sdkmanager.write_text(
+                "#!/usr/bin/env bash\nprintf invoked > \"$SDK_INSTALL_MARKER\"\nexit 17\n",
+                encoding="utf-8",
+            )
+            sdkmanager.chmod(0o755)
+            avdmanager = tools / "avdmanager"
+            avdmanager.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            avdmanager.chmod(0o755)
+
+            environment = os.environ.copy()
+            environment["ANDROID_HOME"] = str(sdk_root)
+            environment["ANDROID_SDK_ROOT"] = str(sdk_root)
+            environment["SDK_INSTALL_MARKER"] = str(marker)
+            completed = subprocess.run(
+                [shutil.which("bash") or "bash", str(script_path)],
+                cwd=root,
+                env=environment,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            self.assertNotEqual(0, completed.returncode)
+            self.assertTrue(marker.is_file(), completed.stdout + completed.stderr)
+            self.assertIn("Stable-channel SDK install failed", completed.stdout + completed.stderr)
 
 
 if __name__ == "__main__":

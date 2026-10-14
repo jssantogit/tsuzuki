@@ -47,7 +47,27 @@ sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 sdkmanager="$(find "$sdk_root/cmdline-tools" -type f -name sdkmanager -print 2>/dev/null | sort -V | tail -n 1)"
 avdmanager="$(find "$sdk_root/cmdline-tools" -type f -name avdmanager -print 2>/dev/null | sort -V | tail -n 1)"
 emulator="$sdk_root/emulator/emulator"
-[[ -x "$sdkmanager" && -x "$avdmanager" && -x "$emulator" ]] || fail_inconclusive 'Android SDK tools are unavailable'
+
+write_sdk_tool_state() {
+  local phase="$1"
+  local path executable
+  {
+    printf 'phase=%s\n' "$phase"
+    printf 'sdk_root=%s\n' "$sdk_root"
+    for tool in sdkmanager avdmanager emulator; do
+      case "$tool" in
+        sdkmanager) path="$sdkmanager" ;;
+        avdmanager) path="$avdmanager" ;;
+        emulator) path="$emulator" ;;
+      esac
+      if [[ -x "$path" ]]; then executable=true; else executable=false; fi
+      printf '%s_path=%s\n%s_executable=%s\n' "$tool" "$path" "$tool" "$executable"
+    done
+  } > "$results_dir/config/sdk-tools-$phase.txt"
+}
+
+write_sdk_tool_state before-install
+[[ -x "$sdkmanager" ]] || fail_inconclusive 'Android SDK sdkmanager is unavailable; see config/sdk-tools-before-install.txt'
 export PATH="$sdk_root/platform-tools:$sdk_root/emulator:$PATH"
 
 serial='emulator-5554'
@@ -68,6 +88,10 @@ sdk_packages=(emulator platform-tools 'platforms;android-35' "$image_package")
 sdk_status=$?
 printf 'SDKMANAGER_INSTALL_EXIT=%s\n' "$sdk_status" >> "$results_dir/config/sdkmanager-install.log"
 (( sdk_status == 0 )) || fail_inconclusive 'Stable-channel SDK install failed; see sdkmanager-install.log'
+
+write_sdk_tool_state after-install
+[[ -x "$avdmanager" ]] || fail_inconclusive 'Android SDK avdmanager is unavailable after package installation; see config/sdk-tools-after-install.txt'
+[[ -x "$emulator" ]] || fail_inconclusive 'Android emulator binary is unavailable after package installation; see config/sdk-tools-after-install.txt'
 
 "$sdkmanager" --version > "$results_dir/config/sdkmanager-version.txt" 2>&1 || true
 printf -v command_text '%q ' "$sdkmanager" --version
