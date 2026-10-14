@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+results_dir='.github/results/default-skin-pre-menu'
+mkdir -p "$results_dir"
+rm -f "$results_dir"/timeline.jsonl "$results_dir"/result.json "$results_dir"/logcat-filtered.jsonl \
+  "$results_dir"/run-info.txt "$results_dir"/pre-menu-immediate.png "$results_dir"/pre-menu-final.png \
+  "$results_dir"/post-menu-anr.png "$results_dir"/post-menu-stable.png
+rm -rf "$results_dir"/snapshots "$results_dir"/config
+mkdir -p "$results_dir/snapshots" "$results_dir/config"
+{
+  printf 'CLASSIFICATION=IN_PROGRESS\n'
+  printf 'REASON=Probe started; final classification pending.\n'
+} > "$results_dir/run-info.txt"
+
+write_run_info() {
+  local classification="$1"
+  local reason="$2"
+  {
+    printf 'CLASSIFICATION=%s\n' "$classification"
+    printf 'REASON=%s\n' "$reason"
+    printf 'RESULT_JSON=%s\n' "$results_dir/result.json"
+  } > "$results_dir/run-info.txt"
+}
+
+fail_inconclusive() {
+  local reason="$1"
+  python3 - "$results_dir/result.json" "$reason" <<'PY'
+import json
+import pathlib
+import sys
+
+pathlib.Path(sys.argv[1]).write_text(json.dumps({
+    "classification": "INCONCLUSIVE",
+    "reason": sys.argv[2],
+    "menu_attempted": False,
+    "menu_issued": False,
+}, indent=2) + "\n", encoding="utf-8")
+PY
+  write_run_info 'INCONCLUSIVE' "$reason"
+  echo "::error::$reason"
+  exit 1
+}
+
+sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+[[ -n "$sdk_root" && -d "$sdk_root" ]] || fail_inconclusive 'Android SDK root is unavailable'
+sdkmanager="$(find "$sdk_root/cmdline-tools" -type f -name sdkmanager -print 2>/dev/null | sort -V | tail -n 1)"
+avdmanager="$(find "$sdk_root/cmdline-tools" -type f -name avdmanager -print 2>/dev/null | sort -V | tail -n 1)"
+emulator="$sdk_root/emulator/emulator"
+[[ -x "$sdkmanager" && -x "$avdmanager" && -x "$emulator" ]] || fail_inconclusive 'Android SDK tools are unavailable'
+export PATH="$sdk_root/platform-tools:$sdk_root/emulator:$PATH"
+
+serial='emulator-5554'
+image_package='system-images;android-35;google_apis;x86_64'
+avd_name='test'
+avd_home="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+avd_dir="$avd_home/$avd_name.avd"
+avd_ini="$avd_home/$avd_name.ini"
+[[ ! -e "$avd_dir" && ! -e "$avd_ini" ]] || fail_inconclusive 'Fresh AVD name already exists; refusing to delete or reuse it'
+
+mkdir -p "$results_dir/config"
+sdk_packages=(emulator platform-tools 'platforms;android-35' "$image_package")
+{
+  printf '%q ' "$sdkmanager" --channel=0 --install "${sdk_packages[@]}"
+  printf '\n'
+} > "$results_dir/config/sdk-install-command.txt"
+"$sdkmanager" --channel=0 --install "${sdk_packages[@]}" > "$results_dir/config/sdkmanager-install.log" 2>&1
+sdk_status=$?
+printf 'SDKMANAGER_INSTALL_EXIT=%s\n' "$sdk_status" >> "$results_dir/config/sdkmanager-install.log"
+(( sdk_status == 0 )) || fail_inconclusive 'Stable-channel SDK install failed; see sdkmanager-install.log'
+
+"$sdkmanager" --version > "$results_dir/config/sdkmanager-version.txt" 2>&1 || true
+printf -v command_text '%q ' "$sdkmanager" --version
+printf '%s\n' "${command_text% }" > "$results_dir/config/sdkmanager-version-command.txt"
+"$sdk_root/platform-tools/adb" version > "$results_dir/config/adb-version.txt" 2>&1 || true
+printf -v command_text '%q ' "$sdk_root/platform-tools/adb" version
+printf '%s\n' "${command_text% }" > "$results_dir/config/adb-version-command.txt"
+"$emulator" -version > "$results_dir/config/emulator-version.txt" 2>&1 || true
+printf -v command_text '%q ' "$emulator" -version
+printf '%s\n' "${command_text% }" > "$results_dir/config/emulator-version-command.txt"
+"$emulator" -accel-check > "$results_dir/config/accel-check.txt" 2>&1
+accel_status=$?
+printf 'ACCEL_CHECK_EXIT=%s\n' "$accel_status" >> "$results_dir/config/accel-check.txt"
+printf -v command_text '%q ' "$emulator" -accel-check
+printf '%s\n' "${command_text% }" > "$results_dir/config/accel-check-command.txt"
+
+image_dir="$sdk_root/system-images/android-35/google_apis/x86_64"
+[[ -s "$image_dir/source.properties" ]] || fail_inconclusive 'Installed system image source.properties is missing'
+cp "$image_dir/source.properties" "$results_dir/config/source.properties"
+[[ -s "$sdk_root/platform-tools/source.properties" ]] \
+  || fail_inconclusive 'Installed platform-tools source.properties is missing'
+[[ -s "$sdk_root/platforms/android-35/source.properties" ]] \
+  || fail_inconclusive 'Installed Android 35 platform source.properties is missing'
+cp "$sdk_root/platform-tools/source.properties" "$results_dir/config/platform-tools-source.properties"
+cp "$sdk_root/platforms/android-35/source.properties" "$results_dir/config/platform-source.properties"
+
+printf -v avdmanager_command '%q ' "$avdmanager" create avd --force -n "$avd_name" --package "$image_package" --device pixel_6
+printf "printf 'no\\n' | %s\n" "${avdmanager_command% }" > "$results_dir/config/avd-create-command.txt"
+printf 'no\n' | "$avdmanager" create avd --force -n "$avd_name" --package "$image_package" --device pixel_6 \
+  > "$results_dir/config/avdmanager-create.log" 2>&1
+avd_status=$?
+printf 'AVDMANAGER_CREATE_EXIT=%s\n' "$avd_status" >> "$results_dir/config/avdmanager-create.log"
+(( avd_status == 0 )) || fail_inconclusive 'Pixel 6 AVD creation failed; see avdmanager-create.log'
+[[ -s "$avd_dir/config.ini" ]] || fail_inconclusive 'Created AVD config.ini is missing'
+cp "$avd_dir/config.ini" "$results_dir/config/avd-config-default.ini"
+printf 'hw.cpu.ncore=2\n' >> "$avd_dir/config.ini"
+cp "$avd_dir/config.ini" "$results_dir/config/avd-config-effective.ini"
+
+printf -v launch_command '%q ' "$emulator" -port 5554 -avd "$avd_name" -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+launch_command="${launch_command% }"
+printf '%s\n' "$launch_command" > "$results_dir/config/emulator-launch-command.txt"
+printf 'HOST_UTC=%s HOST_MONOTONIC_NS=%s\n' \
+  "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$(python3 -c 'import time; print(time.monotonic_ns())')" \
+  > "$results_dir/emulator-launch-start.txt"
+"$emulator" -port 5554 -avd "$avd_name" -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim \
+  > "$results_dir/emulator.log" 2>&1 &
+emulator_pid=$!
+printf 'EMULATOR_PID=%s\n' "$emulator_pid" >> "$results_dir/emulator-launch-start.txt"
+
+python3 - "$results_dir/run-metadata.json" "$results_dir" "$sdk_root" "$image_package" "$avd_name" "$accel_status" <<'PY'
+import json
+import pathlib
+import sys
+
+metadata_path, results, sdk_root, image_package, avd_name, accel_status = sys.argv[1:]
+root = pathlib.Path(results)
+metadata = {
+    "system_image": image_package,
+    "emulator_version": (root / "config/emulator-version.txt").read_text(encoding="utf-8", errors="replace"),
+    "adb_version": (root / "config/adb-version.txt").read_text(encoding="utf-8", errors="replace"),
+    "sdkmanager_version": (root / "config/sdkmanager-version.txt").read_text(encoding="utf-8", errors="replace"),
+    "source_properties": (root / "config/source.properties").read_text(encoding="utf-8", errors="replace"),
+    "platform_tools_source_properties": (root / "config/platform-tools-source.properties").read_text(encoding="utf-8", errors="replace"),
+    "platform_source_properties": (root / "config/platform-source.properties").read_text(encoding="utf-8", errors="replace"),
+    "avd_default_config": (root / "config/avd-config-default.ini").read_text(encoding="utf-8", errors="replace"),
+    "avd_effective_config": (root / "config/avd-config-effective.ini").read_text(encoding="utf-8", errors="replace"),
+    "launch_command": (root / "config/emulator-launch-command.txt").read_text(encoding="utf-8", errors="replace"),
+    "accel_check": (root / "config/accel-check.txt").read_text(encoding="utf-8", errors="replace"),
+    "emulator_log_path": str(root / "emulator.log"),
+    "sdk_root": sdk_root,
+    "avd_name": avd_name,
+    "accel_check_exit": int(accel_status),
+}
+(root / "run-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+PY
+
+# Wait only for ADB transport; the observer begins before sys.boot_completed.
+transport_ready=0
+transport_deadline=$((SECONDS + 600))
+transport_log="$results_dir/adb-transport-poll.log"
+: > "$transport_log"
+while (( SECONDS < transport_deadline )); do
+  transport_output="$(adb -s "$serial" get-state 2>&1)"
+  transport_status=$?
+  printf 'HOST_UTC=%s HOST_MONOTONIC_SECONDS=%s EXIT=%s OUTPUT_AVAILABLE=%s OUTPUT=%q\n' \
+    "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$SECONDS" "$transport_status" \
+    "$([[ -n "$transport_output" ]] && echo true || echo false)" "$transport_output" >> "$transport_log"
+  if (( transport_status == 0 )) && [[ "$(tr -d '\r' <<< "$transport_output")" == 'device' ]]; then
+    transport_ready=1
+    break
+  fi
+  sleep 2
+done
+(( transport_ready == 1 )) || fail_inconclusive 'Emulator ADB transport did not appear within 600 seconds'
+
+python3 .github/scripts/probe_default_skin_emulator_pre_menu.py \
+  --serial "$serial" \
+  --results "$results_dir" \
+  --metadata "$results_dir/run-metadata.json"

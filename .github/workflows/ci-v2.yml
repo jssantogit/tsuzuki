@@ -16,6 +16,11 @@ on:
         required: false
         default: false
         type: boolean
+      default_skin_emulator_pre_menu:
+        description: Run an opt-in fresh-emulator HOME/ANR diagnostic before one MENU input
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -508,6 +513,50 @@ jobs:
         with:
           name: default-skin-rendered-${{ github.sha }}
           path: .github/results/default-skin-rendered/**
+          if-no-files-found: warn
+          retention-days: 7
+
+  default-skin-emulator-pre-menu:
+    name: Default Skin emulator pre-MENU diagnostic
+    if: ${{ inputs.default_skin_emulator_pre_menu }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Observe fresh emulator before and after one MENU input
+        shell: bash
+        run: bash .github/scripts/probe_default_skin_emulator_pre_menu.sh
+
+      - name: Report pre-MENU diagnostic classification
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f .github/results/default-skin-pre-menu/run-info.txt ]]; then
+            cat .github/results/default-skin-pre-menu/run-info.txt
+          else
+            echo '::warning::The pre-MENU diagnostic produced no run-info file; inspect provisioning logs.'
+          fi
+
+      - name: Upload pre-MENU diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: default-skin-emulator-pre-menu-${{ github.sha }}
+          path: .github/results/default-skin-pre-menu/**
           if-no-files-found: warn
           retention-days: 7
 
