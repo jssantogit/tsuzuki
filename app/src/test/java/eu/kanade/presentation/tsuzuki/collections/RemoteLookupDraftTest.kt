@@ -202,6 +202,86 @@ class RemoteLookupDraftTest {
         state.draft.excludeValues shouldBe emptyList()
     }
 
+    @Test
+    fun `UI transitions move one value between include exclude and neutral without losing others`() {
+        val adventure = QueryValue.of("Adventure")
+        val drama = QueryValue.of("Drama")
+        val horror = QueryValue.of("Horror")
+        val mystery = QueryValue.of("Mystery")
+        val capability = includeExcludeCapability(
+            operators = setOf(QueryOperator.EQUALS, QueryOperator.CONTAINS),
+        )
+        val original = RemoteLookupDraft(
+            includes = listOf(
+                RemoteLookupSelection(adventure, QueryOperator.EQUALS),
+                RemoteLookupSelection(drama, QueryOperator.CONTAINS),
+            ),
+            excludes = listOf(
+                RemoteLookupSelection(horror, QueryOperator.EQUALS),
+                RemoteLookupSelection(mystery, QueryOperator.CONTAINS),
+            ),
+        )
+
+        val excluded = original.selectValue(adventure, RemoteLookupValueSelection.EXCLUDE, capability)
+        excluded.includes shouldContainExactly listOf(RemoteLookupSelection(drama, QueryOperator.CONTAINS))
+        excluded.excludes shouldContainExactly listOf(
+            RemoteLookupSelection(horror, QueryOperator.EQUALS),
+            RemoteLookupSelection(mystery, QueryOperator.CONTAINS),
+            RemoteLookupSelection(adventure, QueryOperator.EQUALS),
+        )
+        excluded.selectValue(adventure, RemoteLookupValueSelection.EXCLUDE, capability) shouldBe excluded
+
+        val movedBackToInclude = excluded.selectValue(adventure, RemoteLookupValueSelection.INCLUDE, capability)
+        movedBackToInclude.includes shouldContainExactly listOf(
+            RemoteLookupSelection(drama, QueryOperator.CONTAINS),
+            RemoteLookupSelection(adventure, QueryOperator.EQUALS),
+        )
+        movedBackToInclude.excludes shouldContainExactly listOf(
+            RemoteLookupSelection(horror, QueryOperator.EQUALS),
+            RemoteLookupSelection(mystery, QueryOperator.CONTAINS),
+        )
+
+        val neutral = excluded.selectValue(adventure, RemoteLookupValueSelection.NEUTRAL, capability)
+        neutral.includes shouldContainExactly listOf(RemoteLookupSelection(drama, QueryOperator.CONTAINS))
+        neutral.excludes shouldContainExactly listOf(
+            RemoteLookupSelection(horror, QueryOperator.EQUALS),
+            RemoteLookupSelection(mystery, QueryOperator.CONTAINS),
+        )
+
+        val included = neutral.selectValue(adventure, RemoteLookupValueSelection.INCLUDE, capability)
+        included.includes shouldContainExactly listOf(
+            RemoteLookupSelection(drama, QueryOperator.CONTAINS),
+            RemoteLookupSelection(adventure, QueryOperator.EQUALS),
+        )
+        included.excludes shouldContainExactly neutral.excludes
+    }
+
+    @Test
+    fun `UI selection is a no-op for an already selected value and an unavailable exclude`() {
+        val adventure = QueryValue.of("Adventure")
+        val capability = includeExcludeCapability()
+        val selected = RemoteLookupDraft().selectValue(
+            adventure,
+            RemoteLookupValueSelection.INCLUDE,
+            capability,
+        )
+
+        selected.selectValue(adventure, RemoteLookupValueSelection.INCLUDE, capability) shouldBe selected
+
+        val conflicted = RemoteLookupDraft(
+            includes = listOf(RemoteLookupSelection(adventure, QueryOperator.EQUALS)),
+            excludes = listOf(RemoteLookupSelection(adventure, QueryOperator.CONTAINS)),
+        )
+        conflicted.selectValue(adventure, RemoteLookupValueSelection.INCLUDE, capability) shouldBe conflicted
+
+        val includeOnly = includeExcludeCapability(MultiValueMode.ALL)
+        RemoteLookupDraft().selectValue(
+            adventure,
+            RemoteLookupValueSelection.EXCLUDE,
+            includeOnly,
+        ) shouldBe RemoteLookupDraft()
+    }
+
     private fun editorWithLookupValues(): ListEditorState {
         val query = QueryExpression.All(
             QueryExpression.Predicate(
@@ -233,12 +313,15 @@ class RemoteLookupDraftTest {
         )
     }
 
-    private fun includeExcludeCapability(mode: MultiValueMode = MultiValueMode.INCLUDE_EXCLUDE) =
+    private fun includeExcludeCapability(
+        mode: MultiValueMode = MultiValueMode.INCLUDE_EXCLUDE,
+        operators: Set<QueryOperator> = setOf(QueryOperator.EQUALS),
+    ) =
         CollectionFilterCapability(
             id = "genre",
             field = QueryField.GENRE,
             placement = FilterPlacement.QUICK,
-            operators = setOf(QueryOperator.EQUALS),
+            operators = operators,
             execution = setOf(FilterExecutionMode.RESIDUAL_EXACT),
             valueSource = FilterValueSource.RemoteLookup("genres"),
             multiValueMode = mode,

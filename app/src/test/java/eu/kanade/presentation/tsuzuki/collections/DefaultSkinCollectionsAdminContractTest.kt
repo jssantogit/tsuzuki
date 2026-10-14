@@ -38,7 +38,6 @@ class DefaultSkinCollectionsAdminContractTest {
             ) shouldBe true
         builder shouldContain "onDismiss = { transaction = null }"
         builder shouldContain ".imePadding()"
-        builder shouldContain "selected = included"
         builder shouldContain "is QueryField.Custom -> id"
         builder shouldContain "is QueryField.Custom -> field.identifier"
         builder shouldContain "if (providerId.isNotBlank())"
@@ -67,6 +66,8 @@ class DefaultSkinCollectionsAdminContractTest {
             .substringBefore("@Composable\nprivate fun BuilderGroup(")
         val lookupSheet = builder.substringAfter("private fun RemoteLookupFilterSheet(")
             .substringBefore("private fun <T> BuilderDropdown(")
+        val selectionTransition = builder.substringAfter("fun selectValue(")
+            .substringBefore("fun clear(): RemoteLookupDraft")
         val booleanFacet = builder.substringAfter("FilterValueSource.BooleanToggle ->")
             .substringBefore("is FilterValueSource.RemoteLookup ->")
 
@@ -76,13 +77,23 @@ class DefaultSkinCollectionsAdminContractTest {
         segment shouldContain "Role.RadioButton"
         segment shouldContain "heightIn(min = 48.dp)"
         segment shouldContain "DefaultSkinShape.Control"
+        segment shouldContain "if (!isSelected) onSelected(value)"
         lookupSheet shouldContain "ListBuilderSegmentControl("
         lookupSheet shouldNotContain "DefaultSkinChoiceChip("
         lookupSheet shouldContain "val canExclude = capability.multiValueMode == MultiValueMode.INCLUDE_EXCLUDE"
         lookupSheet shouldContain "if (canExclude)"
-        lookupSheet shouldContain "state.neutral(option.value)"
-        lookupSheet shouldContain "state.include(option.value, capability)"
-        lookupSheet shouldContain "state.exclude(option.value, capability)"
+        lookupSheet shouldContain "included -> \"include\""
+        lookupSheet shouldContain "excluded -> \"exclude\""
+        lookupSheet shouldContain "else -> \"neutral\""
+        lookupSheet shouldContain "state.selectValue(option.value, selection, capability)"
+        lookupSheet shouldNotContain "state.include(option.value, capability)"
+        lookupSheet shouldNotContain "state.exclude(option.value, capability)"
+        selectionTransition shouldContain "if (selection == currentSelection) return this"
+        selectionTransition shouldContain "val cleared = neutral(value)"
+        selectionTransition shouldContain "cleared.include(value, capability)"
+        selectionTransition shouldContain "cleared.exclude(value, capability)"
+        selectionTransition shouldContain "includes = cleared.includes + selected.includes.filter { it.value == value }"
+        selectionTransition shouldContain "excludes = cleared.excludes + selected.excludes.filter { it.value == value }"
         builder shouldContain "DefaultSkinChoiceChip(" // Active filters and boolean facets remain chips.
         booleanFacet shouldContain "DefaultSkinChoiceChip("
         builder shouldContain "DefaultSkinTextField("

@@ -1332,12 +1332,14 @@ private fun RemoteLookupFilterSheet(
                                                     else -> "neutral"
                                                 },
                                                 onSelected = { selected ->
-                                                    val next = when (selected) {
-                                                        "include" -> state.include(option.value, capability)
-                                                        "exclude" -> state.exclude(option.value, capability)
-                                                        else -> state.neutral(option.value)
+                                                    val selection = when (selected) {
+                                                        "include" -> RemoteLookupValueSelection.INCLUDE
+                                                        "exclude" -> RemoteLookupValueSelection.EXCLUDE
+                                                        else -> RemoteLookupValueSelection.NEUTRAL
                                                     }
-                                                    onStateChange(next)
+                                                    onStateChange(
+                                                        state.selectValue(option.value, selection, capability),
+                                                    )
                                                 },
                                             )
                                             HorizontalDivider(color = colors.outline)
@@ -1373,6 +1375,12 @@ internal data class RemoteLookupSelection(
     val value: QueryValue,
     val operator: QueryOperator,
 )
+
+internal enum class RemoteLookupValueSelection {
+    NEUTRAL,
+    INCLUDE,
+    EXCLUDE,
+}
 
 internal data class RemoteLookupDraft(
     val includes: List<RemoteLookupSelection> = emptyList(),
@@ -1416,6 +1424,37 @@ internal data class RemoteLookupDraft(
         }
     }
 
+    fun selectValue(
+        value: QueryValue,
+        selection: RemoteLookupValueSelection,
+        capability: CollectionFilterCapability,
+    ): RemoteLookupDraft {
+        val currentSelection = when {
+            value in includeValues -> RemoteLookupValueSelection.INCLUDE
+            value in excludeValues -> RemoteLookupValueSelection.EXCLUDE
+            else -> RemoteLookupValueSelection.NEUTRAL
+        }
+        if (selection == currentSelection) return this
+        if (selection == RemoteLookupValueSelection.EXCLUDE &&
+            capability.multiValueMode != MultiValueMode.INCLUDE_EXCLUDE
+        ) {
+            return this
+        }
+
+        val cleared = neutral(value)
+        val selected = when (selection) {
+            RemoteLookupValueSelection.NEUTRAL -> cleared
+            RemoteLookupValueSelection.INCLUDE -> cleared.include(value, capability)
+            RemoteLookupValueSelection.EXCLUDE -> cleared.exclude(value, capability)
+        }
+        if (capability.multiValueMode != MultiValueMode.INCLUDE_EXCLUDE) return selected
+
+        return selected.copy(
+            includes = cleared.includes + selected.includes.filter { it.value == value },
+            excludes = cleared.excludes + selected.excludes.filter { it.value == value },
+        )
+    }
+
     fun clear(): RemoteLookupDraft = RemoteLookupDraft()
 
     companion object {
@@ -1450,6 +1489,16 @@ internal data class RemoteLookupSheetState(
 
     fun exclude(value: QueryValue, capability: CollectionFilterCapability): RemoteLookupSheetState = if (isOpen) {
         copy(draft = draft.exclude(value, capability))
+    } else {
+        this
+    }
+
+    fun selectValue(
+        value: QueryValue,
+        selection: RemoteLookupValueSelection,
+        capability: CollectionFilterCapability,
+    ): RemoteLookupSheetState = if (isOpen) {
+        copy(draft = draft.selectValue(value, selection, capability))
     } else {
         this
     }
@@ -1856,7 +1905,7 @@ private fun ListBuilderSegmentControl(
                         .selectable(
                             selected = isSelected,
                             role = Role.RadioButton,
-                            onClick = { onSelected(value) },
+                            onClick = { if (!isSelected) onSelected(value) },
                         )
                         .padding(horizontal = 8.dp),
                     contentAlignment = Alignment.Center,
