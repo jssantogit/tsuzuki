@@ -370,6 +370,30 @@ class ProbeClassificationTest(unittest.TestCase):
         self.assertEqual("absent", matched_prefix["status"])
         self.assertEqual("unknown", unmatched_prefix["status"])
 
+    def test_output_forwarding_scope_is_extended_but_legacy_menu_scope_is_unchanged(self) -> None:
+        snapshot_event = {
+            "source": "snapshot:menu-03:LAST_ANR",
+            "line": "ANR in com.example.launcher: Input dispatching timed out",
+        }
+        legacy_window = probe.selected_anr_observation_window(
+            False, 1_000, 10_000, 26_000, 25_000
+        )
+        output_window = probe.selected_anr_observation_window(
+            True, 1_000, 10_000, 26_000, 25_000
+        )
+        legacy_scope = probe.scope_observation_anrs(
+            [], [snapshot_event], [], {"com.example.launcher"}, output_forwarding_ab=False
+        )
+        output_scope = probe.scope_observation_anrs(
+            [], [snapshot_event], [], {"com.example.launcher"}, output_forwarding_ab=True
+        )
+
+        self.assertEqual((10_000, 25_000), legacy_window)
+        self.assertEqual((1_000, 26_000), output_window)
+        self.assertEqual([snapshot_event], legacy_scope["scoped"]["home"])
+        self.assertEqual([], output_scope["scoped"]["home"])
+        self.assertEqual([snapshot_event], output_scope["unresolved_snapshot_events"])
+
     def test_ab_elapsed_time_uses_observed_end_not_scheduled_window_length(self) -> None:
         self.assertEqual(15.375, probe.elapsed_seconds(1_000_000_000, 16_375_000_000))
 
@@ -408,6 +432,30 @@ class ProbeClassificationTest(unittest.TestCase):
         self.assertEqual("1536", configuration["avd_default_config"]["hw.ramSize"])
         self.assertEqual(["-port", "5554", "-avd", "test", "-gpu", "swiftshader_indirect"], configuration["launch_arguments"])
         self.assertNotIn("/sdk", json.dumps(configuration))
+
+    def test_output_forwarding_environment_records_unset_and_normalizes_known_runner_paths(self) -> None:
+        metadata = {
+            "home": "/home/runner",
+            "sdk_root": "/opt/android-sdk",
+            "avd_home": "/home/runner/.android/avd",
+            "host_environment": {
+                "HOME": {"state": "set", "value": "/home/runner"},
+                "ANDROID_HOME": {"state": "set", "value": "/opt/android-sdk"},
+                "ANDROID_AVD_HOME": {"state": "set", "value": "/home/runner/.android/avd/test.avd"},
+                "ANDROID_SERIAL": {"state": "unset"},
+            },
+        }
+
+        configuration = probe.canonical_configuration(metadata, {})
+
+        self.assertEqual("runner_home", configuration["host_environment"]["HOME"]["value"])
+        self.assertEqual("android_sdk", configuration["host_environment"]["ANDROID_HOME"]["value"])
+        self.assertEqual(
+            "avd_home/test.avd",
+            configuration["host_environment"]["ANDROID_AVD_HOME"]["value"],
+        )
+        self.assertEqual({"state": "unset"}, configuration["host_environment"]["ANDROID_SERIAL"])
+        self.assertNotIn("/home/runner", json.dumps(configuration))
 
     def test_ab_animation_config_uses_successful_end_of_window_reads(self) -> None:
         pre_boot = {

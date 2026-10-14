@@ -355,6 +355,39 @@ def uncorroborated_snapshot_home_anrs(
     return unresolved
 
 
+def selected_anr_observation_window(
+    output_forwarding_ab: bool,
+    launch_ns: int | None,
+    boot_t0_ns: int,
+    observed_end_ns: int,
+    scheduled_window_end_ns: int,
+) -> tuple[int | None, int]:
+    if output_forwarding_ab:
+        return launch_ns, observed_end_ns
+    return boot_t0_ns, scheduled_window_end_ns
+
+
+def scope_observation_anrs(
+    interval_events: list[dict[str, Any]],
+    snapshot_events: list[dict[str, Any]],
+    timestamped_live_events: list[dict[str, Any]],
+    home_packages: set[str],
+    *,
+    output_forwarding_ab: bool,
+) -> dict[str, Any]:
+    status_events = interval_events if output_forwarding_ab else interval_events + snapshot_events
+    snapshot_corroboration = timestamped_live_events if output_forwarding_ab else interval_events
+    return {
+        "scoped": scope_anr_events_to_packages(status_events, home_packages),
+        "scoped_snapshots": scope_anr_events_to_packages(snapshot_events, home_packages),
+        "unresolved_snapshot_events": uncorroborated_snapshot_home_anrs(
+            snapshot_events,
+            snapshot_corroboration,
+            home_packages,
+        ),
+    }
+
+
 def stable_control_boot_path(snapshots: list[dict[str, Any]]) -> bool | None:
     """Return false on an observed unhealthy sample, unknown on missing evidence."""
     health = [snapshot.get("stable_pre_menu_health") for snapshot in snapshots]
@@ -389,6 +422,38 @@ def canonical_animation_values(read_commands: dict[str, dict[str, Any]]) -> dict
     return values
 
 
+def _canonical_host_environment(metadata: dict[str, Any]) -> dict[str, Any]:
+    raw = metadata.get("host_environment")
+    if not isinstance(raw, dict):
+        return {}
+    roles = {
+        str(metadata.get("home")): "runner_home",
+        str(metadata.get("sdk_root")): "android_sdk",
+        str(metadata.get("avd_home")): "avd_home",
+    }
+    roles.pop("", None)
+    canonical: dict[str, Any] = {}
+    for name, entry in raw.items():
+        if not isinstance(entry, dict) or entry.get("state") not in {"set", "unset"}:
+            canonical[str(name)] = {"state": "unknown"}
+            continue
+        if entry["state"] == "unset":
+            canonical[str(name)] = {"state": "unset"}
+            continue
+        value = str(entry.get("value", ""))
+        normalized = roles.get(value)
+        if normalized is None:
+            for path, role in sorted(roles.items(), key=lambda item: len(item[0]), reverse=True):
+                if value.startswith(path.rstrip("/") + "/"):
+                    normalized = role + value[len(path):]
+                    break
+        canonical[str(name)] = {
+            "state": "set",
+            "value": normalized if normalized is not None else value,
+        }
+    return dict(sorted(canonical.items()))
+
+
 def canonical_configuration(metadata: dict[str, Any], animation_values: dict[str, Any]) -> dict[str, Any]:
     """Build a path/time-independent configuration record for A/B matching."""
 
@@ -409,7 +474,7 @@ def canonical_configuration(metadata: dict[str, Any], animation_values: dict[str
         launch = shlex.split(str(metadata.get("launch_command", "")))
     except ValueError:
         launch = []
-    return {
+    configuration = {
         "runner_image_os": metadata.get("runner_image_os"),
         "runner_image_version": metadata.get("runner_image_version"),
         "system_image": metadata.get("system_image"),
@@ -436,6 +501,15 @@ def canonical_configuration(metadata: dict[str, Any], animation_values: dict[str
         },
         "animation_values": animation_values,
     }
+    if "host_environment" in metadata:
+        configuration["host_environment"] = _canonical_host_environment(metadata)
+        configuration["output_capture"] = {
+            "tee": True,
+            "file_capture": True,
+            "capture_file": "emulator.log",
+            "stderr_route": "stdout",
+        }
+    return configuration
 
 
 REMOTE_SNAPSHOT = r"""set +e
@@ -828,7 +902,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--serial", required=True)
     parser.add_argument("--results", type=Path, required=True)
     parser.add_argument("--metadata", type=Path, required=True)
-    parser.add_argument("--mode", choices=("late", "control", "treatment"), default="late")
+    parser.add_argument(
+        "--mode",
+        choices=("late", "control", "treatment", "output-control", "output-treatment"),
+        default="late",
+    )
     return parser.parse_args()
 
 
@@ -841,6 +919,11 @@ def main() -> int:
     snapshot_dir.mkdir(exist_ok=True)
     metadata = load_run_metadata(args.metadata)
     equivalence = config_equivalence(metadata)
+    is_menu_ab = args.mode in {"control", "treatment"}
+    is_output_ab = args.mode in {"output-control", "output-treatment"}
+    is_ab = is_menu_ab or is_output_ab
+    output_arm = args.mode.removeprefix("output-") if is_output_ab else None
+    output_forwarding = metadata.get("output_forwarding") if is_output_ab else None
     mark("observer_start", timeline_path, {"serial": args.serial})
     result: dict[str, Any] = {
         "serial": args.serial,
@@ -858,6 +941,14 @@ def main() -> int:
         "post_menu_unknown_anr": False,
         "screenshots": [],
     }
+    if is_output_ab:
+        result.update({
+            "experiment": "default_skin_emulator_output_forwarding",
+            "arm": output_arm,
+            "launch_monotonic_ns": output_forwarding.get("applied_monotonic_ns")
+            if isinstance(output_forwarding, dict) else None,
+            "output_forwarding": output_forwarding,
+        })
     if not re.fullmatch(r"emulator-[0-9]+", args.serial):
         result["error"] = "Refusing non-emulator ADB serial."
         result["classification"] = "INCONCLUSIVE"
@@ -880,8 +971,14 @@ def main() -> int:
     result["observer_available_at_start"] = observer.available
     observer_started = mark("logcat_observer_started", timeline_path, {"available": observer.available})
     result["logcat_observer_started_monotonic_ns"] = observer_started["monotonic_ns"]
+    if is_output_ab:
+        result["observer_started_monotonic_ns"] = observer_started["monotonic_ns"]
+        applied_ns = result.get("launch_monotonic_ns")
+        result["launch_to_observer_gap_ns"] = (
+            observer_started["monotonic_ns"] - applied_ns if isinstance(applied_ns, int) else None
+        )
     animation_values_before_boot_complete: dict[str, Any] = {}
-    if args.mode in {"control", "treatment"}:
+    if is_ab:
         for setting in ("window_animation_scale", "transition_animation_scale", "animator_duration_scale"):
             animation = run_command(
                 ["adb", "-s", args.serial, "shell", "settings", "get", "global", setting],
@@ -899,7 +996,7 @@ def main() -> int:
         result["animation_policy"] = "Read-only; same runtime defaults through the 15-second A/B window."
 
     def take_snapshot(label: str) -> dict[str, Any]:
-        if args.mode in {"control", "treatment"} and result.get("first_device_observation_after_t0_ns") is None:
+        if is_ab and result.get("first_device_observation_after_t0_ns") is None:
             result["first_device_observation_after_t0_ns"] = time.monotonic_ns()
         before = mark(f"snapshot_{label}_start", timeline_path)
         command = run_command(
@@ -928,10 +1025,16 @@ def main() -> int:
         write_json(snapshot_dir / f"{label}.json", snapshot)
         (snapshot_dir / f"{label}.txt").write_text(raw[:16000], encoding="utf-8")
         result["snapshots"].append(snapshot)
+        if (
+            is_output_ab
+            and snapshot.get("focus_state") == "HOME"
+            and "first_home" not in result.get("output_screenshots", {})
+        ):
+            capture_output_screenshot("first_home", f"{args.mode}-first-home")
         return snapshot
 
     def take_screenshot(label: str) -> dict[str, Any]:
-        if args.mode in {"control", "treatment"} and result.get("first_device_observation_after_t0_ns") is None:
+        if is_ab and result.get("first_device_observation_after_t0_ns") is None:
             result["first_device_observation_after_t0_ns"] = time.monotonic_ns()
         entry = mark(f"screenshot_{label}_start", timeline_path)
         capture = run_command(
@@ -957,12 +1060,19 @@ def main() -> int:
         mark(f"screenshot_{label}_end", timeline_path, {key: value for key, value in record.items() if key != "stderr_excerpt"})
         return record
 
+    def capture_output_screenshot(role: str, label: str) -> dict[str, Any]:
+        capture = take_screenshot(label)
+        result.setdefault("output_screenshots", {})[role] = capture
+        return capture
+
     def capture_anr_if_observed() -> None:
         if not observer.anr_event.is_set():
             return
         observer.anr_event.clear()
-        if args.mode in {"control", "treatment"} and not result.get("anr_screenshot_capture"):
+        if is_ab and not result.get("anr_screenshot_capture"):
             result["anr_screenshot_capture"] = take_screenshot(f"{args.mode}-anr")
+            if is_output_ab:
+                result.setdefault("output_screenshots", {})["anr"] = result["anr_screenshot_capture"]
 
     boot_wait_started = time.monotonic()
     boot_complete = False
@@ -991,9 +1101,10 @@ def main() -> int:
         write_result(results, result)
         return 1
 
-    if args.mode in {"control", "treatment"}:
-        result["experiment"] = "default_skin_menu_ab"
-        result["arm"] = args.mode
+    if is_ab:
+        if is_menu_ab:
+            result["experiment"] = "default_skin_menu_ab"
+            result["arm"] = args.mode
         result["config_equivalence"] = equivalence
 
         # This host-only marker is deliberately followed by MENU in treatment before
@@ -1006,7 +1117,8 @@ def main() -> int:
         menu_finish: dict[str, Any] = {}
         menu_done = threading.Event()
         menu_command = ["adb", "-s", args.serial, "shell", "input", "keyevent", "82"]
-        if args.mode == "treatment":
+        send_menu = args.mode in {"treatment", "output-control", "output-treatment"}
+        if send_menu:
             result["menu_attempted"] = True
             result["menu_event_count"] = 1
             mark("ab_menu_command_start", timeline_path, {"command": menu_command})
@@ -1051,6 +1163,8 @@ def main() -> int:
             result["menu_attempted"] = False
             result["menu_issued"] = False
 
+        if is_output_ab:
+            capture_output_screenshot("boot", f"{args.mode}-boot")
         take_screenshot(f"{args.mode}-immediate")
         capture_anr_if_observed()
         take_snapshot(f"{args.mode}-00")
@@ -1064,7 +1178,10 @@ def main() -> int:
             capture_anr_if_observed()
             now_ns = time.monotonic_ns()
             if not midpoint_captured and now_ns >= midpoint_capture_ns:
-                result["midpoint_screenshot_capture"] = take_screenshot(f"{args.mode}-midpoint")
+                midpoint_screenshot = take_screenshot(f"{args.mode}-midpoint")
+                result["midpoint_screenshot_capture"] = midpoint_screenshot
+                if is_output_ab:
+                    result.setdefault("output_screenshots", {})["midpoint"] = midpoint_screenshot
                 midpoint_captured = True
                 continue
             if now_ns >= window_end_ns:
@@ -1088,7 +1205,9 @@ def main() -> int:
                 "captured": False,
                 "reason": "The 15-second observation ended before the scheduled midpoint screenshot could be captured.",
             }
-        take_screenshot(f"{args.mode}-final")
+        final_screenshot = take_screenshot(f"{args.mode}-final")
+        if is_output_ab:
+            result.setdefault("output_screenshots", {})["final"] = final_screenshot
         capture_anr_if_observed()
         end_ns = time.monotonic_ns()
 
@@ -1109,7 +1228,7 @@ def main() -> int:
             json.dumps(configuration, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
 
-        if args.mode == "treatment":
+        if send_menu:
             if not menu_done.wait(timeout=2):
                 if menu_process is not None:
                     menu_process.kill()
@@ -1142,11 +1261,19 @@ def main() -> int:
             [event for event in observer.snapshot() if event["is_anr"]],
             result["snapshots"],
         )
+        selected_start_ns, interval_end_ns = selected_anr_observation_window(
+            is_output_ab,
+            result.get("launch_monotonic_ns"),
+            t0_ns,
+            end_ns,
+            window_end_ns,
+        )
         interval_events = [
             event
             for event in timestamped_logcat_events
             if isinstance(event.get("mapped_host_monotonic_ns"), int)
-            and t0_ns <= event["mapped_host_monotonic_ns"] <= window_end_ns
+            and isinstance(selected_start_ns, int)
+            and selected_start_ns <= event["mapped_host_monotonic_ns"] <= interval_end_ns
         ]
         snapshot_events = [
             {
@@ -1159,13 +1286,17 @@ def main() -> int:
             for line in [event["line"]]
         ]
         home_package_set = set(home_packages)
-        scoped = scope_anr_events_to_packages(interval_events + snapshot_events, home_package_set)
-        all_scoped = scope_anr_events_to_packages(timestamped_logcat_events, home_package_set)
-        unresolved_snapshot_events = uncorroborated_snapshot_home_anrs(
-            snapshot_events,
+        anr_observations = scope_observation_anrs(
             interval_events,
+            snapshot_events,
+            timestamped_logcat_events,
             home_package_set,
+            output_forwarding_ab=is_output_ab,
         )
+        scoped = anr_observations["scoped"]
+        scoped_snapshots = anr_observations["scoped_snapshots"]
+        all_scoped = scope_anr_events_to_packages(timestamped_logcat_events, home_package_set)
+        unresolved_snapshot_events = anr_observations["unresolved_snapshot_events"]
         result["home_packages_observed"] = home_packages
         result["focus_samples"] = [
             {
@@ -1177,6 +1308,9 @@ def main() -> int:
             }
             for snapshot in snapshots
         ]
+        result["first_home_focus_observed"] = any(
+            snapshot.get("focus_state") == "HOME" for snapshot in snapshots
+        )
         final_snapshot = max(snapshots, key=lambda snapshot: snapshot.get("started_monotonic_ns", 0)) if snapshots else {}
         result["final_focus_state"] = final_snapshot.get("focus_state")
         result["final_home_healthy"] = final_snapshot.get("stable_pre_menu_health")
@@ -1199,6 +1333,7 @@ def main() -> int:
             result["pre_menu_home_anr_unresolved_events"] = prefix["unresolved_events"]
         result["unresolved_home_anr"] = bool(
             scoped["unknown"]
+            or scoped_snapshots["unknown"]
             or unresolved_snapshot_events
             or any(
                 event.get("mapped_host_monotonic_ns") is None
@@ -1218,6 +1353,52 @@ def main() -> int:
             "complete": end_ns >= window_end_ns and observer_complete,
             "snapshot_count": len(snapshots),
         }
+        if is_output_ab:
+            result["observation"].update({
+                "start_monotonic_ns": t0_ns,
+                "end_monotonic_ns": end_ns,
+            })
+            launch_ns = result.get("launch_monotonic_ns")
+            result["launch_to_observer_gap"] = {
+                "launch_monotonic_ns": launch_ns,
+                "observer_started_monotonic_ns": result.get("observer_started_monotonic_ns"),
+                "gap_ns": result.get("launch_to_observer_gap_ns"),
+                "note": "Live Logcat starts after ADB transport; mapped buffered events are retained, while unmapped or snapshot-only HOME ANRs remain unresolved.",
+            }
+            pre_forwarding = [
+                event for event in all_scoped["home"]
+                if isinstance(event.get("mapped_host_monotonic_ns"), int)
+                and isinstance(launch_ns, int)
+                and event["mapped_host_monotonic_ns"] < launch_ns
+            ]
+            unmapped_anrs = [
+                event for category in (all_scoped["home"], all_scoped["unknown"])
+                for event in category
+                if not isinstance(event.get("mapped_host_monotonic_ns"), int)
+            ]
+            result["pre_forwarding_home_anr_status"] = (
+                "present" if pre_forwarding else "unknown" if unmapped_anrs or unresolved_snapshot_events else "absent"
+            )
+            result["pre_forwarding_home_anr_events"] = pre_forwarding
+            result["observer_gap_anr_unknown"] = bool(unmapped_anrs or unresolved_snapshot_events)
+            result["output_forwarding"] = {
+                **(output_forwarding if isinstance(output_forwarding, dict) else {}),
+                "applied_monotonic_ns": result.get("launch_monotonic_ns"),
+            }
+            selected_events = [
+                {**event, "package": anr_event_package(str(event.get("line", "")))}
+                for event in scoped["home"]
+            ]
+            result["home_anr_events"] = selected_events
+            result["screenshots"] = result.get("output_screenshots", {})
+            result["selection_interval"] = {
+                "start_monotonic_ns": launch_ns,
+                "end_monotonic_ns": end_ns,
+                "event_window_source": "device-epoch-mapped Logcat, not receipt time",
+            }
+            result["first_device_observation_after_t0_ns"] = result.get(
+                "first_device_observation_after_t0_ns"
+            )
         result["classification"] = "ARM_COMPLETE" if result["observation"]["complete"] else "INCONCLUSIVE"
         result["reason"] = (
             "The arm completed its matched observation window; A/B interpretation is produced by the comparator."

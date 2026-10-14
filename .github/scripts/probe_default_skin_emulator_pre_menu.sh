@@ -2,6 +2,7 @@
 set -uo pipefail
 
 ab_arm=''
+output_forwarding_arm=''
 if [[ "${1:-}" == '--menu-ab-arm' ]]; then
   ab_arm="${2:-}"
   [[ "$ab_arm" == 'control' || "$ab_arm" == 'treatment' ]] || {
@@ -9,14 +10,23 @@ if [[ "${1:-}" == '--menu-ab-arm' ]]; then
     exit 2
   }
   shift 2
+elif [[ "${1:-}" == '--output-forwarding-ab-arm' ]]; then
+  output_forwarding_arm="${2:-}"
+  [[ "$output_forwarding_arm" == 'control' || "$output_forwarding_arm" == 'treatment' ]] || {
+    echo 'Usage: probe_default_skin_emulator_pre_menu.sh [--output-forwarding-ab-arm control|treatment]' >&2
+    exit 2
+  }
+  shift 2
 elif (($# > 0)); then
-  echo 'Usage: probe_default_skin_emulator_pre_menu.sh [--menu-ab-arm control|treatment]' >&2
+  echo 'Usage: probe_default_skin_emulator_pre_menu.sh [--menu-ab-arm control|treatment] [--output-forwarding-ab-arm control|treatment]' >&2
   exit 2
 fi
 
 results_dir='.github/results/default-skin-pre-menu'
 if [[ -n "$ab_arm" ]]; then
   results_dir=".github/results/default-skin-menu-ab/$ab_arm"
+elif [[ -n "$output_forwarding_arm" ]]; then
+  results_dir=".github/results/default-skin-emulator-output-forwarding-ab/$output_forwarding_arm"
 fi
 mkdir -p "$results_dir"
 rm -f "$results_dir"/timeline.jsonl "$results_dir"/result.json "$results_dir"/logcat-filtered.jsonl \
@@ -210,21 +220,33 @@ cp "$avd_dir/config.ini" "$results_dir/config/avd-config-effective.ini"
 printf -v launch_command '%q ' "$emulator" -port 5554 -avd "$avd_name" -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
 launch_command="${launch_command% }"
 printf '%s\n' "$launch_command" > "$results_dir/config/emulator-launch-command.txt"
+launch_monotonic_ns="$(python3 -c 'import time; print(time.monotonic_ns())')"
+launch_utc="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 printf 'HOST_UTC=%s HOST_MONOTONIC_NS=%s\n' \
-  "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$(python3 -c 'import time; print(time.monotonic_ns())')" \
+  "$launch_utc" "$launch_monotonic_ns" \
   > "$results_dir/emulator-launch-start.txt"
-"$emulator" -port 5554 -avd "$avd_name" -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim \
-  > "$results_dir/emulator.log" 2>&1 &
+if [[ -n "$output_forwarding_arm" ]]; then
+  if [[ "$output_forwarding_arm" == 'treatment' ]]; then
+    "$emulator" -port 5554 -avd "$avd_name" -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim \
+      > >(tee "$results_dir/emulator.log") 2>&1 &
+  else
+    "$emulator" -port 5554 -avd "$avd_name" -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim \
+      > >(tee "$results_dir/emulator.log" >/dev/null) 2>&1 &
+  fi
+else
+  "$emulator" -port 5554 -avd "$avd_name" -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim \
+    > "$results_dir/emulator.log" 2>&1 &
+fi
 emulator_pid=$!
 printf 'EMULATOR_PID=%s\n' "$emulator_pid" >> "$results_dir/emulator-launch-start.txt"
 
-python3 - "$results_dir/run-metadata.json" "$results_dir" "$sdk_root" "$image_package" "$avd_name" "$accel_status" "$emulator_version_status" <<'PY'
+python3 - "$results_dir/run-metadata.json" "$results_dir" "$sdk_root" "$image_package" "$avd_name" "$accel_status" "$emulator_version_status" "$output_forwarding_arm" "$launch_monotonic_ns" <<'PY'
 import os
 import json
 import pathlib
 import sys
 
-metadata_path, results, sdk_root, image_package, avd_name, accel_status, emulator_version_status = sys.argv[1:]
+metadata_path, results, sdk_root, image_package, avd_name, accel_status, emulator_version_status, output_arm, launch_ns = sys.argv[1:]
 root = pathlib.Path(results)
 metadata = {
     "system_image": image_package,
@@ -241,6 +263,8 @@ metadata = {
     "accel_check": (root / "config/accel-check.txt").read_text(encoding="utf-8", errors="replace"),
     "emulator_log_path": str(root / "emulator.log"),
     "sdk_root": sdk_root,
+    "home": os.environ.get("HOME"),
+    "avd_home": os.environ.get("ANDROID_AVD_HOME"),
     "avd_name": avd_name,
     "accel_check_exit": int(accel_status),
     "runner_image_os": os.environ.get("ImageOS"),
@@ -249,6 +273,33 @@ metadata = {
         encoding="utf-8", errors="replace"
     ) if (root / "runtime-dependencies/config/libpulse-after.txt").is_file() else "",
 }
+if output_arm:
+    environment_names = (
+        "HOME", "ANDROID_HOME", "ANDROID_SDK_ROOT", "ANDROID_AVD_HOME", "ANDROID_USER_HOME",
+        "ADB_SERVER_SOCKET", "ANDROID_ADB_SERVER_SOCKET", "ADB_SERVER_PORT", "ANDROID_ADB_SERVER_PORT",
+        "ANDROID_SERIAL", "ANDROID_EMULATOR_HOME", "ANDROID_EMULATOR_PORT",
+    )
+    metadata["host_environment"] = {
+        name: {"state": "set", "value": os.environ[name]} if name in os.environ
+        else {"state": "unset"}
+        for name in environment_names
+    }
+    metadata["output_forwarding"] = {
+        "applied_monotonic_ns": int(launch_ns),
+        "stdout_sink": "github_actions" if output_arm == "treatment" else "discard",
+        "stderr_route": "stdout",
+        "tee": True,
+        "file_capture": True,
+        "capture_file": "emulator.log",
+        "mode": output_arm,
+    }
+(root / "output-capture-metadata.json").write_text(json.dumps({
+    "experiment": "default_skin_emulator_output_forwarding",
+    "arm": output_arm or None,
+    "host_environment": metadata.get("host_environment"),
+    "output_forwarding": metadata.get("output_forwarding"),
+    "launch_monotonic_ns": int(launch_ns),
+}, indent=2) + "\n", encoding="utf-8") if output_arm else None
 (root / "run-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 PY
 
@@ -277,6 +328,12 @@ if [[ -n "$ab_arm" ]]; then
     --results "$results_dir" \
     --metadata "$results_dir/run-metadata.json" \
     --mode "$ab_arm"
+elif [[ -n "$output_forwarding_arm" ]]; then
+  python3 .github/scripts/probe_default_skin_emulator_pre_menu.py \
+    --serial "$serial" \
+    --results "$results_dir" \
+    --metadata "$results_dir/run-metadata.json" \
+    --mode "output-$output_forwarding_arm"
 else
   python3 .github/scripts/probe_default_skin_emulator_pre_menu.py \
     --serial "$serial" \
