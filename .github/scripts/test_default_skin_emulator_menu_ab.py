@@ -27,7 +27,7 @@ def valid_arm(arm: str) -> dict[str, object]:
             "runner_image_os": "Linux",
             "runner_image_version": "2026.10",
             "animation_values": {
-                name: {"exit_code": 0, "value": "1"}
+                name: {"exit_code": 0, "value": "1", "provenance": "post_observation"}
                 for name in (
                     "window_animation_scale",
                     "transition_animation_scale",
@@ -217,6 +217,28 @@ class MenuABComparisonTest(unittest.TestCase):
         for case in cases:
             with self.subTest(case=case):
                 self.assertEqual("INCONCLUSIVE", self.compare(*case))
+
+    def test_failed_post_observation_animation_read_is_inconclusive(self) -> None:
+        control = valid_arm("control")
+        treatment = valid_arm("treatment")
+        treatment["canonical_configuration"]["animation_values"]["window_animation_scale"] = {
+            "exit_code": 20,
+            "value": None,
+            "provenance": "post_observation",
+        }
+
+        self.assertEqual("INCONCLUSIVE", self.compare(control, treatment))
+
+    def test_failed_early_animation_reads_do_not_override_late_matching_values(self) -> None:
+        control = valid_arm("control")
+        treatment = valid_arm("treatment")
+        for arm in (control, treatment):
+            arm["animation_values_before_boot_complete"] = {
+                name: {"exit_code": 20, "stdout_available": True, "value": None}
+                for name in arm["canonical_configuration"]["animation_values"]
+            }
+
+        self.assertEqual("MENU_NOT_CAUSAL", self.compare(control, treatment))
 
 
 if __name__ == "__main__":

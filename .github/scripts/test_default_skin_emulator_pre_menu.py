@@ -409,6 +409,54 @@ class ProbeClassificationTest(unittest.TestCase):
         self.assertEqual(["-port", "5554", "-avd", "test", "-gpu", "swiftshader_indirect"], configuration["launch_arguments"])
         self.assertNotIn("/sdk", json.dumps(configuration))
 
+    def test_ab_animation_config_uses_successful_end_of_window_reads(self) -> None:
+        pre_boot = {
+            name: {
+                "exit_code": 20,
+                "stdout_available": True,
+                "value": None,
+            }
+            for name in (
+                "window_animation_scale",
+                "transition_animation_scale",
+                "animator_duration_scale",
+            )
+        }
+        after_observation = {
+            name: {
+                "exit_code": 0,
+                "stdout_available": True,
+                "stdout": "1\n",
+            }
+            for name in pre_boot
+        }
+
+        observed = probe.canonical_animation_values(after_observation)
+
+        self.assertEqual("1", observed["window_animation_scale"]["value"])
+        self.assertEqual("post_observation", observed["window_animation_scale"]["provenance"])
+        self.assertEqual(20, pre_boot["window_animation_scale"]["exit_code"])
+
+    def test_ab_animation_config_keeps_failed_post_observation_reads_unknown(self) -> None:
+        after_observation = {
+            name: {
+                "exit_code": 20,
+                "stdout_available": True,
+                "stdout": "",
+            }
+            for name in (
+                "window_animation_scale",
+                "transition_animation_scale",
+                "animator_duration_scale",
+            )
+        }
+
+        observed = probe.canonical_animation_values(after_observation)
+
+        self.assertEqual(20, observed["window_animation_scale"]["exit_code"])
+        self.assertIsNone(observed["window_animation_scale"]["value"])
+        self.assertEqual("post_observation", observed["window_animation_scale"]["provenance"])
+
     @unittest.skipUnless(shutil.which("bash"), "Bash is required to exercise the SDK bootstrap script")
     def test_sdk_install_runs_before_emulator_binary_is_required(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

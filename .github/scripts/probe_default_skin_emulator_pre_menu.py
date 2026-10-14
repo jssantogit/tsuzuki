@@ -371,6 +371,24 @@ def elapsed_seconds(start_monotonic_ns: int, end_monotonic_ns: int) -> float:
     return round((end_monotonic_ns - start_monotonic_ns) / 1_000_000_000, 3)
 
 
+def canonical_animation_values(read_commands: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Use only successful post-observation reads as A/B configuration evidence."""
+    values: dict[str, dict[str, Any]] = {}
+    for setting in ("window_animation_scale", "transition_animation_scale", "animator_duration_scale"):
+        command = read_commands.get(setting, {})
+        exit_code = command.get("exit_code")
+        stdout_available = command.get("stdout_available") is True
+        values[setting] = {
+            "exit_code": exit_code,
+            "stdout_available": stdout_available,
+            "value": str(command.get("stdout", "")).strip()
+            if exit_code == 0 and stdout_available
+            else None,
+            "provenance": "post_observation",
+        }
+    return values
+
+
 def canonical_configuration(metadata: dict[str, Any], animation_values: dict[str, Any]) -> dict[str, Any]:
     """Build a path/time-independent configuration record for A/B matching."""
 
@@ -862,7 +880,7 @@ def main() -> int:
     result["observer_available_at_start"] = observer.available
     observer_started = mark("logcat_observer_started", timeline_path, {"available": observer.available})
     result["logcat_observer_started_monotonic_ns"] = observer_started["monotonic_ns"]
-    animation_values: dict[str, Any] = {}
+    animation_values_before_boot_complete: dict[str, Any] = {}
     if args.mode in {"control", "treatment"}:
         for setting in ("window_animation_scale", "transition_animation_scale", "animator_duration_scale"):
             animation = run_command(
@@ -870,14 +888,14 @@ def main() -> int:
                 timeout_seconds=20,
             )
             result["commands"].append(animation)
-            animation_values[setting] = {
+            animation_values_before_boot_complete[setting] = {
                 "exit_code": animation["exit_code"],
                 "stdout_available": animation["stdout_available"],
                 "value": str(animation["stdout"]).strip()
                 if animation["exit_code"] == 0 and animation["stdout_available"]
                 else None,
             }
-        result["animation_values_before_boot_complete"] = animation_values
+        result["animation_values_before_boot_complete"] = animation_values_before_boot_complete
         result["animation_policy"] = "Read-only; same runtime defaults through the 15-second A/B window."
 
     def take_snapshot(label: str) -> dict[str, Any]:
@@ -977,11 +995,6 @@ def main() -> int:
         result["experiment"] = "default_skin_menu_ab"
         result["arm"] = args.mode
         result["config_equivalence"] = equivalence
-        configuration = canonical_configuration(metadata, animation_values)
-        result["canonical_configuration"] = configuration
-        result["canonical_configuration_sha256"] = hashlib.sha256(
-            json.dumps(configuration, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
 
         # This host-only marker is deliberately followed by MENU in treatment before
         # any screenshot, health query, or snapshot command is sent to the emulator.
@@ -1078,6 +1091,23 @@ def main() -> int:
         take_screenshot(f"{args.mode}-final")
         capture_anr_if_observed()
         end_ns = time.monotonic_ns()
+
+        animation_reads_after_observation: dict[str, dict[str, Any]] = {}
+        for setting in ("window_animation_scale", "transition_animation_scale", "animator_duration_scale"):
+            animation = run_command(
+                ["adb", "-s", args.serial, "shell", "settings", "get", "global", setting],
+                timeout_seconds=20,
+            )
+            result["commands"].append(animation)
+            animation_reads_after_observation[setting] = animation
+        animation_values = canonical_animation_values(animation_reads_after_observation)
+        result["animation_values_after_observation"] = animation_values
+        result["animation_policy_observation"] = "Read-only values captured after the matched 15-second A/B window."
+        configuration = canonical_configuration(metadata, animation_values)
+        result["canonical_configuration"] = configuration
+        result["canonical_configuration_sha256"] = hashlib.sha256(
+            json.dumps(configuration, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
 
         if args.mode == "treatment":
             if not menu_done.wait(timeout=2):
