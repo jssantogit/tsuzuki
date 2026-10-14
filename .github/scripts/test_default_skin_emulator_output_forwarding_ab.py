@@ -284,6 +284,13 @@ class OutputForwardingComparisonTest(unittest.TestCase):
         self.assertEqual("INCONCLUSIVE", self.compare(control, treatment))
 
     def test_each_matrix_row_has_pinned_source_and_historical_timing_provenance(self) -> None:
+        allowed_phases = {
+            "PRE_BOOT",
+            "BOOT_BOUNDARY",
+            "POST_BOOT_PRE_ANR",
+            "POST_ANR",
+            "UNKNOWN",
+        }
         required = {
             "layer", "manual", "reactive_circus", "phase",
             "occurs_before_historical_anr", "independently_reproducible",
@@ -293,13 +300,50 @@ class OutputForwardingComparisonTest(unittest.TestCase):
         for row in comparator.DIFFERENCE_MATRIX:
             with self.subTest(row=row["id"]):
                 self.assertTrue(required.issubset(row))
+                self.assertIn(row["phase"], allowed_phases)
                 self.assertEqual(comparator.UPSTREAM_ACTION_PIN, row["upstream_action_source"]["pin"])
                 self.assertTrue(row["source_refs"])
                 self.assertIn("status", row["historical_log_evidence"])
                 self.assertIn("timestamp_utc", row["historical_anr_reference"])
+
+        rows = {row["id"]: row for row in comparator.DIFFERENCE_MATRIX}
+        animation_reads = rows["D5"]
+        self.assertEqual("PRE_BOOT", animation_reads["phase"])
+        self.assertIn("both control and treatment", animation_reads["manual"].lower())
+        for setting in (
+            "window_animation_scale",
+            "transition_animation_scale",
+            "animator_duration_scale",
+        ):
+            self.assertIn(setting, animation_reads["manual"])
+        self.assertIn("after MENU", animation_reads["reactive_circus"])
+        self.assertEqual("POST_ANR", rows["D8"]["phase"])
+        self.assertEqual("POST_ANR", rows["D9"]["phase"])
+        self.assertEqual("UNKNOWN", rows["D10"]["phase"])
+        self.assertEqual("UNKNOWN", rows["D11"]["phase"])
+        self.assertIn(
+            f"{comparator.UPSTREAM_ACTION_URL}/src/emulator-manager.ts#L86-L100",
+            rows["D6"]["source_refs"],
+        )
         unresolved = {row["id"] for row in comparator.DIFFERENCE_MATRIX
                       if row["occurs_before_historical_anr"] is None}
         self.assertEqual({"D7", "D10", "D11"}, unresolved)
+
+    def test_comparison_reports_only_validated_canonical_config_match(self) -> None:
+        control = valid_arm("control")
+        treatment = valid_arm("treatment")
+
+        matched = comparator.compare_arms(control, treatment)
+        self.assertIs(True, matched["config_equivalent_except_selected_difference"])
+
+        treatment["canonical_configuration"]["runner_image_version"] = "different"
+        seal_configuration(treatment)
+        mismatched = comparator.compare_arms(control, treatment)
+        self.assertEqual("INCONCLUSIVE", mismatched["classification"])
+        self.assertIs(False, mismatched["config_equivalent_except_selected_difference"])
+
+        unvalidated = comparator.compare_arms(None, valid_arm("treatment"))
+        self.assertIsNone(unvalidated["config_equivalent_except_selected_difference"])
 
 
 if __name__ == "__main__":

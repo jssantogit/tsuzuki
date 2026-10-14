@@ -62,7 +62,7 @@ DIFFERENCE_MATRIX = [
         "id": "D3", "layer": "ADB readiness", "difference": "The host-side readiness gate differs.",
         "manual": "Poll `adb -s emulator-5554 get-state` until device, every two seconds.",
         "reactive_circus": "Poll `adb -s emulator-5554 shell getprop sys.boot_completed`, every two seconds.",
-        "phase": "PRE_BOOT", "occurs_before_historical_anr": True,
+        "phase": "BOOT_BOUNDARY", "occurs_before_historical_anr": True,
         "status": "Observed command difference; not changed by the selected experiment.",
         "independently_reproducible": True, "rank": 3,
         "source_refs": [f"{UPSTREAM_ACTION_URL}/src/emulator-manager.ts#L138-L167", ".github/scripts/probe_default_skin_emulator_pre_menu.sh: adb-transport-poll.log"],
@@ -77,11 +77,12 @@ DIFFERENCE_MATRIX = [
         "source_refs": [".github/scripts/probe_default_skin_emulator_pre_menu.py: LogcatObserver", f"{UPSTREAM_ACTION_URL}/src/emulator-manager.ts#L86-L100"],
     },
     {
-        "id": "D5", "layer": "Animation policy", "difference": "Earlier manual MENU A/B read-only animation queries are not performed by the action.",
-        "manual": "Read-only global settings queries in the earlier diagnostic mode; output-forwarding arms do not add a preboot read.",
-        "reactive_circus": "disable-animations input is true; writes occur after MENU.",
-        "phase": "PRE_BOOT_READ / POST_MENU_WRITE", "occurs_before_historical_anr": True,
-        "status": "Read-vs-write is not a matched policy change; prior preboot reads were unavailable. Writes are separately excluded below.",
+        "id": "D5", "layer": "Animation policy",
+        "difference": "Both output-forwarding arms retain three read-only pre-boot animation queries; the action does not perform those queries.",
+        "manual": "Both control and treatment read `window_animation_scale`, `transition_animation_scale`, and `animator_duration_scale` before boot; neither arm writes these settings.",
+        "reactive_circus": "No matching pre-boot reads; `disable-animations` writes scales to 0.0 only after MENU (tracked separately as D8).",
+        "phase": "PRE_BOOT", "occurs_before_historical_anr": True,
+        "status": "The same three reads are retained in both compared arms, so they are not the selected A/B variable. The action's post-MENU writes are separately excluded as D8.",
         "independently_reproducible": True, "rank": 4,
         "source_refs": [".github/scripts/probe_default_skin_emulator_pre_menu.py: animation reads", f"{UPSTREAM_ACTION_URL}/src/emulator-manager.ts#L99-L106", "app/build/default-skin-validation/startup-diff-source/historical-job.log: L572-L577"],
     },
@@ -92,7 +93,7 @@ DIFFERENCE_MATRIX = [
         "phase": "PRE_BOOT", "occurs_before_historical_anr": True,
         "status": "Observed timing/observability difference; no direct cause evidence.",
         "independently_reproducible": True, "rank": 5,
-        "source_refs": [".github/scripts/probe_default_skin_emulator_pre_menu.sh: record_emulator_runtime", f"{UPSTREAM_ACTION_URL}/src-emulator-manager.ts#L86-L100"],
+        "source_refs": [".github/scripts/probe_default_skin_emulator_pre_menu.sh: record_emulator_runtime", f"{UPSTREAM_ACTION_URL}/src/emulator-manager.ts#L86-L100"],
     },
     {
         "id": "D7", "layer": "Process supervision", "difference": "Action @actions/exec/sh supervision differs from a manual Bash background process.",
@@ -107,7 +108,7 @@ DIFFERENCE_MATRIX = [
         "id": "D8", "layer": "Animation mutation", "difference": "Action writes three global animation scales after MENU.",
         "manual": "No animation-setting writes in the output-forwarding experiment.",
         "reactive_circus": "Writes window, transition, and animator duration scales to 0.0 after MENU.",
-        "phase": "POST_HISTORICAL_ANR", "occurs_before_historical_anr": False,
+        "phase": "POST_ANR", "occurs_before_historical_anr": False,
         "status": "Excluded as cause by historical ordering: MENU at 23:26:37.191; writes from 23:26:44.453; reported ANR around 23:26:43.",
         "independently_reproducible": True, "rank": None,
         "source_refs": [f"{UPSTREAM_ACTION_URL}/src/emulator-manager.ts#L99-L106", "app/build/default-skin-validation/startup-diff-source/historical-job.log: L573-L577"],
@@ -116,7 +117,7 @@ DIFFERENCE_MATRIX = [
         "id": "D9", "layer": "Post-event diagnostics/cleanup", "difference": "Later diagnostic/build/cleanup steps occur after the selected boot observation.",
         "manual": "Bounded diagnostic snapshots finish after the event window; the disposable job exits after evidence collection.",
         "reactive_circus": "Single MENU, then optional setting writes/build; emulator cleanup uses adb emu kill in finally.",
-        "phase": "POST_WINDOW_OR_POST_ANR", "occurs_before_historical_anr": False,
+        "phase": "POST_ANR", "occurs_before_historical_anr": False,
         "status": "Not a candidate cause for the reported earlier event.",
         "independently_reproducible": True, "rank": None,
         "source_refs": [f"{UPSTREAM_ACTION_URL}/src/emulator-manager.ts#L99-L125", "app/build/default-skin-validation/startup-diff-source/historical-job.log: L1638"],
@@ -125,7 +126,7 @@ DIFFERENCE_MATRIX = [
         "id": "D10", "layer": "SDK executable selection", "difference": "The historical SDK manager executable selected from PATH is not established.",
         "manual": "Find newest sdkmanager under the SDK cmdline-tools tree, then invoke its absolute path.",
         "reactive_circus": "Invoke `sdkmanager` from PATH after prepending latest command-line-tools directories.",
-        "phase": "PRE_BOOT", "occurs_before_historical_anr": None,
+        "phase": "UNKNOWN", "occurs_before_historical_anr": None,
         "status": "Historical resolved executable path/timing unknown; do not infer from source alone.",
         "independently_reproducible": False, "rank": None,
         "source_refs": [f"{UPSTREAM_ACTION_URL}/src/sdk-installer.ts#L31-L55", ".github/scripts/probe_default_skin_emulator_pre_menu.sh: sdkmanager selection"],
@@ -134,7 +135,7 @@ DIFFERENCE_MATRIX = [
         "id": "D11", "layer": "Runner environment/cache", "difference": "Cross-runner environment and cache effects are not fully measured.",
         "manual": "Uses GitHub-hosted runner environment and records selected HOME/SDK/ADB variables.",
         "reactive_circus": "Action executes in the same workflow runner after prior setup/build steps; exact full environment is not part of the historical capture.",
-        "phase": "PRE_BOOT", "occurs_before_historical_anr": None,
+        "phase": "UNKNOWN", "occurs_before_historical_anr": None,
         "status": "Some environment facts are recorded; unobserved variables and cache mechanisms remain unknown.",
         "independently_reproducible": False, "rank": None,
         "source_refs": ["app/build/default-skin-validation/startup-diff-source/historical-job.log: L348-L423", ".github/scripts/probe_default_skin_emulator_pre_menu.sh: run-metadata.json"],
@@ -159,7 +160,7 @@ DIFFERENCE_MATRIX = [
         "id": "E3", "layer": "Port/boot protocol (equal)", "difference": "No port, timeout, or boot-poll interval difference observed.",
         "manual": "5554; 600-second bound; poll interval 2 seconds.",
         "reactive_circus": "5554; 600-second bound; poll interval 2 seconds.",
-        "phase": "PRE_BOOT", "occurs_before_historical_anr": True,
+        "phase": "BOOT_BOUNDARY", "occurs_before_historical_anr": True,
         "status": "Observed equal.", "independently_reproducible": True, "rank": None,
         "source_refs": [f"{UPSTREAM_ACTION_URL}/src/emulator-manager.ts#L140-L165", "app/build/default-skin-validation/startup-diff-source/historical-job.log: L359-L369", ".github/scripts/probe_default_skin_emulator_pre_menu.sh: adb-transport-poll"],
     },
@@ -167,7 +168,7 @@ DIFFERENCE_MATRIX = [
         "id": "E4", "layer": "No ADB kill before the comparison window (equal)", "difference": "Neither path kills ADB/emulator before the shared MENU/observation interval.",
         "manual": "No adb emu kill before the 15-second observation completes.",
         "reactive_circus": "The action's adb emu kill is in cleanup after its body; no kill before MENU/boot observation.",
-        "phase": "POST_WINDOW", "occurs_before_historical_anr": False,
+        "phase": "POST_ANR", "occurs_before_historical_anr": False,
         "status": "Observed equivalent for the compared startup interval; cleanup itself is later.",
         "independently_reproducible": True, "rank": None,
         "source_refs": [f"{UPSTREAM_ACTION_URL}/src/emulator-manager.ts#L120-L125", "app/build/default-skin-validation/startup-diff-source/historical-job.log: L1638"],
@@ -187,11 +188,9 @@ HISTORICAL_LOG_EVIDENCE = {
     "D3": {"status": "OBSERVED", "events": [{"event": "action boot-complete detection", "timestamp_utc": "2026-10-13T23:26:37.1889513Z", "line": 572}]},
     "D4": {"status": "NOT_CAPTURED", "events": [], "note": "The historical action run had no manual Logcat observer; only the current script ordering establishes its pre-boot phase."},
     "D5": {
-        "status": "OBSERVED",
-        "events": [
-            {"event": "action writes window animation scale", "timestamp_utc": "2026-10-13T23:26:44.4531908Z", "line": 575},
-            {"event": "action writes transition/animator scales", "timestamp_utc": "2026-10-13T23:26:44.5168396Z", "line": 576},
-        ],
+        "status": "NOT_CAPTURED",
+        "events": [],
+        "note": "The historical action log has no pre-boot read queries; its later animation writes are recorded separately under D8. Both current output-forwarding arms retain the three read-only queries in their run metadata.",
     },
     "D6": {"status": "NOT_CAPTURED", "events": [], "note": "The historical action log does not record the manual host-diagnostic command sequence."},
     "D7": {"status": "PARTIAL", "events": [{"event": "action emulator launch", "timestamp_utc": "2026-10-13T23:25:54.5092962Z", "line": 423}], "note": "The timestamp identifies launch only; supervision effects were not separately timed."},
@@ -433,41 +432,84 @@ def _precise_home_anr(arm: dict[str, Any]) -> bool:
     )
 
 
+def _comparison_result(
+    classification: str,
+    reason: str,
+    config_equivalent_except_selected_difference: bool | None = None,
+) -> dict[str, Any]:
+    return {
+        "classification": classification,
+        "reason": reason,
+        "config_equivalent_except_selected_difference": config_equivalent_except_selected_difference,
+    }
+
+
 def compare_arms(control: dict[str, Any] | None, treatment: dict[str, Any] | None) -> dict[str, Any]:
     """Classify only matched runs with fully scoped event timing and state evidence."""
     for arm, expected in ((control, "control"), (treatment, "treatment")):
         error = _valid_arm(arm, expected)
         if error:
-            return {"classification": "INCONCLUSIVE", "reason": error}
+            return _comparison_result("INCONCLUSIVE", error)
     assert control is not None and treatment is not None
-    if control["canonical_configuration"] != treatment["canonical_configuration"]:
-        return {"classification": "INCONCLUSIVE", "reason": "The arms differ outside the selected stdout-sink variable."}
+    configuration_matches = control["canonical_configuration"] == treatment["canonical_configuration"]
+    if not configuration_matches:
+        return _comparison_result(
+            "INCONCLUSIVE",
+            "The arms differ outside the selected stdout-sink variable.",
+            configuration_matches,
+        )
     if (
         not control["output_forwarding"]["applied_monotonic_ns"]
         or not treatment["output_forwarding"]["applied_monotonic_ns"]
     ):
-        return {"classification": "INCONCLUSIVE", "reason": "The selected difference was not observed at emulator launch."}
+        return _comparison_result(
+            "INCONCLUSIVE",
+            "The selected difference was not observed at emulator launch.",
+            configuration_matches,
+        )
 
     if control["home_anr"]:
         if not _precise_home_anr(control):
-            return {"classification": "INCONCLUSIVE", "reason": "Control HOME ANR lacks a mapped event in the observation interval."}
-        return {"classification": "BOOT_PATH_UNSTABLE", "reason": "A HOME ANR occurred in the control without forwarded emulator output."}
+            return _comparison_result(
+                "INCONCLUSIVE",
+                "Control HOME ANR lacks a mapped event in the observation interval.",
+                configuration_matches,
+            )
+        return _comparison_result(
+            "BOOT_PATH_UNSTABLE",
+            "A HOME ANR occurred in the control without forwarded emulator output.",
+            configuration_matches,
+        )
     if control["final_home_healthy"] is not True:
-        return {"classification": "INCONCLUSIVE", "reason": "Control has no ANR but does not finish in a positively healthy HOME state."}
+        return _comparison_result(
+            "INCONCLUSIVE",
+            "Control has no ANR but does not finish in a positively healthy HOME state.",
+            configuration_matches,
+        )
 
     if treatment["home_anr"]:
         if not _precise_home_anr(treatment):
-            return {"classification": "INCONCLUSIVE", "reason": "Treatment HOME ANR is unmapped, retained-only, or outside the selected-difference interval."}
-        return {
-            "classification": "DIFFERENCE_CAUSAL",
-            "reason": "A mapped HOME ANR occurred in the forwarded-output arm after that output path began; the matched control remained healthy. This is a candidate signal, not proof of root cause.",
-        }
+            return _comparison_result(
+                "INCONCLUSIVE",
+                "Treatment HOME ANR is unmapped, retained-only, or outside the selected-difference interval.",
+                configuration_matches,
+            )
+        return _comparison_result(
+            "DIFFERENCE_CAUSAL",
+            "A mapped HOME ANR occurred in the forwarded-output arm after that output path began; the matched control remained healthy. This is a candidate signal, not proof of root cause.",
+            configuration_matches,
+        )
     if treatment["final_home_healthy"] is not True:
-        return {"classification": "INCONCLUSIVE", "reason": "Treatment has no ANR but does not finish in a positively healthy HOME state."}
-    return {
-        "classification": "DIFFERENCE_NOT_CAUSAL",
-        "reason": "Neither matched arm recorded a scoped HOME ANR and both ended on positively healthy HOME states.",
-    }
+        return _comparison_result(
+            "INCONCLUSIVE",
+            "Treatment has no ANR but does not finish in a positively healthy HOME state.",
+            configuration_matches,
+        )
+    return _comparison_result(
+        "DIFFERENCE_NOT_CAUSAL",
+        "Neither matched arm recorded a scoped HOME ANR and both ended on positively healthy HOME states.",
+        configuration_matches,
+    )
 
 
 def load_result(path: Path) -> dict[str, Any] | None:
@@ -500,10 +542,7 @@ def main() -> int:
             "reported_anr_utc": "around 2026-10-13T23:26:43Z (prior forensic report; not present as a literal ANR line in the cached job log)",
             "first_animation_write_utc": "2026-10-13T23:26:44.4531908Z (line 575)",
         },
-        "canonical_configuration_matches": bool(
-            control is not None and treatment is not None
-            and control.get("canonical_configuration") == treatment.get("canonical_configuration")
-        ),
+        "canonical_configuration_matches": result.get("config_equivalent_except_selected_difference"),
         "arm_evidence": {
             "control": summarize_arm(control),
             "treatment": summarize_arm(treatment),
