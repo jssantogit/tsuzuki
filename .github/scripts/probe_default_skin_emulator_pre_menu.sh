@@ -66,16 +66,62 @@ write_sdk_tool_state() {
   } > "$results_dir/config/sdk-tools-$phase.txt"
 }
 
+record_emulator_runtime() {
+  local phase="$1"
+  local prefix="$results_dir/config/emulator-runtime-$phase"
+  local command_text
+  if [[ ! -x "$emulator" ]]; then
+    {
+      printf 'emulator_path=%s\n' "$emulator"
+      printf 'emulator_executable=false\n'
+      printf 'ldd_exit_code=NOT_RUN\nemulator_version_exit_code=NOT_RUN\n'
+    } > "$prefix.txt"
+    return 0
+  fi
+
+  printf -v command_text '%q ' ldd "$emulator"
+  printf '%s\n' "${command_text% }" > "$prefix-ldd-command.txt"
+  ldd "$emulator" > "$prefix-ldd.txt" 2>&1
+  emulator_ldd_status=$?
+  printf 'LDD_EXIT_CODE=%s\n' "$emulator_ldd_status" >> "$prefix-ldd.txt"
+
+  printf -v command_text '%q ' "$emulator" -version
+  printf '%s\n' "${command_text% }" > "$results_dir/config/emulator-version-command.txt"
+  "$emulator" -version > "$results_dir/config/emulator-version.txt" 2>&1
+  emulator_version_status=$?
+  printf 'EMULATOR_VERSION_EXIT=%s\n' "$emulator_version_status" \
+    >> "$results_dir/config/emulator-version.txt"
+  {
+    printf 'emulator_path=%s\n' "$emulator"
+    printf 'emulator_executable=true\n'
+    printf 'ldd_exit_code=%s\n' "$emulator_ldd_status"
+    printf 'emulator_version_exit_code=%s\n' "$emulator_version_status"
+    if grep -Eq '=>[[:space:]]+not found' "$prefix-ldd.txt"; then
+      printf 'unresolved_shared_library=true\n'
+    else
+      printf 'unresolved_shared_library=false\n'
+    fi
+  } > "$prefix.txt"
+}
+
 write_sdk_tool_state before-install
 [[ -x "$sdkmanager" ]] || fail_inconclusive 'Android SDK sdkmanager is unavailable; see config/sdk-tools-before-install.txt'
+record_emulator_runtime before-install
 export PATH="$sdk_root/platform-tools:$sdk_root/emulator:$PATH"
 
 serial='emulator-5554'
 image_package='system-images;android-35;google_apis;x86_64'
 avd_name='test'
-avd_home="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+export ANDROID_AVD_HOME="$HOME/.android/avd"
+avd_home="$ANDROID_AVD_HOME"
 avd_dir="$avd_home/$avd_name.avd"
 avd_ini="$avd_home/$avd_name.ini"
+mkdir -p "$avd_home"
+{
+  printf 'HOME=%s\n' "$HOME"
+  printf 'ANDROID_USER_HOME=%s\n' "${ANDROID_USER_HOME:-UNSET}"
+  printf 'ANDROID_AVD_HOME=%s\n' "$ANDROID_AVD_HOME"
+} > "$results_dir/config/avd.env"
 [[ ! -e "$avd_dir" && ! -e "$avd_ini" ]] || fail_inconclusive 'Fresh AVD name already exists; refusing to delete or reuse it'
 
 mkdir -p "$results_dir/config"
@@ -92,6 +138,11 @@ printf 'SDKMANAGER_INSTALL_EXIT=%s\n' "$sdk_status" >> "$results_dir/config/sdkm
 write_sdk_tool_state after-install
 [[ -x "$avdmanager" ]] || fail_inconclusive 'Android SDK avdmanager is unavailable after package installation; see config/sdk-tools-after-install.txt'
 [[ -x "$emulator" ]] || fail_inconclusive 'Android emulator binary is unavailable after package installation; see config/sdk-tools-after-install.txt'
+record_emulator_runtime after-install
+if (( emulator_ldd_status != 0 )) || grep -Eq '=>[[:space:]]+not found' "$results_dir/config/emulator-runtime-after-install-ldd.txt"; then
+  fail_inconclusive 'Android emulator shared-library check failed; see config/emulator-runtime-after-install-ldd.txt'
+fi
+(( emulator_version_status == 0 )) || fail_inconclusive 'Android emulator version command failed; see config/emulator-version.txt and emulator-runtime-after-install-ldd.txt'
 
 "$sdkmanager" --version > "$results_dir/config/sdkmanager-version.txt" 2>&1 || true
 printf -v command_text '%q ' "$sdkmanager" --version
@@ -99,9 +150,6 @@ printf '%s\n' "${command_text% }" > "$results_dir/config/sdkmanager-version-comm
 "$sdk_root/platform-tools/adb" version > "$results_dir/config/adb-version.txt" 2>&1 || true
 printf -v command_text '%q ' "$sdk_root/platform-tools/adb" version
 printf '%s\n' "${command_text% }" > "$results_dir/config/adb-version-command.txt"
-"$emulator" -version > "$results_dir/config/emulator-version.txt" 2>&1 || true
-printf -v command_text '%q ' "$emulator" -version
-printf '%s\n' "${command_text% }" > "$results_dir/config/emulator-version-command.txt"
 "$emulator" -accel-check > "$results_dir/config/accel-check.txt" 2>&1
 accel_status=$?
 printf 'ACCEL_CHECK_EXIT=%s\n' "$accel_status" >> "$results_dir/config/accel-check.txt"
@@ -125,7 +173,20 @@ printf 'no\n' | "$avdmanager" create avd --force -n "$avd_name" --package "$imag
 avd_status=$?
 printf 'AVDMANAGER_CREATE_EXIT=%s\n' "$avd_status" >> "$results_dir/config/avdmanager-create.log"
 (( avd_status == 0 )) || fail_inconclusive 'Pixel 6 AVD creation failed; see avdmanager-create.log'
-[[ -s "$avd_dir/config.ini" ]] || fail_inconclusive 'Created AVD config.ini is missing'
+if [[ ! -s "$avd_dir/config.ini" ]]; then
+  {
+    printf 'avdmanager=%s\n' "$avdmanager"
+    printf 'HOME=%s\nANDROID_USER_HOME=%s\nANDROID_AVD_HOME=%s\n' \
+      "$HOME" "${ANDROID_USER_HOME:-UNSET}" "$ANDROID_AVD_HOME"
+    printf 'expected_config=%s\n' "$avd_dir/config.ini"
+    printf 'command='
+    printf '%q ' "$avdmanager" list avd
+    printf '\n'
+    "$avdmanager" list avd
+    printf 'AVDMANAGER_LIST_EXIT=%s\n' "$?"
+  } > "$results_dir/config/avd-path-diagnostic.txt" 2>&1
+  fail_inconclusive 'Created AVD config.ini is missing; see config/avd.env and config/avd-path-diagnostic.txt'
+fi
 cp "$avd_dir/config.ini" "$results_dir/config/avd-config-default.ini"
 printf 'hw.cpu.ncore=2\n' >> "$avd_dir/config.ini"
 cp "$avd_dir/config.ini" "$results_dir/config/avd-config-effective.ini"
@@ -141,16 +202,17 @@ printf 'HOST_UTC=%s HOST_MONOTONIC_NS=%s\n' \
 emulator_pid=$!
 printf 'EMULATOR_PID=%s\n' "$emulator_pid" >> "$results_dir/emulator-launch-start.txt"
 
-python3 - "$results_dir/run-metadata.json" "$results_dir" "$sdk_root" "$image_package" "$avd_name" "$accel_status" <<'PY'
+python3 - "$results_dir/run-metadata.json" "$results_dir" "$sdk_root" "$image_package" "$avd_name" "$accel_status" "$emulator_version_status" <<'PY'
 import json
 import pathlib
 import sys
 
-metadata_path, results, sdk_root, image_package, avd_name, accel_status = sys.argv[1:]
+metadata_path, results, sdk_root, image_package, avd_name, accel_status, emulator_version_status = sys.argv[1:]
 root = pathlib.Path(results)
 metadata = {
     "system_image": image_package,
     "emulator_version": (root / "config/emulator-version.txt").read_text(encoding="utf-8", errors="replace"),
+    "emulator_version_exit": int(emulator_version_status),
     "adb_version": (root / "config/adb-version.txt").read_text(encoding="utf-8", errors="replace"),
     "sdkmanager_version": (root / "config/sdkmanager-version.txt").read_text(encoding="utf-8", errors="replace"),
     "source_properties": (root / "config/source.properties").read_text(encoding="utf-8", errors="replace"),

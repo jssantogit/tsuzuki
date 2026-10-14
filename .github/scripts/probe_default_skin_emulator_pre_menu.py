@@ -513,7 +513,9 @@ def config_equivalence(metadata: dict[str, Any]) -> dict[str, Any]:
     )
     expected_effective_config = default_config.rstrip("\n") + "\nhw.cpu.ncore=2\n"
     checks = {
-        "emulator_version": EXPECTED_EMULATOR_VERSION in version and EXPECTED_EMULATOR_BUILD in version,
+        "emulator_version": metadata.get("emulator_version_exit") == 0
+        and EXPECTED_EMULATOR_VERSION in version
+        and EXPECTED_EMULATOR_BUILD in version,
         "system_image": metadata.get("system_image") == EXPECTED_IMAGE and properties_ok,
         "avd_only_cpu_override": effective_config == expected_effective_config,
         "launch_command": len(launch_tokens) == len(expected_launch_tokens)

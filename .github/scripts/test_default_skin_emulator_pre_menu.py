@@ -64,6 +64,7 @@ class ProbeClassificationTest(unittest.TestCase):
     def test_equivalence_requires_the_recorded_emulator_image_and_launch_profile(self) -> None:
         metadata = {
             "emulator_version": "Android emulator version 37.2.12.0\nbuild_id 16428233",
+            "emulator_version_exit": 0,
             "source_properties": (
                 "AndroidVersion.ApiLevel=35\nSystemImage.Abi=x86_64\nSystemImage.TagId=google_apis\n"
             ),
@@ -82,6 +83,28 @@ class ProbeClassificationTest(unittest.TestCase):
 
         self.assertTrue(probe.config_equivalence(metadata)["equivalent"])
         metadata["emulator_version"] = "Android emulator version 37.3.0\nbuild_id 999"
+        self.assertFalse(probe.config_equivalence(metadata)["equivalent"])
+
+    def test_failed_emulator_version_command_cannot_claim_configuration_equivalence(self) -> None:
+        metadata = {
+            "emulator_version": "Android emulator version 37.2.12.0\nbuild_id 16428233",
+            "emulator_version_exit": 127,
+            "source_properties": (
+                "AndroidVersion.ApiLevel=35\nSystemImage.Abi=x86_64\nSystemImage.TagId=google_apis\n"
+            ),
+            "system_image": "system-images;android-35;google_apis;x86_64",
+            "avd_default_config": "hw.cpu.ncore=4\n",
+            "avd_effective_config": "hw.cpu.ncore=4\nhw.cpu.ncore=2\n",
+            "launch_command": (
+                "/opt/android/emulator/emulator -port 5554 -avd test -no-window -gpu swiftshader_indirect "
+                "-no-snapshot -noaudio -no-boot-anim"
+            ),
+            "accel_check": "KVM is installed and usable",
+            "accel_check_exit": 0,
+            "emulator_log_available": True,
+            "emulator_log": "renderer gfxstream",
+        }
+
         self.assertFalse(probe.config_equivalence(metadata)["equivalent"])
 
     def test_missing_initial_focus_never_claims_healthy_or_menu_causation(self) -> None:
@@ -237,6 +260,94 @@ class ProbeClassificationTest(unittest.TestCase):
             self.assertNotEqual(0, completed.returncode)
             self.assertTrue(marker.is_file(), completed.stdout + completed.stderr)
             self.assertIn("Stable-channel SDK install failed", completed.stdout + completed.stderr)
+
+    @unittest.skipUnless(
+        shutil.which("bash") and os.name != "nt",
+        "A POSIX path environment is required to exercise the fake SDK bootstrap",
+    )
+    def test_avdmanager_receives_the_exported_action_avd_home(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            script_path = root / ".github/scripts/probe_default_skin_emulator_pre_menu.sh"
+            script_path.parent.mkdir(parents=True)
+            shutil.copy2(ROOT / ".github/scripts/probe_default_skin_emulator_pre_menu.sh", script_path)
+
+            sdk_root = root / "sdk"
+            tool_dir = sdk_root / "cmdline-tools/1/bin"
+            tool_dir.mkdir(parents=True)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            avd_home_marker = root / "avdmanager-home.txt"
+            (tool_dir / "sdkmanager").write_text(
+                """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == --version ]]; then echo 'sdkmanager 1'; exit 0; fi
+mkdir -p "$SDK_ROOT/system-images/android-35/google_apis/x86_64" \\
+  "$SDK_ROOT/platform-tools" "$SDK_ROOT/platforms/android-35" \\
+  "$SDK_ROOT/emulator"
+printf 'api=35\\nabi=x86_64\\ntag=google_apis\\n' \\
+  > "$SDK_ROOT/system-images/android-35/google_apis/x86_64/source.properties"
+touch "$SDK_ROOT/system-images/android-35/google_apis/x86_64/system.img"
+printf 'platform-tools=1\\n' > "$SDK_ROOT/platform-tools/source.properties"
+printf 'platform=35\\n' > "$SDK_ROOT/platforms/android-35/source.properties"
+cat > "$SDK_ROOT/platform-tools/adb" <<'ADB'
+#!/usr/bin/env bash
+if [[ "${1:-}" == version ]]; then echo 'Android Debug Bridge version 1'; exit 0; fi
+exit 0
+ADB
+chmod 755 "$SDK_ROOT/platform-tools/adb"
+cat > "$SDK_ROOT/emulator/emulator" <<'EMULATOR'
+#!/usr/bin/env bash
+case "${1:-}" in
+  -version) echo 'Android emulator version 37.2.12.0'; echo 'build_id 16428233'; exit 0 ;;
+  -accel-check) echo 'KVM is installed and usable'; exit 0 ;;
+esac
+exit 0
+EMULATOR
+chmod 755 "$SDK_ROOT/emulator/emulator"
+""",
+                encoding="utf-8",
+            )
+            (tool_dir / "sdkmanager").chmod(0o755)
+            (tool_dir / "avdmanager").write_text(
+                "#!/usr/bin/env bash\n"
+                "printf '%s' \"${ANDROID_AVD_HOME:-UNSET}\" > \"$AVD_HOME_MARKER\"\n"
+                "exit 17\n",
+                encoding="utf-8",
+            )
+            (tool_dir / "avdmanager").chmod(0o755)
+            (bin_dir / "ldd").write_text("#!/usr/bin/env bash\necho 'libc.so => /lib/libc.so'\n", encoding="utf-8")
+            (bin_dir / "ldd").chmod(0o755)
+
+            home = root / "home"
+            home.mkdir()
+            environment = os.environ.copy()
+            environment["ANDROID_HOME"] = str(sdk_root)
+            environment["ANDROID_SDK_ROOT"] = str(sdk_root)
+            environment["SDK_ROOT"] = str(sdk_root)
+            environment["AVD_HOME_MARKER"] = str(avd_home_marker)
+            environment["HOME"] = str(home)
+            environment.pop("ANDROID_AVD_HOME", None)
+            environment["PATH"] = f"{bin_dir}:{environment.get('PATH', '')}"
+            completed = subprocess.run(
+                [shutil.which("bash") or "bash", str(script_path)],
+                cwd=root,
+                env=environment,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            self.assertNotEqual(0, completed.returncode)
+            runtime_log = root / ".github/results/default-skin-pre-menu/config/emulator-runtime-after-install-ldd.txt"
+            runtime_output = runtime_log.read_text(encoding="utf-8") if runtime_log.exists() else ""
+            self.assertTrue(avd_home_marker.is_file(), completed.stdout + completed.stderr + runtime_output)
+            self.assertEqual(str(home / ".android/avd"), avd_home_marker.read_text(encoding="utf-8"))
+            avd_environment = (root / ".github/results/default-skin-pre-menu/config/avd.env").read_text(
+                encoding="utf-8",
+            )
+            self.assertIn(f"ANDROID_AVD_HOME={home}/.android/avd", avd_environment)
 
 
 if __name__ == "__main__":

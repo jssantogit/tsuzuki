@@ -531,11 +531,38 @@ jobs:
           java-version-file: .github/.java-version
           distribution: temurin
 
+      - name: Test pre-MENU diagnostic helpers
+        run: python3 -B .github/scripts/test_default_skin_emulator_pre_menu.py
+
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+
+      - name: Install emulator runtime library
+        shell: bash
+        run: |
+          set +e
+          results_dir='.github/results/default-skin-pre-menu/runtime-dependencies'
+          mkdir -p "$results_dir/config"
+          dpkg-query -W -f='${Status} ${Version}\n' libpulse0 \
+            > "$results_dir/config/libpulse-before.txt" 2>&1
+          before_status=$?
+          sudo apt-get update > "$results_dir/config/apt-update.log" 2>&1
+          update_status=$?
+          sudo apt-get install -y libpulse0 > "$results_dir/config/libpulse-install.log" 2>&1
+          install_status=$?
+          dpkg-query -W -f='${Status} ${Version}\n' libpulse0 \
+            > "$results_dir/config/libpulse-after.txt" 2>&1
+          after_status=$?
+          printf 'BEFORE_QUERY_EXIT=%s\nAPT_UPDATE_EXIT=%s\nINSTALL_EXIT=%s\nAFTER_QUERY_EXIT=%s\n' \
+            "$before_status" "$update_status" "$install_status" "$after_status" \
+            > "$results_dir/config/libpulse-status.txt"
+          if (( update_status != 0 || install_status != 0 || after_status != 0 )); then
+            echo '::error::Could not install or verify the emulator runtime library libpulse0'
+            exit 1
+          fi
 
       - name: Observe fresh emulator before and after one MENU input
         shell: bash
