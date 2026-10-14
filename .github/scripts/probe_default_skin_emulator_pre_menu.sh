@@ -285,19 +285,24 @@ record_bootstrap_event 'emulator_launch_started' "launch_utc=$launch_utc" \
   "launch_monotonic_ns=$launch_monotonic_ns" "emulator_pid=$emulator_pid" \
   "output_sink=discard" "tee_file_capture=true" "stderr_route=stdout" "command=$launch_command"
 
-python3 - "$results_dir/run-metadata.json" "$results_dir" "$sdk_root" "$image_package" "$avd_name" "$accel_status" "$emulator_version_status" "$output_forwarding_arm" "$launch_monotonic_ns" "$preboot_logcat_arm" <<'PY'
+probe_module_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/probe_default_skin_emulator_pre_menu.py"
+if ! python3 - "$results_dir/run-metadata.json" "$results_dir" "$sdk_root" "$image_package" "$avd_name" "$accel_status" "$emulator_version_status" "$output_forwarding_arm" "$launch_monotonic_ns" "$preboot_logcat_arm" "$probe_module_path" <<'PY'
 import os
 import json
+import importlib.util
 import pathlib
 import sys
 
-metadata_path, results, sdk_root, image_package, avd_name, accel_status, emulator_version_status, output_arm, launch_ns, logcat_arm = sys.argv[1:]
+metadata_path, results, sdk_root, image_package, avd_name, accel_status, emulator_version_status, output_arm, launch_ns, logcat_arm, parser_path = sys.argv[1:]
 root = pathlib.Path(results)
-launch_state = {}
-for line in (root / "emulator-launch-start.txt").read_text(encoding="utf-8").splitlines():
-    if "=" in line:
-        key, value = line.split("=", 1)
-        launch_state[key] = value
+parser_spec = importlib.util.spec_from_file_location("default_skin_pre_menu_probe", parser_path)
+if parser_spec is None or parser_spec.loader is None:
+    raise RuntimeError("Unable to load the emulator launch metadata parser")
+parser_module = importlib.util.module_from_spec(parser_spec)
+parser_spec.loader.exec_module(parser_module)
+launch_state = parser_module.parse_emulator_launch_start(
+    (root / "emulator-launch-start.txt").read_text(encoding="utf-8")
+)
 bootstrap_events = []
 for line in (root / "timeline.jsonl").read_text(encoding="utf-8").splitlines():
     try:
@@ -381,6 +386,10 @@ if output_arm:
 }, indent=2) + "\n", encoding="utf-8") if logcat_arm else None
 (root / "run-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 PY
+then
+  fail_inconclusive 'Unable to assemble run metadata from emulator-launch-start.txt'
+fi
+[[ -s "$results_dir/run-metadata.json" ]] || fail_inconclusive 'Run metadata was not written; stopping before the emulator probe.'
 
 # Wait only for ADB transport; the observer begins before sys.boot_completed.
 transport_ready=0

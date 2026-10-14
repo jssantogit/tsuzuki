@@ -455,6 +455,30 @@ def process_list_evidence(command: dict[str, Any], serial: str) -> dict[str, Any
     }
 
 
+def parse_emulator_launch_start(text: str) -> dict[str, str]:
+    """Parse the shell's timestamp pair and launch fields without losing inline key/value tokens."""
+    launch_state: dict[str, str] = {}
+    for line in text.splitlines():
+        if line.startswith("HOST_UTC="):
+            fields = line.split()
+            for field in fields:
+                key, separator, value = field.partition("=")
+                if separator:
+                    launch_state[key] = value
+        elif "=" in line:
+            key, value = line.split("=", 1)
+            launch_state[key] = value
+    required = ("HOST_UTC", "HOST_MONOTONIC_NS", "EMULATOR_PID")
+    if any(not launch_state.get(key) for key in required):
+        raise ValueError("emulator-launch-start.txt is missing required launch metadata")
+    try:
+        int(launch_state["HOST_MONOTONIC_NS"])
+        int(launch_state["EMULATOR_PID"])
+    except ValueError as error:
+        raise ValueError("emulator-launch-start.txt contains invalid numeric launch metadata") from error
+    return launch_state
+
+
 def summarize_device_clock(command: dict[str, Any] | None) -> dict[str, Any]:
     """Normalize a run_command result into the persisted device-clock schema."""
     if not isinstance(command, dict):

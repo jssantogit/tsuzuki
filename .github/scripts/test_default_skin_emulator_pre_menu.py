@@ -61,6 +61,26 @@ class ProbeClassificationTest(unittest.TestCase):
 
         self.assertIn("gfxstream", metadata["emulator_log"])
 
+    def test_launch_start_parser_reads_actual_combined_host_timestamp_line(self) -> None:
+        downloaded_format = (
+            "HOST_UTC=2026-10-14T03:41:55Z HOST_MONOTONIC_NS=123456789\n"
+            "LAUNCH_COMMAND=/opt/android/emulator/emulator -port 5554 -avd test\n"
+            "EMULATOR_PID=321\n"
+        )
+
+        launch_state = probe.parse_emulator_launch_start(downloaded_format)
+
+        self.assertEqual("2026-10-14T03:41:55Z", launch_state["HOST_UTC"])
+        self.assertEqual("123456789", launch_state["HOST_MONOTONIC_NS"])
+        self.assertEqual("/opt/android/emulator/emulator -port 5554 -avd test", launch_state["LAUNCH_COMMAND"])
+        self.assertEqual("321", launch_state["EMULATOR_PID"])
+
+    def test_launch_start_parser_fails_closed_when_combined_timestamp_is_incomplete(self) -> None:
+        with self.assertRaises(ValueError):
+            probe.parse_emulator_launch_start(
+                "HOST_UTC=2026-10-14T03:41:55Z\nEMULATOR_PID=321\n"
+            )
+
     def test_equivalence_requires_the_recorded_emulator_image_and_launch_profile(self) -> None:
         metadata = {
             "emulator_version": "Android emulator version 37.2.12.0\nbuild_id 16428233",
