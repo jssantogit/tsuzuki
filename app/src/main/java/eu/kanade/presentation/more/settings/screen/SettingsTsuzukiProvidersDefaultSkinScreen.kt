@@ -1,6 +1,6 @@
 package eu.kanade.presentation.more.settings.screen
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,17 +8,22 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,16 +36,24 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.presentation.more.settings.components.SettingsCanvas
+import eu.kanade.presentation.more.settings.components.SettingsGroup
+import eu.kanade.presentation.more.settings.components.SettingsGroupDivider
+import eu.kanade.presentation.more.settings.components.SettingsPageHeader
+import eu.kanade.presentation.more.settings.widget.SettingsPreferenceSwitchIndicator
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinCard
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinChoiceChip
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinPageTitle
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSectionLabel
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextField
@@ -52,6 +65,8 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mihon.app.di.appGraph
+import mihon.icons.materialsymbols.MaterialSymbols
+import mihon.icons.materialsymbols.automirroredrounded.ArrowRight
 import tachiyomi.core.provider.supplychain.EnrolledProviderRepository
 import tachiyomi.core.provider.supplychain.ProviderRepositoryCatalogEntry
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEnrollment
@@ -167,119 +182,89 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
             providerRegistry.observeChanges().collect { reloadInstalled() }
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(colors.canvas)
-                .statusBarsPadding(),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = DefaultSkinSpacing.PageHorizontal, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                DefaultSkinTextAction(
-                    text = stringResource(MR.strings.tsuzuki_navigation_back),
-                    onClick = navigator::pop,
-                )
-                DefaultSkinPageTitle(
-                    text = stringResource(MR.strings.tsuzuki_providers_title),
-                    modifier = Modifier.weight(1f),
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = DefaultSkinSpacing.PageHorizontal),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                DefaultSkinChoiceChip(
-                    text = stringResource(MR.strings.tsuzuki_providers_installed),
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                )
-                DefaultSkinChoiceChip(
-                    text = stringResource(MR.strings.tsuzuki_providers_discover),
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                )
-                Box(Modifier.weight(1f))
-                DefaultSkinTextAction(
-                    text = stringResource(MR.strings.tsuzuki_providers_repositories),
-                    onClick = { showRepositories = true },
-                )
-            }
-
-            if (refreshing) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    CircularProgressIndicator(color = colors.foreground)
-                }
-            }
-
-            errorMessage?.let { message ->
-                DefaultSkinCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = DefaultSkinSpacing.PageHorizontal, vertical = 8.dp),
-                ) {
-                    Text(
-                        text = message,
-                        modifier = Modifier.padding(16.dp),
-                        color = colors.secondary,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
-
-            if (selectedTab == 0) {
-                InstalledProviderCards(
-                    registrations = installed,
-                    rollbackProviderIds = rollbackProviderIds,
-                    operationKeys = operations,
-                    onOpen = { registration ->
-                        navigator.push(
-                            SettingsTsuzukiProviderDetailDefaultSkinScreen(
-                                registration.descriptor.id.value,
-                            ),
+        SettingsCanvas {
+            Column(modifier = Modifier.fillMaxSize()) {
+                SettingsPageHeader(
+                    title = stringResource(MR.strings.tsuzuki_providers_title),
+                    navigateUp = navigator::pop,
+                    actions = {
+                        DefaultSkinTextAction(
+                            text = stringResource(MR.strings.tsuzuki_providers_repositories),
+                            onClick = { showRepositories = true },
+                            modifier = Modifier.heightIn(min = 48.dp),
                         )
                     },
-                    onEnabledChange = { registration, enabled ->
-                        scope.launch {
-                            runProviderUiCatching {
-                                withContext(Dispatchers.IO) {
-                                    scriptRegistry.setEnabled(registration.descriptor.id, enabled)
-                                }
-                            }.onSuccess { reloadInstalled() }
-                                .onFailure { error -> errorMessage = error.message }
-                        }
-                    },
-                    onRollback = { providerId ->
-                        runProviderOperation("rollback:$providerId") { manager.rollback(providerId) }
-                    },
-                    modifier = Modifier.weight(1f),
                 )
-            } else {
-                DiscoverProviderCards(
-                    snapshots = snapshots.values.toList(),
-                    operationKeys = operations,
-                    onInstall = { entry ->
-                        runProviderOperation(
-                            "install:${entry.repositoryId}:${entry.descriptor.providerId}",
-                        ) {
-                            manager.install(
-                                repositoryId = entry.repositoryId,
-                                providerId = entry.descriptor.providerId,
+
+                ProviderTabs(
+                    selectedTab = selectedTab,
+                    onSelectedTab = { selectedTab = it },
+                )
+
+                if (refreshing) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        CircularProgressIndicator(color = colors.foreground)
+                    }
+                }
+
+                errorMessage?.let { message ->
+                    SettingsGroup {
+                        Text(
+                            text = message,
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+
+                if (selectedTab == 0) {
+                    InstalledProviderCards(
+                        registrations = installed,
+                        rollbackProviderIds = rollbackProviderIds,
+                        operationKeys = operations,
+                        onOpen = { registration ->
+                            navigator.push(
+                                SettingsTsuzukiProviderDetailDefaultSkinScreen(
+                                    registration.descriptor.id.value,
+                                ),
                             )
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                )
+                        },
+                        onEnabledChange = { registration, enabled ->
+                            scope.launch {
+                                runProviderUiCatching {
+                                    withContext(Dispatchers.IO) {
+                                        scriptRegistry.setEnabled(registration.descriptor.id, enabled)
+                                    }
+                                }.onSuccess { reloadInstalled() }
+                                    .onFailure { error -> errorMessage = error.message }
+                            }
+                        },
+                        onRollback = { providerId ->
+                            runProviderOperation("rollback:$providerId") { manager.rollback(providerId) }
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    DiscoverProviderCards(
+                        snapshots = snapshots.values.toList(),
+                        operationKeys = operations,
+                        onInstall = { entry ->
+                            runProviderOperation(
+                                "install:${entry.repositoryId}:${entry.descriptor.providerId}",
+                            ) {
+                                manager.install(
+                                    repositoryId = entry.repositoryId,
+                                    providerId = entry.descriptor.providerId,
+                                )
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
 
@@ -375,6 +360,51 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
     }
 }
 
+@Composable
+private fun ProviderTabs(
+    selectedTab: Int,
+    onSelectedTab: (Int) -> Unit,
+) {
+    val colors = defaultSkinColors()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DefaultSkinSpacing.PageHorizontal)
+            .selectableGroup(),
+    ) {
+        listOf(
+            stringResource(MR.strings.tsuzuki_providers_installed),
+            stringResource(MR.strings.tsuzuki_providers_discover),
+        ).forEachIndexed { index, label ->
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .selectable(
+                        selected = selectedTab == index,
+                        role = Role.Tab,
+                        onClick = { onSelectedTab(index) },
+                    ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom,
+            ) {
+                Text(
+                    text = label,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+                    color = colors.foreground,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (selectedTab == index) FontWeight.SemiBold else FontWeight.Medium,
+                )
+                if (selectedTab == index) {
+                    HorizontalDivider(color = colors.foreground, thickness = 2.dp)
+                } else {
+                    Spacer(Modifier.height(2.dp))
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InstalledProviderCards(
@@ -389,13 +419,7 @@ private fun InstalledProviderCards(
     val colors = defaultSkinColors()
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(
-            DefaultSkinSpacing.PageHorizontal,
-            18.dp,
-            DefaultSkinSpacing.PageHorizontal,
-            32.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(DefaultSkinSpacing.Row),
+        contentPadding = PaddingValues(top = 18.dp, bottom = 32.dp),
     ) {
         if (registrations.isEmpty()) {
             item(key = "empty") {
@@ -403,74 +427,120 @@ private fun InstalledProviderCards(
                     text = stringResource(MR.strings.tsuzuki_providers_no_installed),
                     color = colors.secondary,
                     style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(vertical = 24.dp),
+                    modifier = Modifier.padding(horizontal = DefaultSkinSpacing.PageHorizontal, vertical = 24.dp),
                 )
             }
         }
-        items(registrations, key = { it.descriptor.id.value }) { registration ->
-            val descriptor = registration.descriptor
-            val providerId = descriptor.id.value
-            DefaultSkinCard(onClick = { onOpen(registration) }, modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(3.dp),
-                        ) {
-                            Text(
-                                text = descriptor.name,
-                                color = colors.foreground,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = "${descriptor.version.name} · ${providerLifecycleLabelDefaultSkin(
-                                    registration.lifecycleStatus,
-                                )}",
-                                color = colors.secondary,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                        Switch(
-                            checked = registration.lifecycleStatus == ProviderLifecycleStatus.ENABLED,
-                            enabled = registration.lifecycleStatus != ProviderLifecycleStatus.BLOCKED &&
-                                registration.lifecycleStatus != ProviderLifecycleStatus.INVALID,
-                            onCheckedChange = { onEnabledChange(registration, it) },
+        if (registrations.isNotEmpty()) {
+            item(key = "installed_group") {
+                SettingsGroup {
+                    registrations.forEachIndexed { index, registration ->
+                        val providerId = registration.descriptor.id.value
+                        InstalledProviderRow(
+                            registration = registration,
+                            rollbackAvailable = providerId in rollbackProviderIds,
+                            rollbackEnabled = "rollback:$providerId" !in operationKeys,
+                            onOpen = { onOpen(registration) },
+                            onEnabledChange = { onEnabledChange(registration, it) },
+                            onRollback = { onRollback(providerId) },
                         )
-                    }
-                    if (descriptor.capabilities.isNotEmpty()) {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            descriptor.capabilities.take(4).forEach { capability ->
-                                DefaultSkinChoiceChip(
-                                    text = capability.id,
-                                    selected = false,
-                                    onClick = { onOpen(registration) },
-                                )
-                            }
-                        }
-                    }
-                    if (providerId in rollbackProviderIds) {
-                        DefaultSkinTextAction(
-                            text = stringResource(MR.strings.tsuzuki_providers_rollback),
-                            onClick = {
-                                if ("rollback:$providerId" !in operationKeys) onRollback(providerId)
-                            },
-                        )
+                        if (index < registrations.lastIndex) SettingsGroupDivider()
                     }
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun InstalledProviderRow(
+    registration: ProviderRegistration,
+    rollbackAvailable: Boolean,
+    rollbackEnabled: Boolean,
+    onOpen: () -> Unit,
+    onEnabledChange: (Boolean) -> Unit,
+    onRollback: () -> Unit,
+) {
+    val colors = defaultSkinColors()
+    val descriptor = registration.descriptor
+    val checked = registration.lifecycleStatus == ProviderLifecycleStatus.ENABLED
+    val enabled = registration.lifecycleStatus != ProviderLifecycleStatus.BLOCKED &&
+        registration.lifecycleStatus != ProviderLifecycleStatus.INVALID
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .clip(DefaultSkinShape.Control)
+                    .clickable(role = Role.Button, onClick = onOpen)
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        text = descriptor.name,
+                        color = colors.foreground,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "${descriptor.version.name} · ${providerLifecycleLabelDefaultSkin(
+                            registration.lifecycleStatus,
+                        )}",
+                        color = colors.secondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Icon(
+                    imageVector = MaterialSymbols.AutoMirroredRounded.ArrowRight,
+                    contentDescription = null,
+                    tint = colors.secondary,
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .semantics { contentDescription = descriptor.name }
+                    .toggleable(
+                        value = checked,
+                        enabled = enabled,
+                        role = Role.Switch,
+                        onValueChange = onEnabledChange,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                SettingsPreferenceSwitchIndicator(checked = checked, enabled = enabled)
+            }
+        }
+        if (descriptor.capabilities.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                descriptor.capabilities.take(4).forEach { capability ->
+                    DefaultSkinTag(text = capability.id)
+                }
+            }
+        }
+        if (rollbackAvailable) {
+            DefaultSkinTextAction(
+                text = stringResource(MR.strings.tsuzuki_providers_rollback),
+                enabled = rollbackEnabled,
+                onClick = onRollback,
+                modifier = Modifier.heightIn(min = 48.dp),
+            )
         }
     }
 }
@@ -488,13 +558,7 @@ private fun DiscoverProviderCards(
 
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(
-            DefaultSkinSpacing.PageHorizontal,
-            18.dp,
-            DefaultSkinSpacing.PageHorizontal,
-            32.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(DefaultSkinSpacing.Row),
+        contentPadding = PaddingValues(top = 18.dp, bottom = 32.dp),
     ) {
         if (entries.isEmpty()) {
             item(key = "empty") {
@@ -502,50 +566,56 @@ private fun DiscoverProviderCards(
                     text = stringResource(MR.strings.tsuzuki_providers_no_discover),
                     color = colors.secondary,
                     style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(vertical = 24.dp),
+                    modifier = Modifier.padding(horizontal = DefaultSkinSpacing.PageHorizontal, vertical = 24.dp),
                 )
             }
         }
-        items(entries, key = { "${it.repositoryId}:${it.descriptor.providerId}" }) { entry ->
-            val operationKey = "install:${entry.repositoryId}:${entry.descriptor.providerId}"
-            DefaultSkinCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text(
-                        text = entry.descriptor.providerId,
-                        color = colors.foreground,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = "${entry.descriptor.versionName} · ${providerRepositoryStatusLabelDefaultSkin(
-                            entry.status,
-                        )}",
-                        color = colors.secondary,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        text = entry.repositoryId,
-                        color = colors.secondary,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                    if (
-                        entry.status == ProviderRepositoryEntryStatus.AVAILABLE ||
-                        entry.status == ProviderRepositoryEntryStatus.UPDATE_AVAILABLE
-                    ) {
-                        DefaultSkinPrimaryButton(
-                            text = stringResource(
-                                if (entry.status == ProviderRepositoryEntryStatus.UPDATE_AVAILABLE) {
-                                    MR.strings.tsuzuki_providers_update
-                                } else {
-                                    MR.strings.tsuzuki_providers_install
-                                },
-                            ),
-                            enabled = operationKey !in operationKeys,
-                            onClick = { onInstall(entry) },
-                        )
+        if (entries.isNotEmpty()) {
+            item(key = "discover_group") {
+                SettingsGroup {
+                    entries.forEachIndexed { index, entry ->
+                        val operationKey = "install:${entry.repositoryId}:${entry.descriptor.providerId}"
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = entry.descriptor.providerId,
+                                color = colors.foreground,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = "${entry.descriptor.versionName} · ${providerRepositoryStatusLabelDefaultSkin(
+                                    entry.status,
+                                )}",
+                                color = colors.secondary,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Text(
+                                text = entry.repositoryId,
+                                color = colors.secondary,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                            if (
+                                entry.status == ProviderRepositoryEntryStatus.AVAILABLE ||
+                                entry.status == ProviderRepositoryEntryStatus.UPDATE_AVAILABLE
+                            ) {
+                                DefaultSkinPrimaryButton(
+                                    text = stringResource(
+                                        if (entry.status == ProviderRepositoryEntryStatus.UPDATE_AVAILABLE) {
+                                            MR.strings.tsuzuki_providers_update
+                                        } else {
+                                            MR.strings.tsuzuki_providers_install
+                                        },
+                                    ),
+                                    enabled = operationKey !in operationKeys,
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    onClick = { onInstall(entry) },
+                                )
+                            }
+                        }
+                        if (index < entries.lastIndex) SettingsGroupDivider()
                     }
                 }
             }

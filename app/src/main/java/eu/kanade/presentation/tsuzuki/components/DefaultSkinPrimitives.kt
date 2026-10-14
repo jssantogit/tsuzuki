@@ -289,7 +289,7 @@ fun DefaultSkinTextField(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = DefaultSkinShape.Control,
-            color = colors.surface,
+            color = colors.surfaceMuted,
             border = BorderStroke(1.dp, colors.outline),
             shadowElevation = 0.dp,
             tonalElevation = 0.dp,

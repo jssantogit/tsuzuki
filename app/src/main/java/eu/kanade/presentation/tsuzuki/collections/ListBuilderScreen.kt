@@ -3,6 +3,7 @@ package eu.kanade.presentation.tsuzuki.collections
 // Structural List Builder V2: Quick Builder + Advanced.
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +26,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -46,11 +49,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,6 +64,7 @@ import androidx.compose.ui.window.PopupProperties
 import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinChoiceChip
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextField
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
@@ -290,7 +296,7 @@ private fun QuickListBuilder(
     ) {
         item(key = "basic") {
             BuilderGroup(title = stringResource(MR.strings.tsuzuki_list_builder_basic)) {
-                CollectionsAdminNameField(
+                DefaultSkinTextField(
                     value = editor.title,
                     label = stringResource(MR.strings.tsuzuki_list_builder_name),
                     onValueChange = { onEditorChange(editor.copy(title = it)) },
@@ -299,31 +305,17 @@ private fun QuickListBuilder(
                     text = stringResource(MR.strings.tsuzuki_list_builder_display),
                     style = MaterialTheme.typography.labelMedium,
                 )
-                val layoutOptions = listOf("default", "grid", "list")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    layoutOptions.forEach { option ->
-                        DefaultSkinChoiceChip(
-                            text = stringResource(
-                                when (option) {
-                                    "grid" -> MR.strings.tsuzuki_list_builder_display_grid
-                                    "list" -> MR.strings.tsuzuki_list_builder_display_list
-                                    else -> MR.strings.tsuzuki_list_builder_display_default
-                                },
-                            ),
-                            selected = (editor.layoutType ?: "default") == option,
-                            onClick = {
-                                onEditorChange(editor.copy(layoutType = option.takeUnless { it == "default" }))
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 48.dp)
-                                .semantics {
-                                    role = Role.Button
-                                    selected = (editor.layoutType ?: "default") == option
-                                },
-                        )
-                    }
-                }
+                ListBuilderSegmentControl(
+                    options = listOf(
+                        "default" to stringResource(MR.strings.tsuzuki_list_builder_display_default),
+                        "grid" to stringResource(MR.strings.tsuzuki_list_builder_display_grid),
+                        "list" to stringResource(MR.strings.tsuzuki_list_builder_display_list),
+                    ),
+                    selectedValue = editor.layoutType ?: "default",
+                    onSelected = { option ->
+                        onEditorChange(editor.copy(layoutType = option.takeUnless { it == "default" }))
+                    },
+                )
             }
         }
 
@@ -1136,6 +1128,7 @@ private fun RemoteLookupFilterControl(
     val includeValues = positivePredicates.map { it.value }
     val excludeValues = negativePredicates.map { it.value }
     val label = capability.localizedLabel()
+    val colors = defaultSkinColors()
 
     LaunchedEffect(providerId, source.lookupId, transaction?.query, transaction?.isOpen) {
         transaction?.takeIf(RemoteLookupSheetState::isOpen)?.let { open ->
@@ -1152,6 +1145,9 @@ private fun RemoteLookupFilterControl(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
+                .clip(DefaultSkinShape.Control)
+                .background(colors.surfaceMuted)
+                .border(1.dp, colors.outline, DefaultSkinShape.Control)
                 .clickable(
                     enabled = editor.filtersEditable,
                     role = Role.Button,
@@ -1172,16 +1168,12 @@ private fun RemoteLookupFilterControl(
                     )
                 },
                 modifier = Modifier.weight(1f),
-                color = if (editor.filtersEditable) {
-                    defaultSkinColors().foreground
-                } else {
-                    defaultSkinColors().secondary
-                },
+                color = if (editor.filtersEditable) colors.foreground else colors.secondary,
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
                 text = stringResource(MR.strings.tsuzuki_list_builder_change_action),
-                color = defaultSkinColors().accent,
+                color = colors.accent,
                 style = MaterialTheme.typography.labelLarge,
             )
         }
@@ -1317,53 +1309,37 @@ private fun RemoteLookupFilterSheet(
                                                 modifier = Modifier.padding(vertical = 8.dp),
                                                 style = MaterialTheme.typography.bodyLarge,
                                             )
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            ) {
-                                                DefaultSkinChoiceChip(
-                                                    text = stringResource(MR.strings.tsuzuki_list_builder_neutral),
-                                                    selected = !included && !excluded,
-                                                    onClick = { onStateChange(state.neutral(option.value)) },
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .heightIn(min = 48.dp)
-                                                        .semantics {
-                                                            role = Role.Button
-                                                            selected = !included && !excluded
-                                                        },
-                                                )
-                                                DefaultSkinChoiceChip(
-                                                    text = stringResource(MR.strings.tsuzuki_list_builder_include),
-                                                    selected = included,
-                                                    onClick = {
-                                                        onStateChange(state.include(option.value, capability))
-                                                    },
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .heightIn(min = 48.dp)
-                                                        .semantics {
-                                                            role = Role.Button
-                                                            selected = included
-                                                        },
-                                                )
-                                                if (canExclude) {
-                                                    DefaultSkinChoiceChip(
-                                                        text = stringResource(MR.strings.tsuzuki_list_builder_exclude),
-                                                        selected = excluded,
-                                                        onClick = {
-                                                            onStateChange(state.exclude(option.value, capability))
-                                                        },
-                                                        modifier = Modifier
-                                                            .weight(1f)
-                                                            .heightIn(min = 48.dp)
-                                                            .semantics {
-                                                                role = Role.Button
-                                                                selected = excluded
-                                                            },
+                                            ListBuilderSegmentControl(
+                                                options = listOf(
+                                                    "neutral" to stringResource(
+                                                        MR.strings.tsuzuki_list_builder_neutral,
+                                                    ),
+                                                    "include" to stringResource(
+                                                        MR.strings.tsuzuki_list_builder_include,
+                                                    ),
+                                                ) + if (canExclude) {
+                                                    listOf(
+                                                        "exclude" to stringResource(
+                                                            MR.strings.tsuzuki_list_builder_exclude,
+                                                        ),
                                                     )
-                                                }
-                                            }
+                                                } else {
+                                                    emptyList()
+                                                },
+                                                selectedValue = when {
+                                                    included -> "include"
+                                                    excluded -> "exclude"
+                                                    else -> "neutral"
+                                                },
+                                                onSelected = { selected ->
+                                                    val next = when (selected) {
+                                                        "include" -> state.include(option.value, capability)
+                                                        "exclude" -> state.exclude(option.value, capability)
+                                                        else -> state.neutral(option.value)
+                                                    }
+                                                    onStateChange(next)
+                                                },
+                                            )
                                             HorizontalDivider(color = colors.outline)
                                         }
                                     }
@@ -1783,7 +1759,7 @@ private fun <T> BuilderDropdown(
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
                     .clip(shape)
-                    .background(if (enabled) colors.surface else colors.surfaceMuted)
+                    .background(colors.surfaceMuted)
                     .border(1.dp, colors.outline, shape)
                     .clickable(
                         enabled = enabled,
@@ -1842,6 +1818,63 @@ private fun <T> BuilderDropdown(
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ListBuilderSegmentControl(
+    options: List<Pair<String, String>>,
+    selectedValue: String,
+    onSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = defaultSkinColors()
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = DefaultSkinShape.Control,
+        color = colors.surfaceMuted,
+        contentColor = colors.foreground,
+        border = BorderStroke(1.dp, colors.outline),
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().selectableGroup().padding(1.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            options.forEachIndexed { index, (value, label) ->
+                val isSelected = value == selectedValue
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) colors.surface else Color.Transparent)
+                        .selectable(
+                            selected = isSelected,
+                            role = Role.RadioButton,
+                            onClick = { onSelected(value) },
+                        )
+                        .padding(horizontal = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = label,
+                        color = colors.foreground,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (index < options.lastIndex) {
+                    Surface(
+                        modifier = Modifier.width(1.dp).heightIn(min = 24.dp),
+                        color = colors.outline,
+                    ) {}
                 }
             }
         }

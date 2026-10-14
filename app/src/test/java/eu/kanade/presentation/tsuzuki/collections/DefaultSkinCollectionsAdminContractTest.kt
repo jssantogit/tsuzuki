@@ -59,6 +59,43 @@ class DefaultSkinCollectionsAdminContractTest {
     }
 
     @Test
+    fun `display and remote tri-state selectors use a control segment while real chips remain`() {
+        val builder = readAppSource("collections/ListBuilderScreen.kt")
+        val basic = builder.substringAfter("item(key = \"basic\") {")
+            .substringBefore("item(key = \"source\")")
+        val segment = builder.substringAfter("private fun ListBuilderSegmentControl(")
+            .substringBefore("@Composable\nprivate fun BuilderGroup(")
+        val lookupSheet = builder.substringAfter("private fun RemoteLookupFilterSheet(")
+            .substringBefore("private fun <T> BuilderDropdown(")
+        val booleanFacet = builder.substringAfter("FilterValueSource.BooleanToggle ->")
+            .substringBefore("is FilterValueSource.RemoteLookup ->")
+
+        basic shouldContain "ListBuilderSegmentControl("
+        basic shouldNotContain "DefaultSkinChoiceChip("
+        segment shouldContain "selectable("
+        segment shouldContain "Role.RadioButton"
+        segment shouldContain "heightIn(min = 48.dp)"
+        segment shouldContain "DefaultSkinShape.Control"
+        lookupSheet shouldContain "ListBuilderSegmentControl("
+        lookupSheet shouldNotContain "DefaultSkinChoiceChip("
+        lookupSheet shouldContain "val canExclude = capability.multiValueMode == MultiValueMode.INCLUDE_EXCLUDE"
+        lookupSheet shouldContain "if (canExclude)"
+        lookupSheet shouldContain "state.neutral(option.value)"
+        lookupSheet shouldContain "state.include(option.value, capability)"
+        lookupSheet shouldContain "state.exclude(option.value, capability)"
+        builder shouldContain "DefaultSkinChoiceChip(" // Active filters and boolean facets remain chips.
+        booleanFacet shouldContain "DefaultSkinChoiceChip("
+        builder shouldContain "DefaultSkinTextField("
+        val sharedTextField = readAppSource("components/DefaultSkinPrimitives.kt")
+            .substringAfter("fun DefaultSkinTextField(")
+            .substringBefore("@Composable\nfun DefaultSkinFormField(")
+        sharedTextField shouldContain "color = colors.surfaceMuted"
+        sharedTextField shouldNotContain "containerColor"
+        builder shouldContain "onValueChange = { onStateChange(state.search(it)) }"
+        builder shouldContain "current.apply(editor, capability, onEditorChange)"
+    }
+
+    @Test
     fun `root composition owns Collections chrome and keeps open edit and reorder owners`() {
         val source = readAppSource("collections/CollectionsScreen.kt")
         val rootUi = source.substringAfter("if (!fullScreenEditorRendered) {")

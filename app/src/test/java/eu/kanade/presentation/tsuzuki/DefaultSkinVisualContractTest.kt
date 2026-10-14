@@ -364,8 +364,8 @@ class DefaultSkinVisualContractTest {
 
         integrations shouldContain "SettingsPageHeader("
         integrations shouldNotContain "DefaultSkinPageTitle("
-        providers shouldContain "DefaultSkinPageTitle("
-        detail shouldContain "DefaultSkinPageTitle("
+        providers shouldContain "SettingsPageHeader("
+        detail shouldContain "SettingsPageHeader("
         tracking shouldContain "DefaultSkinPageTitle("
         integrations shouldNotContain "TopAppBar("
         providers shouldNotContain "TopAppBar("
@@ -466,6 +466,103 @@ class DefaultSkinVisualContractTest {
         providers shouldNotContain "builtinIntegrationProviderRegistry"
         providers shouldContain "SettingsTsuzukiProviderDetailDefaultSkinScreen("
         readSettingsSource("SettingsMainScreen.kt") shouldContain "SettingsTsuzukiProvidersDefaultSkinScreen()"
+    }
+
+    @Test
+    fun `auth forms share one page gutter and keep accessible field owners`() {
+        val source = readSource("entry/TsuzukiEntryScreen.kt")
+        val auth = source.substringAfter("private fun AuthContent(")
+            .substringBefore("private fun TsuzukiEntryPage.titleResource()")
+        val backButton = sourceBlockStartingAt(source, "private fun AuthBackButton(")
+        val footerMarker = "if (page == TsuzukiEntryPage.LOGIN || page == TsuzukiEntryPage.REGISTER)"
+        val footerStart = auth.lastIndexOf(footerMarker)
+        val supportingFooter = sourceBlockStartingAt(
+            auth.substring(footerStart),
+            footerMarker,
+        )
+        val formField = readSource("components/DefaultSkinPrimitives.kt")
+            .substringAfter("fun DefaultSkinFormField(")
+            .substringBefore("@Composable\nfun DefaultSkinCard(")
+
+        auth shouldContain "DefaultSkinSpacing.PageHorizontal"
+        auth shouldContain "DefaultSkinFormField("
+        auth shouldContain "Modifier.heightIn(min = 48.dp)"
+        auth shouldContain "DefaultSkinTextAction("
+        auth shouldContain "onLogin(email, password)"
+        auth shouldContain "onRegister(email, password)"
+        auth shouldContain "onSendRecovery(email)"
+        auth shouldContain "onUpdatePassword(password, confirmation)"
+        auth shouldContain "TsuzukiEntryError.PASSWORDS_DO_NOT_MATCH"
+        auth shouldNotContain "OutlinedTextField("
+        auth shouldNotContain "padding(horizontal = 24.dp)"
+        auth shouldNotContain "padding(start = -"
+        backButton shouldContain "Modifier.size(48.dp).clickable(role = Role.Button, onClick = onClick)"
+        backButton shouldContain "contentAlignment = Alignment.CenterStart"
+        supportingFooter shouldContain "modifier = Modifier.alignByBaseline()"
+        supportingFooter shouldContain "Modifier.heightIn(min = 48.dp).alignByBaseline()"
+        formField shouldContain "BasicTextField("
+        formField shouldContain "PasswordVisualTransformation()"
+        formField shouldContain "contentDescription = label"
+        formField shouldContain "this.error(error)"
+        formField shouldContain "Modifier.heightIn(min = 48.dp)"
+        formField shouldNotContain "OutlinedTextField("
+    }
+
+    @Test
+    fun `provider surfaces use Settings shells and separate navigation from toggles`() {
+        val root = providerLanding()
+        val detail = providerDetail()
+        val tabs = sourceBlockStartingAt(root, "private fun ProviderTabs(")
+        val installedRow = root.substringAfter("private fun InstalledProviderRow(")
+            .substringBefore("@Composable\nprivate fun DiscoverProviderCards(")
+
+        root shouldContain "SettingsCanvas {"
+        root shouldContain "SettingsPageHeader("
+        root shouldContain "navigateUp = navigator::pop"
+        root shouldContain "SettingsGroup"
+        root shouldContain "SettingsGroupDivider("
+        root shouldContain "SettingsPreferenceSwitchIndicator("
+        root shouldContain "Role.Switch"
+        root shouldContain "ProviderLifecycleStatus.BLOCKED"
+        root shouldContain "ProviderLifecycleStatus.INVALID"
+        root shouldContain "SettingsTsuzukiProviderDetailDefaultSkinScreen("
+        root shouldContain "manager.install("
+        root shouldContain "manager.rollback("
+        root shouldContain "showRepositories = true"
+        root shouldNotContain "androidx.compose.material3.Switch"
+        root shouldNotContain "Switch("
+        root shouldNotContain "DefaultSkinChoiceChip("
+        root shouldNotContain "MR.strings.tsuzuki_navigation_back"
+        tabs shouldContain ".selectableGroup()"
+        tabs shouldContain "selected = selectedTab == index"
+        tabs shouldContain "role = Role.Tab"
+        tabs shouldContain "heightIn(min = 48.dp)"
+        tabs shouldContain "if (selectedTab == index)"
+        tabs shouldContain "HorizontalDivider(color = colors.foreground, thickness = 2.dp)"
+        tabs shouldNotContain "DefaultSkinChoiceChip("
+        installedRow shouldContain ".clickable(role = Role.Button, onClick = onOpen)"
+        installedRow shouldContain "role = Role.Switch"
+        installedRow shouldContain "contentDescription = descriptor.name"
+        installedRow shouldContain "DefaultSkinTag(text = capability.id)"
+        installedRow shouldNotContain "DefaultSkinChoiceChip("
+
+        detail shouldContain "SettingsCanvas {"
+        detail shouldContain "SettingsPageHeader("
+        detail shouldContain "navigateUp = navigator::pop"
+        detail shouldContain "SettingsGroup"
+        detail shouldContain "SettingsGroupDivider("
+        detail shouldContain "SettingsPreferenceSwitchIndicator("
+        detail shouldContain "registry.setEnabled(providerId, enabled)"
+        detail shouldContain "registry.setEnabledContentLanguages("
+        detail shouldContain "if (next == descriptor.contentLanguages)"
+        detail shouldContain "contentDescription = descriptor.name"
+        detail shouldContain "contentDescription = language"
+        detail shouldContain "ProviderSettingType.SECRET"
+        detail shouldContain "descriptor.permissions.network"
+        detail shouldContain "descriptor.permissions.browser"
+        detail shouldNotContain "androidx.compose.material3.Switch"
+        detail shouldNotContain "Switch("
+        detail shouldNotContain "MR.strings.tsuzuki_navigation_back"
     }
 
     @Test

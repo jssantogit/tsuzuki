@@ -1,6 +1,7 @@
 package eu.kanade.presentation.tsuzuki.entry
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +46,7 @@ import eu.kanade.presentation.tsuzuki.components.DefaultSkinFormField
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSecondaryButton
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.R
@@ -166,6 +168,23 @@ private fun WelcomeContent(
 }
 
 @Composable
+private fun AuthBackButton(
+    colors: DefaultSkinColors,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier.size(48.dp).clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Icon(
+            imageVector = MaterialSymbols.AutoMirroredRounded.ArrowBack,
+            contentDescription = stringResource(MR.strings.tsuzuki_navigation_back),
+            tint = colors.foreground,
+        )
+    }
+}
+
+@Composable
 private fun AuthContent(
     page: TsuzukiEntryPage,
     state: TsuzukiEntryState,
@@ -195,16 +214,10 @@ private fun AuthContent(
             .widthIn(max = 480.dp)
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = DefaultSkinSpacing.PageHorizontal)
             .padding(top = 8.dp, bottom = 32.dp),
     ) {
-        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-            Icon(
-                imageVector = MaterialSymbols.AutoMirroredRounded.ArrowBack,
-                contentDescription = stringResource(MR.strings.tsuzuki_navigation_back),
-                tint = colors.foreground,
-            )
-        }
+        AuthBackButton(colors = colors, onClick = onBack)
         Spacer(Modifier.height(28.dp))
         Text(
             text = stringResource(page.titleResource()),
@@ -288,7 +301,7 @@ private fun AuthContent(
                 DefaultSkinTextAction(
                     text = stringResource(MR.strings.tsuzuki_entry_forgot_password),
                     onClick = onForgotPassword,
-                    modifier = Modifier.align(Alignment.End),
+                    modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp),
                 )
             }
 
@@ -418,7 +431,7 @@ private fun AuthContent(
         if (page == TsuzukiEntryPage.LOGIN || page == TsuzukiEntryPage.REGISTER) {
             Spacer(Modifier.height(24.dp))
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -432,6 +445,7 @@ private fun AuthContent(
                     ),
                     color = colors.secondary,
                     style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.alignByBaseline(),
                 )
                 DefaultSkinTextAction(
                     text = stringResource(
@@ -442,6 +456,7 @@ private fun AuthContent(
                         },
                     ),
                     onClick = if (page == TsuzukiEntryPage.LOGIN) onCreateAccount else onSignIn,
+                    modifier = Modifier.heightIn(min = 48.dp).alignByBaseline(),
                 )
             }
         }
