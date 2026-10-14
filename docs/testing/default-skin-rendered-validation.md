@@ -43,6 +43,14 @@ The result distinguishes `PRE_MENU_ANR`, `MENU_TRIGGERED_ANR` (temporal correlat
 
 This is an emulator startup diagnostic, not a Default Skin render test, product test, or physical-device acceptance. A configuration mismatch (including a different emulator version), missing evidence, or unavailable observer is `INCONCLUSIVE`; the experiment must not be repeated with a modified profile merely to obtain a desired result.
 
+### Fresh emulator MENU A/B experiment
+
+`CI v2.1` also exposes the opt-in `default_skin_emulator_menu_ab` input. It starts two independent jobs from fresh AVDs using the same pinned runner, Pixel 6/API 35 Google APIs x86_64 image, emulator toolchain, AVD profile, graphics/KVM settings, and read-only animation policy. The `control` arm sends no input. The `treatment` arm sends exactly one `MENU` keyevent immediately after the successful `sys.boot_completed=1` poll and before any post-T0 screenshot, health query, or snapshot. Both arms then observe the same T0+15-second window; animation scales are read before boot completion and are not changed during either window. Filtered main/system/events Logcat runs continuously, and snapshots resolve HOME on every sample so a setup-app-to-launcher transition is not pinned to the first package.
+
+Each arm uploads its raw evidence independently. The always-run comparator downloads both arms and emits a combined `default-skin-emulator-menu-ab-<commit>` bundle containing the arm folders, `ab-result.json`, and `run-info.txt`, including when an arm artifact is missing. It compares path/time-independent configuration records (runner image/version, SDK/image revisions, emulator build, AVD settings including CPU/memory/disk/keyboard, launch/GPU/KVM data, runtime library, and observed animation values). It returns only `MENU_CAUSAL`, `MENU_NOT_CAUSAL`, `BOOT_PATH_UNSTABLE`, or `INCONCLUSIVE`. `MENU_CAUSAL` is a bounded temporal A/B signal, not proof of a general product cause. Missing/mismatched configuration, incomplete observers/windows, unresolved ANRs, non-immediate MENU, or missing arm evidence remains `INCONCLUSIVE`; missing evidence is never treated as no ANR. The experiment is diagnostic only: no app installation, Gradle, instrumentation, extra input, profile adjustment, or automatic remediation is performed.
+
+The opt-in control/treatment pair is one experiment, not a retry loop. Review both arm timelines, snapshots/screenshots, configuration files and the comparator output together. Do not rerun or change emulator startup behavior just to seek a preferred class; report an inconclusive result as such.
+
 ## Running and reviewing evidence
 
 Run on a configured disposable emulator:

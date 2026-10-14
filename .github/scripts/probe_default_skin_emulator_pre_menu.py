@@ -7,6 +7,7 @@ import argparse
 import atexit
 from collections import deque
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -191,6 +192,7 @@ class LogcatObserver:
         self.events: deque[dict[str, Any]] = deque(maxlen=3000)
         self.events_dropped = 0
         self.lock = threading.Lock()
+        self.anr_event = threading.Event()
         self.available = False
         self.truncated = False
         self.bytes_written = 0
@@ -220,6 +222,7 @@ class LogcatObserver:
                     continue
                 received_ns = time.monotonic_ns()
                 record = {
+                    "source": "logcat",
                     "host_utc": utc_now(),
                     "host_monotonic_ns": received_ns,
                     "device_epoch": _logcat_epoch(line),
@@ -230,6 +233,8 @@ class LogcatObserver:
                     if len(self.events) == self.events.maxlen:
                         self.events_dropped += 1
                     self.events.append(record)
+                if record["is_anr"]:
+                    self.anr_event.set()
                 encoded = (json.dumps(record, sort_keys=True) + "\n").encode("utf-8")
                 if self.bytes_written + len(encoded) <= 1_000_000:
                     output.write(encoded.decode("utf-8"))
@@ -291,23 +296,128 @@ def scope_anr_events(
     events: list[dict[str, Any]],
     home_package: str | None,
 ) -> dict[str, list[dict[str, Any]]]:
+    return scope_anr_events_to_packages(events, {home_package} if home_package else set())
+
+
+def scope_anr_events_to_packages(
+    events: list[dict[str, Any]],
+    home_packages: set[str],
+) -> dict[str, list[dict[str, Any]]]:
     scoped: dict[str, list[dict[str, Any]]] = {"home": [], "other": [], "unknown": []}
-    package_expression = re.compile(r"(?:\bANR in\s+|\bam_anr:\s*\[[^,\]]*,\s*)([A-Za-z0-9_.]+)", re.I)
-    home_expression = (
-        re.compile(rf"(?<![A-Za-z0-9_.]){re.escape(home_package)}(?![A-Za-z0-9_.])")
-        if home_package
-        else None
-    )
     for event in events:
-        line = str(event.get("line", ""))
-        package_match = package_expression.search(line)
-        if package_match is None:
+        package = anr_event_package(str(event.get("line", "")))
+        if package is None:
             scoped["unknown"].append(event)
-        elif home_expression is not None and home_expression.fullmatch(package_match.group(1)):
+        elif package in home_packages:
             scoped["home"].append(event)
         else:
             scoped["other"].append(event)
     return scoped
+
+
+def anr_event_package(line: str) -> str | None:
+    package, _ = anr_event_identity(line)
+    return package
+
+
+def anr_event_identity(line: str) -> tuple[str | None, str | None]:
+    match = re.search(r"\bANR in\s+([A-Za-z0-9_.]+)(.*)$", line, re.I)
+    if match is not None:
+        reason = re.sub(r"\s+", " ", match.group(2)).strip().casefold()
+        return match.group(1), reason
+    match = re.search(
+        r"\bam_anr\s*:\s*\[\s*[^,\]]+,\s*[^,\]]+,\s*([A-Za-z0-9_.]+)",
+        line,
+        re.I,
+    )
+    if match is None:
+        return None, None
+    return match.group(1), ""
+
+
+def uncorroborated_snapshot_home_anrs(
+    snapshot_events: list[dict[str, Any]],
+    timestamped_live_events: list[dict[str, Any]],
+    home_packages: set[str],
+) -> list[dict[str, Any]]:
+    scoped = scope_anr_events_to_packages(snapshot_events, home_packages)
+    unresolved = list(scoped["unknown"])
+    for snapshot_event in scoped["home"]:
+        snapshot_package, snapshot_reason = anr_event_identity(str(snapshot_event.get("line", "")))
+        matched = any(
+            live_event.get("source") == "logcat"
+            and isinstance(live_event.get("mapped_host_monotonic_ns"), int)
+            and anr_event_identity(str(live_event.get("line", ""))) == (snapshot_package, snapshot_reason)
+            for live_event in timestamped_live_events
+        )
+        if not matched:
+            unresolved.append(snapshot_event)
+    return unresolved
+
+
+def stable_control_boot_path(snapshots: list[dict[str, Any]]) -> bool | None:
+    """Return false on an observed unhealthy sample, unknown on missing evidence."""
+    health = [snapshot.get("stable_pre_menu_health") for snapshot in snapshots]
+    if not health:
+        return None
+    if any(value is False for value in health):
+        return False
+    if all(value is True for value in health):
+        return True
+    return None
+
+
+def elapsed_seconds(start_monotonic_ns: int, end_monotonic_ns: int) -> float:
+    return round((end_monotonic_ns - start_monotonic_ns) / 1_000_000_000, 3)
+
+
+def canonical_configuration(metadata: dict[str, Any], animation_values: dict[str, Any]) -> dict[str, Any]:
+    """Build a path/time-independent configuration record for A/B matching."""
+
+    def key_values(raw: str) -> dict[str, str]:
+        values: dict[str, str] = {}
+        for line in raw.splitlines():
+            if "=" not in line or line.lstrip().startswith("#"):
+                continue
+            key, value = line.split("=", 1)
+            normalized_key = key.strip()
+            normalized_value = value.strip()
+            if "path" in normalized_key.lower() or normalized_value.startswith(("/", "\\\\")):
+                continue
+            values[normalized_key] = normalized_value
+        return dict(sorted(values.items()))
+
+    try:
+        launch = shlex.split(str(metadata.get("launch_command", "")))
+    except ValueError:
+        launch = []
+    return {
+        "runner_image_os": metadata.get("runner_image_os"),
+        "runner_image_version": metadata.get("runner_image_version"),
+        "system_image": metadata.get("system_image"),
+        "source_properties": key_values(str(metadata.get("source_properties", ""))),
+        "platform_tools_source_properties": key_values(
+            str(metadata.get("platform_tools_source_properties", ""))
+        ),
+        "platform_source_properties": key_values(str(metadata.get("platform_source_properties", ""))),
+        "libpulse0_package": str(metadata.get("libpulse0_package", "")).strip(),
+        "sdkmanager_version": str(metadata.get("sdkmanager_version", "")).strip(),
+        "adb_version": str(metadata.get("adb_version", "")).strip(),
+        "emulator_version": "\n".join(
+            line.strip()
+            for line in str(metadata.get("emulator_version", "")).splitlines()
+            if line.strip() and not line.startswith("EMULATOR_VERSION_EXIT=")
+        ),
+        "avd_default_config": key_values(str(metadata.get("avd_default_config", ""))),
+        "avd_effective_config": key_values(str(metadata.get("avd_effective_config", ""))),
+        "launch_arguments": launch[1:] if launch else [],
+        "acceleration": {
+            "exit_code": metadata.get("accel_check_exit"),
+            "kvm_usable": "KVM" in str(metadata.get("accel_check", ""))
+            and "usable" in str(metadata.get("accel_check", "")).lower(),
+        },
+        "animation_values": animation_values,
+    }
 
 
 REMOTE_SNAPSHOT = r"""set +e
@@ -381,6 +491,7 @@ def snapshot_health(sections: dict[str, dict[str, Any]]) -> dict[str, Any]:
     window = section_text(sections, "WINDOW")
     focus_state = "UNKNOWN"
     focus_line = None
+    focus_owner_package = None
     if window is not None:
         current_focus = next((line for line in window.splitlines() if "mCurrentFocus" in line), None)
         focused_window = next((line for line in window.splitlines() if "mFocusedWindow" in line or "FocusedWindow" in line), None)
@@ -389,10 +500,13 @@ def snapshot_health(sections: dict[str, dict[str, Any]]) -> dict[str, Any]:
         if focus_line is not None:
             if re.search(r"(?:mCurrentFocus|mFocusedWindow)\s*=\s*(null|None)", focus_line, re.I):
                 focus_state = "NONE"
-            elif home_package and re.search(rf"(?<![A-Za-z0-9_.]){re.escape(home_package)}(?![A-Za-z0-9_.])", focus_line):
-                focus_state = "HOME"
             else:
-                focus_state = "OTHER"
+                focus_owner = re.search(r"(?<![A-Za-z0-9_.])([A-Za-z0-9_.]+)/[A-Za-z0-9_.$]+", focus_line)
+                focus_owner_package = focus_owner.group(1) if focus_owner else None
+                if home_package and focus_owner_package == home_package:
+                    focus_state = "HOME"
+                else:
+                    focus_state = "OTHER"
 
     activity = section_text(sections, "ACTIVITY")
     top_is_home: bool | None = None
@@ -457,6 +571,7 @@ def snapshot_health(sections: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "home_package": home_package,
         "focus_state": focus_state,
         "focus_line": focus_line,
+        "focus_owner_package": focus_owner_package,
         "top_is_home": top_is_home,
         "home_process_alive": home_process_alive,
         "awake": awake,
@@ -481,6 +596,7 @@ def snapshot_health_for_command(
             "home_package": None,
             "focus_state": None,
             "focus_line": None,
+            "focus_owner_package": None,
             "top_is_home": None,
             "home_process_alive": None,
             "awake": None,
@@ -559,10 +675,113 @@ def snapshot_anr_events(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
             "line": line,
             "source": f"snapshot:{snapshot.get('label')}:LAST_ANR",
             "host_monotonic_ns": snapshot.get("ended_monotonic_ns"),
+            "timestamp_quality": "snapshot-observation-only",
         }
         for line in section.get("lines", [])
         if is_anr_line(line)
     ]
+
+
+def map_device_epoch_to_host_monotonic_ns(
+    event: dict[str, Any],
+    snapshots: list[dict[str, Any]],
+) -> int | None:
+    """Map logcat device time using the closest successful snapshot clock sample."""
+    device_epoch = event.get("device_epoch")
+    received_ns = event.get("host_monotonic_ns")
+    if not isinstance(device_epoch, (int, float)) or not isinstance(received_ns, int):
+        return None
+    samples: list[tuple[int, float]] = []
+    for snapshot in snapshots:
+        if snapshot.get("adb_exit_code") != 0 or snapshot.get("stdout_available") is not True:
+            continue
+        raw_epoch = section_text(snapshot.get("sections", {}), "DEVICE_EPOCH")
+        try:
+            epoch = float(raw_epoch.strip()) if raw_epoch is not None else None
+        except ValueError:
+            epoch = None
+        started = snapshot.get("started_monotonic_ns")
+        ended = snapshot.get("ended_monotonic_ns")
+        if epoch is None or not isinstance(started, int) or not isinstance(ended, int):
+            continue
+        midpoint = (started + ended) // 2
+        samples.append((midpoint, epoch))
+    if not samples:
+        return None
+    host_midpoint, device_midpoint = min(samples, key=lambda pair: abs(pair[0] - received_ns))
+    return host_midpoint + round((device_epoch - device_midpoint) * 1_000_000_000)
+
+
+def timestamp_anr_events(
+    events: list[dict[str, Any]],
+    snapshots: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep logcat receipt time while adding device-clock event time when mappable."""
+    timestamped: list[dict[str, Any]] = []
+    for event in events:
+        mapped_ns = map_device_epoch_to_host_monotonic_ns(event, snapshots)
+        timestamped.append(
+            {
+                **event,
+                "mapped_host_monotonic_ns": mapped_ns,
+                "timestamp_quality": "device-epoch-mapped" if mapped_ns is not None else "unmapped-device-epoch",
+            }
+        )
+    return timestamped
+
+
+def classify_pre_menu_home_anrs(
+    events: list[dict[str, Any]],
+    snapshot_events: list[dict[str, Any]],
+    home_packages: set[str],
+    menu_start_monotonic_ns: int | None,
+    observer_complete: bool,
+    observer_start_monotonic_ns: int | None,
+    snapshot_corroborating_events: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Classify treatment's boot-prefix evidence without trusting logcat receipt time."""
+    if (
+        not observer_complete
+        or not home_packages
+        or not isinstance(menu_start_monotonic_ns, int)
+        or not isinstance(observer_start_monotonic_ns, int)
+        or observer_start_monotonic_ns >= menu_start_monotonic_ns
+    ):
+        return {"status": "unknown", "events": [], "unresolved_events": []}
+
+    scoped = scope_anr_events_to_packages(events, home_packages)
+    pre_menu_events: list[dict[str, Any]] = []
+    unresolved_events: list[dict[str, Any]] = []
+    for event in scoped["home"]:
+        mapped_ns = event.get("mapped_host_monotonic_ns")
+        if not isinstance(mapped_ns, int):
+            unresolved_events.append(event)
+        elif mapped_ns <= menu_start_monotonic_ns:
+            pre_menu_events.append(event)
+    for event in scoped["unknown"]:
+        mapped_ns = event.get("mapped_host_monotonic_ns")
+        if not isinstance(mapped_ns, int) or mapped_ns <= menu_start_monotonic_ns:
+            unresolved_events.append(event)
+
+    # LAST_ANR is a snapshot of retained device state, not the event's occurrence time.
+    unresolved_events.extend(
+        uncorroborated_snapshot_home_anrs(
+            snapshot_events,
+            events if snapshot_corroborating_events is None else snapshot_corroborating_events,
+            home_packages,
+        )
+    )
+    if pre_menu_events:
+        status = "present"
+    elif unresolved_events:
+        status = "unknown"
+    else:
+        status = "absent"
+    return {
+        "status": status,
+        "events": pre_menu_events,
+        "unresolved_events": unresolved_events,
+    }
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -579,6 +798,9 @@ def write_result(results: Path, result: dict[str, Any]) -> None:
         f"POST_MENU_ANR={result.get('post_menu_anr', 'UNKNOWN')}",
         f"MENU_ISSUED={result.get('menu_issued', False)}",
         f"CONFIG_EQUIVALENT={result.get('config_equivalence', {}).get('equivalent', False)}",
+        f"EXPERIMENT={result.get('experiment', 'default_skin_emulator_pre_menu')}",
+        f"ARM={result.get('arm', 'late-pre-menu')}",
+        f"OBSERVATION_COMPLETE={result.get('observation', {}).get('complete', 'NOT_APPLICABLE')}",
     ]
     (results / "run-info.txt").write_text("\n".join(info) + "\n", encoding="utf-8")
 
@@ -588,6 +810,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--serial", required=True)
     parser.add_argument("--results", type=Path, required=True)
     parser.add_argument("--metadata", type=Path, required=True)
+    parser.add_argument("--mode", choices=("late", "control", "treatment"), default="late")
     return parser.parse_args()
 
 
@@ -603,6 +826,7 @@ def main() -> int:
     mark("observer_start", timeline_path, {"serial": args.serial})
     result: dict[str, Any] = {
         "serial": args.serial,
+        "mode": args.mode,
         "config_equivalence": equivalence,
         "snapshots": [],
         "commands": [],
@@ -636,9 +860,29 @@ def main() -> int:
     observer.start()
     atexit.register(observer.stop)
     result["observer_available_at_start"] = observer.available
-    mark("logcat_observer_started", timeline_path, {"available": observer.available})
+    observer_started = mark("logcat_observer_started", timeline_path, {"available": observer.available})
+    result["logcat_observer_started_monotonic_ns"] = observer_started["monotonic_ns"]
+    animation_values: dict[str, Any] = {}
+    if args.mode in {"control", "treatment"}:
+        for setting in ("window_animation_scale", "transition_animation_scale", "animator_duration_scale"):
+            animation = run_command(
+                ["adb", "-s", args.serial, "shell", "settings", "get", "global", setting],
+                timeout_seconds=20,
+            )
+            result["commands"].append(animation)
+            animation_values[setting] = {
+                "exit_code": animation["exit_code"],
+                "stdout_available": animation["stdout_available"],
+                "value": str(animation["stdout"]).strip()
+                if animation["exit_code"] == 0 and animation["stdout_available"]
+                else None,
+            }
+        result["animation_values_before_boot_complete"] = animation_values
+        result["animation_policy"] = "Read-only; same runtime defaults through the 15-second A/B window."
 
     def take_snapshot(label: str) -> dict[str, Any]:
+        if args.mode in {"control", "treatment"} and result.get("first_device_observation_after_t0_ns") is None:
+            result["first_device_observation_after_t0_ns"] = time.monotonic_ns()
         before = mark(f"snapshot_{label}_start", timeline_path)
         command = run_command(
             ["adb", "-s", args.serial, "shell", "sh"],
@@ -669,6 +913,8 @@ def main() -> int:
         return snapshot
 
     def take_screenshot(label: str) -> dict[str, Any]:
+        if args.mode in {"control", "treatment"} and result.get("first_device_observation_after_t0_ns") is None:
+            result["first_device_observation_after_t0_ns"] = time.monotonic_ns()
         entry = mark(f"screenshot_{label}_start", timeline_path)
         capture = run_command(
             ["adb", "-s", args.serial, "exec-out", "screencap", "-p"],
@@ -692,6 +938,13 @@ def main() -> int:
         result["screenshots"].append(record)
         mark(f"screenshot_{label}_end", timeline_path, {key: value for key, value in record.items() if key != "stderr_excerpt"})
         return record
+
+    def capture_anr_if_observed() -> None:
+        if not observer.anr_event.is_set():
+            return
+        observer.anr_event.clear()
+        if args.mode in {"control", "treatment"} and not result.get("anr_screenshot_capture"):
+            result["anr_screenshot_capture"] = take_screenshot(f"{args.mode}-anr")
 
     boot_wait_started = time.monotonic()
     boot_complete = False
@@ -719,6 +972,232 @@ def main() -> int:
         result["observer"] = observer.stop()
         write_result(results, result)
         return 1
+
+    if args.mode in {"control", "treatment"}:
+        result["experiment"] = "default_skin_menu_ab"
+        result["arm"] = args.mode
+        result["config_equivalence"] = equivalence
+        configuration = canonical_configuration(metadata, animation_values)
+        result["canonical_configuration"] = configuration
+        result["canonical_configuration_sha256"] = hashlib.sha256(
+            json.dumps(configuration, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+
+        # This host-only marker is deliberately followed by MENU in treatment before
+        # any screenshot, health query, or snapshot command is sent to the emulator.
+        t0 = mark("ab_boot_t0", timeline_path, {"arm": args.mode})
+        t0_ns = t0["monotonic_ns"]
+        result["boot_t0_monotonic_ns"] = t0_ns
+        result["menu_event_count"] = 0
+        menu_process: subprocess.Popen[str] | None = None
+        menu_finish: dict[str, Any] = {}
+        menu_done = threading.Event()
+        menu_command = ["adb", "-s", args.serial, "shell", "input", "keyevent", "82"]
+        if args.mode == "treatment":
+            result["menu_attempted"] = True
+            result["menu_event_count"] = 1
+            mark("ab_menu_command_start", timeline_path, {"command": menu_command})
+            result["menu_start_monotonic_ns"] = time.monotonic_ns()
+            result["menu_delta_ms"] = round((result["menu_start_monotonic_ns"] - t0_ns) / 1_000_000, 3)
+            try:
+                menu_process = subprocess.Popen(
+                    menu_command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+
+                def drain_menu() -> None:
+                    assert menu_process is not None
+                    try:
+                        stdout, stderr = menu_process.communicate(timeout=120)
+                        menu_finish.update({"exit_code": menu_process.returncode, "stdout": stdout, "stderr": stderr})
+                    except subprocess.TimeoutExpired:
+                        menu_process.kill()
+                        stdout, stderr = menu_process.communicate()
+                        menu_finish.update({"exit_code": menu_process.returncode, "stdout": stdout, "stderr": stderr, "timed_out": True})
+                    finally:
+                        menu_finish["ended_monotonic_ns"] = time.monotonic_ns()
+                        mark(
+                            "ab_menu_command_end",
+                            timeline_path,
+                            {
+                                "exit_code": menu_finish.get("exit_code"),
+                                "timed_out": menu_finish.get("timed_out", False),
+                            },
+                        )
+                        menu_done.set()
+
+                threading.Thread(target=drain_menu, name="menu-ab-input", daemon=True).start()
+            except OSError as error:
+                menu_finish.update({"exit_code": None, "stderr": f"{error.__class__.__name__}: {error}"})
+                menu_finish["ended_monotonic_ns"] = time.monotonic_ns()
+                mark("ab_menu_command_end", timeline_path, {"error": menu_finish["stderr"]})
+                menu_done.set()
+        else:
+            result["menu_attempted"] = False
+            result["menu_issued"] = False
+
+        take_screenshot(f"{args.mode}-immediate")
+        capture_anr_if_observed()
+        take_snapshot(f"{args.mode}-00")
+        capture_anr_if_observed()
+        window_end_ns = t0_ns + 15_000_000_000
+        next_sample_ns = t0_ns + 3_000_000_000
+        midpoint_capture_ns = t0_ns + 9_000_000_000
+        midpoint_captured = False
+        sample_index = 1
+        while time.monotonic_ns() < window_end_ns:
+            capture_anr_if_observed()
+            now_ns = time.monotonic_ns()
+            if not midpoint_captured and now_ns >= midpoint_capture_ns:
+                result["midpoint_screenshot_capture"] = take_screenshot(f"{args.mode}-midpoint")
+                midpoint_captured = True
+                continue
+            if now_ns >= window_end_ns:
+                break
+            if now_ns >= next_sample_ns:
+                take_snapshot(f"{args.mode}-{sample_index:02d}")
+                capture_anr_if_observed()
+                sample_index += 1
+                next_sample_ns += 3_000_000_000
+                continue
+            next_deadline_ns = min(
+                window_end_ns,
+                next_sample_ns,
+                midpoint_capture_ns if not midpoint_captured else window_end_ns,
+            )
+            observer.anr_event.wait(timeout=max(0.0, (next_deadline_ns - now_ns) / 1_000_000_000))
+        take_snapshot(f"{args.mode}-final")
+        capture_anr_if_observed()
+        if not midpoint_captured:
+            result["midpoint_screenshot_capture"] = {
+                "captured": False,
+                "reason": "The 15-second observation ended before the scheduled midpoint screenshot could be captured.",
+            }
+        take_screenshot(f"{args.mode}-final")
+        capture_anr_if_observed()
+        end_ns = time.monotonic_ns()
+
+        if args.mode == "treatment":
+            if not menu_done.wait(timeout=2):
+                if menu_process is not None:
+                    menu_process.kill()
+                menu_done.wait(timeout=2)
+                menu_finish["timed_out"] = True
+            result["menu_end_monotonic_ns"] = menu_finish.get("ended_monotonic_ns")
+            result["menu_issued"] = menu_finish.get("exit_code") == 0 and not menu_finish.get("timed_out", False)
+            result["menu_command"] = {
+                "command": menu_command,
+                "exit_code": menu_finish.get("exit_code"),
+                "stdout_available": menu_finish.get("exit_code") is not None,
+                "stdout_nonempty": bool(menu_finish.get("stdout")),
+                "stderr_excerpt": str(menu_finish.get("stderr", ""))[-500:],
+                "timed_out": menu_finish.get("timed_out", False),
+            }
+        else:
+            result["menu_command"] = {"command": [], "exit_code": None}
+
+        snapshots = [
+            snapshot
+            for snapshot in result["snapshots"]
+            if snapshot.get("started_monotonic_ns", window_end_ns + 1) <= window_end_ns
+        ]
+        home_packages = sorted({
+            str(snapshot["home_package"])
+            for snapshot in snapshots
+            if snapshot.get("home_package")
+        })
+        timestamped_logcat_events = timestamp_anr_events(
+            [event for event in observer.snapshot() if event["is_anr"]],
+            result["snapshots"],
+        )
+        interval_events = [
+            event
+            for event in timestamped_logcat_events
+            if isinstance(event.get("mapped_host_monotonic_ns"), int)
+            and t0_ns <= event["mapped_host_monotonic_ns"] <= window_end_ns
+        ]
+        snapshot_events = [
+            {
+                "line": line,
+                "source": "snapshot",
+                "host_monotonic_ns": snapshot.get("ended_monotonic_ns"),
+            }
+            for snapshot in snapshots
+            for event in snapshot_anr_events(snapshot)
+            for line in [event["line"]]
+        ]
+        home_package_set = set(home_packages)
+        scoped = scope_anr_events_to_packages(interval_events + snapshot_events, home_package_set)
+        all_scoped = scope_anr_events_to_packages(timestamped_logcat_events, home_package_set)
+        unresolved_snapshot_events = uncorroborated_snapshot_home_anrs(
+            snapshot_events,
+            interval_events,
+            home_package_set,
+        )
+        result["home_packages_observed"] = home_packages
+        result["focus_samples"] = [
+            {
+                "label": snapshot.get("label"),
+                "focus_state": snapshot.get("focus_state"),
+                "home_package": snapshot.get("home_package"),
+                "stable_home_health": snapshot.get("stable_pre_menu_health"),
+                "started_monotonic_ns": snapshot.get("started_monotonic_ns"),
+            }
+            for snapshot in snapshots
+        ]
+        final_snapshot = max(snapshots, key=lambda snapshot: snapshot.get("started_monotonic_ns", 0)) if snapshots else {}
+        result["final_focus_state"] = final_snapshot.get("focus_state")
+        result["final_home_healthy"] = final_snapshot.get("stable_pre_menu_health")
+        result["home_anr_events"] = scoped["home"]
+        result["other_anr_events"] = scoped["other"]
+        observer_was_running = observer.still_running()
+        observer_complete = observer_was_running and not observer.truncated and observer.events_dropped == 0
+        if args.mode == "treatment":
+            prefix = classify_pre_menu_home_anrs(
+                timestamped_logcat_events,
+                snapshot_events,
+                home_package_set,
+                result.get("menu_start_monotonic_ns"),
+                observer_complete,
+                result.get("logcat_observer_started_monotonic_ns"),
+                interval_events,
+            )
+            result["pre_menu_home_anr_status"] = prefix["status"]
+            result["pre_menu_home_anr_events"] = prefix["events"]
+            result["pre_menu_home_anr_unresolved_events"] = prefix["unresolved_events"]
+        result["unresolved_home_anr"] = bool(
+            scoped["unknown"]
+            or unresolved_snapshot_events
+            or any(
+                event.get("mapped_host_monotonic_ns") is None
+                for category in (all_scoped["home"], all_scoped["unknown"])
+                for event in category
+            )
+        )
+        result["unresolved_snapshot_home_anr_events"] = unresolved_snapshot_events
+        result["home_anr"] = bool(scoped["home"])
+        result["boot_path_stable"] = stable_control_boot_path(snapshots) if args.mode == "control" else None
+        result["observer_available_at_decision"] = observer_was_running
+        result["observer_complete"] = observer_complete
+        result["observer"] = observer.stop()
+        result["observation"] = {
+            "target_seconds": 15,
+            "elapsed_seconds": elapsed_seconds(t0_ns, end_ns),
+            "complete": end_ns >= window_end_ns and observer_complete,
+            "snapshot_count": len(snapshots),
+        }
+        result["classification"] = "ARM_COMPLETE" if result["observation"]["complete"] else "INCONCLUSIVE"
+        result["reason"] = (
+            "The arm completed its matched observation window; A/B interpretation is produced by the comparator."
+            if result["observation"]["complete"]
+            else "The arm did not complete the full observation window with a live, complete log observer."
+        )
+        write_result(results, result)
+        mark("ab_arm_finished", timeline_path, {"arm": args.mode, "classification": result["classification"]})
+        print(json.dumps({"arm": args.mode, "classification": result["classification"], "reason": result["reason"]}, indent=2))
+        return 0 if result["observation"]["complete"] else 1
 
     observation_start = mark("pre_menu_observation_start", timeline_path)
     pre_window_start_ns = observation_start["monotonic_ns"]

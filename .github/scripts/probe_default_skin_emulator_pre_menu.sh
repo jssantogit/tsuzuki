@@ -1,7 +1,23 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+ab_arm=''
+if [[ "${1:-}" == '--menu-ab-arm' ]]; then
+  ab_arm="${2:-}"
+  [[ "$ab_arm" == 'control' || "$ab_arm" == 'treatment' ]] || {
+    echo 'Usage: probe_default_skin_emulator_pre_menu.sh [--menu-ab-arm control|treatment]' >&2
+    exit 2
+  }
+  shift 2
+elif (($# > 0)); then
+  echo 'Usage: probe_default_skin_emulator_pre_menu.sh [--menu-ab-arm control|treatment]' >&2
+  exit 2
+fi
+
 results_dir='.github/results/default-skin-pre-menu'
+if [[ -n "$ab_arm" ]]; then
+  results_dir=".github/results/default-skin-menu-ab/$ab_arm"
+fi
 mkdir -p "$results_dir"
 rm -f "$results_dir"/timeline.jsonl "$results_dir"/result.json "$results_dir"/logcat-filtered.jsonl \
   "$results_dir"/run-info.txt "$results_dir"/pre-menu-immediate.png "$results_dir"/pre-menu-final.png \
@@ -203,6 +219,7 @@ emulator_pid=$!
 printf 'EMULATOR_PID=%s\n' "$emulator_pid" >> "$results_dir/emulator-launch-start.txt"
 
 python3 - "$results_dir/run-metadata.json" "$results_dir" "$sdk_root" "$image_package" "$avd_name" "$accel_status" "$emulator_version_status" <<'PY'
+import os
 import json
 import pathlib
 import sys
@@ -226,6 +243,11 @@ metadata = {
     "sdk_root": sdk_root,
     "avd_name": avd_name,
     "accel_check_exit": int(accel_status),
+    "runner_image_os": os.environ.get("ImageOS"),
+    "runner_image_version": os.environ.get("ImageVersion"),
+    "libpulse0_package": (root / "runtime-dependencies/config/libpulse-after.txt").read_text(
+        encoding="utf-8", errors="replace"
+    ) if (root / "runtime-dependencies/config/libpulse-after.txt").is_file() else "",
 }
 (root / "run-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 PY
@@ -249,7 +271,15 @@ while (( SECONDS < transport_deadline )); do
 done
 (( transport_ready == 1 )) || fail_inconclusive 'Emulator ADB transport did not appear within 600 seconds'
 
-python3 .github/scripts/probe_default_skin_emulator_pre_menu.py \
-  --serial "$serial" \
-  --results "$results_dir" \
-  --metadata "$results_dir/run-metadata.json"
+if [[ -n "$ab_arm" ]]; then
+  python3 .github/scripts/probe_default_skin_emulator_pre_menu.py \
+    --serial "$serial" \
+    --results "$results_dir" \
+    --metadata "$results_dir/run-metadata.json" \
+    --mode "$ab_arm"
+else
+  python3 .github/scripts/probe_default_skin_emulator_pre_menu.py \
+    --serial "$serial" \
+    --results "$results_dir" \
+    --metadata "$results_dir/run-metadata.json"
+fi

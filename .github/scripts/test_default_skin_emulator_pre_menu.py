@@ -155,13 +155,36 @@ class ProbeClassificationTest(unittest.TestCase):
             {"line": "ActivityManager: ANR in com.example.launcher"},
             {"line": "ActivityManager: ANR in com.example.other"},
             {"line": "am_anr: details unavailable"},
+            {"line": "am_anr: [0, 1234, com.example.launcher, 0, 0]"},
+            {"line": "I am_anr  : [0, 1174, com.example.launcher, 0, 0]"},
         ]
 
         scoped = probe.scope_anr_events(events, "com.example.launcher")
 
-        self.assertEqual(1, len(scoped["home"]))
+        self.assertEqual(3, len(scoped["home"]))
         self.assertEqual(1, len(scoped["other"]))
         self.assertEqual(1, len(scoped["unknown"]))
+
+    def test_anr_dialog_title_containing_home_package_is_not_healthy_home_focus(self) -> None:
+        sections = {
+            "HOME": {"exit_code": 0, "lines": ["com.example.launcher/.Home"]},
+            "WINDOW": {
+                "exit_code": 0,
+                "lines": ["mCurrentFocus=Window{a u0 Application Not Responding: com.example.launcher}"],
+            },
+            "ACTIVITY": {"exit_code": 0, "lines": ["topResumedActivity=ActivityRecord{ com.example.launcher/.Home}"]},
+            "HOME_PID": {"exit_code": 0, "lines": ["1234"]},
+            "POWER": {"exit_code": 0, "lines": ["mWakefulness=Awake"]},
+            "KEYGUARD": {"exit_code": 0, "lines": ["KeyguardServiceDelegate: showing=false, inputRestricted=false"]},
+            "PROVISIONED": {"exit_code": 0, "lines": ["1"]},
+            "USER_SETUP": {"exit_code": 0, "lines": ["1"]},
+        }
+
+        health = probe.snapshot_health(sections)
+
+        self.assertEqual("OTHER", health["focus_state"])
+        self.assertIsNone(health["focus_owner_package"])
+        self.assertFalse(health["stable_pre_menu_health"])
 
     def test_home_health_requires_focused_home_and_live_process(self) -> None:
         sections = {
@@ -220,6 +243,171 @@ class ProbeClassificationTest(unittest.TestCase):
         health = probe.snapshot_health(sections)
 
         self.assertIsNone(health["home_process_alive"])
+
+    def test_anr_scope_tracks_all_home_packages_observed_during_boot_transition(self) -> None:
+        events = [
+            {"line": "ANR in com.google.android.setup"},
+            {"line": "ANR in com.android.launcher3"},
+            {"line": "ANR in com.example.unrelated"},
+        ]
+
+        scoped = probe.scope_anr_events_to_packages(
+            events,
+            {"com.google.android.setup", "com.android.launcher3"},
+        )
+
+        self.assertEqual(2, len(scoped["home"]))
+        self.assertEqual(1, len(scoped["other"]))
+        self.assertEqual([], scoped["unknown"])
+
+    def test_treatment_prefix_uses_device_event_time_not_buffered_logcat_receipt(self) -> None:
+        snapshots = [
+            {
+                "adb_exit_code": 0,
+                "stdout_available": True,
+                "started_monotonic_ns": 10_000_000_000,
+                "ended_monotonic_ns": 12_000_000_000,
+                "sections": {"DEVICE_EPOCH": {"exit_code": 0, "lines": ["1000.0"]}},
+            }
+        ]
+        received_after_menu = {
+            "source": "logcat",
+            "host_monotonic_ns": 20_000_000_000,
+            "device_epoch": 1000.5,
+            "line": "ActivityManager: ANR in com.example.launcher",
+        }
+        timestamped = probe.timestamp_anr_events([received_after_menu], snapshots)
+        prefix = probe.classify_pre_menu_home_anrs(
+            timestamped,
+            [],
+            {"com.example.launcher"},
+            menu_start_monotonic_ns=15_000_000_000,
+            observer_complete=True,
+            observer_start_monotonic_ns=9_000_000_000,
+        )
+
+        self.assertEqual(11_500_000_000, timestamped[0]["mapped_host_monotonic_ns"])
+        self.assertEqual(20_000_000_000, timestamped[0]["host_monotonic_ns"])
+        self.assertEqual("present", prefix["status"])
+
+    def test_treatment_prefix_is_unknown_when_home_anr_time_cannot_be_mapped(self) -> None:
+        prefix = probe.classify_pre_menu_home_anrs(
+            [
+                {
+                    "source": "logcat",
+                    "host_monotonic_ns": 20_000_000_000,
+                    "mapped_host_monotonic_ns": None,
+                    "line": "ActivityManager: ANR in com.example.launcher",
+                }
+            ],
+            [],
+            {"com.example.launcher"},
+            menu_start_monotonic_ns=15_000_000_000,
+            observer_complete=True,
+            observer_start_monotonic_ns=9_000_000_000,
+        )
+
+        self.assertEqual("unknown", prefix["status"])
+
+    def test_retained_snapshot_anr_requires_a_matching_timestamped_home_event(self) -> None:
+        snapshot_events = [
+            {
+                "source": "snapshot:menu-03:LAST_ANR",
+                "line": "ANR in com.example.launcher: Input dispatching timed out",
+            }
+        ]
+        matching_live_event = {
+            "source": "logcat",
+            "line": "ActivityManager: ANR in com.example.launcher: Input dispatching timed out",
+            "mapped_host_monotonic_ns": 12_000_000_000,
+        }
+        unmatched_live_event = {
+            "source": "logcat",
+            "line": "ActivityManager: ANR in com.example.other",
+            "mapped_host_monotonic_ns": 12_000_000_000,
+        }
+        mismatched_reason_event = {
+            "source": "logcat",
+            "line": "ActivityManager: ANR in com.example.launcher: Executing service timed out",
+            "mapped_host_monotonic_ns": 12_000_000_000,
+        }
+
+        self.assertEqual(
+            [],
+            probe.uncorroborated_snapshot_home_anrs(
+                snapshot_events, [matching_live_event], {"com.example.launcher"}
+            ),
+        )
+        self.assertEqual(
+            snapshot_events,
+            probe.uncorroborated_snapshot_home_anrs(
+                snapshot_events, [unmatched_live_event], {"com.example.launcher"}
+            ),
+        )
+        self.assertEqual(
+            snapshot_events,
+            probe.uncorroborated_snapshot_home_anrs(
+                snapshot_events, [mismatched_reason_event], {"com.example.launcher"}
+            ),
+        )
+        matched_prefix = probe.classify_pre_menu_home_anrs(
+            [matching_live_event],
+            snapshot_events,
+            {"com.example.launcher"},
+            menu_start_monotonic_ns=11_000_000_000,
+            observer_complete=True,
+            observer_start_monotonic_ns=9_000_000_000,
+        )
+        unmatched_prefix = probe.classify_pre_menu_home_anrs(
+            [unmatched_live_event],
+            snapshot_events,
+            {"com.example.launcher"},
+            menu_start_monotonic_ns=11_000_000_000,
+            observer_complete=True,
+            observer_start_monotonic_ns=9_000_000_000,
+        )
+
+        self.assertEqual("absent", matched_prefix["status"])
+        self.assertEqual("unknown", unmatched_prefix["status"])
+
+    def test_ab_elapsed_time_uses_observed_end_not_scheduled_window_length(self) -> None:
+        self.assertEqual(15.375, probe.elapsed_seconds(1_000_000_000, 16_375_000_000))
+
+    def test_control_boot_path_is_unstable_only_with_observed_unhealthy_sample(self) -> None:
+        snapshots = [
+            {"stable_pre_menu_health": True},
+            {"stable_pre_menu_health": False},
+            {"stable_pre_menu_health": True},
+        ]
+
+        self.assertFalse(probe.stable_control_boot_path(snapshots))
+        self.assertIsNone(probe.stable_control_boot_path([{"stable_pre_menu_health": None}]))
+        self.assertTrue(probe.stable_control_boot_path([{"stable_pre_menu_health": True}]))
+
+    def test_ab_configuration_hash_input_excludes_host_paths_and_keeps_profile_settings(self) -> None:
+        metadata = {
+            "runner_image_os": "ubuntu24",
+            "runner_image_version": "2026.10.01",
+            "system_image": "system-images;android-35;google_apis;x86_64",
+            "source_properties": "AndroidVersion.ApiLevel=35\nSystemImage.Abi=x86_64\n",
+            "platform_tools_source_properties": "Pkg.Revision=37\n",
+            "platform_source_properties": "AndroidVersion.ApiLevel=35\n",
+            "sdkmanager_version": "sdkmanager 1",
+            "adb_version": "Android Debug Bridge version 1",
+            "emulator_version": "Android emulator version 37.2.12.0\nbuild_id 16428233",
+            "avd_default_config": "hw.ramSize=1536\nvm.heapSize=228\n",
+            "avd_effective_config": "vm.heapSize=228\nhw.ramSize=1536\nhw.cpu.ncore=2\n",
+            "launch_command": "/sdk/emulator -port 5554 -avd test -gpu swiftshader_indirect",
+            "accel_check_exit": 0,
+            "accel_check": "KVM is installed and usable",
+        }
+
+        configuration = probe.canonical_configuration(metadata, {"window_animation_scale": {"value": "1"}})
+
+        self.assertEqual("2026.10.01", configuration["runner_image_version"])
+        self.assertEqual("1536", configuration["avd_default_config"]["hw.ramSize"])
+        self.assertEqual(["-port", "5554", "-avd", "test", "-gpu", "swiftshader_indirect"], configuration["launch_arguments"])
+        self.assertNotIn("/sdk", json.dumps(configuration))
 
     @unittest.skipUnless(shutil.which("bash"), "Bash is required to exercise the SDK bootstrap script")
     def test_sdk_install_runs_before_emulator_binary_is_required(self) -> None:

@@ -21,6 +21,11 @@ on:
         required: false
         default: false
         type: boolean
+      default_skin_emulator_menu_ab:
+        description: Compare fresh-emulator zero-input control with immediate-MENU treatment
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -584,6 +589,149 @@ jobs:
         with:
           name: default-skin-emulator-pre-menu-${{ github.sha }}
           path: .github/results/default-skin-pre-menu/**
+          if-no-files-found: warn
+          retention-days: 7
+
+  default-skin-emulator-menu-ab:
+    name: Default Skin emulator MENU A/B (${{ matrix.arm }})
+    if: ${{ inputs.default_skin_emulator_menu_ab }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [control, treatment]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+
+      - name: Test emulator MENU A/B helpers
+        run: |
+          python3 -B .github/scripts/test_default_skin_emulator_pre_menu.py
+          python3 -B .github/scripts/test_default_skin_emulator_menu_ab.py
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install emulator runtime library
+        shell: bash
+        env:
+          MENU_AB_ARM: ${{ matrix.arm }}
+        run: |
+          set +e
+          results_dir=".github/results/default-skin-menu-ab/$MENU_AB_ARM/runtime-dependencies"
+          mkdir -p "$results_dir/config"
+          dpkg-query -W -f='${Status} ${Version}\n' libpulse0 \
+            > "$results_dir/config/libpulse-before.txt" 2>&1
+          before_status=$?
+          sudo apt-get update > "$results_dir/config/apt-update.log" 2>&1
+          update_status=$?
+          sudo apt-get install -y libpulse0 > "$results_dir/config/libpulse-install.log" 2>&1
+          install_status=$?
+          dpkg-query -W -f='${Status} ${Version}\n' libpulse0 \
+            > "$results_dir/config/libpulse-after.txt" 2>&1
+          after_status=$?
+          printf 'BEFORE_QUERY_EXIT=%s\nAPT_UPDATE_EXIT=%s\nINSTALL_EXIT=%s\nAFTER_QUERY_EXIT=%s\n' \
+            "$before_status" "$update_status" "$install_status" "$after_status" \
+            > "$results_dir/config/libpulse-status.txt"
+          if (( update_status != 0 || install_status != 0 || after_status != 0 )); then
+            echo '::error::Could not install or verify the emulator runtime library libpulse0'
+            exit 1
+          fi
+
+      - name: Observe fresh emulator in the selected A/B arm
+        shell: bash
+        env:
+          MENU_AB_ARM: ${{ matrix.arm }}
+        run: bash .github/scripts/probe_default_skin_emulator_pre_menu.sh --menu-ab-arm "$MENU_AB_ARM"
+
+      - name: Report A/B arm evidence
+        if: always()
+        shell: bash
+        env:
+          MENU_AB_ARM: ${{ matrix.arm }}
+        run: |
+          result=".github/results/default-skin-menu-ab/$MENU_AB_ARM/run-info.txt"
+          if [[ -f "$result" ]]; then
+            cat "$result"
+          else
+            echo '::warning::The emulator MENU A/B arm produced no run-info file; inspect provisioning output.'
+          fi
+
+      - name: Upload A/B arm evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: default-skin-emulator-menu-ab-${{ matrix.arm }}-${{ github.sha }}
+          path: .github/results/default-skin-menu-ab/${{ matrix.arm }}/**
+          if-no-files-found: warn
+          retention-days: 7
+
+  default-skin-emulator-menu-ab-compare:
+    name: Compare Default Skin emulator MENU A/B
+    if: ${{ always() && inputs.default_skin_emulator_menu_ab }}
+    needs: [default-skin-emulator-menu-ab]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download A/B arm artifacts without masking missing evidence
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          root='.github/results/default-skin-emulator-menu-ab-bundle'
+          mkdir -p "$root/control" "$root/treatment"
+          for arm in control treatment; do
+            artifact="default-skin-emulator-menu-ab-$arm-$GITHUB_SHA"
+            set +e
+            gh run download "$GITHUB_RUN_ID" --name "$artifact" --dir "$root/$arm" \
+              > "$root/$arm-download.log" 2>&1
+            status=$?
+            set -e
+            printf 'ARTIFACT=%s\nDOWNLOAD_EXIT=%s\n' "$artifact" "$status" \
+              > "$root/$arm-download-status.txt"
+          done
+
+      - name: Compare matched A/B evidence
+        shell: bash
+        run: |
+          python3 -B .github/scripts/compare_default_skin_emulator_menu_ab.py \
+            --control .github/results/default-skin-emulator-menu-ab-bundle/control/result.json \
+            --treatment .github/results/default-skin-emulator-menu-ab-bundle/treatment/result.json \
+            --output .github/results/default-skin-emulator-menu-ab-bundle
+
+      - name: Report A/B comparison
+        if: always()
+        shell: bash
+        run: |
+          report='.github/results/default-skin-emulator-menu-ab-bundle/run-info.txt'
+          if [[ -f "$report" ]]; then
+            cat "$report"
+          else
+            echo '::warning::A/B comparison produced no classification file.'
+          fi
+
+      - name: Upload combined A/B evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: default-skin-emulator-menu-ab-${{ github.sha }}
+          path: .github/results/default-skin-emulator-menu-ab-bundle/**
           if-no-files-found: warn
           retention-days: 7
 
