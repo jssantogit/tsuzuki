@@ -3,6 +3,8 @@ package eu.kanade.presentation.tsuzuki.home
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,9 +13,10 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -32,10 +35,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -46,8 +51,7 @@ import coil3.compose.AsyncImage
 import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.tsuzuki.collections.FolderTile
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinCard
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinSecondaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.tsuzuki.recordArtworkLoad
@@ -174,7 +178,7 @@ private fun HomeHeroCarousel(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(HERO_ASPECT_RATIO),
+            .height(HOME_HERO_HEIGHT),
     ) {
         Crossfade(
             targetState = activeItem,
@@ -238,12 +242,12 @@ private fun HomeHero(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0.0f to Color.Black.copy(alpha = 0.22f),
-                        0.18f to Color.Transparent,
-                        0.32f to colors.canvas.copy(alpha = 0.08f),
-                        0.47f to colors.canvas.copy(alpha = 0.65f),
-                        0.62f to colors.canvas.copy(alpha = 0.91f),
-                        0.83f to colors.canvas.copy(alpha = 0.98f),
+                        0.0f to Color.Transparent,
+                        0.42f to Color.Transparent,
+                        0.48f to colors.canvas.copy(alpha = 0.12f),
+                        0.62f to colors.canvas.copy(alpha = 0.58f),
+                        0.78f to colors.canvas.copy(alpha = 0.90f),
+                        0.94f to colors.canvas.copy(alpha = 0.98f),
                         1.0f to colors.canvas,
                     ),
                 ),
@@ -252,8 +256,8 @@ private fun HomeHero(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(horizontal = DefaultSkinSpacing.PageHorizontal, vertical = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(horizontal = DefaultSkinSpacing.PageHorizontal, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (metadata.isNotBlank()) {
                 Text(
@@ -266,7 +270,7 @@ private fun HomeHero(
             }
             Text(
                 text = item.title,
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = colors.foreground,
                 maxLines = 3,
@@ -284,17 +288,19 @@ private fun HomeHero(
             FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp),
+                    .padding(top = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 maxItemsInEachRow = 2,
             ) {
-                DefaultSkinPrimaryButton(
+                DefaultSkinHomeHeroAction(
                     text = stringResource(MR.strings.tsuzuki_home_read),
+                    primary = true,
                     onClick = onRead,
                 )
-                DefaultSkinSecondaryButton(
+                DefaultSkinHomeHeroAction(
                     text = stringResource(MR.strings.tsuzuki_home_details),
+                    primary = false,
                     onClick = onDetails,
                 )
             }
@@ -323,6 +329,38 @@ private fun HomeHero(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DefaultSkinHomeHeroAction(
+    text: String,
+    primary: Boolean,
+    onClick: () -> Unit,
+) {
+    val colors = defaultSkinColors()
+    val shape = DefaultSkinShape.Control
+    Box(
+        modifier = Modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .heightIn(min = 38.dp)
+                .clip(shape)
+                .background(if (primary) colors.accent else colors.surface)
+                .then(if (primary) Modifier else Modifier.border(1.dp, colors.outline, shape)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = text,
+                modifier = Modifier.padding(horizontal = 16.dp),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = if (primary) colors.onAccent else colors.foreground,
+                maxLines = 1,
+            )
         }
     }
 }
@@ -449,11 +487,12 @@ private fun CollectionHomeSection(
 
 internal fun homeModuleTopSpacing(previousModuleExists: Boolean, heroPrecedesModule: Boolean): Dp = when {
     previousModuleExists -> DefaultSkinSpacing.Section
-    heroPrecedesModule -> DefaultSkinSpacing.Group
+    heroPrecedesModule -> homeHeroFirstModuleSpacing
     else -> 0.dp
 }
 
-private const val HERO_ASPECT_RATIO = 0.71f
+private val homeHeroFirstModuleSpacing = 8.dp
+internal val HOME_HERO_HEIGHT = 350.dp
 private const val HERO_ROTATION_INTERVAL_MILLIS = 8_000L
 private const val HERO_CROSSFADE_MILLIS = 650
 private const val MAX_HERO_ITEMS = 4

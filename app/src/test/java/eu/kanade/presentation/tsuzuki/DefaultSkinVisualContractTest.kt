@@ -5,6 +5,7 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinColors
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
 import eu.kanade.presentation.tsuzuki.components.defaultSkinPalette
+import eu.kanade.presentation.tsuzuki.home.HOME_HERO_HEIGHT
 import eu.kanade.presentation.tsuzuki.home.homeModuleTopSpacing
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -72,13 +73,21 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
-    fun `Home actions use Default Skin hierarchy instead of stock Material buttons`() {
+    fun `Home hero uses local content sized actions instead of shared full width buttons`() {
         val home = readSource("home/TsuzukiHomeScreen.kt")
+        val carousel = sourceBlockStartingAt(home, "private fun HomeHeroCarousel(")
+        val homeHero = sourceBlockStartingAt(home, "private fun HomeHero(")
+        val action = sourceBlockStartingAt(home, "private fun DefaultSkinHomeHeroAction(")
 
-        home shouldContain "DefaultSkinPrimaryButton("
-        home shouldContain "DefaultSkinSecondaryButton("
-        home shouldNotContain "import androidx.compose.material3.Button"
-        home shouldNotContain "import androidx.compose.material3.OutlinedButton"
+        carousel shouldContain ".height(HOME_HERO_HEIGHT)"
+        carousel shouldNotContain ".aspectRatio(HERO_ASPECT_RATIO)"
+        homeHero shouldContain "DefaultSkinHomeHeroAction("
+        homeHero shouldNotContain "DefaultSkinPrimaryButton("
+        homeHero shouldNotContain "DefaultSkinSecondaryButton("
+        homeHero shouldNotContain "Modifier.weight(1f)"
+        action shouldContain "heightIn(min = 48.dp)"
+        action shouldContain "heightIn(min = 38.dp)"
+        action shouldContain "clickable(role = Role.Button"
     }
 
     @Test
@@ -95,7 +104,10 @@ class DefaultSkinVisualContractTest {
         hero shouldNotContain "MangaCover.Square("
         hero shouldNotContain "MangaCover.Book("
         hero shouldContain "MangaCoverFrame("
+        hero shouldContain ".matchParentSize()"
         hero shouldContain ".clipToBounds()"
+        hero shouldContain "canonicalDetailsHeroFadeStops(background)"
+        hero shouldNotContain ".height(toolbarLeadHeight + artworkLead)"
         hero shouldNotContain "artworkLead * 0.68f"
         (artworkIndex >= 0 && titleIndex > artworkIndex) shouldBe true
         atmosphere shouldContain "toolbarLeadHeight +"
@@ -139,7 +151,7 @@ class DefaultSkinVisualContractTest {
         homeModuleTopSpacing(
             previousModuleExists = false,
             heroPrecedesModule = true,
-        ) shouldBe DefaultSkinSpacing.Group
+        ) shouldBe 8.dp
         homeModuleTopSpacing(
             previousModuleExists = true,
             heroPrecedesModule = false,
@@ -148,6 +160,7 @@ class DefaultSkinVisualContractTest {
             previousModuleExists = false,
             heroPrecedesModule = false,
         ) shouldBe 0.dp
+        (HOME_HERO_HEIGHT.value in 340f..360f) shouldBe true
     }
 
     @Test
@@ -473,28 +486,45 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
-    fun `search compact cards keep Fit foreground with subdued frame scoped artwork atmosphere`() {
+    fun `search compact cards use the shared cropped standard cover without an atmosphere layer`() {
         val search = readSource("search/TsuzukiSearchScreen.kt")
         val compactCard = search.substringAfter("internal fun SearchCompactCard(").substringBefore("\n@OptIn")
         val artwork = sourceBlockStartingAt(search, "internal fun SearchCompactArtwork(")
-        val atmosphere = sourceBlockStartingAt(search, "private fun DecorativeSearchArtwork(")
+        val cover = readSource("components/TsuzukiDefaultSkinCover.kt")
 
-        compactCard shouldContain ".width(148.dp)"
+        compactCard shouldContain ".width(TsuzukiDefaultSkinCoverSize.Standard.width)"
         compactCard shouldContain "SearchCompactArtwork("
-        artwork shouldContain "aspectRatio(MangaCover.Book.ratio)"
-        artwork shouldContain "MangaCover.Book("
+        artwork shouldContain "TsuzukiDefaultSkinCover("
         artwork shouldContain "contentDescription = title"
-        artwork shouldContain "ContentScale.Fit"
-        artwork shouldNotContain "ContentScale.Crop"
-        artwork shouldContain "background(colors.surfaceMuted)"
-        atmosphere shouldContain "MangaCoverFrame("
-        atmosphere shouldContain "contentScale = androidx.compose.ui.layout.ContentScale.Crop"
-        atmosphere shouldContain "contentDescription = null"
-        atmosphere shouldContain "surfaceMuted"
-        atmosphere shouldContain "alpha("
+        artwork shouldNotContain "ContentScale.Fit"
+        artwork shouldNotContain "DecorativeSearchArtwork("
+        artwork shouldNotContain "onAtmosphereLoadEvent ="
+        cover shouldContain "MangaCoverFrame("
+        cover shouldContain "ContentScale.Crop"
+        cover shouldContain "DefaultSkinShape.Control"
+        cover shouldContain "TSUZUKI_DEFAULT_SKIN_COVER_ASPECT_RATIO"
         artwork shouldNotContain "onClick ="
         artwork shouldNotContain ".clickable("
         readMangaCoverSource() shouldContain "Book(2f / 3f)"
+    }
+
+    @Test
+    fun `catalog and library covers use the shared standard and compact variants`() {
+        val collections = readSource("collections/CollectionBrowseScreens.kt")
+        val catalogTile = sourceBlockStartingAt(collections, "private fun CatalogGridItem(")
+        val library = readSource("library/CanonicalLibraryScreen.kt")
+        val libraryList = sourceBlockStartingAt(library, "private fun CanonicalLibraryList(")
+
+        catalogTile shouldContain "TsuzukiDefaultSkinCoverSize.Standard"
+        catalogTile shouldContain "contentAlignment = Alignment.TopCenter"
+        catalogTile shouldContain "propagateMinConstraints = false"
+        catalogTile shouldContain ".widthIn(max = TsuzukiDefaultSkinCoverSize.Standard.width)"
+        collections shouldContain "GridCells.Adaptive(minSize = TsuzukiDefaultSkinCoverSize.Standard.width)"
+        libraryList shouldContain "GridCells.Adaptive(minSize = 104.dp)"
+        libraryList shouldContain "TsuzukiDefaultSkinCoverSize.Library"
+        libraryList shouldContain "item.coverUrl ?: item.sourceCover ?: item.localCoverUrl"
+        libraryList shouldContain "fallbackData = listOf(item.sourceCover, item.sourceCover?.url, item.localCoverUrl)"
+        libraryList shouldNotContain "MangaCover.Book("
     }
 
     private fun providerLanding(): String = readSettingsSource("SettingsTsuzukiProvidersDefaultSkinScreen.kt")

@@ -49,7 +49,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -61,13 +60,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.category.visualName
-import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinChoiceChip
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPageTitle
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSectionLabel
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
+import eu.kanade.presentation.tsuzuki.components.TsuzukiDefaultSkinCover
+import eu.kanade.presentation.tsuzuki.components.TsuzukiDefaultSkinCoverSize
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.tsuzuki.recordArtworkLoad
 import eu.kanade.tachiyomi.R
@@ -630,16 +630,19 @@ private fun CanonicalLibraryList(
                     subsystem = DiagnosticSubsystem.IMAGE,
                 )
             }
-            MangaCover.Book(
-                data = item.coverUrl ?: item.sourceCover ?: item.localCoverUrl,
-                fallbackData = listOf(item.sourceCover, item.sourceCover?.url, item.localCoverUrl),
-                contentDescription = item.title,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(role = Role.Button) { onOpenItem(item) },
-                onLoadEvent = { trace.recordArtworkLoad(it) },
-            )
+            Box(
+                modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { onOpenItem(item) },
+                contentAlignment = Alignment.TopCenter,
+                propagateMinConstraints = false,
+            ) {
+                TsuzukiDefaultSkinCover(
+                    data = item.coverUrl ?: item.sourceCover ?: item.localCoverUrl,
+                    fallbackData = listOf(item.sourceCover, item.sourceCover?.url, item.localCoverUrl),
+                    contentDescription = item.title,
+                    size = TsuzukiDefaultSkinCoverSize.Library,
+                    onLoadEvent = { trace.recordArtworkLoad(it) },
+                )
+            }
         }
     }
 }

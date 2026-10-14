@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -35,15 +34,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -52,14 +46,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import eu.kanade.presentation.manga.components.MangaCover
-import eu.kanade.presentation.manga.components.MangaCoverFrame
 import eu.kanade.presentation.manga.components.MangaCoverLoadEvent
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinCard
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPageTitle
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSectionLabel
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
+import eu.kanade.presentation.tsuzuki.components.TsuzukiDefaultSkinCover
+import eu.kanade.presentation.tsuzuki.components.TsuzukiDefaultSkinCoverSize
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.tsuzuki.integration.IntegrationBrandIcon
 import eu.kanade.presentation.tsuzuki.integration.ratingScaleLabel
@@ -458,7 +452,7 @@ internal fun SearchCompactCard(
     val colors = defaultSkinColors()
     Column(
         modifier = Modifier
-            .width(148.dp)
+            .width(TsuzukiDefaultSkinCoverSize.Standard.width)
             .clickable(role = Role.Button, onClick = onClick)
             .testTag("search_compact_card"),
     ) {
@@ -500,70 +494,18 @@ internal fun SearchCompactArtwork(
     title: String,
     modifier: Modifier = Modifier,
     onForegroundLoadEvent: ((MangaCoverLoadEvent) -> Unit)? = null,
+    // Kept for call-site compatibility; this surface has no decorative second-artwork request.
+    @Suppress("UNUSED_PARAMETER")
     onAtmosphereLoadEvent: ((MangaCoverLoadEvent) -> Unit)? = null,
 ) {
-    val colors = defaultSkinColors()
-    val decorativeArtworkAvailable = remember(data) { mutableStateOf(!data.isNullOrBlank()) }
-    Box(
-        modifier = modifier
-            .aspectRatio(MangaCover.Book.ratio)
-            .clip(DefaultSkinShape.Control)
-            .background(colors.surfaceMuted)
-            .testTag("search_compact_artwork_frame"),
-    ) {
-        if (decorativeArtworkAvailable.value) {
-            DecorativeSearchArtwork(
-                data = data,
-                modifier = Modifier.fillMaxSize().testTag("search_compact_artwork_atmosphere"),
-                surfaceMuted = colors.surfaceMuted,
-                artworkAvailable = decorativeArtworkAvailable,
-                onLoadEvent = onAtmosphereLoadEvent,
-            )
-        }
-        MangaCover.Book(
-            data = data,
-            contentDescription = title,
-            shape = DefaultSkinShape.Control,
-            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-            modifier = Modifier.fillMaxSize().testTag("search_compact_artwork_foreground"),
-            onLoadEvent = onForegroundLoadEvent,
-        )
-    }
-}
-
-@Composable
-private fun DecorativeSearchArtwork(
-    data: String?,
-    modifier: Modifier,
-    surfaceMuted: androidx.compose.ui.graphics.Color,
-    artworkAvailable: MutableState<Boolean>,
-    onLoadEvent: ((MangaCoverLoadEvent) -> Unit)?,
-) {
-    val recordLoadEvent: (MangaCoverLoadEvent) -> Unit = remember(artworkAvailable, onLoadEvent) {
-        { event ->
-            if (event is MangaCoverLoadEvent.Failed && !event.willFallback) {
-                artworkAvailable.value = false
-            }
-            onLoadEvent?.invoke(event)
-        }
-    }
-    Box(modifier = modifier) {
-        MangaCoverFrame(
-            data = data,
-            contentDescription = null,
-            shape = RectangleShape,
-            modifier = Modifier
-                .fillMaxSize()
-                .alpha(0.32f),
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-            onLoadEvent = recordLoadEvent,
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(surfaceMuted.copy(alpha = 0.68f)),
-        )
-    }
+    TsuzukiDefaultSkinCover(
+        data = data,
+        contentDescription = title,
+        modifier = modifier.testTag("search_compact_artwork_frame"),
+        size = TsuzukiDefaultSkinCoverSize.Standard,
+        foregroundModifier = Modifier.testTag("search_compact_artwork_foreground"),
+        onLoadEvent = onForegroundLoadEvent,
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)

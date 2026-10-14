@@ -112,9 +112,7 @@ internal fun CanonicalDetailsHero(
                 if (hasArtwork) {
                     Box(
                         Modifier
-                            .align(Alignment.TopCenter)
-                            .fillMaxWidth()
-                            .height(toolbarLeadHeight + artworkLead)
+                            .matchParentSize()
                             .clipToBounds()
                             .testTag("canonical_details_hero_frame")
                             .clearAndSetSemantics {},
@@ -136,11 +134,7 @@ internal fun CanonicalDetailsHero(
                                 .fillMaxSize()
                                 .background(
                                     Brush.verticalGradient(
-                                        0f to background.copy(alpha = 0.08f),
-                                        0.30f to background.copy(alpha = 0.24f),
-                                        0.50f to background.copy(alpha = 0.74f),
-                                        0.74f to background.copy(alpha = 0.96f),
-                                        1f to background,
+                                        *canonicalDetailsHeroFadeStops(background).toTypedArray(),
                                     ),
                                 )
                                 .testTag("canonical_details_hero_fade"),
@@ -391,6 +385,15 @@ internal fun CanonicalDetailsHero(
 }
 
 internal fun canonicalDetailsArtworkLead(maxWidth: Dp): Dp = (maxWidth * 0.43f).coerceIn(120.dp, 224.dp)
+
+internal fun canonicalDetailsHeroFadeStops(background: Color): List<Pair<Float, Color>> = listOf(
+    0f to background.copy(alpha = 0f),
+    0.44f to background.copy(alpha = 0f),
+    0.55f to background.copy(alpha = 0.2f),
+    0.68f to background.copy(alpha = 0.74f),
+    0.86f to background.copy(alpha = 0.96f),
+    1f to background,
+)
 
 @Composable
 internal fun DetailsEditorial(state: CanonicalTitleScreenState.Loaded) {

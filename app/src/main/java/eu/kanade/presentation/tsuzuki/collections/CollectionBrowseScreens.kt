@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -27,13 +28,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AppBar
-import eu.kanade.presentation.manga.components.MangaCover
+import eu.kanade.presentation.tsuzuki.components.TsuzukiDefaultSkinCover
+import eu.kanade.presentation.tsuzuki.components.TsuzukiDefaultSkinCoverSize
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionBrowseScreenState
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.FolderCatalogContent
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.FolderCatalogScreenState
@@ -135,7 +136,7 @@ private fun FolderCatalogReady(
     val direct = state.preferredListId != null
     val enabledLists = state.folder.lists.filter { it.enabled }.sortedWith(compareBy({ it.sortOrder }, { it.id }))
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(140.dp),
+        columns = GridCells.Adaptive(minSize = TsuzukiDefaultSkinCoverSize.Standard.width),
         modifier = modifier,
         contentPadding = PaddingValues(16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -262,23 +263,30 @@ private fun BrowseScaffold(
 
 @Composable
 private fun CatalogGridItem(item: CatalogItem, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier.clickable(role = Role.Button, onClick = onClick),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.TopCenter,
+        propagateMinConstraints = false,
     ) {
-        MangaCover.Book(
-            data = item.coverUrl,
-            contentDescription = item.title,
-            modifier = Modifier.fillMaxWidth(),
-            contentScale = ContentScale.Fit,
-        )
-        Text(
-            item.title,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Column(
+            modifier = Modifier
+                .widthIn(max = TsuzukiDefaultSkinCoverSize.Standard.width)
+                .clickable(role = Role.Button, onClick = onClick),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TsuzukiDefaultSkinCover(
+                data = item.coverUrl,
+                contentDescription = item.title,
+                size = TsuzukiDefaultSkinCoverSize.Standard,
+            )
+            Text(
+                item.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
