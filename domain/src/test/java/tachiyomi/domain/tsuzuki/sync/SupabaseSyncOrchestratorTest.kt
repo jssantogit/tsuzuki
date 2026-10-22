@@ -71,6 +71,31 @@ class SupabaseSyncOrchestratorTest {
     }
 
     @Test
+    fun `isolated v2 progress domain never writes old v1 records`() = runTest {
+        val v2 = SyncDocumentKind.READING_PROGRESS_V2
+        val local = document(status = "READING").copy(
+            kind = v2,
+            schemaVersion = 2,
+        )
+        val adapter = FakeAdapter(local)
+        val transport = FakeTransport()
+        val outbox = FakeOutbox().apply { markDirty(v2, 1) }
+
+        val result = orchestrator(
+            adapter = adapter,
+            outbox = outbox,
+            transport = transport,
+        ).sync(v2)
+
+        (result is SyncDocumentResult.Failed) shouldBe false
+        transport.pushedBatches.isNotEmpty() shouldBe true
+        transport.pushedBatches.all { it.domain == v2.name } shouldBe true
+        transport.pushedBatches.none { it.domain == SyncDocumentKind.READING_PROGRESS.name } shouldBe true
+        adapter.current.schemaVersion shouldBe 2
+        adapter.current.kind shouldBe v2
+    }
+
+    @Test
     fun `stored schema mismatch refuses sync before pulling or applying remote records`() = runTest {
         val local = document(status = "READING")
         val adapter = FakeAdapter(local)
@@ -482,7 +507,8 @@ class SupabaseSyncOrchestratorTest {
     private class FakeAdapter(
         var current: SyncDocumentEnvelope,
     ) : SyncDocumentAdapter {
-        override val documentKind = SyncDocumentKind.LIBRARY
+        override val documentKind: SyncDocumentKind
+            get() = current.kind
 
         override suspend fun exportDocument(): SyncDocumentEnvelope = current
 
