@@ -75,7 +75,7 @@ class CanonicalChapterRepositoryImpl(
 
     override suspend fun upsert(chapter: CanonicalChapter) {
         database.transaction {
-            validateExactChapterWrite(chapter)
+            validateExactChapterWrite(chapter, getById(chapter.id))
             database.tsuzuki_canonical_chaptersQueries.upsertTsuzukiCanonicalChapter(
                 id = chapter.id,
                 canonicalTitleId = chapter.canonicalTitleId,
@@ -143,8 +143,19 @@ class CanonicalChapterRepositoryImpl(
         variants: List<ChapterVariant>,
     ) {
         database.transaction {
+            require(chapters.map(CanonicalChapter::id).distinct().size == chapters.size) {
+                "A reconciliation batch cannot write the same canonical chapter ID twice"
+            }
+            val existingById = if (chapters.isEmpty()) {
+                emptyMap()
+            } else {
+                database.tsuzuki_canonical_chaptersQueries
+                    .getTsuzukiCanonicalChaptersByIds(chapters.map(CanonicalChapter::id), ::mapChapter)
+                    .awaitAsList()
+                    .associateBy(CanonicalChapter::id)
+            }
             chapters.forEach { chapter ->
-                validateExactChapterWrite(chapter)
+                validateExactChapterWrite(chapter, existingById[chapter.id])
                 database.tsuzuki_canonical_chaptersQueries.upsertTsuzukiCanonicalChapter(
                     id = chapter.id,
                     canonicalTitleId = chapter.canonicalTitleId,
@@ -173,13 +184,12 @@ class CanonicalChapterRepositoryImpl(
      * upsert has its own atomic WHERE guard, so another writer racing this
      * read cannot silently replace an already stored exact identity.
      */
-    private suspend fun validateExactChapterWrite(chapter: CanonicalChapter) {
+    private fun validateExactChapterWrite(chapter: CanonicalChapter, existing: CanonicalChapter?) {
         if (chapter.numberingKind != null) {
             // Validate newly constructed exact rows before persisting them.
             chapter.identity
         }
-        val existing = getById(chapter.id) ?: return
-        if (existing.numberingKind != null) {
+        if (existing?.numberingKind != null) {
             check(existing.identity == chapter.identity && existing.volume == chapter.volume) {
                 "Cannot rewrite exact chapter identity for ${chapter.id}"
             }
