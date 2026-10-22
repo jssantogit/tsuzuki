@@ -151,7 +151,9 @@ class CanonicalReadingProgressSyncAdapter(
                 )
             }
 
-        require(resolvedProgress.map(CanonicalChapterProgress::canonicalChapterId).distinct().size == resolvedProgress.size) {
+        require(
+            resolvedProgress.map(CanonicalChapterProgress::canonicalChapterId).distinct().size == resolvedProgress.size,
+        ) {
             "Multiple portable progress records resolve to the same local chapter"
         }
         resolvedProgress.forEach { progress ->
