@@ -156,9 +156,10 @@ class CanonicalReadingProgressSyncAdapter(
         ) {
             "Multiple portable progress records resolve to the same local chapter"
         }
-        resolvedProgress.forEach { progress ->
-            readingRepository.upsertProgress(progress)
-        }
+        // Production SQL repository applies the entire validated document in
+        // one transaction. Never partially apply a remote update after a later
+        // write fails (for example, due to a stale chapter foreign key).
+        readingRepository.upsertProgressBatch(resolvedProgress)
     }
 
     override suspend fun hasUnportableLocalState(): Boolean {
