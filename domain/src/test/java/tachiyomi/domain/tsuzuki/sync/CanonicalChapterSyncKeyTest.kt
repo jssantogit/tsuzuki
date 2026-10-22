@@ -25,6 +25,23 @@ class CanonicalChapterSyncKeyTest {
     }
 
     @Test
+    fun `unnumbered extras require stable mapped evidence rather than only their semantic type`() {
+        val bonusA = CanonicalChapter(
+            id = "bonus-a",
+            canonicalTitleId = "title-1",
+            displayNumber = "Extra - Bonus A",
+            type = CanonicalChapterType.EXTRA,
+        )
+        val bonusB = bonusA.copy(id = "bonus-b", displayNumber = "Extra - Bonus B")
+
+        CanonicalChapterSyncKey.from(bonusA) shouldBe null
+        CanonicalChapterSyncKey.from(bonusB) shouldBe null
+        val keyA = CanonicalChapterSyncKey.from(bonusA, "addon:source:bonus-a")
+        val keyB = CanonicalChapterSyncKey.from(bonusB, "addon:source:bonus-b")
+        (keyA == keyB) shouldBe false
+    }
+
+    @Test
     fun `unknown unstructured chapter is not published without stable evidence`() {
         val chapter = CanonicalChapter(
             id = "local-a",
