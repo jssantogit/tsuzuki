@@ -42,6 +42,12 @@ GitHub Actions [run 39817021141](https://github.com/jssantogit/tsuzuki/actions/r
 - Both tests completed with instrumented JUnit success; full logs were uploaded as a short-lived GitHub Actions artifact (3-day retention).
 - This is **only two synthetic-fixture emulator scenarios**. It does not cover a real pre-v2 database upgrade, all Reader Next/Previous controls, offline downloads, cross-device migration, older-client coexistence, or actual users' libraries. Keep those matrix rows **Not run** until independently verified.
 
+## Progress-import integrity and expanded emulator gate
+
+The reading-progress import path (v1 and opt-in v2) now **resolves and validates every incoming record before writing any local checkpoint**, verifies each record's full length-prefixed ID against its title ID and chapter key, and refuses two different remote records that resolve to the same local chapter. Regression tests assert that a malformed later record cannot partially apply an earlier valid record, and that a forged chapter key cannot redirect reading progress. This is a prevalidation guarantee, not an assertion that an arbitrary storage failure during persistence provides full database rollback.
+
+The disposable Android gate script now requests three additional existing source-switching tests: keeping the old Reader session when a replacement source is empty/failing, clamping page positions when a new source has fewer pages, and restoring position through Reader Activity recreation. **Their results are pending the new isolated emulator run**; neither the existing two passed scenarios nor a compilation success should be interpreted as a passed five-scenario gate.
+
 ## Existing automated checks
 
 - Domain and Data tests cover decimal precision, volume-aware identities, conflicting evidence, SQLDelight schema migrations, protected state and compare-and-swap writer behavior.
