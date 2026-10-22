@@ -54,7 +54,7 @@ class CanonicalReadingProgressSyncAdapter(
                     .getByCanonicalTitleId(title.id)
                     .associateBy(CanonicalChapter::id)
                 val ambiguousNumberedIds = if (exactVersion2Enabled) {
-                    emptySet()
+                    ambiguousVersion2NumberedChapterIds(chapters.values)
                 } else {
                     ambiguousNumberedChapterIds(
                         chapters.values,
@@ -167,7 +167,7 @@ class CanonicalReadingProgressSyncAdapter(
                 .getByCanonicalTitleId(title.id)
                 .associateBy(CanonicalChapter::id)
             val ambiguousNumberedIds = if (exactVersion2Enabled) {
-                emptySet()
+                ambiguousVersion2NumberedChapterIds(chapters.values)
             } else {
                 ambiguousNumberedChapterIds(
                     chapters.values,
@@ -232,6 +232,16 @@ private fun ambiguousNumberedChapterIds(chapters: Collection<CanonicalChapter>):
     chapters.asSequence()
         .filter { it.identity.isNumbered }
         .groupBy(CanonicalChapter::identity)
+        .values.asSequence()
+        .filter { it.size > 1 }
+        .flatten()
+        .map(CanonicalChapter::id)
+        .toSet()
+
+private fun ambiguousVersion2NumberedChapterIds(chapters: Collection<CanonicalChapter>): Set<String> =
+    chapters.asSequence()
+        .filter { it.identity.isNumbered }
+        .groupBy { chapter -> CanonicalChapterSyncKey.fromVersion2(chapter)!!.chapterKey }
         .values.asSequence()
         .filter { it.size > 1 }
         .flatten()
