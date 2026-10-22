@@ -61,6 +61,8 @@ class ParseCanonicalChapterLabelTest {
         ambiguous.confidence shouldBe 0.0
         ambiguous.rawLabel shouldBe "Chapter 12.05"
         ambiguousExtended.type shouldBe CanonicalChapterType.UNKNOWN
+        parse.execute("Vol. 12 Ch. 12.05", numericHint = 12.05).type shouldBe CanonicalChapterType.UNKNOWN
+        parse.execute("Chapter 12.05", numericHint = 5.0).type shouldBe CanonicalChapterType.UNKNOWN
         (known.identity == ambiguous.identity) shouldBe false
     }
 
