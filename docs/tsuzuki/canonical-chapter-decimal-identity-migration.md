@@ -45,6 +45,12 @@ Use exact parsing/ordering rather than floating point. Avoid treating the raw so
 
 The helper accepts evidence snapshots and protected-state flags from a caller; it **does not** query historic history, downloads, or sync itself. No production entry point calls it, no existing canonical ID is mutated, and no automatic bulk migration is authorized. Before any future caller treats a candidate as a promotion decision, independently verify source provenance, historical variants and volume ambiguity, reader state, sync portability, and database transaction boundaries on real migration snapshots.
 
+## Database-backed historical migration preflight
+
+`LegacyExactChapterMigrationPreflight.inspect` (Data, **internal**, not injected or called by production code) now performs a read-only SQLDelight transaction over the current canonical row, complete title siblings and mapped evidence, protected progress/history/download/update state, and source variants. A missing row, competing sibling, variant, protected state or inconsistent evidence yields a typed rejection. If portable sync state cannot be independently confirmed absent, the default is `REMOTE_SYNC_UNVERIFIED`; the caller cannot infer cross-device safety from local SQLite tables. With an explicit external audit flag and no known blockers, the result is still only `ReviewOnly`, never approval to promote a legacy ID. Repeating inspection after evidence changes re-reads the database rather than trusting a cached candidate.
+
+**There is still no migration write endpoint.** In particular, there is no statement to bypass the canonical upsert guard, no automatic backfill and no mechanism for changing an old portable key. The next implementation stage requires versioned sync compatibility, a revalidated compare-and-swap write transaction with protected-state policies, and device-level migration testing. An audit result returned after the read transaction has ended must never be used as authority for a later write.
+
 ## Targeted regression checkpoint (2026-10-22)
 
 The prior full CI on `a2156caf` passed all lanes except a Data test that exposed a per-chapter exact-identity preflight read. The preflight was replaced with one batched SQLDelight query and a 40-chapter query-count regression. Targeted Data tests, SQLDelight migration checks, Spotless and App compile on `f14d07c2` passed. New read-only historical assessment and the atomic no-in-place-promotion guard require complete Domain/Data/App/release/native acceptance at the latest checkpoint.
