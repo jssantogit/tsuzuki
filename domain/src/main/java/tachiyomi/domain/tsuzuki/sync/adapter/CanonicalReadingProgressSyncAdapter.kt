@@ -115,22 +115,25 @@ class CanonicalReadingProgressSyncAdapter(
             "Reading progress protocol version mismatch; explicit cross-device negotiation is required"
         }
 
-        document.records.values
+        // Validate and resolve every record before making ANY local write.
+        // A malformed later record must never leave earlier progress applied.
+        val resolvedProgress = document.records.values
             .sortedBy(SyncRecordEnvelope::id)
-            .forEach { record ->
+            .map { record ->
                 require(!record.isTombstone) {
                     "Reading progress tombstones are not supported"
                 }
 
                 val canonicalTitleId = record.fields.requiredString("canonicalTitleId")
                 val chapterKey = record.fields.requiredString("chapterKey")
+                require(CanonicalChapterSyncKey(canonicalTitleId, chapterKey).recordId == record.id) {
+                    "Portable progress record ID does not match its chapter key"
+                }
                 val localChapter = resolveLocalChapter(
                     canonicalTitleId = canonicalTitleId,
                     chapterKey = chapterKey,
                 )
-                val variantEvidenceKey = record.fields.optionalString(
-                    "lastVariantEvidenceKey",
-                )
+                val variantEvidenceKey = record.fields.optionalString("lastVariantEvidenceKey")
                 val localVariantId = variantEvidenceKey?.let { evidenceKey ->
                     chapterRepository
                         .getVariantsByCanonicalChapterId(localChapter.id)
@@ -139,17 +142,21 @@ class CanonicalReadingProgressSyncAdapter(
                         }
                         ?.id
                 }
-
-                readingRepository.upsertProgress(
-                    CanonicalChapterProgress(
-                        canonicalChapterId = localChapter.id,
-                        read = record.fields.requiredBoolean("read"),
-                        lastPageRead = record.fields.requiredLong("lastPageRead"),
-                        lastVariantId = localVariantId,
-                        updatedAt = record.updatedAtEpochMillis,
-                    ),
+                CanonicalChapterProgress(
+                    canonicalChapterId = localChapter.id,
+                    read = record.fields.requiredBoolean("read"),
+                    lastPageRead = record.fields.requiredLong("lastPageRead"),
+                    lastVariantId = localVariantId,
+                    updatedAt = record.updatedAtEpochMillis,
                 )
             }
+
+        require(resolvedProgress.map(CanonicalChapterProgress::canonicalChapterId).distinct().size == resolvedProgress.size) {
+            "Multiple portable progress records resolve to the same local chapter"
+        }
+        resolvedProgress.forEach { progress ->
+            readingRepository.upsertProgress(progress)
+        }
     }
 
     override suspend fun hasUnportableLocalState(): Boolean {
