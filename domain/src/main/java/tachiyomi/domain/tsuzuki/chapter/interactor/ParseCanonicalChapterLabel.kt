@@ -197,11 +197,16 @@ class ParseCanonicalChapterLabel {
         val baseNumber = match.groupValues[1].toIntOrNull() ?: return null
         val decimalPart = match.groupValues[2].takeIf(String::isNotEmpty)
         val suffix = match.groupValues[3].takeIf(String::isNotEmpty)
+        // ChapterIdentity persists only the integer part, not its decimal scale.
+        // "12.05" and "12.5" would both map to part=5. Reject scale-sensitive
+        // labels until decimal precision can be stored and migrated losslessly.
+        if (decimalPart != null && decimalPart.length > 1 && decimalPart.startsWith('0')) return null
         val part = decimalPart?.toIntOrNull()
+        if (decimalPart != null && part == null) return null
         val display = buildString {
             append(baseNumber)
             when {
-                decimalPart != null -> append('.').append(decimalPart.toInt())
+                decimalPart != null -> append('.').append(part)
                 suffix != null -> append(suffix)
             }
         }
