@@ -342,22 +342,27 @@ jobs:
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
             --username "$GITHUB_ACTOR" --password-stdin
 
-      - name: Start local Supabase
+      - name: Start database-only Supabase for pgTAP
         if: steps.project.outputs.present == 'true'
         shell: bash
         run: |
-          # Docker registry throttling is transient on shared runners. Retry
-          # startup only, never migrations or failing backend assertions.
-          for attempt in 1 2 3; do
-            if supabase start; then
+          # pgTAP and db reset need PostgreSQL, not the full 13-service
+          # development stack. Full-stack pulls exhaust GHCR shared-runner
+          # rate limits; excluding non-database services reduces both risk
+          # and CI resource use without skipping a single backend assertion.
+          excluded="gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor"
+          # Retry infrastructure pulls only; database migrations/tests still
+          # fail immediately on any assertion or schema error.
+          for attempt in 1 2 3 4 5; do
+            if supabase start -x "$excluded"; then
               exit 0
             fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "::error::Supabase startup failed after three attempts"
+            if [ "$attempt" -eq 5 ]; then
+              echo "::error::Supabase database startup failed after five attempts"
               exit 1
             fi
             supabase stop --no-backup || true
-            sleep "$((attempt * 20))"
+            sleep "$((attempt * 30))"
           done
 
       - name: Reset database
