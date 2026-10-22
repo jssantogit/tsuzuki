@@ -110,6 +110,37 @@ class CanonicalChapterRepositoryImplTest {
     }
 
     @Test
+    fun `local numbering resets across volumes preserve volume reading order for list and flow`() =
+        runBlocking<Unit> {
+            val chapters = listOf(
+                chapter("vol2-ch2", "2", 2).copy(volume = 2),
+                chapter("vol1-ch2", "2", 2).copy(volume = 1),
+                chapter("vol2-ch1", "1", 1).copy(volume = 2),
+                chapter("vol1-ch1", "1", 1).copy(volume = 1),
+            )
+            chapters.forEach { repository.upsert(it) }
+
+            val expectedIds = listOf("vol1-ch1", "vol1-ch2", "vol2-ch1", "vol2-ch2")
+            repository.getByCanonicalTitleId("title-1").map { it.id } shouldContainExactly expectedIds
+            repository.observeByCanonicalTitleId("title-1").first().map { it.id } shouldContainExactly expectedIds
+        }
+
+    @Test
+    fun `global chapter numbering stays numeric even when volume metadata interleaves`() =
+        runBlocking<Unit> {
+            val chapters = listOf(
+                chapter("four", "4", 4).copy(volume = 2),
+                chapter("three", "3", 3).copy(volume = 1),
+                chapter("two", "2", 2).copy(volume = 2),
+                chapter("one", "1", 1).copy(volume = 1),
+            )
+            chapters.forEach { repository.upsert(it) }
+
+            repository.getByCanonicalTitleId("title-1").map { it.id } shouldContainExactly
+                listOf("one", "two", "three", "four")
+        }
+
+    @Test
     fun `variant upsert is idempotent and preserves lossless metadata`() = runBlocking<Unit> {
         val first = variant(id = "variant-1", sourceChapterId = "source-1")
         val second = variant(
