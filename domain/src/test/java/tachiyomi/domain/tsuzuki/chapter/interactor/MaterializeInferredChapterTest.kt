@@ -132,6 +132,33 @@ class MaterializeInferredChapterTest {
         repo.getByCanonicalTitleId("title").size shouldBe 2
     }
 
+    @Test
+    fun `stale count slot cannot create a phantom after volume-local numbering is discovered`() = runTest {
+        val repo = FakeChapters()
+        val observed = CanonicalChapter(
+            id = "volume-one-chapter-one",
+            canonicalTitleId = "title",
+            displayNumber = "1",
+            type = tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType.REGULAR,
+            baseNumber = 1,
+            volume = 1,
+            confidence = 1.0,
+        )
+        repo.upsert(observed)
+        repo.upsert(observed.copy(id = "volume-two-chapter-one", volume = 2))
+        val staleSlot = buildCanonicalChapterOutline(
+            "title",
+            emptyList(),
+            listOf(ReportedChapterCount("title", "kitsu", 3, 1L)),
+        ).last().chapter
+
+        shouldThrow<IllegalStateException> {
+            MaterializeInferredChapter(repo, ChapterMutationGate(), { 2L }).execute(staleSlot)
+        }
+        repo.getByCanonicalTitleId("title").map { it.id } shouldBe
+            listOf("volume-one-chapter-one", "volume-two-chapter-one")
+    }
+
     private class FakeChapters : CanonicalChapterRepository {
         private val values = linkedMapOf<String, CanonicalChapter>()
 
