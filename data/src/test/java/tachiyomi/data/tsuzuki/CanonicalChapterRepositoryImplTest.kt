@@ -166,6 +166,27 @@ class CanonicalChapterRepositoryImplTest {
     }
 
     @Test
+    fun `historical preflight does not re-promote already exact persisted rows`() = runBlocking<Unit> {
+        val exact = chapter("exact-previous", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+        seedHistoricalExactEvidence(exact.id, "source-a", "Chapter 12.05")
+        seedHistoricalExactEvidence(exact.id, "source-b", "Chapter 12.05")
+
+        LegacyExactChapterMigrationPreflight(database).inspect(
+            chapterId = exact.id,
+            remoteSyncStateAuditedAbsent = true,
+        ) shouldBe LegacyExactMigrationPreflight.Blocked(
+            reason = LegacyExactMigrationPreflight.Reason.EVIDENCE_BLOCKED,
+            evidenceReason = LegacyExactPromotionReview.Reason.ALREADY_EXACT,
+        )
+        repository.getById(exact.id) shouldBe exact
+    }
+
+    @Test
     fun `historical preflight refuses unverified portable sync status by default`() = runBlocking<Unit> {
         val legacy = chapter("legacy-sync", "12.5", 12).copy(part = 5)
         repository.upsert(legacy)
