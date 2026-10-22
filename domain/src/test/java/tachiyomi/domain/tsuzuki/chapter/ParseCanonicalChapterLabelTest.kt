@@ -140,6 +140,32 @@ class ParseCanonicalChapterLabelTest {
     }
 
     @Test
+    fun `exact ordinal part stays distinct from both decimal and legacy part`() {
+        val legacy = CanonicalChapterIdentity(
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 12,
+            part = 5,
+        )
+        val ordinal = CanonicalChapterIdentity(
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 12,
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.ORDINAL_PART,
+        )
+        val decimal = CanonicalChapterIdentity(
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 12,
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+        )
+
+        (legacy == ordinal) shouldBe false
+        (ordinal == decimal) shouldBe false
+        (legacy == decimal) shouldBe false
+    }
+
+    @Test
     fun `legacy canonical identities keep their previous signed-number ordering`() {
         val smaller = CanonicalChapterIdentity(type = CanonicalChapterType.REGULAR, baseNumber = -12)
         val larger = CanonicalChapterIdentity(type = CanonicalChapterType.REGULAR, baseNumber = -2)
