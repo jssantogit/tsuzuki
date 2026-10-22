@@ -44,7 +44,7 @@ GitHub Actions [run 39817021141](https://github.com/jssantogit/tsuzuki/actions/r
 
 ## Progress-import integrity and expanded emulator gate
 
-The reading-progress import path (v1 and opt-in v2) now **resolves and validates every incoming record before writing any local checkpoint**, verifies each record's full length-prefixed ID against its title ID and chapter key, and refuses two different remote records that resolve to the same local chapter. Regression tests assert that a malformed later record cannot partially apply an earlier valid record, and that a forged chapter key cannot redirect reading progress. This is a prevalidation guarantee, not an assertion that an arbitrary storage failure during persistence provides full database rollback.
+The reading-progress import path (v1 and opt-in v2) now **resolves and validates every incoming record before writing any local checkpoint**, verifies each record's full length-prefixed ID against its title ID and chapter key, and refuses two different remote records that resolve to the same local chapter. Regression tests assert that a malformed later record cannot partially apply an earlier valid record, and that a forged chapter key cannot redirect reading progress. The production reading repository now also exposes an atomic SQLDelight `upsertProgressBatch` path: after prevalidation the adapter writes all checkpoints in one SQLite transaction. Data regression tests inject a later invalid chapter foreign key to verify that earlier progress is rolled back; duplicate IDs are rejected before writing. Nontransactional test adapters fail closed on multi-record updates unless they explicitly implement atomic batches. This is an automated rollback guarantee for the production SQLite repository, **not** validation of remote cross-device migration on users' devices.
 
 The disposable Android gate script now requests three additional existing source-switching tests: keeping the old Reader session when a replacement source is empty/failing, clamping page positions when a new source has fewer pages, and restoring position through Reader Activity recreation. **All five scenarios passed** in run 39820322683; see the run-specific report below. This does not cover production databases or mixed-device protocol negotiation.
 
@@ -63,7 +63,7 @@ This expands the previous 2-scenario smoke and validates actual app instrumentat
 ## Existing automated checks
 
 - Domain and Data tests cover decimal precision, volume-aware identities, conflicting evidence, SQLDelight schema migrations, protected state and compare-and-swap writer behavior.
-- The ordinary reading-progress sync adapter **remains schema v1**. The opt-in version-2 path is not connected to live Supabase sync or the user's account.
+- The ordinary reading-progress sync adapter **remains schema v1**. Its batch import now uses a single rollback-safe SQLite transaction. The opt-in version-2 path is not connected to live Supabase sync or the user's account.
 - A green GitHub Actions release compile or native package gate demonstrates buildability, **not** completion of the physical-device acceptance matrix above.
 
 ## Release decision
