@@ -93,10 +93,15 @@ ON CONFLICT(id) DO UPDATE SET
 -- SQLDelight's generator cannot resolve OLD/NEW references in a CREATE TRIGGER.
 -- Put the collision guard on the single canonical upsert query instead, so
 -- every caller of this generated statement (including title convergence)
--- refuses to overwrite an already persisted v2 chapter identity.
-WHERE tsuzuki_canonical_chapters.numbering_kind IS NULL
+-- refuses to overwrite an already persisted v2 chapter identity or silently
+-- promote an existing v1 ID without a separately audited migration.
+WHERE (
+        tsuzuki_canonical_chapters.numbering_kind IS NULL
+        AND excluded.numbering_kind IS NULL
+    )
     OR (
-        excluded.numbering_kind IS tsuzuki_canonical_chapters.numbering_kind
+        tsuzuki_canonical_chapters.numbering_kind IS NOT NULL
+        AND excluded.numbering_kind IS tsuzuki_canonical_chapters.numbering_kind
         AND excluded.type IS tsuzuki_canonical_chapters.type
         AND excluded.base_number IS tsuzuki_canonical_chapters.base_number
         AND excluded.part IS tsuzuki_canonical_chapters.part
