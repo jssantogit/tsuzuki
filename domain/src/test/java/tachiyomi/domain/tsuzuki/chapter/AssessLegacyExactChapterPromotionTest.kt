@@ -10,6 +10,7 @@ import tachiyomi.domain.tsuzuki.chapter.interactor.AssessLegacyExactChapterPromo
 import tachiyomi.domain.tsuzuki.chapter.interactor.LegacyExactPromotionReview
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 
@@ -29,7 +30,10 @@ class AssessLegacyExactChapterPromotionTest {
         )
 
         candidate shouldBe LegacyExactPromotionReview.Candidate(
-            identity = legacy.identity.copy(
+            identity = CanonicalChapterIdentity(
+                type = CanonicalChapterType.REGULAR,
+                baseNumber = 12,
+                part = 5,
                 numberingKind = CanonicalChapterNumberingKind.DECIMAL,
                 decimalFraction = CanonicalChapterDecimalFraction(5, 1),
             ),
@@ -56,7 +60,10 @@ class AssessLegacyExactChapterPromotionTest {
         val result = assessor.assess(original, listOf(proof), listOf(original))
 
         result shouldBe LegacyExactPromotionReview.Candidate(
-            identity = original.identity.copy(
+            identity = CanonicalChapterIdentity(
+                type = CanonicalChapterType.REGULAR,
+                baseNumber = 12,
+                part = 5,
                 numberingKind = CanonicalChapterNumberingKind.DECIMAL,
                 decimalFraction = CanonicalChapterDecimalFraction(5, 2),
             ),
