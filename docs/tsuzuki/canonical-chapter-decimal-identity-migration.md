@@ -39,6 +39,12 @@ Use exact parsing/ordering rather than floating point. Avoid treating the raw so
 5. Version portable chapter sync keys. Do not change an existing record ID in place or silently publish two chapters under the same old key. Use feature/version gating and evidence-backed compatibility resolution; blocked/unportable records must remain local until an explicit safe mapping exists.
 6. Gate rollout on focused RED/GREEN tests, SQLDelight migrations, historical sample audit, full Gradle CI, and real-device Reader/next/previous/download/sync regression checks.
 
+## Read-only historical promotion assessment
+
+`AssessLegacyExactChapterPromotion` is an opt-in, pure **review helper**, not a migration, reconciliation writer or permission to rekey a chapter. It returns a typed candidate only when stored legacy integer fields match the precise preview, every mapped evidence item has a stable source key and explicit unambiguous numeric label, all evidence agrees on exact fraction and volume, and provenance is editorial or comes from at least two distinct producers. Conflicting labels, unsupported compact forms, a competitor within the same identity/volume, protected reader state, or portable sync state cause a typed rejection. An existing exact chapter is never proposed for re-promotion.
+
+The helper accepts evidence snapshots and protected-state flags from a caller; it **does not** query historic history, downloads, or sync itself. No production entry point calls it, no existing canonical ID is mutated, and no automatic bulk migration is authorized. Before any future caller treats a candidate as a promotion decision, independently verify source provenance, historical variants and volume ambiguity, reader state, sync portability, and database transaction boundaries on real migration snapshots.
+
 ## Current release gate
 
 Safe mitigation and the **opt-in v2 model + additive migration** are in `fix/canonical-chapter-resolver-hardening`. Full v2 parser/reconciler activation (the read-only preview exists), safe reconciliation against existing v1 evidence, historical identity promotion, portable sync v2, and real-device database-upgrade validation are **not implemented**. The current v1 sync deliberately leaves opt-in exact rows local/unportable. Do not merge with a claim that decimal identity or historical duplicates have been fully repaired.
