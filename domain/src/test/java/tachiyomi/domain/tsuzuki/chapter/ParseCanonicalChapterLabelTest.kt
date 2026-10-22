@@ -103,8 +103,8 @@ class ParseCanonicalChapterLabelTest {
         old.identity.sortKey shouldBe existingKey
         (fiveTenths.identity == old.identity) shouldBe false
         (fiveHundredths.identity == fiveTenths.identity) shouldBe false
-        fiveHundredths.identity.compareTo(fiveTenths.identity) shouldBe -1
-        fiveHundredths.sortKey.compareTo(fiveTenths.sortKey) shouldBe -1
+        (fiveHundredths.identity < fiveTenths.identity) shouldBe true
+        (fiveHundredths.sortKey < fiveTenths.sortKey) shouldBe true
         old.sortKey shouldBe "01|0000000012|10000000005|00|"
     }
 
