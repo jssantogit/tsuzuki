@@ -17,6 +17,9 @@ data class CanonicalChapter(
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
     val confirmation: CanonicalChapterConfirmation = CanonicalChapterConfirmation.PROVISIONAL,
+    /** Null identifies legacy rows; exact numbering is activated only with explicit trusted evidence. */
+    val numberingKind: CanonicalChapterNumberingKind? = null,
+    val decimalFraction: CanonicalChapterDecimalFraction? = null,
 ) {
 
     val identity: CanonicalChapterIdentity
@@ -25,6 +28,8 @@ data class CanonicalChapter(
             baseNumber = baseNumber,
             part = part,
             alphaSuffix = alphaSuffix,
+            numberingKind = numberingKind,
+            decimalFraction = decimalFraction,
         )
 
     /** Ordering is always derived from the structured canonical identity. */
