@@ -18,7 +18,7 @@ class CanonicalChapterDecimalFractionTest {
         (fiveTenths == fiveHundredths) shouldBe false
         (fiveHundredths == fiveThousandths) shouldBe false
         (fiveThousandths!! < fiveHundredths!!) shouldBe true
-        (fiveHundredths < fiveTenths!!) shouldBe true
+        (fiveHundredths!! < fiveTenths!!) shouldBe true
     }
 
     @Test
