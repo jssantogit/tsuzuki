@@ -68,6 +68,20 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(set(result["selected_tests"]), {"Domain — Tsuzuki", "App — Tsuzuki"})
         self.assertEqual(result["selected_compiles"], [])
 
+    def test_runtime_chapter_kotlin_change_runs_format_in_affected_mode(self):
+        result = plan(
+            ["domain/src/main/java/tachiyomi/domain/tsuzuki/chapter/interactor/ParseCanonicalChapterLabel.kt"],
+            "affected",
+        )
+        self.assertTrue(result["run_format"])
+
+    def test_runtime_mihon_content_change_runs_format_in_affected_mode(self):
+        result = plan(
+            ["app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/addon/MihonContentProvider.kt"],
+            "affected",
+        )
+        self.assertTrue(result["run_format"])
+
     def test_runtime_domain_binding_change_runs_domain_and_app_tests_and_compile(self):
         result = plan(
             ["domain/src/main/java/tachiyomi/domain/tsuzuki/content/interactor/ResolveContentBinding.kt"],
