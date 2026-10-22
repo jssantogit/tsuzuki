@@ -46,7 +46,19 @@ GitHub Actions [run 39817021141](https://github.com/jssantogit/tsuzuki/actions/r
 
 The reading-progress import path (v1 and opt-in v2) now **resolves and validates every incoming record before writing any local checkpoint**, verifies each record's full length-prefixed ID against its title ID and chapter key, and refuses two different remote records that resolve to the same local chapter. Regression tests assert that a malformed later record cannot partially apply an earlier valid record, and that a forged chapter key cannot redirect reading progress. This is a prevalidation guarantee, not an assertion that an arbitrary storage failure during persistence provides full database rollback.
 
-The disposable Android gate script now requests three additional existing source-switching tests: keeping the old Reader session when a replacement source is empty/failing, clamping page positions when a new source has fewer pages, and restoring position through Reader Activity recreation. **Their results are pending the new isolated emulator run**; neither the existing two passed scenarios nor a compilation success should be interpreted as a passed five-scenario gate.
+The disposable Android gate script now requests three additional existing source-switching tests: keeping the old Reader session when a replacement source is empty/failing, clamping page positions when a new source has fewer pages, and restoring position through Reader Activity recreation. **All five scenarios passed** in run 39820322683; see the run-specific report below. This does not cover production databases or mixed-device protocol negotiation.
+
+## Extended disposable emulator validation — 2026-10-22
+
+GitHub Actions [run 39820322683](https://github.com/jssantogit/tsuzuki/actions/runs/39820322683) **PASSED 5/5** instrumentation scenarios on exact commit `66baf4e1f3f67139a0ffcd3ab1480b317c37ea95` (Android emulator API 35, disposable `app.tsuzuki.dev` install):
+
+- `sourceAtoBLoadsPagesAndPreservesCanonicalChapterAndObservedPosition`: PASS
+- `emptyOrFailingSourceKeepsPreviouslyLoadedReaderSession`: PASS
+- `pageCountDifferenceClampsPositionToValidPage`: PASS
+- `activityRecreationRestoresObservedCanonicalPosition`: PASS
+- `invalidDiscoveryIntentDoesNotOpenTitleOrMutateProgressAndPreferences`: PASS
+
+This expands the previous 2-scenario smoke and validates actual app instrumentation behavior for source failure recovery and Reader recreation. The matrix's physical-device, historical database, true next/previous volume navigation, downloads/offline and mixed-account synchronization requirements remain **NOT RUN**. A passing emulator is not evidence of safe production rollout.
 
 ## Existing automated checks
 
