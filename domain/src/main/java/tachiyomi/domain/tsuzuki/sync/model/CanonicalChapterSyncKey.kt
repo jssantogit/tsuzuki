@@ -22,7 +22,9 @@ data class CanonicalChapterSyncKey(
         ): CanonicalChapterSyncKey? {
             val identity = chapter.identity
             val chapterKey = when {
-                identity.isNumbered || identity.isSpecific -> {
+                // A semantic type without a chapter number (Extra, One-shot,
+                // etc.) does not identify a unique release across providers.
+                identity.isNumbered -> {
                     "identity:${identity.sortKey}"
                 }
                 !stableEvidenceKey.isNullOrBlank() -> {
