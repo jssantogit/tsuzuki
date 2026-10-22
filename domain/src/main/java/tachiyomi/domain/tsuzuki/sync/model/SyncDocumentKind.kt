@@ -10,9 +10,6 @@ enum class SyncDocumentKind(
     TITLES("titles.json"),
     LIBRARY("library.json"),
     READING_PROGRESS("reading-progress.json"),
-    // Opt-in v2 namespace. Old clients cannot request this Supabase domain;
-    // it must not be added to supabaseDurableKinds before state migration.
-    READING_PROGRESS_V2("reading-progress-v2.json"),
     CHAPTER_UPDATE_STATE("chapter-update-state.json"),
     CONTINUE_READING_STATE("continue-reading-state.json"),
     COLLECTIONS("collections.json"),
@@ -26,6 +23,9 @@ enum class SyncDocumentKind(
     SETTINGS("settings.json"),
     SOURCE_MAPPINGS("source-mappings.json"),
     FALLBACK_PROGRESS("fallback-progress.json"),
+    // Append-only: preserve existing enum ordinals for older stored clients.
+    // Opt-in v2 namespace, intentionally outside supabaseDurableKinds.
+    READING_PROGRESS_V2("reading-progress-v2.json"),
     ;
 
     companion object {
