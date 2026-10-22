@@ -97,6 +97,40 @@ class ReconcileChapterEvidenceTest {
     }
 
     @Test
+    fun `independent legacy chapter may still coexist with a different exact decimal release`() = runTest {
+        val fixture = fixture()
+        val exact = existingChapter("exact-v2").copy(
+            displayNumber = "12.05",
+            baseNumber = 12,
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+            confirmation = CanonicalChapterConfirmation.CONFIRMED,
+        )
+        fixture.chapterRepository.upsert(exact)
+        val independent = fixture.addonEvidence(
+            id = "legacy-observation",
+            rawLabel = "Chapter 12.5",
+            externalKey = "independent-legacy-key",
+        )
+
+        fixture.reconciler.execute("title", listOf(independent))
+
+        val chapters = fixture.chapterRepository.getByCanonicalTitleId("title")
+        chapters shouldHaveSize 2
+        chapters.single { it.id == exact.id } shouldBe exact
+        val legacy = chapters.single { it.id != exact.id }
+        legacy.numberingKind shouldBe null
+        legacy.baseNumber shouldBe 12
+        legacy.part shouldBe 5
+        fixture.evidenceRepository.getByProducerExternalKey(
+            ProducerKind.ADDON,
+            "addon",
+            "independent-legacy-key",
+        )?.mappedCanonicalChapterId shouldBe legacy.id
+    }
+
+    @Test
     fun `unnumbered extra releases with different source keys remain separate canonical chapters`() = runTest {
         val fixture = fixture()
         val first = fixture.addonEvidence(
