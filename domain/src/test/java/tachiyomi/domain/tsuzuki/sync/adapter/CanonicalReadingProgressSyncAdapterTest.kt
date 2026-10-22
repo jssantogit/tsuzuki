@@ -184,6 +184,39 @@ class CanonicalReadingProgressSyncAdapterTest {
     }
 
     @Test
+    fun `v2 cannot assign a five-hundredths checkpoint to a five-tenths chapter`() = runTest {
+        val exact = chapter("exact-005").copy(
+            displayNumber = "12.05",
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        val wrongFraction = exact.copy(
+            id = "wrong-fraction",
+            displayNumber = "12.5",
+            decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+        )
+        val readingA = FakeReadingRepository().apply {
+            upsertProgress(CanonicalChapterProgress(exact.id, lastPageRead = 6, updatedAt = 1))
+        }
+        val readingB = FakeReadingRepository()
+        val exported = adapter(
+            chapters = FakeChapterRepository(listOf(exact), emptyList()),
+            reading = readingA,
+            exactVersion2Enabled = true,
+        ).exportDocument()
+
+        shouldThrow<IllegalArgumentException> {
+            adapter(
+                chapters = FakeChapterRepository(listOf(wrongFraction), emptyList()),
+                reading = readingB,
+                exactVersion2Enabled = true,
+            ).applyDocument(exported)
+        }
+        readingB.getProgress(wrongFraction.id) shouldBe null
+    }
+
+    @Test
     fun `v2 exports same numbered chapters in distinct volumes without collisions`() = runTest {
         val first = chapter("vol-one").copy(volume = 1)
         val second = chapter("vol-two").copy(volume = 2)
