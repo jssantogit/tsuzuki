@@ -140,6 +140,14 @@ class ParseCanonicalChapterLabelTest {
     }
 
     @Test
+    fun `legacy canonical identities keep their previous signed-number ordering`() {
+        val smaller = CanonicalChapterIdentity(type = CanonicalChapterType.REGULAR, baseNumber = -12)
+        val larger = CanonicalChapterIdentity(type = CanonicalChapterType.REGULAR, baseNumber = -2)
+
+        (smaller < larger) shouldBe true
+    }
+
+    @Test
     fun `alpha suffix remains distinct from regular and decimal chapters`() {
         val chapter = parse.execute("12a")
         val regular = parse.execute("12")
