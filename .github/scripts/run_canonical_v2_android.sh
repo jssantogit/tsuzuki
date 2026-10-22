@@ -55,5 +55,17 @@ run_test "${class}#sourceAtoBLoadsPagesAndPreservesCanonicalChapterAndObservedPo
   androidSourceSwitchOptIn .github/results/canonical-v2-android/source-switch.txt
 
 adb shell pm clear "$app" | grep -Fq 'Success'
+run_test "${class}#emptyOrFailingSourceKeepsPreviouslyLoadedReaderSession" \
+  androidSourceSwitchOptIn .github/results/canonical-v2-android/source-error.txt
+
+adb shell pm clear "$app" | grep -Fq 'Success'
+run_test "${class}#pageCountDifferenceClampsPositionToValidPage" \
+  androidSourceSwitchOptIn .github/results/canonical-v2-android/page-clamp.txt
+
+adb shell pm clear "$app" | grep -Fq 'Success'
+run_test "${class}#activityRecreationRestoresObservedCanonicalPosition" \
+  androidSourceSwitchOptIn .github/results/canonical-v2-android/reader-recreate.txt
+
+adb shell pm clear "$app" | grep -Fq 'Success'
 run_test "${nav_class}#invalidDiscoveryIntentDoesNotOpenTitleOrMutateProgressAndPreferences" \
   androidNavigationOptIn .github/results/canonical-v2-android/navigation.txt
