@@ -60,6 +60,10 @@ class SupabaseSyncOrchestrator(
     private val mutex = Mutex()
     private val adapters = adapters.associateBy { it.documentKind }
 
+    private companion object {
+        const val LEGACY_SYNC_SCHEMA_VERSION = 1
+    }
+
     init {
         require(this.adapters.size == adapters.size) {
             "Supabase sync adapters must have unique document kinds"
@@ -137,6 +141,16 @@ class SupabaseSyncOrchestrator(
 
         return try {
             val localBeforePull = adapter.exportDocument()
+            // The existing Supabase event transport does not carry a document
+            // schema version. It must NEVER stamp a legacy remote snapshot as
+            // v2 based on the requesting client's local schema. A coordinated
+            // server-enforced version handshake is required before v2 sync.
+            if (localBeforePull.schemaVersion != LEGACY_SYNC_SCHEMA_VERSION) {
+                return SyncDocumentResult.Failed(
+                    documentKind,
+                    SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA),
+                )
+            }
             if (localBeforePull.kind != documentKind) {
                 return fail(
                     documentKind = documentKind,
@@ -154,7 +168,16 @@ class SupabaseSyncOrchestrator(
                 stateRepository.get(documentKind)
             }
             val acceptedBase = stored?.acceptedBase
-            val schemaVersion = acceptedBase?.schemaVersion ?: localBeforePull.schemaVersion
+            if (acceptedBase != null && acceptedBase.schemaVersion != localBeforePull.schemaVersion) {
+                // Stale accepted frontiers may not be reused after an upgrade
+                // or downgrade: applying records would risk silent progress
+                // corruption even when no network call is required.
+                return SyncDocumentResult.Failed(
+                    documentKind,
+                    SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA),
+                )
+            }
+            val schemaVersion = localBeforePull.schemaVersion
 
             var pull = initialRemoteState(
                 documentKind = documentKind,
