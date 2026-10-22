@@ -260,5 +260,4 @@ class CanonicalChapterRepositoryImpl(
         createdAt = createdAt,
         updatedAt = updatedAt,
     )
-
 }
