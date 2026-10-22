@@ -105,7 +105,20 @@ data class CanonicalChapterIdentity private constructor(
             }
         }
 
-    override fun compareTo(other: CanonicalChapterIdentity): Int = sortKey.compareTo(other.sortKey)
+    override fun compareTo(other: CanonicalChapterIdentity): Int {
+        // Do not change the legacy comparator: some historical rows may contain
+        // signed numbers, for which the legacy sort key was not a numeric order.
+        if (numberingKind != null || other.numberingKind != null) {
+            return sortKey.compareTo(other.sortKey)
+        }
+        return when {
+            type.sortRank != other.type.sortRank -> type.sortRank.compareTo(other.type.sortRank)
+            baseNumber != other.baseNumber -> compareNullableNumbers(baseNumber, other.baseNumber)
+            part != other.part -> compareNullableParts(part, other.part)
+            alphaSuffix != other.alphaSuffix -> compareNullableStrings(alphaSuffix, other.alphaSuffix)
+            else -> 0
+        }
+    }
 
     private companion object {
         private const val NULL_NUMBER_KEY = "9999999999"
