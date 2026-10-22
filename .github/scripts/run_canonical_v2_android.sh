@@ -3,8 +3,8 @@
 set -euo pipefail
 umask 077
 
-app='app.mihon.dev'
-runner='app.mihon.dev.test/androidx.test.runner.AndroidJUnitRunner'
+app='app.tsuzuki.dev'
+runner='app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner'
 class='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest'
 nav_class='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalTitleSourceNavigationInstrumentedTest'
 
