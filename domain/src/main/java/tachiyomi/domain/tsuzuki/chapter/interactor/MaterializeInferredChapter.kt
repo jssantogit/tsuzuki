@@ -2,6 +2,7 @@ package tachiyomi.domain.tsuzuki.chapter.interactor
 
 import dev.zacsweers.metro.Inject
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.hasVolumeLocalChapterNumbering
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import kotlin.time.Clock
 
@@ -24,8 +25,11 @@ class MaterializeInferredChapter internal constructor(
     suspend fun execute(slot: CanonicalChapter): CanonicalChapter {
         require(isInferredChapter(slot)) { "Only count-derived slots can be materialized" }
         return gate.withLock {
-            val matches = repository.getByCanonicalTitleId(slot.canonicalTitleId)
-                .filter { it.identity == slot.identity }
+            val observed = repository.getByCanonicalTitleId(slot.canonicalTitleId)
+            check(!hasVolumeLocalChapterNumbering(observed)) {
+                "Count-derived chapter slots are unsafe when numbering restarts across volumes"
+            }
+            val matches = observed.filter { it.identity == slot.identity }
             when (matches.size) {
                 0 -> {
                     val now = clock()
