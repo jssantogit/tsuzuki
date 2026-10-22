@@ -133,6 +133,58 @@ class CanonicalChapterRepositoryImplTest {
     }
 
     @Test
+    fun `ordinary writes cannot promote a legacy chapter id into exact numbering`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-kept", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+        database.tsuzuki_chapter_progressQueries.upsertTsuzukiChapterProgress(
+            canonicalChapterId = legacy.id,
+            read = false,
+            lastPageRead = 7L,
+            lastVariantId = null,
+            updatedAt = 150L,
+        )
+
+        val guessedPromotion = legacy.copy(
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+            updatedAt = 300L,
+        )
+        shouldThrow<IllegalStateException> { repository.upsert(guessedPromotion) }
+
+        repository.getById(legacy.id) shouldBe legacy
+        database.tsuzuki_chapter_progressQueries
+            .getTsuzukiChapterProgress(legacy.id)
+            .awaitAsOneOrNull()?.last_page_read shouldBe 7L
+    }
+
+    @Test
+    fun `generated SQL upsert cannot silently promote a legacy chapter id`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-direct", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+
+        database.tsuzuki_canonical_chaptersQueries.upsertTsuzukiCanonicalChapter(
+            id = legacy.id,
+            canonicalTitleId = legacy.canonicalTitleId,
+            displayNumber = legacy.displayNumber,
+            volume = legacy.volume?.toLong(),
+            title = "Guessed promotion",
+            type = legacy.type.name,
+            baseNumber = legacy.baseNumber?.toLong(),
+            part = legacy.part?.toLong(),
+            alphaSuffix = legacy.alphaSuffix,
+            confidence = legacy.confidence,
+            createdAt = legacy.createdAt,
+            updatedAt = 500L,
+            confirmationState = legacy.confirmation.name,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL.name,
+            decimalNumerator = 5L,
+            decimalScale = 1L,
+        )
+
+        repository.getById(legacy.id) shouldBe legacy
+    }
+
+    @Test
     fun `legacy refresh cannot erase exact numbering on an existing chapter id`() = runBlocking<Unit> {
         val exact = chapter("exact-immutable", "12.05", 12).copy(
             part = 5,
