@@ -189,7 +189,9 @@ class CanonicalChapterRepositoryImpl(
             // Validate newly constructed exact rows before persisting them.
             chapter.identity
         }
-        if (existing?.numberingKind != null) {
+        if (existing != null && (existing.numberingKind != null || chapter.numberingKind != null)) {
+            // Ordinary upserts never promote a legacy ID into v2 in place:
+            // evidence, protected user state and sync need a separate audit.
             check(existing.identity == chapter.identity && existing.volume == chapter.volume) {
                 "Cannot rewrite exact chapter identity for ${chapter.id}"
             }
