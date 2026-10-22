@@ -217,6 +217,19 @@ class CanonicalChapterRepositoryImpl(
         decimalNumerator: Long?,
         decimalScale: Long?,
     ): CanonicalChapter {
+        if (numberingKind != null) {
+            // Never narrow a corrupted SQLite INTEGER into another valid v2
+            // chapter number. Legacy rows retain their historical decoding.
+            check(baseNumber != null && baseNumber in 0L..Int.MAX_VALUE.toLong()) {
+                "Out-of-range exact chapter base number for chapter $id"
+            }
+            check(part != null && part in 0L..Int.MAX_VALUE.toLong()) {
+                "Out-of-range exact chapter part for chapter $id"
+            }
+            check(volume == null || volume in 0L..Int.MAX_VALUE.toLong()) {
+                "Out-of-range exact chapter volume for chapter $id"
+            }
+        }
         val fraction = decodeStoredDecimalFraction(
             chapterId = id,
             numberingKind = numberingKind,
