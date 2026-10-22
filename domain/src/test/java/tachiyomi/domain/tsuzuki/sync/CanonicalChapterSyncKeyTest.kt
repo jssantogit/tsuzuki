@@ -61,6 +61,74 @@ class CanonicalChapterSyncKeyTest {
     }
 
     @Test
+    fun `version two keys separate exact fractional scales without local IDs`() {
+        val exact = CanonicalChapter(
+            id = "local-a",
+            canonicalTitleId = "title-1",
+            displayNumber = "12.05",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 12,
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        val otherScale = exact.copy(
+            id = "local-b",
+            displayNumber = "12.5",
+            decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+        )
+        val equivalent = exact.copy(id = "local-c", displayNumber = "12.050")
+        val firstKey = CanonicalChapterSyncKey.fromVersion2(exact)
+
+        firstKey shouldBe CanonicalChapterSyncKey.fromVersion2(equivalent)
+        (firstKey == CanonicalChapterSyncKey.fromVersion2(otherScale)) shouldBe false
+        firstKey?.chapterKey?.startsWith("identity-v2:") shouldBe true
+        CanonicalChapterSyncKey.from(exact) shouldBe null
+    }
+
+    @Test
+    fun `version two keys encode volume ordinal and semantic distinctions`() {
+        val exact = CanonicalChapter(
+            id = "local-a",
+            canonicalTitleId = "title-1",
+            displayNumber = "12.5",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 12,
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+            volume = 1,
+        )
+        val volumeTwo = exact.copy(id = "local-b", volume = 2)
+        val unknownVolume = exact.copy(id = "local-c", volume = null)
+        val ordinal = exact.copy(
+            id = "local-d",
+            numberingKind = CanonicalChapterNumberingKind.ORDINAL_PART,
+            decimalFraction = null,
+        )
+        val legacy = exact.copy(id = "local-e", numberingKind = null, decimalFraction = null)
+
+        val keys = listOf(exact, volumeTwo, unknownVolume, ordinal, legacy)
+            .map { CanonicalChapterSyncKey.fromVersion2(it)?.recordId }
+        keys.distinct().size shouldBe keys.size
+        keys.all { it != null } shouldBe true
+        (CanonicalChapterSyncKey.fromVersion2(legacy) == CanonicalChapterSyncKey.from(legacy)) shouldBe false
+    }
+
+    @Test
+    fun `version two never exports unknown or unnumbered releases without stable evidence`() {
+        val unknown = CanonicalChapter(
+            id = "unknown-local",
+            canonicalTitleId = "title-1",
+            displayNumber = "?",
+            type = CanonicalChapterType.UNKNOWN,
+        )
+        CanonicalChapterSyncKey.fromVersion2(unknown) shouldBe null
+        CanonicalChapterSyncKey.fromVersion2(unknown, stableEvidenceKey = "source-key") shouldBe
+            CanonicalChapterSyncKey.fromVersion2(unknown.copy(id = "other-device"), "source-key")
+    }
+
+    @Test
     fun `unknown unstructured chapter is not published without stable evidence`() {
         val chapter = CanonicalChapter(
             id = "local-a",
