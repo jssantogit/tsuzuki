@@ -319,7 +319,21 @@ jobs:
 
       - name: Start local Supabase
         if: steps.project.outputs.present == 'true'
-        run: supabase start
+        shell: bash
+        run: |
+          # Docker registry throttling is transient on shared runners. Retry
+          # startup only, never migrations or failing backend assertions.
+          for attempt in 1 2 3; do
+            if supabase start; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::Supabase startup failed after three attempts"
+              exit 1
+            fi
+            supabase stop --no-backup || true
+            sleep "$((attempt * 20))"
+          done
 
       - name: Reset database
         if: steps.project.outputs.present == 'true'
