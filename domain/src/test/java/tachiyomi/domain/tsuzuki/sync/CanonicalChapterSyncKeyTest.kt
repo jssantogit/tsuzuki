@@ -3,6 +3,8 @@ package tachiyomi.domain.tsuzuki.sync
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.sync.model.CanonicalChapterSyncKey
 
@@ -39,6 +41,23 @@ class CanonicalChapterSyncKeyTest {
         val keyA = CanonicalChapterSyncKey.from(bonusA, "addon:source:bonus-a")
         val keyB = CanonicalChapterSyncKey.from(bonusB, "addon:source:bonus-b")
         (keyA == keyB) shouldBe false
+    }
+
+    @Test
+    fun `opt-in exact decimal remains local until portable sync protocol is versioned`() {
+        val precise = CanonicalChapter(
+            id = "local-exact",
+            canonicalTitleId = "title-1",
+            displayNumber = "12.05",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 12,
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+
+        CanonicalChapterSyncKey.from(precise) shouldBe null
+        CanonicalChapterSyncKey.from(precise, stableEvidenceKey = "source:chapter") shouldBe null
     }
 
     @Test
