@@ -67,6 +67,16 @@ jobs:
           python3 .github/scripts/identity_contract.py
           bash -n .github/scripts/run_canonical_v2_android.sh
 
+      - name: Ensure experimental exact sync v2 remains disabled in production
+        shell: bash
+        run: |
+          # Removing this guard requires an independently reviewed cloud
+          # protocol rollout and legacy-account migration, not a feature toggle.
+          if git grep -n -E 'exactVersion2Enabled[[:space:]]*=[[:space:]]*true' -- app/src/main data/src/main domain/src/main; then
+            echo "::error::Exact progress v2 cannot be wired to production before protocol migration acceptance"
+            exit 1
+          fi
+
       - name: Resolve verification scope
         id: scope
         shell: bash
