@@ -210,6 +210,9 @@ def plan(paths: list[str], mode: str) -> dict[str, object]:
                 continue
 
             if is_runtime_integration_path(path):
+                # Runtime integration Kotlin must not bypass Spotless just because
+                # it receives the broader Domain + App test matrix.
+                state["run_format"] = True
                 add_test(state["tests"], "domain", tsuzuki=True)
                 add_test(state["tests"], "app", tsuzuki=True)
                 if path.startswith("domain/src/main/"):
