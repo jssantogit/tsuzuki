@@ -20,6 +20,9 @@ data class CanonicalChapterSyncKey(
             chapter: CanonicalChapter,
             stableEvidenceKey: String? = null,
         ): CanonicalChapterSyncKey? {
+            // v1 sync cannot interpret exact fractional scales or ordinal kinds.
+            // Keep new v2 rows local until both export and import are versioned.
+            if (chapter.numberingKind != null) return null
             val identity = chapter.identity
             val chapterKey = when {
                 // A semantic type without a chapter number (Extra, One-shot,
