@@ -33,6 +33,49 @@ import tachiyomi.domain.tsuzuki.content.repository.ContentBindingRepository
 class MihonContentProviderTest {
 
     @Test
+    fun `unmapped unnumbered extra cannot resolve a different extra by semantic type alone`() = runTest {
+        val current = CanonicalChapter(
+            id = "extra-a",
+            canonicalTitleId = "title",
+            displayNumber = "Extra - Bonus A",
+            type = CanonicalChapterType.EXTRA,
+            confidence = 1.0,
+        )
+        val linked = binding("binding-extra", "7:/title").copy(verifiedByUser = true)
+        var materialized = false
+        val provider = MihonContentProvider(
+            addonId = AddonId("mangadex"),
+            contentBindingRepository = FakeContentBindingRepository(listOf(linked)),
+            canonicalChapterRepository = FakeCanonicalChapterRepository(
+                variants = emptyList(),
+                chapter = current,
+            ),
+            parser = ParseCanonicalChapterLabel(),
+            fetchInventory = {
+                Result.success(
+                    inventory(
+                        it.id,
+                        7L,
+                        "pt-BR",
+                        snapshot(7L, it.id, "/extra-b", "pt-BR").copy(
+                            rawName = "Extra - Bonus B",
+                            rawNumberHint = null,
+                        ),
+                    ),
+                )
+            },
+            materializeDelivery = { _, _ ->
+                materialized = true
+                Result.success(ContentDelivery.Mihon(7L, 99L, 9L))
+            },
+        )
+
+        provider.resolve("title", current.id).getOrThrow() shouldBe emptyList()
+        materialized shouldBe false
+    }
+
+
+    @Test
     fun `targeted content lookup never fetches a sibling source inventory`() = runTest {
         val english = binding(id = "binding-en", sourceKey = "7:/dandadan")
         val portuguese = binding(id = "binding-pt", sourceKey = "8:/dandadan")
