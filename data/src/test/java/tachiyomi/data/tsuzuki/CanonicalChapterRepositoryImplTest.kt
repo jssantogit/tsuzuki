@@ -32,8 +32,10 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileLegacyChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterVolume
+import tachiyomi.domain.tsuzuki.chapter.interactor.LegacyExactPromotionReview
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
@@ -129,6 +131,109 @@ class CanonicalChapterRepositoryImplTest {
 
         repository.upsertBatch(listOf(exact.copy(updatedAt = 250L)), emptyList())
         repository.getById(exact.id) shouldBe exact.copy(updatedAt = 250L)
+        repository.getById(legacy.id) shouldBe legacy
+    }
+
+    @Test
+    fun `historical database preflight reads evidence and proposes no mutation`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-review", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+        seedHistoricalExactEvidence("legacy-review", "source-a", "Chapter 12.5")
+        seedHistoricalExactEvidence("legacy-review", "source-b", "Chapter 12.50")
+
+        val preflight = LegacyExactChapterMigrationPreflight(database).inspect(
+            chapterId = legacy.id,
+            remoteSyncStateAuditedAbsent = true,
+        )
+
+        preflight shouldBe LegacyExactMigrationPreflight.ReviewOnly(
+            chapterId = legacy.id,
+            evidenceReview = LegacyExactPromotionReview.Candidate(
+                identity = CanonicalChapterIdentity(
+                    type = CanonicalChapterType.REGULAR,
+                    baseNumber = 12,
+                    part = 5,
+                    numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+                    decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+                ),
+                supportingProducers = 2,
+            ),
+        )
+        repository.getById(legacy.id) shouldBe legacy
+        database.tsuzuki_chapter_evidenceQueries
+            .getTsuzukiChapterEvidenceByMappedChapter(legacy.id)
+            .awaitAsList().size shouldBe 2
+    }
+
+    @Test
+    fun `historical preflight refuses unverified portable sync status by default`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-sync", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+        seedHistoricalExactEvidence(legacy.id, "source-a", "Chapter 12.5")
+        seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.50")
+
+        LegacyExactChapterMigrationPreflight(database).inspect(legacy.id) shouldBe
+            LegacyExactMigrationPreflight.Blocked(LegacyExactMigrationPreflight.Reason.REMOTE_SYNC_UNVERIFIED)
+    }
+
+    @Test
+    fun `historical preflight rejects protected reading progress without changing it`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-protected", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+        seedHistoricalExactEvidence(legacy.id, "source-a", "Chapter 12.5")
+        seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.50")
+        database.tsuzuki_chapter_progressQueries.upsertTsuzukiChapterProgress(
+            canonicalChapterId = legacy.id,
+            read = true,
+            lastPageRead = 7L,
+            lastVariantId = null,
+            updatedAt = 200L,
+        )
+
+        LegacyExactChapterMigrationPreflight(database).inspect(
+            chapterId = legacy.id,
+            remoteSyncStateAuditedAbsent = true,
+        ) shouldBe LegacyExactMigrationPreflight.Blocked(LegacyExactMigrationPreflight.Reason.PROTECTED_STATE)
+
+        repository.getById(legacy.id) shouldBe legacy
+        database.tsuzuki_chapter_progressQueries
+            .getTsuzukiChapterProgress(legacy.id)
+            .awaitAsOneOrNull()?.last_page_read shouldBe 7L
+    }
+
+    @Test
+    fun `historical preflight refuses existing reader variants without manually rechecking them`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-variant", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+        seedHistoricalExactEvidence(legacy.id, "source-a", "Chapter 12.5")
+        seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.50")
+        repository.upsertVariant(variant("v-legacy", canonicalChapterId = legacy.id, sourceChapterId = "legacy-variant"))
+
+        LegacyExactChapterMigrationPreflight(database).inspect(
+            chapterId = legacy.id,
+            remoteSyncStateAuditedAbsent = true,
+        ) shouldBe LegacyExactMigrationPreflight.Blocked(LegacyExactMigrationPreflight.Reason.VARIANTS_REQUIRE_REVIEW)
+
+        repository.getById(legacy.id) shouldBe legacy
+    }
+
+    @Test
+    fun `historical preflight re-reads changed evidence instead of trusting prior review`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-stale", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+        seedHistoricalExactEvidence(legacy.id, "source-a", "Chapter 12.5")
+        seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.50")
+        val preflight = LegacyExactChapterMigrationPreflight(database)
+
+        (preflight.inspect(legacy.id, remoteSyncStateAuditedAbsent = true) is
+            LegacyExactMigrationPreflight.ReviewOnly) shouldBe true
+
+        seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.05")
+        preflight.inspect(legacy.id, remoteSyncStateAuditedAbsent = true) shouldBe
+            LegacyExactMigrationPreflight.Blocked(
+                reason = LegacyExactMigrationPreflight.Reason.EVIDENCE_BLOCKED,
+                evidenceReason = LegacyExactPromotionReview.Reason.CONFLICTING_EVIDENCE,
+            )
         repository.getById(legacy.id) shouldBe legacy
     }
 
@@ -1505,6 +1610,26 @@ class CanonicalChapterRepositoryImplTest {
             preferredOverride = false,
             createdAt = 100L,
             updatedAt = 100L,
+        )
+    }
+
+    private suspend fun seedHistoricalExactEvidence(chapterId: String, producerId: String, rawLabel: String) {
+        tachiyomi.data.tsuzuki.chapter.ChapterEvidenceRepositoryImpl(database).upsert(
+            evidence = ChapterEvidence(
+                id = "evidence-$producerId",
+                canonicalTitleId = "title-1",
+                producerKind = ProducerKind.ADDON,
+                producerId = producerId,
+                externalChapterKey = "key-$producerId",
+                rawLabel = rawLabel,
+                rawNumber = null,
+                volume = null,
+                title = null,
+                observedAt = 300L,
+                confidence = 1.0,
+                authority = ChapterEvidenceAuthority.ADDON_PROVISIONAL,
+            ),
+            mappedCanonicalChapterId = chapterId,
         )
     }
 
