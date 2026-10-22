@@ -4,6 +4,8 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
+import tachiyomi.domain.tsuzuki.chapter.model.hasVolumeLocalChapterNumbering
+import tachiyomi.domain.tsuzuki.chapter.model.orderCanonicalChapters
 import tachiyomi.domain.tsuzuki.metadata.ReportedChapterCount
 
 /**
@@ -54,7 +56,10 @@ fun buildCanonicalChapterOutline(
             inferredFromReportedCount = isInferredChapter(chapter),
         )
     }
-    val inferredRows = (1..expectedCount)
+    // A reported count is not a chapter number. When numbering restarts per volume,
+    // 20 reported chapters may mean two volumes of 1..10, not chapters 1..20.
+    val inferredLimit = if (hasVolumeLocalChapterNumbering(observedChapters)) 0 else expectedCount
+    val inferredRows = (1..inferredLimit)
         .asSequence()
         .filter { number ->
             CanonicalChapterIdentity(type = CanonicalChapterType.REGULAR, baseNumber = number) !in observedRegular
@@ -74,8 +79,10 @@ fun buildCanonicalChapterOutline(
             )
         }
         .toList()
-    return (observedRows + inferredRows)
-        .sortedWith(compareBy({ it.chapter.identity }, { it.chapter.id }))
+    val entries = observedRows + inferredRows
+    val entriesByChapterId = entries.associateBy { it.chapter.id }
+    return orderCanonicalChapters(entries.map(CanonicalChapterOutlineEntry::chapter))
+        .map { chapter -> entriesByChapterId.getValue(chapter.id) }
 }
 
 private const val MAX_DISPLAY_CHAPTERS = 5_000
