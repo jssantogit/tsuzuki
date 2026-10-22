@@ -71,9 +71,9 @@ class CanonicalDownloadRepositoryImplTest {
             createdAt = 1L,
             updatedAt = 1L,
             confirmationState = "CONFIRMED",
-        numberingKind = null,
-        decimalNumerator = null,
-        decimalScale = null,
+            numberingKind = null,
+            decimalNumerator = null,
+            decimalScale = null,
         )
         repository = CanonicalDownloadRepositoryImpl(database)
     }
@@ -132,9 +132,9 @@ class CanonicalDownloadRepositoryImplTest {
             createdAt = 1L,
             updatedAt = 1L,
             confirmationState = "CONFIRMED",
-        numberingKind = null,
-        decimalNumerator = null,
-        decimalScale = null,
+            numberingKind = null,
+            decimalNumerator = null,
+            decimalScale = null,
         )
         repository.upsert(
             CanonicalDownloadArtifact(
