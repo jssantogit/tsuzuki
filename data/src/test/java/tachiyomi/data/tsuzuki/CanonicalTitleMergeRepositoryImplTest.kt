@@ -393,6 +393,27 @@ class CanonicalTitleMergeRepositoryImplTest {
         chapterRepository.getByCanonicalTitleId("winner").size shouldBe 2
     }
 
+    @Test
+    fun `converging titles rejects equal exact decimal identities`() = runBlocking<Unit> {
+        seedTitle("winner", "Winner")
+        seedTitle("duplicate", "Duplicate")
+        val exact = chapter("winner-12-05", "winner", 12).copy(
+            displayNumber = "12.05",
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        chapterRepository.upsert(exact)
+        chapterRepository.upsert(exact.copy(id = "duplicate-12-05", canonicalTitleId = "duplicate"))
+
+        shouldThrow<CanonicalTitleMergeConflict.ChapterIdentityConflict> {
+            repository.convergeTo("winner", "duplicate")
+        }
+
+        chapterRepository.getById("winner-12-05") shouldBe exact
+        chapterRepository.getById("duplicate-12-05")?.canonicalTitleId shouldBe "duplicate"
+    }
+
     private suspend fun seedTitle(id: String, displayTitle: String) {
         database.tsuzuki_titlesQueries.insertTsuzukiTitle(
             id = id,
