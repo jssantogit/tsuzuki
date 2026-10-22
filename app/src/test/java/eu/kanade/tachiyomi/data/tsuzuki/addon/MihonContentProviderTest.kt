@@ -74,6 +74,63 @@ class MihonContentProviderTest {
         materialized shouldBe false
     }
 
+    @Test
+    fun `persisted exact special mapping remains readable without a numbered identity`() = runTest {
+        val current = CanonicalChapter(
+            id = "extra-a",
+            canonicalTitleId = "title",
+            displayNumber = "Extra - Bonus A",
+            type = CanonicalChapterType.EXTRA,
+            confidence = 1.0,
+        )
+        val linked = binding("binding-extra", "7:/title")
+        val persisted = PersistedChapterEvidence(
+            evidence = ChapterEvidence(
+                id = "special-a",
+                canonicalTitleId = "title",
+                producerKind = ProducerKind.ADDON,
+                producerId = "mangadex",
+                externalChapterKey = "7:/extra-a",
+                rawLabel = "Extra - Bonus A",
+                rawNumber = null,
+                volume = null,
+                title = null,
+                observedAt = 10L,
+                confidence = 1.0,
+                authority = ChapterEvidenceAuthority.ADDON_PROVISIONAL,
+            ),
+            mappedCanonicalChapterId = current.id,
+        )
+        val provider = MihonContentProvider(
+            addonId = AddonId("mangadex"),
+            contentBindingRepository = FakeContentBindingRepository(listOf(linked)),
+            canonicalChapterRepository = FakeCanonicalChapterRepository(
+                variants = emptyList(),
+                chapter = current,
+            ),
+            parser = ParseCanonicalChapterLabel(),
+            fetchInventory = {
+                Result.success(
+                    inventory(
+                        it.id,
+                        7L,
+                        "pt-BR",
+                        snapshot(7L, it.id, "/extra-a", "pt-BR").copy(
+                            rawName = "Extra - Bonus A",
+                            rawNumberHint = null,
+                        ),
+                    ),
+                )
+            },
+            materializeDelivery = { _, _ ->
+                Result.success(ContentDelivery.Mihon(7L, 99L, 8L))
+            },
+            chapterEvidenceRepository = FakeChapterEvidenceRepository(listOf(persisted)),
+        )
+
+        provider.resolve("title", current.id).getOrThrow()
+            .map { it.delivery } shouldBe listOf(ContentDelivery.Mihon(7L, 99L, 8L))
+    }
 
     @Test
     fun `targeted content lookup never fetches a sibling source inventory`() = runTest {
