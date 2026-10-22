@@ -304,9 +304,9 @@ class ChapterEvidenceReconciliationBenchmarkTest {
                     createdAt = 1L,
                     updatedAt = 1L,
                     confirmationState = "CONFIRMED",
-                numberingKind = null,
-                decimalNumerator = null,
-                decimalScale = null,
+                    numberingKind = null,
+                    decimalNumerator = null,
+                    decimalScale = null,
                 )
                 database.tsuzuki_chapter_evidenceQueries.upsertTsuzukiChapterEvidence(
                     id = observation.id,
@@ -380,9 +380,9 @@ class ChapterEvidenceReconciliationBenchmarkTest {
                     createdAt = 1L,
                     updatedAt = 1L,
                     confirmationState = "CONFIRMED",
-                numberingKind = null,
-                decimalNumerator = null,
-                decimalScale = null,
+                    numberingKind = null,
+                    decimalNumerator = null,
+                    decimalScale = null,
                 )
             }
             observations.forEach { observation ->
