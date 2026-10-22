@@ -38,7 +38,11 @@ class CanonicalReadingProgressSyncAdapter(
     private val exactVersion2Enabled: Boolean = false,
 ) : SyncDocumentAdapter {
 
-    override val documentKind = SyncDocumentKind.READING_PROGRESS
+    override val documentKind = if (exactVersion2Enabled) {
+        SyncDocumentKind.READING_PROGRESS_V2
+    } else {
+        SyncDocumentKind.READING_PROGRESS
+    }
 
     override suspend fun exportDocument(): SyncDocumentEnvelope {
         val records = linkedMapOf<String, SyncRecordEnvelope>()
