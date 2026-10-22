@@ -51,6 +51,61 @@ import tachiyomi.domain.tsuzuki.sync.service.VerifiedCanonicalIdentity
 class SupabaseSyncOrchestratorTest {
 
     @Test
+    fun `unnegotiated v2 schema never contacts legacy Supabase sync transport`() = runTest {
+        val local = document(status = "READING").copy(schemaVersion = 2)
+        val adapter = FakeAdapter(local)
+        val transport = FakeTransport()
+        val outbox = FakeOutbox().apply { markDirty(SyncDocumentKind.LIBRARY, 1) }
+        val orchestrator = orchestrator(
+            adapter = adapter,
+            outbox = outbox,
+            transport = transport,
+        )
+
+        val result = orchestrator.sync(SyncDocumentKind.LIBRARY)
+
+        (result as SyncDocumentResult.Failed).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        adapter.current shouldBe local
+        transport.networkCalls shouldBe 0
+        outbox.get(SyncDocumentKind.LIBRARY) shouldNotBe null
+    }
+
+    @Test
+    fun `stored schema mismatch refuses sync before pulling or applying remote records`() = runTest {
+        val local = document(status = "READING")
+        val adapter = FakeAdapter(local)
+        val stored = FakeStoredState().apply {
+            put(
+                SyncStoredState(
+                    documentKind = SyncDocumentKind.LIBRARY,
+                    acceptedBase = document(status = "OLD").copy(schemaVersion = 2),
+                    remoteRevision = null,
+                    lastSuccessfulSyncAtEpochMillis = 1,
+                ),
+            )
+        }
+        val cloud = FakeCloudState().apply {
+            putCursor(
+                documentKind = SyncDocumentKind.LIBRARY,
+                eventCursor = 5,
+                lastSuccessfulSyncAtEpochMillis = 1,
+            )
+        }
+        val transport = FakeTransport()
+        val result = orchestrator(
+            adapter = adapter,
+            storedState = stored,
+            cloudState = cloud,
+            transport = transport,
+        ).sync(SyncDocumentKind.LIBRARY)
+
+        (result as SyncDocumentResult.Failed).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        adapter.current shouldBe local
+        transport.networkCalls shouldBe 0
+        cloud.getCursor(SyncDocumentKind.LIBRARY)?.eventCursor shouldBe 5L
+    }
+
+    @Test
     fun `timeout after server apply reuses persisted mutation id on retry`() = runTest {
         val adapter = FakeAdapter(document(status = "READING"))
         val outbox = FakeOutbox().apply { markDirty(SyncDocumentKind.LIBRARY, 1) }
