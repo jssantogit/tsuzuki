@@ -50,6 +50,31 @@ class ParseCanonicalChapterLabelTest {
     }
 
     @Test
+    fun `leading-zero fractional labels cannot alias an existing numbered chapter identity`() {
+        val known = parse.execute("Chapter 12.5")
+        val ambiguous = parse.execute("Chapter 12.05")
+        val ambiguousExtended = parse.execute("12.005")
+
+        known.type shouldBe CanonicalChapterType.REGULAR
+        known.part shouldBe 5
+        ambiguous.type shouldBe CanonicalChapterType.UNKNOWN
+        ambiguous.confidence shouldBe 0.0
+        ambiguous.rawLabel shouldBe "Chapter 12.05"
+        ambiguousExtended.type shouldBe CanonicalChapterType.UNKNOWN
+        (known.identity == ambiguous.identity) shouldBe false
+    }
+
+    @Test
+    fun `out-of-range fractional components fail closed instead of throwing`() {
+        val overInt = parse.execute("Chapter 12.2147483648")
+        val manyDigits = parse.execute("Chapter 12.99999999999999999999999999")
+
+        overInt.type shouldBe CanonicalChapterType.UNKNOWN
+        manyDigits.type shouldBe CanonicalChapterType.UNKNOWN
+        manyDigits.rawLabel shouldBe "Chapter 12.99999999999999999999999999"
+    }
+
+    @Test
     fun `alpha suffix remains distinct from regular and decimal chapters`() {
         val chapter = parse.execute("12a")
         val regular = parse.execute("12")
