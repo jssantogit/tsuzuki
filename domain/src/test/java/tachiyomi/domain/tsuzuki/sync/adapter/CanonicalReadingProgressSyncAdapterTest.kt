@@ -1,5 +1,6 @@
 package tachiyomi.domain.tsuzuki.sync.adapter
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -89,6 +90,35 @@ class CanonicalReadingProgressSyncAdapterTest {
 
         exported.records shouldBe emptyMap()
         adapter.hasUnportableLocalState() shouldBe true
+    }
+
+    @Test
+    fun `two same-number chapters in distinct volumes cannot overwrite exported progress`() = runTest {
+        val first = chapter("volume-1-chapter-12").copy(volume = 1)
+        val second = chapter("volume-2-chapter-12").copy(volume = 2)
+        val reading = FakeReadingRepository().apply {
+            upsertProgress(
+                CanonicalChapterProgress(
+                    canonicalChapterId = first.id,
+                    lastPageRead = 3,
+                    updatedAt = 10,
+                ),
+            )
+            upsertProgress(
+                CanonicalChapterProgress(
+                    canonicalChapterId = second.id,
+                    lastPageRead = 7,
+                    updatedAt = 20,
+                ),
+            )
+        }
+        val sync = adapter(
+            chapters = FakeChapterRepository(listOf(first, second), emptyList()),
+            reading = reading,
+        )
+
+        shouldThrow<IllegalStateException> { sync.exportDocument() }
+        sync.hasUnportableLocalState() shouldBe true
     }
 
     private fun adapter(
