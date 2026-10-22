@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
@@ -143,9 +145,84 @@ class CanonicalReadingProgressSyncAdapterTest {
         sync.hasUnportableLocalState() shouldBe true
     }
 
+    @Test
+    fun `opt-in v2 can transport exact decimal progress across devices`() = runTest {
+        val source = chapter("exact-source").copy(
+            displayNumber = "12.05",
+            part = 5,
+            volume = 2,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        val destination = source.copy(id = "exact-destination")
+        val readingA = FakeReadingRepository().apply {
+            upsertProgress(
+                CanonicalChapterProgress(
+                    canonicalChapterId = source.id,
+                    lastPageRead = 9,
+                    updatedAt = 100,
+                ),
+            )
+        }
+        val readingB = FakeReadingRepository()
+        val exported = adapter(
+            chapters = FakeChapterRepository(listOf(source), emptyList()),
+            reading = readingA,
+            exactVersion2Enabled = true,
+        ).exportDocument()
+
+        exported.schemaVersion shouldBe 2
+        exported.records.size shouldBe 1
+        adapter(
+            chapters = FakeChapterRepository(listOf(destination), emptyList()),
+            reading = readingB,
+            exactVersion2Enabled = true,
+        ).applyDocument(exported)
+
+        readingB.getProgress(destination.id)?.lastPageRead shouldBe 9L
+        readingB.getProgress(source.id) shouldBe null
+    }
+
+    @Test
+    fun `v2 exports same numbered chapters in distinct volumes without collisions`() = runTest {
+        val first = chapter("vol-one").copy(volume = 1)
+        val second = chapter("vol-two").copy(volume = 2)
+        val reading = FakeReadingRepository().apply {
+            upsertProgress(CanonicalChapterProgress(first.id, lastPageRead = 2, updatedAt = 1))
+            upsertProgress(CanonicalChapterProgress(second.id, lastPageRead = 4, updatedAt = 2))
+        }
+        val sync = adapter(
+            chapters = FakeChapterRepository(listOf(first, second), emptyList()),
+            reading = reading,
+            exactVersion2Enabled = true,
+        )
+        sync.hasUnportableLocalState() shouldBe false
+        sync.exportDocument().records.size shouldBe 2
+    }
+
+    @Test
+    fun `protocol versions never interpret each others progress records`() = runTest {
+        val exact = chapter("exact").copy(
+            displayNumber = "12.05",
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        val reading = FakeReadingRepository().apply {
+            upsertProgress(CanonicalChapterProgress(exact.id, lastPageRead = 6, updatedAt = 1))
+        }
+        val v2 = adapter(FakeChapterRepository(listOf(exact), emptyList()), reading, exactVersion2Enabled = true)
+        val v1 = adapter(FakeChapterRepository(listOf(exact), emptyList()), FakeReadingRepository())
+        val version2Document = v2.exportDocument()
+        shouldThrow<IllegalArgumentException> { v1.applyDocument(version2Document) }
+        val version1Document = v1.exportDocument()
+        shouldThrow<IllegalArgumentException> { v2.applyDocument(version1Document) }
+    }
+
     private fun adapter(
         chapters: CanonicalChapterRepository,
         reading: CanonicalReadingRepository,
+        exactVersion2Enabled: Boolean = false,
     ) = CanonicalReadingProgressSyncAdapter(
         titleSource = CanonicalTitleSyncSource { listOf(title()) },
         chapterRepository = chapters,
@@ -155,6 +232,7 @@ class CanonicalReadingProgressSyncAdapterTest {
         clock = object : SyncClock {
             override fun nowEpochMillis(): Long = 100L
         },
+        exactVersion2Enabled = exactVersion2Enabled,
     )
 
     private fun title() = CanonicalTitle(
