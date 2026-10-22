@@ -133,6 +133,98 @@ class CanonicalChapterRepositoryImplTest {
     }
 
     @Test
+    fun `legacy refresh cannot erase exact numbering on an existing chapter id`() = runBlocking<Unit> {
+        val exact = chapter("exact-immutable", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+        val staleLegacy = exact.copy(
+            displayNumber = "12.5",
+            title = "Stale label",
+            numberingKind = null,
+            decimalFraction = null,
+            updatedAt = 300L,
+        )
+
+        shouldThrow<Throwable> { repository.upsert(staleLegacy) }
+
+        repository.getById(exact.id) shouldBe exact
+    }
+
+    @Test
+    fun `exact numbering may refresh metadata but cannot switch fractional identity`() = runBlocking<Unit> {
+        val exact = chapter("exact-stable", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+        val refreshed = exact.copy(title = "Updated safely", updatedAt = 300L)
+        repository.upsert(refreshed)
+        repository.getById(exact.id) shouldBe refreshed
+
+        shouldThrow<Throwable> {
+            repository.upsert(
+                refreshed.copy(
+                    displayNumber = "12.5",
+                    decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+                    updatedAt = 400L,
+                ),
+            )
+        }
+
+        repository.getById(exact.id) shouldBe refreshed
+    }
+
+    @Test
+    fun `batch exact identity conflict rolls back preceding legacy writes`() = runBlocking<Unit> {
+        val exact = chapter("exact-batch", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        val ordinary = chapter("ordinary-batch", "Chapter 9", 9)
+        repository.upsert(exact)
+        repository.upsert(ordinary)
+
+        shouldThrow<Throwable> {
+            repository.upsertBatch(
+                chapters = listOf(
+                    ordinary.copy(updatedAt = 200L, title = "Should rollback"),
+                    exact.copy(numberingKind = null, decimalFraction = null, updatedAt = 200L),
+                ),
+                variants = emptyList(),
+            )
+        }
+
+        repository.getById(exact.id) shouldBe exact
+        repository.getById(ordinary.id) shouldBe ordinary
+    }
+
+    @Test
+    fun `direct SQL updates cannot downgrade exact numbering outside Kotlin repository`() = runBlocking<Unit> {
+        val exact = chapter("exact-direct", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+
+        shouldThrow<Throwable> {
+            driver.execute(
+                null,
+                "UPDATE tsuzuki_canonical_chapters SET numbering_kind = NULL, decimal_numerator = NULL, " +
+                    "decimal_scale = NULL WHERE id = 'exact-direct'",
+                0,
+            ).await()
+        }
+
+        repository.getById(exact.id) shouldBe exact
+    }
+
+    @Test
     fun `incomplete exact numbering metadata fails closed instead of reading as legacy`() = runBlocking<Unit> {
         val exact = chapter("exact-incomplete", "12.05", 12).copy(
             part = 5,
