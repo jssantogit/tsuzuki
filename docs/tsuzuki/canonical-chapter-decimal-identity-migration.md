@@ -8,6 +8,8 @@ The stored canonical chapter currently represents identity as `type + baseNumber
 
 The branch **fails closed** for fractional components beginning with a significant leading zero, and for fractional integers that overflow, while preserving the original raw label in evidence. New exact numbering fields in the database default to NULL for every legacy chapter. No existing canonical ID, progress row, variant or portable key is rewritten. This is not yet an activated exact fractional identity pipeline.
 
+Persisted v2 metadata now has a fail-closed read guard in `CanonicalChapterRepositoryImpl`: a DECIMAL kind requires both numeric fields, rejects values outside the exact model range and must agree with the legacy `part`; a legacy or ordinal record must not carry orphan decimal fields. Corrupt or half-written rows trigger an error instead of silently becoming another chapter identity. This is an integrity check, **not** an automatic repair or permission to promote legacy rows.
+
 Additional unresolved problems:
 - `12.50` currently stores `part = 50`, while `12.5` stores `part = 5`: numerically equivalent decimal labels may be treated as separate chapters.
 - `12 Part 5` and `12.5` use the same `part = 5` identity, although source conventions may distinguish ordinal parts from decimal fractions.
