@@ -2,6 +2,8 @@ package tachiyomi.domain.tsuzuki.sync.adapter
 
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -251,6 +253,64 @@ class CanonicalReadingProgressSyncAdapterTest {
         shouldThrow<IllegalArgumentException> { v1.applyDocument(version2Document) }
         val version1Document = v1.exportDocument()
         shouldThrow<IllegalArgumentException> { v2.applyDocument(version1Document) }
+    }
+
+    @Test
+    fun `a malformed later progress record cannot partially apply a valid earlier record`() = runTest {
+        val first = chapter("aa-first")
+        val second = chapter("zz-second").copy(baseNumber = 13, displayNumber = "13")
+        for (version2 in listOf(false, true)) {
+            val sourceReading = FakeReadingRepository().apply {
+                upsertProgress(CanonicalChapterProgress(first.id, lastPageRead = 7, updatedAt = 1))
+                upsertProgress(CanonicalChapterProgress(second.id, lastPageRead = 9, updatedAt = 2))
+            }
+            val chapters = FakeChapterRepository(listOf(first, second), emptyList())
+            val exported = adapter(chapters, sourceReading, exactVersion2Enabled = version2).exportDocument()
+            val records = exported.records.toMutableMap()
+            val badId = records.keys.sorted().last()
+            val badRecord = records.getValue(badId)
+            records[badId] = badRecord.copy(
+                fields = JsonObject(badRecord.fields + ("lastPageRead" to JsonPrimitive("invalid"))),
+            )
+            val destinationReading = FakeReadingRepository()
+
+            shouldThrow<Exception> {
+                adapter(chapters, destinationReading, exactVersion2Enabled = version2)
+                    .applyDocument(exported.copy(records = records))
+            }
+            destinationReading.getProgress(first.id) shouldBe null
+            destinationReading.getProgress(second.id) shouldBe null
+        }
+    }
+
+    @Test
+    fun `tampered portable record fields cannot redirect a checkpoint to another chapter`() = runTest {
+        val first = chapter("aa-first")
+        val second = chapter("zz-second").copy(baseNumber = 13, displayNumber = "13")
+        for (version2 in listOf(false, true)) {
+            val chapters = FakeChapterRepository(listOf(first, second), emptyList())
+            val sourceReading = FakeReadingRepository().apply {
+                upsertProgress(CanonicalChapterProgress(first.id, lastPageRead = 7, updatedAt = 1))
+            }
+            val valid = adapter(chapters, sourceReading, exactVersion2Enabled = version2).exportDocument()
+            val otherReading = FakeReadingRepository().apply {
+                upsertProgress(CanonicalChapterProgress(second.id, lastPageRead = 9, updatedAt = 2))
+            }
+            val secondKey = adapter(chapters, otherReading, exactVersion2Enabled = version2)
+                .exportDocument().records.values.single().fields.getValue("chapterKey")
+
+            val sourceRecord = valid.records.values.single()
+            val forged = sourceRecord.copy(
+                fields = JsonObject(sourceRecord.fields + ("chapterKey" to secondKey)),
+            )
+            val destinationReading = FakeReadingRepository()
+            shouldThrow<IllegalArgumentException> {
+                adapter(chapters, destinationReading, exactVersion2Enabled = version2)
+                    .applyDocument(valid.copy(records = mapOf(forged.id to forged)))
+            }
+            destinationReading.getProgress(first.id) shouldBe null
+            destinationReading.getProgress(second.id) shouldBe null
+        }
     }
 
     private fun adapter(
