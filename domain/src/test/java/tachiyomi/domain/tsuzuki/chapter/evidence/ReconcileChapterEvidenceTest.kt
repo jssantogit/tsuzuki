@@ -16,12 +16,85 @@ import tachiyomi.domain.tsuzuki.chapter.diagnostics.NoOpChapterInventoryDiagnost
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterVolume
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.model.SourceChapterInventory
 import tachiyomi.domain.tsuzuki.chapter.model.SourceChapterSnapshot
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 
 class ReconcileChapterEvidenceTest {
+
+    @Test
+    fun `stale legacy label cannot fork a previously mapped exact decimal chapter`() = runTest {
+        val fixture = fixture()
+        val exact = existingChapter("exact-v2").copy(
+            displayNumber = "12.05",
+            baseNumber = 12,
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+            confirmation = CanonicalChapterConfirmation.CONFIRMED,
+        )
+        fixture.chapterRepository.upsert(exact)
+        val prior = fixture.addonEvidence(
+            id = "exact-original",
+            rawLabel = "Chapter 12.05",
+            externalKey = "stable-exact-key",
+        )
+        fixture.evidenceRepository.upsert(prior, mappedCanonicalChapterId = exact.id)
+
+        fixture.reconciler.execute(
+            "title",
+            listOf(prior.copy(id = "stale-legacy", rawLabel = "Chapter 12.5", observedAt = 20L)),
+        )
+
+        fixture.chapterRepository.getByCanonicalTitleId("title") shouldBe listOf(exact)
+        fixture.evidenceRepository.getByProducerExternalKey(
+            ProducerKind.ADDON,
+            "addon",
+            "stable-exact-key",
+        )?.mappedCanonicalChapterId shouldBe null
+    }
+
+    @Test
+    fun `stale legacy observation cannot steal exact decimal mapping for a sibling chapter`() = runTest {
+        val fixture = fixture()
+        val exact = existingChapter("exact-v2").copy(
+            displayNumber = "12.05",
+            baseNumber = 12,
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+            confirmation = CanonicalChapterConfirmation.CONFIRMED,
+        )
+        val legacy = exact.copy(
+            id = "legacy-v1",
+            displayNumber = "12.5",
+            numberingKind = null,
+            decimalFraction = null,
+        )
+        fixture.chapterRepository.upsert(exact)
+        fixture.chapterRepository.upsert(legacy)
+        val prior = fixture.addonEvidence(
+            id = "exact-original",
+            rawLabel = "Chapter 12.05",
+            externalKey = "stable-exact-key",
+        )
+        fixture.evidenceRepository.upsert(prior, mappedCanonicalChapterId = exact.id)
+
+        fixture.reconciler.execute(
+            "title",
+            listOf(prior.copy(id = "legacy-update", rawLabel = "Chapter 12.5", observedAt = 20L)),
+        )
+
+        fixture.chapterRepository.getByCanonicalTitleId("title") shouldBe listOf(exact, legacy)
+        fixture.evidenceRepository.getByProducerExternalKey(
+            ProducerKind.ADDON,
+            "addon",
+            "stable-exact-key",
+        )?.mappedCanonicalChapterId shouldBe null
+    }
 
     @Test
     fun `unnumbered extra releases with different source keys remain separate canonical chapters`() = runTest {
