@@ -69,6 +69,30 @@ class CanonicalReadingProgressSyncAdapterTest {
     }
 
     @Test
+    fun `remote progress importer calls one atomic batch rather than partial individual writes`() = runTest {
+        val first = chapter("first").copy(baseNumber = 1, displayNumber = "1")
+        val second = chapter("second").copy(baseNumber = 2, displayNumber = "2")
+        val source = FakeReadingRepository().apply {
+            upsertProgress(CanonicalChapterProgress(first.id, lastPageRead = 4, updatedAt = 10))
+            upsertProgress(CanonicalChapterProgress(second.id, lastPageRead = 7, updatedAt = 20))
+        }
+        val imported = FakeReadingRepository()
+        val exported = adapter(
+            chapters = FakeChapterRepository(listOf(first, second), emptyList()),
+            reading = source,
+        ).exportDocument()
+
+        adapter(
+            chapters = FakeChapterRepository(listOf(first, second), emptyList()),
+            reading = imported,
+        ).applyDocument(exported)
+
+        imported.atomicBatchCalls shouldBe 1
+        imported.getProgress(first.id)?.lastPageRead shouldBe 4
+        imported.getProgress(second.id)?.lastPageRead shouldBe 7
+    }
+
+    @Test
     fun `unknown chapter without stable evidence stays local and marks adapter unportable`() = runTest {
         val unknown = CanonicalChapter(
             id = "unknown-local",
@@ -429,6 +453,8 @@ class CanonicalReadingProgressSyncAdapterTest {
 
     private class FakeReadingRepository : CanonicalReadingRepository {
         private val progress = mutableMapOf<String, CanonicalChapterProgress>()
+        var atomicBatchCalls: Int = 0
+            private set
 
         override suspend fun getProgress(canonicalChapterId: String) =
             progress[canonicalChapterId]
@@ -445,6 +471,12 @@ class CanonicalReadingProgressSyncAdapterTest {
 
         override suspend fun upsertProgress(progress: CanonicalChapterProgress) {
             this.progress[progress.canonicalChapterId] = progress
+        }
+
+        override suspend fun upsertProgressBatch(progress: List<CanonicalChapterProgress>) {
+            atomicBatchCalls++
+            check(progress.map(CanonicalChapterProgress::canonicalChapterId).distinct().size == progress.size)
+            this.progress.putAll(progress.associateBy(CanonicalChapterProgress::canonicalChapterId))
         }
 
         override suspend fun getHistory(canonicalChapterId: String): CanonicalChapterHistory? =
