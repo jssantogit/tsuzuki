@@ -31,6 +31,11 @@ class CanonicalReadingProgressSyncAdapter(
     private val evidenceRepository: ChapterSyncEvidenceRepository,
     private val revisionSource: SyncRevisionSource,
     private val clock: SyncClock,
+    /**
+     * Experimental v2 codec only. No production composition passes true until
+     * mixed-device document negotiation is implemented and rolled out.
+     */
+    private val exactVersion2Enabled: Boolean = false,
 ) : SyncDocumentAdapter {
 
     override val documentKind = SyncDocumentKind.READING_PROGRESS
@@ -44,7 +49,7 @@ class CanonicalReadingProgressSyncAdapter(
                 val chapters = chapterRepository
                     .getByCanonicalTitleId(title.id)
                     .associateBy(CanonicalChapter::id)
-                val ambiguousNumberedIds = ambiguousNumberedChapterIds(chapters.values)
+                val ambiguousNumberedIds = if (exactVersion2Enabled) emptySet() else ambiguousNumberedChapterIds(chapters.values)
 
                 readingRepository.getProgressByCanonicalTitleId(title.id)
                     .sortedBy(CanonicalChapterProgress::canonicalChapterId)
@@ -56,10 +61,7 @@ class CanonicalReadingProgressSyncAdapter(
                         }
                         val stableEvidence = evidenceRepository
                             .getStableEvidenceKey(chapter.id)
-                        val syncKey = CanonicalChapterSyncKey.from(
-                            chapter = chapter,
-                            stableEvidenceKey = stableEvidence,
-                        ) ?: return@forEach
+                        val syncKey = portableKey(chapter, stableEvidence) ?: return@forEach
 
                         val variantEvidenceKey = resolveVariantEvidenceKey(
                             progress = progress,
@@ -87,7 +89,7 @@ class CanonicalReadingProgressSyncAdapter(
             }
 
         return SyncDocumentEnvelope(
-            schemaVersion = SCHEMA_VERSION,
+            schemaVersion = if (exactVersion2Enabled) EXACT_SCHEMA_VERSION else SCHEMA_VERSION,
             kind = documentKind,
             revision = revisionSource.nextRevision(),
             generatedAtEpochMillis = clock.nowEpochMillis(),
@@ -98,6 +100,9 @@ class CanonicalReadingProgressSyncAdapter(
     override suspend fun applyDocument(document: SyncDocumentEnvelope) {
         require(document.kind == documentKind) {
             "Reading progress adapter cannot apply ${document.kind}"
+        }
+        require(document.schemaVersion == if (exactVersion2Enabled) EXACT_SCHEMA_VERSION else SCHEMA_VERSION) {
+            "Reading progress protocol version mismatch; explicit cross-device negotiation is required"
         }
 
         document.records.values
@@ -142,16 +147,13 @@ class CanonicalReadingProgressSyncAdapter(
             val chapters = chapterRepository
                 .getByCanonicalTitleId(title.id)
                 .associateBy(CanonicalChapter::id)
-            val ambiguousNumberedIds = ambiguousNumberedChapterIds(chapters.values)
+            val ambiguousNumberedIds = if (exactVersion2Enabled) emptySet() else ambiguousNumberedChapterIds(chapters.values)
             val seenKeys = mutableSetOf<String>()
             for (progress in readingRepository.getProgressByCanonicalTitleId(title.id)) {
                 val chapter = chapters[progress.canonicalChapterId] ?: return true
                 if (chapter.id in ambiguousNumberedIds) return true
                 val stableEvidence = evidenceRepository.getStableEvidenceKey(chapter.id)
-                val key = CanonicalChapterSyncKey.from(
-                    chapter = chapter,
-                    stableEvidenceKey = stableEvidence,
-                ) ?: return true
+                val key = portableKey(chapter, stableEvidence) ?: return true
                 if (!seenKeys.add(key.recordId)) return true
             }
         }
@@ -175,10 +177,7 @@ class CanonicalReadingProgressSyncAdapter(
         val matches = mutableListOf<CanonicalChapter>()
         for (chapter in chapterRepository.getByCanonicalTitleId(canonicalTitleId)) {
             val stableEvidence = evidenceRepository.getStableEvidenceKey(chapter.id)
-            val localKey = CanonicalChapterSyncKey.from(
-                chapter = chapter,
-                stableEvidenceKey = stableEvidence,
-            )
+            val localKey = portableKey(chapter, stableEvidence)
             if (localKey?.chapterKey == chapterKey) {
                 matches += chapter
             }
@@ -189,8 +188,18 @@ class CanonicalReadingProgressSyncAdapter(
         }
     }
 
+    private fun portableKey(
+        chapter: CanonicalChapter,
+        stableEvidenceKey: String?,
+    ): CanonicalChapterSyncKey? = if (exactVersion2Enabled) {
+        CanonicalChapterSyncKey.fromVersion2(chapter, stableEvidenceKey)
+    } else {
+        CanonicalChapterSyncKey.from(chapter, stableEvidenceKey)
+    }
+
     private companion object {
         const val SCHEMA_VERSION = 1
+        const val EXACT_SCHEMA_VERSION = 2
     }
 }
 
