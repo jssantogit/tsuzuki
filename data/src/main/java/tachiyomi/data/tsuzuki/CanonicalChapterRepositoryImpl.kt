@@ -74,7 +74,9 @@ class CanonicalChapterRepositoryImpl(
     }
 
     override suspend fun upsert(chapter: CanonicalChapter) {
-        database.tsuzuki_canonical_chaptersQueries.upsertTsuzukiCanonicalChapter(
+        database.transaction {
+            validateExactChapterWrite(chapter)
+            database.tsuzuki_canonical_chaptersQueries.upsertTsuzukiCanonicalChapter(
             id = chapter.id,
             canonicalTitleId = chapter.canonicalTitleId,
             displayNumber = chapter.displayNumber,
@@ -91,7 +93,8 @@ class CanonicalChapterRepositoryImpl(
             numberingKind = chapter.numberingKind?.name,
             decimalNumerator = chapter.decimalFraction?.numerator?.toLong(),
             decimalScale = chapter.decimalFraction?.scale?.toLong(),
-        )
+            )
+        }
     }
 
     override suspend fun upsertVariant(variant: ChapterVariant) {
@@ -141,6 +144,7 @@ class CanonicalChapterRepositoryImpl(
     ) {
         database.transaction {
             chapters.forEach { chapter ->
+                validateExactChapterWrite(chapter)
                 database.tsuzuki_canonical_chaptersQueries.upsertTsuzukiCanonicalChapter(
                     id = chapter.id,
                     canonicalTitleId = chapter.canonicalTitleId,
@@ -161,6 +165,24 @@ class CanonicalChapterRepositoryImpl(
                 )
             }
             variants.forEach { variant -> upsertVariantInternal(variant) }
+        }
+    }
+
+    /**
+     * Surface a deterministic conflict to repository callers. The SQLDelight
+     * upsert has its own atomic WHERE guard, so another writer racing this
+     * read cannot silently replace an already stored exact identity.
+     */
+    private suspend fun validateExactChapterWrite(chapter: CanonicalChapter) {
+        if (chapter.numberingKind != null) {
+            // Validate newly constructed exact rows before persisting them.
+            chapter.identity
+        }
+        val existing = getById(chapter.id) ?: return
+        if (existing.numberingKind != null) {
+            check(existing.identity == chapter.identity && existing.volume == chapter.volume) {
+                "Cannot rewrite exact chapter identity for ${chapter.id}"
+            }
         }
     }
 
