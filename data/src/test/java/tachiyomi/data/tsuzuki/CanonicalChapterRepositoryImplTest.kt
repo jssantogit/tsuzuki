@@ -193,6 +193,45 @@ class CanonicalChapterRepositoryImplTest {
     }
 
     @Test
+    fun `oversized stored legacy part cannot wrap within exact ordinal identity`() = runBlocking<Unit> {
+        val ordinal = chapter("ordinal-overflow", "12 Part 5", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.ORDINAL_PART,
+        )
+        repository.upsert(ordinal)
+
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_canonical_chapters SET part = 4294967301 WHERE id = 'ordinal-overflow'",
+            0,
+        ).await()
+
+        shouldThrow<IllegalStateException> {
+            repository.getById(ordinal.id)
+        }
+    }
+
+    @Test
+    fun `oversized stored base number cannot wrap within an exact chapter identity`() = runBlocking<Unit> {
+        val exact = chapter("exact-base-overflow", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_canonical_chapters SET base_number = 4294967308 WHERE id = 'exact-base-overflow'",
+            0,
+        ).await()
+
+        shouldThrow<IllegalStateException> {
+            repository.getById(exact.id)
+        }
+    }
+
+    @Test
     fun `stray decimal metadata on a legacy chapter is not silently discarded`() = runBlocking<Unit> {
         val legacy = chapter("legacy-stray", "12.5", 12).copy(part = 5)
         repository.upsert(legacy)
