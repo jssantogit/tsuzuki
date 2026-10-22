@@ -121,6 +121,28 @@ class CanonicalReadingProgressSyncAdapterTest {
         sync.hasUnportableLocalState() shouldBe true
     }
 
+    @Test
+    fun `one tracked volume chapter is not portable while a sibling shares its identity`() = runTest {
+        val tracked = chapter("tracked-volume-1").copy(volume = 1)
+        val sibling = chapter("untracked-volume-2").copy(volume = 2)
+        val reading = FakeReadingRepository().apply {
+            upsertProgress(
+                CanonicalChapterProgress(
+                    canonicalChapterId = tracked.id,
+                    lastPageRead = 4,
+                    updatedAt = 10,
+                ),
+            )
+        }
+        val sync = adapter(
+            chapters = FakeChapterRepository(listOf(tracked, sibling), emptyList()),
+            reading = reading,
+        )
+
+        shouldThrow<IllegalStateException> { sync.exportDocument() }
+        sync.hasUnportableLocalState() shouldBe true
+    }
+
     private fun adapter(
         chapters: CanonicalChapterRepository,
         reading: CanonicalReadingRepository,
