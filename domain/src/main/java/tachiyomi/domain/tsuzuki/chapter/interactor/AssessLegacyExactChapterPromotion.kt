@@ -6,6 +6,7 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
+import kotlin.math.abs
 
 /**
  * Read-only historical audit. A [LegacyExactPromotionReview.Candidate] is NOT an
@@ -70,6 +71,16 @@ class AssessLegacyExactChapterPromotion(
             if (exact.baseNumber != chapter.baseNumber || exact.part != chapter.part) {
                 return blocked(LegacyExactPromotionReview.Reason.LEGACY_IDENTITY_MISMATCH)
             }
+            // A raw numeric hint can contradict the explicit label, but must
+            // NEVER become a canonical identity or supply missing precision.
+            // Floating point is used only for this conservative contradiction test.
+            if (exact.decimalFraction != null && evidence.rawNumber != null) {
+                val hint = evidence.rawNumber
+                val expected = "${exact.baseNumber}.${exact.decimalFraction.asNormalizedDigits()}".toDouble()
+                if (!hint.isFinite() || hint < 0.0 || abs(hint - expected) > HINT_EPSILON) {
+                    return blocked(LegacyExactPromotionReview.Reason.CONFLICTING_EVIDENCE)
+                }
+            }
             exactIdentities += exact
             independentProducers += evidence.producerKind.name to evidence.producerId
             if (evidence.authority == ChapterEvidenceAuthority.EDITORIAL) {
@@ -109,6 +120,7 @@ class AssessLegacyExactChapterPromotion(
 
     private companion object {
         private const val MIN_CONFIDENCE = 0.95
+        private const val HINT_EPSILON = 1e-10
     }
 }
 
