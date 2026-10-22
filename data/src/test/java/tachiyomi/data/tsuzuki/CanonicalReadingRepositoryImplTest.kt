@@ -100,6 +100,51 @@ class CanonicalReadingRepositoryImplTest {
     }
 
     @Test
+    fun `incoming sync batch is atomic when a later progress row violates foreign keys`() = runBlocking<Unit> {
+        repository.upsertProgress(
+            CanonicalChapterProgress("chapter-1", lastPageRead = 2L, updatedAt = 100L),
+        )
+
+        shouldThrow<Exception> {
+            repository.upsertProgressBatch(
+                listOf(
+                    CanonicalChapterProgress("chapter-1", lastPageRead = 8L, updatedAt = 200L),
+                    CanonicalChapterProgress("missing-chapter", lastPageRead = 10L, updatedAt = 200L),
+                ),
+            )
+        }
+
+        repository.getProgress("chapter-1")?.lastPageRead shouldBe 2L
+        repository.getProgress("missing-chapter") shouldBe null
+    }
+
+    @Test
+    fun `incoming sync batch saves two canonical checkpoints together`() = runBlocking<Unit> {
+        repository.upsertProgressBatch(
+            listOf(
+                CanonicalChapterProgress("chapter-1", lastPageRead = 8L, updatedAt = 200L),
+                CanonicalChapterProgress("chapter-2", lastPageRead = 4L, updatedAt = 200L),
+            ),
+        )
+
+        repository.getProgress("chapter-1")?.lastPageRead shouldBe 8L
+        repository.getProgress("chapter-2")?.lastPageRead shouldBe 4L
+    }
+
+    @Test
+    fun `duplicate sync checkpoint IDs fail before a batch writes anything`() = runBlocking<Unit> {
+        shouldThrow<IllegalArgumentException> {
+            repository.upsertProgressBatch(
+                listOf(
+                    CanonicalChapterProgress("chapter-1", lastPageRead = 8L),
+                    CanonicalChapterProgress("chapter-1", lastPageRead = 10L),
+                ),
+            )
+        }
+        repository.getProgress("chapter-1") shouldBe null
+    }
+
+    @Test
     fun `history accumulates duration and remembers the last used variant`() = runBlocking<Unit> {
         repository.recordHistory(
             CanonicalChapterHistoryUpdate(
