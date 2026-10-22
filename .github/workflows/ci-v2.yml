@@ -307,6 +307,9 @@ jobs:
     if: needs.plan.outputs.run_supabase == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -327,6 +330,17 @@ jobs:
         uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
         with:
           version: 2.117.0
+
+      - name: Authenticate Supabase image pulls from GHCR
+        if: steps.project.outputs.present == 'true'
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Hosted runners share anonymous registry quotas. Use only this
+          # job's ephemeral read-only package token, never a personal token.
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" --password-stdin
 
       - name: Start local Supabase
         if: steps.project.outputs.present == 'true'
