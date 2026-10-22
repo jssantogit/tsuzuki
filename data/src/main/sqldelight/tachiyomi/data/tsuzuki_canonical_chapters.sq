@@ -112,6 +112,50 @@ WHERE (
     );
 
 
+-- Not used by the ordinary repository upsert. This compare-and-swap statement
+-- requires a separately audited migration writer and an enclosing transaction.
+-- All protected-state checks are duplicated at SQL level to fail closed.
+promoteLegacyChapterNumberingIfSafe:
+UPDATE tsuzuki_canonical_chapters
+SET numbering_kind = :numberingKind,
+    decimal_numerator = :decimalNumerator,
+    decimal_scale = :decimalScale
+WHERE id = :chapterId
+    AND canonical_title_id = :canonicalTitleId
+    AND numbering_kind IS NULL
+    AND type = 'REGULAR'
+    AND base_number = :baseNumber
+    AND part = :part
+    AND alpha_suffix IS NULL
+    AND volume IS :volume
+    AND updated_at = :updatedAt
+    AND NOT EXISTS (
+        SELECT 1 FROM tsuzuki_chapter_variants
+        WHERE canonical_chapter_id = :chapterId
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM tsuzuki_chapter_progress
+        WHERE canonical_chapter_id = :chapterId
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM tsuzuki_chapter_history
+        WHERE canonical_chapter_id = :chapterId
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM tsuzuki_canonical_downloads
+        WHERE canonical_chapter_id = :chapterId
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM tsuzuki_chapter_update_state
+        WHERE canonical_chapter_id = :chapterId
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM tsuzuki_mihon_projection_queue
+        WHERE canonical_chapter_id = :chapterId
+    );
+
+
+
 countTsuzukiCanonicalChapterProtectedState:
 SELECT
     (SELECT count(*) FROM tsuzuki_chapter_progress WHERE canonical_chapter_id = :canonicalChapterId) +
