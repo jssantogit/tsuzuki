@@ -44,12 +44,16 @@ class CanonicalReadingProgressSyncAdapter(
                 val chapters = chapterRepository
                     .getByCanonicalTitleId(title.id)
                     .associateBy(CanonicalChapter::id)
+                val ambiguousNumberedIds = ambiguousNumberedChapterIds(chapters.values)
 
                 readingRepository.getProgressByCanonicalTitleId(title.id)
                     .sortedBy(CanonicalChapterProgress::canonicalChapterId)
                     .forEach { progress ->
                         val chapter = chapters[progress.canonicalChapterId]
                             ?: return@forEach
+                        check(chapter.id !in ambiguousNumberedIds) {
+                            "Distinct canonical chapters would share a portable progress key"
+                        }
                         val stableEvidence = evidenceRepository
                             .getStableEvidenceKey(chapter.id)
                         val syncKey = CanonicalChapterSyncKey.from(
@@ -61,6 +65,9 @@ class CanonicalReadingProgressSyncAdapter(
                             progress = progress,
                         )
 
+                        check(syncKey.recordId !in records) {
+                            "Duplicate portable chapter progress key would overwrite another record"
+                        }
                         records[syncKey.recordId] = SyncRecordEnvelope(
                             id = syncKey.recordId,
                             revision = revisionSource.nextRevision(),
@@ -135,17 +142,17 @@ class CanonicalReadingProgressSyncAdapter(
             val chapters = chapterRepository
                 .getByCanonicalTitleId(title.id)
                 .associateBy(CanonicalChapter::id)
+            val ambiguousNumberedIds = ambiguousNumberedChapterIds(chapters.values)
+            val seenKeys = mutableSetOf<String>()
             for (progress in readingRepository.getProgressByCanonicalTitleId(title.id)) {
                 val chapter = chapters[progress.canonicalChapterId] ?: return true
+                if (chapter.id in ambiguousNumberedIds) return true
                 val stableEvidence = evidenceRepository.getStableEvidenceKey(chapter.id)
-                if (
-                    CanonicalChapterSyncKey.from(
-                        chapter = chapter,
-                        stableEvidenceKey = stableEvidence,
-                    ) == null
-                ) {
-                    return true
-                }
+                val key = CanonicalChapterSyncKey.from(
+                    chapter = chapter,
+                    stableEvidenceKey = stableEvidence,
+                ) ?: return true
+                if (!seenKeys.add(key.recordId)) return true
             }
         }
         return false
@@ -186,6 +193,16 @@ class CanonicalReadingProgressSyncAdapter(
         const val SCHEMA_VERSION = 1
     }
 }
+
+private fun ambiguousNumberedChapterIds(chapters: Collection<CanonicalChapter>): Set<String> =
+    chapters.asSequence()
+        .filter { it.identity.isNumbered }
+        .groupBy(CanonicalChapter::identity)
+        .values.asSequence()
+        .filter { it.size > 1 }
+        .flatten()
+        .map(CanonicalChapter::id)
+        .toSet()
 
 private fun JsonObject.requiredString(name: String): String =
     getValue(name).jsonPrimitive.content
