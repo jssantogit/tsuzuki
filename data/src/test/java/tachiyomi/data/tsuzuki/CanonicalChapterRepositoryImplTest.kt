@@ -33,7 +33,9 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileLegacyChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterVolume
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.model.SourceChapterInventory
 import tachiyomi.domain.tsuzuki.chapter.model.SourceChapterSnapshot
@@ -107,6 +109,27 @@ class CanonicalChapterRepositoryImplTest {
         repository.getByCanonicalTitleId("title-1") shouldContainExactly listOf(updatedFirst, second)
         repository.getById(first.id) shouldBe updatedFirst
         repository.observeByCanonicalTitleId("title-1").first() shouldContainExactly listOf(updatedFirst, second)
+    }
+
+    @Test
+    fun `exact fractional metadata round trips beside unchanged legacy rows`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-12-5", "12.5", 12).copy(part = 5)
+        val exact = chapter("exact-12-05", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(legacy)
+        repository.upsert(exact)
+
+        val chapters = repository.getByCanonicalTitleId("title-1").associateBy(CanonicalChapter::id)
+        chapters.getValue(legacy.id) shouldBe legacy
+        chapters.getValue(exact.id) shouldBe exact
+        (chapters.getValue(legacy.id).identity == chapters.getValue(exact.id).identity) shouldBe false
+
+        repository.upsertBatch(listOf(exact.copy(updatedAt = 250L)), emptyList())
+        repository.getById(exact.id) shouldBe exact.copy(updatedAt = 250L)
+        repository.getById(legacy.id) shouldBe legacy
     }
 
     @Test
