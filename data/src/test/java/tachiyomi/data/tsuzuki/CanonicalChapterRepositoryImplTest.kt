@@ -89,15 +89,6 @@ class CanonicalChapterRepositoryImplTest {
         nativeLibraryDirectory?.toFile()?.deleteRecursively()
     }
 
-    /**
-     * Simulate a database that was corrupted before migration 44 added its
-     * write guard. These tests exercise the independent read-side fail-closed
-     * decoder; normal write paths must keep the trigger installed.
-     */
-    private suspend fun disableExactIdentityTriggerForCorruptionFixture() {
-        driver.execute(null, "DROP TRIGGER tsuzuki_exact_chapter_identity_guard", 0).await()
-    }
-
     private fun nativeLibraryArchitecture(): String = when (System.getProperty("os.arch").orEmpty().lowercase()) {
         "aarch64", "arm64" -> "aarch64"
         "x86_64", "amd64" -> "x86_64"
@@ -213,7 +204,7 @@ class CanonicalChapterRepositoryImplTest {
     }
 
     @Test
-    fun `direct SQL updates cannot downgrade exact numbering outside Kotlin repository`() = runBlocking<Unit> {
+    fun `generated SQL upsert cannot downgrade exact numbering outside Kotlin repository`() = runBlocking<Unit> {
         val exact = chapter("exact-direct", "12.05", 12).copy(
             part = 5,
             numberingKind = CanonicalChapterNumberingKind.DECIMAL,
@@ -221,14 +212,26 @@ class CanonicalChapterRepositoryImplTest {
         )
         repository.upsert(exact)
 
-        shouldThrow<Throwable> {
-            driver.execute(
-                null,
-                "UPDATE tsuzuki_canonical_chapters SET numbering_kind = NULL, decimal_numerator = NULL, " +
-                    "decimal_scale = NULL WHERE id = 'exact-direct'",
-                0,
-            ).await()
-        }
+        // This deliberately bypasses the Kotlin repository and invokes the
+        // generated SQLDelight statement used by other application writers.
+        database.tsuzuki_canonical_chaptersQueries.upsertTsuzukiCanonicalChapter(
+            id = exact.id,
+            canonicalTitleId = exact.canonicalTitleId,
+            displayNumber = "12.5",
+            volume = exact.volume?.toLong(),
+            title = "Stale update",
+            type = exact.type.name,
+            baseNumber = exact.baseNumber?.toLong(),
+            part = exact.part?.toLong(),
+            alphaSuffix = exact.alphaSuffix,
+            confidence = exact.confidence,
+            createdAt = exact.createdAt,
+            updatedAt = exact.updatedAt + 1L,
+            confirmationState = exact.confirmation.name,
+            numberingKind = null,
+            decimalNumerator = null,
+            decimalScale = null,
+        )
 
         repository.getById(exact.id) shouldBe exact
     }
@@ -241,7 +244,6 @@ class CanonicalChapterRepositoryImplTest {
             decimalFraction = CanonicalChapterDecimalFraction(5, 2),
         )
         repository.upsert(exact)
-        disableExactIdentityTriggerForCorruptionFixture()
 
         driver.execute(
             null,
@@ -262,7 +264,6 @@ class CanonicalChapterRepositoryImplTest {
             decimalFraction = CanonicalChapterDecimalFraction(5, 2),
         )
         repository.upsert(exact)
-        disableExactIdentityTriggerForCorruptionFixture()
 
         driver.execute(
             null,
@@ -283,7 +284,6 @@ class CanonicalChapterRepositoryImplTest {
             decimalFraction = CanonicalChapterDecimalFraction(5, 2),
         )
         repository.upsert(exact)
-        disableExactIdentityTriggerForCorruptionFixture()
 
         driver.execute(
             null,
@@ -303,7 +303,6 @@ class CanonicalChapterRepositoryImplTest {
             numberingKind = CanonicalChapterNumberingKind.ORDINAL_PART,
         )
         repository.upsert(ordinal)
-        disableExactIdentityTriggerForCorruptionFixture()
 
         driver.execute(
             null,
@@ -324,7 +323,6 @@ class CanonicalChapterRepositoryImplTest {
             decimalFraction = CanonicalChapterDecimalFraction(5, 2),
         )
         repository.upsert(exact)
-        disableExactIdentityTriggerForCorruptionFixture()
 
         driver.execute(
             null,
