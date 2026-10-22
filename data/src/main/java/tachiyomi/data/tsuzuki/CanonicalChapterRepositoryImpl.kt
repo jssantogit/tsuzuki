@@ -77,22 +77,22 @@ class CanonicalChapterRepositoryImpl(
         database.transaction {
             validateExactChapterWrite(chapter)
             database.tsuzuki_canonical_chaptersQueries.upsertTsuzukiCanonicalChapter(
-            id = chapter.id,
-            canonicalTitleId = chapter.canonicalTitleId,
-            displayNumber = chapter.displayNumber,
-            volume = chapter.volume?.toLong(),
-            title = chapter.title,
-            type = chapter.type.name,
-            baseNumber = chapter.baseNumber?.toLong(),
-            part = chapter.part?.toLong(),
-            alphaSuffix = chapter.alphaSuffix,
-            confidence = chapter.confidence,
-            createdAt = chapter.createdAt,
-            updatedAt = chapter.updatedAt,
-            confirmationState = chapter.confirmation.name,
-            numberingKind = chapter.numberingKind?.name,
-            decimalNumerator = chapter.decimalFraction?.numerator?.toLong(),
-            decimalScale = chapter.decimalFraction?.scale?.toLong(),
+                id = chapter.id,
+                canonicalTitleId = chapter.canonicalTitleId,
+                displayNumber = chapter.displayNumber,
+                volume = chapter.volume?.toLong(),
+                title = chapter.title,
+                type = chapter.type.name,
+                baseNumber = chapter.baseNumber?.toLong(),
+                part = chapter.part?.toLong(),
+                alphaSuffix = chapter.alphaSuffix,
+                confidence = chapter.confidence,
+                createdAt = chapter.createdAt,
+                updatedAt = chapter.updatedAt,
+                confirmationState = chapter.confirmation.name,
+                numberingKind = chapter.numberingKind?.name,
+                decimalNumerator = chapter.decimalFraction?.numerator?.toLong(),
+                decimalScale = chapter.decimalFraction?.scale?.toLong(),
             )
         }
     }
