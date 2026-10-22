@@ -23,20 +23,29 @@ internal class LegacyExactChapterMigrationPreflight(
     suspend fun inspect(
         chapterId: String,
         remoteSyncStateAuditedAbsent: Boolean = false,
+    ): LegacyExactMigrationPreflight = database.transactionWithResult {
+        inspectInTransaction(chapterId, remoteSyncStateAuditedAbsent)
+    }
+
+    /**
+     * Can be reused inside a migration writer's enclosing transaction, so
+     * revalidation and conditional write observe the same SQLite snapshot.
+     */
+    internal suspend fun inspectInTransaction(
+        chapterId: String,
+        remoteSyncStateAuditedAbsent: Boolean,
     ): LegacyExactMigrationPreflight {
-        // There is no local database query which proves that another device
-        // never published a v1 chapter key. Require an explicit external audit;
-        // even a successful result is for human/diagnostic review ONLY.
+        // A local database cannot prove no older device published a v1 key.
         if (!remoteSyncStateAuditedAbsent) {
             return LegacyExactMigrationPreflight.Blocked(
                 LegacyExactMigrationPreflight.Reason.REMOTE_SYNC_UNVERIFIED,
             )
         }
-        return database.transactionWithResult {
+        return run {
             val chapterRepository = CanonicalChapterRepositoryImpl(database)
             val evidenceRepository = ChapterEvidenceRepositoryImpl(database)
             val chapter = chapterRepository.getById(chapterId)
-                ?: return@transactionWithResult LegacyExactMigrationPreflight.Blocked(
+                ?: return@run LegacyExactMigrationPreflight.Blocked(
                     LegacyExactMigrationPreflight.Reason.MISSING_CHAPTER,
                 )
 
@@ -44,14 +53,14 @@ internal class LegacyExactChapterMigrationPreflight(
                 .countTsuzukiCanonicalChapterProtectedState(chapterId)
                 .awaitAsOne()
             if (protectedStateCount > 0L) {
-                return@transactionWithResult LegacyExactMigrationPreflight.Blocked(
+                return@run LegacyExactMigrationPreflight.Blocked(
                     LegacyExactMigrationPreflight.Reason.PROTECTED_STATE,
                 )
             }
             // Variants have their own raw chapter labels and source order. A
             // complete migration would need to compare them independently.
             if (chapterRepository.getVariantsByCanonicalChapterId(chapterId).isNotEmpty()) {
-                return@transactionWithResult LegacyExactMigrationPreflight.Blocked(
+                return@run LegacyExactMigrationPreflight.Blocked(
                     LegacyExactMigrationPreflight.Reason.VARIANTS_REQUIRE_REVIEW,
                 )
             }
