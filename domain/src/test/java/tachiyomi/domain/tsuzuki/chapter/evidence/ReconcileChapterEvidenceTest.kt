@@ -54,10 +54,13 @@ class ReconcileChapterEvidenceTest {
         secondMapping shouldNotBe null
         firstMapping shouldNotBe secondMapping
 
-        fixture.reconciler.execute("title", listOf(
-            first.copy(observedAt = 11L),
-            second.copy(observedAt = 11L),
-        ))
+        fixture.reconciler.execute(
+            "title",
+            listOf(
+                first.copy(observedAt = 11L),
+                second.copy(observedAt = 11L),
+            ),
+        )
         fixture.chapterRepository.getByCanonicalTitleId("title") shouldHaveSize 2
         fixture.evidenceRepository.getByProducerExternalKey(
             ProducerKind.ADDON,
@@ -74,20 +77,23 @@ class ReconcileChapterEvidenceTest {
     @Test
     fun `numbered extra releases from independent sources still reconcile by identity`() = runTest {
         val fixture = fixture()
-        fixture.reconciler.execute("title", listOf(
-            fixture.addonEvidence(
-                id = "first-extra-one",
-                rawLabel = "Extra 1",
-                externalKey = "extra-one-a",
-                producerId = "source-a",
+        fixture.reconciler.execute(
+            "title",
+            listOf(
+                fixture.addonEvidence(
+                    id = "first-extra-one",
+                    rawLabel = "Extra 1",
+                    externalKey = "extra-one-a",
+                    producerId = "source-a",
+                ),
+                fixture.addonEvidence(
+                    id = "second-extra-one",
+                    rawLabel = "Extra 1",
+                    externalKey = "extra-one-b",
+                    producerId = "source-b",
+                ),
             ),
-            fixture.addonEvidence(
-                id = "second-extra-one",
-                rawLabel = "Extra 1",
-                externalKey = "extra-one-b",
-                producerId = "source-b",
-            ),
-        ))
+        )
 
         fixture.chapterRepository.getByCanonicalTitleId("title") shouldHaveSize 1
         val mapped = fixture.evidenceRepository.getByCanonicalTitleId("title")
