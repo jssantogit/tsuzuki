@@ -14,6 +14,8 @@ import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.subscribeToList
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.model.orderCanonicalChapters
@@ -86,6 +88,9 @@ class CanonicalChapterRepositoryImpl(
             createdAt = chapter.createdAt,
             updatedAt = chapter.updatedAt,
             confirmationState = chapter.confirmation.name,
+            numberingKind = chapter.numberingKind?.name,
+            decimalNumerator = chapter.decimalFraction?.numerator?.toLong(),
+            decimalScale = chapter.decimalFraction?.scale?.toLong(),
         )
     }
 
@@ -150,6 +155,9 @@ class CanonicalChapterRepositoryImpl(
                     createdAt = chapter.createdAt,
                     updatedAt = chapter.updatedAt,
                     confirmationState = chapter.confirmation.name,
+                    numberingKind = chapter.numberingKind?.name,
+                    decimalNumerator = chapter.decimalFraction?.numerator?.toLong(),
+                    decimalScale = chapter.decimalFraction?.scale?.toLong(),
                 )
             }
             variants.forEach { variant -> upsertVariantInternal(variant) }
@@ -205,6 +213,9 @@ class CanonicalChapterRepositoryImpl(
         createdAt: Long,
         updatedAt: Long,
         confirmationState: String,
+        numberingKind: String?,
+        decimalNumerator: Long?,
+        decimalScale: Long?,
     ) = CanonicalChapter(
         id = id,
         canonicalTitleId = canonicalTitleId,
@@ -219,6 +230,12 @@ class CanonicalChapterRepositoryImpl(
         createdAt = createdAt,
         updatedAt = updatedAt,
         confirmation = CanonicalChapterConfirmation.valueOf(confirmationState),
+        numberingKind = numberingKind?.let(CanonicalChapterNumberingKind::valueOf),
+        decimalFraction = if (decimalNumerator != null && decimalScale != null) {
+            CanonicalChapterDecimalFraction(decimalNumerator.toInt(), decimalScale.toInt())
+        } else {
+            null
+        },
     )
 
     private fun mapVariant(
