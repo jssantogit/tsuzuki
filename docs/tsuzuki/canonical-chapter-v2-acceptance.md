@@ -26,6 +26,13 @@ Status: **NOT EXECUTED / NOT RELEASE-APPROVED**. This is an acceptance matrix, n
 | Mixed-version sync | Attempt v1-to-v2 and v2-to-v1 transfer in an isolated test environment | Incompatible documents rejected without writing progress, with clear recovery path | **Not run** |
 | Downgrade and restore | Roll back app from a backed-up snapshot without v2 in-place mutation | No data loss, corruption or stale-identity promotion | **Not run** |
 
+## Additional automated gates (2026-10-22)
+
+- `.github/scripts/test_chapter_migration_43.py`: exercises migration 43 against a disposable pre-43-shaped SQLite fixture with two distinct chapter IDs sharing the legacy numeric part, preserved progress, history, downloads, mapped evidence and variants. This is a **synthetic compatibility smoke test**, not a restored Android user database.
+- `.github/workflows/ci-v2.yml`: runs that fixture in the planner plus Kotlin domain/data/app tests and SQLDelight's schema migration verification. Final full CI verdict must be read from the exact tested commit.
+- `.github/workflows/canonical-chapter-v2-android.yml`: separate opt-in-guarded emulator test lane with a disposable debug package, exercising Reader source switching and invalid navigation. It requires a successful instrumentation report and clears app data afterward. This gate is **not** evidence for real user backups or cross-device sync until the GitHub run completes successfully.
+- The Supabase orchestration code now **rejects unnegotiated v2 documents** and incompatible accepted-base versions **before using the legacy unversioned transport**. This protects data but deliberately leaves live sync v2 unavailable, pending server-side protocol negotiations, v1 remote record migration and older-client downgrade protection.
+
 ## Existing automated checks
 
 - Domain and Data tests cover decimal precision, volume-aware identities, conflicting evidence, SQLDelight schema migrations, protected state and compare-and-swap writer behavior.
