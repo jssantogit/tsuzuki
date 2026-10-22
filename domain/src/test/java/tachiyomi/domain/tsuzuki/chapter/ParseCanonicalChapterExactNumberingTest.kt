@@ -60,6 +60,10 @@ class ParseCanonicalChapterExactNumberingTest {
         parser.previewExactNumbering("Chapter 12.05 6") shouldBe null
         parser.previewExactNumbering("Chapter 12.000") shouldBe null
         parser.previewExactNumbering("Chapter 12.0000000001") shouldBe null
+        parser.previewExactNumbering("Chapter 12.2147483648") shouldBe null
+        parser.previewExactNumbering("Chapter 12.05 Part 2") shouldBe null
+        parser.previewExactNumbering("Chapter 12") shouldBe null
+        parser.previewExactNumbering("Chapter 12a") shouldBe null
         parser.previewExactNumbering("Bonus 12.05") shouldBe null
     }
 
