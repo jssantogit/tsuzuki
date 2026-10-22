@@ -1,7 +1,9 @@
 package tachiyomi.domain.tsuzuki.chapter.interactor
 
 import dev.zacsweers.metro.Inject
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ParsedChapterLabel
 import java.text.Normalizer
@@ -56,6 +58,49 @@ class ParseCanonicalChapterLabel {
         }
 
         return unknown(original, hint)
+    }
+
+    /**
+     * Read-only, opt-in preview for exact v2 numbering. This method is NOT used
+     * by inventory reconciliation or reading/sync, and never mutates legacy IDs.
+     *
+     * The chapter marker must be explicit: a bare `9.46` may instead represent
+     * volume 9, chapter 46. Numeric hints do not make that interpretation safe.
+     */
+    fun previewExactNumbering(rawLabel: String?): CanonicalChapterIdentity? {
+        val normalized = normalize(rawLabel.orEmpty())
+        if (normalized.isEmpty()) return null
+
+        val volumeMarkers = VOLUME_MARKERS.findAll(normalized).toList()
+        if (volumeMarkers.size > 1 || volumeMarkers.any { it.value.contains("none") }) return null
+        val leadingVolume = LEADING_VOLUME_PREFIX.containsMatchIn(normalized)
+        if (volumeMarkers.isNotEmpty() && !leadingVolume) return null
+
+        val chapterSourceText = LEADING_VOLUME_PREFIX.replaceFirst(normalized, "")
+        if (!CHAPTER_PREFIX.containsMatchIn(chapterSourceText)) return null
+        val chapterText = removeChapterPrefix(chapterSourceText)
+
+        parsePartForm(chapterText)?.let { parsed ->
+            return CanonicalChapterIdentity(
+                type = CanonicalChapterType.REGULAR,
+                baseNumber = parsed.baseNumber,
+                part = parsed.part,
+                numberingKind = CanonicalChapterNumberingKind.ORDINAL_PART,
+            )
+        }
+
+        val match = NUMBER_FORM.find(chapterText) ?: return null
+        if (!isAllowedRemainder(chapterText.substring(match.range.last + 1).trim())) return null
+        val digits = match.groupValues[2].takeIf(String::isNotEmpty) ?: return null
+        val fraction = CanonicalChapterDecimalFraction.parse(digits) ?: return null
+        val base = match.groupValues[1].toIntOrNull() ?: return null
+        return CanonicalChapterIdentity(
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = base,
+            part = fraction.numerator,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = fraction,
+        )
     }
 
     /** Alias for callers that use the source model's `numberHint` wording. */
@@ -349,6 +394,7 @@ class ParseCanonicalChapterLabel {
                 "(?=(?:ch(?:apter)?|capitulo)\\s*\\.?\\s*\\d)",
         )
         val CHAPTER_PREFIX = Regex("^(?:ch(?:apter)?|capitulo)\\s*\\.?\\s*")
+        val VOLUME_MARKERS = Regex("\\bvol(?:ume)?\\.?\\s*(?:\\d+|none)\\b")
         val ZERO_PLACEHOLDER_SEMANTIC = Regex("^0(?:[.]0+)?\\s*[-:]\\s*(.+)$")
         val SPECIAL_PREFIX =
             Regex("^(extra|special|especial)(?:\\s+|\\s*[:.-]\\s*)(\\d+)?(?:\\s+(?:part|pt)\\s+(\\d+))?")
