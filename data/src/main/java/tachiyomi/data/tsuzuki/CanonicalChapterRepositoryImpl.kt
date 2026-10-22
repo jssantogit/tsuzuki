@@ -216,10 +216,17 @@ class CanonicalChapterRepositoryImpl(
         numberingKind: String?,
         decimalNumerator: Long?,
         decimalScale: Long?,
-    ) = CanonicalChapter(
-        id = id,
-        canonicalTitleId = canonicalTitleId,
-        displayNumber = displayNumber,
+    ): CanonicalChapter {
+        val fraction = decodeStoredDecimalFraction(
+            chapterId = id,
+            numberingKind = numberingKind,
+            decimalNumerator = decimalNumerator,
+            decimalScale = decimalScale,
+        )
+        return CanonicalChapter(
+            id = id,
+            canonicalTitleId = canonicalTitleId,
+            displayNumber = displayNumber,
         volume = volume?.toInt(),
         title = title,
         type = CanonicalChapterType.valueOf(type),
@@ -230,13 +237,44 @@ class CanonicalChapterRepositoryImpl(
         createdAt = createdAt,
         updatedAt = updatedAt,
         confirmation = CanonicalChapterConfirmation.valueOf(confirmationState),
-        numberingKind = numberingKind?.let(CanonicalChapterNumberingKind::valueOf),
-        decimalFraction = if (decimalNumerator != null && decimalScale != null) {
+            numberingKind = numberingKind?.let(CanonicalChapterNumberingKind::valueOf),
+            decimalFraction = fraction,
+        ).also { chapter ->
+            if (chapter.numberingKind != null) {
+                try {
+                    chapter.identity
+                } catch (error: IllegalArgumentException) {
+                    throw IllegalStateException("Stored exact chapter identity is inconsistent for chapter $id", error)
+                }
+            }
+        }
+    }
+
+    private fun decodeStoredDecimalFraction(
+        chapterId: String,
+        numberingKind: String?,
+        decimalNumerator: Long?,
+        decimalScale: Long?,
+    ): CanonicalChapterDecimalFraction? {
+        if (numberingKind != CanonicalChapterNumberingKind.DECIMAL.name) {
+            check(decimalNumerator == null && decimalScale == null) {
+                "Unexpected decimal metadata on non-decimal chapter $chapterId"
+            }
+            return null
+        }
+
+        check(decimalNumerator != null && decimalScale != null) {
+            "Incomplete exact decimal metadata for chapter $chapterId"
+        }
+        check(decimalNumerator in 1L..Int.MAX_VALUE.toLong() && decimalScale in 1L..9L) {
+            "Out-of-range exact decimal metadata for chapter $chapterId"
+        }
+        return try {
             CanonicalChapterDecimalFraction(decimalNumerator.toInt(), decimalScale.toInt())
-        } else {
-            null
-        },
-    )
+        } catch (error: IllegalArgumentException) {
+            throw IllegalStateException("Invalid exact decimal metadata for chapter $chapterId", error)
+        }
+    }
 
     private fun mapVariant(
         id: String,
