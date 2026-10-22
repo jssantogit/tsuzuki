@@ -9,7 +9,9 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 
@@ -74,6 +76,67 @@ class ParseCanonicalChapterLabelTest {
         overInt.type shouldBe CanonicalChapterType.UNKNOWN
         manyDigits.type shouldBe CanonicalChapterType.UNKNOWN
         manyDigits.rawLabel shouldBe "Chapter 12.99999999999999999999999999"
+    }
+
+    @Test
+    fun `opt-in exact decimals distinguish scale without changing legacy chapter identity keys`() {
+        val old = CanonicalChapter(
+            id = "existing",
+            canonicalTitleId = "title",
+            displayNumber = "12.5",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 12,
+            part = 5,
+        )
+        val existingKey = old.identity.sortKey
+        val fiveTenths = old.copy(
+            id = "exact-five-tenths",
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+        )
+        val fiveHundredths = fiveTenths.copy(
+            id = "exact-five-hundredths",
+            displayNumber = "12.05",
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+
+        old.identity.sortKey shouldBe existingKey
+        (fiveTenths.identity == old.identity) shouldBe false
+        (fiveHundredths.identity == fiveTenths.identity) shouldBe false
+        fiveHundredths.identity.compareTo(fiveTenths.identity) shouldBe -1
+        fiveHundredths.sortKey.compareTo(fiveTenths.sortKey) shouldBe -1
+        old.sortKey shouldBe "01|0000000012|10000000005|00|"
+    }
+
+    @Test
+    fun `exact decimal order uses fractional scale instead of integer numerator`() {
+        val chapters = listOf(
+            CanonicalChapterIdentity(
+                type = CanonicalChapterType.REGULAR,
+                baseNumber = 12,
+                part = 5,
+                numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+                decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+            ),
+            CanonicalChapterIdentity(
+                type = CanonicalChapterType.REGULAR,
+                baseNumber = 12,
+                part = 25,
+                numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+                decimalFraction = CanonicalChapterDecimalFraction(25, 2),
+            ),
+            CanonicalChapterIdentity(
+                type = CanonicalChapterType.REGULAR,
+                baseNumber = 12,
+                part = 5,
+                numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+                decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+            ),
+        )
+
+        chapters.sorted().map { it.decimalFraction!!.asNormalizedDigits() } shouldBe
+            listOf("05", "25", "5")
+        chapters.sortedBy(CanonicalChapterIdentity::sortKey) shouldBe chapters.sorted()
     }
 
     @Test
