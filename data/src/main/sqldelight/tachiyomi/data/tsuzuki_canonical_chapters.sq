@@ -12,6 +12,9 @@ CREATE TABLE tsuzuki_canonical_chapters(
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     confirmation_state TEXT NOT NULL DEFAULT 'PROVISIONAL',
+    numbering_kind TEXT,
+    decimal_numerator INTEGER,
+    decimal_scale INTEGER,
     FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
 );
 
@@ -44,7 +47,10 @@ INSERT INTO tsuzuki_canonical_chapters(
     confidence,
     created_at,
     updated_at,
-    confirmation_state
+    confirmation_state,
+    numbering_kind,
+    decimal_numerator,
+    decimal_scale
 )
 VALUES (
     :id,
@@ -59,7 +65,10 @@ VALUES (
     :confidence,
     :createdAt,
     :updatedAt,
-    :confirmationState
+    :confirmationState,
+    :numberingKind,
+    :decimalNumerator,
+    :decimalScale
 )
 ON CONFLICT(id) DO UPDATE SET
     canonical_title_id = excluded.canonical_title_id,
@@ -72,7 +81,10 @@ ON CONFLICT(id) DO UPDATE SET
     alpha_suffix = excluded.alpha_suffix,
     confidence = excluded.confidence,
     updated_at = excluded.updated_at,
-    confirmation_state = excluded.confirmation_state;
+    confirmation_state = excluded.confirmation_state,
+    numbering_kind = excluded.numbering_kind,
+    decimal_numerator = excluded.decimal_numerator,
+    decimal_scale = excluded.decimal_scale;
 
 
 countTsuzukiCanonicalChapterProtectedState:
