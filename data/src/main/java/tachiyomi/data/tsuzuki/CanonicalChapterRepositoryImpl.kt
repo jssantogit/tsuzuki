@@ -14,7 +14,7 @@ import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.subscribeToList
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
-import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.chapter.model.orderCanonicalChapters
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
@@ -30,14 +30,14 @@ class CanonicalChapterRepositoryImpl(
         return database.tsuzuki_canonical_chaptersQueries
             .getTsuzukiCanonicalChaptersByTitle(canonicalTitleId, ::mapChapter)
             .awaitAsList()
-            .sortedWith(CHAPTER_COMPARATOR)
+            .let(::orderCanonicalChapters)
     }
 
     override fun observeByCanonicalTitleId(canonicalTitleId: String): Flow<List<CanonicalChapter>> {
         return database.tsuzuki_canonical_chaptersQueries
             .getTsuzukiCanonicalChaptersByTitle(canonicalTitleId, ::mapChapter)
             .subscribeToList()
-            .map { chapters -> chapters.sortedWith(CHAPTER_COMPARATOR) }
+            .map(::orderCanonicalChapters)
     }
 
     override suspend fun getById(id: String): CanonicalChapter? {
@@ -261,14 +261,4 @@ class CanonicalChapterRepositoryImpl(
         updatedAt = updatedAt,
     )
 
-    private companion object {
-        val CHAPTER_COMPARATOR = compareBy<CanonicalChapter>({
-            CanonicalChapterIdentity(
-                type = it.type,
-                baseNumber = it.baseNumber,
-                part = it.part,
-                alphaSuffix = it.alphaSuffix,
-            )
-        }, { it.id })
-    }
 }
