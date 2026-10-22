@@ -8,9 +8,9 @@ package tachiyomi.domain.tsuzuki.chapter.model
  * evidence of volume-local numbering; only then does volume lead the regular chapter order.
  * Unqualified volumes sort after known volumes in this mode rather than being guessed.
  */
-fun orderCanonicalChapters(chapters: List<CanonicalChapter>): List<CanonicalChapter> {
+fun hasVolumeLocalChapterNumbering(chapters: List<CanonicalChapter>): Boolean {
     val volumeByIdentity = mutableMapOf<CanonicalChapterIdentity, Int>()
-    val hasVolumeLocalNumbering = chapters.any { chapter ->
+    return chapters.any { chapter ->
         if (
             chapter.type != CanonicalChapterType.REGULAR ||
             chapter.baseNumber == null ||
@@ -22,8 +22,11 @@ fun orderCanonicalChapters(chapters: List<CanonicalChapter>): List<CanonicalChap
             previousVolume != null && previousVolume != chapter.volume
         }
     }
+}
 
-    val comparator = if (hasVolumeLocalNumbering) {
+/** See [hasVolumeLocalChapterNumbering] for the conservative reset detection rule. */
+fun orderCanonicalChapters(chapters: List<CanonicalChapter>): List<CanonicalChapter> {
+    val comparator = if (hasVolumeLocalChapterNumbering(chapters)) {
         compareBy<CanonicalChapter>({ it.type.sortRank }, { it.volume ?: Int.MAX_VALUE }, { it.identity }, { it.id })
     } else {
         compareBy<CanonicalChapter>({ it.identity }, { it.volume ?: Int.MAX_VALUE }, { it.id })
