@@ -45,6 +45,10 @@ Use exact parsing/ordering rather than floating point. Avoid treating the raw so
 
 The helper accepts evidence snapshots and protected-state flags from a caller; it **does not** query historic history, downloads, or sync itself. No production entry point calls it, no existing canonical ID is mutated, and no automatic bulk migration is authorized. Before any future caller treats a candidate as a promotion decision, independently verify source provenance, historical variants and volume ambiguity, reader state, sync portability, and database transaction boundaries on real migration snapshots.
 
+## Targeted regression checkpoint (2026-10-22)
+
+The prior full CI on `a2156caf` passed all lanes except a Data test that exposed a per-chapter exact-identity preflight read. The preflight was replaced with one batched SQLDelight query and a 40-chapter query-count regression. Targeted Data tests, SQLDelight migration checks, Spotless and App compile on `f14d07c2` passed. New read-only historical assessment and the atomic no-in-place-promotion guard require complete Domain/Data/App/release/native acceptance at the latest checkpoint.
+
 ## Current release gate
 
 Safe mitigation and the **opt-in v2 model + additive migration** are in `fix/canonical-chapter-resolver-hardening`. Full v2 parser/reconciler activation (the read-only preview exists), safe reconciliation against existing v1 evidence, historical identity promotion, portable sync v2, and real-device database-upgrade validation are **not implemented**. The current v1 sync deliberately leaves opt-in exact rows local/unportable. Do not merge with a claim that decimal identity or historical duplicates have been fully repaired.
