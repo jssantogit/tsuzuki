@@ -62,6 +62,7 @@ class SupabaseSyncOrchestrator(
 
     private companion object {
         const val LEGACY_SYNC_SCHEMA_VERSION = 1
+        const val EXACT_PROGRESS_SCHEMA_VERSION = 2
     }
 
     init {
@@ -141,11 +142,17 @@ class SupabaseSyncOrchestrator(
 
         return try {
             val localBeforePull = adapter.exportDocument()
-            // The existing Supabase event transport does not carry a document
-            // schema version. It must NEVER stamp a legacy remote snapshot as
-            // v2 based on the requesting client's local schema. A coordinated
-            // server-enforced version handshake is required before v2 sync.
-            if (localBeforePull.schemaVersion != LEGACY_SYNC_SCHEMA_VERSION) {
+            // The existing Supabase event transport does not carry document
+            // schema versions. Never stamp a v1 remote snapshot as v2.
+            // A dedicated v2 domain name is a wire-level namespace: old
+            // clients only request READING_PROGRESS, so neither side reads
+            // or overwrites the other's records. v2 is still opt-in and is
+            // forbidden for any other unversioned remote domain.
+            val supportedSchema = when (documentKind) {
+                SyncDocumentKind.READING_PROGRESS_V2 -> EXACT_PROGRESS_SCHEMA_VERSION
+                else -> LEGACY_SYNC_SCHEMA_VERSION
+            }
+            if (localBeforePull.schemaVersion != supportedSchema) {
                 return SyncDocumentResult.Failed(
                     documentKind,
                     SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA),
