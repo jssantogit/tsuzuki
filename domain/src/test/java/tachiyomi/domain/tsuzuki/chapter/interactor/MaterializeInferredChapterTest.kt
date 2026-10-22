@@ -1,5 +1,6 @@
 package tachiyomi.domain.tsuzuki.chapter.interactor
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -103,6 +104,32 @@ class MaterializeInferredChapterTest {
 
         actual.id shouldBe existing.id
         repo.getByCanonicalTitleId("title").size shouldBe 1
+    }
+
+    @Test
+    fun `stale inferred slot fails closed when multiple volumes share its number`() = runTest {
+        val repo = FakeChapters()
+        val firstVolume = CanonicalChapter(
+            id = "volume-one-37",
+            canonicalTitleId = "title",
+            displayNumber = "37",
+            type = tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType.REGULAR,
+            baseNumber = 37,
+            volume = 1,
+            confidence = 1.0,
+        )
+        repo.upsert(firstVolume)
+        repo.upsert(firstVolume.copy(id = "volume-two-37", volume = 2))
+        val inferred = buildCanonicalChapterOutline(
+            "title",
+            emptyList(),
+            listOf(ReportedChapterCount("title", "kitsu", 37, 1L)),
+        ).last().chapter
+
+        shouldThrow<IllegalStateException> {
+            MaterializeInferredChapter(repo, ChapterMutationGate(), { 2L }).execute(inferred)
+        }
+        repo.getByCanonicalTitleId("title").size shouldBe 2
     }
 
     private class FakeChapters : CanonicalChapterRepository {
