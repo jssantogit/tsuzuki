@@ -173,6 +173,26 @@ class CanonicalChapterRepositoryImplTest {
     }
 
     @Test
+    fun `inconsistent legacy part and exact numerator is rejected when loading a chapter`() = runBlocking<Unit> {
+        val exact = chapter("exact-part-mismatch", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_canonical_chapters SET part = 6 WHERE id = 'exact-part-mismatch'",
+            0,
+        ).await()
+
+        shouldThrow<IllegalStateException> {
+            repository.getById(exact.id)
+        }
+    }
+
+    @Test
     fun `stray decimal metadata on a legacy chapter is not silently discarded`() = runBlocking<Unit> {
         val legacy = chapter("legacy-stray", "12.5", 12).copy(part = 5)
         repository.upsert(legacy)
