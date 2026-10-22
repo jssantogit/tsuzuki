@@ -172,6 +172,7 @@ class CanonicalReadingProgressSyncAdapterTest {
         ).exportDocument()
 
         exported.schemaVersion shouldBe 2
+        exported.kind shouldBe tachiyomi.domain.tsuzuki.sync.model.SyncDocumentKind.READING_PROGRESS_V2
         exported.records.size shouldBe 1
         adapter(
             chapters = FakeChapterRepository(listOf(destination), emptyList()),
