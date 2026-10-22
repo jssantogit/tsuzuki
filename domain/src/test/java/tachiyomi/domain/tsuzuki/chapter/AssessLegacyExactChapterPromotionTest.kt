@@ -84,6 +84,20 @@ class AssessLegacyExactChapterPromotionTest {
     }
 
     @Test
+    fun `contradictory numeric hints block a historical precision review`() {
+        val legacy = chapter()
+        val first = evidence("source-a", "Chapter 12.5")
+        val second = evidence("source-b", "Chapter 12.50")
+        val contradictory = second.copy(evidence = second.evidence.copy(rawNumber = 46.0))
+
+        assessor.assess(
+            legacy,
+            listOf(first, contradictory),
+            listOf(legacy),
+        ) shouldBe blocked(LegacyExactPromotionReview.Reason.CONFLICTING_EVIDENCE)
+    }
+
+    @Test
     fun `legacy integer part and precise decimal must agree without rewriting legacy rows`() {
         val legacy = chapter().copy(part = 50, displayNumber = "12.50")
         assessor.assess(
