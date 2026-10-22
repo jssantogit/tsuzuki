@@ -30,9 +30,9 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.LegacyInventoryEvidenceAdapter
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileLegacyChapterEvidence
+import tachiyomi.domain.tsuzuki.chapter.interactor.LegacyExactPromotionReview
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterVolume
-import tachiyomi.domain.tsuzuki.chapter.interactor.LegacyExactPromotionReview
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
