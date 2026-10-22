@@ -49,7 +49,13 @@ class CanonicalReadingProgressSyncAdapter(
                 val chapters = chapterRepository
                     .getByCanonicalTitleId(title.id)
                     .associateBy(CanonicalChapter::id)
-                val ambiguousNumberedIds = if (exactVersion2Enabled) emptySet() else ambiguousNumberedChapterIds(chapters.values)
+                val ambiguousNumberedIds = if (exactVersion2Enabled) {
+                    emptySet()
+                } else {
+                    ambiguousNumberedChapterIds(
+                        chapters.values,
+                    )
+                }
 
                 readingRepository.getProgressByCanonicalTitleId(title.id)
                     .sortedBy(CanonicalChapterProgress::canonicalChapterId)
@@ -147,7 +153,13 @@ class CanonicalReadingProgressSyncAdapter(
             val chapters = chapterRepository
                 .getByCanonicalTitleId(title.id)
                 .associateBy(CanonicalChapter::id)
-            val ambiguousNumberedIds = if (exactVersion2Enabled) emptySet() else ambiguousNumberedChapterIds(chapters.values)
+            val ambiguousNumberedIds = if (exactVersion2Enabled) {
+                emptySet()
+            } else {
+                ambiguousNumberedChapterIds(
+                    chapters.values,
+                )
+            }
             val seenKeys = mutableSetOf<String>()
             for (progress in readingRepository.getProgressByCanonicalTitleId(title.id)) {
                 val chapter = chapters[progress.canonicalChapterId] ?: return true
