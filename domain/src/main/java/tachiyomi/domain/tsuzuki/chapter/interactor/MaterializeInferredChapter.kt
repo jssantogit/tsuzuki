@@ -24,12 +24,16 @@ class MaterializeInferredChapter internal constructor(
     suspend fun execute(slot: CanonicalChapter): CanonicalChapter {
         require(isInferredChapter(slot)) { "Only count-derived slots can be materialized" }
         return gate.withLock {
-            repository.getByCanonicalTitleId(slot.canonicalTitleId)
-                .firstOrNull { it.identity == slot.identity }
-                ?: run {
+            val matches = repository.getByCanonicalTitleId(slot.canonicalTitleId)
+                .filter { it.identity == slot.identity }
+            when (matches.size) {
+                0 -> {
                     val now = clock()
                     slot.copy(createdAt = now, updatedAt = now).also { repository.upsert(it) }
                 }
+                1 -> matches.single()
+                else -> error("Count-derived chapter identity is ambiguous across observed chapters")
+            }
         }
     }
 }
