@@ -237,6 +237,29 @@ class CanonicalReadingProgressSyncAdapterTest {
     }
 
     @Test
+    fun `a numbered v2 chapter with an untracked identical sibling is not portable`() = runTest {
+        val tracked = chapter("tracked-exact").copy(
+            displayNumber = "12.05",
+            part = 5,
+            volume = 1,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        val sibling = tracked.copy(id = "untracked-exact")
+        val reading = FakeReadingRepository().apply {
+            upsertProgress(CanonicalChapterProgress(tracked.id, lastPageRead = 4, updatedAt = 5))
+        }
+        val sync = adapter(
+            chapters = FakeChapterRepository(listOf(tracked, sibling), emptyList()),
+            reading = reading,
+            exactVersion2Enabled = true,
+        )
+
+        sync.hasUnportableLocalState() shouldBe true
+        shouldThrow<IllegalStateException> { sync.exportDocument() }
+    }
+
+    @Test
     fun `protocol versions never interpret each others progress records`() = runTest {
         val exact = chapter("exact").copy(
             displayNumber = "12.05",
