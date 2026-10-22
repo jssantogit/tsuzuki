@@ -1,5 +1,6 @@
 package tachiyomi.data.tsuzuki
 
+import app.cash.sqldelight.async.coroutines.awaitAsList
 import app.cash.sqldelight.async.coroutines.awaitAsOneOrNull
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
@@ -105,15 +106,17 @@ class LegacyExactChapterMigrationWriterTest {
         migrated.part shouldBe 5
         database.tsuzuki_chapter_evidenceQueries
             .getTsuzukiChapterEvidenceByMappedChapter("legacy")
-            .awaitAsOneOrNull() shouldBe null
+            .awaitAsList().size shouldBe 2
     }
 
     @Test
     fun `protected reader state prevents mutation even after an earlier positive preflight`() = runBlocking<Unit> {
         seedCandidate("legacy")
         val writer = LegacyExactChapterMigrationWriter(database)
-        writer.inspect("legacy", remoteSyncStateAuditedAbsent = true) is
-            LegacyExactMigrationPreflight.ReviewOnly shouldBe true
+        (
+            writer.inspect("legacy", remoteSyncStateAuditedAbsent = true) is
+                LegacyExactMigrationPreflight.ReviewOnly
+            ) shouldBe true
         database.tsuzuki_chapter_progressQueries.upsertTsuzukiChapterProgress(
             canonicalChapterId = "legacy",
             read = true,
@@ -134,8 +137,10 @@ class LegacyExactChapterMigrationWriterTest {
     fun `contradictory evidence prevents a later approved write`() = runBlocking<Unit> {
         seedCandidate("legacy")
         val writer = LegacyExactChapterMigrationWriter(database)
-        writer.inspect("legacy", remoteSyncStateAuditedAbsent = true) is
-            LegacyExactMigrationPreflight.ReviewOnly shouldBe true
+        (
+            writer.inspect("legacy", remoteSyncStateAuditedAbsent = true) is
+                LegacyExactMigrationPreflight.ReviewOnly
+            ) shouldBe true
         seedEvidence("legacy", "source-b", "Chapter 12.5")
 
         writer.promote("legacy", reviewerApproved = true, remoteSyncStateAuditedAbsent = true) shouldBe
