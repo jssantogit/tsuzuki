@@ -45,6 +45,25 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(result["selected_tests"], ["Domain"])
         self.assertEqual(result["selected_compiles"], ["App Compile"])
 
+    def test_reading_progress_adapter_change_checks_domain_and_sqlite_data(self):
+        result = plan(
+            ["domain/src/main/java/tachiyomi/domain/tsuzuki/sync/adapter/CanonicalReadingProgressSyncAdapter.kt"],
+            "affected",
+        )
+        self.assertEqual(set(result["selected_tests"]), {"Domain — Tsuzuki", "Data — Tsuzuki"})
+        self.assertEqual(result["selected_compiles"], ["App Compile"])
+        self.assertTrue(result["run_format"])
+
+    def test_atomic_progress_repository_change_checks_both_interfaces(self):
+        for path in (
+            "domain/src/main/java/tachiyomi/domain/tsuzuki/reader/repository/CanonicalReadingRepository.kt",
+            "data/src/main/java/tachiyomi/data/tsuzuki/CanonicalReadingRepositoryImpl.kt",
+        ):
+            with self.subTest(path=path):
+                result = plan([path], "affected")
+                self.assertEqual(set(result["selected_tests"]), {"Domain — Tsuzuki", "Data — Tsuzuki"})
+                self.assertEqual(result["selected_compiles"], ["App Compile"])
+
     def test_tsuzuki_data_production_change_runs_filtered_data_tests_and_app_compile(self):
         result = plan(["data/src/main/java/tachiyomi/data/tsuzuki/Foo.kt"], "affected")
         self.assertEqual(result["selected_tests"], ["Data — Tsuzuki"])
