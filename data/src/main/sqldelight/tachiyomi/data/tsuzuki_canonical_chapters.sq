@@ -33,6 +33,11 @@ FROM tsuzuki_canonical_chapters
 WHERE id = :id
 LIMIT 1;
 
+getTsuzukiCanonicalChaptersByIds:
+SELECT *
+FROM tsuzuki_canonical_chapters
+WHERE id IN ?;
+
 upsertTsuzukiCanonicalChapter:
 INSERT INTO tsuzuki_canonical_chapters(
     id,
