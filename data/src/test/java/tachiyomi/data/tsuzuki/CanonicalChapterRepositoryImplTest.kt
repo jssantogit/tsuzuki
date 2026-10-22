@@ -133,6 +133,62 @@ class CanonicalChapterRepositoryImplTest {
     }
 
     @Test
+    fun `incomplete exact numbering metadata fails closed instead of reading as legacy`() = runBlocking<Unit> {
+        val exact = chapter("exact-incomplete", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_canonical_chapters SET decimal_scale = NULL WHERE id = 'exact-incomplete'",
+            0,
+        ).await()
+
+        shouldThrow<IllegalStateException> {
+            repository.getById(exact.id)
+        }
+    }
+
+    @Test
+    fun `oversized stored decimal metadata cannot wrap into a different chapter identity`() = runBlocking<Unit> {
+        val exact = chapter("exact-overflow", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_canonical_chapters SET decimal_numerator = 4294967301 WHERE id = 'exact-overflow'",
+            0,
+        ).await()
+
+        shouldThrow<IllegalStateException> {
+            repository.getById(exact.id)
+        }
+    }
+
+    @Test
+    fun `stray decimal metadata on a legacy chapter is not silently discarded`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-stray", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_canonical_chapters SET decimal_numerator = 5 WHERE id = 'legacy-stray'",
+            0,
+        ).await()
+
+        shouldThrow<IllegalStateException> {
+            repository.getById(legacy.id)
+        }
+    }
+
+    @Test
     fun `local numbering resets across volumes preserve volume reading order for list and flow`() =
         runBlocking<Unit> {
             val chapters = listOf(
