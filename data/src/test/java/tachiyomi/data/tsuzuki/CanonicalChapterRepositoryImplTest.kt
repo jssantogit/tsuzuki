@@ -218,6 +218,26 @@ class CanonicalChapterRepositoryImplTest {
     }
 
     @Test
+    fun `historical preflight rejects missing rows and competing siblings from fresh snapshot`() = runBlocking<Unit> {
+        val preflight = LegacyExactChapterMigrationPreflight(database)
+        preflight.inspect("missing-id", remoteSyncStateAuditedAbsent = true) shouldBe
+            LegacyExactMigrationPreflight.Blocked(LegacyExactMigrationPreflight.Reason.MISSING_CHAPTER)
+
+        val legacy = chapter("legacy-with-peer", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+        repository.upsert(legacy.copy(id = "competing-peer"))
+        seedHistoricalExactEvidence(legacy.id, "source-a", "Chapter 12.5")
+        seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.50")
+
+        preflight.inspect(legacy.id, remoteSyncStateAuditedAbsent = true) shouldBe
+            LegacyExactMigrationPreflight.Blocked(
+                reason = LegacyExactMigrationPreflight.Reason.EVIDENCE_BLOCKED,
+                evidenceReason = LegacyExactPromotionReview.Reason.COMPETING_CHAPTER,
+            )
+        repository.getById(legacy.id) shouldBe legacy
+    }
+
+    @Test
     fun `historical preflight re-reads changed evidence instead of trusting prior review`() = runBlocking<Unit> {
         val legacy = chapter("legacy-stale", "12.5", 12).copy(part = 5)
         repository.upsert(legacy)
