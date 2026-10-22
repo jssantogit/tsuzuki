@@ -465,7 +465,14 @@ class ReconcileChapterEvidence internal constructor(
                 reasonCounts.increment(ChapterInventoryDiagnosticReason.IDENTITY_MISMATCH)
             }
 
-            val identityCandidates = chaptersByIdentity[parsed.identity].orEmpty()
+            // Unnumbered semantic types (Extra, Prologue, One-shot, etc.) do not
+            // identify an individual release across source keys. Reuse a stable
+            // external-key mapping instead of merging every release of one type.
+            val identityCandidates = if (parsed.identity.isNumbered) {
+                chaptersByIdentity[parsed.identity].orEmpty()
+            } else {
+                emptyList()
+            }
             val legacyUnqualifiedMergeTarget = if (
                 parsedIdentityIsReliable &&
                 observation.producerKind == ProducerKind.ADDON &&
