@@ -14,7 +14,28 @@ data class CanonicalChapterIdentity private constructor(
     val baseNumber: Int? = null,
     val part: Int? = null,
     private val normalizedAlphaSuffix: String? = null,
+    val numberingKind: CanonicalChapterNumberingKind? = null,
+    val decimalFraction: CanonicalChapterDecimalFraction? = null,
 ) : Comparable<CanonicalChapterIdentity> {
+
+    init {
+        require(decimalFraction == null || numberingKind == CanonicalChapterNumberingKind.DECIMAL) {
+            "Only exact decimal chapters may have a decimal fraction"
+        }
+        if (numberingKind != null) {
+            require(type == CanonicalChapterType.REGULAR && baseNumber != null) {
+                "Exact numbering requires a regular numbered chapter"
+            }
+            when (numberingKind) {
+                CanonicalChapterNumberingKind.DECIMAL -> require(
+                    decimalFraction != null && part == decimalFraction.numerator && alphaSuffix == null,
+                ) { "Decimal numerator must match the legacy part field" }
+                CanonicalChapterNumberingKind.ORDINAL_PART -> require(part != null && decimalFraction == null) {
+                    "Ordinal numbering requires a part and no decimal fraction"
+                }
+            }
+        }
+    }
 
     /**
      * Public construction normalizes the suffix before it participates in
@@ -25,12 +46,16 @@ data class CanonicalChapterIdentity private constructor(
         baseNumber: Int? = null,
         part: Int? = null,
         alphaSuffix: String? = null,
+        numberingKind: CanonicalChapterNumberingKind? = null,
+        decimalFraction: CanonicalChapterDecimalFraction? = null,
         @Suppress("UNUSED_PARAMETER") normalizationMarker: Unit = Unit,
     ) : this(
         type = type,
         baseNumber = baseNumber,
         part = part,
         normalizedAlphaSuffix = alphaSuffix?.lowercase(Locale.ROOT),
+        numberingKind = numberingKind,
+        decimalFraction = decimalFraction,
     )
 
     val alphaSuffix: String?
@@ -59,21 +84,28 @@ data class CanonicalChapterIdentity private constructor(
             append('|')
             // An unsuffixed chapter must precede its fractional installments (0 before 0.5).
             // The explicit prefix prevents null from colliding with a real part zero.
-            append(part?.let { "1" + numberKey(it) } ?: "0")
+            append(
+                if (numberingKind == CanonicalChapterNumberingKind.DECIMAL) {
+                    "1" + decimalFraction!!.asNormalizedDigits().padEnd(NULL_NUMBER_KEY.length, '0')
+                } else {
+                    part?.let { "1" + numberKey(it) } ?: "0"
+                },
+            )
             append('|')
             when (val suffix = alphaSuffix?.lowercase()) {
                 null -> append("00|")
                 else -> append("01|").append(suffix)
             }
+            if (numberingKind != null) {
+                // Existing v1 sort/sync keys remain byte-for-byte unchanged.
+                append("|v2:").append(numberingKind.name)
+                decimalFraction?.let {
+                    append(':').append(it.numerator).append(':').append(it.scale)
+                }
+            }
         }
 
-    override fun compareTo(other: CanonicalChapterIdentity): Int = when {
-        type.sortRank != other.type.sortRank -> type.sortRank.compareTo(other.type.sortRank)
-        baseNumber != other.baseNumber -> compareNullableNumbers(baseNumber, other.baseNumber)
-        part != other.part -> compareNullableParts(part, other.part)
-        alphaSuffix != other.alphaSuffix -> compareNullableStrings(alphaSuffix, other.alphaSuffix)
-        else -> 0
-    }
+    override fun compareTo(other: CanonicalChapterIdentity): Int = sortKey.compareTo(other.sortKey)
 
     private companion object {
         private const val NULL_NUMBER_KEY = "9999999999"
