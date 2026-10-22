@@ -21,25 +21,6 @@ CREATE TABLE tsuzuki_canonical_chapters(
 CREATE INDEX tsuzuki_canonical_chapter_title_index
 ON tsuzuki_canonical_chapters(canonical_title_id);
 
--- Guard a previously accepted exact identity against stale legacy upserts or
--- competing updates through any SQL writer, not just the Kotlin repository.
--- Canonical title ID is intentionally mutable during safe title convergence.
-CREATE TRIGGER tsuzuki_exact_chapter_identity_guard
-BEFORE UPDATE ON tsuzuki_canonical_chapters
-WHEN OLD.numbering_kind IS NOT NULL AND (
-    NEW.numbering_kind IS NOT OLD.numbering_kind
-    OR NEW.type IS NOT OLD.type
-    OR NEW.base_number IS NOT OLD.base_number
-    OR NEW.part IS NOT OLD.part
-    OR NEW.alpha_suffix IS NOT OLD.alpha_suffix
-    OR NEW.volume IS NOT OLD.volume
-    OR NEW.decimal_numerator IS NOT OLD.decimal_numerator
-    OR NEW.decimal_scale IS NOT OLD.decimal_scale
-)
-BEGIN
-    SELECT RAISE(ABORT, 'Cannot overwrite an existing exact chapter identity');
-END;
-
 getTsuzukiCanonicalChaptersByTitle:
 SELECT *
 FROM tsuzuki_canonical_chapters
@@ -103,7 +84,22 @@ ON CONFLICT(id) DO UPDATE SET
     confirmation_state = excluded.confirmation_state,
     numbering_kind = excluded.numbering_kind,
     decimal_numerator = excluded.decimal_numerator,
-    decimal_scale = excluded.decimal_scale;
+    decimal_scale = excluded.decimal_scale
+-- SQLDelight's generator cannot resolve OLD/NEW references in a CREATE TRIGGER.
+-- Put the collision guard on the single canonical upsert query instead, so
+-- every caller of this generated statement (including title convergence)
+-- refuses to overwrite an already persisted v2 chapter identity.
+WHERE tsuzuki_canonical_chapters.numbering_kind IS NULL
+    OR (
+        excluded.numbering_kind IS tsuzuki_canonical_chapters.numbering_kind
+        AND excluded.type IS tsuzuki_canonical_chapters.type
+        AND excluded.base_number IS tsuzuki_canonical_chapters.base_number
+        AND excluded.part IS tsuzuki_canonical_chapters.part
+        AND excluded.alpha_suffix IS tsuzuki_canonical_chapters.alpha_suffix
+        AND excluded.volume IS tsuzuki_canonical_chapters.volume
+        AND excluded.decimal_numerator IS tsuzuki_canonical_chapters.decimal_numerator
+        AND excluded.decimal_scale IS tsuzuki_canonical_chapters.decimal_scale
+    );
 
 
 countTsuzukiCanonicalChapterProtectedState:
