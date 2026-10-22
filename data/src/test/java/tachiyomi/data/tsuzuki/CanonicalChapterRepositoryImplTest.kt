@@ -228,7 +228,9 @@ class CanonicalChapterRepositoryImplTest {
         repository.upsert(legacy)
         seedHistoricalExactEvidence(legacy.id, "source-a", "Chapter 12.5")
         seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.50")
-        repository.upsertVariant(variant("v-legacy", canonicalChapterId = legacy.id, sourceChapterId = "legacy-variant"))
+        repository.upsertVariant(
+            variant("v-legacy", canonicalChapterId = legacy.id, sourceChapterId = "legacy-variant"),
+        )
 
         LegacyExactChapterMigrationPreflight(database).inspect(
             chapterId = legacy.id,
@@ -266,8 +268,10 @@ class CanonicalChapterRepositoryImplTest {
         seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.50")
         val preflight = LegacyExactChapterMigrationPreflight(database)
 
-        (preflight.inspect(legacy.id, remoteSyncStateAuditedAbsent = true) is
-            LegacyExactMigrationPreflight.ReviewOnly) shouldBe true
+        (
+            preflight.inspect(legacy.id, remoteSyncStateAuditedAbsent = true) is
+                LegacyExactMigrationPreflight.ReviewOnly
+            ) shouldBe true
 
         seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.05")
         preflight.inspect(legacy.id, remoteSyncStateAuditedAbsent = true) shouldBe
