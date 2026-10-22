@@ -89,6 +89,15 @@ class CanonicalChapterRepositoryImplTest {
         nativeLibraryDirectory?.toFile()?.deleteRecursively()
     }
 
+    /**
+     * Simulate a database that was corrupted before migration 44 added its
+     * write guard. These tests exercise the independent read-side fail-closed
+     * decoder; normal write paths must keep the trigger installed.
+     */
+    private suspend fun disableExactIdentityTriggerForCorruptionFixture() {
+        driver.execute(null, "DROP TRIGGER tsuzuki_exact_chapter_identity_guard", 0).await()
+    }
+
     private fun nativeLibraryArchitecture(): String = when (System.getProperty("os.arch").orEmpty().lowercase()) {
         "aarch64", "arm64" -> "aarch64"
         "x86_64", "amd64" -> "x86_64"
@@ -232,6 +241,7 @@ class CanonicalChapterRepositoryImplTest {
             decimalFraction = CanonicalChapterDecimalFraction(5, 2),
         )
         repository.upsert(exact)
+        disableExactIdentityTriggerForCorruptionFixture()
 
         driver.execute(
             null,
@@ -252,6 +262,7 @@ class CanonicalChapterRepositoryImplTest {
             decimalFraction = CanonicalChapterDecimalFraction(5, 2),
         )
         repository.upsert(exact)
+        disableExactIdentityTriggerForCorruptionFixture()
 
         driver.execute(
             null,
@@ -272,6 +283,7 @@ class CanonicalChapterRepositoryImplTest {
             decimalFraction = CanonicalChapterDecimalFraction(5, 2),
         )
         repository.upsert(exact)
+        disableExactIdentityTriggerForCorruptionFixture()
 
         driver.execute(
             null,
@@ -291,6 +303,7 @@ class CanonicalChapterRepositoryImplTest {
             numberingKind = CanonicalChapterNumberingKind.ORDINAL_PART,
         )
         repository.upsert(ordinal)
+        disableExactIdentityTriggerForCorruptionFixture()
 
         driver.execute(
             null,
@@ -311,6 +324,7 @@ class CanonicalChapterRepositoryImplTest {
             decimalFraction = CanonicalChapterDecimalFraction(5, 2),
         )
         repository.upsert(exact)
+        disableExactIdentityTriggerForCorruptionFixture()
 
         driver.execute(
             null,
