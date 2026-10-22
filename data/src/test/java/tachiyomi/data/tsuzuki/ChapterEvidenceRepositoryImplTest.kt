@@ -158,8 +158,33 @@ class ChapterEvidenceRepositoryImplTest {
             ),
         )
 
-        queryCounter.executeQueryCount shouldBe 2
+        // One canonical snapshot, one evidence snapshot and one batched exact-ID
+        // preflight; no extra SELECT per chapter in the inventory.
+        queryCounter.executeQueryCount shouldBe 3
         evidenceRepository.getByCanonicalTitleId("title-1") shouldHaveSize 1
+    }
+
+    @Test
+    fun `reconciliation preflights exact identities once for a large chapter inventory`() = runBlocking<Unit> {
+        val reconciler = ReconcileChapterEvidence(
+            ParseCanonicalChapterLabel(),
+            chapterRepository,
+            evidenceRepository,
+        )
+        val observations = (1..40).map { number ->
+            editorialEvidence(
+                id = "large-$number",
+                label = "Chapter $number",
+                key = "large-$number",
+            )
+        }
+
+        queryCounter.reset()
+        reconciler.execute("title-1", observations)
+
+        // Query count must not grow with inventory size.
+        queryCounter.executeQueryCount shouldBe 3
+        chapterRepository.getByCanonicalTitleId("title-1") shouldHaveSize 40
     }
 
     @Test
