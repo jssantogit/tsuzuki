@@ -24,6 +24,79 @@ import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 class ReconcileChapterEvidenceTest {
 
     @Test
+    fun `unnumbered extra releases with different source keys remain separate canonical chapters`() = runTest {
+        val fixture = fixture()
+        val first = fixture.addonEvidence(
+            id = "extra-a",
+            rawLabel = "Extra - Bonus A",
+            externalKey = "extra-a",
+        )
+        val second = fixture.addonEvidence(
+            id = "extra-b",
+            rawLabel = "Extra - Bonus B",
+            externalKey = "extra-b",
+        )
+
+        fixture.reconciler.execute("title", listOf(first, second))
+
+        fixture.chapterRepository.getByCanonicalTitleId("title") shouldHaveSize 2
+        val firstMapping = fixture.evidenceRepository.getByProducerExternalKey(
+            ProducerKind.ADDON,
+            "addon",
+            "extra-a",
+        )?.mappedCanonicalChapterId
+        val secondMapping = fixture.evidenceRepository.getByProducerExternalKey(
+            ProducerKind.ADDON,
+            "addon",
+            "extra-b",
+        )?.mappedCanonicalChapterId
+        firstMapping shouldNotBe null
+        secondMapping shouldNotBe null
+        firstMapping shouldNotBe secondMapping
+
+        fixture.reconciler.execute("title", listOf(
+            first.copy(observedAt = 11L),
+            second.copy(observedAt = 11L),
+        ))
+        fixture.chapterRepository.getByCanonicalTitleId("title") shouldHaveSize 2
+        fixture.evidenceRepository.getByProducerExternalKey(
+            ProducerKind.ADDON,
+            "addon",
+            "extra-a",
+        )?.mappedCanonicalChapterId shouldBe firstMapping
+        fixture.evidenceRepository.getByProducerExternalKey(
+            ProducerKind.ADDON,
+            "addon",
+            "extra-b",
+        )?.mappedCanonicalChapterId shouldBe secondMapping
+    }
+
+    @Test
+    fun `numbered extra releases from independent sources still reconcile by identity`() = runTest {
+        val fixture = fixture()
+        fixture.reconciler.execute("title", listOf(
+            fixture.addonEvidence(
+                id = "first-extra-one",
+                rawLabel = "Extra 1",
+                externalKey = "extra-one-a",
+                producerId = "source-a",
+            ),
+            fixture.addonEvidence(
+                id = "second-extra-one",
+                rawLabel = "Extra 1",
+                externalKey = "extra-one-b",
+                producerId = "source-b",
+            ),
+        ))
+
+        fixture.chapterRepository.getByCanonicalTitleId("title") shouldHaveSize 1
+        val mapped = fixture.evidenceRepository.getByCanonicalTitleId("title")
+            .mapNotNull(PersistedChapterEvidence::mappedCanonicalChapterId)
+        mapped.distinct() shouldHaveSize 1
+        mapped shouldHaveSize 2
+    }
+
+    @Test
     fun `addon evidence creates provisional chapter`() = runTest {
         val fixture = fixture()
 
