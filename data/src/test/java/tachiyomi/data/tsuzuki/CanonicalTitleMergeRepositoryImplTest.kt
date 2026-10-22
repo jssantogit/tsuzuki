@@ -23,6 +23,8 @@ import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.model.CanonicalLibraryEntry
 import tachiyomi.domain.tsuzuki.model.LibraryStatus
@@ -359,6 +361,36 @@ class CanonicalTitleMergeRepositoryImplTest {
 
         chapterRepository.getById("winner-37")?.canonicalTitleId shouldBe "winner"
         chapterRepository.getById("duplicate-37")?.canonicalTitleId shouldBe "duplicate"
+    }
+
+    @Test
+    fun `converging titles retains exact distinct fractional identities and progress keys`() = runBlocking<Unit> {
+        seedTitle("winner", "Winner")
+        seedTitle("duplicate", "Duplicate")
+        val first = chapter("winner-12-5", "winner", 12).copy(
+            displayNumber = "12.5",
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+        )
+        val second = chapter("duplicate-12-05", "duplicate", 12).copy(
+            displayNumber = "12.05",
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        chapterRepository.upsert(first)
+        chapterRepository.upsert(second)
+        readingRepository.upsertProgress(
+            CanonicalChapterProgress(canonicalChapterId = second.id, lastPageRead = 4L, updatedAt = 20L),
+        )
+
+        repository.convergeTo("winner", "duplicate")
+
+        chapterRepository.getById(first.id) shouldBe first
+        chapterRepository.getById(second.id) shouldBe second.copy(canonicalTitleId = "winner")
+        readingRepository.getProgress(second.id)?.lastPageRead shouldBe 4L
+        chapterRepository.getByCanonicalTitleId("winner").size shouldBe 2
     }
 
     private suspend fun seedTitle(id: String, displayTitle: String) {
