@@ -26,6 +26,10 @@ trap cleanup EXIT
 
 adb install -r "${app_apks[0]}"
 adb install -r "${test_apks[0]}"
+if ! adb shell pm list packages "$app" | tr -d '\r' | grep -Fxq "package:${app}"; then
+  echo "ERROR: The installed debug package does not match ${app}" >&2
+  exit 4
+fi
 adb shell pm clear "$app" | grep -Fq 'Success'
 
 run_test() {
