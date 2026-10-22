@@ -33,6 +33,15 @@ Status: **NOT EXECUTED / NOT RELEASE-APPROVED**. This is an acceptance matrix, n
 - `.github/workflows/canonical-chapter-v2-android.yml`: separate opt-in-guarded emulator test lane with a disposable debug package, exercising Reader source switching and invalid navigation. It requires a successful instrumentation report and clears app data afterward. This gate is **not** evidence for real user backups or cross-device sync until the GitHub run completes successfully.
 - The Supabase orchestration code now **rejects unnegotiated v2 documents** and incompatible accepted-base versions **before using the legacy unversioned transport**. This protects data but deliberately leaves live sync v2 unavailable, pending server-side protocol negotiations, v1 remote record migration and older-client downgrade protection.
 
+## Verified disposable emulator smoke (2026-10-22)
+
+GitHub Actions [run 39817021141](https://github.com/jssantogit/tsuzuki/actions/runs/39817021141) **PASSED** on exact commit `b983b3fede189f8dcf3ff44c17a5dc53a0aa6f1a`, with real installed debug and instrumentation APKs on an API 35 Android emulator:
+
+- `CanonicalReaderSourceSwitchInstrumentedTest#sourceAtoBLoadsPagesAndPreservesCanonicalChapterAndObservedPosition`: PASS — Reader switched from source A to B while retaining the canonical chapter and observed page position.
+- `CanonicalTitleSourceNavigationInstrumentedTest#invalidDiscoveryIntentDoesNotOpenTitleOrMutateProgressAndPreferences`: PASS — invalid source discovery left canonical reading progress and preferences unchanged.
+- Both tests completed with instrumented JUnit success; full logs were uploaded as a short-lived GitHub Actions artifact (3-day retention).
+- This is **only two synthetic-fixture emulator scenarios**. It does not cover a real pre-v2 database upgrade, all Reader Next/Previous controls, offline downloads, cross-device migration, older-client coexistence, or actual users' libraries. Keep those matrix rows **Not run** until independently verified.
+
 ## Existing automated checks
 
 - Domain and Data tests cover decimal precision, volume-aware identities, conflicting evidence, SQLDelight schema migrations, protected state and compare-and-swap writer behavior.
