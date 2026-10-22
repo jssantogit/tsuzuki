@@ -3122,7 +3122,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
     }
 
     private companion object {
-        const val EXPECTED_TARGET_PACKAGE = "app.mihon.dev"
+        const val EXPECTED_TARGET_PACKAGE = "app.tsuzuki.dev"
         const val UI_TIMEOUT_MS = 60_000L
         const val REGISTRY_READY_TIMEOUT_MS = 15_000L
         const val MIN_IMAGE_COLOR_SAMPLES = 80
