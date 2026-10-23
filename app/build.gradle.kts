@@ -409,6 +409,8 @@ dependencies {
     implementation(libs.leakCanary.plumber)
 
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation("app.cash.sqldelight:sqlite-driver:2.3.2")
+    testImplementation("org.xerial:sqlite-jdbc:3.51.3.0")
     testImplementation(libs.okhttp.mockwebserver)
 }
 
