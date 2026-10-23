@@ -8,12 +8,14 @@ import eu.kanade.tachiyomi.data.backup.create.CanonicalCoreBackupExporter
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterOverride
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryEntry
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreList
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreProviderBinding
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreReaderPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreProgress
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreSourceMapping
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
@@ -253,6 +255,79 @@ class CanonicalCoreBackupImporterTest {
         database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
         database.tsuzuki_collectionsQueries.getAllTsuzukiCollections()
             .awaitAsList().single().id shouldBe "existing"
+    }
+
+    @Test
+    fun `reader preference and durable chapter override survive export restore`() = runBlocking {
+        val core = coreWithCollectionsAndBindings().copy(
+            readerPreferences = listOf(
+                BackupCoreReaderPreference("title-1", true, 50),
+            ),
+            chapterOverrides = listOf(
+                BackupCoreChapterOverride(
+                    id = "override-1",
+                    canonicalTitleId = "title-1",
+                    canonicalChapterKey = "chapter:1",
+                    sourceId = null,
+                    sourceTitleUrl = null,
+                    sourceChapterId = null,
+                    kind = "MARK_MISSING",
+                    payloadJson = """{"reason":"user"}""",
+                    schemaVersion = 1,
+                    revision = 2,
+                    createdAt = 30,
+                    updatedAt = 40,
+                    deletedAt = null,
+                ),
+            ),
+        )
+        importer.restoreCore(coreSection(core))
+        database.tsuzuki_reader_preferencesQueries
+            .getAllTsuzukiReaderPreferences().awaitAsList()
+            .single().automatic_fallback shouldBe true
+        database.tsuzuki_chapter_overridesQueries
+            .getAllTsuzukiChapterOverrides().awaitAsList()
+            .single().payload_json shouldBe """{"reason":"user"}"""
+
+        val titles = CanonicalTitleRepositoryImpl(database)
+        val exporter = CanonicalCoreBackupExporter(
+            titleSource = CanonicalTitleSyncSource { titles.getAllAsFlow().first() },
+            titleRepository = titles,
+            libraryRepository = CanonicalLibraryRepositoryImpl(database),
+            chapterRepository = CanonicalChapterRepositoryImpl(database),
+            sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+            readingRepository = CanonicalReadingRepositoryImpl(database),
+            database = database,
+            json = Json,
+        )
+        val exported = Json.decodeFromString(BackupCanonicalCore.serializer(), exporter.export().payloadJson)
+        exported.readerPreferences.single().automaticFallback shouldBe true
+        exported.chapterOverrides.single().payloadJson shouldBe """{"reason":"user"}"""
+    }
+
+    @Test
+    fun `unknown chapter override target is rejected before database mutation`() = runBlocking {
+        val core = coreWithCollectionsAndBindings().copy(
+            chapterOverrides = listOf(
+                BackupCoreChapterOverride(
+                    id = "override-bad",
+                    canonicalTitleId = "unknown-title",
+                    canonicalChapterKey = null,
+                    sourceId = null,
+                    sourceTitleUrl = null,
+                    sourceChapterId = null,
+                    kind = "CUSTOM",
+                    payloadJson = "{}",
+                    schemaVersion = 1,
+                    revision = 0,
+                    createdAt = 1,
+                    updatedAt = 1,
+                    deletedAt = null,
+                ),
+            ),
+        )
+        shouldThrow<IllegalArgumentException> { importer.restoreCore(coreSection(core)) }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
     }
 
     @Test
