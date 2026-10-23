@@ -81,8 +81,14 @@ data class BackupCanonicalCore(
             "History refers to absent canonical chapter"
         }
         require(
-            progress.all { it.lastVariantId == null || variantsById[it.lastVariantId]?.canonicalChapterId == it.canonicalChapterId } &&
-                history.all { it.lastVariantId == null || variantsById[it.lastVariantId]?.canonicalChapterId == it.canonicalChapterId },
+            progress.all {
+                it.lastVariantId == null ||
+                    variantsById[it.lastVariantId]?.canonicalChapterId == it.canonicalChapterId
+            } &&
+                history.all {
+                    it.lastVariantId == null ||
+                        variantsById[it.lastVariantId]?.canonicalChapterId == it.canonicalChapterId
+                },
         ) { "Reader checkpoint references a variant of another chapter" }
     }
 
