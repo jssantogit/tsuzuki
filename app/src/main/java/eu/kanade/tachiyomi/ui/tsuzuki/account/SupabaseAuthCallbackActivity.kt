@@ -35,32 +35,21 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching {
-                // Only accept a PKCE authorization code in the URI query.
-                // Never accept implicit-flow bearer tokens from a deep link.
-                check(callback.fragment.isNullOrEmpty()) {
-                    "Implicit-flow token fragments are not accepted"
+                val query = callback.queryParameterNames.associateWith { key ->
+                    val values = callback.getQueryParameters(key)
+                    check(values.size == 1) { "Duplicate auth callback parameter" }
+                    values.single()
                 }
-                val typeHint = callback.getQueryParameter("type")
-                    ?.also { check(it in ALLOWED_TYPES) { "Unsupported callback type" } }
-                check(
-                    callback.getQueryParameter("access_token") == null &&
-                        callback.getQueryParameter("refresh_token") == null &&
-                        callback.getQueryParameter("token_hash") == null
-                ) { "Bearer tokens are not accepted in callback URLs" }
-                val state = callback.getQueryParameter("tsz_state")
-                    ?: error("Auth callback is missing state")
-                val code = callback.getQueryParameter("code")
-                    ?.takeIf(String::isNotBlank)
-                    ?: error("Auth callback is missing its PKCE code")
+                val payload = SupabaseCallbackCodePolicy.parse(query, callback.fragment)
                 val requests = PersistentAuthCallbackRequestStore(noBackupFilesDir)
-                val verifier = requests.consume(state, typeHint)
+                val verifier = requests.consume(payload.state, payload.typeHint)
                     ?: error("Auth callback was not initiated here or has expired")
 
                 val authService = SupabaseAuthService(
                     client = OkHttpClient(),
                     configuration = configuration,
                 )
-                val result = authService.exchangeAuthCode(code, verifier)
+                val result = authService.exchangeAuthCode(payload.code, verifier)
 
                 val session = requireNotNull(result.session) {
                     "Supabase callback did not create a session"
@@ -88,7 +77,4 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
             port == -1 &&
             encodedPath.isNullOrEmpty()
 
-    companion object {
-        private val ALLOWED_TYPES = setOf("signup", "recovery")
-    }
 }
