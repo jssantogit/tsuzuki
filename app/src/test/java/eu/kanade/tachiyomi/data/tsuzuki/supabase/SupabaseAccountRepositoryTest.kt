@@ -211,10 +211,13 @@ class SupabaseAccountRepositoryTest {
         repository(InMemorySessionStore(), callbackStore)
             .register("reader@example.com", "password").getOrThrow()
 
-        val redirectTo = server.takeRequest().url.queryParameter("redirect_to")
+        val request = server.takeRequest()
+        val redirectTo = request.url.queryParameter("redirect_to")
         redirectTo shouldBe "tsuzuki://auth?tsz_state=$nonce"
-        callbackStore.consume("signup", nonce) shouldBe true
-        callbackStore.consume("signup", nonce) shouldBe false
+        request.body!!.utf8().contains("\"code_challenge_method\":\"s256\"") shouldBe true
+        request.body!!.utf8().contains("\"code_challenge\":") shouldBe true
+        (callbackStore.consume(nonce, "signup") != null) shouldBe true
+        callbackStore.consume(nonce, "signup") shouldBe null
     }
 
     @Test
@@ -229,7 +232,7 @@ class SupabaseAccountRepositoryTest {
         repository(InMemorySessionStore(), callbackStore)
             .register("reader@example.com", "password").isFailure shouldBe true
 
-        callbackStore.consume("signup", nonce) shouldBe false
+        callbackStore.consume(nonce, "signup") shouldBe null
     }
 
     @Test
@@ -244,10 +247,12 @@ class SupabaseAccountRepositoryTest {
         repository(InMemorySessionStore(), callbackStore)
             .sendPasswordRecovery("reader@example.com").getOrThrow()
 
-        server.takeRequest().url.queryParameter("redirect_to") shouldBe
+        val request = server.takeRequest()
+        request.url.queryParameter("redirect_to") shouldBe
             "tsuzuki://auth?tsz_state=$nonce"
-        callbackStore.consume("signup", nonce) shouldBe false
-        callbackStore.consume("recovery", nonce) shouldBe true
+        request.body!!.utf8().contains("\"code_challenge_method\":\"s256\"") shouldBe true
+        callbackStore.consume(nonce, "signup") shouldBe null
+        (callbackStore.consume(nonce, "recovery") != null) shouldBe true
     }
 
     private fun freshCallbackStore() = PersistentAuthCallbackRequestStore(
