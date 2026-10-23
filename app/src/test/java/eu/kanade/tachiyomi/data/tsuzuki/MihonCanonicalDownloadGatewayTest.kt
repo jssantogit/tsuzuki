@@ -58,6 +58,7 @@ class MihonCanonicalDownloadGatewayTest {
             sourceProvider = { StubSource(it, "en", "Source") },
             downloadLookup = { _, _, _ -> false },
             artifactLocator = { artifact },
+            artifactAvailability = { true },
             downloadStarter = { starts++ },
             downloadCompletion = { true },
         )
@@ -81,6 +82,7 @@ class MihonCanonicalDownloadGatewayTest {
                 locateCalls++
                 if (locateCalls >= 2) artifact else null
             },
+            artifactAvailability = { true },
             downloadStarter = { startedChapterId = it },
             downloadCompletion = {
                 awaitedChapterId = it
