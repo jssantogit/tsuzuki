@@ -20,7 +20,7 @@ class CanonicalOfflineArtifactInstrumentedTest {
     @Test(timeout = 60_000L)
     fun missingEmptyAndReadableOfflineArtifactsAreDistinguished() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        assertEquals("true", instrumentation.arguments.getString("offlineArtifactOptIn"))
+        assertEquals("true", InstrumentationRegistry.getArguments().getString("offlineArtifactOptIn"))
         val context = instrumentation.targetContext
         assertEquals("This fixture must not touch production storage", "app.tsuzuki.dev", context.packageName)
 
