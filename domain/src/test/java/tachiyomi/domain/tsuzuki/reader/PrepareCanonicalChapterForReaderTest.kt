@@ -28,6 +28,7 @@ import tachiyomi.domain.tsuzuki.content.repository.ContentPreferenceRepository
 import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.download.model.CanonicalDownloadArtifact
 import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
+import tachiyomi.domain.tsuzuki.download.service.CanonicalDownloadGateway
 import tachiyomi.domain.tsuzuki.reader.interactor.PrepareCanonicalChapterForReader
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterHistory
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterHistoryUpdate
@@ -283,6 +284,12 @@ class PrepareCanonicalChapterForReaderTest {
             canonicalChapterRepository = chapters,
             canonicalReadingRepository = reading,
             canonicalDownloadRepository = downloads,
+            canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+
+                override suspend fun isArtifactAvailable(artifact: CanonicalDownloadArtifact): Boolean =
+                    downloadArtifactAvailable
+            },
             chapterContentPreparer = preparer,
             structuredDiagnostics = NoOpStructuredDiagnosticRecorder,
         )
