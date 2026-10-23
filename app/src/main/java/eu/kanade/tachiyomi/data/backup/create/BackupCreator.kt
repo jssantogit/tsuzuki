@@ -61,15 +61,17 @@ class BackupCreator(
 
     suspend fun backup(uri: Uri, options: BackupOptions): String {
         var file: UniFile? = null
+        var createdByThisBackup = false
         try {
             file = if (isAutoBackup) {
                 // Get dir of file and create
                 val dir = UniFile.fromUri(context, uri)
 
-                // Do not delete any known-good backup until the replacement
-                // has passed serialization, write, and validation.
-                // Create new file to place backup
-                dir?.createFile(getFilename())
+                // Only the automatic output created by this attempt is ours
+                // to clean up after failure; never delete a manual URI.
+                val created = dir?.createFile(getFilename())
+                createdByThisBackup = created != null
+                created
             } else {
                 UniFile.fromUri(context, uri)
             }
@@ -147,7 +149,7 @@ class BackupCreator(
             return fileUri.toString()
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
-            file?.delete()
+            BackupOutputCleanupPolicy.onFailure(file, createdByThisBackup)
             throw e
         }
     }

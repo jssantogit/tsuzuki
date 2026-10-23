@@ -10,7 +10,13 @@ unbounded gzip expansion in the application process. Oversized files fail
 without partial restore; they are not truncated or silently accepted.
 The writer applies the same cap before opening the destination output stream,
 so it does not overwrite a manual backup with a newly generated archive that
-the decoder would refuse. Because
+the decoder would refuse.
+Failure cleanup now removes **only** an output created by that automatic
+backup attempt; it never calls delete on a caller-supplied manual destination.
+This prevents loss of a preexisting manual backup on failures that occur
+before opening the destination. A failure **during** an in-place manual write
+can still leave a damaged file: fully atomic staging/replace for SAF destinations
+remains a separate pre-release requirement. Because
 protobuf parsing still requires resident memory below this ceiling, on-device
 large-file tests remain an acceptance requirement. This size bound is not a
 checksum or authentication mechanism.
