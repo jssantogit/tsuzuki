@@ -164,8 +164,10 @@ data class BackupCanonicalCore(
         require(
             libraryCategories.all {
                 it.canonicalTitleId in titleIds &&
-                    (it.name.isNotBlank() ||
-                        (it.sourceCategoryId == 0L && it.name.isEmpty() && it.order == -1L && it.flags == 0L))
+                    (
+                        it.name.isNotBlank() ||
+                            (it.sourceCategoryId == 0L && it.name.isEmpty() && it.order == -1L && it.flags == 0L)
+                        )
             },
         ) { "Invalid library category reference" }
         require(sourcePreferences.all { it.language.isNotBlank() && it.position >= 0 }) {
