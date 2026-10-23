@@ -64,6 +64,7 @@ jobs:
           python3 .github/scripts/test_extension_fixture.py
           python3 .github/scripts/test_identity_contract.py
           python3 .github/scripts/test_chapter_migration_43.py
+          python3 .github/scripts/test_verify_chapter_migration_43_backup.py
           python3 .github/scripts/identity_contract.py
           bash -n .github/scripts/run_canonical_v2_android.sh
 
