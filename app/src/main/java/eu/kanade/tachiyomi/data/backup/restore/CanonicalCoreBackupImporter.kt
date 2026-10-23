@@ -292,8 +292,9 @@ class CanonicalCoreBackupImporter(
                             .awaitAsList().filter { it.name == membership.name }
                     }
                     check(matches.size == 1) { "Cannot resolve restored category" }
-                    check(matches.single().order == membership.order &&
-                        matches.single().flags == membership.flags
+                    check(
+                        matches.single().order == membership.order &&
+                            matches.single().flags == membership.flags,
                     ) { "Existing category has incompatible order or flags" }
                     categoryIds[membership.name] = matches.single().id
                 }
