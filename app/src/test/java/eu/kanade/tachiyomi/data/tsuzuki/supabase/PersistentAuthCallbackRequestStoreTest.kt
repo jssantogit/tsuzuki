@@ -31,13 +31,13 @@ class PersistentAuthCallbackRequestStoreTest {
         val store = PersistentAuthCallbackRequestStore(
             directory = directory,
             nowEpochMillis = { 10L },
-            nonceSource = { "nonce-1" },
+            nonceSource = { "nonce-123456789012345678901234" },
         )
         store.start("recovery")
 
-        store.consume("signup", "nonce-1") shouldBe false
+        store.consume("signup", "nonce-123456789012345678901234") shouldBe false
         store.consume("recovery", "unexpected") shouldBe false
-        store.consume("recovery", "nonce-1") shouldBe true
+        store.consume("recovery", "nonce-123456789012345678901234") shouldBe true
     }
 
     @Test
@@ -47,13 +47,13 @@ class PersistentAuthCallbackRequestStoreTest {
         val store = PersistentAuthCallbackRequestStore(
             directory = directory,
             nowEpochMillis = { current },
-            nonceSource = { "nonce-1" },
+            nonceSource = { "nonce-123456789012345678901234" },
         )
         store.start("signup")
-        store.consume("email_change", "nonce-1") shouldBe false
+        store.consume("email_change", "nonce-123456789012345678901234") shouldBe false
 
         current += PersistentAuthCallbackRequestStore.LIFETIME_MILLIS + 1
-        store.consume("signup", "nonce-1") shouldBe false
+        store.consume("signup", "nonce-123456789012345678901234") shouldBe false
     }
 
     @Test
@@ -78,12 +78,12 @@ class PersistentAuthCallbackRequestStoreTest {
         val store = PersistentAuthCallbackRequestStore(
             directory = directory,
             nowEpochMillis = { 1_000L },
-            nonceSource = { "nonce-1" },
+            nonceSource = { "nonce-123456789012345678901234" },
         )
         store.start("signup")
-        store.cancel("signup", "nonce-1")
-        store.consume("signup", "nonce-1") shouldBe false
+        store.cancel("signup", "nonce-123456789012345678901234")
+        store.consume("signup", "nonce-123456789012345678901234") shouldBe false
         directory.resolve(PersistentAuthCallbackRequestStore.FILE_NAME).writeText("bad format")
-        store.consume("signup", "nonce-1") shouldBe false
+        store.consume("signup", "nonce-123456789012345678901234") shouldBe false
     }
 }
