@@ -153,6 +153,9 @@ object SettingsTsuzukiSyncScreen : Screen() {
 private fun TsuzukiSyncScreenError.messageText(): String = when (this) {
     TsuzukiSyncScreenError.AUTHORIZATION_REQUIRED ->
         "Sign in to use cloud sync."
+    TsuzukiSyncScreenError.ACCOUNT_SCOPE_MISMATCH ->
+        "Cloud sync paused: existing sync data belongs to another or unknown account. " +
+            "No data was deleted or sent. Account-safe migration is required."
     TsuzukiSyncScreenError.NETWORK_UNAVAILABLE ->
         "Sync could not reach the server. Local changes remain queued."
     TsuzukiSyncScreenError.REMOTE_UNAVAILABLE ->
