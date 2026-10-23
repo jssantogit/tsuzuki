@@ -452,6 +452,18 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
+    fun `default Mihon category maps only to the reserved system row zero`() = runBlocking {
+        val core = coreWithCollectionsAndBindings().copy(
+            libraryCategories = listOf(
+                BackupCoreLibraryCategory("title-1", "", -1, 0, sourceCategoryId = 0),
+            ),
+        )
+        importer.restoreCore(coreSection(core))
+        database.tsuzuki_library_categoriesQueries
+            .getAllTsuzukiLibraryCategories().awaitAsList().single().category_id shouldBe 0L
+    }
+
+    @Test
     fun `ambiguous existing categories abort without importing canonical records`() = runBlocking {
         database.categoriesQueries.insert(name = "Favorites", order = 1, flags = 0)
         database.categoriesQueries.insert(name = "Favorites", order = 2, flags = 0)
