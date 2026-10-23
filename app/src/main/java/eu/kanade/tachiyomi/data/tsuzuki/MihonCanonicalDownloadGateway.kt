@@ -149,10 +149,11 @@ class MihonCanonicalDownloadGateway internal constructor(
          */
         internal fun isArtifactReadable(context: Context, artifact: CanonicalDownloadArtifact): Boolean {
             if (artifact.localUri.isBlank()) return false
-            val local = UniFile.fromUri(context, Uri.parse(artifact.localUri)) ?: return false
-            if (!local.exists()) return false
+            return try {
+                val local = UniFile.fromUri(context, Uri.parse(artifact.localUri)) ?: return false
+                if (!local.exists()) return false
 
-            return if (artifact.format.equals("DIRECTORY", ignoreCase = true)) {
+                if (artifact.format.equals("DIRECTORY", ignoreCase = true)) {
                 local.isDirectory && local.listFiles()
                     ?.any { entry ->
                         !entry.isDirectory && entry.exists() &&
@@ -181,6 +182,13 @@ class MihonCanonicalDownloadGateway internal constructor(
                         }
                     }
                 }
+            }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // Corrupt archives and temporarily unavailable file grants are not
+                // reusable cache hits. Preserve the row for later recovery.
+                false
             }
         }
 
