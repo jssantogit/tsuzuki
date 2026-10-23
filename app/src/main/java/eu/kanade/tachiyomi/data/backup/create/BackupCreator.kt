@@ -65,13 +65,8 @@ class BackupCreator(
                 // Get dir of file and create
                 val dir = UniFile.fromUri(context, uri)
 
-                // Delete older backups
-                dir?.listFiles { _, filename -> FILENAME_REGEX.matches(filename) }
-                    .orEmpty()
-                    .sortedByDescending { it.name }
-                    .drop(MAX_AUTO_BACKUPS - 1)
-                    .forEach { it.delete() }
-
+                // Do not delete any known-good backup until the replacement
+                // has passed serialization, write, and validation.
                 // Create new file to place backup
                 dir?.createFile(getFilename())
             } else {
@@ -113,6 +108,34 @@ class BackupCreator(
             backupFileValidator.validate(fileUri)
 
             if (isAutoBackup) {
+                // Retire older backups only after the new archive is verified.
+                // Any listing error conservatively retains existing copies.
+                try {
+                    val candidates = UniFile.fromUri(context, uri)
+                        ?.listFiles { _, filename -> FILENAME_REGEX.matches(filename) }
+                        .orEmpty()
+                    val files = candidates.mapNotNull { candidate ->
+                        candidate.name?.let { name ->
+                            AutomaticBackupRetentionPolicy.BackupFile(
+                                uri = candidate.uri.toString(),
+                                filename = name,
+                            )
+                        }
+                    }
+                    if (files.any { it.uri == fileUri.toString() }) {
+                        val obsolete = AutomaticBackupRetentionPolicy.obsoleteAfterSuccess(
+                            backups = files,
+                            validatedUri = fileUri.toString(),
+                            maximumCopies = MAX_AUTO_BACKUPS,
+                        )
+                        candidates.filter { it.uri.toString() in obsolete }
+                            .forEach { it.delete() }
+                    }
+                } catch (error: Exception) {
+                    logcat(LogPriority.WARN, error) {
+                        "Validated backup saved, but automatic retention could not be completed"
+                    }
+                }
                 backupPreferences.lastAutoBackupTimestamp.set(Clock.System.now().toEpochMilliseconds())
             }
 
