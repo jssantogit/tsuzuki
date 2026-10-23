@@ -38,6 +38,14 @@ The Reader previously used image-type/header recognition for the last local page
 
 The disposable emulator fixture includes a valid PNG, a PNG with a valid header and truncated pixel payload, arbitrary corrupt bytes, and an unavailable stream. The fixture executes **before source-switch UI tests** so a failure in an unrelated UI scenario cannot conceal this regression. Decoding one sampled page is not equivalent to verifying the archive's full CRC, all pages, or hardware-/device-specific image renderers. Full content-integrity and physical-device tests remain **Not run** in the acceptance matrix.
 
+## Read-only progress migration and protocol fence (automated; rollout NOT RUN)
+
+The client now refuses `READING_PROGRESS_V2` both for direct and background sync. The server-side public `sync_apply_mutation_batch` wrapper denies the same domain before mutation idempotency or writes; the unmodified legacy implementation is internal and is no longer executable directly by app roles. The read-only, authenticated `sync_get_progress_protocol()` advertises only schema/epoch 1; the HTTP client decoder refuses unknown future versions and inconsistent capability flags. Neither the server nor the client has an epoch-promotion entry point.
+
+A pure `PreviewCanonicalProgressV2Migration` inspects a v1 remote document against the complete local title inventory and optional stable evidence. It can return old-record-ID to new-record-ID **review pairs**, but it blocks ambiguous volume-number resets, exact numbering guessed from legacy parts, unresolved or forged keys and tombstones. A passing preview is never a write permit. The remote v1 document and all local progress remain unchanged.
+
+The safe migration still requires an account-scoped authoritative server epoch, durable compatibility and device registry, approved frontier/record conversion, a **server-side fence** against old-client v1 writes after cutover, transactional receipts, downgrade behavior and physical mixed-device acceptance. All are **Not implemented / Not run**, independently of whether SQL pgTAP and Kotlin CI gates are green. Technical contract: [canonical-progress-v2-rollout-contract.md](canonical-progress-v2-rollout-contract.md).
+
 ## Offline historical SQLite backup preflight (tooling; acceptance NOT RUN)
 
 A read-only checker is available at `.github/scripts/verify_chapter_migration_43_backup.py`. It checks a **user-supplied, checkpointed pre-43 SQLite database** on an isolated temporary copy, never runs migration SQL against the supplied file, and prints only pass/fail and table/chapter counts. It verifies SQLite integrity, foreign keys, table definitions, unchanged pre-existing row values (including progress, history, downloads, evidence and variants), and NULL v2 fields after migration 43.
