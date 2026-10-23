@@ -146,7 +146,7 @@ class PrepareCanonicalChapterForReaderTest {
 
         fixture.prepare.execute("chapter-1")
             .shouldBeInstanceOf<CanonicalReaderPreparation.Unavailable>()
-        fixture.downloads.value shouldBe artifact
+        fixture.downloads.artifact shouldBe artifact
     }
 
     @Test
