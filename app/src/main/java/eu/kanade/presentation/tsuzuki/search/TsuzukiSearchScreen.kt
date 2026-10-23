@@ -113,12 +113,13 @@ fun TsuzukiSearchScreen(
         val listState = rememberLazyListState()
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().statusBarsPadding().padding(contentPadding),
+            modifier = Modifier.fillMaxSize().statusBarsPadding().padding(contentPadding)
+                .testTag("tsuzuki_search_scroll"),
             contentPadding = PaddingValues(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             item(key = "search_header", contentType = "search_header") {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(Modifier.testTag("tsuzuki_search_header"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     DefaultSkinPageTitle(
                         text = stringResource(MR.strings.tsuzuki_navigation_search),
                         modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp),

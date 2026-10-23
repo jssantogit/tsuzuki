@@ -86,7 +86,7 @@ class CanonicalMetadataSnapshotRepositoryImplTest {
     }
 
     @Test
-    fun `local snapshot observation emits a factual year after details writes with the same title ids`() = runBlocking {
+    fun `local snapshot emits factual year after details writes with unchanged title ids`() = runBlocking<Unit> {
         val initial = CompletableDeferred<Unit>()
         val updated = CompletableDeferred<CanonicalMetadataSnapshot>()
         val job = launch {
