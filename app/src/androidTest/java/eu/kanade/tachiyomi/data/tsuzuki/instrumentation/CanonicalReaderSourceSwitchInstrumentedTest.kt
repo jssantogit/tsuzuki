@@ -279,7 +279,10 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             val reader = awaitActivity(ReaderActivity::class.java)
             awaitReaderPages(reader, fixture.sourceA.name, expectedCount = 10)
             val position = advanceToPage(reader, fixture, 4, "CHAPTER_BOUNDARIES")
-            val progressBefore = runBlocking { fixture.reading.getProgress(fixture.chapter.id) }
+            val progressBefore = awaitValue("persisted canonical progress before boundary keys") {
+                runBlocking { fixture.reading.getProgress(fixture.chapter.id) }
+                    ?.takeIf { it.lastPageRead >= position.toLong() }
+            }
             val historyBefore = runBlocking { fixture.reading.getHistory(fixture.chapter.id) }
             val instrumentation = InstrumentationRegistry.getInstrumentation()
 
