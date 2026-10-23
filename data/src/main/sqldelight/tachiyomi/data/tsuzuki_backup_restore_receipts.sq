@@ -1,0 +1,21 @@
+-- An archive checksum is an import idempotency key, NOT account ownership proof.
+CREATE TABLE tsuzuki_backup_restore_receipts(
+    snapshot_hash TEXT NOT NULL PRIMARY KEY,
+    format_version INTEGER NOT NULL,
+    imported_at INTEGER NOT NULL
+);
+
+getTsuzukiBackupRestoreReceipt:
+SELECT *
+FROM tsuzuki_backup_restore_receipts
+WHERE snapshot_hash = :snapshotHash
+LIMIT 1;
+
+listTsuzukiBackupRestoreReceipts:
+SELECT *
+FROM tsuzuki_backup_restore_receipts
+ORDER BY imported_at DESC;
+
+insertTsuzukiBackupRestoreReceipt:
+INSERT INTO tsuzuki_backup_restore_receipts(snapshot_hash, format_version, imported_at)
+VALUES (:snapshotHash, :formatVersion, :importedAt);
