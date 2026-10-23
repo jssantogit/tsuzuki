@@ -1,10 +1,8 @@
 package tachiyomi.domain.tsuzuki.reader.interactor
 
 import dev.zacsweers.metro.Inject
-import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.orderCanonicalChapters
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
-import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterProgress
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalReadingStart
 import tachiyomi.domain.tsuzuki.reader.repository.CanonicalReadingRepository
 
