@@ -13,16 +13,24 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreProgress
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreSourceMapping
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreVariant
+import eu.kanade.tachiyomi.data.backup.create.CanonicalCoreBackupExporter
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.data.Chapters
 import tachiyomi.data.Database
+import tachiyomi.data.tsuzuki.CanonicalTitleRepositoryImpl
+import tachiyomi.data.tsuzuki.CanonicalLibraryRepositoryImpl
+import tachiyomi.data.tsuzuki.CanonicalChapterRepositoryImpl
+import tachiyomi.data.tsuzuki.CanonicalReadingRepositoryImpl
+import tachiyomi.data.tsuzuki.SourceTitleMappingRepositoryImpl
+import tachiyomi.domain.tsuzuki.sync.service.CanonicalTitleSyncSource
 import tachiyomi.data.DateColumnAdapter
 import tachiyomi.data.History
 import tachiyomi.data.Mangas
@@ -104,6 +112,33 @@ class CanonicalCoreBackupImporterTest {
             .getTsuzukiChapterHistory("chapter-1").awaitAsOne().time_read shouldBe 55L
         database.tsuzuki_backup_restore_receiptsQueries
             .getTsuzukiBackupRestoreReceipt(section.sha256).awaitAsOne().snapshot_hash shouldBe section.sha256
+    }
+
+    @Test
+    fun `canonical export of restored SQLite graph preserves its local-only state`() = runBlocking {
+        importer.restoreCore(section())
+        val titleRepo = CanonicalTitleRepositoryImpl(database)
+        val exporter = CanonicalCoreBackupExporter(
+            titleSource = CanonicalTitleSyncSource { titleRepo.getAllAsFlow().first() },
+            titleRepository = titleRepo,
+            libraryRepository = CanonicalLibraryRepositoryImpl(database),
+            chapterRepository = CanonicalChapterRepositoryImpl(database),
+            sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+            readingRepository = CanonicalReadingRepositoryImpl(database),
+            database = database,
+            json = Json,
+        )
+        val section = exporter.export()
+        section.validate()
+        val restored = Json.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
+        restored.validate()
+
+        restored.titles.single().identityState shouldBe "UNVERIFIED"
+        restored.chapters.single().confirmation shouldBe "PROVISIONAL"
+        restored.sourceMappings.single().id shouldBe "mapping-1"
+        restored.variants.single().sourceChapterId shouldBe "remote-chapter-1"
+        restored.progress.single().lastPageRead shouldBe 7L
+        restored.history.single().totalReadDuration shouldBe 55L
     }
 
     @Test
