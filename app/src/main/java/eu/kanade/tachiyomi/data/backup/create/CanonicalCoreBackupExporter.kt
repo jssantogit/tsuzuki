@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreIdentity
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryEntry
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreProgress
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreSourceMapping
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreVariant
 import kotlinx.coroutines.flow.first
@@ -16,6 +17,7 @@ import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.reader.repository.CanonicalReadingRepository
 import tachiyomi.domain.tsuzuki.repository.CanonicalLibraryRepository
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
+import tachiyomi.domain.tsuzuki.repository.SourceTitleMappingRepository
 import tachiyomi.domain.tsuzuki.sync.service.CanonicalTitleSyncSource
 
 /**
@@ -31,6 +33,7 @@ class CanonicalCoreBackupExporter(
     private val titleRepository: CanonicalTitleRepository,
     private val libraryRepository: CanonicalLibraryRepository,
     private val chapterRepository: CanonicalChapterRepository,
+    private val sourceMappingRepository: SourceTitleMappingRepository,
     private val readingRepository: CanonicalReadingRepository,
     private val json: Json,
 ) {
@@ -43,6 +46,7 @@ class CanonicalCoreBackupExporter(
             titleRepository.getExternalIdentities(title.id)
                 .sortedWith(compareBy({ it.provider }, { it.externalId }))
         }
+        val sourceMappings = sourceMappingRepository.getAll().sortedBy { it.id }
         val chapters = titles.flatMap { title ->
             chapterRepository.getByCanonicalTitleId(title.id).sortedBy { it.id }
         }
@@ -63,6 +67,22 @@ class CanonicalCoreBackupExporter(
             },
             identities = identities.map {
                 BackupCoreIdentity(it.canonicalTitleId, it.provider, it.externalId, it.verified, it.createdAt)
+            },
+            sourceMappings = sourceMappings.map {
+                BackupCoreSourceMapping(
+                    id = it.id,
+                    canonicalTitleId = it.canonicalTitleId,
+                    mihonMangaId = it.mihonMangaId,
+                    sourceId = it.sourceId,
+                    sourceUrl = it.sourceUrl,
+                    language = it.language,
+                    matchConfidence = it.matchConfidence,
+                    verifiedByUser = it.verifiedByUser,
+                    availability = it.availability.name,
+                    preferredOverride = it.preferredOverride,
+                    createdAt = it.createdAt,
+                    updatedAt = it.updatedAt,
+                )
             },
             library = library.map {
                 BackupCoreLibraryEntry(it.canonicalTitleId, it.status.name, it.favorite, it.addedAt, it.updatedAt)
