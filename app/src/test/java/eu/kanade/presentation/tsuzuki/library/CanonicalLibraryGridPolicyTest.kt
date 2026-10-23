@@ -11,6 +11,8 @@ class CanonicalLibraryGridPolicyTest {
         val phoneWidth = 360.dp
         val phoneColumns = canonicalLibraryGridColumnCount(phoneWidth)
         phoneColumns shouldBe 3
+        canonicalLibraryGridColumnCount(320.dp) shouldBe 3
+        canonicalLibraryGridColumnCount(300.dp) shouldBe 2
         val phoneCellWidth = (phoneWidth - 32.dp - 24.dp) / phoneColumns
         (phoneCellWidth >= 101.dp) shouldBe true
         (phoneCellWidth < 102.dp) shouldBe true

@@ -680,6 +680,7 @@ private fun CanonicalLibraryList(
 }
 
 internal fun canonicalLibraryGridColumnCount(width: androidx.compose.ui.unit.Dp): Int {
+    if (width >= 320.dp && width < 420.dp) return 3
     val usableWidth = (width - 32.dp).coerceAtLeast(0.dp)
     return ((usableWidth + 12.dp) / (96.dp + 12.dp)).toInt().coerceAtLeast(1)
 }
