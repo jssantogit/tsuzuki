@@ -438,6 +438,19 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
+    fun `same category name with conflicting original identity cannot merge during restore`() = runBlocking {
+        val base = coreWithCollectionsAndBindings()
+        val broken = base.copy(
+            libraryCategories = listOf(
+                BackupCoreLibraryCategory("title-1", "Read", 1, 0, sourceCategoryId = 12),
+                BackupCoreLibraryCategory("title-1", "Read", 2, 0, sourceCategoryId = 13),
+            ),
+        )
+        shouldThrow<IllegalArgumentException> { importer.restoreCore(coreSection(broken)) }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+    }
+
+    @Test
     fun `ambiguous existing categories abort without importing canonical records`() = runBlocking {
         database.categoriesQueries.insert(name = "Favorites", order = 1, flags = 0)
         database.categoriesQueries.insert(name = "Favorites", order = 2, flags = 0)
