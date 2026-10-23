@@ -266,6 +266,35 @@ class CanonicalCoreBackupImporter(
                     updatedAt = it.updatedAt,
                 )
             }
+            // The portable archive never reuses device-local category row IDs.
+            // Reconcile by unique name only when order and flags match exactly;
+            // incompatible/ambiguous existing rows are a hard rollback.
+            val categoryIds = mutableMapOf<String, Long>()
+            for (membership in core.libraryCategories) {
+                if (membership.name !in categoryIds) {
+                    var matches = database.categoriesQueries.getCategories()
+                        .awaitAsList().filter { it.name == membership.name }
+                    check(matches.size <= 1) { "Ambiguous category name during restore" }
+                    if (matches.isEmpty()) {
+                        database.categoriesQueries.insert(
+                            name = membership.name,
+                            order = membership.order,
+                            flags = membership.flags,
+                        )
+                        matches = database.categoriesQueries.getCategories()
+                            .awaitAsList().filter { it.name == membership.name }
+                    }
+                    check(matches.size == 1) { "Cannot resolve restored category" }
+                    check(matches.single().order == membership.order &&
+                        matches.single().flags == membership.flags
+                    ) { "Existing category has incompatible order or flags" }
+                    categoryIds[membership.name] = matches.single().id
+                }
+                database.tsuzuki_library_categoriesQueries.insertTsuzukiLibraryCategory(
+                    canonicalTitleId = membership.canonicalTitleId,
+                    categoryId = categoryIds.getValue(membership.name),
+                )
+            }
             core.contentPreferences.forEach {
                 database.tsuzuki_content_preferencesQueries.upsertTsuzukiContentPreference(
                     canonicalTitleId = it.canonicalTitleId,
