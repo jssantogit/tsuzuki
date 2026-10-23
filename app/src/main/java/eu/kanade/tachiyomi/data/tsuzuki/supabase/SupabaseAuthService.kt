@@ -35,7 +35,12 @@ class SupabaseAuthService(
             url = endpointWithRedirect("auth/v1/signup", redirectTo),
             body = json.encodeToString(
                 CredentialsRequest.serializer(),
-                CredentialsRequest(email = email, password = password, codeChallenge = codeChallenge, codeChallengeMethod = "s256"),
+                CredentialsRequest(
+                    email = email,
+                    password = password,
+                    codeChallenge = codeChallenge,
+                    codeChallengeMethod = "s256",
+                ),
             ),
         )
 
