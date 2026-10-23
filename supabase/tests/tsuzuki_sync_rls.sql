@@ -194,14 +194,14 @@ select set_config('request.jwt.claim.sub', '', true);
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 
 select throws_ok(
-    $select public.sync_get_cursor('LIBRARY')$,
+    $$select public.sync_get_cursor('LIBRARY')$$,
     '42501',
     null,
     'anonymous callers cannot execute sync RPCs'
 );
 
 select throws_ok(
-    $select public.sync_get_progress_protocol()$,
+    $$select public.sync_get_progress_protocol()$$,
     '42501',
     null,
     'anonymous callers cannot discover an account progress protocol'
