@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.tsuzuki.supabase
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.security.MessageDigest
@@ -89,7 +90,10 @@ class PersistentAuthCallbackRequestStore(
         val file = File(directory, FILE_NAME)
         if (!file.exists()) return emptyList()
         return try {
-            val records = json.decodeFromString<List<PendingRequest>>(file.readText())
+            val records = json.decodeFromString(
+                ListSerializer(PendingRequest.serializer()),
+                file.readText(),
+            )
             records.takeIf { items ->
                 items.size <= MAX_PENDING_REQUESTS &&
                     items.all {
@@ -110,7 +114,9 @@ class PersistentAuthCallbackRequestStore(
         val file = File(directory, FILE_NAME)
         val temp = File(directory, "$FILE_NAME.tmp")
         try {
-            temp.writeText(json.encodeToString(entries))
+            temp.writeText(
+                json.encodeToString(ListSerializer(PendingRequest.serializer()), entries),
+            )
             check(temp.renameTo(file)) { "Could not persist callback request ledger" }
         } finally {
             temp.delete()
