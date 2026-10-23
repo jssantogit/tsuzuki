@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreContinueReadingState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreIdentity
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryEntry
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreList
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreProgress
@@ -109,6 +110,8 @@ class CanonicalCoreBackupExporter(
             database.tsuzuki_title_name_observationsQueries
                 .getTsuzukiTitleNameObservationsByTitle(title.id).awaitAsList()
         }
+        val libraryCategories = database.tsuzuki_library_categoriesQueries
+            .getAllTsuzukiLibraryCategories().awaitAsList()
         val sourceLanguages = database.tsuzuki_source_preferencesQueries
             .getConfiguredLanguages().awaitAsList()
         val sourcePreferences = sourceLanguages.flatMap { language ->
@@ -264,6 +267,9 @@ class CanonicalCoreBackupExporter(
             },
             sourcePreferences = sourcePreferences.map {
                 BackupCoreSourcePreference(it.language, it.source_id, it.position)
+            },
+            libraryCategories = libraryCategories.map {
+                BackupCoreLibraryCategory(it.canonical_title_id, it.name, it.category_order, it.flags)
             },
             continueReadingStates = continueReadingStates.map {
                 BackupCoreContinueReadingState(it.canonical_title_id, it.hidden_at)
