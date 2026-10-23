@@ -29,6 +29,7 @@ data class BackupCanonicalCore(
     val chapterOverrides: List<BackupCoreChapterOverride> = emptyList(),
     val contentPreferences: List<BackupCoreContentPreference> = emptyList(),
     val sourcePreferences: List<BackupCoreSourcePreference> = emptyList(),
+    val libraryCategories: List<BackupCoreLibraryCategory> = emptyList(),
     val continueReadingStates: List<BackupCoreContinueReadingState> = emptyList(),
     val chapterUpdateStates: List<BackupCoreChapterUpdateState> = emptyList(),
     val titleArtwork: List<BackupCoreTitleArtwork> = emptyList(),
@@ -46,6 +47,9 @@ data class BackupCanonicalCore(
         require(chapterOverrides.isUniqueBy { it.id }) { "Duplicate chapter override" }
         require(providerBindings.isUniqueBy { Triple(it.providerId, it.facetId, it.externalWorkId) }) {
             "Duplicate provider binding external identity"
+        }
+        require(libraryCategories.isUniqueBy { it.canonicalTitleId to it.name }) {
+            "Ambiguous category names for the same title"
         }
         require(contentPreferences.isUniqueBy { it.canonicalTitleId }) { "Duplicate content preference" }
         require(sourcePreferences.isUniqueBy { it.language to it.sourceId }) { "Duplicate source priority" }
@@ -144,6 +148,9 @@ data class BackupCanonicalCore(
         require(contentPreferences.all { it.canonicalTitleId in titleIds }) {
             "Content preference refers to absent title"
         }
+        require(libraryCategories.all {
+            it.canonicalTitleId in titleIds && it.name.isNotBlank()
+        }) { "Invalid library category reference" }
         require(sourcePreferences.all { it.language.isNotBlank() && it.position >= 0 }) {
             "Invalid source preference"
         }
@@ -314,6 +321,14 @@ data class BackupCoreSourcePreference(
     val language: String,
     val sourceId: Long,
     val position: Long,
+)
+
+@Serializable
+data class BackupCoreLibraryCategory(
+    val canonicalTitleId: String,
+    val name: String,
+    val order: Long,
+    val flags: Long,
 )
 
 @Serializable
