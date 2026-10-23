@@ -39,6 +39,39 @@ class SupabaseSyncHttpTransport(
     },
 ) : SupabaseSyncTransport, CanonicalIdentityClaimTransport {
 
+    /**
+     * Read-only protocol discovery. It never enables v2 transport or changes
+     * an account epoch. A future / contradictory server response fails closed.
+     */
+    suspend fun getProgressProtocol(): SyncTransportResult<LegacyProgressProtocol> {
+        val response = executeAuthenticated(
+            request = rpcRequest("sync_get_progress_protocol", buildJsonObject {}),
+        ) { raw ->
+            json.decodeFromString(ProgressProtocolResponse.serializer(), raw)
+        }
+        return when (response) {
+            is SyncTransportResult.Failure -> response
+            is SyncTransportResult.Success -> {
+                val protocol = response.value
+                if (
+                    protocol.schemaVersion != 1 ||
+                    protocol.protocolEpoch != 1L ||
+                    protocol.activeDomain != SyncDocumentKind.READING_PROGRESS.name ||
+                    protocol.exactProgressEnabled ||
+                    protocol.migrationReady
+                ) {
+                    SyncTransportResult.Failure(
+                        SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA),
+                    )
+                } else {
+                    SyncTransportResult.Success(
+                        LegacyProgressProtocol(protocolEpoch = protocol.protocolEpoch),
+                    )
+                }
+            }
+        }
+    }
+
     override suspend fun pullDelta(
         documentKind: SyncDocumentKind,
         sinceEventId: Long,
@@ -341,6 +374,24 @@ class SupabaseSyncHttpTransport(
         val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
 }
+
+
+/**
+ * The only protocol a client may acknowledge while remote migration, client
+ * capabilities and downgrade fencing are unavailable.
+ */
+data class LegacyProgressProtocol(
+    val protocolEpoch: Long,
+)
+
+@Serializable
+private data class ProgressProtocolResponse(
+    val schemaVersion: Int,
+    val protocolEpoch: Long,
+    val activeDomain: String,
+    val exactProgressEnabled: Boolean,
+    val migrationReady: Boolean,
+)
 
 @Serializable
 private data class MutationConflictResponse(
