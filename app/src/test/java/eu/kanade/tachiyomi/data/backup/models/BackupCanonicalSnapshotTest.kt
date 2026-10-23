@@ -46,6 +46,13 @@ class BackupCanonicalSnapshotTest {
     }
 
     @Test
+    fun `checksum alone does not make malformed JSON a valid backup section`() {
+        runCatching {
+            BackupCanonicalSection.fromJson("tsuzuki.core.v1", "{malformed json")
+        }.isFailure shouldBe true
+    }
+
+    @Test
     fun `unsupported snapshot version and duplicate sections are rejected`() {
         val section = BackupCanonicalSection.fromJson("tsuzuki.library.v1", "[]")
 
