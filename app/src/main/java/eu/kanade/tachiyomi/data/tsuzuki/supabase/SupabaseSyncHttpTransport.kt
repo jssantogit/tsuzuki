@@ -72,6 +72,42 @@ class SupabaseSyncHttpTransport(
         }
     }
 
+    /**
+     * Authenticated presence for an existing v1 client. It is deliberately
+     * separate from normal sync and cannot authorize a v2 migration.
+     * Do not call from production sync until the backend migration is deployed.
+     */
+    suspend fun registerLegacyProgressDevice(clientId: String): SyncTransportResult<LegacyProgressDeviceLease> {
+        require(clientId.isNotBlank()) { "Sync client identity must not be blank" }
+        val response = executeAuthenticated(
+            request = rpcRequest(
+                "sync_register_progress_device",
+                buildJsonObject { put("p_client_id", JsonPrimitive(clientId)) },
+            ),
+        ) { raw ->
+            json.decodeFromString(ProgressDeviceRegistrationResponse.serializer(), raw)
+        }
+        return when (response) {
+            is SyncTransportResult.Failure -> response
+            is SyncTransportResult.Success -> {
+                val lease = response.value
+                if (
+                    lease.schemaVersion != 1 ||
+                    lease.protocolEpoch != 1L ||
+                    lease.leaseExpiresAt.isBlank() ||
+                    lease.exactProgressEnabled ||
+                    lease.migrationReady
+                ) {
+                    SyncTransportResult.Failure(SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA))
+                } else {
+                    SyncTransportResult.Success(
+                        LegacyProgressDeviceLease(leaseExpiresAt = lease.leaseExpiresAt),
+                    )
+                }
+            }
+        }
+    }
+
     override suspend fun pullDelta(
         documentKind: SyncDocumentKind,
         sinceEventId: Long,
@@ -404,6 +440,20 @@ private data class ProgressProtocolResponse(
     val schemaVersion: Int,
     val protocolEpoch: Long,
     val activeDomain: String,
+    val exactProgressEnabled: Boolean,
+    val migrationReady: Boolean,
+)
+
+/** Device-presence receipt only; never a protocol activation credential. */
+data class LegacyProgressDeviceLease(
+    val leaseExpiresAt: String,
+)
+
+@Serializable
+private data class ProgressDeviceRegistrationResponse(
+    val schemaVersion: Int,
+    val protocolEpoch: Long,
+    val leaseExpiresAt: String,
     val exactProgressEnabled: Boolean,
     val migrationReady: Boolean,
 )

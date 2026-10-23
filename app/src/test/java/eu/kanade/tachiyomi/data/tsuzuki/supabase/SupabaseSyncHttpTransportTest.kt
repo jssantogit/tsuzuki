@@ -217,6 +217,73 @@ class SupabaseSyncHttpTransportTest {
     }
 
     @Test
+    fun `legacy device registration records a safe heartbeat without enabling v2`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """{"schemaVersion":1,"protocolEpoch":1,"leaseExpiresAt":"2026-11-22T12:00:00Z","exactProgressEnabled":false,"migrationReady":false}""",
+                )
+                .build(),
+        )
+
+        val result = transport().registerLegacyProgressDevice("22000000-0000-0000-0000-000000000001")
+
+        (result as SyncTransportResult.Success).value.leaseExpiresAt shouldBe "2026-11-22T12:00:00Z"
+        val request = server.takeRequest()
+        request.url.encodedPath shouldBe "/rest/v1/rpc/sync_register_progress_device"
+        request.headers["Authorization"] shouldBe "Bearer access-token"
+        request.body!!.utf8().contains(
+            "\"p_client_id\":\"22000000-0000-0000-0000-000000000001\"",
+        ) shouldBe true
+    }
+
+    @Test
+    fun `device heartbeat rejects future epoch lease even when server says ready`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """{"schemaVersion":2,"protocolEpoch":2,"leaseExpiresAt":"2026-11-22T12:00:00Z","exactProgressEnabled":true,"migrationReady":true}""",
+                )
+                .build(),
+        )
+
+        val result = transport().registerLegacyProgressDevice("22000000-0000-0000-0000-000000000002")
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+    }
+
+    @Test
+    fun `device heartbeat refusing a changed epoch yields unsupported schema`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(400)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """{"code":"0A000","message":"legacy device registration is disabled at this protocol epoch"}""",
+                )
+                .build(),
+        )
+
+        val result = transport().registerLegacyProgressDevice("22000000-0000-0000-0000-000000000003")
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+    }
+
+    @Test
+    fun `logged-out device heartbeat cannot call remote registration`() = runTest {
+        val result = transport(
+            account = FakeAccountRepository(AccountState.LoggedOut, token = null),
+        ).registerLegacyProgressDevice("22000000-0000-0000-0000-000000000004")
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.AUTHORIZATION_REQUIRED
+        server.requestCount shouldBe 0
+    }
+
+    @Test
     fun `push converts local mutation paths and returns mutation scoped conflicts`() = runTest {
         server.enqueue(
             MockResponse.Builder()
