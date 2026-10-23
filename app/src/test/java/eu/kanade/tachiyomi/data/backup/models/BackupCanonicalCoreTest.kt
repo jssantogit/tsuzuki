@@ -42,6 +42,24 @@ class BackupCanonicalCoreTest {
     }
 
     @Test
+    fun `variant cannot be restored using a source mapping from a different title`() {
+        val original = core()
+        val wrongTitle = BackupCoreTitle("title-2", "Other", "UNVERIFIED", 1, 2)
+        val wrongMapping = original.sourceMappings.single().copy(
+            id = "mapping-2",
+            canonicalTitleId = "title-2",
+            sourceId = 99,
+        )
+        runCatching {
+            original.copy(
+                titles = original.titles + wrongTitle,
+                sourceMappings = original.sourceMappings + wrongMapping,
+                variants = original.variants.map { it.copy(sourceMappingId = "mapping-2") },
+            ).validate()
+        }.isFailure shouldBe true
+    }
+
+    @Test
     fun `unknown schema version is not silently imported`() {
         runCatching { core().copy(schemaVersion = 200).validate() }.isFailure shouldBe true
     }
