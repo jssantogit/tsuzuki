@@ -19,7 +19,7 @@ fun metadataStartYear(startDate: String?): String? {
     if (dayText.any { it !in '0'..'9' }) return null
     val day = dayText.toIntOrNull() ?: return null
     val maxDay = when (month) {
-        2 -> if (year % 400 == 0 || year % 4 == 0 && year % 100 != 0) 29 else 28
+        2 -> if (year % 400 == 0 || (year % 4 == 0 && year % 100 != 0)) 29 else 28
         4, 6, 9, 11 -> 30
         else -> 31
     }

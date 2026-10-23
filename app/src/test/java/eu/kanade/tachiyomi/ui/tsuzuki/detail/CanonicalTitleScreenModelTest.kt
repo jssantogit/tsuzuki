@@ -1291,7 +1291,7 @@ class CanonicalTitleScreenModelTest {
     }
 
     private fun emptyMetadataResolver(): ResolveCanonicalMetadata = mockk {
-        coEvery { cached(any()) } returns null
+        coEvery { cached(any<String>()) } returns null
         coEvery { execute(any(), any()) } returns Result.success(ResolvedMetadata())
     }
 

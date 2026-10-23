@@ -244,7 +244,7 @@ class CanonicalLibraryScreenModelTest {
         advanceUntilIdle()
 
         val expanded = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items
-        expanded.single { it.id == "two" }.startYear shouldBe
+        expanded.single { it.canonicalTitleId == "two" }.startYear shouldBe
             null
         requestedBatches shouldBe
             listOf(listOf("one"), listOf("one", "two"))
