@@ -274,8 +274,62 @@ class CanonicalLibraryScreenModelTest {
                 .items.single { it.canonicalTitleId == "one" }.startYear shouldBe null
         }
         io.mockk.verify(exactly = 2) { metadataResolver.observeCached(any()) }
-        coVerify(exactly = 0) { metadataResolver.execute(any(), any()) }
+        coVerify(atMost = 1) { metadataResolver.execute("one", any()) }
         coVerify(exactly = 0) { metadataResolver.cached(any<Collection<String>>()) }
+    }
+
+    @Test
+    fun `library enriches absent years without opening Details and without repeated requests`() = runTest(
+        testDispatcher,
+    ) {
+        val repo = FakeCanonicalLibraryRepository()
+        val metadataUpdates = MutableStateFlow<Map<String, ResolvedMetadata>>(emptyMap())
+        val metadataResolver = mockk<ResolveCanonicalMetadata>()
+        every { metadataResolver.observeCached(any()) } answers {
+            val ids = firstArg<Collection<String>>().toSet()
+            metadataUpdates.map { values -> values.filterKeys(ids::contains) }
+        }
+        val calls = mutableListOf<String>()
+        coEvery { metadataResolver.execute(any(), any()) } coAnswers {
+            val id = firstArg<String>()
+            calls += id
+            val resolved = ResolvedMetadata(
+                startDate = ProvenancedMetadata(
+                    if (id == "one") "2020-06-12" else "2019-03-01",
+                    IntegrationId("mal"),
+                    "mal-$id",
+                    "MAL",
+                ),
+            )
+            metadataUpdates.value = metadataUpdates.value + (id to resolved)
+            Result.success(resolved)
+        }
+        val model = CanonicalLibraryScreenModel(
+            observeCanonicalLibrary = ObserveCanonicalLibrary(repo),
+            setCanonicalLibraryStatus = SetCanonicalLibraryStatus(repo),
+            removeUnifiedLibraryTitle = RemoveUnifiedLibraryTitle(
+                getFavoriteMihonMangaIds = { emptyList() },
+                setMihonFavorite = { _, _ -> true },
+                removeCanonical = repo::remove,
+            ),
+            migrateMihonLibraryToCanonical = FakeMigrateMihonLibraryToCanonical(),
+            resolveCanonicalReadingStart = FakeCanonicalReadingStartResolver(),
+            canonicalReadingRepository = FakeCanonicalReadingRepository(),
+            resolveCanonicalMetadata = metadataResolver,
+        )
+        repo.emitItems(listOf(canonicalItem("one", "Frieren"), canonicalItem("two", "Spy x Family")))
+        advanceUntilIdle()
+
+        val cards = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items
+        cards.associate { it.canonicalTitleId to it.startYear } shouldBe
+            mapOf("one" to "2020", "two" to "2019")
+        calls shouldBe listOf("one", "two")
+
+        model.search("Spy")
+        advanceUntilIdle()
+        model.search(null)
+        advanceUntilIdle()
+        calls shouldBe listOf("one", "two")
     }
 
     @Test
