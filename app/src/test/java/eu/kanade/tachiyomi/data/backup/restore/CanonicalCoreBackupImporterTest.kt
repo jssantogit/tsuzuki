@@ -100,7 +100,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `clean restore keeps exact chapter history and remains idempotent after a local edit`() = runBlocking {
+    fun `clean restore keeps exact chapter history and remains idempotent after a local edit`(): Unit = runBlocking {
         val section = section()
         importer.restoreCore(section)
 
@@ -129,7 +129,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `canonical export of restored SQLite graph preserves its local-only state`() = runBlocking {
+    fun `canonical export of restored SQLite graph preserves its local-only state`(): Unit = runBlocking {
         importer.restoreCore(section())
         val titleRepo = CanonicalTitleRepositoryImpl(database)
         val exporter = CanonicalCoreBackupExporter(
@@ -156,7 +156,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `foreign device operational Mihon IDs are not rebound to unrelated local rows`() = runBlocking {
+    fun `foreign device operational Mihon IDs are not rebound to unrelated local rows`(): Unit = runBlocking {
         importer.restoreCore(section())
 
         database.tsuzuki_source_mappingsQueries
@@ -170,7 +170,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `collection folders lists and provider bindings survive SQLite export restore`() = runBlocking {
+    fun `collection folders lists and provider bindings survive SQLite export restore`(): Unit = runBlocking {
         importer.restoreCore(sectionWithCollectionsAndBindings())
         val restoredCollection = database.tsuzuki_collectionsQueries
             .getAllTsuzukiCollections().awaitAsList().single()
@@ -211,7 +211,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `collection cycle or list in another folder fails before database writes`() = runBlocking {
+    fun `collection cycle or list in another folder fails before database writes`(): Unit = runBlocking {
         val good = coreWithCollectionsAndBindings()
         val cycle = good.copy(
             folders = good.folders.map { it.copy(parentFolderId = "folder-1") },
@@ -229,7 +229,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `child folder is restored after parent even when backup is out of order`() = runBlocking {
+    fun `child folder is restored after parent even when backup is out of order`(): Unit = runBlocking {
         val core = coreWithCollectionsAndBindings()
         val child = core.folders.single().copy(
             id = "folder-child",
@@ -245,7 +245,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `existing collections cannot be silently overwritten by a canonical restore`() = runBlocking {
+    fun `existing collections cannot be silently overwritten by a canonical restore`(): Unit = runBlocking {
         database.tsuzuki_collectionsQueries.upsertTsuzukiCollection(
             id = "existing",
             title = "Personal",
@@ -267,7 +267,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `reader preference and durable chapter override survive export restore`() = runBlocking {
+    fun `reader preference and durable chapter override survive export restore`(): Unit = runBlocking {
         val core = coreWithCollectionsAndBindings().copy(
             readerPreferences = listOf(
                 BackupCoreReaderPreference("title-1", true, 50),
@@ -315,7 +315,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `unknown chapter override target is rejected before database mutation`() = runBlocking {
+    fun `unknown chapter override target is rejected before database mutation`(): Unit = runBlocking {
         val core = coreWithCollectionsAndBindings().copy(
             chapterOverrides = listOf(
                 BackupCoreChapterOverride(
@@ -340,7 +340,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `source and content preferences and title observations preserve the original values`() = runBlocking {
+    fun `source and content preferences and title observations preserve the original values`(): Unit = runBlocking {
         val input = coreWithCollectionsAndBindings().copy(
             contentPreferences = listOf(
                 BackupCoreContentPreference("title-1", "provider-a", "pt-BR", 10),
@@ -388,7 +388,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `conflicting source preference order or orphan chapter update prevents all writes`() = runBlocking {
+    fun `conflicting source preference order or orphan chapter update prevents all writes`(): Unit = runBlocking {
         val input = coreWithCollectionsAndBindings()
         val duplicateOrder = input.copy(
             sourcePreferences = listOf(
@@ -407,7 +407,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `library categories restore by stable attributes rather than source device row ID`() = runBlocking {
+    fun `library categories restore by stable attributes rather than source device row ID`(): Unit = runBlocking {
         val core = coreWithCollectionsAndBindings().copy(
             libraryCategories = listOf(
                 BackupCoreLibraryCategory("title-1", "Favorites", 5, 7),
@@ -439,7 +439,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `same category name with conflicting original identity cannot merge during restore`() = runBlocking {
+    fun `same category name with conflicting original identity cannot merge during restore`(): Unit = runBlocking {
         val base = coreWithCollectionsAndBindings()
         val broken = base.copy(
             titles = base.titles + BackupCoreTitle("title-2", "Other", "SOURCE_ONLY", 1, 2),
@@ -453,7 +453,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `default Mihon category maps only to the reserved system row zero`() = runBlocking {
+    fun `default Mihon category maps only to the reserved system row zero`(): Unit = runBlocking {
         val core = coreWithCollectionsAndBindings().copy(
             libraryCategories = listOf(
                 BackupCoreLibraryCategory("title-1", "", -1, 0, sourceCategoryId = 0),
@@ -465,7 +465,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `integration settings preserve toggles but never export tokens or nested secrets`() = runBlocking {
+    fun `integration settings preserve toggles but never export tokens or nested secrets`(): Unit = runBlocking {
         importer.restoreCore(section())
         database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
             integrationId = "kitsu",
@@ -493,7 +493,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `existing integration settings cannot be overwritten by a foreign archive`() = runBlocking {
+    fun `existing integration settings cannot be overwritten by a foreign archive`(): Unit = runBlocking {
         database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
             integrationId = "kitsu",
             enabled = false,
@@ -518,7 +518,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `unrelated local integration state blocks importing another library`() = runBlocking {
+    fun `unrelated local integration state blocks importing another library`(): Unit = runBlocking {
         database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
             integrationId = "external-provider",
             enabled = true,
@@ -532,7 +532,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `identical preexisting integration config is reused without rewriting its timestamp`() = runBlocking {
+    fun `identical preexisting integration config is reused without rewriting its timestamp`(): Unit = runBlocking {
         database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
             integrationId = "kitsu",
             enabled = true,
@@ -551,7 +551,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `crafted backup cannot restore authentication credentials in integration config`() = runBlocking {
+    fun `crafted backup cannot restore authentication credentials in integration config`(): Unit = runBlocking {
         val core = coreWithCollectionsAndBindings().copy(
             integrationSettings = listOf(
                 BackupCoreIntegrationSetting("kitsu", true, """{"access_token":"stolen"}""", 30),
@@ -562,7 +562,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `unknown provider runtime payload blocks an incomplete portable export`() = runBlocking {
+    fun `unknown provider runtime payload blocks an incomplete portable export`(): Unit = runBlocking {
         importer.restoreCore(section())
         database.tsuzuki_content_bindingsQueries.upsertTsuzukiContentBinding(
             id = "provider-runtime-1",
@@ -591,7 +591,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `ambiguous existing categories abort without importing canonical records`() = runBlocking {
+    fun `ambiguous existing categories abort without importing canonical records`(): Unit = runBlocking {
         database.categoriesQueries.insert(name = "Favorites", order = 1, flags = 0)
         database.categoriesQueries.insert(name = "Favorites", order = 2, flags = 0)
         val core = coreWithCollectionsAndBindings().copy(
@@ -604,7 +604,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `colliding provider binding external identities are rejected`() = runBlocking {
+    fun `colliding provider binding external identities are rejected`(): Unit = runBlocking {
         val good = coreWithCollectionsAndBindings()
         val conflicting = good.copy(
             providerBindings = good.providerBindings + good.providerBindings.single().copy(id = "binding-2"),
@@ -614,7 +614,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `injected failure before receipt rolls back all canonical writes`() = runBlocking {
+    fun `injected failure before receipt rolls back all canonical writes`(): Unit = runBlocking {
         shouldThrow<IllegalStateException> {
             importer.restoreCore(section()) { error("forced crash before commit") }
         }
@@ -625,7 +625,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `existing unrelated canonical library refuses silent import and leaves data unchanged`() = runBlocking {
+    fun `existing unrelated canonical library refuses silent import and leaves data unchanged`(): Unit = runBlocking {
         database.tsuzuki_titlesQueries.insertTsuzukiTitle(
             id = "original",
             displayTitle = "Owned locally",
@@ -641,7 +641,7 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
-    fun `malformed core never begins a partial import`() = runBlocking {
+    fun `malformed core never begins a partial import`(): Unit = runBlocking {
         val invalid = BackupCanonicalSection.fromJson(
             BackupCanonicalCore.SECTION_KEY,
             Json.encodeToString(
