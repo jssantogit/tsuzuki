@@ -65,9 +65,11 @@ class PersistentAuthCallbackRequestStore(
         }
         if (matchingIndex < 0) return@synchronized false
         try {
-            persist(entries.filterIndexed { index, record ->
-                index != matchingIndex && record.isValidAt(now)
-            })
+            persist(
+                entries.filterIndexed { index, record ->
+                    index != matchingIndex && record.isValidAt(now)
+                },
+            )
             true
         } catch (_: Exception) {
             // A callback is not authorized unless consumption is durable.
