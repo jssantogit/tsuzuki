@@ -9,6 +9,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.account.model.AccountState
+import java.nio.file.Files
 
 class SupabaseAccountRepositoryTest {
 
@@ -123,6 +124,7 @@ class SupabaseAccountRepositoryTest {
                 configuration = config,
             ),
             sessionStore = store,
+            callbackRequests = freshCallbackStore(),
             nowEpochSeconds = { 100 },
         )
 
@@ -173,7 +175,10 @@ class SupabaseAccountRepositoryTest {
         server.takeRequest().url.encodedPath shouldBe "/auth/v1/recover"
     }
 
-    private fun repository(store: SupabaseSessionStore): SupabaseAccountRepository {
+    private fun repository(
+        store: SupabaseSessionStore,
+        callbacks: AuthCallbackRequestStore = freshCallbackStore(),
+    ): SupabaseAccountRepository {
         val config = SupabaseConfiguration(
             url = server.url("/").toString().removeSuffix("/"),
             publishableKey = "publishable-test-key",
@@ -185,8 +190,69 @@ class SupabaseAccountRepositoryTest {
         return SupabaseAccountRepository(
             authService = service,
             sessionStore = store,
+            callbackRequests = callbacks,
         )
     }
+
+    @Test
+    fun `signup redirects contain a valid pending request nonce`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .body("""{"user":{"id":"user-1","email":"reader@example.com"},"session":null}""")
+                .build(),
+        )
+        val nonce = "unique-signup-nonce-1234567890"
+        val callbackStore = PersistentAuthCallbackRequestStore(
+            directory = Files.createTempDirectory("tsuzuki-auth-flow").toFile(),
+            nonceSource = { nonce },
+        )
+
+        repository(InMemorySessionStore(), callbackStore)
+            .register("reader@example.com", "password").getOrThrow()
+
+        val redirectTo = server.takeRequest().url.queryParameter("redirect_to")
+        redirectTo shouldBe "tsuzuki://auth?tsz_state=$nonce"
+        callbackStore.consume("signup", nonce) shouldBe true
+        callbackStore.consume("signup", nonce) shouldBe false
+    }
+
+    @Test
+    fun `failed signup never leaves a callback request authorized`() = runTest {
+        server.enqueue(MockResponse.Builder().code(400).body("{}").build())
+        val nonce = "failed-signup-nonce-123456789"
+        val callbackStore = PersistentAuthCallbackRequestStore(
+            directory = Files.createTempDirectory("tsuzuki-auth-failed").toFile(),
+            nonceSource = { nonce },
+        )
+
+        repository(InMemorySessionStore(), callbackStore)
+            .register("reader@example.com", "password").isFailure shouldBe true
+
+        callbackStore.consume("signup", nonce) shouldBe false
+    }
+
+    @Test
+    fun `password recovery callback is bound only to recovery request`() = runTest {
+        server.enqueue(MockResponse.Builder().code(200).body("{}").build())
+        val nonce = "unique-recovery-nonce-123456789"
+        val callbackStore = PersistentAuthCallbackRequestStore(
+            directory = Files.createTempDirectory("tsuzuki-auth-recovery").toFile(),
+            nonceSource = { nonce },
+        )
+
+        repository(InMemorySessionStore(), callbackStore)
+            .sendPasswordRecovery("reader@example.com").getOrThrow()
+
+        server.takeRequest().url.queryParameter("redirect_to") shouldBe
+            "tsuzuki://auth?tsz_state=$nonce"
+        callbackStore.consume("signup", nonce) shouldBe false
+        callbackStore.consume("recovery", nonce) shouldBe true
+    }
+
+    private fun freshCallbackStore() = PersistentAuthCallbackRequestStore(
+        directory = Files.createTempDirectory("tsuzuki-auth-repository").toFile(),
+    )
 
     private fun sessionResponse(
         accessToken: String = "access-1",
