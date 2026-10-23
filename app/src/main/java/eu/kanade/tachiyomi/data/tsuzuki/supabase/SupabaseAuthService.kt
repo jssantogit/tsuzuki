@@ -18,9 +18,16 @@ class SupabaseAuthService(
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000L },
 ) {
 
-    suspend fun register(email: String, password: String): AuthResult =
+    fun callbackRedirectUrl(nonce: String): String {
+        require(nonce.matches(Regex("[A-Za-z0-9_-]{16,128}"))) {
+            "Callback state must be a high-entropy URL-safe nonce"
+        }
+        return configuration.callbackUrl + "?tsz_state=$nonce"
+    }
+
+    suspend fun register(email: String, password: String, redirectTo: String): AuthResult =
         postAuth(
-            url = endpointWithRedirect("auth/v1/signup"),
+            url = endpointWithRedirect("auth/v1/signup", redirectTo),
             body = json.encodeToString(
                 CredentialsRequest.serializer(),
                 CredentialsRequest(email = email, password = password),
@@ -45,9 +52,9 @@ class SupabaseAuthService(
             ),
         )
 
-    suspend fun sendPasswordRecovery(email: String) {
+    suspend fun sendPasswordRecovery(email: String, redirectTo: String) {
         postRaw(
-            url = endpointWithRedirect("auth/v1/recover"),
+            url = endpointWithRedirect("auth/v1/recover", redirectTo),
             body = json.encodeToString(RecoveryRequest.serializer(), RecoveryRequest(email)),
         ).use { response ->
             check(response.isSuccessful) {
@@ -160,11 +167,11 @@ class SupabaseAuthService(
                 .build(),
         )
 
-    private fun endpointWithRedirect(path: String): String =
+    private fun endpointWithRedirect(path: String, redirectTo: String): String =
         configuration.endpoint(path)
             .toHttpUrl()
             .newBuilder()
-            .addQueryParameter("redirect_to", configuration.callbackUrl)
+            .addQueryParameter("redirect_to", redirectTo)
             .build()
             .toString()
 
