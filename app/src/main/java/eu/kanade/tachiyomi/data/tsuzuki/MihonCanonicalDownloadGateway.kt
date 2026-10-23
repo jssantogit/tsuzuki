@@ -139,7 +139,7 @@ class MihonCanonicalDownloadGateway internal constructor(
          * validation. Actual archive parsing and page discovery remain in the Reader.
          * A detached SD card/revoked SAF permission must not delete the DB reference.
          */
-        private fun isArtifactReadable(context: Context, artifact: CanonicalDownloadArtifact): Boolean {
+        internal fun isArtifactReadable(context: Context, artifact: CanonicalDownloadArtifact): Boolean {
             if (artifact.localUri.isBlank()) return false
             val local = UniFile.fromUri(context, Uri.parse(artifact.localUri)) ?: return false
             if (!local.exists()) return false
