@@ -30,6 +30,16 @@ class SettingsVisualPresetContractTest {
     }
 
     @Test
+    fun `palettes are selected inside Visual Preset while appearance retains theme mode`() {
+        val appearance = readSource("SettingsAppearanceScreen.kt")
+        val preset = readSource("SettingsTsuzukiVisualPresetScreen.kt")
+        appearance shouldNotContain "AppThemePreferenceWidget("
+        preset shouldContain "AppThemePreferenceWidget("
+        preset shouldContain "appThemePref.set(it)"
+        preset shouldContain "compactPreview = true"
+    }
+
+    @Test
     fun `visual preset uses the shared Settings shell and semantic presentation`() {
         val source = readSource("SettingsTsuzukiVisualPresetScreen.kt")
 

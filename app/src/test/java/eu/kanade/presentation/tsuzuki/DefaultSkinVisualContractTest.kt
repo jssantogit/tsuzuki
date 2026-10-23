@@ -1,7 +1,10 @@
 package eu.kanade.presentation.tsuzuki
 
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinColors
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
 import eu.kanade.presentation.tsuzuki.components.defaultSkinPalette
@@ -39,6 +42,42 @@ class DefaultSkinVisualContractTest {
             accent = Color(0xFFF5F5F5),
             onAccent = Color(0xFF0B0C0D),
         )
+    }
+
+    @Test
+    fun `active palette responds to selected preset without losing neutral default`() {
+        val light = lightColorScheme(
+            primary = Color(0xFF005A9C),
+            onPrimary = Color.White,
+            background = Color(0xFFF6F4EF),
+        )
+        defaultSkinPalette(isLight = true, appTheme = AppTheme.DEFAULT, scheme = light) shouldBe
+            defaultSkinPalette(isLight = true)
+        val selected = defaultSkinPalette(isLight = true, appTheme = AppTheme.MONET, scheme = light)
+        selected.accent shouldBe light.primary
+        selected.onAccent shouldBe light.onPrimary
+        selected.canvas shouldBe light.background
+
+        val dark = darkColorScheme(
+            primary = Color(0xFFC3B1FF),
+            onPrimary = Color.Black,
+            background = Color(0xFF181328),
+        )
+        defaultSkinPalette(isLight = false, appTheme = AppTheme.CATPPUCCIN, scheme = dark).accent shouldBe
+            dark.primary
+        defaultSkinPalette(isLight = false, appTheme = AppTheme.CATPPUCCIN, scheme = dark, amoled = true)
+            .canvas shouldBe Color.Black
+    }
+
+    @Test
+    fun `password visibility and filter chips center labels in compact touch targets`() {
+        val fields = readSource("components/DefaultSkinPrimitives.kt")
+        val listBuilder = readSource("collections/ListBuilderScreen.kt")
+        fields shouldContain "contentAlignment = Alignment.Center"
+        fields shouldContain "Modifier.heightIn(min = 48.dp)"
+        fields shouldContain "modifier.heightIn(min = 48.dp)"
+        fields shouldContain ".heightIn(min = 32.dp)"
+        listBuilder shouldContain "DefaultSkinChoiceChip("
     }
 
     @Test
@@ -279,10 +318,12 @@ class DefaultSkinVisualContractTest {
             (appearance.indexOf(first) < appearance.indexOf(second)) shouldBe true
         }
         appearance shouldContain "setAppCompatDelegateThemeMode(it)"
-        appearance shouldContain "AppThemePreferenceWidget("
-        appearance shouldContain "compactPreview = true"
-        appearance shouldContain "title = stringResource(MR.strings.pref_app_theme)"
-        appearance shouldContain "ActivityCompat.recreate(it)"
+        appearance shouldNotContain "AppThemePreferenceWidget("
+        val preset = readSettingsSource("SettingsTsuzukiVisualPresetScreen.kt")
+        preset shouldContain "AppThemePreferenceWidget("
+        preset shouldContain "compactPreview = true"
+        preset shouldContain "stringResource(MR.strings.pref_app_theme)"
+        preset shouldContain "appThemePref.set(it)"
         appearance shouldNotContain "AppThemeModePreferenceWidget("
         baseSettings shouldContain "<string name=\"tsuzuki_theme_mode_title\">Theme mode</string>"
         portugueseSettings shouldContain "<string name=\"tsuzuki_theme_mode_title\">Modo do tema</string>"
