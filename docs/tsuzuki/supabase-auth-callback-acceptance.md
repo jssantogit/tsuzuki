@@ -11,14 +11,17 @@ token by itself is **not** evidence of local authorization to switch accounts.
 
 - Signup and recovery each send `redirect_to=tsuzuki://auth?tsz_state=<random>`.
 - The state is a 24-byte `SecureRandom` URL-safe nonce; only its SHA-256
-  fingerprint is persisted under `noBackupFilesDir`.
-- Matching type + state is required; it is consumed **before** verification
-  or session acceptance, and cannot be reused. Tokens may be in URI fragments
-  but `tsz_state` is read strictly from the URI query.
+  fingerprint is stored with the device-private 32-byte PKCE verifier under
+  `noBackupFilesDir`. The code challenge is BASE64URL(SHA-256(verifier)).
+- Matching state (and type, if present) is required; it is consumed **before**
+  code exchange or session acceptance, and cannot be reused. The callback
+  accepts ONLY `code` in the URI query. Bearer credentials and URI fragments
+  are rejected; the verifier is sent only in a POST to `grant_type=pkce`.
 - Requests expire after 7 days, are bounded to 8 outstanding entries, and
   fail closed on damaged or unwritable storage.
-- The callback updates the existing app-scoped account repository, rather
-  than silently leaving an old in-memory session active.
+- The callback exchanges the code with its locally held verifier, then updates
+  the existing app-scoped account repository rather than leaving an old
+  in-memory session active.
 - `email_change` is deliberately not an accepted callback type: there is no
   corresponding initiated flow in Tsuzuki yet.
 - No session or sync state is deleted to repair mismatched cloud ownership.
@@ -37,37 +40,40 @@ This document does not claim that the live project configuration has been
 changed. Verify both registration and password recovery using real emails
 before release.
 
-## Residual P0 threat: interception by another Android app
+## PKCE implementation and residual release risks
 
-The request nonce rejects unsolicited session adoption **inside Tsuzuki**, but it
-does **not** make the native `tsuzuki://` scheme exclusive. Another installed app
-can register the same custom scheme and intercept the Supabase redirect,
-including any implicit-flow `access_token` or `refresh_token` fragments.
-Never advertise the nonce-only fix as complete credential-interception defense.
+The code now uses PKCE-S256 for signup and password recovery. An app that
+intercepts `tsuzuki://auth?...&code=...` does not have the device-private
+verifier required to exchange the code, and Tsuzuki rejects old implicit
+bearer-token links instead of adopting their sessions. Supabase's GoTrue
+`/signup` and `/recover` endpoints accept `code_challenge` and
+`code_challenge_method=s256`; `/token?grant_type=pkce` accepts
+`auth_code` and `code_verifier`.
 
-**Release blocker:** replace bearer-token redirects with PKCE code exchange
-using a locally protected verifier (Supabase supports PKCE for signup and
-password recovery) and verify that the live backend returns a `code`, not
-bearer credentials. A verified HTTPS Android App Link with Digital Asset Links
-is preferable when a controlled domain/signing setup is available.
-Review:
+This **does not** mean the whole system is release-accepted: verify hosted
+Supabase redirect allowlist + custom email templates, confirm PKCE is enabled
+for email confirmation (signup with autoconfirm is incompatible), prove
+code-only redirects on device, and consider verified HTTPS Android App Links
+rather than unverified custom URI handling for defense in depth.
 - https://supabase.com/docs/guides/auth/sessions/pkce-flow
-- https://mas.owasp.org/MASTG/best-practices/MASTG-BEST-0070/
+- https://supabase.com/docs/guides/auth/server-side/advanced-guide
+- https://github.com/supabase/auth/blob/master/openapi.yaml
 
 ## Acceptance matrix
 
-1. Signup from logged out app: callback carries same query nonce; session is
+1. Signup from logged out app: callback carries code and matching query nonce; PKCE exchanges it and session is
    accepted, Account/Sync UI shows the new account without process restart.
 2. Recovery from app: matching recovery nonce is accepted; signup nonce cannot
    authorize recovery, and vice versa.
-3. Unsolicited deep link with valid Supabase tokens but no nonce: rejected
-   without session replacement or authenticated backend request.
+3. Unsolicited deep link with valid Supabase tokens (even with a matching state):
+   rejected without token exchange or session replacement.
 4. A replay of the same deep link: rejected; expiry after 7 days: rejected.
 5. Process death between email initiation and callback: matching stored
    request still succeeds exactly once.
-6. A wrong query nonce or nonce only in fragment: rejected; `email_change`
-   callback is rejected without an initiated flow.
-7. Network error after request initiation: the pending request is removed.
+6. Wrong query nonce or fragment-only nonce is rejected. Duplicated query keys,
+   bearer tokens, and `email_change` are rejected.
+7. Network error while initiating signup/recovery: the pending request is removed.
+   Exchange errors also permanently consume that code's verifier; restart flow.
 8. Unexpected account switching A→B with prior pending sync state: no RPC
    authenticated for B carries A's batch/cursor; local data is retained.
 9. Legacy install with pre-existing unowned cloud metadata: syncing remains
