@@ -110,7 +110,8 @@ class CanonicalLibraryScreenModelTest {
         val refreshUserLibraries = mockk<RefreshUserLibraries>()
         coEvery { refreshUserLibraries.refreshConnected() } returns emptyMap()
         val metadataResolver = mockk<ResolveCanonicalMetadata>()
-        every { metadataResolver.observeCached(any()) } returns flowOf(emptyMap())
+        val observedMetadata = MutableStateFlow<Map<String, ResolvedMetadata>>(emptyMap())
+        every { metadataResolver.observeCached(any()) } returns observedMetadata
 
         val screenModel = CanonicalLibraryScreenModel(
             observeUnifiedLibrary = observeUnifiedLibrary,
@@ -131,6 +132,17 @@ class CanonicalLibraryScreenModelTest {
         screenModel.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>()
         coVerify(exactly = 1) { sourceResolver.execute(title.id, allowNetwork = false) }
         coVerify(exactly = 0) { sourceResolver.execute(title.id, allowNetwork = true) }
+
+        // An independently loaded year must update only the text, not re-resolve every cover.
+        observedMetadata.value = mapOf(
+            title.id to ResolvedMetadata(
+                startDate = ProvenancedMetadata("2021-05-04", IntegrationId("mal"), "m1", "MAL"),
+            ),
+        )
+        advanceUntilIdle()
+        screenModel.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>()
+            .items.single().startYear shouldBe "2021"
+        coVerify(exactly = 1) { sourceResolver.execute(title.id, allowNetwork = false) }
     }
 
     @Test
