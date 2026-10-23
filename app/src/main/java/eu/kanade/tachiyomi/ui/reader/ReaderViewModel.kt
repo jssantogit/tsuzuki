@@ -1380,18 +1380,27 @@ class ReaderViewModel(
         if (!incognitoMode && page.status !is Page.State.Error && !suppressCanonicalProgress) {
             readerChapter.chapter.last_page_read = pageIndex
 
-            if (readerChapter.pages?.lastIndex == pageIndex) {
+            val canonicalSession = canonicalSessionFor(readerChapter)
+            val lastPageSelected = readerChapter.pages?.lastIndex == pageIndex
+            val chapterCompleted = lastPageSelected && (
+                canonicalSession == null ||
+                    readerChapter.pageLoader !is LocalChapterLoader ||
+                    (page is ReaderPage && isCanonicalLocalPageReadable(page))
+                )
+            // A local page list can expose a corrupt image as Ready before it
+            // decodes. Keep the user's last-page checkpoint, but do not mark
+            // the canonical chapter read until the last image header is valid.
+            if (chapterCompleted) {
                 updateChapterProgressOnComplete(readerChapter)
             }
 
-            val canonicalSession = canonicalSessionFor(readerChapter)
             if (canonicalSession != null) {
                 try {
                     if (canonicalSession.variantId.isNullOrBlank()) {
                         recordCanonicalReaderProgress.recordPage(
                             canonicalChapterId = canonicalSession.canonicalChapterId,
                             pageIndex = pageIndex,
-                            completed = readerChapter.pages?.lastIndex == pageIndex,
+                            completed = chapterCompleted,
                             mihonChapterId = canonicalSession.mihonChapterId,
                         )
                     } else {
@@ -1399,7 +1408,7 @@ class ReaderViewModel(
                             canonicalChapterId = canonicalSession.canonicalChapterId,
                             variantId = canonicalSession.variantId,
                             pageIndex = pageIndex,
-                            completed = readerChapter.pages?.lastIndex == pageIndex,
+                            completed = chapterCompleted,
                             mihonChapterId = canonicalSession.mihonChapterId,
                         )
                     }
