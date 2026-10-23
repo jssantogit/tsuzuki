@@ -20,8 +20,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -65,6 +67,7 @@ import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogScore
 import tachiyomi.domain.tsuzuki.integration.model.TsuzukiRating
+import tachiyomi.domain.tsuzuki.integration.model.metadataStartYear
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -82,75 +85,79 @@ fun TsuzukiSearchScreen(
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
+    val observedFormats = remember((state as? SearchState.Results)?.query) { mutableStateListOf<CatalogItemFormat>() }
+    val resultItems = (state as? SearchState.Results)?.items.orEmpty()
+    val currentFormats = resultItems.map { it.format }.distinct()
+
+    LaunchedEffect(observedFormats, currentFormats) {
+        val additions = currentFormats.filterNot(observedFormats::contains)
+        if (observedFormats.isEmpty()) {
+            observedFormats.addAll(FORMAT_ORDER.filter(additions::contains))
+            observedFormats.addAll(additions.filterNot(FORMAT_ORDER::contains))
+        } else {
+            observedFormats.addAll(additions)
+        }
+    }
+
+    val resultGroups = observedFormats.mapNotNull { format ->
+        resultItems.filter { it.format == format }
+            .takeIf { it.isNotEmpty() }
+            ?.let { format to it }
+    }
+
     Scaffold(
         modifier = modifier,
         containerColor = colors.canvas,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { contentPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .padding(contentPadding),
+        val listState = rememberLazyListState()
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().statusBarsPadding().padding(contentPadding),
+            contentPadding = PaddingValues(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            DefaultSkinPageTitle(
-                text = stringResource(MR.strings.tsuzuki_navigation_search),
-                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 16.dp),
-            )
-            SearchField(
-                query = query,
-                onQueryChange = onQueryChange,
-                onSearch = onSearch,
-                onClear = {
-                    onQueryChange("")
-                    onRetry()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-            )
-
-            when (state) {
-                SearchState.Loading -> Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(
-                        color = colors.foreground,
-                        strokeWidth = 2.dp,
+            item(key = "search_header", contentType = "search_header") {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    DefaultSkinPageTitle(
+                        text = stringResource(MR.strings.tsuzuki_navigation_search),
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp),
+                    )
+                    SearchField(
+                        query = query,
+                        onQueryChange = onQueryChange,
+                        onSearch = onSearch,
+                        onClear = {
+                            onQueryChange("")
+                            onRetry()
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                     )
                 }
-
-                is SearchState.NeedsIntegration -> NeedsIntegrationContent(
-                    recentSearches = state.recentSearches,
-                    onRecentSearch = onRecentSearch,
-                    onOpenIntegrations = onOpenIntegrations,
+            }
+            when (state) {
+                SearchState.Loading -> item(key = "loading") {
+                    Box(Modifier.fillMaxWidth().heightIn(min = 160.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = colors.foreground, strokeWidth = 2.dp)
+                    }
+                }
+                is SearchState.NeedsIntegration -> needsIntegrationContent(
+                    state.recentSearches,
+                    onRecentSearch,
+                    onOpenIntegrations,
                 )
-
-                is SearchState.Discover -> DiscoverContent(
-                    state = state,
-                    onRecentSearch = onRecentSearch,
-                    onClearRecent = onClearRecent,
-                    onResultClick = onResultClick,
-                )
-
-                is SearchState.Results -> CatalogItems(
-                    query = state.query,
-                    items = state.items,
-                    onResultClick = onResultClick,
-                )
-
-                is SearchState.Empty -> MessageContent(
-                    message = stringResource(MR.strings.tsuzuki_search_empty),
-                )
-
-                is SearchState.Error -> MessageContent(
-                    message = stringResource(MR.strings.tsuzuki_search_error),
-                    action = stringResource(MR.strings.tsuzuki_search_retry),
-                    onAction = {
-                        state.query?.let(onSearch) ?: onRetry()
-                    },
-                )
+                is SearchState.Discover -> discoverContent(state, onRecentSearch, onClearRecent, onResultClick)
+                is SearchState.Results -> catalogItems(resultGroups, onResultClick)
+                is SearchState.Empty -> item(key = "empty") {
+                    MessageContent(message = stringResource(MR.strings.tsuzuki_search_empty))
+                }
+                is SearchState.Error -> item(key = "error") {
+                    MessageContent(
+                        message = stringResource(MR.strings.tsuzuki_search_error),
+                        action = stringResource(MR.strings.tsuzuki_search_retry),
+                        onAction = { state.query?.let(onSearch) ?: onRetry() },
+                    )
+                }
             }
         }
     }
@@ -221,82 +228,68 @@ private fun SearchField(
     }
 }
 
-@Composable
-private fun NeedsIntegrationContent(
+private fun LazyListScope.needsIntegrationContent(
     recentSearches: List<String>,
     onRecentSearch: (String) -> Unit,
     onOpenIntegrations: () -> Unit,
 ) {
-    val colors = defaultSkinColors()
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-    ) {
-        if (recentSearches.isNotEmpty()) {
-            item {
-                RecentSearches(
-                    searches = recentSearches,
-                    onSearch = onRecentSearch,
-                    onClear = null,
-                )
-            }
-        }
+    if (recentSearches.isNotEmpty()) {
         item {
-            DefaultSkinCard {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text(
-                        text = stringResource(MR.strings.tsuzuki_search_no_integration),
-                        color = colors.foreground,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = stringResource(MR.strings.tsuzuki_search_integration_prompt),
-                        color = colors.secondary,
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    DefaultSkinPrimaryButton(
-                        text = stringResource(MR.strings.tsuzuki_search_configure_integrations),
-                        onClick = onOpenIntegrations,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                }
+            RecentSearches(
+                searches = recentSearches,
+                onSearch = onRecentSearch,
+                onClear = null,
+            )
+        }
+    }
+    item {
+        val colors = defaultSkinColors()
+        DefaultSkinCard(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = stringResource(MR.strings.tsuzuki_search_no_integration),
+                    color = colors.foreground,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = stringResource(MR.strings.tsuzuki_search_integration_prompt),
+                    color = colors.secondary,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                DefaultSkinPrimaryButton(
+                    text = stringResource(MR.strings.tsuzuki_search_configure_integrations),
+                    onClick = onOpenIntegrations,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
             }
         }
     }
 }
 
-@Composable
-private fun DiscoverContent(
+private fun LazyListScope.discoverContent(
     state: SearchState.Discover,
     onRecentSearch: (String) -> Unit,
     onClearRecent: () -> Unit,
     onResultClick: (CatalogItem) -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 20.dp, bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-    ) {
-        if (state.recentSearches.isNotEmpty()) {
-            item {
-                RecentSearches(
-                    searches = state.recentSearches,
-                    onSearch = onRecentSearch,
-                    onClear = onClearRecent,
-                )
-            }
+    if (state.recentSearches.isNotEmpty()) {
+        item {
+            RecentSearches(
+                searches = state.recentSearches,
+                onSearch = onRecentSearch,
+                onClear = onClearRecent,
+            )
         }
-        items(
-            items = state.blocks.filter { it.items.isNotEmpty() },
-            key = DiscoverBlock::kind,
-        ) { block ->
-            DiscoverSection(block = block, onResultClick = onResultClick)
-        }
+    }
+    items(
+        items = state.blocks.filter { it.items.isNotEmpty() },
+        key = DiscoverBlock::kind,
+    ) { block ->
+        DiscoverSection(block = block, onResultClick = onResultClick)
     }
 }
 
@@ -382,59 +375,32 @@ private fun DiscoverSection(
     }
 }
 
-@Composable
-private fun CatalogItems(
-    query: String,
-    items: List<CatalogItem>,
+private fun LazyListScope.catalogItems(
+    groups: List<Pair<CatalogItemFormat, List<CatalogItem>>>,
     onResultClick: (CatalogItem) -> Unit,
 ) {
-    val observedFormats = remember(query) { mutableStateListOf<CatalogItemFormat>() }
-    val currentFormats = items.map { it.format }.distinct()
-
-    LaunchedEffect(query, currentFormats) {
-        val additions = currentFormats.filterNot(observedFormats::contains)
-        if (observedFormats.isEmpty()) {
-            observedFormats.addAll(FORMAT_ORDER.filter(additions::contains))
-            observedFormats.addAll(additions.filterNot(FORMAT_ORDER::contains))
-        } else {
-            observedFormats.addAll(additions)
-        }
-    }
-
-    val groups = observedFormats.mapNotNull { format ->
-        items.filter { it.format == format }
-            .takeIf { it.isNotEmpty() }
-            ?.let { format to it }
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 24.dp, bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(28.dp),
-    ) {
-        items(
-            items = groups,
-            key = { (format, _) -> "result_format_$format" },
-        ) { (format, groupedItems) ->
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                DefaultSkinSectionLabel(
-                    text = format.displayName(),
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                )
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    items(
-                        items = groupedItems,
-                        key = { "${it.provider}:${it.providerId}" },
-                    ) { result ->
-                        SearchCompactCard(
-                            item = result,
-                            year = result.startDate?.takeIf { it.length >= 4 }?.take(4),
-                            onClick = { onResultClick(result) },
-                        )
-                    }
+    items(
+        items = groups,
+        key = { (format, _) -> "result_format_$format" },
+    ) { (format, groupedItems) ->
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            DefaultSkinSectionLabel(
+                text = format.displayName(),
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                items(
+                    items = groupedItems,
+                    key = { "${it.provider}:${it.providerId}" },
+                ) { result ->
+                    SearchCompactCard(
+                        item = result,
+                        year = metadataStartYear(result.startDate),
+                        onClick = { onResultClick(result) },
+                    )
                 }
             }
         }
@@ -468,6 +434,7 @@ internal fun SearchCompactCard(
             color = colors.foreground,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
+            minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp),

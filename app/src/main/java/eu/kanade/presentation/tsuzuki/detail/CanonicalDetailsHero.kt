@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -89,7 +90,7 @@ internal fun CanonicalDetailsHero(
     onAddToLibrary: () -> Unit,
     onRemoveFromLibrary: () -> Unit,
     onRefresh: () -> Unit,
-    onSynopsis: () -> Unit,
+    onVisualHeightChanged: (Int) -> Unit = {},
     onArtworkLoadEvent: ((MangaCoverLoadEvent) -> Unit)? = null,
 ) {
     val recorder = LocalContext.current.appGraph.structuredDiagnosticRecorder
@@ -116,7 +117,9 @@ internal fun CanonicalDetailsHero(
         val artworkLead = canonicalDetailsArtworkLead(usefulViewportHeight, configuration.fontScale)
         Column(Modifier.fillMaxWidth().background(background).padding(bottom = 16.dp)) {
             Box(
-                Modifier.fillMaxWidth().background(background).testTag("canonical_details_hero_visual")
+                Modifier.fillMaxWidth().background(background)
+                    .onSizeChanged { onVisualHeightChanged(it.height) }
+                    .testTag("canonical_details_hero_visual")
                     .then(if (hasArtwork) Modifier.heightIn(min = artworkLead) else Modifier),
             ) {
                 if (hasArtwork) {
@@ -164,30 +167,40 @@ internal fun CanonicalDetailsHero(
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
                     )
-                    val year = metadataStartYear(state.startDate)
-                    val format = editorialFormatLabel(state.editorialFormat)
-                    if (year != null || format != null) {
-                        FlowRow(
-                            Modifier.fillMaxWidth().testTag("canonical_details_hero_metadata"),
-                            horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            year?.let {
-                                Text(it, color = skinColors.foreground, style = MaterialTheme.typography.bodyLarge)
-                            }
-                            format?.let {
-                                Text(it, color = skinColors.foreground, style = MaterialTheme.typography.bodyLarge)
-                            }
-                        }
+                    val genres = detailsHeroGenres(state.genres)
+                    if (genres.isNotEmpty()) {
+                        Text(
+                            genres.joinToString(" · "),
+                            Modifier.fillMaxWidth().testTag("canonical_details_hero_genres"),
+                            color = skinColors.secondary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+            val year = metadataStartYear(state.startDate)
+            val format = editorialFormatLabel(state.editorialFormat)
+            if (year != null || format != null) {
+                FlowRow(
+                    Modifier.fillMaxWidth().testTag("canonical_details_editorial_metadata"),
+                    horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    year?.let {
+                        Text(it, color = skinColors.foreground, style = MaterialTheme.typography.bodyLarge)
+                    }
+                    format?.let {
+                        Text(it, color = skinColors.foreground, style = MaterialTheme.typography.bodyLarge)
                     }
                 }
             }
             if (state.tsuzukiRating != null || state.ratings.isNotEmpty()) {
                 LazyRow(
-                    Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp).drawWithContent {
+                    Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp).drawWithContent {
                         drawContent()
                         val cueWidth = 12.dp.toPx()
                         val leftCue = if (layoutDirection == LayoutDirection.Ltr) {
@@ -219,7 +232,7 @@ internal fun CanonicalDetailsHero(
                         }
                     },
                     state = ratingsState,
-                    horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
                 ) {
                     state.tsuzukiRating?.let { rating ->
@@ -257,48 +270,20 @@ internal fun CanonicalDetailsHero(
                     }
                 }
             }
-            if (state.editorialStatus != null || state.genres.isNotEmpty()) {
-                Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    editorialStatusLabel(state.editorialStatus)?.let {
-                        Text(
-                            it,
-                            color = skinColors.secondary,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                    if (state.genres.isNotEmpty()) {
-                        FlowRow(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            state.genres.forEach { Text(it, color = skinColors.secondary) }
-                        }
-                    }
-                }
+            editorialStatusLabel(state.editorialStatus)?.let {
+                Text(
+                    it,
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    color = skinColors.secondary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                )
             }
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                state.description?.takeIf(String::isNotBlank)?.let {
-                    Text(
-                        it,
-                        color = skinColors.secondary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    DefaultSkinTextAction(
-                        text = stringResource(MR.strings.tsuzuki_details_read_synopsis),
-                        onClick = onSynopsis,
-                        modifier = Modifier.heightIn(min = 48.dp),
-                    )
-                }
+                InlineSynopsis(state.title.id, state.description)
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -410,9 +395,9 @@ internal fun canonicalDetailsArtworkLead(usefulViewportHeight: Dp, fontScale: Fl
 internal fun canonicalDetailsHeroFadeStops(background: Color): List<Pair<Float, Color>> = listOf(
     0f to background.copy(alpha = 0f),
     0.44f to background.copy(alpha = 0f),
-    0.55f to background.copy(alpha = 0.2f),
-    0.68f to background.copy(alpha = 0.74f),
-    0.86f to background.copy(alpha = 0.96f),
+    0.58f to background.copy(alpha = 0.12f),
+    0.72f to background.copy(alpha = 0.60f),
+    0.88f to background.copy(alpha = 0.94f),
     1f to background,
 )
 
@@ -475,3 +460,6 @@ private fun editorialStatusLabel(value: String?): String? = when (value) {
     "UPCOMING", "NOT_YET_RELEASED" -> stringResource(MR.strings.tsuzuki_details_status_upcoming)
     else -> null
 }
+
+/** Keep real genres in their editorial order without empty labels or excessive wrapping. */
+internal fun detailsHeroGenres(genres: List<String>): List<String> = genres.filter(String::isNotBlank).take(3)

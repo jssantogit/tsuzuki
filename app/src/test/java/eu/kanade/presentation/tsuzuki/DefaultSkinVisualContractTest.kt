@@ -74,7 +74,7 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
-    fun `Home hero is cinematic responsive and offers one wide details action`() {
+    fun `Home hero is cinematic responsive and offers one compact details action`() {
         val home = readSource("home/TsuzukiHomeScreen.kt")
         val carousel = sourceBlockStartingAt(home, "private fun HomeHeroCarousel(")
         val homeHero = sourceBlockStartingAt(home, "private fun HomeHero(")
@@ -85,7 +85,7 @@ class DefaultSkinVisualContractTest {
         carousel shouldNotContain ".aspectRatio(HERO_ASPECT_RATIO)"
         homeHero shouldContain "DefaultSkinPrimaryButton("
         (homeHero.split("DefaultSkinPrimaryButton(").size - 1) shouldBe 1
-        homeHero shouldContain "modifier = Modifier.fillMaxWidth()"
+        homeHero shouldContain "Modifier.widthIn(min = 200.dp, max = 240.dp)"
         homeHero shouldContain "MR.strings.tsuzuki_home_view_work"
         homeHero shouldContain "catalogFormatLabel(item.format)"
         homeHero shouldContain "metadataStartYear(item.startDate)"
@@ -97,7 +97,7 @@ class DefaultSkinVisualContractTest {
         homeHero shouldNotContain "item.status"
         home shouldNotContain "onHeroRead"
         home shouldNotContain "DefaultSkinHomeHeroAction"
-        button shouldContain "modifier.heightIn(min = 52.dp)"
+        button shouldContain "minimumHeight: Dp = 52.dp"
     }
 
     @Test
@@ -131,7 +131,7 @@ class DefaultSkinVisualContractTest {
         atmosphere shouldNotContain "MangaCover.Square("
         atmosphere shouldNotContain "if (state.tsuzukiRating"
         atmosphere shouldNotContain "editorialStatusLabel(state.editorialStatus)"
-        atmosphere shouldNotContain "state.genres"
+        atmosphere shouldContain "detailsHeroGenres(state.genres)"
         (hero.indexOf("if (state.tsuzukiRating") > hero.indexOf("state.title.displayTitle")) shouldBe true
         hero shouldContain "DefaultSkinPrimaryButton("
         hero shouldContain "state.refreshError"
@@ -140,7 +140,7 @@ class DefaultSkinVisualContractTest {
                 hero.indexOf("if (state.tsuzukiRating")
             ) shouldBe
             true
-        (hero.indexOf("state.genres") > hero.indexOf("if (state.tsuzukiRating")) shouldBe true
+        (hero.indexOf("state.genres") < hero.indexOf("if (state.tsuzukiRating")) shouldBe true
         editorial shouldContain "state.description"
         editorial shouldNotContain "state.editorialStatus"
         editorial shouldNotContain "state.genres"
@@ -665,18 +665,18 @@ class DefaultSkinVisualContractTest {
         val library = readSource("library/CanonicalLibraryScreen.kt")
         val libraryList = sourceBlockStartingAt(library, "private fun CanonicalLibraryList(")
 
-        catalogTile shouldContain "TsuzukiDefaultSkinCoverSize.Standard"
+        catalogTile shouldContain "TsuzukiDefaultSkinCoverSize.Grid"
         catalogTile shouldContain "contentAlignment = Alignment.TopCenter"
         catalogTile shouldContain "propagateMinConstraints = false"
-        catalogTile shouldContain ".widthIn(max = TsuzukiDefaultSkinCoverSize.Standard.width)"
-        collections shouldContain "GridCells.Adaptive(minSize = TsuzukiDefaultSkinCoverSize.Standard.width)"
-        libraryList shouldContain "GridCells.Fixed(canonicalLibraryGridColumnCount(maxWidth))"
-        libraryList shouldContain "TsuzukiDefaultSkinCoverSize.Library"
+        catalogTile shouldContain "Modifier.fillMaxWidth()"
+        collections shouldContain "GridCells.Fixed(defaultSkinWorkGridColumnCount(maxWidth))"
+        libraryList shouldContain "GridCells.Fixed(defaultSkinWorkGridColumnCount(maxWidth))"
+        libraryList shouldContain "TsuzukiDefaultSkinCoverSize.Grid"
         libraryList shouldContain "item.coverUrl ?: item.sourceCover ?: item.localCoverUrl"
         libraryList shouldContain "fallbackData = listOf(item.sourceCover, item.sourceCover?.url, item.localCoverUrl)"
         libraryList shouldContain "item.startYear"
         libraryList shouldContain "maxLines = 2"
-        libraryList shouldContain "widthIn(max = TsuzukiDefaultSkinCoverSize.Library.width)"
+        libraryList shouldContain "Modifier.fillMaxWidth()"
         libraryList shouldNotContain "item.status"
         libraryList shouldNotContain "item.format"
         libraryList shouldNotContain "item.categories"

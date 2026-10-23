@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -35,10 +35,12 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.tsuzuki.components.TsuzukiDefaultSkinCover
 import eu.kanade.presentation.tsuzuki.components.TsuzukiDefaultSkinCoverSize
+import eu.kanade.presentation.tsuzuki.components.defaultSkinWorkGridColumnCount
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionBrowseScreenState
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.FolderCatalogContent
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.FolderCatalogScreenState
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
+import tachiyomi.domain.tsuzuki.integration.model.metadataStartYear
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
@@ -52,7 +54,7 @@ fun CollectionBrowseScreen(
 ) {
     val title = (state as? CollectionBrowseScreenState.Ready)?.collection?.title
         ?: stringResource(MR.strings.tsuzuki_collection_title)
-    BrowseScaffold(title, navigateUp, modifier) { contentModifier ->
+    BrowseScaffold(navigateUp, modifier) { contentModifier ->
         when (state) {
             CollectionBrowseScreenState.Loading -> BrowseLoading(contentModifier)
             CollectionBrowseScreenState.Missing, is CollectionBrowseScreenState.Error -> BrowseMessage(
@@ -68,8 +70,9 @@ fun CollectionBrowseScreen(
                         modifier = contentModifier,
                         contentPadding = PaddingValues(16.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        item(key = "title", span = { GridItemSpan(maxLineSpan) }) { BrowseTitle(title) }
                         items(state.collection.folders, key = { it.folderId }) { folder ->
                             FolderTile(folder, { onFolder(folder.folderId) }, width = null)
                         }
@@ -101,7 +104,7 @@ fun FolderCatalogScreen(
     } else {
         ready?.folder?.title ?: stringResource(MR.strings.tsuzuki_folder_title)
     }
-    BrowseScaffold(title, navigateUp, modifier) { contentModifier ->
+    BrowseScaffold(navigateUp, modifier) { contentModifier ->
         when (state) {
             FolderCatalogScreenState.Loading -> BrowseLoading(contentModifier)
             FolderCatalogScreenState.Missing, is FolderCatalogScreenState.Error -> BrowseMessage(
@@ -112,6 +115,7 @@ fun FolderCatalogScreen(
             )
             is FolderCatalogScreenState.Ready -> FolderCatalogReady(
                 state,
+                title,
                 onChildFolder,
                 onSelectList,
                 onCatalogItem,
@@ -126,6 +130,7 @@ fun FolderCatalogScreen(
 @Composable
 private fun FolderCatalogReady(
     state: FolderCatalogScreenState.Ready,
+    title: String,
     onChildFolder: (String) -> Unit,
     onSelectList: (String) -> Unit,
     onCatalogItem: (CatalogItem) -> Unit,
@@ -135,99 +140,106 @@ private fun FolderCatalogReady(
 ) {
     val direct = state.preferredListId != null
     val enabledLists = state.folder.lists.filter { it.enabled }.sortedWith(compareBy({ it.sortOrder }, { it.id }))
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = TsuzukiDefaultSkinCoverSize.Standard.width),
-        modifier = modifier,
-        contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-    ) {
-        if (!direct && state.folder.childFolders.isNotEmpty()) {
-            item(key = "child_folders", span = { GridItemSpan(maxLineSpan) }) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(state.folder.childFolders, key = { it.folderId }) { child ->
-                        FolderTile(child, { onChildFolder(child.folderId) })
-                    }
-                }
-            }
-        }
-        if (state.showListSelector) {
-            item(key = "list_selector", span = { GridItemSpan(maxLineSpan) }) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                    items(enabledLists, key = { it.id }) { list ->
-                        val selected = state.selectedListId == list.id
-                        Column(
-                            modifier = Modifier.width(IntrinsicSize.Min).heightIn(min = 48.dp)
-                                .selectable(selected, role = Role.Tab, onClick = { onSelectList(list.id) }),
-                            verticalArrangement = Arrangement.Bottom,
-                        ) {
-                            Text(
-                                list.title,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selected) {
-                                    MaterialTheme.colorScheme.onSurface
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                modifier = Modifier.padding(vertical = 12.dp),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Box(
-                                Modifier.fillMaxWidth().height(2.dp).background(
-                                    if (selected) {
-                                        MaterialTheme.colorScheme.onSurface
-                                    } else {
-                                        androidx.compose.ui.graphics.Color.Transparent
-                                    },
-                                ),
-                            )
+    BoxWithConstraints(modifier) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(defaultSkinWorkGridColumnCount(maxWidth)),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item(key = "title", span = { GridItemSpan(maxLineSpan) }) { BrowseTitle(title) }
+            if (!direct && state.folder.childFolders.isNotEmpty()) {
+                item(key = "child_folders", span = { GridItemSpan(maxLineSpan) }) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        items(state.folder.childFolders, key = { it.folderId }) { child ->
+                            FolderTile(child, { onChildFolder(child.folderId) })
                         }
                     }
                 }
             }
-        }
-        when (val content = state.content) {
-            FolderCatalogContent.Idle -> item(key = "idle", span = { GridItemSpan(maxLineSpan) }) {
-                Text(
-                    stringResource(
-                        if (direct) MR.strings.tsuzuki_direct_list_unavailable else MR.strings.tsuzuki_folder_no_lists,
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            if (state.showListSelector) {
+                item(key = "list_selector", span = { GridItemSpan(maxLineSpan) }) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                        items(enabledLists, key = { it.id }) { list ->
+                            val selected = state.selectedListId == list.id
+                            Column(
+                                modifier = Modifier.width(IntrinsicSize.Min).heightIn(min = 48.dp)
+                                    .selectable(selected, role = Role.Tab, onClick = { onSelectList(list.id) }),
+                                verticalArrangement = Arrangement.Bottom,
+                            ) {
+                                Text(
+                                    list.title,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.onSurface
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier.padding(vertical = 12.dp),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Box(
+                                    Modifier.fillMaxWidth().height(2.dp).background(
+                                        if (selected) {
+                                            MaterialTheme.colorScheme.onSurface
+                                        } else {
+                                            androidx.compose.ui.graphics.Color.Transparent
+                                        },
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
             }
-            FolderCatalogContent.Loading -> item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
-                BrowseLoading(Modifier.fillMaxWidth().padding(24.dp))
-            }
-            is FolderCatalogContent.Error -> item(key = "error", span = { GridItemSpan(maxLineSpan) }) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            when (val content = state.content) {
+                FolderCatalogContent.Idle -> item(key = "idle", span = { GridItemSpan(maxLineSpan) }) {
                     Text(
-                        stringResource(MR.strings.tsuzuki_catalog_error),
+                        stringResource(
+                            if (direct) {
+                                MR.strings.tsuzuki_direct_list_unavailable
+                            } else {
+                                MR.strings.tsuzuki_folder_no_lists
+                            },
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    TextButton(onClick = onRetry) { Text(stringResource(MR.strings.action_retry)) }
                 }
-            }
-            is FolderCatalogContent.Content -> {
-                if (content.items.isEmpty()) {
-                    item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
+                FolderCatalogContent.Loading -> item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
+                    BrowseLoading(Modifier.fillMaxWidth().padding(24.dp))
+                }
+                is FolderCatalogContent.Error -> item(key = "error", span = { GridItemSpan(maxLineSpan) }) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            stringResource(MR.strings.tsuzuki_catalog_empty),
+                            stringResource(MR.strings.tsuzuki_catalog_error),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    }
-                } else {
-                    items(content.items, key = { "${it.provider}:${it.providerId}" }) { item ->
-                        CatalogGridItem(item, { onCatalogItem(item) })
+                        TextButton(onClick = onRetry) { Text(stringResource(MR.strings.action_retry)) }
                     }
                 }
-                if (content.nextCursor != null) {
-                    item(key = "load_more", span = { GridItemSpan(maxLineSpan) }) {
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            TextButton(onClick = onLoadMore) {
-                                Text(stringResource(MR.strings.tsuzuki_catalog_load_more))
+                is FolderCatalogContent.Content -> {
+                    if (content.items.isEmpty()) {
+                        item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
+                            Text(
+                                stringResource(MR.strings.tsuzuki_catalog_empty),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else {
+                        items(content.items, key = { "${it.provider}:${it.providerId}" }) { item ->
+                            CatalogGridItem(item, { onCatalogItem(item) })
+                        }
+                    }
+                    if (content.nextCursor != null) {
+                        item(key = "load_more", span = { GridItemSpan(maxLineSpan) }) {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                TextButton(onClick = onLoadMore) {
+                                    Text(stringResource(MR.strings.tsuzuki_catalog_load_more))
+                                }
                             }
                         }
                     }
@@ -239,7 +251,6 @@ private fun FolderCatalogReady(
 
 @Composable
 private fun BrowseScaffold(
-    title: String,
     navigateUp: () -> Unit,
     modifier: Modifier,
     content: @Composable (Modifier) -> Unit,
@@ -247,17 +258,7 @@ private fun BrowseScaffold(
     Scaffold(modifier = modifier, topBar = {
         AppBar(titleContent = {}, navigateUp = navigateUp)
     }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            Text(
-                title,
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-            )
-            Box(Modifier.weight(1f)) {
-                content(Modifier.fillMaxSize())
-            }
-        }
+        content(Modifier.fillMaxSize().padding(padding))
     }
 }
 
@@ -269,15 +270,14 @@ private fun CatalogGridItem(item: CatalogItem, onClick: () -> Unit) {
         propagateMinConstraints = false,
     ) {
         Column(
-            modifier = Modifier
-                .widthIn(max = TsuzukiDefaultSkinCoverSize.Standard.width)
+            modifier = Modifier.fillMaxWidth()
                 .clickable(role = Role.Button, onClick = onClick),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             TsuzukiDefaultSkinCover(
                 data = item.coverUrl,
                 contentDescription = item.title,
-                size = TsuzukiDefaultSkinCoverSize.Standard,
+                size = TsuzukiDefaultSkinCoverSize.Grid,
             )
             Text(
                 item.title,
@@ -285,6 +285,12 @@ private fun CatalogGridItem(item: CatalogItem, onClick: () -> Unit) {
                 fontWeight = FontWeight.Medium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                metadataStartYear(item.startDate).orEmpty(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
             )
         }
     }
@@ -300,4 +306,14 @@ private fun BrowseMessage(message: String, modifier: Modifier = Modifier) {
     Box(modifier.padding(24.dp), contentAlignment = Alignment.Center) {
         Text(message, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+@Composable
+private fun BrowseTitle(title: String) {
+    Text(
+        title,
+        Modifier.fillMaxWidth(),
+        style = MaterialTheme.typography.headlineLarge,
+        fontWeight = FontWeight.Bold,
+    )
 }

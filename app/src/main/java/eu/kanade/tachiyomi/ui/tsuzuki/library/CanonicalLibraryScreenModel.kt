@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
@@ -185,32 +186,23 @@ class CanonicalLibraryScreenModel private constructor(
             ?.observeAll()
             ?: flowOf(emptyList())
 
-        var metadataIdentity: List<String>? = null
-        var startYears = emptyMap<String, String>()
-        val librarySnapshots = observeLibrary().map { libraryItems ->
-            val canonicalTitleIds = libraryItems.map { it.id }.distinct()
-            if (canonicalTitleIds != metadataIdentity) {
-                metadataIdentity = canonicalTitleIds
-                startYears = if (canonicalTitleIds.isEmpty() || resolveCanonicalMetadata == null) {
-                    emptyMap()
-                } else {
-                    try {
-                        resolveCanonicalMetadata.cached(canonicalTitleIds)
-                            .mapNotNull { (titleId, metadata) ->
-                                metadata.libraryStartYear()?.let { titleId to it }
-                            }
-                            .toMap()
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (error: Exception) {
-                        logcat(LogPriority.WARN, error) {
-                            "Failed to load cached canonical start years for the library"
-                        }
-                        emptyMap()
-                    }
-                }
+        val librarySnapshots = observeLibrary().flatMapLatest { libraryItems ->
+            val ids = libraryItems.map { it.id }.distinct()
+            val metadata = if (ids.isEmpty()) {
+                flowOf(emptyMap())
+            } else {
+                resolveCanonicalMetadata?.observeCached(ids) ?: flowOf(emptyMap())
             }
-            LibraryInventory(libraryItems, startYears)
+            metadata.catch { error ->
+                if (error is CancellationException) throw error
+                logcat(LogPriority.WARN, error) { "Failed to observe cached canonical start years for the library" }
+                emit(emptyMap())
+            }.map { snapshots ->
+                LibraryInventory(
+                    libraryItems,
+                    snapshots.mapNotNull { (id, metadata) -> metadata.libraryStartYear()?.let { id to it } }.toMap(),
+                )
+            }
         }
 
         val cards = combine(

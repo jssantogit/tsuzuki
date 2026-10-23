@@ -71,6 +71,7 @@ import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.TsuzukiDefaultSkinCover
 import eu.kanade.presentation.tsuzuki.components.TsuzukiDefaultSkinCoverSize
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
+import eu.kanade.presentation.tsuzuki.components.defaultSkinWorkGridColumnCount
 import eu.kanade.presentation.tsuzuki.recordArtworkLoad
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.tsuzuki.library.CanonicalLibraryCardModel
@@ -619,7 +620,7 @@ private fun CanonicalLibraryList(
     val colors = defaultSkinColors()
     BoxWithConstraints(modifier.fillMaxSize()) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(canonicalLibraryGridColumnCount(maxWidth)),
+            columns = GridCells.Fixed(defaultSkinWorkGridColumnCount(maxWidth)),
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -648,13 +649,13 @@ private fun CanonicalLibraryList(
                             data = item.coverUrl ?: item.sourceCover ?: item.localCoverUrl,
                             fallbackData = listOf(item.sourceCover, item.sourceCover?.url, item.localCoverUrl),
                             contentDescription = item.title,
-                            size = TsuzukiDefaultSkinCoverSize.Library,
+                            size = TsuzukiDefaultSkinCoverSize.Grid,
                             onLoadEvent = { trace.recordArtworkLoad(it) },
                         )
                     }
                     Text(
                         text = item.title,
-                        modifier = Modifier.widthIn(max = TsuzukiDefaultSkinCoverSize.Library.width),
+                        modifier = Modifier.fillMaxWidth(),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                         color = colors.foreground,
@@ -662,10 +663,11 @@ private fun CanonicalLibraryList(
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
                     )
-                    item.startYear?.let { year ->
+                    run {
+                        val year = item.startYear.orEmpty()
                         Text(
                             text = year,
-                            modifier = Modifier.widthIn(max = TsuzukiDefaultSkinCoverSize.Library.width),
+                            modifier = Modifier.fillMaxWidth(),
                             style = MaterialTheme.typography.bodySmall,
                             color = colors.secondary,
                             maxLines = 1,
@@ -677,12 +679,6 @@ private fun CanonicalLibraryList(
             }
         }
     }
-}
-
-internal fun canonicalLibraryGridColumnCount(width: androidx.compose.ui.unit.Dp): Int {
-    if (width >= 320.dp && width < 420.dp) return 3
-    val usableWidth = (width - 32.dp).coerceAtLeast(0.dp)
-    return ((usableWidth + 12.dp) / (96.dp + 12.dp)).toInt().coerceAtLeast(1)
 }
 
 @Composable

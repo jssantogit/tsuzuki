@@ -6,7 +6,11 @@ import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -79,6 +83,33 @@ class CanonicalMetadataSnapshotRepositoryImplTest {
             System.setProperty("org.sqlite.lib.path", originalNativeLibraryPath)
         }
         nativeLibraryDirectory?.toFile()?.deleteRecursively()
+    }
+
+    @Test
+    fun `local snapshot observation emits a factual year after details writes with the same title ids`() = runBlocking {
+        val initial = CompletableDeferred<Unit>()
+        val updated = CompletableDeferred<CanonicalMetadataSnapshot>()
+        val job = launch {
+            repository.observeMany(listOf("title")).collect { snapshots ->
+                if (snapshots.isEmpty()) initial.complete(Unit)
+                snapshots["title"]?.let { updated.complete(it) }
+            }
+        }
+        try {
+            withTimeout(5_000L) { initial.await() }
+            val snapshot = CanonicalMetadataSnapshot(
+                canonicalTitleId = "title",
+                configurationFingerprint = "cfg",
+                metadata = ResolvedMetadata(
+                    startDate = ProvenancedMetadata("2021-04-01", IntegrationId("mal"), "m1"),
+                ),
+                refreshedAt = 100L,
+            )
+            repository.upsertIfNewer(snapshot)
+            withTimeout(5_000L) { updated.await() } shouldBe snapshot
+        } finally {
+            job.cancelAndJoin()
+        }
     }
 
     @Test

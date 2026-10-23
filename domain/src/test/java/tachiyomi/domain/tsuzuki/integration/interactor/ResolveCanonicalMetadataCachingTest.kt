@@ -6,7 +6,10 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
@@ -177,6 +180,35 @@ class ResolveCanonicalMetadataCachingTest {
         ratings.calls shouldBe 1
     }
 
+    @Test
+    fun `cache observer follows enrichment and rejects incompatible snapshots without remote work`() = runTest {
+        val provider = CountingMetadataProvider()
+        val snapshots = FakeSnapshotRepository()
+        val registry = FakeRegistry(provider)
+        val resolver = resolver(provider, snapshots, clock = { 1000L }, scope = backgroundScope, registry = registry)
+        val observed = mutableListOf<Map<String, ResolvedMetadata>>()
+        backgroundScope.launch { resolver.observeCached(listOf(TITLE_ID)).collect { observed += it } }
+        runCurrent()
+        observed.last() shouldBe emptyMap()
+        val snapshot = CanonicalMetadataSnapshot(
+            TITLE_ID,
+            "cfg",
+            ResolvedMetadata(startDate = ProvenancedMetadata("2022-05-04", IntegrationId("mal"), "m1")),
+            1000L,
+        )
+        snapshots.upsertIfNewer(snapshot)
+        runCurrent()
+        observed.last().getValue(TITLE_ID).startDate?.value shouldBe "2022-05-04"
+        snapshots.upsertIfNewer(snapshot.copy(configurationFingerprint = "incompatible", refreshedAt = 1001L))
+        runCurrent()
+        observed.last() shouldBe emptyMap()
+        snapshots.invalidateTitle(TITLE_ID)
+        runCurrent()
+        observed.last() shouldBe emptyMap()
+        provider.calls shouldBe 0
+        snapshots.batchReadCount shouldBe 0
+    }
+
     private fun resolver(
         provider: CountingMetadataProvider,
         snapshots: FakeSnapshotRepository,
@@ -229,10 +261,13 @@ class ResolveCanonicalMetadataCachingTest {
         private val provider: MetadataProvider,
         private val ratingProviders: List<RatingsProvider> = emptyList(),
     ) : IntegrationRegistry {
+        var fingerprint = "cfg"
+        val changes = MutableStateFlow(Unit)
+        override fun observeChanges(): Flow<Unit> = changes
         var configurationFingerprintCalls = 0
         override fun configurationFingerprint(): String {
             configurationFingerprintCalls++
-            return "cfg"
+            return fingerprint
         }
         override fun searchProviders(): List<SearchProvider> = emptyList()
         override fun discoveryProviders(): List<DiscoveryProvider> = emptyList()
@@ -277,6 +312,10 @@ class ResolveCanonicalMetadataCachingTest {
     ) : CanonicalMetadataSnapshotRepository {
         private val snapshots = (listOfNotNull(initial) + additional)
             .associateByTo(mutableMapOf(), CanonicalMetadataSnapshot::canonicalTitleId)
+        private val updates = MutableStateFlow(snapshots.toMap())
+        override fun observeMany(canonicalTitleIds: Collection<String>): Flow<Map<String, CanonicalMetadataSnapshot>> =
+            updates.map { snapshot -> snapshot.filterKeys { it in canonicalTitleIds } }
+
         var batchReadCount = 0
             private set
         var lastBatchIds = emptyList<String>()
@@ -296,11 +335,13 @@ class ResolveCanonicalMetadataCachingTest {
             if (current == null || snapshot.refreshedAt >= current.refreshedAt) {
                 snapshots[snapshot.canonicalTitleId] = snapshot
             }
+            updates.value = snapshots.toMap()
             return snapshots.getValue(snapshot.canonicalTitleId)
         }
 
         override suspend fun invalidateTitle(canonicalTitleId: String) {
             snapshots.remove(canonicalTitleId)
+            updates.value = snapshots.toMap()
         }
     }
 

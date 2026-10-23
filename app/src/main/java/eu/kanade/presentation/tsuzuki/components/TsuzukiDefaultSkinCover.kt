@@ -18,6 +18,7 @@ internal const val TSUZUKI_DEFAULT_SKIN_COVER_ASPECT_RATIO: Float = 2f / 3f
 internal enum class TsuzukiDefaultSkinCoverSize(val width: Dp) {
     Standard(126.dp),
     Library(126.dp),
+    Grid(Dp.Unspecified),
 }
 
 /** A Tsuzuki-owned catalog cover frame; the shared MangaCover renderer keeps image loading/fallbacks. */
@@ -34,7 +35,7 @@ internal fun TsuzukiDefaultSkinCover(
 ) {
     Box(
         modifier = modifier
-            .widthIn(max = size.width)
+            .then(if (size == TsuzukiDefaultSkinCoverSize.Grid) Modifier else Modifier.widthIn(max = size.width))
             .fillMaxWidth()
             .aspectRatio(TSUZUKI_DEFAULT_SKIN_COVER_ASPECT_RATIO),
     ) {

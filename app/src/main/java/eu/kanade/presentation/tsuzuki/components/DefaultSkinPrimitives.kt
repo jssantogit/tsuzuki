@@ -7,6 +7,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** Shared visual language for the approved Default Skin. */
@@ -133,12 +135,15 @@ fun DefaultSkinPrimaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     leadingContent: (@Composable RowScope.() -> Unit)? = null,
+    minimumHeight: Dp = 52.dp,
+    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
 ) {
     val colors = defaultSkinColors()
     Button(
         onClick = onClick,
-        modifier = modifier.heightIn(min = 52.dp),
+        modifier = modifier.heightIn(min = minimumHeight),
         enabled = enabled,
+        contentPadding = contentPadding,
         shape = DefaultSkinShape.Control,
         colors = ButtonDefaults.buttonColors(
             containerColor = colors.accent,

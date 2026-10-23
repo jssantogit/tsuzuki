@@ -6,7 +6,13 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import tachiyomi.data.Database
+import tachiyomi.data.subscribeToList
 import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshot
 import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshotRepository
 
@@ -61,6 +67,28 @@ class CanonicalMetadataSnapshotRepositoryImpl(
             }
         }
         return snapshots
+    }
+
+    override fun observeMany(canonicalTitleIds: Collection<String>): Flow<Map<String, CanonicalMetadataSnapshot>> {
+        if (canonicalTitleIds.isEmpty()) return flowOf(emptyMap())
+        val batches = canonicalTitleIds.distinct().chunked(MAX_BATCH_SIZE).map { ids ->
+            database.tsuzuki_metadata_snapshotQueries
+                .getManyTsuzukiMetadataSnapshots(ids) { titleId, fingerprint, payload, refreshedAt ->
+                    SnapshotRow(titleId, fingerprint, payload, refreshedAt)
+                }
+                .subscribeToList()
+                .map { rows ->
+                    rows.mapNotNull { row ->
+                        try {
+                            row.toSnapshot()
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }.associateBy(CanonicalMetadataSnapshot::canonicalTitleId)
+                }
+        }
+        return combine(batches) { snapshots -> snapshots.fold(emptyMap()) { all, batch -> all + batch } }
+            .distinctUntilChanged()
     }
 
     override suspend fun upsertIfNewer(snapshot: CanonicalMetadataSnapshot): CanonicalMetadataSnapshot =

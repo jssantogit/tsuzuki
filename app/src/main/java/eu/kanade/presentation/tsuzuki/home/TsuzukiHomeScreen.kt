@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -233,9 +234,9 @@ private fun HomeHero(
                         0.0f to Color.Transparent,
                         0.42f to Color.Transparent,
                         0.48f to colors.canvas.copy(alpha = 0.12f),
-                        0.62f to colors.canvas.copy(alpha = 0.58f),
-                        0.78f to colors.canvas.copy(alpha = 0.90f),
-                        0.94f to colors.canvas.copy(alpha = 0.98f),
+                        0.62f to colors.canvas.copy(alpha = 0.32f),
+                        0.78f to colors.canvas.copy(alpha = 0.76f),
+                        0.94f to colors.canvas.copy(alpha = 0.96f),
                         1.0f to colors.canvas,
                     ),
                 ),
@@ -269,7 +270,9 @@ private fun HomeHero(
             )
             DefaultSkinPrimaryButton(
                 text = stringResource(MR.strings.tsuzuki_home_view_work),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.widthIn(min = 200.dp, max = 240.dp),
+                minimumHeight = 48.dp,
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
                 onClick = onDetails,
             )
             if (itemCount > 1) {

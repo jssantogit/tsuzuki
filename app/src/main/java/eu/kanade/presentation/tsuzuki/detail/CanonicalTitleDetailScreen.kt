@@ -147,6 +147,7 @@ private fun LoadedDetails(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
+    var heroVisualHeight by remember(state.title.id) { mutableIntStateOf(0) }
     val toolbarOffset = WindowInsets.statusBars.getTop(density) + with(density) { 56.dp.roundToPx() }
     val moveMode: (CanonicalDetailsLowerAction) -> Unit = { action ->
         val target = detailsModeAfterAction(mode, action)
@@ -168,7 +169,7 @@ private fun LoadedDetails(
                     onAddToLibrary,
                     onRemoveFromLibrary,
                     onRefresh,
-                    onSynopsis = { moveMode(CanonicalDetailsLowerAction.EDITORIAL) },
+                    onVisualHeightChanged = { heroVisualHeight = it },
                 )
             }
             item(key = "modes") { DetailsModes(mode, moveMode) }
@@ -285,13 +286,14 @@ private fun LoadedDetails(
             onBack = { moveMode(CanonicalDetailsLowerAction.BACK) },
             onRefresh = onRefresh,
             onProviders = onProviders,
-            background = if (listState.firstVisibleItemIndex > 0 ||
-                listState.firstVisibleItemScrollOffset > 80
-            ) {
-                background
-            } else {
-                Color.Transparent
-            },
+            background = background.copy(
+                alpha = detailsToolbarFraction(
+                    heroVisualHeight,
+                    toolbarOffset,
+                    listState.firstVisibleItemIndex,
+                    listState.firstVisibleItemScrollOffset,
+                ),
+            ),
             onSources = if (state.metadataSources.isNotEmpty()) ({ sheet = DetailsSheet.SOURCES }) else null,
         )
     }
@@ -481,4 +483,12 @@ private fun ChapterJumpSheet(chapters: List<CanonicalChapterDetailItem>, onJump:
             if (chapter == null) notFound = true else onJump(chapter)
         }) { Text(stringResource(MR.strings.tsuzuki_details_jump_go)) }
     }
+}
+
+/** Fade only as the visual hero's bottom crosses the toolbar; no pixel-threshold color switch. */
+internal fun detailsToolbarFraction(heroHeight: Int, toolbarHeight: Int, itemIndex: Int, scrollOffset: Int): Float {
+    if (itemIndex > 0) return 1f
+    if (heroHeight <= 0) return 0f
+    val transition = toolbarHeight.coerceAtLeast(1)
+    return ((scrollOffset - heroHeight + transition * 2).toFloat() / transition).coerceIn(0f, 1f)
 }

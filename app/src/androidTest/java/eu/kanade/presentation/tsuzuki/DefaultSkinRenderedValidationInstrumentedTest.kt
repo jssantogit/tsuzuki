@@ -1010,7 +1010,6 @@ class DefaultSkinRenderedValidationInstrumentedTest {
                             onAddToLibrary = {},
                             onRemoveFromLibrary = {},
                             onRefresh = {},
-                            onSynopsis = {},
                             onArtworkLoadEvent = { event ->
                                 loadEvents += event
                                 if (event is MangaCoverLoadEvent.Succeeded || event is MangaCoverLoadEvent.Failed) {

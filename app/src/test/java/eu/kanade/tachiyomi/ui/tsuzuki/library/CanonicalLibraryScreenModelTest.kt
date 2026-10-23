@@ -14,6 +14,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -108,7 +110,7 @@ class CanonicalLibraryScreenModelTest {
         val refreshUserLibraries = mockk<RefreshUserLibraries>()
         coEvery { refreshUserLibraries.refreshConnected() } returns emptyMap()
         val metadataResolver = mockk<ResolveCanonicalMetadata>()
-        coEvery { metadataResolver.cached(any<Collection<String>>()) } returns emptyMap()
+        every { metadataResolver.observeCached(any()) } returns flowOf(emptyMap())
 
         val screenModel = CanonicalLibraryScreenModel(
             observeUnifiedLibrary = observeUnifiedLibrary,
@@ -185,20 +187,18 @@ class CanonicalLibraryScreenModelTest {
         val artworkRepository = mockk<TitleArtworkRepository>()
         every { artworkRepository.observeAll() } returns artworkUpdates
         val metadataResolver = mockk<ResolveCanonicalMetadata>()
-        var cachedYear = "2020-06-12"
+        val metadataUpdates = MutableStateFlow(
+            mapOf(
+                "one" to ResolvedMetadata(
+                    startDate = ProvenancedMetadata("2020-06-12", IntegrationId("mal"), "m1", "MAL"),
+                ),
+            ),
+        )
         val requestedBatches = mutableListOf<List<String>>()
-        coEvery { metadataResolver.cached(any<Collection<String>>()) } coAnswers {
+        every { metadataResolver.observeCached(any()) } answers {
             val ids = firstArg<Collection<String>>().toList()
             requestedBatches += ids
-            ids.associateWith { id ->
-                ResolvedMetadata(
-                    startDate = if (id == "one") {
-                        ProvenancedMetadata(cachedYear, IntegrationId("mal"), "m1", "MAL")
-                    } else {
-                        null
-                    },
-                )
-            }
+            metadataUpdates.map { snapshots -> snapshots.filterKeys(ids::contains) }
         }
         val model = CanonicalLibraryScreenModel(
             observeCanonicalLibrary = ObserveCanonicalLibrary(repo),
@@ -242,8 +242,11 @@ class CanonicalLibraryScreenModelTest {
         requestedBatches shouldBe listOf(listOf("one"))
 
         // Details updates the local snapshot while the canonical inventory IDs stay unchanged.
-        cachedYear = "2021-04-01"
-        repo.emitItems(listOf(canonicalItem("one", "Frieren updated")))
+        metadataUpdates.value = mapOf(
+            "one" to ResolvedMetadata(
+                startDate = ProvenancedMetadata("2021-04-01", IntegrationId("mal"), "m1", "MAL"),
+            ),
+        )
         advanceUntilIdle()
         model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items.single().startYear shouldBe
             "2021"
@@ -260,7 +263,19 @@ class CanonicalLibraryScreenModelTest {
             null
         requestedBatches shouldBe
             listOf(listOf("one"), listOf("one", "two"))
-        coVerify(exactly = 2) { metadataResolver.cached(any<Collection<String>>()) }
+        listOf<ProvenancedMetadata<String>?>(
+            null,
+            ProvenancedMetadata("invalid", IntegrationId("mal"), "m1", "MAL"),
+            ProvenancedMetadata("2021-02-30", IntegrationId("mal"), "m1", "MAL"),
+        ).forEach { date ->
+            metadataUpdates.value = mapOf("one" to ResolvedMetadata(startDate = date))
+            advanceUntilIdle()
+            model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>()
+                .items.single { it.canonicalTitleId == "one" }.startYear shouldBe null
+        }
+        io.mockk.verify(exactly = 2) { metadataResolver.observeCached(any()) }
+        coVerify(exactly = 0) { metadataResolver.execute(any(), any()) }
+        coVerify(exactly = 0) { metadataResolver.cached(any<Collection<String>>()) }
     }
 
     @Test

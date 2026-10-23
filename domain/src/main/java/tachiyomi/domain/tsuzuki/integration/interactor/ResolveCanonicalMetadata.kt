@@ -5,6 +5,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onStart
 import tachiyomi.domain.tsuzuki.artwork.model.TitleArtworkObservation
 import tachiyomi.domain.tsuzuki.artwork.repository.TitleArtworkRepository
 import tachiyomi.domain.tsuzuki.catalog.cache.RatingEnrichmentCache
@@ -151,6 +157,26 @@ class ResolveCanonicalMetadata private constructor(
             .asSequence()
             .filter { snapshot -> snapshot.configurationFingerprint == configurationFingerprint }
             .associate { snapshot -> snapshot.canonicalTitleId to snapshot.metadata }
+    }
+
+    /** Cache-only batch stream: table changes and configuration changes both refresh the projection. */
+    fun observeCached(canonicalTitleIds: Collection<String>): Flow<Map<String, ResolvedMetadata>> = flow {
+        val repository = snapshotRepository
+        if (canonicalTitleIds.isEmpty() || repository == null) {
+            emit(emptyMap())
+            return@flow
+        }
+        registry.awaitReady()
+        emitAll(
+            combine(
+                repository.observeMany(canonicalTitleIds.distinct()),
+                registry.observeChanges().onStart { emit(Unit) },
+            ) { snapshots, _ ->
+                val fingerprint = registry.configurationFingerprint()
+                snapshots.values.filter { it.configurationFingerprint == fingerprint }
+                    .associate { it.canonicalTitleId to it.metadata }
+            }.distinctUntilChanged(),
+        )
     }
 
     suspend fun execute(
