@@ -123,6 +123,89 @@ class SupabaseSyncHttpTransportTest {
     }
 
     @Test
+    fun `server epoch refusal is surfaced as unsupported schema during protocol discovery`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(400)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """{"code":"0A000","message":"progress protocol epoch is not supported by this client"}""",
+                )
+                .build(),
+        )
+
+        val result = transport().getProgressProtocol()
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        server.requestCount shouldBe 1
+    }
+
+    @Test
+    fun `downgraded client progress mutation reports unsupported schema without conflict lookup`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(400)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """{"code":"0A000","message":"legacy progress writes are disabled at this protocol epoch"}""",
+                )
+                .build(),
+        )
+
+        val result = transport().push(
+            SupabaseMutationBatch(
+                mutationId = "10000000-0000-0000-0000-000000000099",
+                originClientId = "legacy-device",
+                domain = SyncDocumentKind.READING_PROGRESS.name,
+                baseCursor = 0,
+                operations = listOf(
+                    SyncMutation.SetField(
+                        recordId = "chapter-1",
+                        propertyPath = listOf("lastPageRead"),
+                        value = JsonPrimitive(7),
+                        recordUpdatedAtEpochMillis = 1,
+                    ),
+                ),
+            ),
+        )
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        server.requestCount shouldBe 1
+        server.takeRequest().url.encodedPath shouldBe "/rest/v1/rpc/sync_apply_mutation_batch"
+    }
+
+    @Test
+    fun `invalid mutation stays malformed document instead of protocol refusal`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(400)
+                .addHeader("Content-Type", "application/json")
+                .body("""{"code":"22023","message":"invalid mutation request"}""")
+                .build(),
+        )
+
+        val result = transport().push(
+            SupabaseMutationBatch(
+                mutationId = "10000000-0000-0000-0000-000000000098",
+                originClientId = "device-1",
+                domain = SyncDocumentKind.READING_PROGRESS.name,
+                baseCursor = 0,
+                operations = listOf(
+                    SyncMutation.SetField(
+                        recordId = "chapter-1",
+                        propertyPath = listOf("lastPageRead"),
+                        value = JsonPrimitive(7),
+                        recordUpdatedAtEpochMillis = 1,
+                    ),
+                ),
+            ),
+        )
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.MALFORMED_DOCUMENT
+        server.requestCount shouldBe 1
+    }
+
+    @Test
     fun `logged-out protocol discovery performs no remote request`() = runTest {
         val result = transport(
             account = FakeAccountRepository(AccountState.LoggedOut, token = null),

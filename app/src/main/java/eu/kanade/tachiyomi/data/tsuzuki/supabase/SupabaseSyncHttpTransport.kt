@@ -281,6 +281,7 @@ class SupabaseSyncHttpTransport(
                     return SyncTransportResult.Failure(
                         response.code.toSyncFailure(
                             retryAfterHeader = response.header("Retry-After"),
+                            responseBody = raw,
                         ),
                     )
                 }
@@ -338,7 +339,22 @@ class SupabaseSyncHttpTransport(
 
     private fun Int.toSyncFailure(
         retryAfterHeader: String?,
+        responseBody: String,
     ): SyncFailure {
+        // PostgREST reports server-side epoch fences with SQLSTATE 0A000
+        // and HTTP 400. Do not misclassify a forbidden progress protocol as
+        // corrupted local data, or bypass other ordinary 400 validation.
+        if (this == 400 || this == 422) {
+            val postgresCode = runCatching {
+                (json.parseToJsonElement(responseBody) as? JsonObject)
+                    ?.get("code")
+                    ?.let { it as? JsonPrimitive }
+                    ?.content
+            }.getOrNull()
+            if (postgresCode == "0A000") {
+                return SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA)
+            }
+        }
         val reason = when (this) {
             400, 422 -> SyncFailureReason.MALFORMED_DOCUMENT
             401 -> SyncFailureReason.AUTHORIZATION_REQUIRED
