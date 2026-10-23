@@ -4,6 +4,7 @@ import app.cash.sqldelight.async.coroutines.awaitAsList
 import app.cash.sqldelight.async.coroutines.awaitAsOne
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import eu.kanade.tachiyomi.data.backup.create.CanonicalCoreBackupExporter
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
@@ -13,30 +14,28 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreProgress
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreSourceMapping
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreVariant
-import eu.kanade.tachiyomi.data.backup.create.CanonicalCoreBackupExporter
-import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.data.Chapters
 import tachiyomi.data.Database
-import tachiyomi.data.tsuzuki.CanonicalTitleRepositoryImpl
-import tachiyomi.data.tsuzuki.CanonicalLibraryRepositoryImpl
-import tachiyomi.data.tsuzuki.CanonicalChapterRepositoryImpl
-import tachiyomi.data.tsuzuki.CanonicalReadingRepositoryImpl
-import tachiyomi.data.tsuzuki.SourceTitleMappingRepositoryImpl
-import tachiyomi.domain.tsuzuki.sync.service.CanonicalTitleSyncSource
 import tachiyomi.data.DateColumnAdapter
 import tachiyomi.data.History
 import tachiyomi.data.Mangas
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
+import tachiyomi.data.tsuzuki.CanonicalChapterRepositoryImpl
+import tachiyomi.data.tsuzuki.CanonicalLibraryRepositoryImpl
+import tachiyomi.data.tsuzuki.CanonicalReadingRepositoryImpl
+import tachiyomi.data.tsuzuki.CanonicalTitleRepositoryImpl
+import tachiyomi.data.tsuzuki.SourceTitleMappingRepositoryImpl
+import tachiyomi.domain.tsuzuki.sync.service.CanonicalTitleSyncSource
 import java.nio.file.Files
 
 class CanonicalCoreBackupImporterTest {
