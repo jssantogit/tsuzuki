@@ -20,6 +20,13 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreReaderPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreSourceMapping
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreVariant
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreContentPreference
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreSourcePreference
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreContinueReadingState
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterUpdateState
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleArtwork
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleFormat
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleName
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.flow.first
@@ -327,6 +334,73 @@ class CanonicalCoreBackupImporterTest {
             ),
         )
         shouldThrow<IllegalArgumentException> { importer.restoreCore(coreSection(core)) }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+    }
+
+    @Test
+    fun `source and content preferences and title observations preserve the original values`() = runBlocking {
+        val input = coreWithCollectionsAndBindings().copy(
+            contentPreferences = listOf(
+                BackupCoreContentPreference("title-1", "provider-a", "pt-BR", 10),
+            ),
+            sourcePreferences = listOf(
+                BackupCoreSourcePreference("pt-BR", 42, 0),
+            ),
+            continueReadingStates = listOf(
+                BackupCoreContinueReadingState("title-1", 1234),
+            ),
+            chapterUpdateStates = listOf(
+                BackupCoreChapterUpdateState("chapter-1", "title-1", 10, 20),
+            ),
+            titleArtwork = listOf(
+                BackupCoreTitleArtwork("title-1", "kitsu", "cover-url", null, 11),
+            ),
+            titleFormats = listOf(
+                BackupCoreTitleFormat("title-1", "kitsu", "MANGA", 12),
+            ),
+            titleNames = listOf(
+                BackupCoreTitleName("title-1", "kitsu", "synonym", "Alias", 13),
+            ),
+        )
+        importer.restoreCore(coreSection(input))
+
+        val titles = CanonicalTitleRepositoryImpl(database)
+        val exported = CanonicalCoreBackupExporter(
+            titleSource = CanonicalTitleSyncSource { titles.getAllAsFlow().first() },
+            titleRepository = titles,
+            libraryRepository = CanonicalLibraryRepositoryImpl(database),
+            chapterRepository = CanonicalChapterRepositoryImpl(database),
+            sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+            readingRepository = CanonicalReadingRepositoryImpl(database),
+            database = database,
+            json = Json,
+        ).export()
+        val decoded = Json.decodeFromString(BackupCanonicalCore.serializer(), exported.payloadJson)
+        decoded.contentPreferences shouldBe input.contentPreferences
+        decoded.sourcePreferences shouldBe input.sourcePreferences
+        decoded.continueReadingStates shouldBe input.continueReadingStates
+        decoded.chapterUpdateStates shouldBe input.chapterUpdateStates
+        decoded.titleArtwork shouldBe input.titleArtwork
+        decoded.titleFormats shouldBe input.titleFormats
+        decoded.titleNames shouldBe input.titleNames
+    }
+
+    @Test
+    fun `conflicting source preference order or orphan chapter update prevents all writes`() = runBlocking {
+        val input = coreWithCollectionsAndBindings()
+        val duplicateOrder = input.copy(
+            sourcePreferences = listOf(
+                BackupCoreSourcePreference("pt-BR", 42, 0),
+                BackupCoreSourcePreference("pt-BR", 43, 0),
+            ),
+        )
+        shouldThrow<IllegalArgumentException> { importer.restoreCore(coreSection(duplicateOrder)) }
+        val orphan = input.copy(
+            chapterUpdateStates = listOf(
+                BackupCoreChapterUpdateState("chapter-1", "different-title", 10, null),
+            ),
+        )
+        shouldThrow<IllegalArgumentException> { importer.restoreCore(coreSection(orphan)) }
         database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
     }
 
