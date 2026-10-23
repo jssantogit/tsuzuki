@@ -68,6 +68,22 @@ class BackupCanonicalSnapshotTest {
     }
 
     @Test
+    fun `secret integration configuration is rejected before any legacy restore begins`() {
+        val core = BackupCanonicalCore(
+            integrationSettings = listOf(
+                BackupCoreIntegrationSetting("kitsu", true, """{"refresh_token":"private"}""", 1),
+            ),
+        )
+        val section = BackupCanonicalSection.fromJson(
+            BackupCanonicalCore.SECTION_KEY,
+            Json.encodeToString(BackupCanonicalCore.serializer(), core),
+        )
+        runCatching {
+            BackupCanonicalSnapshot(sections = listOf(section)).validate()
+        }.isFailure shouldBe true
+    }
+
+    @Test
     fun `unsupported snapshot version and duplicate sections are rejected`() {
         val section = BackupCanonicalSection.fromJson("tsuzuki.library.v1", "[]")
 
