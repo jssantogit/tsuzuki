@@ -48,6 +48,7 @@ data class TsuzukiSyncScreenState(
 
 enum class TsuzukiSyncScreenError {
     AUTHORIZATION_REQUIRED,
+    ACCOUNT_SCOPE_MISMATCH,
     NETWORK_UNAVAILABLE,
     REMOTE_UNAVAILABLE,
     CONFLICT_REMAINS,
@@ -208,6 +209,8 @@ class TsuzukiSyncScreenModel(
     private fun SyncFailureReason.toScreenError(): TsuzukiSyncScreenError = when (this) {
         SyncFailureReason.AUTHORIZATION_REQUIRED ->
             TsuzukiSyncScreenError.AUTHORIZATION_REQUIRED
+        SyncFailureReason.ACCOUNT_SCOPE_MISMATCH ->
+            TsuzukiSyncScreenError.ACCOUNT_SCOPE_MISMATCH
         SyncFailureReason.NETWORK_UNAVAILABLE,
         SyncFailureReason.RATE_LIMITED,
         -> TsuzukiSyncScreenError.NETWORK_UNAVAILABLE
