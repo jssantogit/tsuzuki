@@ -1,5 +1,8 @@
 package eu.kanade.tachiyomi.data.tsuzuki
 
+import android.content.Context
+import android.net.Uri
+import com.hippo.unifile.UniFile
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -30,10 +33,12 @@ class MihonCanonicalDownloadGateway internal constructor(
     private val artifactLocator: suspend (ContentOption) -> CanonicalDownloadArtifact? = { null },
     private val downloadStarter: (Long) -> Unit = {},
     private val downloadCompletion: suspend (Long) -> Boolean = { false },
+    private val artifactAvailability: suspend (CanonicalDownloadArtifact) -> Boolean = { false },
 ) : CanonicalDownloadGateway {
 
     @Inject
     constructor(
+        context: Context,
         mangaRepository: MangaRepository,
         chapterRepository: ChapterRepository,
         sourceManager: SourceManager,
@@ -82,7 +87,13 @@ class MihonCanonicalDownloadGateway internal constructor(
         downloadCompletion = { chapterId ->
             awaitDownloadCompletion(downloadManager, chapterId)
         },
+        artifactAvailability = { artifact ->
+            withIOContext { isArtifactReadable(context, artifact) }
+        },
     )
+
+    override suspend fun isArtifactAvailable(artifact: CanonicalDownloadArtifact): Boolean =
+        artifactAvailability(artifact)
 
     override suspend fun isDownloaded(variant: ChapterVariant): Boolean {
         val mangaId = variant.mihonMangaId ?: return false
@@ -123,6 +134,25 @@ class MihonCanonicalDownloadGateway internal constructor(
     }
 
     companion object {
+        /**
+         * This is a lightweight readability preflight, not archive-decoding or checksum
+         * validation. Actual archive parsing and page discovery remain in the Reader.
+         * A detached SD card/revoked SAF permission must not delete the DB reference.
+         */
+        private fun isArtifactReadable(context: Context, artifact: CanonicalDownloadArtifact): Boolean {
+            if (artifact.localUri.isBlank()) return false
+            val local = UniFile.fromUri(context, Uri.parse(artifact.localUri)) ?: return false
+            if (!local.exists()) return false
+
+            return if (artifact.format.equals("DIRECTORY", ignoreCase = true)) {
+                local.isDirectory && local.listFiles()
+                    ?.any { entry -> !entry.isDirectory && entry.exists() } == true
+            } else {
+                if (local.isDirectory) return false
+                local.openInputStream()?.use { stream -> stream.read() != -1 } == true
+            }
+        }
+
         private suspend fun locateArtifact(
             option: ContentOption,
             mangaRepository: MangaRepository,
