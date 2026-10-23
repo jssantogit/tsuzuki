@@ -4,25 +4,21 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -41,10 +37,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.VerticalSlider
-import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -57,13 +50,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
@@ -79,8 +69,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
 private enum class DetailsSheet { SORT, JUMP, SOURCES }
-private const val FULL_CHAPTER_FIRST_ITEM = 3
-private val CHAPTER_SCRUBBER_LANE_WIDTH = 112.dp
+private const val FULL_CHAPTER_FIRST_ITEM = 1
 
 @Composable
 fun CanonicalTitleDetailScreen(
@@ -155,24 +144,38 @@ private fun LoadedDetails(
             navigateUp()
         } else {
             mode = target
-            scope.launch { listState.animateScrollToItem(1, -toolbarOffset) }
+            scope.launch {
+                listState.scrollToItem(
+                    if (target == CanonicalDetailsLowerMode.FULL) 0 else 1,
+                    if (target == CanonicalDetailsLowerMode.FULL) 0 else -toolbarOffset,
+                )
+            }
         }
     }
     BackHandler(enabled = mode != CanonicalDetailsLowerMode.COMPACT) { moveMode(CanonicalDetailsLowerAction.BACK) }
     Box(Modifier.fillMaxSize()) {
-        LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
-            item(key = "hero") {
-                CanonicalDetailsHero(
-                    state,
-                    background,
-                    onReadTitle,
-                    onAddToLibrary,
-                    onRemoveFromLibrary,
-                    onRefresh,
-                    onVisualHeightChanged = { heroVisualHeight = it },
-                )
+        LazyColumn(
+            state = listState,
+            contentPadding = if (mode == CanonicalDetailsLowerMode.FULL) {
+                PaddingValues(top = with(density) { toolbarOffset.toDp() }, bottom = 24.dp)
+            } else {
+                PaddingValues(bottom = 24.dp)
+            },
+        ) {
+            if (mode != CanonicalDetailsLowerMode.FULL) {
+                item(key = "hero") {
+                    CanonicalDetailsHero(
+                        state,
+                        background,
+                        onReadTitle,
+                        onAddToLibrary,
+                        onRemoveFromLibrary,
+                        onRefresh,
+                        onVisualHeightChanged = { heroVisualHeight = it },
+                    )
+                }
+                item(key = "modes") { DetailsModes(mode, moveMode) }
             }
-            item(key = "modes") { DetailsModes(mode, moveMode) }
             when (mode) {
                 CanonicalDetailsLowerMode.COMPACT -> item(key = "context") {
                     ContextualChapterRail(state, onOpenChapter, onProviders) {
@@ -215,85 +218,28 @@ private fun LoadedDetails(
                             state.downloadInProgressChapterId == item.chapter.id,
                             onOpenChapter,
                             onDownload,
-                            modifier = Modifier.padding(
-                                start = 16.dp,
-                                end = if (showChapterScrubber(chapters.size)) CHAPTER_SCRUBBER_LANE_WIDTH else 16.dp,
-                            ),
+                            modifier = Modifier.padding(horizontal = 16.dp),
                         )
                     }
                 }
-            }
-        }
-        if (mode == CanonicalDetailsLowerMode.FULL && showChapterScrubber(chapters.size) &&
-            listState.firstVisibleItemIndex >= 2
-        ) {
-            var dragging by remember { mutableStateOf(false) }
-            var bubbleHeightPx by remember { mutableIntStateOf(0) }
-            val slider = rememberSliderState(value = 0f, trackRange = 0f..1f)
-            val firstIndex = (listState.firstVisibleItemIndex - FULL_CHAPTER_FIRST_ITEM).coerceIn(0, chapters.lastIndex)
-            LaunchedEffect(firstIndex, dragging) {
-                if (!dragging) slider.value = firstIndex.toFloat() / chapters.lastIndex
-            }
-            val selected = chapterAtScrubberPosition(chapters, slider.value)
-            val selectedLabel = selected?.let { detailsChapterLabel(it) }.orEmpty()
-            val scrubberLabel = stringResource(MR.strings.tsuzuki_details_scrubber)
-            BoxWithConstraints(
-                Modifier.align(Alignment.CenterEnd).width(CHAPTER_SCRUBBER_LANE_WIDTH).fillMaxHeight(0.55f),
-            ) {
-                val bubbleHeight = with(density) { bubbleHeightPx.toDp() }
-                val bubbleTravel = (maxHeight - bubbleHeight).coerceAtLeast(0.dp)
-                val bubbleOffset = ((maxHeight - 48.dp) * slider.value + 24.dp - bubbleHeight / 2)
-                    .coerceIn(0.dp, bubbleTravel)
-                if (dragging && selected != null) {
-                    Text(
-                        selectedLabel,
-                        modifier = Modifier.align(Alignment.TopStart).offset(y = bubbleOffset).width(64.dp)
-                            .onSizeChanged { bubbleHeightPx = it.height }
-                            .background(
-                                MaterialTheme.colorScheme.inverseSurface,
-                                MaterialTheme.shapes.small,
-                            ).padding(6.dp),
-                        color = MaterialTheme.colorScheme.inverseOnSurface,
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                }
-                VerticalSlider(
-                    state = slider,
-                    modifier = Modifier.align(Alignment.CenterEnd).width(48.dp).fillMaxHeight()
-                        .semantics {
-                            contentDescription = scrubberLabel
-                            stateDescription = selectedLabel
-                        },
-                    onValueChange = {
-                        dragging = true
-                        slider.value = it
-                    },
-                    onValueChangeFinished = {
-                        dragging = false
-                        chapterAtScrubberPosition(chapters, slider.value)?.let { target ->
-                            val index = chapters.indexOfFirst { it.chapter.id == target.chapter.id }
-                            scope.launch {
-                                val viewport = listState.layoutInfo
-                                val center = (viewport.viewportEndOffset - viewport.viewportStartOffset) / 2
-                                listState.animateScrollToItem(FULL_CHAPTER_FIRST_ITEM + index, -center)
-                            }
-                        }
-                    },
-                )
             }
         }
         DetailsToolbar(
             onBack = { moveMode(CanonicalDetailsLowerAction.BACK) },
             onRefresh = onRefresh,
             onProviders = onProviders,
-            background = background.copy(
-                alpha = detailsToolbarFraction(
-                    heroVisualHeight,
-                    toolbarOffset,
-                    listState.firstVisibleItemIndex,
-                    listState.firstVisibleItemScrollOffset,
-                ),
-            ),
+            background = if (mode == CanonicalDetailsLowerMode.FULL) {
+                background
+            } else {
+                background.copy(
+                    alpha = detailsToolbarFraction(
+                        heroVisualHeight,
+                        toolbarOffset,
+                        listState.firstVisibleItemIndex,
+                        listState.firstVisibleItemScrollOffset,
+                    ),
+                )
+            },
             onSources = if (state.metadataSources.isNotEmpty()) ({ sheet = DetailsSheet.SOURCES }) else null,
         )
     }

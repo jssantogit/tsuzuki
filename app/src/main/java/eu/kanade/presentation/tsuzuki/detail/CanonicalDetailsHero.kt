@@ -403,37 +403,58 @@ internal fun canonicalDetailsHeroFadeStops(background: Color): List<Pair<Float, 
 
 @Composable
 internal fun DetailsEditorial(state: CanonicalTitleScreenState.Loaded) {
-    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(32.dp)) {
-        state.description?.takeIf(String::isNotBlank)?.let {
-            EditorialSection(stringResource(MR.strings.tsuzuki_details_synopsis), it)
-        }
+    val genres = editorialGenres(state.genres)
+    val artists = state.artists.filter(String::isNotBlank).distinct()
+        .filterNot { name -> state.author?.split(",")?.any { it.trim() == name } == true }
+    val publication = listOfNotNull(
+        editorialFormatLabel(state.editorialFormat),
+        state.startDate?.takeIf(String::isNotBlank),
+        state.endDate?.takeIf(String::isNotBlank),
+        state.editorialVolumeCount?.let { stringResource(MR.strings.tsuzuki_details_volumes, it) },
+    )
+    val hasEditorialFacts = !state.author.isNullOrBlank() ||
+        artists.isNotEmpty() || genres.isNotEmpty() || publication.isNotEmpty() ||
+        state.tags.any(String::isNotBlank)
+
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
         state.author?.takeIf(String::isNotBlank)?.let {
             EditorialSection(stringResource(MR.strings.tsuzuki_details_creation), it)
         }
-        val publication = listOfNotNull(
-            editorialFormatLabel(state.editorialFormat),
-            state.startDate?.takeIf(String::isNotBlank),
-            state.endDate?.takeIf(String::isNotBlank),
-            state.editorialVolumeCount?.let { stringResource(MR.strings.tsuzuki_details_volumes, it) },
-        )
+        if (artists.isNotEmpty()) {
+            EditorialSection(stringResource(MR.strings.tsuzuki_details_artists), artists.joinToString(" · "))
+        }
+        if (genres.isNotEmpty()) {
+            EditorialSection(stringResource(MR.strings.tsuzuki_details_genres), genres.joinToString(" · "))
+        }
         if (publication.isNotEmpty()) {
             EditorialSection(
                 stringResource(MR.strings.tsuzuki_details_publication),
                 publication.joinToString("\n"),
             )
         }
-        if (state.tags.isNotEmpty()) {
-            EditorialSection(
-                stringResource(MR.strings.tsuzuki_details_tags),
-                state.tags.joinToString(" · "),
+        state.tags.filter(String::isNotBlank).distinct().takeIf(List<String>::isNotEmpty)?.let {
+            EditorialSection(stringResource(MR.strings.tsuzuki_details_tags), it.joinToString(" · "))
+        }
+        if (!hasEditorialFacts) {
+            Text(
+                stringResource(MR.strings.tsuzuki_details_editorial_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
 }
 
+/** Editorial facts keep all available genres; only the Hero is limited to three. */
+internal fun editorialGenres(genres: List<String>): List<String> =
+    genres.map(String::trim).filter(String::isNotBlank).distinct()
+
 @Composable
 private fun EditorialSection(title: String, text: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, style = MaterialTheme.typography.titleLarge)
         Text(text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
