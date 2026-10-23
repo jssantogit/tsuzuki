@@ -113,11 +113,11 @@ select is(
 );
 
 select throws_ok(
-    $
+    $$
     select tsuzuki_private.sync_apply_mutation_batch(
         '{"mutationId":"10000000-0000-0000-0000-00000000b099"}'::jsonb
     )
-    $,
+    $$,
     '42501',
     null,
     'authenticated clients cannot call the underlying ungated sync implementation'
