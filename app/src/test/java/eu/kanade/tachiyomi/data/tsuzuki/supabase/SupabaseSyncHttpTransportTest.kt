@@ -73,6 +73,27 @@ class SupabaseSyncHttpTransportTest {
     }
 
     @Test
+    fun `account replacement during token retrieval prevents authenticated RPC`() = runTest {
+        val original = AccountState.Authenticated(TsuzukiAccount("user-1", "a@example.com"))
+        val replacement = AccountState.Authenticated(TsuzukiAccount("user-2", "b@example.com"))
+        val account = FakeAccountRepository(
+            initial = original,
+            token = "token-from-user-2",
+            nextStateOnToken = replacement,
+        )
+        val transport = transport(
+            account = account,
+            scopeGuard = SyncAccountScopeGuard { it == "user-1" },
+        )
+
+        val result = transport.snapshot(SyncDocumentKind.LIBRARY)
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe
+            SyncFailureReason.ACCOUNT_SCOPE_MISMATCH
+        server.requestCount shouldBe 0
+    }
+
+    @Test
     fun `push converts local mutation paths and returns mutation scoped conflicts`() = runTest {
         server.enqueue(
             MockResponse.Builder()
@@ -249,6 +270,7 @@ class SupabaseSyncHttpTransportTest {
     private class FakeAccountRepository(
         initial: AccountState,
         private val token: String?,
+        private val nextStateOnToken: AccountState? = null,
     ) : AccountRepository {
         private val mutableState = MutableStateFlow(initial)
         override val state: StateFlow<AccountState> = mutableState
@@ -263,6 +285,9 @@ class SupabaseSyncHttpTransportTest {
 
         override suspend fun refreshSession() = error("not used")
 
-        override suspend fun getAccessToken() = Result.success(token)
+        override suspend fun getAccessToken(): Result<String?> {
+            nextStateOnToken?.let { mutableState.value = it }
+            return Result.success(token)
+        }
     }
 }
