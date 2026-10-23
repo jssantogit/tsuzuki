@@ -43,6 +43,7 @@ data class CanonicalLibraryCardModel(
     val coverUrl: String? = null,
     val sourceCover: MangaCover? = null,
     val localCoverUrl: String? = null,
+    val startYear: String? = null,
 ) {
     val coverData: Any?
         get() = coverUrl ?: sourceCover ?: localCoverUrl
@@ -56,6 +57,7 @@ internal fun UnifiedLibraryTitle.toCardModel(
     localCoverUrl: String? = null,
     sourceCover: MangaCover? = null,
     canonicalCoverUrl: String? = null,
+    startYear: String? = null,
 ): CanonicalLibraryCardModel {
     val readingState = progress.toReadingState()
     val originStatuses = buildMap<String, Set<LibraryStatus>> {
@@ -105,6 +107,7 @@ internal fun UnifiedLibraryTitle.toCardModel(
         coverUrl = canonicalCoverUrl ?: preferredExternalCoverUrl(),
         sourceCover = sourceCover,
         localCoverUrl = localCoverUrl,
+        startYear = startYear,
     )
 }
 

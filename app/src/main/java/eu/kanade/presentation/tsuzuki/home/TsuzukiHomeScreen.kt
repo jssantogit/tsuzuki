@@ -3,22 +3,19 @@ package eu.kanade.presentation.tsuzuki.home
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -35,15 +32,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -51,7 +49,7 @@ import coil3.compose.AsyncImage
 import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.tsuzuki.collections.FolderTile
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinCard
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.tsuzuki.recordArtworkLoad
@@ -60,12 +58,12 @@ import kotlinx.coroutines.delay
 import mihon.app.di.appGraph
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
-import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemStatus
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticTrace
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticWorkflow
 import tachiyomi.domain.tsuzuki.home.model.HomeContinueReadingItem
 import tachiyomi.domain.tsuzuki.home.model.HomeSection
+import tachiyomi.domain.tsuzuki.integration.model.metadataStartYear
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
@@ -73,7 +71,6 @@ import tachiyomi.presentation.core.i18n.stringResource
 @Composable
 fun TsuzukiHomeScreen(
     state: TsuzukiHomeScreenState,
-    onHeroRead: (CatalogItem) -> Unit,
     onHeroDetails: (CatalogItem) -> Unit,
     onContinueReading: (HomeContinueReadingItem) -> Unit,
     onFolder: (collectionId: String, folderId: String) -> Unit,
@@ -98,7 +95,6 @@ fun TsuzukiHomeScreen(
                 item(key = "home_hero") {
                     HomeHeroCarousel(
                         items = heroes,
-                        onRead = onHeroRead,
                         onDetails = onHeroDetails,
                     )
                 }
@@ -160,7 +156,6 @@ fun TsuzukiHomeScreen(
 @Composable
 private fun HomeHeroCarousel(
     items: List<CatalogItem>,
-    onRead: (CatalogItem) -> Unit,
     onDetails: (CatalogItem) -> Unit,
 ) {
     var activeIndex by remember(items) { mutableIntStateOf(0) }
@@ -175,10 +170,21 @@ private fun HomeHeroCarousel(
     }
 
     val activeItem = items[activeIndex.coerceIn(items.indices)]
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    val statusBarInset = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
+    val navigationBarInset = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(HOME_HERO_HEIGHT),
+            .height(
+                homeHeroHeight(
+                    screenHeightDp = configuration.screenHeightDp,
+                    statusBarInset = statusBarInset,
+                    navigationBarInset = navigationBarInset,
+                    fontScale = configuration.fontScale,
+                ),
+            ),
     ) {
         Crossfade(
             targetState = activeItem,
@@ -189,7 +195,6 @@ private fun HomeHeroCarousel(
                 item = item,
                 activeIndex = activeIndex,
                 itemCount = items.size,
-                onRead = { onRead(item) },
                 onDetails = { onDetails(item) },
             )
         }
@@ -197,33 +202,16 @@ private fun HomeHeroCarousel(
 }
 
 @Composable
-@OptIn(ExperimentalLayoutApi::class)
 private fun HomeHero(
     item: CatalogItem,
     activeIndex: Int,
     itemCount: Int,
-    onRead: () -> Unit,
     onDetails: () -> Unit,
 ) {
     val colors = defaultSkinColors()
     val metadata = buildList {
-        if (item.format != CatalogItemFormat.UNKNOWN) {
-            add(
-                item.format.name
-                    .lowercase()
-                    .replace('_', ' ')
-                    .replaceFirstChar { it.uppercase() },
-            )
-        }
-        item.genres.firstOrNull()?.takeIf(String::isNotBlank)?.let(::add)
-        if (item.status != CatalogItemStatus.UNKNOWN) {
-            add(
-                item.status.name
-                    .lowercase()
-                    .replace('_', ' ')
-                    .replaceFirstChar { it.uppercase() },
-            )
-        }
+        catalogFormatLabel(item.format)?.let(::add)
+        metadataStartYear(item.startDate)?.let(::add)
     }.take(3).joinToString(" · ")
 
     Box(
@@ -254,9 +242,10 @@ private fun HomeHero(
         )
         Column(
             modifier = Modifier
-                .align(Alignment.BottomStart)
+                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(horizontal = DefaultSkinSpacing.PageHorizontal, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (metadata.isNotBlank()) {
@@ -264,6 +253,7 @@ private fun HomeHero(
                     text = metadata,
                     style = MaterialTheme.typography.labelMedium,
                     color = colors.secondary,
+                    textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -273,37 +263,15 @@ private fun HomeHero(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = colors.foreground,
-                maxLines = 3,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            item.synopsis?.takeIf(String::isNotBlank)?.let { synopsis ->
-                Text(
-                    text = synopsis,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.secondary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            FlowRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                maxItemsInEachRow = 2,
-            ) {
-                DefaultSkinHomeHeroAction(
-                    text = stringResource(MR.strings.tsuzuki_home_read),
-                    primary = true,
-                    onClick = onRead,
-                )
-                DefaultSkinHomeHeroAction(
-                    text = stringResource(MR.strings.tsuzuki_home_details),
-                    primary = false,
-                    onClick = onDetails,
-                )
-            }
+            DefaultSkinPrimaryButton(
+                text = stringResource(MR.strings.tsuzuki_home_view_work),
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onDetails,
+            )
             if (itemCount > 1) {
                 val carouselPosition = stringResource(
                     MR.strings.tsuzuki_home_hero_position,
@@ -334,35 +302,27 @@ private fun HomeHero(
 }
 
 @Composable
-private fun DefaultSkinHomeHeroAction(
-    text: String,
-    primary: Boolean,
-    onClick: () -> Unit,
-) {
-    val colors = defaultSkinColors()
-    val shape = DefaultSkinShape.Control
-    Box(
-        modifier = Modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .heightIn(min = 38.dp)
-                .clip(shape)
-                .background(if (primary) colors.accent else colors.surface)
-                .then(if (primary) Modifier else Modifier.border(1.dp, colors.outline, shape)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = text,
-                modifier = Modifier.padding(horizontal = 16.dp),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = if (primary) colors.onAccent else colors.foreground,
-                maxLines = 1,
-            )
-        }
-    }
+private fun catalogFormatLabel(format: CatalogItemFormat): String? = when (format) {
+    CatalogItemFormat.MANGA -> stringResource(MR.strings.tsuzuki_details_format_manga)
+    CatalogItemFormat.NOVEL -> stringResource(MR.strings.tsuzuki_details_format_novel)
+    CatalogItemFormat.ONE_SHOT -> stringResource(MR.strings.tsuzuki_details_format_one_shot)
+    CatalogItemFormat.MANHWA -> stringResource(MR.strings.tsuzuki_details_format_manhwa)
+    CatalogItemFormat.MANHUA -> stringResource(MR.strings.tsuzuki_details_format_manhua)
+    CatalogItemFormat.DOUJIN -> stringResource(MR.strings.tsuzuki_details_format_doujin)
+    CatalogItemFormat.WEBTOON -> stringResource(MR.strings.tsuzuki_details_format_webtoon)
+    CatalogItemFormat.UNKNOWN -> null
+}
+
+internal fun homeHeroHeight(
+    screenHeightDp: Int,
+    statusBarInset: Dp,
+    navigationBarInset: Dp,
+    fontScale: Float,
+): Dp {
+    val usefulViewport = (screenHeightDp.dp - statusBarInset - navigationBarInset).coerceAtLeast(1.dp)
+    val fontScaleMinimum = (360.dp + ((fontScale - 1f).coerceAtLeast(0f) * 180f).dp)
+        .coerceAtMost(HOME_HERO_MAX_HEIGHT)
+    return (usefulViewport * 0.65f).coerceIn(fontScaleMinimum, HOME_HERO_MAX_HEIGHT)
 }
 
 @Composable
@@ -492,7 +452,7 @@ internal fun homeModuleTopSpacing(previousModuleExists: Boolean, heroPrecedesMod
 }
 
 private val homeHeroFirstModuleSpacing = 8.dp
-internal val HOME_HERO_HEIGHT = 350.dp
+internal val HOME_HERO_MAX_HEIGHT = 640.dp
 private const val HERO_ROTATION_INTERVAL_MILLIS = 8_000L
 private const val HERO_CROSSFADE_MILLIS = 650
 private const val MAX_HERO_ITEMS = 4

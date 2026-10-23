@@ -1,5 +1,6 @@
 package tachiyomi.data.tsuzuki.integration
 
+import app.cash.sqldelight.async.coroutines.awaitAsList
 import app.cash.sqldelight.async.coroutines.awaitAsOneOrNull
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -41,6 +42,27 @@ class CanonicalMetadataSnapshotRepositoryImpl(
         }
     }
 
+    override suspend fun getMany(canonicalTitleIds: Collection<String>): Map<String, CanonicalMetadataSnapshot> {
+        if (canonicalTitleIds.isEmpty()) return emptyMap()
+        val snapshots = mutableMapOf<String, CanonicalMetadataSnapshot>()
+        canonicalTitleIds.distinct().chunked(MAX_BATCH_SIZE).forEach { ids ->
+            val rows = database.tsuzuki_metadata_snapshotQueries
+                .getManyTsuzukiMetadataSnapshots(ids) { titleId, fingerprint, payload, refreshedAt ->
+                    SnapshotRow(titleId, fingerprint, payload, refreshedAt)
+                }
+                .awaitAsList()
+            rows.forEach { row ->
+                val snapshot = try {
+                    row.toSnapshot()
+                } catch (_: Exception) {
+                    null
+                }
+                if (snapshot != null) snapshots[snapshot.canonicalTitleId] = snapshot
+            }
+        }
+        return snapshots
+    }
+
     override suspend fun upsertIfNewer(snapshot: CanonicalMetadataSnapshot): CanonicalMetadataSnapshot =
         database.transactionWithResult {
             val existing = get(snapshot.canonicalTitleId)
@@ -66,4 +88,15 @@ class CanonicalMetadataSnapshotRepositoryImpl(
         val payloadJson: String,
         val refreshedAt: Long,
     )
+
+    private fun SnapshotRow.toSnapshot() = CanonicalMetadataSnapshot(
+        canonicalTitleId = canonicalTitleId,
+        configurationFingerprint = configurationFingerprint,
+        metadata = CanonicalMetadataSnapshotJsonCodec.decode(payloadJson),
+        refreshedAt = refreshedAt,
+    )
+
+    private companion object {
+        const val MAX_BATCH_SIZE = 900
+    }
 }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -614,37 +616,72 @@ private fun CanonicalLibraryList(
     modifier: Modifier = Modifier,
 ) {
     val recorder = LocalContext.current.appGraph.structuredDiagnosticRecorder
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 104.dp),
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        items(items = items, key = CanonicalLibraryCardModel::canonicalTitleId) { item ->
-            val trace = remember(item.canonicalTitleId, recorder.sessionId) {
-                DiagnosticTrace.start(
-                    recorder = recorder,
-                    workflow = DiagnosticWorkflow.OPEN_TITLE,
-                    canonicalTitleId = item.canonicalTitleId,
-                    subsystem = DiagnosticSubsystem.IMAGE,
-                )
-            }
-            Box(
-                modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { onOpenItem(item) },
-                contentAlignment = Alignment.TopCenter,
-                propagateMinConstraints = false,
-            ) {
-                TsuzukiDefaultSkinCover(
-                    data = item.coverUrl ?: item.sourceCover ?: item.localCoverUrl,
-                    fallbackData = listOf(item.sourceCover, item.sourceCover?.url, item.localCoverUrl),
-                    contentDescription = item.title,
-                    size = TsuzukiDefaultSkinCoverSize.Library,
-                    onLoadEvent = { trace.recordArtworkLoad(it) },
-                )
+    val colors = defaultSkinColors()
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(canonicalLibraryGridColumnCount(maxWidth)),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(items = items, key = CanonicalLibraryCardModel::canonicalTitleId) { item ->
+                val trace = remember(item.canonicalTitleId, recorder.sessionId) {
+                    DiagnosticTrace.start(
+                        recorder = recorder,
+                        workflow = DiagnosticWorkflow.OPEN_TITLE,
+                        canonicalTitleId = item.canonicalTitleId,
+                        subsystem = DiagnosticSubsystem.IMAGE,
+                    )
+                }
+                Column(
+                    modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { onOpenItem(item) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.TopCenter,
+                        propagateMinConstraints = false,
+                    ) {
+                        TsuzukiDefaultSkinCover(
+                            data = item.coverUrl ?: item.sourceCover ?: item.localCoverUrl,
+                            fallbackData = listOf(item.sourceCover, item.sourceCover?.url, item.localCoverUrl),
+                            contentDescription = item.title,
+                            size = TsuzukiDefaultSkinCoverSize.Library,
+                            onLoadEvent = { trace.recordArtworkLoad(it) },
+                        )
+                    }
+                    Text(
+                        text = item.title,
+                        modifier = Modifier.widthIn(max = TsuzukiDefaultSkinCoverSize.Library.width),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = colors.foreground,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                    )
+                    item.startYear?.let { year ->
+                        Text(
+                            text = year,
+                            modifier = Modifier.widthIn(max = TsuzukiDefaultSkinCoverSize.Library.width),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.secondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
             }
         }
     }
+}
+
+internal fun canonicalLibraryGridColumnCount(width: androidx.compose.ui.unit.Dp): Int {
+    val usableWidth = (width - 32.dp).coerceAtLeast(0.dp)
+    return ((usableWidth + 12.dp) / (96.dp + 12.dp)).toInt().coerceAtLeast(1)
 }
 
 @Composable

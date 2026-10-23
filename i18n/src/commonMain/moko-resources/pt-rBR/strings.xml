@@ -1014,8 +1014,8 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_search_retry">Tentar novamente</string>
     <string name="tsuzuki_search_configure_providers">Configurar Providers</string>
     <string name="tsuzuki_home_hero_position">Destaque %1$d de %2$d</string>
+    <string name="tsuzuki_home_view_work">Conferir obra</string>
     <string name="tsuzuki_home_page">Página %d</string>
-    <string name="tsuzuki_home_reading_unavailable">Ainda não há capítulo disponível para leitura.</string>
     <string name="tsuzuki_home_continue_reading">Continue lendo</string>
     <string name="tsuzuki_search_query_label">Buscar mangá</string>
     <string name="tsuzuki_search_clear">Limpar busca</string>

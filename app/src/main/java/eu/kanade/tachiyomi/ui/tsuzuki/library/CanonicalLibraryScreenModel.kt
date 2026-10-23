@@ -32,6 +32,9 @@ import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.domain.tsuzuki.artwork.repository.TitleArtworkRepository
 import tachiyomi.domain.tsuzuki.artwork.resolveCanonicalArtwork
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
+import tachiyomi.domain.tsuzuki.integration.interactor.ResolveCanonicalMetadata
+import tachiyomi.domain.tsuzuki.integration.model.ResolvedMetadata
+import tachiyomi.domain.tsuzuki.integration.model.metadataStartYear
 import tachiyomi.domain.tsuzuki.library.interactor.ObserveCanonicalLibrary
 import tachiyomi.domain.tsuzuki.library.interactor.ObserveUnifiedLibrary
 import tachiyomi.domain.tsuzuki.library.interactor.RefreshUserLibraries
@@ -66,6 +69,11 @@ sealed interface CanonicalLibraryEvent {
     data class OpenCanonicalTitle(val canonicalTitleId: String) : CanonicalLibraryEvent
 }
 
+private data class LibraryInventory(
+    val items: List<UnifiedLibraryTitle>,
+    val startYears: Map<String, String>,
+)
+
 @ViewModelKey
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 class CanonicalLibraryScreenModel private constructor(
@@ -79,6 +87,7 @@ class CanonicalLibraryScreenModel private constructor(
     private val mangaRepository: MangaRepository? = null,
     private val resolveCanonicalSourceManga: ResolveCanonicalSourceManga? = null,
     private val titleArtworkRepository: TitleArtworkRepository? = null,
+    private val resolveCanonicalMetadata: ResolveCanonicalMetadata? = null,
 ) : ViewModel() {
 
     @Inject
@@ -93,6 +102,7 @@ class CanonicalLibraryScreenModel private constructor(
         mangaRepository: MangaRepository,
         resolveCanonicalSourceManga: ResolveCanonicalSourceManga,
         titleArtworkRepository: TitleArtworkRepository,
+        resolveCanonicalMetadata: ResolveCanonicalMetadata,
     ) : this(
         observeLibrary = observeUnifiedLibrary::subscribe,
         setCanonicalLibraryStatus = setCanonicalLibraryStatus,
@@ -104,6 +114,7 @@ class CanonicalLibraryScreenModel private constructor(
         mangaRepository = mangaRepository,
         resolveCanonicalSourceManga = resolveCanonicalSourceManga,
         titleArtworkRepository = titleArtworkRepository,
+        resolveCanonicalMetadata = resolveCanonicalMetadata,
     )
 
     internal constructor(
@@ -113,6 +124,8 @@ class CanonicalLibraryScreenModel private constructor(
         migrateMihonLibraryToCanonical: MigrateMihonLibraryToCanonical,
         resolveCanonicalReadingStart: CanonicalReadingStartResolver,
         canonicalReadingRepository: CanonicalReadingRepository,
+        resolveCanonicalMetadata: ResolveCanonicalMetadata? = null,
+        titleArtworkRepository: TitleArtworkRepository? = null,
     ) : this(
         observeLibrary = {
             observeCanonicalLibrary.subscribe().map { items ->
@@ -126,6 +139,8 @@ class CanonicalLibraryScreenModel private constructor(
         canonicalReadingRepository = canonicalReadingRepository,
         refreshUserLibrariesAction = null,
         mangaRepository = null,
+        titleArtworkRepository = titleArtworkRepository,
+        resolveCanonicalMetadata = resolveCanonicalMetadata,
     )
 
     private val eventChannel = Channel<CanonicalLibraryEvent>()
@@ -170,13 +185,42 @@ class CanonicalLibraryScreenModel private constructor(
             ?.observeAll()
             ?: flowOf(emptyList())
 
+        var metadataIdentity: List<String>? = null
+        var startYears = emptyMap<String, String>()
+        val librarySnapshots = observeLibrary().map { libraryItems ->
+            val canonicalTitleIds = libraryItems.map { it.id }.distinct()
+            if (canonicalTitleIds != metadataIdentity) {
+                metadataIdentity = canonicalTitleIds
+                startYears = if (canonicalTitleIds.isEmpty() || resolveCanonicalMetadata == null) {
+                    emptyMap()
+                } else {
+                    try {
+                        resolveCanonicalMetadata.cached(canonicalTitleIds)
+                            .mapNotNull { (titleId, metadata) ->
+                                metadata.libraryStartYear()?.let { titleId to it }
+                            }
+                            .toMap()
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        logcat(LogPriority.WARN, error) {
+                            "Failed to load cached canonical start years for the library"
+                        }
+                        emptyMap()
+                    }
+                }
+            }
+            LibraryInventory(libraryItems, startYears)
+        }
+
         val cards = combine(
-            observeLibrary(),
+            librarySnapshots,
             localCoverUrls,
             artworkObservations,
-        ) { libraryItems, covers, artwork ->
-            Triple(libraryItems, covers, artwork.groupBy { it.canonicalTitleId })
-        }.flatMapLatest { (libraryItems, covers, artworkByTitle) ->
+        ) { inventory, covers, artwork ->
+            Triple(inventory, covers, artwork.groupBy { it.canonicalTitleId })
+        }.flatMapLatest { (inventory, covers, artworkByTitle) ->
+            val libraryItems = inventory.items
             if (libraryItems.isEmpty()) {
                 flowOf(emptyList())
             } else {
@@ -210,6 +254,7 @@ class CanonicalLibraryScreenModel private constructor(
                                     localCoverUrl = localCover,
                                     sourceCover = sourceCover,
                                     canonicalCoverUrl = canonicalCover,
+                                    startYear = inventory.startYears[item.id],
                                 )
                             }
                     },
@@ -363,6 +408,12 @@ private fun LibraryTitle.toLocalUnifiedTitle() = UnifiedLibraryTitle(
     categories = categories,
     format = CatalogItemFormat.UNKNOWN,
 )
+
+private fun ResolvedMetadata.libraryStartYear(): String? {
+    val evidence = startDate ?: return null
+    if (evidence.providerId.value.isBlank() || evidence.externalId.isNullOrBlank()) return null
+    return metadataStartYear(evidence.value)
+}
 
 private fun UnifiedLibraryTitle.localCoverUrl(
     covers: Map<Long, String?>,

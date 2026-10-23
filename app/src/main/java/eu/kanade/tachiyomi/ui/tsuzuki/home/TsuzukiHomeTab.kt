@@ -18,7 +18,6 @@ import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.FolderCatalogScreen
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreen
-import eu.kanade.tachiyomi.util.system.toast
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -43,7 +42,6 @@ data object TsuzukiHomeTab : Tab {
 
         TsuzukiHomeScreen(
             state = state,
-            onHeroRead = screenModel::readCatalogItem,
             onHeroDetails = screenModel::openCatalogItem,
             onContinueReading = { item ->
                 context.startActivity(
@@ -69,10 +67,6 @@ data object TsuzukiHomeTab : Tab {
                     is TsuzukiHomeEvent.OpenCanonicalTitle -> {
                         navigator.push(CanonicalTitleScreen(event.canonicalTitleId))
                     }
-                    is TsuzukiHomeEvent.OpenReader -> {
-                        context.startActivity(ReaderActivity.newCanonicalIntent(context, event.canonicalChapterId))
-                    }
-                    TsuzukiHomeEvent.ReadingUnavailable -> context.toast(MR.strings.tsuzuki_home_reading_unavailable)
                 }
             }
         }

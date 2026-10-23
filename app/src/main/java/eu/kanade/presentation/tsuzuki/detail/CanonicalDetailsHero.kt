@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -40,6 +41,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -74,6 +76,7 @@ import mihon.icons.materialsymbols.rounded.Check
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticTrace
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticWorkflow
+import tachiyomi.domain.tsuzuki.integration.model.metadataStartYear
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -104,11 +107,18 @@ internal fun CanonicalDetailsHero(
     val layoutDirection = LocalLayoutDirection.current
     val skinColors = defaultSkinColors()
     val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
     val toolbarLeadHeight = with(density) { WindowInsets.statusBars.getTop(this).toDp() } + 56.dp
+    val usefulViewportHeight = configuration.screenHeightDp.dp - with(density) {
+        (WindowInsets.statusBars.getTop(this) + WindowInsets.navigationBars.getBottom(this)).toDp()
+    }
     BoxWithConstraints(Modifier.fillMaxWidth().testTag("canonical_details_hero_content")) {
-        val artworkLead = canonicalDetailsArtworkLead(maxWidth)
+        val artworkLead = canonicalDetailsArtworkLead(usefulViewportHeight, configuration.fontScale)
         Column(Modifier.fillMaxWidth().background(background).padding(bottom = 16.dp)) {
-            Box(Modifier.fillMaxWidth().background(background)) {
+            Box(
+                Modifier.fillMaxWidth().background(background).testTag("canonical_details_hero_visual")
+                    .then(if (hasArtwork) Modifier.heightIn(min = artworkLead) else Modifier),
+            ) {
                 if (hasArtwork) {
                     Box(
                         Modifier
@@ -141,10 +151,9 @@ internal fun CanonicalDetailsHero(
                         )
                     }
                 }
-                val contentTop = toolbarLeadHeight +
-                    if (hasArtwork) artworkLead - DefaultSkinSpacing.Section * 2 else 0.dp
                 Column(
-                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = contentTop),
+                    Modifier.fillMaxWidth().align(Alignment.BottomCenter)
+                        .padding(start = 16.dp, end = 16.dp, top = toolbarLeadHeight, bottom = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -155,8 +164,10 @@ internal fun CanonicalDetailsHero(
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    val year = state.startDate?.takeIf { it.length >= 4 && it.take(4).all(Char::isDigit) }?.take(4)
+                    val year = metadataStartYear(state.startDate)
                     val format = editorialFormatLabel(state.editorialFormat)
                     if (year != null || format != null) {
                         FlowRow(
@@ -170,22 +181,6 @@ internal fun CanonicalDetailsHero(
                             format?.let {
                                 Text(it, color = skinColors.foreground, style = MaterialTheme.typography.bodyLarge)
                             }
-                        }
-                    }
-                    editorialStatusLabel(state.editorialStatus)?.let {
-                        Text(
-                            it,
-                            color = skinColors.secondary,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                    if (state.genres.isNotEmpty()) {
-                        FlowRow(
-                            Modifier.fillMaxWidth().padding(top = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            state.genres.forEach { Text(it, color = skinColors.secondary) }
                         }
                     }
                 }
@@ -258,6 +253,31 @@ internal fun CanonicalDetailsHero(
                                 color = skinColors.foreground,
                                 fontWeight = FontWeight.Bold,
                             )
+                        }
+                    }
+                }
+            }
+            if (state.editorialStatus != null || state.genres.isNotEmpty()) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    editorialStatusLabel(state.editorialStatus)?.let {
+                        Text(
+                            it,
+                            color = skinColors.secondary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    if (state.genres.isNotEmpty()) {
+                        FlowRow(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            state.genres.forEach { Text(it, color = skinColors.secondary) }
                         }
                     }
                 }
@@ -384,7 +404,8 @@ internal fun CanonicalDetailsHero(
     }
 }
 
-internal fun canonicalDetailsArtworkLead(maxWidth: Dp): Dp = (maxWidth * 0.43f).coerceIn(120.dp, 224.dp)
+internal fun canonicalDetailsArtworkLead(usefulViewportHeight: Dp, fontScale: Float): Dp =
+    (usefulViewportHeight * (0.64f / fontScale.coerceAtLeast(1f))).coerceIn(320.dp, 560.dp)
 
 internal fun canonicalDetailsHeroFadeStops(background: Color): List<Pair<Float, Color>> = listOf(
     0f to background.copy(alpha = 0f),
@@ -406,7 +427,6 @@ internal fun DetailsEditorial(state: CanonicalTitleScreenState.Loaded) {
         }
         val publication = listOfNotNull(
             editorialFormatLabel(state.editorialFormat),
-            editorialStatusLabel(state.editorialStatus),
             state.startDate?.takeIf(String::isNotBlank),
             state.endDate?.takeIf(String::isNotBlank),
             state.editorialVolumeCount?.let { stringResource(MR.strings.tsuzuki_details_volumes, it) },
@@ -415,12 +435,6 @@ internal fun DetailsEditorial(state: CanonicalTitleScreenState.Loaded) {
             EditorialSection(
                 stringResource(MR.strings.tsuzuki_details_publication),
                 publication.joinToString("\n"),
-            )
-        }
-        if (state.genres.isNotEmpty()) {
-            EditorialSection(
-                stringResource(MR.strings.tsuzuki_details_genres),
-                state.genres.joinToString(" · "),
             )
         }
         if (state.tags.isNotEmpty()) {

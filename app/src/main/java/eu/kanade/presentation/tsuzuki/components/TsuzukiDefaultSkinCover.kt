@@ -3,7 +3,8 @@ package eu.kanade.presentation.tsuzuki.components
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -15,8 +16,8 @@ import eu.kanade.presentation.manga.components.MangaCoverLoadEvent
 internal const val TSUZUKI_DEFAULT_SKIN_COVER_ASPECT_RATIO: Float = 2f / 3f
 
 internal enum class TsuzukiDefaultSkinCoverSize(val width: Dp) {
-    Standard(148.dp),
-    Library(96.dp),
+    Standard(126.dp),
+    Library(126.dp),
 }
 
 /** A Tsuzuki-owned catalog cover frame; the shared MangaCover renderer keeps image loading/fallbacks. */
@@ -33,7 +34,8 @@ internal fun TsuzukiDefaultSkinCover(
 ) {
     Box(
         modifier = modifier
-            .width(size.width)
+            .widthIn(max = size.width)
+            .fillMaxWidth()
             .aspectRatio(TSUZUKI_DEFAULT_SKIN_COVER_ASPECT_RATIO),
     ) {
         MangaCoverFrame(

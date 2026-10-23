@@ -26,11 +26,11 @@ import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.domain.tsuzuki.artwork.model.TitleArtworkObservation
 import tachiyomi.domain.tsuzuki.artwork.repository.TitleArtworkRepository
-import tachiyomi.domain.tsuzuki.interactor.MaterializeCanonicalTitle
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.interactor.ResolveCanonicalMetadata
 import tachiyomi.domain.tsuzuki.integration.model.ProvenancedMetadata
 import tachiyomi.domain.tsuzuki.integration.model.ResolvedMetadata
+import tachiyomi.domain.tsuzuki.interactor.MaterializeCanonicalTitle
 import tachiyomi.domain.tsuzuki.library.interactor.ObserveCanonicalLibrary
 import tachiyomi.domain.tsuzuki.library.interactor.ObserveUnifiedLibrary
 import tachiyomi.domain.tsuzuki.library.interactor.RefreshUserLibraries
@@ -176,7 +176,9 @@ class CanonicalLibraryScreenModelTest {
     }
 
     @Test
-    fun `cached start years load by library identity and survive filter and progress updates`() = runTest(testDispatcher) {
+    fun `cached start years load by library identity and survive filter and progress updates`() = runTest(
+        testDispatcher,
+    ) {
         val repo = FakeCanonicalLibraryRepository()
         val readingRepository = FakeCanonicalReadingRepository()
         val artworkUpdates = MutableStateFlow(emptyList<TitleArtworkObservation>())
@@ -214,7 +216,8 @@ class CanonicalLibraryScreenModelTest {
         repo.emitItems(listOf(canonicalItem("one", "Frieren")))
         advanceUntilIdle()
 
-        model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items.single().startYear shouldBe "2020"
+        model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items.single().startYear shouldBe
+            "2020"
         model.search("Frieren")
         readingRepository.emitProgress(
             "one",
@@ -232,7 +235,8 @@ class CanonicalLibraryScreenModelTest {
 
         val updated = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items.single()
         updated.startYear shouldBe "2020"
-        updated.readingState shouldBe CanonicalLibraryReadingState.IN_PROGRESS
+        updated.readingState shouldBe
+            CanonicalLibraryReadingState.IN_PROGRESS
         updated.coverUrl shouldBe "cover"
         requestedBatches shouldBe listOf(listOf("one"))
 
@@ -240,8 +244,10 @@ class CanonicalLibraryScreenModelTest {
         advanceUntilIdle()
 
         val expanded = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items
-        expanded.single { it.id == "two" }.startYear shouldBe null
-        requestedBatches shouldBe listOf(listOf("one"), listOf("one", "two"))
+        expanded.single { it.id == "two" }.startYear shouldBe
+            null
+        requestedBatches shouldBe
+            listOf(listOf("one"), listOf("one", "two"))
         coVerify(exactly = 2) { metadataResolver.cached(any<Collection<String>>()) }
     }
 

@@ -141,6 +141,18 @@ class ResolveCanonicalMetadata private constructor(
             ?.metadata
     }
 
+    suspend fun cached(canonicalTitleIds: Collection<String>): Map<String, ResolvedMetadata> {
+        if (canonicalTitleIds.isEmpty()) return emptyMap()
+        val repository = snapshotRepository ?: return emptyMap()
+        registry.awaitReady()
+        val configurationFingerprint = registry.configurationFingerprint()
+        return repository.getMany(canonicalTitleIds.distinct())
+            .values
+            .asSequence()
+            .filter { snapshot -> snapshot.configurationFingerprint == configurationFingerprint }
+            .associate { snapshot -> snapshot.canonicalTitleId to snapshot.metadata }
+    }
+
     suspend fun execute(
         canonicalTitleId: String,
         forceRefresh: Boolean = false,

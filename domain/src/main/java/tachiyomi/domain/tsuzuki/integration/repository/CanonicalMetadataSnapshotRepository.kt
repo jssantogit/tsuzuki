@@ -12,6 +12,8 @@ data class CanonicalMetadataSnapshot(
 interface CanonicalMetadataSnapshotRepository {
     suspend fun get(canonicalTitleId: String): CanonicalMetadataSnapshot?
 
+    suspend fun getMany(canonicalTitleIds: Collection<String>): Map<String, CanonicalMetadataSnapshot>
+
     suspend fun upsertIfNewer(snapshot: CanonicalMetadataSnapshot): CanonicalMetadataSnapshot
 
     suspend fun invalidateTitle(canonicalTitleId: String)
