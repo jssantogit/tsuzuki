@@ -1,6 +1,7 @@
 package tachiyomi.data.tsuzuki.integration
 
 import app.cash.sqldelight.async.coroutines.await
+import app.cash.sqldelight.async.coroutines.awaitAsOneOrNull
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
@@ -133,6 +134,43 @@ class CanonicalMetadataSnapshotRepositoryImplTest {
         repository.upsertIfNewer(snapshot)
 
         repository.get("title") shouldBe snapshot
+    }
+
+    @Test
+    fun `batch reads omit corrupt rows without invalidating their persisted snapshots`() = runBlocking {
+        database.tsuzuki_titlesQueries.insertTsuzukiTitle(
+            id = "corrupt-title",
+            displayTitle = "Corrupt",
+            identityState = "SOURCE_ONLY",
+            createdAt = 1L,
+            updatedAt = 1L,
+        )
+        val valid = CanonicalMetadataSnapshot(
+            canonicalTitleId = "title",
+            configurationFingerprint = "cfg-a",
+            metadata = ResolvedMetadata(
+                startDate = ProvenancedMetadata("2020-06-12", IntegrationId("mal"), "m1", "MAL"),
+            ),
+            refreshedAt = 1234L,
+        )
+        repository.upsertIfNewer(valid)
+        database.tsuzuki_metadata_snapshotQueries.upsertTsuzukiMetadataSnapshot(
+            canonicalTitleId = "corrupt-title",
+            configurationFingerprint = "cfg-a",
+            payloadJson = "{not-valid-json",
+            refreshedAt = 1234L,
+        )
+
+        val snapshots = repository.getMany(listOf("title", "corrupt-title"))
+        val corruptRow = database.tsuzuki_metadata_snapshotQueries
+            .getTsuzukiMetadataSnapshot("corrupt-title") { id, fingerprint, payload, refreshedAt ->
+                listOf(id, fingerprint, payload, refreshedAt.toString())
+            }
+            .awaitAsOneOrNull()
+
+        snapshots.keys shouldBe setOf("title")
+        snapshots["title"]?.metadata?.startDate?.value shouldBe "2020-06-12"
+        corruptRow shouldBe listOf("corrupt-title", "cfg-a", "{not-valid-json", "1234")
     }
 
     private fun nativeLibraryArchitecture(): String = when (System.getProperty("os.arch").orEmpty().lowercase()) {

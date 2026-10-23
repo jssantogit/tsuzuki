@@ -69,6 +69,55 @@ class ResolveCanonicalMetadataCachingTest {
     }
 
     @Test
+    fun `cached metadata batch returns current provenance with one fingerprinted local read`() = runTest {
+        val provider = CountingMetadataProvider()
+        val snapshots = FakeSnapshotRepository(
+            initial = CanonicalMetadataSnapshot(
+                canonicalTitleId = TITLE_ID,
+                configurationFingerprint = "cfg",
+                metadata = ResolvedMetadata(
+                    startDate = ProvenancedMetadata(
+                        value = "2020-06-12",
+                        providerId = IntegrationId("mal"),
+                        externalId = "m1",
+                        attribution = "MAL",
+                    ),
+                ),
+                refreshedAt = 1_000L,
+            ),
+            additional = listOf(
+                CanonicalMetadataSnapshot(
+                    canonicalTitleId = "stale-title",
+                    configurationFingerprint = "old-config",
+                    metadata = ResolvedMetadata(
+                        startDate = ProvenancedMetadata("1999", IntegrationId("mal"), "m2"),
+                    ),
+                    refreshedAt = 1_000L,
+                ),
+            ),
+        )
+        val registry = FakeRegistry(provider)
+        val resolver = resolver(
+            provider = provider,
+            snapshots = snapshots,
+            clock = { 1_500L },
+            scope = backgroundScope,
+            registry = registry,
+        )
+
+        val cached = resolver.cached(listOf(TITLE_ID, "missing-title", "stale-title"))
+
+        cached[TITLE_ID]?.startDate?.value shouldBe "2020-06-12"
+        cached[TITLE_ID]?.startDate?.providerId shouldBe IntegrationId("mal")
+        cached.containsKey("missing-title") shouldBe false
+        cached.containsKey("stale-title") shouldBe false
+        snapshots.batchReadCount shouldBe 1
+        snapshots.lastBatchIds shouldBe listOf(TITLE_ID, "missing-title", "stale-title")
+        registry.configurationFingerprintCalls shouldBe 1
+        provider.calls shouldBe 0
+    }
+
+    @Test
     fun `simultaneous metadata resolution shares one provider request`() = runTest {
         val gate = CompletableDeferred<Unit>()
         val provider = CountingMetadataProvider(gate)
@@ -135,6 +184,7 @@ class ResolveCanonicalMetadataCachingTest {
         ratingProviders: List<RatingsProvider> = emptyList(),
         clock: () -> Long,
         scope: CoroutineScope,
+        registry: FakeRegistry = FakeRegistry(provider, ratingProviders),
         ratingCache: RatingEnrichmentCache = RatingEnrichmentCache(
             scope = scope,
             clock = { 0L },
@@ -144,7 +194,7 @@ class ResolveCanonicalMetadataCachingTest {
         ),
     ) = ResolveCanonicalMetadata(
         canonicalTitleRepository = FakeCanonicalTitleRepository(),
-        registry = FakeRegistry(provider, ratingProviders),
+        registry = registry,
         titleArtworkRepository = mockk(relaxed = true),
         diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
         snapshotRepository = snapshots,
@@ -179,7 +229,11 @@ class ResolveCanonicalMetadataCachingTest {
         private val provider: MetadataProvider,
         private val ratingProviders: List<RatingsProvider> = emptyList(),
     ) : IntegrationRegistry {
-        override fun configurationFingerprint(): String = "cfg"
+        var configurationFingerprintCalls = 0
+        override fun configurationFingerprint(): String {
+            configurationFingerprintCalls++
+            return "cfg"
+        }
         override fun searchProviders(): List<SearchProvider> = emptyList()
         override fun discoveryProviders(): List<DiscoveryProvider> = emptyList()
         override fun metadataProviders(): List<MetadataProvider> = listOf(provider)
@@ -219,22 +273,34 @@ class ResolveCanonicalMetadataCachingTest {
 
     private class FakeSnapshotRepository(
         initial: CanonicalMetadataSnapshot? = null,
+        additional: List<CanonicalMetadataSnapshot> = emptyList(),
     ) : CanonicalMetadataSnapshotRepository {
-        private var snapshot = initial
+        private val snapshots = (listOfNotNull(initial) + additional)
+            .associateByTo(mutableMapOf(), CanonicalMetadataSnapshot::canonicalTitleId)
+        var batchReadCount = 0
+            private set
+        var lastBatchIds = emptyList<String>()
+            private set
 
         override suspend fun get(canonicalTitleId: String): CanonicalMetadataSnapshot? =
-            snapshot?.takeIf { it.canonicalTitleId == canonicalTitleId }
+            snapshots[canonicalTitleId]
+
+        override suspend fun getMany(canonicalTitleIds: Collection<String>): Map<String, CanonicalMetadataSnapshot> {
+            batchReadCount++
+            lastBatchIds = canonicalTitleIds.toList()
+            return canonicalTitleIds.mapNotNull { id -> snapshots[id]?.let { id to it } }.toMap()
+        }
 
         override suspend fun upsertIfNewer(snapshot: CanonicalMetadataSnapshot): CanonicalMetadataSnapshot {
-            val current = this.snapshot
+            val current = snapshots[snapshot.canonicalTitleId]
             if (current == null || snapshot.refreshedAt >= current.refreshedAt) {
-                this.snapshot = snapshot
+                snapshots[snapshot.canonicalTitleId] = snapshot
             }
-            return this.snapshot!!
+            return snapshots.getValue(snapshot.canonicalTitleId)
         }
 
         override suspend fun invalidateTitle(canonicalTitleId: String) {
-            if (snapshot?.canonicalTitleId == canonicalTitleId) snapshot = null
+            snapshots.remove(canonicalTitleId)
         }
     }
 

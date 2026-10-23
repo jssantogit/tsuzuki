@@ -5,7 +5,7 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinColors
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
 import eu.kanade.presentation.tsuzuki.components.defaultSkinPalette
-import eu.kanade.presentation.tsuzuki.home.HOME_HERO_HEIGHT
+import eu.kanade.presentation.tsuzuki.home.homeHeroHeight
 import eu.kanade.presentation.tsuzuki.home.homeModuleTopSpacing
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -13,6 +13,7 @@ import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
+import tachiyomi.domain.tsuzuki.integration.model.metadataStartYear
 
 class DefaultSkinVisualContractTest {
 
@@ -73,31 +74,38 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
-    fun `Home hero uses local content sized actions instead of shared full width buttons`() {
+    fun `Home hero is cinematic responsive and offers one wide details action`() {
         val home = readSource("home/TsuzukiHomeScreen.kt")
         val carousel = sourceBlockStartingAt(home, "private fun HomeHeroCarousel(")
         val homeHero = sourceBlockStartingAt(home, "private fun HomeHero(")
-        val action = sourceBlockStartingAt(home, "private fun DefaultSkinHomeHeroAction(")
+        val button = readSource("components/DefaultSkinPrimitives.kt")
 
-        carousel shouldContain ".height(HOME_HERO_HEIGHT)"
+        carousel shouldContain "homeHeroHeight("
+        carousel shouldContain "configuration.screenHeightDp"
         carousel shouldNotContain ".aspectRatio(HERO_ASPECT_RATIO)"
-        homeHero shouldContain "DefaultSkinHomeHeroAction("
-        homeHero shouldNotContain "DefaultSkinPrimaryButton("
-        homeHero shouldNotContain "DefaultSkinSecondaryButton("
-        homeHero shouldNotContain "Modifier.weight(1f)"
-        action shouldContain "heightIn(min = 48.dp)"
-        action shouldContain "heightIn(min = 38.dp)"
-        action shouldContain "clickable(role = Role.Button"
+        homeHero shouldContain "DefaultSkinPrimaryButton("
+        (homeHero.split("DefaultSkinPrimaryButton(").size - 1) shouldBe 1
+        homeHero shouldContain "modifier = Modifier.fillMaxWidth()"
+        homeHero shouldContain "MR.strings.tsuzuki_home_view_work"
+        homeHero shouldContain "catalogFormatLabel(item.format)"
+        homeHero shouldContain "metadataStartYear(item.startDate)"
+        homeHero shouldContain "onDetails"
+        homeHero shouldContain "TextAlign.Center"
+        homeHero shouldNotContain "onRead"
+        homeHero shouldNotContain "item.synopsis"
+        homeHero shouldNotContain "item.genres"
+        homeHero shouldNotContain "item.status"
+        home shouldNotContain "onHeroRead"
+        home shouldNotContain "DefaultSkinHomeHeroAction"
+        button shouldContain "modifier.heightIn(min = 52.dp)"
     }
 
     @Test
-    fun `canonical details hero uses caller owned artwork bounds and flowing title content`() {
+    fun `canonical details visual lead is sparse and places real content below artwork`() {
         val hero = readSource("detail/CanonicalDetailsHero.kt")
         val screen = readSource("detail/CanonicalTitleDetailScreen.kt")
-        val atmosphere = sourceBlockStartingAt(
-            hero,
-            "Box(Modifier.fillMaxWidth().background(background))",
-        )
+        val atmosphere = sourceBlockStartingAt(hero, "canonical_details_hero_visual")
+        val editorial = sourceBlockStartingAt(hero, "internal fun DetailsEditorial(")
         val artworkIndex = atmosphere.indexOf("MangaCoverFrame(")
         val titleIndex = atmosphere.indexOf("state.title.displayTitle")
 
@@ -107,14 +115,31 @@ class DefaultSkinVisualContractTest {
         hero shouldContain ".matchParentSize()"
         hero shouldContain ".clipToBounds()"
         hero shouldContain "canonicalDetailsHeroFadeStops(background)"
+        hero shouldContain "if (hasArtwork)"
+        hero shouldContain "Modifier.heightIn(min = artworkLead)"
+        hero shouldContain "configuration.screenHeightDp"
+        hero shouldContain "configuration.fontScale"
+        hero shouldContain "WindowInsets.navigationBars"
+        hero shouldContain "align(Alignment.BottomCenter)"
+        hero shouldContain "maxLines = 2"
+        hero shouldContain "overflow = TextOverflow.Ellipsis"
         hero shouldNotContain ".height(toolbarLeadHeight + artworkLead)"
         hero shouldNotContain "artworkLead * 0.68f"
         (artworkIndex >= 0 && titleIndex > artworkIndex) shouldBe true
-        atmosphere shouldContain "toolbarLeadHeight +"
+        atmosphere shouldContain "toolbarLeadHeight"
         atmosphere shouldContain "Brush.verticalGradient("
         atmosphere shouldNotContain "MangaCover.Square("
         atmosphere shouldNotContain "if (state.tsuzukiRating"
+        atmosphere shouldNotContain "editorialStatusLabel(state.editorialStatus)"
+        atmosphere shouldNotContain "state.genres"
         (hero.indexOf("if (state.tsuzukiRating") > hero.indexOf("state.title.displayTitle")) shouldBe true
+        hero shouldContain "DefaultSkinPrimaryButton("
+        hero shouldContain "state.refreshError"
+        (hero.indexOf("editorialStatusLabel(state.editorialStatus)") > hero.indexOf("if (state.tsuzukiRating")) shouldBe true
+        (hero.indexOf("state.genres") > hero.indexOf("if (state.tsuzukiRating")) shouldBe true
+        editorial shouldContain "state.description"
+        editorial shouldNotContain "state.editorialStatus"
+        editorial shouldNotContain "state.genres"
         screen shouldContain "defaultSkinColors().canvas"
         screen shouldNotContain "luminance()"
         hero shouldNotContain "Spacer(Modifier.weight(1f))"
@@ -141,9 +166,19 @@ class DefaultSkinVisualContractTest {
 
         chapters shouldContain "DefaultSkinTextAction("
         chapters shouldNotContain "TextButton("
-        homeHero shouldContain "FlowRow("
+        homeHero shouldContain "DefaultSkinPrimaryButton("
+        homeHero shouldContain "repeat(itemCount)"
         homeHero shouldNotContain "Modifier.weight(1f)"
         home shouldNotContain "home_safe_top"
+    }
+
+    @Test
+    fun `Home year uses only a valid factual catalog start date`() {
+        metadataStartYear("2020") shouldBe "2020"
+        metadataStartYear("2020-06-12") shouldBe "2020"
+        metadataStartYear(null) shouldBe null
+        metadataStartYear("unknown") shouldBe null
+        metadataStartYear("2020-13-01") shouldBe null
     }
 
     @Test
@@ -160,7 +195,21 @@ class DefaultSkinVisualContractTest {
             previousModuleExists = false,
             heroPrecedesModule = false,
         ) shouldBe 0.dp
-        (HOME_HERO_HEIGHT.value in 340f..360f) shouldBe true
+        val standardViewport = homeHeroHeight(
+            screenHeightDp = 800,
+            statusBarInset = 24.dp,
+            navigationBarInset = 24.dp,
+            fontScale = 1f,
+        )
+        (standardViewport.value in 480f..500f) shouldBe true
+        val largeFontViewport = homeHeroHeight(
+            screenHeightDp = 800,
+            statusBarInset = 24.dp,
+            navigationBarInset = 24.dp,
+            fontScale = 1.8f,
+        )
+        (largeFontViewport >= standardViewport) shouldBe true
+        (largeFontViewport.value <= 640f) shouldBe true
     }
 
     @Test
@@ -617,10 +666,17 @@ class DefaultSkinVisualContractTest {
         catalogTile shouldContain "propagateMinConstraints = false"
         catalogTile shouldContain ".widthIn(max = TsuzukiDefaultSkinCoverSize.Standard.width)"
         collections shouldContain "GridCells.Adaptive(minSize = TsuzukiDefaultSkinCoverSize.Standard.width)"
-        libraryList shouldContain "GridCells.Adaptive(minSize = 104.dp)"
+        libraryList shouldContain "GridCells.Fixed(canonicalLibraryGridColumnCount(maxWidth))"
         libraryList shouldContain "TsuzukiDefaultSkinCoverSize.Library"
         libraryList shouldContain "item.coverUrl ?: item.sourceCover ?: item.localCoverUrl"
         libraryList shouldContain "fallbackData = listOf(item.sourceCover, item.sourceCover?.url, item.localCoverUrl)"
+        libraryList shouldContain "item.startYear"
+        libraryList shouldContain "maxLines = 2"
+        libraryList shouldContain "widthIn(max = TsuzukiDefaultSkinCoverSize.Library.width)"
+        libraryList shouldNotContain "item.status"
+        libraryList shouldNotContain "item.format"
+        libraryList shouldNotContain "item.categories"
+        libraryList shouldNotContain "ResolveCanonicalMetadata"
         libraryList shouldNotContain "MangaCover.Book("
     }
 

@@ -24,8 +24,13 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.manga.repository.MangaRepository
+import tachiyomi.domain.tsuzuki.artwork.model.TitleArtworkObservation
 import tachiyomi.domain.tsuzuki.artwork.repository.TitleArtworkRepository
 import tachiyomi.domain.tsuzuki.interactor.MaterializeCanonicalTitle
+import tachiyomi.domain.tsuzuki.integration.IntegrationId
+import tachiyomi.domain.tsuzuki.integration.interactor.ResolveCanonicalMetadata
+import tachiyomi.domain.tsuzuki.integration.model.ProvenancedMetadata
+import tachiyomi.domain.tsuzuki.integration.model.ResolvedMetadata
 import tachiyomi.domain.tsuzuki.library.interactor.ObserveCanonicalLibrary
 import tachiyomi.domain.tsuzuki.library.interactor.ObserveUnifiedLibrary
 import tachiyomi.domain.tsuzuki.library.interactor.RefreshUserLibraries
@@ -102,6 +107,8 @@ class CanonicalLibraryScreenModelTest {
         every { artworkRepository.observeAll() } returns MutableStateFlow(emptyList())
         val refreshUserLibraries = mockk<RefreshUserLibraries>()
         coEvery { refreshUserLibraries.refreshConnected() } returns emptyMap()
+        val metadataResolver = mockk<ResolveCanonicalMetadata>()
+        coEvery { metadataResolver.cached(any<Collection<String>>()) } returns emptyMap()
 
         val screenModel = CanonicalLibraryScreenModel(
             observeUnifiedLibrary = observeUnifiedLibrary,
@@ -111,6 +118,7 @@ class CanonicalLibraryScreenModelTest {
             resolveCanonicalReadingStart = FakeCanonicalReadingStartResolver(),
             canonicalReadingRepository = FakeCanonicalReadingRepository(),
             refreshUserLibraries = refreshUserLibraries,
+            resolveCanonicalMetadata = metadataResolver,
             mangaRepository = mangaRepository,
             resolveCanonicalSourceManga = sourceResolver,
             titleArtworkRepository = artworkRepository,
@@ -165,6 +173,76 @@ class CanonicalLibraryScreenModelTest {
         state.items.map { it.canonicalTitleId } shouldBe listOf("title-1")
         state.items.first().title shouldBe "Frieren"
         state.items.first().status shouldBe LibraryStatus.READING
+    }
+
+    @Test
+    fun `cached start years load by library identity and survive filter and progress updates`() = runTest(testDispatcher) {
+        val repo = FakeCanonicalLibraryRepository()
+        val readingRepository = FakeCanonicalReadingRepository()
+        val artworkUpdates = MutableStateFlow(emptyList<TitleArtworkObservation>())
+        val artworkRepository = mockk<TitleArtworkRepository>()
+        every { artworkRepository.observeAll() } returns artworkUpdates
+        val metadataResolver = mockk<ResolveCanonicalMetadata>()
+        val requestedBatches = mutableListOf<List<String>>()
+        coEvery { metadataResolver.cached(any<Collection<String>>()) } coAnswers {
+            val ids = firstArg<Collection<String>>().toList()
+            requestedBatches += ids
+            ids.associateWith { id ->
+                ResolvedMetadata(
+                    startDate = if (id == "one") {
+                        ProvenancedMetadata("2020-06-12", IntegrationId("mal"), "m1", "MAL")
+                    } else {
+                        null
+                    },
+                )
+            }
+        }
+        val model = CanonicalLibraryScreenModel(
+            observeCanonicalLibrary = ObserveCanonicalLibrary(repo),
+            setCanonicalLibraryStatus = SetCanonicalLibraryStatus(repo),
+            removeUnifiedLibraryTitle = RemoveUnifiedLibraryTitle(
+                getFavoriteMihonMangaIds = { emptyList() },
+                setMihonFavorite = { _, _ -> true },
+                removeCanonical = repo::remove,
+            ),
+            migrateMihonLibraryToCanonical = FakeMigrateMihonLibraryToCanonical(),
+            resolveCanonicalReadingStart = FakeCanonicalReadingStartResolver(),
+            canonicalReadingRepository = readingRepository,
+            resolveCanonicalMetadata = metadataResolver,
+            titleArtworkRepository = artworkRepository,
+        )
+        repo.emitItems(listOf(canonicalItem("one", "Frieren")))
+        advanceUntilIdle()
+
+        model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items.single().startYear shouldBe "2020"
+        model.search("Frieren")
+        readingRepository.emitProgress(
+            "one",
+            listOf(CanonicalChapterProgress(canonicalChapterId = "chapter-one", lastPageRead = 1L)),
+        )
+        artworkUpdates.value = listOf(
+            TitleArtworkObservation(
+                canonicalTitleId = "one",
+                provider = "kitsu",
+                coverUrl = "cover",
+                updatedAt = 1L,
+            ),
+        )
+        advanceUntilIdle()
+
+        val updated = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items.single()
+        updated.startYear shouldBe "2020"
+        updated.readingState shouldBe CanonicalLibraryReadingState.IN_PROGRESS
+        updated.coverUrl shouldBe "cover"
+        requestedBatches shouldBe listOf(listOf("one"))
+
+        repo.emitItems(listOf(canonicalItem("one", "Frieren"), canonicalItem("two", "Dungeon Meshi")))
+        advanceUntilIdle()
+
+        val expanded = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items
+        expanded.single { it.id == "two" }.startYear shouldBe null
+        requestedBatches shouldBe listOf(listOf("one"), listOf("one", "two"))
+        coVerify(exactly = 2) { metadataResolver.cached(any<Collection<String>>()) }
     }
 
     @Test
@@ -646,6 +724,10 @@ class CanonicalLibraryScreenModelTest {
 
     private class FakeCanonicalReadingRepository : CanonicalReadingRepository {
         private val progressByTitle = mutableMapOf<String, MutableStateFlow<List<CanonicalChapterProgress>>>()
+
+        fun emitProgress(canonicalTitleId: String, progress: List<CanonicalChapterProgress>) {
+            progressByTitle.getOrPut(canonicalTitleId) { MutableStateFlow(emptyList()) }.value = progress
+        }
 
         override suspend fun getProgress(
             canonicalChapterId: String,

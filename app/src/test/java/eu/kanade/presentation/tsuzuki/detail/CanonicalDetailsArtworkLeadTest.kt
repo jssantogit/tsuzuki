@@ -8,10 +8,11 @@ import org.junit.jupiter.api.Test
 class CanonicalDetailsArtworkLeadTest {
 
     @Test
-    fun `artwork lead preserves its width ratio within the established bounds`() {
-        canonicalDetailsArtworkLead(180.dp) shouldBe 120.dp
-        canonicalDetailsArtworkLead(320.dp) shouldBe 137.6.dp
-        canonicalDetailsArtworkLead(1_024.dp) shouldBe 224.dp
+    fun `artwork lead follows useful viewport height and respects bounds and font scaling`() {
+        canonicalDetailsArtworkLead(600.dp, 1f) shouldBe 384.dp
+        canonicalDetailsArtworkLead(800.dp, 1f) shouldBe 512.dp
+        canonicalDetailsArtworkLead(1_200.dp, 1f) shouldBe 560.dp
+        canonicalDetailsArtworkLead(800.dp, 2f) shouldBe 320.dp
     }
 
     @Test
