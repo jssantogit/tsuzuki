@@ -5,6 +5,7 @@ import dev.zacsweers.metro.Inject
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterOverride
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
@@ -12,6 +13,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreIdentity
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryEntry
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreList
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreProviderBinding
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreReaderPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreProgress
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreSourceMapping
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
@@ -81,6 +83,10 @@ class CanonicalCoreBackupExporter(
             database.tsuzuki_provider_bindingsQueries
                 .getTsuzukiProviderBindingsByTitle(title.id).awaitAsList()
         }
+        val readerPreferences = database.tsuzuki_reader_preferencesQueries
+            .getAllTsuzukiReaderPreferences().awaitAsList()
+        val chapterOverrides = database.tsuzuki_chapter_overridesQueries
+            .getAllTsuzukiChapterOverrides().awaitAsList()
 
         val core = BackupCanonicalCore(
             titles = titles.map {
@@ -197,6 +203,30 @@ class CanonicalCoreBackupExporter(
                     availability = it.availability,
                     createdAt = it.created_at,
                     updatedAt = it.updated_at,
+                )
+            },
+            readerPreferences = readerPreferences.map {
+                BackupCoreReaderPreference(
+                    canonicalTitleId = it.canonical_title_id,
+                    automaticFallback = it.automatic_fallback,
+                    updatedAt = it.updated_at,
+                )
+            },
+            chapterOverrides = chapterOverrides.map {
+                BackupCoreChapterOverride(
+                    id = it.id,
+                    canonicalTitleId = it.canonical_title_id,
+                    canonicalChapterKey = it.canonical_chapter_key,
+                    sourceId = it.source_id,
+                    sourceTitleUrl = it.source_title_url,
+                    sourceChapterId = it.source_chapter_id,
+                    kind = it.kind,
+                    payloadJson = it.payload_json,
+                    schemaVersion = it.schema_version,
+                    revision = it.revision,
+                    createdAt = it.created_at,
+                    updatedAt = it.updated_at,
+                    deletedAt = it.deleted_at,
                 )
             },
         )
