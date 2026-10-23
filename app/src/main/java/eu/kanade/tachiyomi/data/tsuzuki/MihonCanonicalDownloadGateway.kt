@@ -1,8 +1,5 @@
 package eu.kanade.tachiyomi.data.tsuzuki
 
-import android.content.Context
-import android.net.Uri
-import com.hippo.unifile.UniFile
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -33,7 +30,6 @@ class MihonCanonicalDownloadGateway internal constructor(
     private val artifactLocator: suspend (ContentOption) -> CanonicalDownloadArtifact? = { null },
     private val downloadStarter: (Long) -> Unit = {},
     private val downloadCompletion: suspend (Long) -> Boolean = { false },
-    private val artifactAvailable: suspend (CanonicalDownloadArtifact) -> Boolean = { false },
 ) : CanonicalDownloadGateway {
 
     @Inject
@@ -43,7 +39,6 @@ class MihonCanonicalDownloadGateway internal constructor(
         sourceManager: SourceManager,
         downloadManager: DownloadManager,
         downloadProvider: DownloadProvider,
-        context: Context,
     ) : this(
         mangaTitleProvider = { mangaId ->
             try {
@@ -87,25 +82,7 @@ class MihonCanonicalDownloadGateway internal constructor(
         downloadCompletion = { chapterId ->
             awaitDownloadCompletion(downloadManager, chapterId)
         },
-        artifactAvailable = { artifact ->
-            withIOContext {
-                try {
-                    val local = UniFile.fromUri(context, Uri.parse(artifact.localUri))
-                    when (artifact.format.uppercase()) {
-                        "DIRECTORY" -> local?.exists() == true && local.isDirectory
-                        else -> local?.exists() == true && local.isFile && local.length() > 0L
-                    }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    false // Removed document, revoked permission, or unsupported local URI.
-                }
-            }
-        },
     )
-
-    override suspend fun isArtifactAvailable(artifact: CanonicalDownloadArtifact): Boolean =
-        artifactAvailable(artifact)
 
     override suspend fun isDownloaded(variant: ChapterVariant): Boolean {
         val mangaId = variant.mihonMangaId ?: return false
