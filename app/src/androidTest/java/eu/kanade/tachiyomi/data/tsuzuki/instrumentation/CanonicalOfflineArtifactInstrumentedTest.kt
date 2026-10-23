@@ -71,11 +71,14 @@ class CanonicalOfflineArtifactInstrumentedTest {
             val epubArtifact = artifact(epub, "EPUB")
             writeZip(epub, mapOf("001.png" to page))
             assertFalse(MihonCanonicalDownloadGateway.isArtifactReadable(context, epubArtifact))
+            val epubManifest = """<package><manifest>""" +
+                """<item id="page" href="page.xhtml" media-type="application/xhtml+xml"/>""" +
+                """</manifest><spine><itemref idref="page"/></spine></package>"""
             writeZip(
                 epub,
                 mapOf(
                     "META-INF/container.xml" to """<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>""".toByteArray(),
-                    "OEBPS/content.opf" to """<package><manifest><item id="page" href="page.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="page"/></spine></package>""".toByteArray(),
+                    "OEBPS/content.opf" to epubManifest.toByteArray(),
                     "OEBPS/page.xhtml" to """<html><body><img src="001.png"/></body></html>""".toByteArray(),
                     "OEBPS/001.png" to page,
                 ),
