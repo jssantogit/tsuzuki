@@ -7,6 +7,7 @@ import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedFactory
 import dev.zacsweers.metro.AssistedInject
 import eu.kanade.tachiyomi.BuildConfig
+import eu.kanade.tachiyomi.data.backup.BackupArchiveByteLimit
 import eu.kanade.tachiyomi.data.backup.BackupFileValidator
 import eu.kanade.tachiyomi.data.backup.create.creators.CategoriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.ExtensionStoresBackupCreator
@@ -93,6 +94,10 @@ class BackupCreator(
             if (byteArray.isEmpty()) {
                 throw IllegalStateException(context.stringResource(MR.strings.empty_backup_error))
             }
+
+            // Never overwrite a destination with an archive the decoder
+            // would reject because its decoded size exceeds the safety cap.
+            BackupArchiveByteLimit.requireRestorableSize(byteArray.size.toLong())
 
             file.openOutputStream()
                 .also {

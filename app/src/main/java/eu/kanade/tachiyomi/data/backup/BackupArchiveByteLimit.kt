@@ -11,6 +11,12 @@ import java.io.IOException
 internal object BackupArchiveByteLimit {
     const val MAX_UNCOMPRESSED_BYTES = 256L * 1024 * 1024
 
+    fun requireRestorableSize(byteCount: Long) {
+        check(byteCount in 1..MAX_UNCOMPRESSED_BYTES) {
+            "Backup exceeds the safe uncompressed size limit"
+        }
+    }
+
     fun read(source: BufferedSource, limit: Long = MAX_UNCOMPRESSED_BYTES): ByteArray {
         require(limit in 0..MAX_UNCOMPRESSED_BYTES) { "Invalid backup size limit" }
         val destination = Buffer()

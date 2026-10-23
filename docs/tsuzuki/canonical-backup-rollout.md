@@ -7,7 +7,10 @@ Status: schema/validation + transactional core exporter and importer, in draft P
 The legacy `.tachibk` decoder now reads both plain and gzip archives with a
 256 MiB **uncompressed** size ceiling before protobuf decoding. This avoids
 unbounded gzip expansion in the application process. Oversized files fail
-without partial restore; they are not truncated or silently accepted. Because
+without partial restore; they are not truncated or silently accepted.
+The writer applies the same cap before opening the destination output stream,
+so it does not overwrite a manual backup with a newly generated archive that
+the decoder would refuse. Because
 protobuf parsing still requires resident memory below this ceiling, on-device
 large-file tests remain an acceptance requirement. This size bound is not a
 checksum or authentication mechanism.

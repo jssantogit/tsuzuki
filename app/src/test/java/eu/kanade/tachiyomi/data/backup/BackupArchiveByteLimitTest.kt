@@ -4,8 +4,8 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import okio.Buffer
 import okio.GzipSink
+import okio.GzipSource
 import okio.buffer
-import okio.gzip
 import org.junit.jupiter.api.Test
 import java.io.IOException
 
@@ -15,6 +15,14 @@ class BackupArchiveByteLimitTest {
     fun `normal and exact-limit legacy backup bytes remain readable`() {
         BackupArchiveByteLimit.read(Buffer().writeUtf8("backup"), 6).decodeToString() shouldBe "backup"
         BackupArchiveByteLimit.read(Buffer().writeUtf8(""), 0).size shouldBe 0
+    }
+
+    @Test
+    fun `writer rejects archives exceeding the future restore limit`() {
+        BackupArchiveByteLimit.requireRestorableSize(BackupArchiveByteLimit.MAX_UNCOMPRESSED_BYTES)
+        shouldThrow<IllegalStateException> {
+            BackupArchiveByteLimit.requireRestorableSize(BackupArchiveByteLimit.MAX_UNCOMPRESSED_BYTES + 1)
+        }
     }
 
     @Test
@@ -32,7 +40,7 @@ class BackupArchiveByteLimitTest {
             sink.write(ByteArray(4096))
         }
         shouldThrow<IOException> {
-            BackupArchiveByteLimit.read(compressed.gzip().buffer(), 1024)
+            BackupArchiveByteLimit.read(GzipSource(compressed).buffer(), 1024)
         }
     }
 
@@ -42,6 +50,6 @@ class BackupArchiveByteLimitTest {
         GzipSink(compressed).buffer().use { sink ->
             sink.writeUtf8("123456")
         }
-        BackupArchiveByteLimit.read(compressed.gzip().buffer(), 6).decodeToString() shouldBe "123456"
+        BackupArchiveByteLimit.read(GzipSource(compressed).buffer(), 6).decodeToString() shouldBe "123456"
     }
 }
