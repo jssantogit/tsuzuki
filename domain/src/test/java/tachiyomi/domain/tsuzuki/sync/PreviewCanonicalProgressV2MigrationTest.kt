@@ -78,6 +78,29 @@ class PreviewCanonicalProgressV2MigrationTest {
     }
 
     @Test
+    fun `variant-specific checkpoints require a separately reviewed source mapping`() {
+        val chapter = chapter("source")
+        val legacy = document(chapter)
+        val record = legacy.records.values.single()
+        val withVariant = record.copy(
+            fields = buildJsonObject {
+                put("canonicalTitleId", chapter.canonicalTitleId)
+                put("chapterKey", CanonicalChapterSyncKey.from(chapter)!!.chapterKey)
+                put("read", false)
+                put("lastPageRead", 2)
+                put("lastVariantEvidenceKey", "source:legacy-variant")
+            },
+        )
+
+        preview.assess(
+            legacy.copy(records = mapOf(withVariant.id to withVariant)),
+            listOf(chapter),
+        ) shouldBe ProgressMigrationPreview.Blocked(
+            ProgressMigrationPreview.Reason.VARIANT_EVIDENCE_REQUIRES_REVIEW,
+        )
+    }
+
+    @Test
     fun `unknown unnumbered chapter needs stable evidence to be reviewable`() {
         val chapter = chapter("unknown").copy(
             type = CanonicalChapterType.UNKNOWN,
