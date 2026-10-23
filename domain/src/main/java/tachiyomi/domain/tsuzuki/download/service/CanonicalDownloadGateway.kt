@@ -16,6 +16,12 @@ import tachiyomi.domain.tsuzuki.download.model.CanonicalDownloadArtifact
 interface CanonicalDownloadGateway {
     suspend fun isDownloaded(variant: ChapterVariant): Boolean
 
+    /**
+     * Checks the physical artifact rather than accepting a cached database pointer.
+     * Unknown or inaccessible resources must fail closed.
+     */
+    suspend fun isArtifactAvailable(artifact: CanonicalDownloadArtifact): Boolean = false
+
     suspend fun acquire(option: ContentOption): Result<CanonicalDownloadArtifact> {
         return Result.failure(
             UnsupportedOperationException("Canonical download acquisition is not implemented"),
