@@ -115,8 +115,8 @@ import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterProgress
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.ConnectException
-import java.net.SocketTimeoutException
 import java.net.InetAddress
+import java.net.SocketTimeoutException
 import java.net.URI
 import java.net.UnknownHostException
 import java.util.UUID
