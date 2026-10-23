@@ -36,7 +36,7 @@ Run from the repository root, on an independently exported SQLite snapshot (not 
 python3 .github/scripts/verify_chapter_migration_43_backup.py /path/to/offline-pre43.sqlite
 ```
 
-The checker rejects sources with SQLite `-wal` or `-shm` sidecars: first create a consistent, **offline, checkpointed** snapshot using SQLite's backup API or a verified database-export workflow. It opens the original snapshot in immutable read-only mode and discards its temporary migration copy. Keep the database locally; do not attach it to public CI or the PR. The fixture tests for this tool run in the CI Change Planner.
+The checker rejects sources with SQLite `-wal`, `-shm` or `-journal` sidecars (also when accessed through a symbolic link): first create a consistent, **offline, checkpointed** snapshot using SQLite's backup API or a verified database-export workflow. It opens the original snapshot in immutable read-only mode and discards its temporary migration copy. Keep the database locally; do not attach it to public CI or the PR. The fixture tests for this tool run in the CI Change Planner.
 
 **Scope limit:** a passing result checks the additive migration 43 on that database snapshot only. It does not execute the Android backup/restore path, SQLDelight's full upgrade path from arbitrary old versions, Reader behavior, mixed-device synchronization, or downgrade behavior. The matrix's historical database upgrade, physical Reader and synchronization rows remain **Not run** until separately accepted on real device data.
 
