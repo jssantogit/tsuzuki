@@ -59,6 +59,44 @@ class GetCanonicalReadingStartTest {
     }
 
     @Test
+    fun `newer checkpoint wins even when its volume precedes a newer numbered volume`() = runTest {
+        val chapters = FakeCanonicalChapterRepository(
+            listOf(
+                chapter("volume-2-chapter-1", 1).copy(volume = 2),
+                chapter("volume-1-chapter-2", 2).copy(volume = 1),
+                chapter("volume-1-chapter-1", 1).copy(volume = 1),
+            ),
+        )
+        val reading = FakeCanonicalReadingRepository(
+            listOf(
+                progress("volume-1-chapter-2", read = false, updatedAt = 400L),
+                progress("volume-2-chapter-1", read = false, updatedAt = 300L),
+            ),
+        )
+
+        GetCanonicalReadingStart(chapters, reading).execute("title-1") shouldBe
+            CanonicalReadingStart.Ready("volume-1-chapter-2")
+    }
+
+    @Test
+    fun `first unread uses canonical volume order when repository rows are shuffled`() = runTest {
+        val chapters = FakeCanonicalChapterRepository(
+            listOf(
+                chapter("volume-2-chapter-2", 2).copy(volume = 2),
+                chapter("volume-1-chapter-2", 2).copy(volume = 1),
+                chapter("volume-2-chapter-1", 1).copy(volume = 2),
+                chapter("volume-1-chapter-1", 1).copy(volume = 1),
+            ),
+        )
+        val reading = FakeCanonicalReadingRepository(
+            listOf(progress("volume-1-chapter-1", read = true, updatedAt = 200L)),
+        )
+
+        GetCanonicalReadingStart(chapters, reading).execute("title-1") shouldBe
+            CanonicalReadingStart.Ready("volume-1-chapter-2")
+    }
+
+    @Test
     fun `first unread chapter starts when there is no active progress`() = runTest {
         val chapters = FakeCanonicalChapterRepository(
             listOf(chapter("chapter-1", 1), chapter("chapter-2", 2), chapter("chapter-3", 3)),
