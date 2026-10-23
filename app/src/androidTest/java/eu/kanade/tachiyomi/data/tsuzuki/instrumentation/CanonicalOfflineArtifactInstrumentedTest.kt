@@ -59,6 +59,13 @@ class CanonicalOfflineArtifactInstrumentedTest {
                 stream = { ByteArrayInputStream(byteArrayOf(0x00, 0x01)) }
             }
             assertTrue(runBlocking { isCanonicalLocalPageReadable(validLastPage) })
+            val headerOnlyLastPage = ReaderPage(1).apply {
+                stream = { ByteArrayInputStream(page.copyOf(40)) }
+            }
+            assertFalse(
+                "A valid PNG header with a truncated pixel payload must not finish a chapter",
+                runBlocking { isCanonicalLocalPageReadable(headerOnlyLastPage) },
+            )
             assertFalse(
                 "A corrupt last image cannot qualify a canonical chapter for read completion",
                 runBlocking { isCanonicalLocalPageReadable(damagedLastPage) },
