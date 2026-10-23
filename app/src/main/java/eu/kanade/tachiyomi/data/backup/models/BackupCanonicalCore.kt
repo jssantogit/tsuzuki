@@ -28,6 +28,7 @@ data class BackupCanonicalCore(
     val readerPreferences: List<BackupCoreReaderPreference> = emptyList(),
     val chapterOverrides: List<BackupCoreChapterOverride> = emptyList(),
     val contentPreferences: List<BackupCoreContentPreference> = emptyList(),
+    val integrationSettings: List<BackupCoreIntegrationSetting> = emptyList(),
     val sourcePreferences: List<BackupCoreSourcePreference> = emptyList(),
     val libraryCategories: List<BackupCoreLibraryCategory> = emptyList(),
     val continueReadingStates: List<BackupCoreContinueReadingState> = emptyList(),
@@ -57,6 +58,12 @@ data class BackupCanonicalCore(
                     memberships.mapNotNull { it.sourceCategoryId }.distinct().size <= 1
             },
         ) { "Distinct source categories cannot be silently merged by name" }
+        require(integrationSettings.isUniqueBy { it.integrationId }) {
+            "Duplicate integration settings"
+        }
+        require(integrationSettings.all { it.integrationId.isNotBlank() }) {
+            "Integration identifier must not be blank"
+        }
         require(contentPreferences.isUniqueBy { it.canonicalTitleId }) { "Duplicate content preference" }
         require(sourcePreferences.isUniqueBy { it.language to it.sourceId }) { "Duplicate source priority" }
         require(sourcePreferences.isUniqueBy { it.language to it.position }) { "Duplicate source order" }
@@ -322,6 +329,14 @@ data class BackupCoreChapterOverride(
     val createdAt: Long,
     val updatedAt: Long,
     val deletedAt: Long?,
+)
+
+@Serializable
+data class BackupCoreIntegrationSetting(
+    val integrationId: String,
+    val enabled: Boolean,
+    val configJson: String,
+    val updatedAt: Long,
 )
 
 @Serializable
