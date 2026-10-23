@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.ui.main.MainActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import mihon.app.di.AppGraph
 import mihon.core.metro.metroGraph
 import okhttp3.OkHttpClient
 
@@ -73,7 +74,8 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
                 }
                 // Use the same scoped repository observed by Account/Sync UI.
                 // A separate instance would leave an older in-memory user active.
-                applicationContext.metroGraph().callbackAccountRepository.acceptSession(session)
+                val graph: AppGraph = applicationContext.metroGraph()
+                graph.callbackAccountRepository.acceptSession(session)
             }
 
             withContext(Dispatchers.Main) {
