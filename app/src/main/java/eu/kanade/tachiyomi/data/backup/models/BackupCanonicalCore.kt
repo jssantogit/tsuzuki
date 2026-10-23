@@ -34,13 +34,18 @@ data class BackupCanonicalCore(
         require(library.isUniqueBy { it.canonicalTitleId }) { "Duplicate library membership" }
         require(progress.isUniqueBy { it.canonicalChapterId }) { "Duplicate reading progress" }
         require(history.isUniqueBy { it.canonicalChapterId }) { "Duplicate reading history" }
-        require(identities.isUniqueBy { Triple(it.canonicalTitleId, it.provider, it.externalId) }) {
+        require(identities.isUniqueBy { it.provider to it.externalId }) {
             "Duplicate external identity"
+        }
+        require(variants.isUniqueBy { it.sourceId to it.sourceChapterId }) {
+            "Duplicate source chapter identity"
         }
 
         val titleIds = titles.mapTo(mutableSetOf()) { it.id }
         val chapterIds = chapters.mapTo(mutableSetOf()) { it.id }
-        val mappingIds = sourceMappings.mapTo(mutableSetOf()) { it.id }
+        val mappingsById = sourceMappings.associateBy { it.id }
+        val chaptersById = chapters.associateBy { it.id }
+        val mappingIds = mappingsById.keys
         val variantsById = variants.associateBy { it.id }
         require(titleIds.none(String::isBlank) && chapterIds.none(String::isBlank)) {
             "Canonical ID must not be blank"
@@ -63,6 +68,12 @@ data class BackupCanonicalCore(
         require(variants.all { it.canonicalChapterId in chapterIds }) {
             "Variant refers to absent canonical chapter"
         }
+        require(
+            variants.all {
+                mappingsById[it.sourceMappingId]?.canonicalTitleId ==
+                    chaptersById[it.canonicalChapterId]?.canonicalTitleId
+            },
+        ) { "Variant source mapping and canonical chapter belong to different titles" }
         require(progress.all { it.canonicalChapterId in chapterIds }) {
             "Progress refers to absent canonical chapter"
         }
