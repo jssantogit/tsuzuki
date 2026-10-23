@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterOverride
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterUpdateState
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterEvidence
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContentPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContinueReadingState
@@ -613,6 +614,115 @@ class CanonicalCoreBackupImporterTest {
         )
         shouldThrow<IllegalArgumentException> { importer.restoreCore(coreSection(core)) }
         database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+    }
+
+    @Test
+    fun `provenance and mapped chapter evidence survive transactional restore and export`(): Unit = runBlocking {
+        val core = coreWithCollectionsAndBindings().copy(
+            chapterEvidence = listOf(
+                BackupCoreChapterEvidence(
+                    id = "evidence-1",
+                    canonicalTitleId = "title-1",
+                    producerKind = "ADDON",
+                    producerId = "mangaball",
+                    externalChapterKey = "remote-1",
+                    rawLabel = "Chapter 1",
+                    rawNumber = 1.0,
+                    volume = 1,
+                    title = "Beginning",
+                    observedAt = 88,
+                    confidence = 0.91,
+                    authorityClass = "ADDON_PROVISIONAL",
+                    mappedCanonicalChapterId = "chapter-1",
+                ),
+                BackupCoreChapterEvidence(
+                    id = "evidence-2",
+                    canonicalTitleId = "title-1",
+                    producerKind = "INTEGRATION",
+                    producerId = "kitsu",
+                    externalChapterKey = null,
+                    rawLabel = "Unmatched special",
+                    rawNumber = null,
+                    volume = null,
+                    title = null,
+                    observedAt = 89,
+                    confidence = 0.2,
+                    authorityClass = "EDITORIAL",
+                    mappedCanonicalChapterId = null,
+                ),
+            ),
+        )
+        importer.restoreCore(coreSection(core))
+        val stored = database.tsuzuki_chapter_evidenceQueries
+            .getTsuzukiChapterEvidenceByTitle("title-1").awaitAsList()
+        stored.map { it.id } shouldBe listOf("evidence-1", "evidence-2")
+        stored.first().mapped_canonical_chapter_id shouldBe "chapter-1"
+        stored.first().raw_metadata.isEmpty() shouldBe true
+
+        val titles = CanonicalTitleRepositoryImpl(database)
+        val exported = CanonicalCoreBackupExporter(
+            titleSource = CanonicalTitleSyncSource { titles.getAllAsFlow().first() },
+            titleRepository = titles,
+            libraryRepository = CanonicalLibraryRepositoryImpl(database),
+            chapterRepository = CanonicalChapterRepositoryImpl(database),
+            sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+            readingRepository = CanonicalReadingRepositoryImpl(database),
+            database = database,
+            json = Json,
+        ).export()
+        val decoded = Json.decodeFromString(BackupCanonicalCore.serializer(), exported.payloadJson)
+        decoded.chapterEvidence shouldBe core.chapterEvidence
+    }
+
+    @Test
+    fun `chapter evidence for unrelated canonical chapter is rejected before writes`(): Unit = runBlocking {
+        val core = coreWithCollectionsAndBindings().copy(
+            titles = coreWithCollectionsAndBindings().titles +
+                BackupCoreTitle("title-2", "Different book", "SOURCE_ONLY", 1, 2),
+            chapterEvidence = listOf(
+                BackupCoreChapterEvidence(
+                    "wrong-evidence", "title-2", "ADDON", "mangaball", "other",
+                    "Chapter 1", 1.0, null, null, 30, 0.9, "ADDON_PROVISIONAL", "chapter-1",
+                ),
+            ),
+        )
+        shouldThrow<IllegalArgumentException> { importer.restoreCore(coreSection(core)) }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+        database.tsuzuki_backup_restore_receiptsQueries
+            .listTsuzukiBackupRestoreReceipts().awaitAsList() shouldBe emptyList()
+    }
+
+    @Test
+    fun `opaque evidence metadata cannot silently disappear from portable backup`(): Unit = runBlocking {
+        importer.restoreCore(section())
+        database.tsuzuki_chapter_evidenceQueries.upsertTsuzukiChapterEvidence(
+            id = "opaque-evidence",
+            canonicalTitleId = "title-1",
+            producerKind = "ADDON",
+            producerId = "custom-addon",
+            externalChapterKey = "local-1",
+            rawLabel = "Chapter 1",
+            rawNumber = 1.0,
+            volume = null,
+            title = null,
+            observedAt = 40,
+            confidence = 0.8,
+            authorityClass = "ADDON_PROVISIONAL",
+            mappedCanonicalChapterId = "chapter-1",
+            rawMetadata = byteArrayOf(1, 2, 3),
+        )
+        val titles = CanonicalTitleRepositoryImpl(database)
+        val exporter = CanonicalCoreBackupExporter(
+            titleSource = CanonicalTitleSyncSource { titles.getAllAsFlow().first() },
+            titleRepository = titles,
+            libraryRepository = CanonicalLibraryRepositoryImpl(database),
+            chapterRepository = CanonicalChapterRepositoryImpl(database),
+            sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+            readingRepository = CanonicalReadingRepositoryImpl(database),
+            database = database,
+            json = Json,
+        )
+        shouldThrow<IllegalStateException> { exporter.export() }
     }
 
     @Test
