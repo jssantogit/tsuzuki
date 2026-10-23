@@ -5,15 +5,15 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
+import eu.kanade.tachiyomi.data.tsuzuki.supabase.PersistentAuthCallbackRequestStore
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseAuthService
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseConfiguration
-import eu.kanade.tachiyomi.data.tsuzuki.supabase.PersistentAuthCallbackRequestStore
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import mihon.core.metro.metroGraph
+import okhttp3.OkHttpClient
 
 class SupabaseAuthCallbackActivity : ComponentActivity() {
 
