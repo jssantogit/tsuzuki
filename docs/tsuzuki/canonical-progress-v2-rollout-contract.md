@@ -68,3 +68,10 @@ No tests may use private user snapshots in public CI. Keep PR #140 in **draft**,
 - A subsequent forward-only migration makes enrollment acquire `FOR UPDATE` on the same account epoch ledger (serializing concurrent distinct UUIDs), enforces a **64 distinct observed-installations-per-account limit**, and never prunes expired records to create a false impression that historical clients disappeared. Re-registrations of existing IDs remain possible at the limit. This is operational abuse protection, **not** an active-device eligibility threshold.
 - Successful heartbeat renewals now preserve monotonic `last_seen_at` and `lease_expires_at` using `greatest`, so overlapping calls cannot make a previously observed lease older. The existing v1-only epoch and no-activation invariants remain intact; no production scheduler calls this endpoint.
 - pgTAP covers full registry, 65th rejection, same-device renewal at cap, monotonic last-seen and lease, and account isolation. A synthetic 64-device cap is not evidence that all devices are known and must never authorize cutover.
+
+## Old-client READ downgrade fence (pre-activation)
+
+- The epoch read fence now covers `sync_pull_delta(READING_PROGRESS)`, `sync_get_cursor(READING_PROGRESS)` and `sync_snapshot_domain(READING_PROGRESS)`, not only writes. A hypothetical epoch2 account must not let an old client import stale v1 checkpoints locally before its next write fails.
+- Each protected reader calls account-scoped `sync_get_progress_protocol()` before its legacy query. It takes `FOR SHARE` on existing ledger rows; a future approved cutover must take `FOR UPDATE` inside the same transaction as cursor CAS and migration receipt.
+- Read operations for `LIBRARY` and other compatible domains retain previous behavior. Unknown/un-enrolled accounts still read v1 without creating ledger rows. pgTAP covers epoch2 refusal across all three readers, other-account isolation and anon denial.
+- The active epoch remains 1. Neither migration authorization, data copying nor v2 activation is introduced.
