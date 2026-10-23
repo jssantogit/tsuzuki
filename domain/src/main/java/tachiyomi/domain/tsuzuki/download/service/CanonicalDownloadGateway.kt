@@ -16,6 +16,14 @@ import tachiyomi.domain.tsuzuki.download.model.CanonicalDownloadArtifact
 interface CanonicalDownloadGateway {
     suspend fun isDownloaded(variant: ChapterVariant): Boolean
 
+    /**
+     * Revalidate that a previously persisted artifact is physically accessible.
+     * A database record alone never proves the download still exists.
+     * The conservative default refuses reuse by gateways without a validator.
+     * Temporarily inaccessible storage must not cause automatic metadata deletion.
+     */
+    suspend fun isArtifactAvailable(artifact: CanonicalDownloadArtifact): Boolean = false
+
     suspend fun acquire(option: ContentOption): Result<CanonicalDownloadArtifact> {
         return Result.failure(
             UnsupportedOperationException("Canonical download acquisition is not implemented"),
