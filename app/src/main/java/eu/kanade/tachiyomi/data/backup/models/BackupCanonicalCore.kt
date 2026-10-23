@@ -25,6 +25,8 @@ data class BackupCanonicalCore(
     val folders: List<BackupCoreFolder> = emptyList(),
     val lists: List<BackupCoreList> = emptyList(),
     val providerBindings: List<BackupCoreProviderBinding> = emptyList(),
+    val readerPreferences: List<BackupCoreReaderPreference> = emptyList(),
+    val chapterOverrides: List<BackupCoreChapterOverride> = emptyList(),
 ) {
     fun validate() {
         require(schemaVersion == VERSION) { "Unsupported canonical core schema" }
@@ -33,6 +35,8 @@ data class BackupCanonicalCore(
         require(folders.isUniqueBy { it.id }) { "Duplicate folder ID" }
         require(lists.isUniqueBy { it.id }) { "Duplicate collection list ID" }
         require(providerBindings.isUniqueBy { it.id }) { "Duplicate provider binding ID" }
+        require(readerPreferences.isUniqueBy { it.canonicalTitleId }) { "Duplicate reader preference" }
+        require(chapterOverrides.isUniqueBy { it.id }) { "Duplicate chapter override" }
         require(providerBindings.isUniqueBy { Triple(it.providerId, it.facetId, it.externalWorkId) }) {
             "Duplicate provider binding external identity"
         }
@@ -97,6 +101,17 @@ data class BackupCanonicalCore(
             it.id.isNotBlank() && it.canonicalTitleId in titleIds &&
                 it.providerId.isNotBlank() && it.facetId.isNotBlank() && it.externalWorkId.isNotBlank()
         }) { "Invalid provider binding or missing canonical title" }
+        require(readerPreferences.all { it.canonicalTitleId in titleIds }) {
+            "Reader preference references a missing title"
+        }
+        require(chapterOverrides.all {
+            it.id.isNotBlank() && it.canonicalTitleId in titleIds &&
+                it.kind.isNotBlank() && it.payloadJson.isNotBlank() &&
+                (it.sourceId == null) == (it.sourceTitleUrl == null) &&
+                (it.sourceChapterId == null || it.sourceId != null) &&
+                (it.canonicalChapterKey == null || it.canonicalChapterKey.isNotBlank()) &&
+                it.schemaVersion > 0 && it.revision >= 0
+        }) { "Invalid chapter override or missing canonical title" }
         require(chapters.all { it.canonicalTitleId in titleIds }) {
             "Chapter refers to absent canonical title"
         }
@@ -208,6 +223,30 @@ data class BackupCoreProviderBinding(
     val availability: String,
     val createdAt: Long,
     val updatedAt: Long,
+)
+
+@Serializable
+data class BackupCoreReaderPreference(
+    val canonicalTitleId: String,
+    val automaticFallback: Boolean,
+    val updatedAt: Long,
+)
+
+@Serializable
+data class BackupCoreChapterOverride(
+    val id: String,
+    val canonicalTitleId: String,
+    val canonicalChapterKey: String?,
+    val sourceId: Long?,
+    val sourceTitleUrl: String?,
+    val sourceChapterId: String?,
+    val kind: String,
+    val payloadJson: String,
+    val schemaVersion: Long,
+    val revision: Long,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val deletedAt: Long?,
 )
 
 @Serializable
