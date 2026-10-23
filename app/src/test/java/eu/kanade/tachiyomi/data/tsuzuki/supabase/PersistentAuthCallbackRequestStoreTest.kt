@@ -3,113 +3,107 @@ package eu.kanade.tachiyomi.data.tsuzuki.supabase
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
+import java.security.MessageDigest
+import java.util.Base64
 
 class PersistentAuthCallbackRequestStoreTest {
 
+    private val verifier = "private-verifier-123456789012345678901234567890123"
+
     @Test
-    fun `matching callback is accepted once across a process restart`() {
+    fun `PKCE verifier survives process restart and is consumed only once`() {
         val directory = Files.createTempDirectory("tsuzuki-callback").toFile()
-        val first = PersistentAuthCallbackRequestStore(
-            directory = directory,
-            nowEpochMillis = { 1_000L },
-            nonceSource = { "secure-signup-nonce" },
-        )
-        val nonce = first.start("signup")
-        nonce shouldBe "secure-signup-nonce"
+        val first = store(directory, now = { 1_000L })
+        val request = first.start("signup")
 
-        val restored = PersistentAuthCallbackRequestStore(
-            directory = directory,
-            nowEpochMillis = { 2_000L },
+        request.nonce shouldBe "secure-callback-nonce-1234567890"
+        val expectedChallenge = Base64.getUrlEncoder().withoutPadding().encodeToString(
+            MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII)),
         )
-        restored.consume("signup", nonce) shouldBe true
-        restored.consume("signup", nonce) shouldBe false
+        request.codeChallenge shouldBe expectedChallenge
+        request.codeChallenge shouldBe request.codeChallenge // deterministic S256
+
+        val reopened = store(directory, now = { 2_000L })
+        reopened.consume(request.nonce, "signup") shouldBe verifier
+        reopened.consume(request.nonce, "signup") shouldBe null
     }
 
     @Test
-    fun `wrong type or nonce cannot consume original request`() {
+    fun `wrong request type or nonce cannot consume a PKCE verifier`() {
         val directory = Files.createTempDirectory("tsuzuki-callback-type").toFile()
-        val store = PersistentAuthCallbackRequestStore(
-            directory = directory,
-            nowEpochMillis = { 10L },
-            nonceSource = { "nonce-123456789012345678901234" },
-        )
-        store.start("recovery")
+        val store = store(directory)
+        val request = store.start("recovery")
 
-        store.consume("signup", "nonce-123456789012345678901234") shouldBe false
-        store.consume("recovery", "unexpected") shouldBe false
-        store.consume("recovery", "nonce-123456789012345678901234") shouldBe true
+        store.consume(request.nonce, "signup") shouldBe null
+        store.consume("unexpected-nonce-1234567890", "recovery") shouldBe null
+        store.consume(request.nonce, "recovery") shouldBe verifier
+        store.consume(request.nonce, "recovery") shouldBe null
     }
 
     @Test
-    fun `expired and unrequested callbacks fail closed`() {
-        val directory = Files.createTempDirectory("tsuzuki-callback-expired").toFile()
-        var current = 1_000L
-        val store = PersistentAuthCallbackRequestStore(
-            directory = directory,
-            nowEpochMillis = { current },
-            nonceSource = { "nonce-123456789012345678901234" },
-        )
-        store.start("signup")
-        store.consume("email_change", "nonce-123456789012345678901234") shouldBe false
-
-        current += PersistentAuthCallbackRequestStore.LIFETIME_MILLIS + 1
-        store.consume("signup", "nonce-123456789012345678901234") shouldBe false
+    fun `type may be absent in GoTrue code-only redirect`() {
+        val store = store(Files.createTempDirectory("tsuzuki-code-only").toFile())
+        val request = store.start("signup")
+        store.consume(request.nonce) shouldBe verifier
     }
 
     @Test
-    fun `accidental nonce reuse is rejected rather than permitting two callbacks`() {
-        val directory = Files.createTempDirectory("tsuzuki-nonce-collision").toFile()
-        val nonce = "same-nonce-value-12345678901234"
-        val store = PersistentAuthCallbackRequestStore(
-            directory = directory,
-            nowEpochMillis = { 1_000L },
-            nonceSource = { nonce },
-        )
+    fun `expired callback and unsupported type are rejected`() {
+        var clock = 1_000L
+        val store = store(Files.createTempDirectory("tsuzuki-expiry").toFile(), { clock })
+        val request = store.start("signup")
 
-        store.start("signup") shouldBe nonce
+        store.consume(request.nonce, "email_change") shouldBe null
+        clock += PersistentAuthCallbackRequestStore.LIFETIME_MILLIS + 1
+        store.consume(request.nonce, "signup") shouldBe null
+    }
+
+    @Test
+    fun `nonce collision cannot bind a second verifier`() {
+        val store = store(Files.createTempDirectory("tsuzuki-collision").toFile())
+        val request = store.start("signup")
         runCatching { store.start("recovery") }.isFailure shouldBe true
-        store.consume("signup", nonce) shouldBe true
-        store.consume("recovery", nonce) shouldBe false
+        store.consume(request.nonce, "signup") shouldBe verifier
+        store.consume(request.nonce, "recovery") shouldBe null
     }
 
     @Test
-    fun `corrupted persistent ledger cannot be silently rebound`() {
-        val directory = Files.createTempDirectory("tsuzuki-callback-corrupt").toFile()
-        directory.resolve(PersistentAuthCallbackRequestStore.FILE_NAME)
-            .writeText("{broken")
-        val store = PersistentAuthCallbackRequestStore(
-            directory = directory,
-            nonceSource = { "fresh-strong-nonce-1234567890" },
-        )
-
+    fun `damaged ledger cannot be rebound to an arbitrary user`() {
+        val directory = Files.createTempDirectory("tsuzuki-corrupt").toFile()
+        directory.resolve(PersistentAuthCallbackRequestStore.FILE_NAME).writeText("{bad")
+        val store = store(directory)
         runCatching { store.start("signup") }.isFailure shouldBe true
-        store.consume("signup", "fresh-strong-nonce-1234567890") shouldBe false
+        store.consume("secure-callback-nonce-1234567890", "signup") shouldBe null
     }
 
     @Test
-    fun `short callback nonce is rejected before it can be enrolled`() {
-        val directory = Files.createTempDirectory("tsuzuki-callback-weak").toFile()
-        val store = PersistentAuthCallbackRequestStore(
-            directory = directory,
-            nonceSource = { "short" },
+    fun `short state and verifier are rejected`() {
+        val dir = Files.createTempDirectory("tsuzuki-short").toFile()
+        val shortNonce = PersistentAuthCallbackRequestStore(dir, nonceSource = { "tiny" })
+        runCatching { shortNonce.start("signup") }.isFailure shouldBe true
+        val shortVerifier = PersistentAuthCallbackRequestStore(
+            dir,
+            nonceSource = { "secure-callback-nonce-1234567890" },
+            verifierSource = { "tiny" },
         )
-
-        runCatching { store.start("recovery") }.isFailure shouldBe true
-        directory.resolve(PersistentAuthCallbackRequestStore.FILE_NAME).exists() shouldBe false
+        runCatching { shortVerifier.start("signup") }.isFailure shouldBe true
     }
 
     @Test
-    fun `cancelled and malformed requests never authorize callbacks`() {
-        val directory = Files.createTempDirectory("tsuzuki-callback-cancel").toFile()
-        val store = PersistentAuthCallbackRequestStore(
-            directory = directory,
-            nowEpochMillis = { 1_000L },
-            nonceSource = { "nonce-123456789012345678901234" },
-        )
-        store.start("signup")
-        store.cancel("signup", "nonce-123456789012345678901234")
-        store.consume("signup", "nonce-123456789012345678901234") shouldBe false
-        directory.resolve(PersistentAuthCallbackRequestStore.FILE_NAME).writeText("bad format")
-        store.consume("signup", "nonce-123456789012345678901234") shouldBe false
+    fun `cancelled requests cannot authorize a future callback`() {
+        val store = store(Files.createTempDirectory("tsuzuki-cancel").toFile())
+        val request = store.start("recovery")
+        store.cancel("recovery", request.nonce)
+        store.consume(request.nonce, "recovery") shouldBe null
     }
+
+    private fun store(
+        directory: java.io.File,
+        now: () -> Long = { 1_000L },
+    ) = PersistentAuthCallbackRequestStore(
+        directory = directory,
+        nowEpochMillis = now,
+        nonceSource = { "secure-callback-nonce-1234567890" },
+        verifierSource = { verifier },
+    )
 }
