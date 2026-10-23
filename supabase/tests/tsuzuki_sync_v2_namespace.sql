@@ -1,6 +1,6 @@
 begin;
 
-select plan(8);
+select plan(10);
 
 insert into auth.users (id, aud, role, email, encrypted_password, created_at, updated_at)
 values (
@@ -50,6 +50,35 @@ select throws_ok(
     '0A000',
     'exact progress requires a negotiated protocol rollout',
     'v2 progress RPC rejects writes until account migration is coordinated'
+);
+
+select throws_ok(
+    $
+    select public.sync_apply_mutation_batch(
+        '{
+            "mutationId":"20000000-0000-0000-0000-000000000003",
+            "originClientId":"spoofed-client",
+            "domain":"  READING_PROGRESS_V2  ",
+            "baseCursor":0,
+            "operations":[
+                {"type":"set","recordId":"chapter-key","fieldPath":"lastPageRead","value":99}
+            ]
+        }'::jsonb
+    );
+    $,
+    '0A000',
+    'exact progress requires a negotiated protocol rollout',
+    'whitespace around the domain cannot bypass the v2 rollout guard'
+);
+
+select is(
+    (
+        select count(*)::integer
+        from tsuzuki_private.tsuzuki_sync_mutations
+        where mutation_id = '20000000-0000-0000-0000-000000000003'::uuid
+    ),
+    0,
+    'whitespace bypass attempt leaves no idempotency record'
 );
 
 select is(
