@@ -56,6 +56,23 @@ class SupabaseAccountRepositoryTest {
     }
 
     @Test
+    fun `signup never adopts implicit tokens when email confirmation is disabled`() = runTest {
+        server.enqueue(sessionResponse())
+        val store = InMemorySessionStore()
+        val nonce = "implicit-signup-nonce-123456789"
+        val callbacks = PersistentAuthCallbackRequestStore(
+            directory = Files.createTempDirectory("tsuzuki-implicit-signup").toFile(),
+            nonceSource = { nonce },
+        )
+        val repository = repository(store, callbacks)
+
+        repository.register("reader@example.com", "password").isFailure shouldBe true
+        store.load() shouldBe null
+        repository.state.value shouldBe AccountState.LoggedOut
+        callbacks.consume(nonce, "signup") shouldBe null
+    }
+
+    @Test
     fun `password login uses password grant and persists authenticated session`() = runTest {
         server.enqueue(sessionResponse())
         val store = InMemorySessionStore()
