@@ -33,6 +33,7 @@ class SupabaseSyncHttpTransport(
     private val client: OkHttpClient,
     private val configuration: SupabaseConfiguration,
     private val accountRepository: AccountRepository,
+    private val accountScopeGuard: SyncAccountScopeGuard,
     private val json: Json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
@@ -219,9 +220,13 @@ class SupabaseSyncHttpTransport(
         request: Request,
         decode: (String) -> T,
     ): SyncTransportResult<T> {
-        if (accountRepository.state.value !is AccountState.Authenticated) {
-            return SyncTransportResult.Failure(
+        val accountAtStart = accountRepository.state.value as? AccountState.Authenticated
+            ?: return SyncTransportResult.Failure(
                 SyncFailure(SyncFailureReason.AUTHORIZATION_REQUIRED),
+            )
+        if (!accountScopeGuard.permits(accountAtStart.account.id)) {
+            return SyncTransportResult.Failure(
+                SyncFailure(SyncFailureReason.ACCOUNT_SCOPE_MISMATCH),
             )
         }
 
@@ -232,6 +237,18 @@ class SupabaseSyncHttpTransport(
         if (accessToken.isNullOrBlank()) {
             return SyncTransportResult.Failure(
                 SyncFailure(SyncFailureReason.AUTHORIZATION_REQUIRED),
+            )
+        }
+
+        // Token refresh and deep-link callbacks may change the persisted
+        // session. A request must never cross identities mid-operation.
+        val accountBeforeRequest = accountRepository.state.value as? AccountState.Authenticated
+        if (
+            accountBeforeRequest?.account?.id != accountAtStart.account.id ||
+            !accountScopeGuard.permits(accountAtStart.account.id)
+        ) {
+            return SyncTransportResult.Failure(
+                SyncFailure(SyncFailureReason.ACCOUNT_SCOPE_MISMATCH),
             )
         }
 
