@@ -216,7 +216,9 @@ class SupabaseSyncOrchestratorTest {
         adapter.current shouldBe local
         outbox.get(progress) shouldNotBe null
         cloudState.getPending(progress)?.attemptCount shouldBe 1
-        cloudState.getCursor(progress) shouldBe null
+        // The successful initial remote read may persist the accepted cursor 0.
+        // A rejected push must not advance it to an unaccepted write frontier.
+        cloudState.getCursor(progress)?.eventCursor shouldBe 0L
         transport.pushedBatches.shouldHaveSize(1)
     }
 
