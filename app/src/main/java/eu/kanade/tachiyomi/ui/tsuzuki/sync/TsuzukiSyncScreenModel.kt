@@ -95,7 +95,9 @@ class TsuzukiSyncScreenModel(
             accountState = account,
             diagnosticsAccountId = local.diagnostics.accountId,
             runtimeState = runtimeState,
-            pendingMutationCount = if ((account as? AccountState.Authenticated)?.account?.id == local.diagnostics.accountId) {
+            pendingMutationCount = if ((account as? AccountState.Authenticated)?.account?.id ==
+                local.diagnostics.accountId
+            ) {
                 local.diagnostics.pendingMutationCount
             } else {
                 0
