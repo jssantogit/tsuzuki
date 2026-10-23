@@ -1,6 +1,6 @@
 begin;
 
-select plan(10);
+select plan(12);
 
 insert into auth.users (
     id,
@@ -113,6 +113,17 @@ select is(
 );
 
 select throws_ok(
+    $
+    select tsuzuki_private.sync_apply_mutation_batch(
+        '{"mutationId":"10000000-0000-0000-0000-00000000b099"}'::jsonb
+    )
+    $,
+    '42501',
+    null,
+    'authenticated clients cannot call the underlying ungated sync implementation'
+);
+
+select throws_ok(
     $$
     update tsuzuki_private.tsuzuki_sync_fields
     set value = '"HACKED"'::jsonb
@@ -183,10 +194,17 @@ select set_config('request.jwt.claim.sub', '', true);
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 
 select throws_ok(
-    $$select public.sync_get_cursor('LIBRARY')$$,
+    $select public.sync_get_cursor('LIBRARY')$,
     '42501',
     null,
     'anonymous callers cannot execute sync RPCs'
+);
+
+select throws_ok(
+    $select public.sync_get_progress_protocol()$,
+    '42501',
+    null,
+    'anonymous callers cannot discover an account progress protocol'
 );
 
 reset role;
