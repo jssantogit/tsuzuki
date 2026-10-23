@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreContentPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContinueReadingState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreIntegrationSetting
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreIdentity
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryEntry
@@ -30,6 +31,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import tachiyomi.data.Database
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
+import tachiyomi.domain.tsuzuki.integration.model.PortableIntegrationConfig
 import tachiyomi.domain.tsuzuki.reader.repository.CanonicalReadingRepository
 import tachiyomi.domain.tsuzuki.repository.CanonicalLibraryRepository
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
@@ -112,6 +114,8 @@ class CanonicalCoreBackupExporter(
         }
         val libraryCategories = database.tsuzuki_library_categoriesQueries
             .getAllTsuzukiLibraryCategories().awaitAsList()
+        val integrationSettings = database.tsuzuki_integration_settingsQueries
+            .getAllTsuzukiIntegrationSettings().awaitAsList()
         val sourceLanguages = database.tsuzuki_source_preferencesQueries
             .getConfiguredLanguages().awaitAsList()
         val sourcePreferences = sourceLanguages.flatMap { language ->
@@ -258,6 +262,14 @@ class CanonicalCoreBackupExporter(
                     createdAt = it.created_at,
                     updatedAt = it.updated_at,
                     deletedAt = it.deleted_at,
+                )
+            },
+            integrationSettings = integrationSettings.map {
+                BackupCoreIntegrationSetting(
+                    integrationId = it.integration_id,
+                    enabled = it.enabled,
+                    configJson = PortableIntegrationConfig.redact(it.config_json, json),
+                    updatedAt = it.updated_at,
                 )
             },
             contentPreferences = contentPreferences.map {
