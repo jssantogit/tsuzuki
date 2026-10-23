@@ -72,6 +72,15 @@ class PreviewCanonicalProgressV2Migration {
                 return ProgressMigrationPreview.Blocked(ProgressMigrationPreview.Reason.MALFORMED_REMOTE_RECORD)
             }
 
+            // This preview has no source-variant inventory. An unresolved
+            // per-source page checkpoint cannot be promoted safely merely
+            // because its chapter identity was unambiguous.
+            if (variantKey != JsonNull) {
+                return ProgressMigrationPreview.Blocked(
+                    ProgressMigrationPreview.Reason.VARIANT_EVIDENCE_REQUIRES_REVIEW,
+                )
+            }
+
             val candidates = legacyCandidates[record.id].orEmpty()
             when (candidates.size) {
                 0 -> return ProgressMigrationPreview.Blocked(ProgressMigrationPreview.Reason.UNRESOLVED_LEGACY_KEY)
@@ -116,5 +125,6 @@ sealed interface ProgressMigrationPreview {
         UNRESOLVED_LEGACY_KEY,
         AMBIGUOUS_LEGACY_IDENTITY,
         AMBIGUOUS_TARGET_IDENTITY,
+        VARIANT_EVIDENCE_REQUIRES_REVIEW,
     }
 }
