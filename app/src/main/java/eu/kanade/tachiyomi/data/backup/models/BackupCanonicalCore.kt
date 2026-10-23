@@ -15,6 +15,7 @@ data class BackupCanonicalCore(
     val schemaVersion: Int = VERSION,
     val titles: List<BackupCoreTitle> = emptyList(),
     val identities: List<BackupCoreIdentity> = emptyList(),
+    val sourceMappings: List<BackupCoreSourceMapping> = emptyList(),
     val library: List<BackupCoreLibraryEntry> = emptyList(),
     val chapters: List<BackupCoreChapter> = emptyList(),
     val variants: List<BackupCoreVariant> = emptyList(),
@@ -24,6 +25,10 @@ data class BackupCanonicalCore(
     fun validate() {
         require(schemaVersion == VERSION) { "Unsupported canonical core schema" }
         require(titles.isUniqueBy { it.id }) { "Duplicate canonical title" }
+        require(sourceMappings.isUniqueBy { it.id }) { "Duplicate source mapping" }
+        require(sourceMappings.isUniqueBy { it.sourceId to it.sourceUrl }) {
+            "Duplicate source mapping identity"
+        }
         require(chapters.isUniqueBy { it.id }) { "Duplicate canonical chapter" }
         require(variants.isUniqueBy { it.id }) { "Duplicate chapter variant" }
         require(library.isUniqueBy { it.canonicalTitleId }) { "Duplicate library membership" }
@@ -35,6 +40,7 @@ data class BackupCanonicalCore(
 
         val titleIds = titles.mapTo(mutableSetOf()) { it.id }
         val chapterIds = chapters.mapTo(mutableSetOf()) { it.id }
+        val mappingIds = sourceMappings.mapTo(mutableSetOf()) { it.id }
         val variantsById = variants.associateBy { it.id }
         require(titleIds.none(String::isBlank) && chapterIds.none(String::isBlank)) {
             "Canonical ID must not be blank"
@@ -47,6 +53,12 @@ data class BackupCanonicalCore(
         }
         require(library.all { it.canonicalTitleId in titleIds }) {
             "Library entry refers to absent canonical title"
+        }
+        require(sourceMappings.all { it.canonicalTitleId in titleIds }) {
+            "Source mapping refers to absent canonical title"
+        }
+        require(variants.all { it.sourceMappingId in mappingIds }) {
+            "Variant refers to absent source mapping"
         }
         require(variants.all { it.canonicalChapterId in chapterIds }) {
             "Variant refers to absent canonical chapter"
@@ -88,6 +100,22 @@ data class BackupCoreIdentity(
     val externalId: String,
     val verified: Boolean,
     val createdAt: Long,
+)
+
+@Serializable
+data class BackupCoreSourceMapping(
+    val id: String,
+    val canonicalTitleId: String,
+    val mihonMangaId: Long?,
+    val sourceId: Long,
+    val sourceUrl: String,
+    val language: String,
+    val matchConfidence: Double?,
+    val verifiedByUser: Boolean,
+    val availability: String,
+    val preferredOverride: Boolean,
+    val createdAt: Long,
+    val updatedAt: Long,
 )
 
 @Serializable
