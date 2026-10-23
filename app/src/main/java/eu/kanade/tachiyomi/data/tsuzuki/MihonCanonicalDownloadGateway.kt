@@ -154,40 +154,39 @@ class MihonCanonicalDownloadGateway internal constructor(
                 if (!local.exists()) return false
 
                 if (artifact.format.equals("DIRECTORY", ignoreCase = true)) {
-                local.isDirectory && local.listFiles()
-                    ?.any { entry ->
-                        !entry.isDirectory && entry.exists() &&
-                            entry.openInputStream()?.use { ImageUtil.findImageType(it) != null } == true
-                    } == true
-            } else {
-                if (local.isDirectory) return false
-                if (artifact.format.equals("EPUB", ignoreCase = true)) {
-                    local.epubReader(context).use { reader ->
-                        reader.getImagesFromPages().any { path ->
-                            reader.getInputStream(path)?.use { ImageUtil.findImageType(it) != null } == true
-                        }
-                    }
+                    local.isDirectory && local.listFiles()
+                        ?.any { entry ->
+                            !entry.isDirectory && entry.exists() &&
+                                entry.openInputStream()?.use { ImageUtil.findImageType(it) != null } == true
+                        } == true
                 } else {
-                    // Exercise the actual archive decoder and inspect the first viable
-                    // image, not just the CBZ/ZIP signature or a random nonempty file.
-                    // Full multi-page integrity remains the Reader's responsibility.
-                    local.archiveReader(context).use { reader ->
-                        reader.useEntries { entries ->
-                            entries.any { entry ->
-                                entry.isFile &&
-                                    reader.getInputStream(entry.name)?.use {
-                                        ImageUtil.findImageType(it) != null
-                                    } == true
+                    if (local.isDirectory) return false
+                    if (artifact.format.equals("EPUB", ignoreCase = true)) {
+                        local.epubReader(context).use { reader ->
+                            reader.getImagesFromPages().any { path ->
+                                reader.getInputStream(path)?.use { ImageUtil.findImageType(it) != null } == true
+                            }
+                        }
+                    } else {
+                        // Verify a real image entry through the archive decoder, not
+                        // just a ZIP signature. Full multi-page integrity remains
+                        // the Reader's responsibility.
+                        local.archiveReader(context).use { reader ->
+                            reader.useEntries { entries ->
+                                entries.any { entry ->
+                                    entry.isFile &&
+                                        reader.getInputStream(entry.name)?.use {
+                                            ImageUtil.findImageType(it) != null
+                                        } == true
+                                }
                             }
                         }
                     }
                 }
-            }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
-                // Corrupt archives and temporarily unavailable file grants are not
-                // reusable cache hits. Preserve the row for later recovery.
+                // Preserve the row when an archive is corrupt or storage is detached.
                 false
             }
         }
