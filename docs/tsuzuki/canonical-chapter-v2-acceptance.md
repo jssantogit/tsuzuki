@@ -26,6 +26,12 @@ Status: **NOT EXECUTED / NOT RELEASE-APPROVED**. This is an acceptance matrix, n
 | Mixed-version sync | Attempt v1-to-v2 and v2-to-v1 transfer in an isolated test environment | Incompatible documents rejected without writing progress, with clear recovery path | **Not run** |
 | Downgrade and restore | Roll back app from a backed-up snapshot without v2 in-place mutation | No data loss, corruption or stale-identity promotion | **Not run** |
 
+## Cached-download recovery preflight (automated fixture; physical acceptance NOT RUN)
+
+The canonical Reader and chapter-download path no longer trust a persisted `CanonicalDownloadArtifact` without a physical readability check. The local Mihon boundary checks file/directory existence and lightweight readability before reusing it, and **also** verifies freshly acquired files before reporting completion. A stale record falls through to normal source/option resolution or download acquisition; the record is **not automatically deleted** if an SD card is detached or an SAF grant is revoked. Validation failures other than cancellation fail closed; cancellation still propagates.
+
+Domain regressions cover stale files masking healthy online sources, reacquisition, absent providers without metadata loss, permission-denied inspection and cancellation. App regressions reject unreadable located/post-download artifacts. The disposable Android gate adds a real file-URI fixture for missing, zero-byte, readable-file and directory cases under the isolated debug package's cache. The gate exercises **lightweight availability**, not full CBZ/RAR/EPUB decoding, image validation, checksum verification, actual downloaded archives, physical removable storage, restoration of permissions, or restart across app versions. Those remain **Not run** in the Downloads matrix row.
+
 ## Offline historical SQLite backup preflight (tooling; acceptance NOT RUN)
 
 A read-only checker is available at `.github/scripts/verify_chapter_migration_43_backup.py`. It checks a **user-supplied, checkpointed pre-43 SQLite database** on an isolated temporary copy, never runs migration SQL against the supplied file, and prints only pass/fail and table/chapter counts. It verifies SQLite integrity, foreign keys, table definitions, unchanged pre-existing row values (including progress, history, downloads, evidence and variants), and NULL v2 fields after migration 43.
