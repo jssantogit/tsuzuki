@@ -120,7 +120,7 @@ set local role anon;
 select set_config('request.jwt.claim.sub', '', true);
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 select throws_ok(
-    $select public.sync_register_progress_device('22000000-0000-0000-0000-000000000004')$,
+    $$select public.sync_register_progress_device('22000000-0000-0000-0000-000000000004')$$,
     '42501', null,
     'anonymous clients cannot register a legacy device'
 );
@@ -128,5 +128,3 @@ reset role;
 
 select * from finish();
 rollback;
-
--- pgTAP heartbeat syntax regression corrected; no v2 activation.
