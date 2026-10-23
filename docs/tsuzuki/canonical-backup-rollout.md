@@ -2,6 +2,16 @@
 
 Status: schema/validation + transactional core exporter and importer, in draft PR #141. The production .tachibk writer and restorer are NOT connected to these new components yet. The existing legacy Mihon backup does NOT include the canonical Tsuzuki library; do not describe it as complete.
 
+## Resource safety for existing backup files
+
+The legacy `.tachibk` decoder now reads both plain and gzip archives with a
+256 MiB **uncompressed** size ceiling before protobuf decoding. This avoids
+unbounded gzip expansion in the application process. Oversized files fail
+without partial restore; they are not truncated or silently accepted. Because
+protobuf parsing still requires resident memory below this ceiling, on-device
+large-file tests remain an acceptance requirement. This size bound is not a
+checksum or authentication mechanism.
+
 ## Backward compatibility
 
 Optional protobuf field 107 (Backup.canonicalSnapshot) is absent in legacy archives. Sections have independent version keys, SHA-256 checksums, JSON validation, and core graph referential checks. Checksums identify corruption, not a trusted author.
