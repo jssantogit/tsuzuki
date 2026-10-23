@@ -59,7 +59,15 @@ class SupabaseSyncHttpTransportTest {
                 .code(200)
                 .addHeader("Content-Type", "application/json")
                 .body(
-                    """{"schemaVersion":1,"protocolEpoch":1,"activeDomain":"READING_PROGRESS","exactProgressEnabled":false,"migrationReady":false}""",
+                    """
+                    {
+                      "schemaVersion":1,
+                      "protocolEpoch":1,
+                      "activeDomain":"READING_PROGRESS",
+                      "exactProgressEnabled":false,
+                      "migrationReady":false
+                    }
+                    """.trimIndent(),
                 )
                 .build(),
         )
@@ -80,7 +88,15 @@ class SupabaseSyncHttpTransportTest {
                 .code(200)
                 .addHeader("Content-Type", "application/json")
                 .body(
-                    """{"schemaVersion":2,"protocolEpoch":2,"activeDomain":"READING_PROGRESS_V2","exactProgressEnabled":true,"migrationReady":true}""",
+                    """
+                    {
+                      "schemaVersion":2,
+                      "protocolEpoch":2,
+                      "activeDomain":"READING_PROGRESS_V2",
+                      "exactProgressEnabled":true,
+                      "migrationReady":true
+                    }
+                    """.trimIndent(),
                 )
                 .build(),
         )
