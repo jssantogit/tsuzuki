@@ -18,7 +18,7 @@ internal object SupabaseCallbackCodePolicy {
         }
         check(
             listOf("access_token", "refresh_token", "token_hash", "expires_in")
-                .none(query::containsKey)
+                .none(query::containsKey),
         ) { "Callback must not contain bearer credentials" }
 
         val state = query["tsz_state"]
