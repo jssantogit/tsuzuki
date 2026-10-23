@@ -9,6 +9,7 @@ import android.graphics.Color
 import android.graphics.PointF
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityWindowInfo
@@ -267,6 +268,41 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                 details = "sourceAPageCount=${first.second}|sourceBPageCount=${after.second}" +
                     "|positionBefore=$positionBefore|positionAfter=${after.first}",
             )
+        }
+    }
+
+    @Test(timeout = 240_000L)
+    fun boundaryNextPreviousKeepsObservedCanonicalPageAndProgress() {
+        requireOptIn()
+        withFixture { fixture ->
+            fixture.launchReader()
+            val reader = awaitActivity(ReaderActivity::class.java)
+            awaitReaderPages(reader, fixture.sourceA.name, expectedCount = 10)
+            val position = advanceToPage(reader, fixture, 4, "CHAPTER_BOUNDARIES")
+            val progressBefore = runBlocking { fixture.reading.getProgress(fixture.chapter.id) }
+            val historyBefore = runBlocking { fixture.reading.getHistory(fixture.chapter.id) }
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+
+            // The fixture intentionally contains exactly one canonical chapter.
+            // Next and Previous must therefore be no-ops, not a jump to page zero.
+            for (keyCode in listOf(KeyEvent.KEYCODE_N, KeyEvent.KEYCODE_P)) {
+                instrumentation.sendKeyDownUpSync(keyCode)
+                instrumentation.waitForIdleSync()
+                SystemClock.sleep(500L)
+                assertEquals(
+                    "Unavailable adjacent navigation must retain the observed Reader page",
+                    position,
+                    awaitReaderPages(reader, fixture.sourceA.name, expectedCount = 10).first,
+                )
+                assertEquals(fixture.chapter.id, reader.intent.getStringExtra("canonical_chapter"))
+                assertEquals(
+                    "Unavailable adjacent navigation must not update canonical progress",
+                    progressBefore,
+                    runBlocking { fixture.reading.getProgress(fixture.chapter.id) },
+                )
+                assertEquals(historyBefore, runBlocking { fixture.reading.getHistory(fixture.chapter.id) })
+            }
+            report("CHAPTER_BOUNDARIES", 10, position, details = "next=NOOP|previous=NOOP|progress=UNCHANGED")
         }
     }
 
