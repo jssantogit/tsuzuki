@@ -46,7 +46,7 @@ class SettingsVisualPresetContractTest {
 
         source shouldContain "SettingsCanvas {"
         source shouldContain "SettingsPageHeader("
-        source shouldContain "SettingsGroup(title = stringResource(MR.strings.tsuzuki_visual_preset_current))"
+        source shouldContain "SettingsGroup("
         source shouldContain "defaultSkinColors()"
         source shouldNotContain "Scaffold("
         source shouldNotContain "AppBar("

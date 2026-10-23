@@ -16,9 +16,23 @@
     <string name="tsuzuki_integration_status_active">Ativa</string>
 
     <string name="tsuzuki_visual_preset_title">Preset visual</string>
-    <string name="tsuzuki_visual_preset_current">Preset atual</string>
+    <string name="tsuzuki_visual_preset_current">Presets visuais</string>
     <string name="tsuzuki_visual_preset_name">Tsuzuki Default Skin</string>
-    <string name="tsuzuki_visual_preset_summary">A prévia acompanha o tema atual sem criar outro preset.</string>
+    <string name="tsuzuki_visual_preset_summary">Visual original do Tsuzuki: superfícies neutras que valorizam as capas.</string>
+    <string name="tsuzuki_preset_monet_summary">Cores inspiradas no papel de parede, com adaptação automática.</string>
+    <string name="tsuzuki_preset_catppuccin_summary">Tons pastéis suaves e superfícies acolhedoras.</string>
+    <string name="tsuzuki_preset_green_apple_summary">Verdes frescos com superfícies claras e serenas.</string>
+    <string name="tsuzuki_preset_lavender_summary">Toques de lavanda para uma leitura delicada.</string>
+    <string name="tsuzuki_preset_midnight_dusk_summary">Azuis profundos e tons de crepúsculo com contraste sutil.</string>
+    <string name="tsuzuki_preset_nord_summary">Azuis nórdicos frios e contraste equilibrado.</string>
+    <string name="tsuzuki_preset_strawberry_daiquiri_summary">Tons de frutas vermelhas e rosa com detalhes quentes.</string>
+    <string name="tsuzuki_preset_tako_summary">Acentos roxos intensos com identidade escura marcante.</string>
+    <string name="tsuzuki_preset_tealturquoise_summary">Turquesa vibrante para uma interface clara e leve.</string>
+    <string name="tsuzuki_preset_tidal_wave_summary">Azuis e tons de água inspirados no oceano.</string>
+    <string name="tsuzuki_preset_yinyang_summary">Equilíbrio e contraste inspirados no preto e branco.</string>
+    <string name="tsuzuki_preset_yotsuba_summary">Verdes quentes e tons creme com visual descontraído.</string>
+    <string name="tsuzuki_preset_tokyonight_summary">Azuis noturnos, índigo e detalhes luminosos.</string>
+    <string name="tsuzuki_preset_monochrome_summary">Paleta minimalista em cinza que destaca as capas.</string>
     <string name="tsuzuki_theme_mode_title">Modo do tema</string>
     <string name="tsuzuki_collections_settings_title">Collections</string>
     <string name="tsuzuki_collections_settings_summary">Organize coleções, pastas e listas exibidas pelo Tsuzuki</string>

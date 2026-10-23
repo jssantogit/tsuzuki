@@ -1,16 +1,16 @@
 package eu.kanade.presentation.more.settings.screen
 
-import androidx.compose.foundation.background
+import android.app.Activity
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,20 +20,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
+import dev.icerock.moko.resources.StringResource
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.presentation.more.settings.components.SettingsCanvas
 import eu.kanade.presentation.more.settings.components.SettingsGroup
-import eu.kanade.presentation.more.settings.components.SettingsGroupDivider
 import eu.kanade.presentation.more.settings.components.SettingsPageHeader
-import eu.kanade.presentation.more.settings.widget.AppThemePreferenceWidget
-import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
+import eu.kanade.presentation.more.settings.widget.AppThemePalettePreview
+import eu.kanade.presentation.theme.TachiyomiTheme
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.util.Screen
+import eu.kanade.tachiyomi.util.system.DeviceUtil
+import eu.kanade.tachiyomi.util.system.isDynamicColorAvailable
 import mihon.app.di.appGraph
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.roundedfilled.CheckCircle
@@ -46,12 +51,17 @@ object SettingsTsuzukiVisualPresetScreen : Screen() {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val colors = defaultSkinColors()
         val context = LocalContext.current
         val uiPreferences = remember(context) { context.appGraph.uiPreferences }
         val appThemePref = uiPreferences.appTheme
         val appTheme by appThemePref.collectAsState()
         val amoled by uiPreferences.themeDarkAmoled.collectAsState()
+        val availablePresets = remember {
+            AppTheme.entries.filter { theme ->
+                theme.titleRes != null && (theme != AppTheme.MONET || DeviceUtil.isDynamicColorAvailable)
+            }
+        }
+        val colors = defaultSkinColors()
 
         SettingsCanvas {
             LazyColumn {
@@ -62,56 +72,72 @@ object SettingsTsuzukiVisualPresetScreen : Screen() {
                     )
                 }
 
-                item(key = "visual_preset_group") {
-                    SettingsGroup(title = stringResource(MR.strings.tsuzuki_visual_preset_current)) {
-                        DefaultSkinSchematicPreview(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            colors = colors,
-                        )
-                        SettingsGroupDivider()
+                items(availablePresets, key = AppTheme::name) { theme ->
+                    val selected = appTheme == theme
+                    val title = if (theme == AppTheme.DEFAULT) {
+                        stringResource(MR.strings.tsuzuki_visual_preset_name)
+                    } else {
+                        stringResource(theme.titleRes!!)
+                    }
+                    val selectPreset = {
+                        if (!selected) {
+                            appThemePref.set(theme)
+                            (context as? Activity)?.let { ActivityCompat.recreate(it) }
+                        }
+                    }
+                    SettingsGroup(
+                        title = if (theme == availablePresets.first()) {
+                            stringResource(MR.strings.tsuzuki_visual_preset_current)
+                        } else {
+                            null
+                        },
+                    ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .semantics { selected = true }
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .clickable(role = Role.RadioButton, onClick = selectPreset)
+                                .semantics { this.selected = selected }
+                                .padding(14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
+                            TachiyomiTheme(appTheme = theme, amoled = amoled) {
+                                AppThemePalettePreview(
+                                    stableThemeKey = theme.name.lowercase(),
+                                    themeName = title,
+                                    selected = selected,
+                                    selectionColor = colors.accent,
+                                    unselectedBorderColor = colors.outline,
+                                    onClick = selectPreset,
+                                    interactive = false,
+                                    modifier = Modifier.width(112.dp),
+                                )
+                            }
                             Column(
                                 modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(3.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                                 Text(
-                                    text = stringResource(MR.strings.tsuzuki_visual_preset_name),
+                                    text = title,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = colors.foreground,
                                 )
                                 Text(
-                                    text = stringResource(MR.strings.tsuzuki_visual_preset_summary),
+                                    text = stringResource(presetDescription(theme)),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = colors.secondary,
                                 )
                             }
-                            Icon(
-                                imageVector = MaterialSymbols.RoundedFilled.CheckCircle,
-                                contentDescription = stringResource(MR.strings.selected),
-                                tint = colors.accent,
-                                modifier = Modifier.size(22.dp),
-                            )
+                            if (selected) {
+                                Icon(
+                                    imageVector = MaterialSymbols.RoundedFilled.CheckCircle,
+                                    contentDescription = stringResource(MR.strings.selected),
+                                    tint = colors.accent,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
                         }
-                    }
-                }
-                item(key = "visual_palette_group") {
-                    SettingsGroup(title = stringResource(MR.strings.pref_app_theme)) {
-                        AppThemePreferenceWidget(
-                            value = appTheme,
-                            amoled = amoled,
-                            compactPreview = true,
-                            onItemClick = { appThemePref.set(it) },
-                        )
                     }
                 }
             }
@@ -119,73 +145,21 @@ object SettingsTsuzukiVisualPresetScreen : Screen() {
     }
 }
 
-@Composable
-private fun DefaultSkinSchematicPreview(
-    modifier: Modifier = Modifier,
-    colors: eu.kanade.presentation.tsuzuki.components.DefaultSkinColors,
-) {
-    Column(
-        modifier = modifier
-            .background(colors.canvas, DefaultSkinShape.Control)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.46f)
-                .height(12.dp)
-                .background(colors.foreground.copy(alpha = 0.82f), RoundedCornerShape(5.dp)),
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.28f)
-                .height(6.dp)
-                .background(colors.secondary.copy(alpha = 0.5f), RoundedCornerShape(4.dp)),
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(colors.surface, DefaultSkinShape.Control)
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            PreviewRow(long = true, colors = colors)
-            PreviewRow(long = false, colors = colors)
-        }
-    }
-}
-
-@Composable
-private fun PreviewRow(
-    long: Boolean,
-    colors: eu.kanade.presentation.tsuzuki.components.DefaultSkinColors,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(26.dp)
-                .background(colors.surfaceMuted, DefaultSkinShape.Control),
-        )
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(if (long) 0.72f else 0.52f)
-                    .height(6.dp)
-                    .background(colors.foreground.copy(alpha = 0.72f), RoundedCornerShape(4.dp)),
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(if (long) 0.48f else 0.36f)
-                    .height(5.dp)
-                    .background(colors.secondary.copy(alpha = 0.42f), RoundedCornerShape(4.dp)),
-            )
-        }
-    }
+internal fun presetDescription(theme: AppTheme): StringResource = when (theme) {
+    AppTheme.DEFAULT -> MR.strings.tsuzuki_visual_preset_summary
+    AppTheme.MONET -> MR.strings.tsuzuki_preset_monet_summary
+    AppTheme.CATPPUCCIN -> MR.strings.tsuzuki_preset_catppuccin_summary
+    AppTheme.GREEN_APPLE -> MR.strings.tsuzuki_preset_green_apple_summary
+    AppTheme.LAVENDER -> MR.strings.tsuzuki_preset_lavender_summary
+    AppTheme.MIDNIGHT_DUSK -> MR.strings.tsuzuki_preset_midnight_dusk_summary
+    AppTheme.NORD -> MR.strings.tsuzuki_preset_nord_summary
+    AppTheme.STRAWBERRY_DAIQUIRI -> MR.strings.tsuzuki_preset_strawberry_daiquiri_summary
+    AppTheme.TAKO -> MR.strings.tsuzuki_preset_tako_summary
+    AppTheme.TEALTURQUOISE -> MR.strings.tsuzuki_preset_tealturquoise_summary
+    AppTheme.TIDAL_WAVE -> MR.strings.tsuzuki_preset_tidal_wave_summary
+    AppTheme.YINYANG -> MR.strings.tsuzuki_preset_yinyang_summary
+    AppTheme.YOTSUBA -> MR.strings.tsuzuki_preset_yotsuba_summary
+    AppTheme.TOKYONIGHT -> MR.strings.tsuzuki_preset_tokyonight_summary
+    AppTheme.MONOCHROME -> MR.strings.tsuzuki_preset_monochrome_summary
+    else -> MR.strings.tsuzuki_visual_preset_summary
 }

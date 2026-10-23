@@ -287,13 +287,14 @@ private fun AppThemePhonePreviewItem(
 }
 
 @Composable
-private fun AppThemePalettePreview(
+internal fun AppThemePalettePreview(
     stableThemeKey: String,
     themeName: String,
     selected: Boolean,
     selectionColor: Color,
     unselectedBorderColor: Color,
     onClick: () -> Unit,
+    interactive: Boolean = true,
 ) {
     val frameShape = DefaultSkinShape.Control
     Box(
@@ -307,7 +308,7 @@ private fun AppThemePalettePreview(
             )
             .clip(frameShape)
             .background(MaterialTheme.colorScheme.surface)
-            .clickable(role = Role.RadioButton, onClick = onClick)
+            .then(if (interactive) Modifier.clickable(role = Role.RadioButton, onClick = onClick) else Modifier)
             .semantics {
                 contentDescription = themeName
                 this.selected = selected
