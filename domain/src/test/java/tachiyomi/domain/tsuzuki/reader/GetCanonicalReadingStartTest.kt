@@ -36,6 +36,29 @@ class GetCanonicalReadingStartTest {
     }
 
     @Test
+    fun `equal progress timestamps prefer the later canonical volume after numbering resets`() = runTest {
+        val chapters = FakeCanonicalChapterRepository(
+            listOf(
+                chapter("volume-1-chapter-1", 1).copy(volume = 1),
+                chapter("volume-1-chapter-2", 2).copy(volume = 1),
+                chapter("volume-2-chapter-1", 1).copy(volume = 2),
+                chapter("volume-2-chapter-2", 2).copy(volume = 2),
+            ),
+        )
+        val reading = FakeCanonicalReadingRepository(
+            listOf(
+                progress("volume-1-chapter-2", read = false, updatedAt = 300L),
+                progress("volume-2-chapter-1", read = false, updatedAt = 300L),
+            ),
+        )
+
+        // Chapter 2 (volume 1) must not outrank chapter 1 (volume 2)
+        // merely because its numeric legacy sort key is larger.
+        GetCanonicalReadingStart(chapters, reading).execute("title-1") shouldBe
+            CanonicalReadingStart.Ready("volume-2-chapter-1")
+    }
+
+    @Test
     fun `first unread chapter starts when there is no active progress`() = runTest {
         val chapters = FakeCanonicalChapterRepository(
             listOf(chapter("chapter-1", 1), chapter("chapter-2", 2), chapter("chapter-3", 3)),
