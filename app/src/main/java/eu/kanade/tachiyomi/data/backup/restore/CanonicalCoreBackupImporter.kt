@@ -12,6 +12,7 @@ import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterOverrideKind
+import tachiyomi.domain.tsuzuki.integration.model.PortableIntegrationConfig
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.LibraryStatus
 import tachiyomi.domain.tsuzuki.model.SourceMappingAvailability
@@ -53,6 +54,12 @@ class CanonicalCoreBackupImporter(
         core.chapterOverrides.forEach { override ->
             ChapterOverrideKind.valueOf(override.kind)
             json.parseToJsonElement(override.payloadJson)
+        }
+        core.integrationSettings.forEach { setting ->
+            val sanitized = PortableIntegrationConfig.redact(setting.configJson, json)
+            require(json.parseToJsonElement(setting.configJson) == json.parseToJsonElement(sanitized)) {
+                "Backup cannot import authentication secrets in integration settings"
+            }
         }
         val variantMetadata = core.variants.associate { variant ->
             variant.id to json.parseToJsonElement(variant.rawSourceMetadataJson).jsonObject
@@ -293,6 +300,14 @@ class CanonicalCoreBackupImporter(
                 database.tsuzuki_library_categoriesQueries.insertTsuzukiLibraryCategory(
                     canonicalTitleId = membership.canonicalTitleId,
                     categoryId = categoryIds.getValue(membership.name),
+                )
+            }
+            core.integrationSettings.forEach {
+                database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+                    integrationId = it.integrationId,
+                    enabled = it.enabled,
+                    configJson = it.configJson,
+                    updatedAt = it.updatedAt,
                 )
             }
             core.contentPreferences.forEach {
