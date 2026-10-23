@@ -185,6 +185,7 @@ class CanonicalLibraryScreenModelTest {
         val artworkRepository = mockk<TitleArtworkRepository>()
         every { artworkRepository.observeAll() } returns artworkUpdates
         val metadataResolver = mockk<ResolveCanonicalMetadata>()
+        var cachedYear = "2020-06-12"
         val requestedBatches = mutableListOf<List<String>>()
         coEvery { metadataResolver.cached(any<Collection<String>>()) } coAnswers {
             val ids = firstArg<Collection<String>>().toList()
@@ -192,7 +193,7 @@ class CanonicalLibraryScreenModelTest {
             ids.associateWith { id ->
                 ResolvedMetadata(
                     startDate = if (id == "one") {
-                        ProvenancedMetadata("2020-06-12", IntegrationId("mal"), "m1", "MAL")
+                        ProvenancedMetadata(cachedYear, IntegrationId("mal"), "m1", "MAL")
                     } else {
                         null
                     },
@@ -239,6 +240,13 @@ class CanonicalLibraryScreenModelTest {
             CanonicalLibraryReadingState.IN_PROGRESS
         updated.coverUrl shouldBe "cover"
         requestedBatches shouldBe listOf(listOf("one"))
+
+        // Details updates the local snapshot while the canonical inventory IDs stay unchanged.
+        cachedYear = "2021-04-01"
+        repo.emitItems(listOf(canonicalItem("one", "Frieren updated")))
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items.single().startYear shouldBe
+            "2021"
 
         repo.emitItems(listOf(canonicalItem("one", "Frieren"), canonicalItem("two", "Dungeon Meshi")))
         advanceUntilIdle()
