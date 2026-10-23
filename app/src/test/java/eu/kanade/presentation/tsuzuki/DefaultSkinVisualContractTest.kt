@@ -73,10 +73,14 @@ class DefaultSkinVisualContractTest {
     fun `password visibility and filter chips center labels in compact touch targets`() {
         val fields = readSource("components/DefaultSkinPrimitives.kt")
         val listBuilder = readSource("collections/ListBuilderScreen.kt")
-        fields shouldContain "contentAlignment = Alignment.Center"
-        fields shouldContain "Modifier.heightIn(min = 48.dp)"
-        fields shouldContain "modifier.heightIn(min = 48.dp)"
-        fields shouldContain ".heightIn(min = 32.dp)"
+        val textAction = fields.substringAfter("fun DefaultSkinTextAction(")
+            .substringBefore("fun DefaultSkinChoiceChip(")
+        val chip = fields.substringAfter("fun DefaultSkinChoiceChip(")
+            .substringBefore("fun DefaultSkinTag(")
+        textAction shouldContain "contentAlignment = Alignment.Center"
+        textAction shouldContain ".heightIn(min = 48.dp)"
+        chip shouldContain ".heightIn(min = 48.dp)"
+        chip shouldContain ".heightIn(min = 32.dp)"
         listBuilder shouldContain "DefaultSkinChoiceChip("
     }
 
