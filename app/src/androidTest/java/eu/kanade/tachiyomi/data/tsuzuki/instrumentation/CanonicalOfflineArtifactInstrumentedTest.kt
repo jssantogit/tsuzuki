@@ -63,6 +63,10 @@ class CanonicalOfflineArtifactInstrumentedTest {
                 "A corrupt last image cannot qualify a canonical chapter for read completion",
                 runBlocking { isCanonicalLocalPageReadable(damagedLastPage) },
             )
+            assertFalse(
+                "An unavailable image stream cannot qualify a chapter for completion",
+                runBlocking { isCanonicalLocalPageReadable(ReaderPage(1)) },
+            )
             writeZip(archive, mapOf("001.png" to page))
             assertTrue(MihonCanonicalDownloadGateway.isArtifactReadable(context, archiveArtifact))
             writeZip(archive, mapOf("000.jpg" to byteArrayOf(0x01), "001.png" to page))
