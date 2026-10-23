@@ -49,6 +49,22 @@ class BackupCanonicalCoreTest {
     private fun core() = BackupCanonicalCore(
         titles = listOf(BackupCoreTitle("title-1", "Book", "UNVERIFIED", 1, 2)),
         identities = listOf(BackupCoreIdentity("title-1", "source", "remote-1", false, 1)),
+        sourceMappings = listOf(
+            BackupCoreSourceMapping(
+                id = "mapping-1",
+                canonicalTitleId = "title-1",
+                mihonMangaId = null,
+                sourceId = 42,
+                sourceUrl = "https://example.invalid/book",
+                language = "pt-BR",
+                matchConfidence = 0.9,
+                verifiedByUser = false,
+                availability = "AVAILABLE",
+                preferredOverride = false,
+                createdAt = 1,
+                updatedAt = 2,
+            ),
+        ),
         library = listOf(BackupCoreLibraryEntry("title-1", "READING", true, 2, 3)),
         chapters = listOf(
             BackupCoreChapter(
