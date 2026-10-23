@@ -375,7 +375,6 @@ class SupabaseSyncHttpTransport(
     }
 }
 
-
 /**
  * The only protocol a client may acknowledge while remote migration, client
  * capabilities and downgrade fencing are unavailable.
