@@ -22,22 +22,22 @@ class SupabaseAccountRepository(
 
     override suspend fun register(email: String, password: String): Result<AccountState> =
         runCatching {
-            val nonce = callbackRequests.start("signup")
+            val request = callbackRequests.start("signup")
             try {
                 val result = authService.register(
                     email = email,
                     password = password,
-                    redirectTo = authService.callbackRedirectUrl(nonce),
+                    redirectTo = authService.callbackRedirectUrl(request.nonce),
+                    codeChallenge = request.codeChallenge,
                 )
-                val next = result.session?.let {
-                    callbackRequests.cancel("signup", nonce)
-                    sessionStore.save(it)
-                    it.toAccountState()
-                } ?: AccountState.EmailConfirmationRequired(email)
+                check(result.session == null) {
+                    "PKCE signup must not return bearer tokens before email verification"
+                }
+                val next = AccountState.EmailConfirmationRequired(email)
                 mutableState.value = next
                 next
             } catch (error: Throwable) {
-                callbackRequests.cancel("signup", nonce)
+                callbackRequests.cancel("signup", request.nonce)
                 throw error
             }
         }
@@ -64,14 +64,15 @@ class SupabaseAccountRepository(
 
     override suspend fun sendPasswordRecovery(email: String): Result<Unit> =
         runCatching {
-            val nonce = callbackRequests.start("recovery")
+            val request = callbackRequests.start("recovery")
             try {
                 authService.sendPasswordRecovery(
                     email = email,
-                    redirectTo = authService.callbackRedirectUrl(nonce),
+                    redirectTo = authService.callbackRedirectUrl(request.nonce),
+                    codeChallenge = request.codeChallenge,
                 )
             } catch (error: Throwable) {
-                callbackRequests.cancel("recovery", nonce)
+                callbackRequests.cancel("recovery", request.nonce)
                 throw error
             }
         }
