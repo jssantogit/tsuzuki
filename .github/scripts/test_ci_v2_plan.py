@@ -132,6 +132,15 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(result["selected_tests"], ["App"])
         self.assertEqual(result["selected_compiles"], [])
 
+    def test_reader_activity_navigation_change_keeps_full_app_regressions(self):
+        result = plan(
+            ["app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt"],
+            "affected",
+        )
+        self.assertEqual(result["selected_tests"], ["App"])
+        self.assertTrue(result["run_format"])
+        self.assertEqual(result["selected_compiles"], [])
+
     def test_core_common_change_runs_core_tests_and_app_compile(self):
         result = plan(["core/common/src/main/java/mihon/core/common/Foo.kt"], "affected")
         self.assertEqual(result["selected_tests"], ["Core Common"])
