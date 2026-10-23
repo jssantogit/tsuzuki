@@ -111,7 +111,7 @@ class MihonCanonicalDownloadGateway internal constructor(
                 )
 
             artifactLocator(option)?.let { artifact ->
-                return Result.success(artifact)
+                if (artifactAvailability(artifact)) return Result.success(artifact)
             }
 
             downloadStarter(delivery.chapterId)
@@ -125,6 +125,11 @@ class MihonCanonicalDownloadGateway internal constructor(
                 ?: return Result.failure(
                     IllegalStateException("Completed chapter download could not be located"),
                 )
+            if (!artifactAvailability(artifact)) {
+                return Result.failure(
+                    IllegalStateException("Completed chapter download is not physically readable"),
+                )
+            }
             Result.success(artifact)
         } catch (error: CancellationException) {
             throw error
