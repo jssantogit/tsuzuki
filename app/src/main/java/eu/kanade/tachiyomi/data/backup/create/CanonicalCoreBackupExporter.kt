@@ -123,6 +123,22 @@ class CanonicalCoreBackupExporter(
                 .getPreferencesForLanguage(language).awaitAsList()
         }
 
+        // Until runtime payloads have a portable, credential-safe codec, never
+        // claim a complete archive while they are present. These bindings may
+        // embed local Mihon row IDs or secrets from third-party addons.
+        for (title in titles) {
+            check(
+                database.tsuzuki_content_bindingsQueries
+                    .getTsuzukiContentBindingsByTitle(title.id).awaitAsList().isEmpty(),
+            ) { "Unexportable provider runtime binding requires a portable codec" }
+        }
+        // External library memberships encode the linked remote account's
+        // work/list status. They cannot be silently attributed to a new user.
+        check(
+            database.tsuzuki_external_library_membershipsQueries
+                .getAllTsuzukiExternalLibraryMemberships().awaitAsList().isEmpty(),
+        ) { "External account list memberships need an isolated backup migration" }
+
         val core = BackupCanonicalCore(
             titles = titles.map {
                 BackupCoreTitle(it.id, it.displayTitle, it.identityState.name, it.createdAt, it.updatedAt)
