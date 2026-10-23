@@ -431,7 +431,7 @@ class CanonicalCoreBackupImporterTest {
             json = Json,
         ).export()
         val decoded = Json.decodeFromString(BackupCanonicalCore.serializer(), exported.payloadJson)
-        decoded.libraryCategories shouldBe core.libraryCategories
+        decoded.libraryCategories.map { it.copy(sourceCategoryId = null) } shouldBe core.libraryCategories
         importer.restoreCore(coreSection(core))
         database.tsuzuki_library_categoriesQueries
             .getAllTsuzukiLibraryCategories().awaitAsList().size shouldBe 1
@@ -441,9 +441,10 @@ class CanonicalCoreBackupImporterTest {
     fun `same category name with conflicting original identity cannot merge during restore`() = runBlocking {
         val base = coreWithCollectionsAndBindings()
         val broken = base.copy(
+            titles = base.titles + BackupCoreTitle("title-2", "Other", "SOURCE_ONLY", 1, 2),
             libraryCategories = listOf(
                 BackupCoreLibraryCategory("title-1", "Read", 1, 0, sourceCategoryId = 12),
-                BackupCoreLibraryCategory("title-1", "Read", 2, 0, sourceCategoryId = 13),
+                BackupCoreLibraryCategory("title-2", "Read", 1, 0, sourceCategoryId = 13),
             ),
         )
         shouldThrow<IllegalArgumentException> { importer.restoreCore(coreSection(broken)) }
