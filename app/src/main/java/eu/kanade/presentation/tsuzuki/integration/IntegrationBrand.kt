@@ -12,6 +12,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.R
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 @Composable
 fun IntegrationBrandIcon(
@@ -77,8 +79,8 @@ internal fun ratingScaleLabel(
 }
 
 private fun Double.toCompactRatingNumber(): String =
-    if (isFinite() && this % 1.0 == 0.0) {
-        toLong().toString()
+    if (isFinite()) {
+        BigDecimal.valueOf(this).setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
     } else {
         toString()
     }

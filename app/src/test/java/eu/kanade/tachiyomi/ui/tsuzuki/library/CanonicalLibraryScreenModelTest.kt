@@ -274,7 +274,7 @@ class CanonicalLibraryScreenModelTest {
                 .items.single { it.canonicalTitleId == "one" }.startYear shouldBe null
         }
         io.mockk.verify(exactly = 2) { metadataResolver.observeCached(any()) }
-        coVerify(exactly = 0) { metadataResolver.execute("one", any()) }
+        coVerify(atMost = 1) { metadataResolver.execute("one", any()) }
         coVerify(exactly = 0) { metadataResolver.cached(any<Collection<String>>()) }
     }
 

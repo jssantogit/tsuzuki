@@ -10,6 +10,7 @@ import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import eu.kanade.domain.tsuzuki.library.interactor.RemoveUnifiedLibraryTitle
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -144,6 +146,10 @@ class CanonicalLibraryScreenModel private constructor(
         resolveCanonicalMetadata = resolveCanonicalMetadata,
     )
 
+    // A single paced worker enriches absent years outside card composition and avoids provider bursts.
+    private val pendingYearEnrichment = Channel<String>(Channel.UNLIMITED)
+    private val attemptedYearEnrichment = mutableSetOf<String>()
+
     private val eventChannel = Channel<CanonicalLibraryEvent>()
     val events = eventChannel.receiveAsFlow()
 
@@ -151,6 +157,22 @@ class CanonicalLibraryScreenModel private constructor(
     private val filters = MutableStateFlow(CanonicalLibraryFilterState())
 
     init {
+        resolveCanonicalMetadata?.let { resolver ->
+            viewModelScope.launch {
+                for (titleId in pendingYearEnrichment) {
+                    try {
+                        resolver.execute(titleId)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Throwable) {
+                        logcat(LogPriority.WARN, error) {
+                            "Background library metadata enrichment failed"
+                        }
+                    }
+                    delay(400L)
+                }
+            }
+        }
         refreshUserLibrariesAction?.let { refresh ->
             viewModelScope.launch {
                 try {
@@ -202,6 +224,14 @@ class CanonicalLibraryScreenModel private constructor(
                     libraryItems,
                     snapshots.mapNotNull { (id, metadata) -> metadata.libraryStartYear()?.let { id to it } }.toMap(),
                 )
+            }.onEach { inventory ->
+                if (resolveCanonicalMetadata != null) {
+                    inventory.items.forEach { item ->
+                        if (item.id !in inventory.startYears && attemptedYearEnrichment.add(item.id)) {
+                            pendingYearEnrichment.trySend(item.id)
+                        }
+                    }
+                }
             }
         }
 
