@@ -88,7 +88,8 @@ class CanonicalCoreBackupImporter(
                 database.tsuzuki_source_mappingsQueries.upsertTsuzukiSourceMapping(
                     id = it.id,
                     canonicalTitleId = it.canonicalTitleId,
-                    mihonMangaId = it.mihonMangaId,
+                    // Operational Mihon IDs are device-local, never portable.
+                    mihonMangaId = null,
                     sourceId = it.sourceId,
                     sourceUrl = it.sourceUrl,
                     language = it.language,
@@ -123,8 +124,9 @@ class CanonicalCoreBackupImporter(
                     canonicalChapterId = it.canonicalChapterId,
                     sourceMappingId = it.sourceMappingId,
                     sourceId = it.sourceId,
-                    mihonMangaId = it.mihonMangaId,
-                    mihonChapterId = it.mihonChapterId,
+                    // Operational Mihon IDs are device-local, never portable.
+                    mihonMangaId = null,
+                    mihonChapterId = null,
                     sourceChapterId = it.sourceChapterId,
                     sourceChapterUrl = it.sourceChapterUrl,
                     language = it.language,
