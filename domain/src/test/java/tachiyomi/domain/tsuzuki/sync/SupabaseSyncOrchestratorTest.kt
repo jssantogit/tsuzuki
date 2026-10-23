@@ -195,6 +195,32 @@ class SupabaseSyncOrchestratorTest {
     }
 
     @Test
+    fun `server epoch fence retains unsent v1 progress and pending mutation`() = runTest {
+        val progress = SyncDocumentKind.READING_PROGRESS
+        val local = document(status = "READING").copy(kind = progress)
+        val adapter = FakeAdapter(local)
+        val outbox = FakeOutbox().apply { markDirty(progress, 1) }
+        val cloudState = FakeCloudState()
+        val transport = FakeTransport().apply {
+            pushOutcomes += PushOutcome.UnsupportedEpoch
+        }
+
+        val result = orchestrator(
+            adapter = adapter,
+            outbox = outbox,
+            cloudState = cloudState,
+            transport = transport,
+        ).sync(progress)
+
+        (result as SyncDocumentResult.Failed).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        adapter.current shouldBe local
+        outbox.get(progress) shouldNotBe null
+        cloudState.getPending(progress)?.attemptCount shouldBe 1
+        cloudState.getCursor(progress) shouldBe null
+        transport.pushedBatches.shouldHaveSize(1)
+    }
+
+    @Test
     fun `logged out sync keeps local mutation pending and performs no network request`() = runTest {
         val adapter = FakeAdapter(document(status = "READING"))
         val outbox = FakeOutbox().apply { markDirty(SyncDocumentKind.LIBRARY, 1) }
@@ -673,6 +699,8 @@ class SupabaseSyncOrchestratorTest {
     }
 
     private sealed interface PushOutcome {
+        data object UnsupportedEpoch : PushOutcome
+
         data class AppliedResponseLost(
             val cursor: Long,
             val events: List<SupabaseSyncEvent>,
@@ -735,6 +763,9 @@ class SupabaseSyncOrchestratorTest {
             mutationIds += batch.mutationId
             pushedBatches += batch
             return when (val outcome = pushOutcomes.removeFirstOrNull()) {
+                PushOutcome.UnsupportedEpoch -> SyncTransportResult.Failure(
+                    SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA),
+                )
                 is PushOutcome.AppliedResponseLost -> {
                     events += outcome.events
                     SyncTransportResult.Failure(
