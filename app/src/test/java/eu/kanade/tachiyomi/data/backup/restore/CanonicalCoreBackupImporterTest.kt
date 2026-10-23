@@ -493,6 +493,64 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
+    fun `existing integration settings cannot be overwritten by a foreign archive`() = runBlocking {
+        database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+            integrationId = "kitsu",
+            enabled = false,
+            configJson = """{"language":"ja"}""",
+            updatedAt = 300,
+        )
+        val backup = coreWithCollectionsAndBindings().copy(
+            integrationSettings = listOf(
+                BackupCoreIntegrationSetting("kitsu", true, """{"language":"pt-BR"}""", 10),
+            ),
+        )
+
+        shouldThrow<IllegalStateException> { importer.restoreCore(coreSection(backup)) }
+        val original = database.tsuzuki_integration_settingsQueries
+            .getAllTsuzukiIntegrationSettings().awaitAsList().single()
+        original.enabled shouldBe false
+        original.config_json shouldBe """{"language":"ja"}"""
+        original.updated_at shouldBe 300L
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+        database.tsuzuki_backup_restore_receiptsQueries
+            .listTsuzukiBackupRestoreReceipts().awaitAsList() shouldBe emptyList()
+    }
+
+    @Test
+    fun `unrelated local integration state blocks importing another library`() = runBlocking {
+        database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+            integrationId = "external-provider",
+            enabled = true,
+            configJson = """{"language":"en"}""",
+            updatedAt = 300,
+        )
+        shouldThrow<IllegalStateException> { importer.restoreCore(section()) }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+        database.tsuzuki_integration_settingsQueries
+            .getAllTsuzukiIntegrationSettings().awaitAsList().single().integration_id shouldBe "external-provider"
+    }
+
+    @Test
+    fun `identical preexisting integration config is reused without rewriting its timestamp`() = runBlocking {
+        database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+            integrationId = "kitsu",
+            enabled = true,
+            configJson = """{"language":"pt-BR"}""",
+            updatedAt = 300,
+        )
+        val backup = coreWithCollectionsAndBindings().copy(
+            integrationSettings = listOf(
+                BackupCoreIntegrationSetting("kitsu", true, """{"language":"pt-BR"}""", 10),
+            ),
+        )
+        importer.restoreCore(coreSection(backup))
+        database.tsuzuki_integration_settingsQueries
+            .getAllTsuzukiIntegrationSettings().awaitAsList().single().updated_at shouldBe 300L
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList().size shouldBe 1
+    }
+
+    @Test
     fun `crafted backup cannot restore authentication credentials in integration config`() = runBlocking {
         val core = coreWithCollectionsAndBindings().copy(
             integrationSettings = listOf(
