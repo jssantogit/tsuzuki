@@ -87,7 +87,12 @@ class CanonicalMetadataSnapshotRepositoryImpl(
                     }.associateBy(CanonicalMetadataSnapshot::canonicalTitleId)
                 }
         }
-        return combine(batches) { snapshots -> snapshots.fold(emptyMap()) { all, batch -> all + batch } }
+        return combine(batches) { snapshots ->
+            snapshots.fold(emptyMap<String, CanonicalMetadataSnapshot>()) { all, batch ->
+                all +
+                    batch
+            }
+        }
             .distinctUntilChanged()
     }
 

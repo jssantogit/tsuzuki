@@ -54,7 +54,8 @@ fun CollectionBrowseScreen(
 ) {
     val title = (state as? CollectionBrowseScreenState.Ready)?.collection?.title
         ?: stringResource(MR.strings.tsuzuki_collection_title)
-    BrowseScaffold(navigateUp, modifier) { contentModifier ->
+    val hasScrollableTitle = state is CollectionBrowseScreenState.Ready && state.collection.folders.isNotEmpty()
+    BrowseScaffold(navigateUp, modifier, statusTitle = title.takeUnless { hasScrollableTitle }) { contentModifier ->
         when (state) {
             CollectionBrowseScreenState.Loading -> BrowseLoading(contentModifier)
             CollectionBrowseScreenState.Missing, is CollectionBrowseScreenState.Error -> BrowseMessage(
@@ -104,7 +105,11 @@ fun FolderCatalogScreen(
     } else {
         ready?.folder?.title ?: stringResource(MR.strings.tsuzuki_folder_title)
     }
-    BrowseScaffold(navigateUp, modifier) { contentModifier ->
+    BrowseScaffold(
+        navigateUp,
+        modifier,
+        statusTitle = title.takeUnless { state is FolderCatalogScreenState.Ready },
+    ) { contentModifier ->
         when (state) {
             FolderCatalogScreenState.Loading -> BrowseLoading(contentModifier)
             FolderCatalogScreenState.Missing, is FolderCatalogScreenState.Error -> BrowseMessage(
@@ -253,10 +258,16 @@ private fun FolderCatalogReady(
 private fun BrowseScaffold(
     navigateUp: () -> Unit,
     modifier: Modifier,
+    statusTitle: String? = null,
     content: @Composable (Modifier) -> Unit,
 ) {
     Scaffold(modifier = modifier, topBar = {
-        AppBar(titleContent = {}, navigateUp = navigateUp)
+        AppBar(
+            titleContent = {
+                statusTitle?.let { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            },
+            navigateUp = navigateUp,
+        )
     }) { padding ->
         content(Modifier.fillMaxSize().padding(padding))
     }
