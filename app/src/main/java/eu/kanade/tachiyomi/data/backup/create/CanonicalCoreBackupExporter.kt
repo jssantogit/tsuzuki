@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreVariant
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
+import tachiyomi.data.Database
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.reader.repository.CanonicalReadingRepository
 import tachiyomi.domain.tsuzuki.repository.CanonicalLibraryRepository
@@ -35,9 +36,10 @@ class CanonicalCoreBackupExporter(
     private val chapterRepository: CanonicalChapterRepository,
     private val sourceMappingRepository: SourceTitleMappingRepository,
     private val readingRepository: CanonicalReadingRepository,
+    private val database: Database,
     private val json: Json,
 ) {
-    suspend fun export(): BackupCanonicalSection {
+    suspend fun export(): BackupCanonicalSection = database.transactionWithResult {
         val titles = titleSource.getAllTitles().sortedBy { it.id }
         val library = libraryRepository.getAllAsFlow().first()
             .sortedBy { it.canonicalTitleId }
@@ -134,7 +136,7 @@ class CanonicalCoreBackupExporter(
             },
         )
         core.validate()
-        return BackupCanonicalSection.fromJson(
+        BackupCanonicalSection.fromJson(
             key = BackupCanonicalCore.SECTION_KEY,
             json = json.encodeToString(BackupCanonicalCore.serializer(), core),
         )
