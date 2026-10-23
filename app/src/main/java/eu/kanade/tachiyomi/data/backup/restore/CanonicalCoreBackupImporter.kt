@@ -46,6 +46,9 @@ class CanonicalCoreBackupImporter(
             CanonicalChapterType.valueOf(it.type)
             CanonicalChapterConfirmation.valueOf(it.confirmation)
         }
+        core.lists.forEach { list ->
+            list.queryJson?.let(json::parseToJsonElement)
+        }
         val variantMetadata = core.variants.associate { variant ->
             variant.id to json.parseToJsonElement(variant.rawSourceMetadataJson).jsonObject
         }
@@ -65,6 +68,11 @@ class CanonicalCoreBackupImporter(
             check(database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList().isEmpty()) {
                 "Canonical library is not empty: explicit merge or safe migration is required"
             }
+
+            check(
+                database.tsuzuki_collectionsQueries
+                    .getAllTsuzukiCollections().awaitAsList().isEmpty(),
+            ) { "Collections already exist: explicit merge is required" }
 
             core.titles.forEach {
                 database.tsuzuki_titlesQueries.insertTsuzukiTitle(
@@ -137,6 +145,80 @@ class CanonicalCoreBackupImporter(
                     rawNumberHint = it.rawNumberHint,
                     rawSourceOrder = it.rawSourceOrder,
                     rawSourceMetadata = MemoColumnAdapter.encode(variantMetadata.getValue(it.id)),
+                    createdAt = it.createdAt,
+                    updatedAt = it.updatedAt,
+                )
+            }
+            core.collections.forEach {
+                database.tsuzuki_collectionsQueries.upsertTsuzukiCollection(
+                    id = it.id,
+                    title = it.title,
+                    origin = it.origin,
+                    sortOrder = it.sortOrder,
+                    schemaVersion = it.schemaVersion,
+                    revision = it.revision,
+                    createdAt = it.createdAt,
+                    updatedAt = it.updatedAt,
+                    deletedAt = it.deletedAt,
+                )
+            }
+            // Folder parents have foreign keys. Insert them before descendants
+            // regardless of ordering in the serialized backup.
+            val insertedFolders = mutableSetOf<String>()
+            val remainingFolders = core.folders.toMutableList()
+            while (remainingFolders.isNotEmpty()) {
+                val available = remainingFolders.filter { folder ->
+                    folder.parentFolderId == null || folder.parentFolderId in insertedFolders
+                }
+                check(available.isNotEmpty()) { "Folder dependency cycle in canonical backup" }
+                available.forEach {
+                    database.tsuzuki_collectionsQueries.upsertTsuzukiFolder(
+                        id = it.id,
+                        collectionId = it.collectionId,
+                        parentFolderId = it.parentFolderId,
+                        title = it.title,
+                        origin = it.origin,
+                        sortOrder = it.sortOrder,
+                        schemaVersion = it.schemaVersion,
+                        revision = it.revision,
+                        createdAt = it.createdAt,
+                        updatedAt = it.updatedAt,
+                        deletedAt = it.deletedAt,
+                    )
+                    insertedFolders += it.id
+                }
+                remainingFolders.removeAll(available.toSet())
+            }
+            core.lists.forEach {
+                database.tsuzuki_collectionsQueries.upsertTsuzukiList(
+                    id = it.id,
+                    collectionId = it.collectionId,
+                    folderId = it.folderId,
+                    title = it.title,
+                    providerId = it.providerId,
+                    queryJson = it.queryJson,
+                    sort = it.sort,
+                    sortDirection = it.sortDirection,
+                    layoutType = it.layoutType,
+                    sortOrder = it.sortOrder,
+                    enabled = it.enabled,
+                    origin = it.origin,
+                    schemaVersion = it.schemaVersion,
+                    revision = it.revision,
+                    createdAt = it.createdAt,
+                    updatedAt = it.updatedAt,
+                    deletedAt = it.deletedAt,
+                )
+            }
+            core.providerBindings.forEach {
+                database.tsuzuki_provider_bindingsQueries.upsertTsuzukiProviderBinding(
+                    id = it.id,
+                    canonicalTitleId = it.canonicalTitleId,
+                    providerId = it.providerId,
+                    facetId = it.facetId,
+                    externalWorkId = it.externalWorkId,
+                    verification = it.verification,
+                    availability = it.availability,
                     createdAt = it.createdAt,
                     updatedAt = it.updatedAt,
                 )
