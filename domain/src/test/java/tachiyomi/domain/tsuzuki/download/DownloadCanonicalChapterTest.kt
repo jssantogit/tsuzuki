@@ -52,43 +52,6 @@ class DownloadCanonicalChapterTest {
     }
 
     @Test
-    fun staleCanonicalArtifactIsRemovedBeforeDownloadingARealReplacement() = runTest {
-        val replacement = artifact("mangafire")
-        val fixture = fixture(
-            preference = ContentPreference("title-1", AddonId("mangafire"), 1L),
-            providers = listOf(provider(option("mangafire"))),
-            existingArtifact = artifact("missing"),
-            existingArtifactValid = false,
-            gatewayArtifact = replacement,
-        )
-
-        val result = fixture.download.execute("chapter-1")
-
-        result.shouldBeInstanceOf<CanonicalDownloadPreparation.Complete>()
-        result.reused shouldBe false
-        result.artifact shouldBe replacement
-        fixture.repository.deleted shouldBe true
-        fixture.repository.value shouldBe replacement
-        fixture.gateway.calls shouldBe 1
-    }
-
-    @Test
-    fun staleCanonicalArtifactNeverClaimsOfflineSuccessWhenNoProviderIsAvailable() = runTest {
-        val fixture = fixture(
-            preference = null,
-            providers = emptyList(),
-            existingArtifact = artifact("missing"),
-            existingArtifactValid = false,
-        )
-
-        val result = fixture.download.execute("chapter-1")
-
-        result.shouldBeInstanceOf<CanonicalDownloadPreparation.Unavailable>()
-        fixture.repository.deleted shouldBe true
-        fixture.repository.value shouldBe null
-    }
-
-    @Test
     fun preferredAddonDownloadsAndPersistsCanonicalArtifact() = runTest {
         val preferred = option("mangadex")
         val acquired = artifact("mangadex")
@@ -165,7 +128,6 @@ class DownloadCanonicalChapterTest {
         preference: ContentPreference?,
         providers: List<ContentProvider>,
         existingArtifact: CanonicalDownloadArtifact? = null,
-        existingArtifactValid: Boolean = true,
         gatewayArtifact: CanonicalDownloadArtifact? = null,
     ): Fixture {
         val preferenceRepository = FakeContentPreferenceRepository(preference)
@@ -178,7 +140,7 @@ class DownloadCanonicalChapterTest {
             inFlightContentResolution = InFlightContentResolution(backgroundScope),
         )
         val repository = FakeCanonicalDownloadRepository(existingArtifact)
-        val gateway = FakeCanonicalDownloadGateway(gatewayArtifact, existingArtifactValid)
+        val gateway = FakeCanonicalDownloadGateway(gatewayArtifact)
         val download = DownloadCanonicalChapter(
             canonicalChapterRepository = FakeCanonicalChapterRepository(),
             contentPreferenceRepository = preferenceRepository,
@@ -286,7 +248,6 @@ class DownloadCanonicalChapterTest {
     private class FakeCanonicalDownloadRepository(
         var value: CanonicalDownloadArtifact?,
     ) : CanonicalDownloadRepository {
-        var deleted = false
         override suspend fun get(canonicalChapterId: String) =
             value?.takeIf { it.canonicalChapterId == canonicalChapterId }
 
@@ -295,7 +256,6 @@ class DownloadCanonicalChapterTest {
         }
 
         override suspend fun delete(canonicalChapterId: String) {
-            deleted = true
             if (value?.canonicalChapterId == canonicalChapterId) value = null
         }
 
@@ -304,14 +264,11 @@ class DownloadCanonicalChapterTest {
 
     private class FakeCanonicalDownloadGateway(
         private val artifact: CanonicalDownloadArtifact?,
-        private val artifactValid: Boolean,
     ) : CanonicalDownloadGateway {
         var calls = 0
         var lastOption: ContentOption? = null
 
         override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
-
-        override suspend fun isArtifactAvailable(artifact: CanonicalDownloadArtifact): Boolean = artifactValid
 
         override suspend fun acquire(option: ContentOption): Result<CanonicalDownloadArtifact> {
             calls++
