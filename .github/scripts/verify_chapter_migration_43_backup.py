@@ -7,6 +7,7 @@ snapshot to a disposable private working database first. No content is printed.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import hashlib
 import pickle
 import sqlite3
@@ -55,12 +56,13 @@ def verify_backup(backup_path: Path, migration_path: Path = MIGRATION) -> dict[s
         raise VerificationError("Backup not found or not a regular file")
     if not migration_path.is_file():
         raise VerificationError("Migration 43 was not found")
-    if any(backup_path.with_name(backup_path.name + suffix).exists() for suffix in ("-wal", "-shm")):
-        raise VerificationError("Supply a checkpointed offline SQLite snapshot, not a live WAL database")
+    actual = backup_path.resolve()
+    if any(actual.with_name(actual.name + suffix).exists() for suffix in ("-wal", "-shm", "-journal")):
+        raise VerificationError("Supply a checkpointed offline SQLite snapshot, not a live journal database")
     with tempfile.TemporaryDirectory(prefix="tsuzuki-chapter-43-") as directory:
-        with sqlite3.connect(backup_path.resolve().as_uri() + "?mode=ro&immutable=1", uri=True) as source:
+        with closing(sqlite3.connect(actual.as_uri() + "?mode=ro&immutable=1", uri=True)) as source:
             # The only writable connection is the disposable local copy.
-            with sqlite3.connect(str(Path(directory) / "working.sqlite")) as db:
+            with closing(sqlite3.connect(str(Path(directory) / "working.sqlite"))) as db:
                 source.backup(db)
                 old_tables = tables(db)
                 old_cols = old_tables.get(CHAPTERS)
