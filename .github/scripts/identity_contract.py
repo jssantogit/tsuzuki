@@ -199,7 +199,7 @@ def check_contract(root: Path) -> list[str]:
             )
             helper_content = naming_helper.read_text(encoding="utf-8") if naming_helper.is_file() else ""
             delegated = "AutomaticBackupFileNames.generate(BuildConfig.APPLICATION_ID)" in backup_creator
-            returns_tachibk = re.search(r'\\breturn\\s+"[^"\\n]*\\.tachibk"', helper_content) is not None
+            returns_tachibk = re.search(r'\breturn\s+"[^"\n]*\.tachibk"', helper_content) is not None
             if not (delegated and returns_tachibk):
                 errors.append("backup filename must preserve .tachibk compatibility")
 
