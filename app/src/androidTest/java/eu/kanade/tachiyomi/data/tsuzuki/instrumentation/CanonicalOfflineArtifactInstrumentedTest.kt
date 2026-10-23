@@ -50,6 +50,11 @@ class CanonicalOfflineArtifactInstrumentedTest {
             val page = pngPage()
             writeZip(archive, mapOf("001.png" to page))
             assertTrue(MihonCanonicalDownloadGateway.isArtifactReadable(context, archiveArtifact))
+            writeZip(archive, mapOf("000.jpg" to byteArrayOf(0x01), "001.png" to page))
+            assertTrue(
+                "A malformed image must not mask another readable image in the archive",
+                MihonCanonicalDownloadGateway.isArtifactReadable(context, archiveArtifact),
+            )
 
             val directory = File(root, "pages")
             assertTrue(directory.mkdirs())
