@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterOverride
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryEntry
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreList
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreProgress
@@ -401,6 +402,51 @@ class CanonicalCoreBackupImporterTest {
             ),
         )
         shouldThrow<IllegalArgumentException> { importer.restoreCore(coreSection(orphan)) }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+    }
+
+    @Test
+    fun `library categories restore by stable attributes rather than source device row ID`() = runBlocking {
+        val core = coreWithCollectionsAndBindings().copy(
+            libraryCategories = listOf(
+                BackupCoreLibraryCategory("title-1", "Favorites", 5, 7),
+            ),
+        )
+        importer.restoreCore(coreSection(core))
+        val membership = database.tsuzuki_library_categoriesQueries
+            .getAllTsuzukiLibraryCategories().awaitAsList().single()
+        membership.canonical_title_id shouldBe "title-1"
+        membership.name shouldBe "Favorites"
+        membership.category_order shouldBe 5L
+        membership.flags shouldBe 7L
+        val titles = CanonicalTitleRepositoryImpl(database)
+        val exported = CanonicalCoreBackupExporter(
+            titleSource = CanonicalTitleSyncSource { titles.getAllAsFlow().first() },
+            titleRepository = titles,
+            libraryRepository = CanonicalLibraryRepositoryImpl(database),
+            chapterRepository = CanonicalChapterRepositoryImpl(database),
+            sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+            readingRepository = CanonicalReadingRepositoryImpl(database),
+            database = database,
+            json = Json,
+        ).export()
+        val decoded = Json.decodeFromString(BackupCanonicalCore.serializer(), exported.payloadJson)
+        decoded.libraryCategories shouldBe core.libraryCategories
+        importer.restoreCore(coreSection(core))
+        database.tsuzuki_library_categoriesQueries
+            .getAllTsuzukiLibraryCategories().awaitAsList().size shouldBe 1
+    }
+
+    @Test
+    fun `ambiguous existing categories abort without importing canonical records`() = runBlocking {
+        database.categoriesQueries.insert(name = "Favorites", order = 1, flags = 0)
+        database.categoriesQueries.insert(name = "Favorites", order = 2, flags = 0)
+        val core = coreWithCollectionsAndBindings().copy(
+            libraryCategories = listOf(
+                BackupCoreLibraryCategory("title-1", "Favorites", 1, 0),
+            ),
+        )
+        shouldThrow<IllegalStateException> { importer.restoreCore(coreSection(core)) }
         database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
     }
 
