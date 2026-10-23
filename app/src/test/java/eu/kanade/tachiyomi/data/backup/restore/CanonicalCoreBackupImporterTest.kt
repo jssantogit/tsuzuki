@@ -132,7 +132,7 @@ class CanonicalCoreBackupImporterTest {
         val restored = Json.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
         restored.validate()
 
-        restored.titles.single().identityState shouldBe "UNVERIFIED"
+        restored.titles.single().identityState shouldBe "SOURCE_ONLY"
         restored.chapters.single().confirmation shouldBe "PROVISIONAL"
         restored.sourceMappings.single().id shouldBe "mapping-1"
         restored.variants.single().sourceChapterId shouldBe "remote-chapter-1"
@@ -156,7 +156,7 @@ class CanonicalCoreBackupImporterTest {
         database.tsuzuki_titlesQueries.insertTsuzukiTitle(
             id = "original",
             displayTitle = "Owned locally",
-            identityState = "UNVERIFIED",
+            identityState = "SOURCE_ONLY",
             createdAt = 1L,
             updatedAt = 1L,
         )
@@ -184,7 +184,7 @@ class CanonicalCoreBackupImporterTest {
 
     private fun section(): BackupCanonicalSection {
         val core = BackupCanonicalCore(
-            titles = listOf(BackupCoreTitle("title-1", "Example", "UNVERIFIED", 1, 2)),
+            titles = listOf(BackupCoreTitle("title-1", "Example", "SOURCE_ONLY", 1, 2)),
             sourceMappings = listOf(
                 BackupCoreSourceMapping(
                     id = "mapping-1",
