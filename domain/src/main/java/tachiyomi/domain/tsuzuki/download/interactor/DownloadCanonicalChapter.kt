@@ -58,20 +58,15 @@ class DownloadCanonicalChapter(
                 outcome = if (cached == null) DiagnosticOutcome.MISS else DiagnosticOutcome.HIT,
             )
             if (cached != null) {
-                if (canonicalDownloadGateway.isArtifactAvailable(cached)) {
-                    return complete(
-                        trace,
-                        started,
-                        CanonicalDownloadPreparation.Complete(
-                            canonicalChapterId = canonicalChapterId,
-                            artifact = cached,
-                            reused = true,
-                        ),
-                    )
-                }
-                // Only retire the missing artifact pointer. Canonical identity,
-                // reading progress, and history are never changed here.
-                canonicalDownloadRepository.delete(canonicalChapterId)
+                return complete(
+                    trace,
+                    started,
+                    CanonicalDownloadPreparation.Complete(
+                        canonicalChapterId = canonicalChapterId,
+                        artifact = cached,
+                        reused = true,
+                    ),
+                )
             }
 
             val chapter = canonicalChapterRepository.getById(canonicalChapterId)
