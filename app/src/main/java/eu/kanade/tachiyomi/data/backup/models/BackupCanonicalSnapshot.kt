@@ -23,7 +23,13 @@ data class BackupCanonicalSnapshot(
             "Duplicate canonical backup section"
         }
         require(sections.size <= MAX_SECTIONS) { "Too many canonical backup sections" }
-        sections.forEach(BackupCanonicalSection::validate)
+        sections.forEach { section ->
+            section.validate()
+            if (section.key == BackupCanonicalCore.SECTION_KEY) {
+                Json.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
+                    .validate()
+            }
+        }
     }
 
     companion object {
