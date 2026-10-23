@@ -79,6 +79,11 @@ class CanonicalCoreBackupImporter(
                     .getAllTsuzukiCollections().awaitAsList().isEmpty(),
             ) { "Collections already exist: explicit merge is required" }
 
+            check(
+                database.tsuzuki_source_preferencesQueries
+                    .getConfiguredLanguages().awaitAsList().isEmpty(),
+            ) { "Source preferences already exist; explicit merge is required" }
+
             core.titles.forEach {
                 database.tsuzuki_titlesQueries.insertTsuzukiTitle(
                     id = it.id,
@@ -258,6 +263,61 @@ class CanonicalCoreBackupImporter(
                     status = it.status,
                     favorite = it.favorite,
                     addedAt = it.addedAt,
+                    updatedAt = it.updatedAt,
+                )
+            }
+            core.contentPreferences.forEach {
+                database.tsuzuki_content_preferencesQueries.upsertTsuzukiContentPreference(
+                    canonicalTitleId = it.canonicalTitleId,
+                    preferredAddonId = it.preferredAddonId,
+                    preferredLanguage = it.preferredLanguage,
+                    updatedAt = it.updatedAt,
+                )
+            }
+            core.sourcePreferences.forEach {
+                database.tsuzuki_source_preferencesQueries.insertPreference(
+                    language = it.language,
+                    sourceId = it.sourceId,
+                    position = it.position,
+                )
+            }
+            core.continueReadingStates.forEach {
+                database.tsuzuki_continue_reading_stateQueries.upsertTsuzukiContinueReadingState(
+                    canonicalTitleId = it.canonicalTitleId,
+                    hiddenAt = it.hiddenAt,
+                )
+            }
+            core.chapterUpdateStates.forEach {
+                database.tsuzuki_chapter_update_stateQueries.upsertTsuzukiChapterUpdateState(
+                    canonicalChapterId = it.canonicalChapterId,
+                    canonicalTitleId = it.canonicalTitleId,
+                    firstSeenAt = it.firstSeenAt,
+                    acknowledgedAt = it.acknowledgedAt,
+                )
+            }
+            core.titleArtwork.forEach {
+                database.tsuzuki_title_artwork_observationsQueries.upsertTsuzukiTitleArtworkObservation(
+                    canonicalTitleId = it.canonicalTitleId,
+                    provider = it.provider,
+                    coverUrl = it.coverUrl,
+                    bannerUrl = it.bannerUrl,
+                    updatedAt = it.updatedAt,
+                )
+            }
+            core.titleFormats.forEach {
+                database.tsuzuki_title_format_observationsQueries.upsertTsuzukiTitleFormatObservation(
+                    canonicalTitleId = it.canonicalTitleId,
+                    provider = it.provider,
+                    format = it.format,
+                    updatedAt = it.updatedAt,
+                )
+            }
+            core.titleNames.forEach {
+                database.tsuzuki_title_name_observationsQueries.upsertTsuzukiTitleNameObservation(
+                    canonicalTitleId = it.canonicalTitleId,
+                    provider = it.provider,
+                    sourceKey = it.sourceKey,
+                    value = it.value,
                     updatedAt = it.updatedAt,
                 )
             }
