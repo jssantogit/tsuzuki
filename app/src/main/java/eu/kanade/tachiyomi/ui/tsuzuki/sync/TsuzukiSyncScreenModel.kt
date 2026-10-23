@@ -134,6 +134,10 @@ class TsuzukiSyncScreenModel(
             error.value = TsuzukiSyncScreenError.AUTHORIZATION_REQUIRED
             return
         }
+        if (!state.value.cloudEnabled) {
+            error.value = TsuzukiSyncScreenError.ACCOUNT_SCOPE_MISMATCH
+            return
+        }
 
         viewModelScope.launch {
             error.value = null
@@ -223,6 +227,9 @@ class TsuzukiSyncScreenModel(
             val cursors = kinds.mapNotNull { stateStore.getCursor(it) }
             val conflicts = kinds.flatMap { conflictRepository.getForDocument(it) }
 
+            if (error.value == TsuzukiSyncScreenError.ACCOUNT_SCOPE_MISMATCH) {
+                error.value = null
+            }
             diagnostics.value = SyncDiagnostics(
                 accountId = currentAccountId,
                 pendingMutationCount = pending,
