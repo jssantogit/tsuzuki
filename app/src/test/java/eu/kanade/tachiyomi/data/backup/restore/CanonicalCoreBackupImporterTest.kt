@@ -15,6 +15,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreContentPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContinueReadingState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreIntegrationSetting
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryEntry
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreList
@@ -461,6 +462,45 @@ class CanonicalCoreBackupImporterTest {
         importer.restoreCore(coreSection(core))
         database.tsuzuki_library_categoriesQueries
             .getAllTsuzukiLibraryCategories().awaitAsList().single().category_id shouldBe 0L
+    }
+
+    @Test
+    fun `integration settings preserve toggles but never export tokens or nested secrets`() = runBlocking {
+        importer.restoreCore(section())
+        database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+            integrationId = "kitsu",
+            enabled = true,
+            configJson = """{"language":"pt-BR","access_token":"private","nested":{"api_key":"secret"}}""",
+            updatedAt = 99,
+        )
+        val titles = CanonicalTitleRepositoryImpl(database)
+        val archived = CanonicalCoreBackupExporter(
+            titleSource = CanonicalTitleSyncSource { titles.getAllAsFlow().first() },
+            titleRepository = titles,
+            libraryRepository = CanonicalLibraryRepositoryImpl(database),
+            chapterRepository = CanonicalChapterRepositoryImpl(database),
+            sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+            readingRepository = CanonicalReadingRepositoryImpl(database),
+            database = database,
+            json = Json,
+        ).export()
+        val decoded = Json.decodeFromString(BackupCanonicalCore.serializer(), archived.payloadJson)
+        decoded.integrationSettings shouldBe listOf(
+            BackupCoreIntegrationSetting("kitsu", true, """{"language":"pt-BR","nested":{}}""", 99),
+        )
+        archived.payloadJson.contains("private") shouldBe false
+        archived.payloadJson.contains("secret") shouldBe false
+    }
+
+    @Test
+    fun `crafted backup cannot restore authentication credentials in integration config`() = runBlocking {
+        val core = coreWithCollectionsAndBindings().copy(
+            integrationSettings = listOf(
+                BackupCoreIntegrationSetting("kitsu", true, """{"access_token":"stolen"}""", 30),
+            ),
+        )
+        shouldThrow<IllegalArgumentException> { importer.restoreCore(coreSection(core)) }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
     }
 
     @Test
