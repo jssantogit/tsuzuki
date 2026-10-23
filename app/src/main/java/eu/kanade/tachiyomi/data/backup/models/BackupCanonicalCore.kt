@@ -148,29 +148,37 @@ data class BackupCanonicalCore(
         require(contentPreferences.all { it.canonicalTitleId in titleIds }) {
             "Content preference refers to absent title"
         }
-        require(libraryCategories.all {
-            it.canonicalTitleId in titleIds && it.name.isNotBlank()
-        }) { "Invalid library category reference" }
+        require(
+            libraryCategories.all {
+                it.canonicalTitleId in titleIds && it.name.isNotBlank()
+            },
+        ) { "Invalid library category reference" }
         require(sourcePreferences.all { it.language.isNotBlank() && it.position >= 0 }) {
             "Invalid source preference"
         }
         require(continueReadingStates.all { it.canonicalTitleId in titleIds }) {
             "Continue reading state refers to absent title"
         }
-        require(chapterUpdateStates.all {
-            it.canonicalChapterId in chapterIds &&
-                chaptersById[it.canonicalChapterId]?.canonicalTitleId == it.canonicalTitleId
-        }) { "Chapter update state refers to an unrelated title or missing chapter" }
+        require(
+            chapterUpdateStates.all {
+                it.canonicalChapterId in chapterIds &&
+                    chaptersById[it.canonicalChapterId]?.canonicalTitleId == it.canonicalTitleId
+            },
+        ) { "Chapter update state refers to an unrelated title or missing chapter" }
         require(titleArtwork.all { it.canonicalTitleId in titleIds && it.provider.isNotBlank() }) {
             "Artwork observation refers to missing title"
         }
-        require(titleFormats.all {
-            it.canonicalTitleId in titleIds && it.provider.isNotBlank() && it.format.isNotBlank()
-        }) { "Invalid title format observation" }
-        require(titleNames.all {
-            it.canonicalTitleId in titleIds && it.provider.isNotBlank() &&
-                it.sourceKey.isNotBlank() && it.value.isNotBlank()
-        }) { "Invalid title name observation" }
+        require(
+            titleFormats.all {
+                it.canonicalTitleId in titleIds && it.provider.isNotBlank() && it.format.isNotBlank()
+            },
+        ) { "Invalid title format observation" }
+        require(
+            titleNames.all {
+                it.canonicalTitleId in titleIds && it.provider.isNotBlank() &&
+                    it.sourceKey.isNotBlank() && it.value.isNotBlank()
+            },
+        ) { "Invalid title name observation" }
         require(chapters.all { it.canonicalTitleId in titleIds }) {
             "Chapter refers to absent canonical title"
         }
