@@ -110,7 +110,15 @@ class CanonicalCoreBackupExporter(
             .getAllTsuzukiTitleFormatObservations().awaitAsList()
         val titleNames = titles.flatMap { title ->
             database.tsuzuki_title_name_observationsQueries
-                .getTsuzukiTitleNameObservationsByTitle(title.id).awaitAsList()
+                .getTsuzukiTitleNameObservationsByTitle(title.id) {
+                        canonicalTitleId,
+                        provider,
+                        sourceKey,
+                        value,
+                        updatedAt,
+                    ->
+                    BackupCoreTitleName(canonicalTitleId, provider, sourceKey, value, updatedAt)
+                }.awaitAsList()
         }
         val libraryCategories = database.tsuzuki_library_categoriesQueries
             .getAllTsuzukiLibraryCategories().awaitAsList()
@@ -331,15 +339,7 @@ class CanonicalCoreBackupExporter(
             titleFormats = titleFormats.map {
                 BackupCoreTitleFormat(it.canonical_title_id, it.provider, it.format, it.updated_at)
             },
-            titleNames = titleNames.map {
-                BackupCoreTitleName(
-                    it.canonical_title_id,
-                    it.provider,
-                    it.source_key,
-                    it.value,
-                    it.updated_at,
-                )
-            },
+            titleNames = titleNames,
         )
         core.validate()
         BackupCanonicalSection.fromJson(
