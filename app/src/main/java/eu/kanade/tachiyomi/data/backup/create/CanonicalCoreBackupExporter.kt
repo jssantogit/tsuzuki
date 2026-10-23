@@ -262,7 +262,10 @@ class CanonicalCoreBackupExporter(
             },
             contentPreferences = contentPreferences.map {
                 BackupCoreContentPreference(
-                    it.canonical_title_id, it.preferred_addon_id, it.preferred_language, it.updated_at,
+                    it.canonical_title_id,
+                    it.preferred_addon_id,
+                    it.preferred_language,
+                    it.updated_at,
                 )
             },
             sourcePreferences = sourcePreferences.map {
@@ -276,12 +279,19 @@ class CanonicalCoreBackupExporter(
             },
             chapterUpdateStates = chapterUpdateStates.map {
                 BackupCoreChapterUpdateState(
-                    it.canonical_chapter_id, it.canonical_title_id, it.first_seen_at, it.acknowledged_at,
+                    it.canonical_chapter_id,
+                    it.canonical_title_id,
+                    it.first_seen_at,
+                    it.acknowledged_at,
                 )
             },
             titleArtwork = titleArtwork.map {
                 BackupCoreTitleArtwork(
-                    it.canonical_title_id, it.provider, it.cover_url, it.banner_url, it.updated_at,
+                    it.canonical_title_id,
+                    it.provider,
+                    it.cover_url,
+                    it.banner_url,
+                    it.updated_at,
                 )
             },
             titleFormats = titleFormats.map {
@@ -289,7 +299,11 @@ class CanonicalCoreBackupExporter(
             },
             titleNames = titleNames.map {
                 BackupCoreTitleName(
-                    it.canonical_title_id, it.provider, it.source_key, it.value, it.updated_at,
+                    it.canonical_title_id,
+                    it.provider,
+                    it.source_key,
+                    it.value,
+                    it.updated_at,
                 )
             },
         )
