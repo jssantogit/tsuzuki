@@ -100,6 +100,19 @@ class HistoricalBackupVerificationTest(unittest.TestCase):
         self.assertEqual(self.backup.read_bytes(), original)
         self.assertEqual(sidecar.read_bytes(), b"fixture")
 
+    def test_rollback_journal_snapshot_is_refused(self):
+        sidecar = self.backup.with_name(self.backup.name + "-journal")
+        sidecar.write_bytes(b"fixture")
+        with self.assertRaisesRegex(VerificationError, 'checkpointed offline'):
+            verify_backup(self.backup, MIGRATION)
+
+    def test_symlink_cannot_hide_live_database_sidecars(self):
+        alias = Path(self.temp.name) / "alias.sqlite"
+        alias.symlink_to(self.backup)
+        self.backup.with_name(self.backup.name + "-wal").write_bytes(b"fixture")
+        with self.assertRaisesRegex(VerificationError, 'checkpointed offline'):
+            verify_backup(alias, MIGRATION)
+
     def test_renaming_unrelated_table_is_rejected(self):
         dangerous = Path(self.temp.name) / 'rename.sqm'
         dangerous.write_text(MIGRATION.read_text() + "\nALTER TABLE unrelated_binary RENAME TO deleted_name;\n")
