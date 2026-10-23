@@ -58,8 +58,12 @@ select set_config(
     'request.jwt.claims',
     '{"sub":"00000000-0000-0000-0000-000000000031","role":"authenticated"}', true
 );
-select public.sync_register_progress_device('33000000-0000-0000-0000-000000000001');
-select public.sync_register_progress_device('33000000-0000-0000-0000-000000000002');
+do $$
+begin
+    perform public.sync_register_progress_device('33000000-0000-0000-0000-000000000001');
+    perform public.sync_register_progress_device('33000000-0000-0000-0000-000000000002');
+end;
+$$;
 select is(
     public.sync_preview_progress_rollout() ->> 'registeredDeviceCount',
     '2', 'preflight counts only registered devices for its account'

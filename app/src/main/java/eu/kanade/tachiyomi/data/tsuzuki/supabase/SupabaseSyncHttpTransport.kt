@@ -108,6 +108,54 @@ class SupabaseSyncHttpTransport(
         }
     }
 
+    /**
+     * Server-observed v1 inventory for manual migration review only.
+     * No amount of positive-looking counters can authorize v2 sync.
+     */
+    suspend fun previewLegacyProgressRollout(): SyncTransportResult<LegacyProgressRolloutPreview> {
+        val response = executeAuthenticated(
+            request = rpcRequest("sync_preview_progress_rollout", buildJsonObject {}),
+        ) { raw ->
+            json.decodeFromString(ProgressRolloutPreviewResponse.serializer(), raw)
+        }
+        return when (response) {
+            is SyncTransportResult.Failure -> response
+            is SyncTransportResult.Success -> {
+                val preview = response.value
+                if (
+                    preview.schemaVersion != 1 ||
+                    preview.protocolEpoch != 1L ||
+                    preview.activeDomain != SyncDocumentKind.READING_PROGRESS.name ||
+                    preview.registeredDeviceCount < 0 ||
+                    preview.unexpiredLegacyDeviceCount < 0 ||
+                    preview.unexpiredLegacyDeviceCount > preview.registeredDeviceCount ||
+                    preview.legacyRecordCount < 0 ||
+                    preview.legacyTombstoneCount < 0 ||
+                    preview.legacyTombstoneCount > preview.legacyRecordCount ||
+                    preview.legacyEventCursor < 0 ||
+                    preview.historicalDeviceCoverageProven ||
+                    preview.pendingLocalWritesObservable ||
+                    preview.exactProgressEnabled ||
+                    preview.migrationReady
+                ) {
+                    SyncTransportResult.Failure(
+                        SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA),
+                    )
+                } else {
+                    SyncTransportResult.Success(
+                        LegacyProgressRolloutPreview(
+                            registeredDeviceCount = preview.registeredDeviceCount,
+                            unexpiredLegacyDeviceCount = preview.unexpiredLegacyDeviceCount,
+                            legacyRecordCount = preview.legacyRecordCount,
+                            legacyTombstoneCount = preview.legacyTombstoneCount,
+                            legacyEventCursor = preview.legacyEventCursor,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
     override suspend fun pullDelta(
         documentKind: SyncDocumentKind,
         sinceEventId: Long,
@@ -454,6 +502,31 @@ private data class ProgressDeviceRegistrationResponse(
     val schemaVersion: Int,
     val protocolEpoch: Long,
     val leaseExpiresAt: String,
+    val exactProgressEnabled: Boolean,
+    val migrationReady: Boolean,
+)
+
+/** Non-authorizing account v1 inventory; local pending writes remain unknown. */
+data class LegacyProgressRolloutPreview(
+    val registeredDeviceCount: Long,
+    val unexpiredLegacyDeviceCount: Long,
+    val legacyRecordCount: Long,
+    val legacyTombstoneCount: Long,
+    val legacyEventCursor: Long,
+)
+
+@Serializable
+private data class ProgressRolloutPreviewResponse(
+    val schemaVersion: Int,
+    val protocolEpoch: Long,
+    val activeDomain: String,
+    val registeredDeviceCount: Long,
+    val unexpiredLegacyDeviceCount: Long,
+    val legacyRecordCount: Long,
+    val legacyTombstoneCount: Long,
+    val legacyEventCursor: Long,
+    val historicalDeviceCoverageProven: Boolean,
+    val pendingLocalWritesObservable: Boolean,
     val exactProgressEnabled: Boolean,
     val migrationReady: Boolean,
 )

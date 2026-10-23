@@ -300,6 +300,115 @@ class SupabaseSyncHttpTransportTest {
     }
 
     @Test
+    fun `progress preflight accepts server observed legacy counts without authorizing v2`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """
+                    {
+                      "schemaVersion":1,"protocolEpoch":1,"activeDomain":"READING_PROGRESS",
+                      "registeredDeviceCount":2,"unexpiredLegacyDeviceCount":1,
+                      "legacyRecordCount":23,"legacyTombstoneCount":4,"legacyEventCursor":105,
+                      "historicalDeviceCoverageProven":false,"pendingLocalWritesObservable":false,
+                      "exactProgressEnabled":false,"migrationReady":false
+                    }
+                    """.trimIndent(),
+                )
+                .build(),
+        )
+
+        val result = transport().previewLegacyProgressRollout()
+
+        val preview = (result as SyncTransportResult.Success).value
+        preview.registeredDeviceCount shouldBe 2L
+        preview.unexpiredLegacyDeviceCount shouldBe 1L
+        preview.legacyRecordCount shouldBe 23L
+        preview.legacyTombstoneCount shouldBe 4L
+        preview.legacyEventCursor shouldBe 105L
+        val request = server.takeRequest()
+        request.url.encodedPath shouldBe "/rest/v1/rpc/sync_preview_progress_rollout"
+        request.headers["Authorization"] shouldBe "Bearer access-token"
+        request.body!!.utf8() shouldBe "{}"
+    }
+
+    @Test
+    fun `progress preflight rejects claims of device coverage or migration authorization`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """
+                    {
+                      "schemaVersion":1,"protocolEpoch":1,"activeDomain":"READING_PROGRESS",
+                      "registeredDeviceCount":1,"unexpiredLegacyDeviceCount":1,
+                      "legacyRecordCount":1,"legacyTombstoneCount":0,"legacyEventCursor":1,
+                      "historicalDeviceCoverageProven":true,"pendingLocalWritesObservable":false,
+                      "exactProgressEnabled":false,"migrationReady":false
+                    }
+                    """.trimIndent(),
+                )
+                .build(),
+        )
+
+        val result = transport().previewLegacyProgressRollout()
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+    }
+
+    @Test
+    fun `progress preflight rejects negative or contradictory counts`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """
+                    {
+                      "schemaVersion":1,"protocolEpoch":1,"activeDomain":"READING_PROGRESS",
+                      "registeredDeviceCount":1,"unexpiredLegacyDeviceCount":2,
+                      "legacyRecordCount":1,"legacyTombstoneCount":2,"legacyEventCursor":-1,
+                      "historicalDeviceCoverageProven":false,"pendingLocalWritesObservable":false,
+                      "exactProgressEnabled":false,"migrationReady":false
+                    }
+                    """.trimIndent(),
+                )
+                .build(),
+        )
+
+        val result = transport().previewLegacyProgressRollout()
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+    }
+
+    @Test
+    fun `future progress epoch refuses legacy inventory preview`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(400)
+                .addHeader("Content-Type", "application/json")
+                .body("""{"code":"0A000","message":"progress protocol epoch is not supported by this client"}""")
+                .build(),
+        )
+
+        val result = transport().previewLegacyProgressRollout()
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+    }
+
+    @Test
+    fun `logged-out progress preflight performs no network request`() = runTest {
+        val result = transport(
+            account = FakeAccountRepository(AccountState.LoggedOut, token = null),
+        ).previewLegacyProgressRollout()
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.AUTHORIZATION_REQUIRED
+        server.requestCount shouldBe 0
+    }
+
+    @Test
     fun `push converts local mutation paths and returns mutation scoped conflicts`() = runTest {
         server.enqueue(
             MockResponse.Builder()
