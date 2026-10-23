@@ -13,6 +13,9 @@ import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.source.Source
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
+import mihon.core.archive.archiveReader
+import mihon.core.archive.epubReader
+import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.domain.chapter.repository.ChapterRepository
 import tachiyomi.domain.manga.repository.MangaRepository
@@ -140,8 +143,8 @@ class MihonCanonicalDownloadGateway internal constructor(
 
     companion object {
         /**
-         * This is a lightweight readability preflight, not archive-decoding or checksum
-         * validation. Actual archive parsing and page discovery remain in the Reader.
+         * This bounded content preflight opens an archive and identifies at least one
+         * viable image header. It does not decode every page or verify checksums.
          * A detached SD card/revoked SAF permission must not delete the DB reference.
          */
         internal fun isArtifactReadable(context: Context, artifact: CanonicalDownloadArtifact): Boolean {
@@ -151,10 +154,33 @@ class MihonCanonicalDownloadGateway internal constructor(
 
             return if (artifact.format.equals("DIRECTORY", ignoreCase = true)) {
                 local.isDirectory && local.listFiles()
-                    ?.any { entry -> !entry.isDirectory && entry.exists() } == true
+                    ?.any { entry ->
+                        !entry.isDirectory && entry.exists() &&
+                            entry.openInputStream()?.use { ImageUtil.findImageType(it) != null } == true
+                    } == true
             } else {
                 if (local.isDirectory) return false
-                local.openInputStream()?.use { stream -> stream.read() != -1 } == true
+                if (artifact.format.equals("EPUB", ignoreCase = true)) {
+                    local.epubReader(context).use { reader ->
+                        reader.getImagesFromPages().any { path ->
+                            reader.getInputStream(path)?.use { ImageUtil.findImageType(it) != null } == true
+                        }
+                    }
+                } else {
+                    // Exercise the actual archive decoder and inspect the first viable
+                    // image, not just the CBZ/ZIP signature or a random nonempty file.
+                    // Full multi-page integrity remains the Reader's responsibility.
+                    local.archiveReader(context).use { reader ->
+                        reader.useEntries { entries ->
+                            entries.any { entry ->
+                                entry.isFile &&
+                                    reader.getInputStream(entry.name)?.use {
+                                        ImageUtil.findImageType(it) != null
+                                    } == true
+                            }
+                        }
+                    }
+                }
             }
         }
 
