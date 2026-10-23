@@ -164,16 +164,16 @@ private fun LoadedDetails(
         ) {
             if (mode != CanonicalDetailsLowerMode.FULL) {
                 item(key = "hero") {
-                CanonicalDetailsHero(
-                    state,
-                    background,
-                    onReadTitle,
-                    onAddToLibrary,
-                    onRemoveFromLibrary,
-                    onRefresh,
-                    onVisualHeightChanged = { heroVisualHeight = it },
-                )
-            }
+                    CanonicalDetailsHero(
+                        state,
+                        background,
+                        onReadTitle,
+                        onAddToLibrary,
+                        onRemoveFromLibrary,
+                        onRefresh,
+                        onVisualHeightChanged = { heroVisualHeight = it },
+                    )
+                }
                 item(key = "modes") { DetailsModes(mode, moveMode) }
             }
             when (mode) {
