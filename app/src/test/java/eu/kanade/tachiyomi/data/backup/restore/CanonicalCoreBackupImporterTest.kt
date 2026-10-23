@@ -141,6 +141,20 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
+    fun `foreign device operational Mihon IDs are not rebound to unrelated local rows`() = runBlocking {
+        importer.restoreCore(section())
+
+        database.tsuzuki_source_mappingsQueries
+            .getTsuzukiSourceMappingsByTitle("title-1").awaitAsList()
+            .single().mihon_manga_id shouldBe null
+        val restored = database.tsuzuki_chapter_variantsQueries
+            .getTsuzukiChapterVariantsByCanonicalChapter("chapter-1").awaitAsList()
+            .single()
+        restored.mihon_manga_id shouldBe null
+        restored.mihon_chapter_id shouldBe null
+    }
+
+    @Test
     fun `injected failure before receipt rolls back all canonical writes`() = runBlocking {
         shouldThrow<IllegalStateException> {
             importer.restoreCore(section()) { error("forced crash before commit") }
@@ -189,7 +203,7 @@ class CanonicalCoreBackupImporterTest {
                 BackupCoreSourceMapping(
                     id = "mapping-1",
                     canonicalTitleId = "title-1",
-                    mihonMangaId = null,
+                    mihonMangaId = 501L,
                     sourceId = 42,
                     sourceUrl = "https://example.invalid/manga",
                     language = "pt-BR",
@@ -225,8 +239,8 @@ class CanonicalCoreBackupImporterTest {
                     canonicalChapterId = "chapter-1",
                     sourceMappingId = "mapping-1",
                     sourceId = 42,
-                    mihonMangaId = null,
-                    mihonChapterId = null,
+                    mihonMangaId = 501L,
+                    mihonChapterId = 502L,
                     sourceChapterId = "remote-chapter-1",
                     sourceChapterUrl = null,
                     language = "pt-BR",
