@@ -218,6 +218,44 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
+    fun `child folder is restored after parent even when backup is out of order`() = runBlocking {
+        val core = coreWithCollectionsAndBindings()
+        val child = core.folders.single().copy(
+            id = "folder-child",
+            parentFolderId = "folder-1",
+            title = "Nested folder",
+        )
+        importer.restoreCore(coreSection(core.copy(folders = listOf(child) + core.folders)))
+
+        val folders = database.tsuzuki_collectionsQueries
+            .getAllTsuzukiFoldersByCollection("collection-1").awaitAsList()
+        folders.size shouldBe 2
+        folders.single { it.id == "folder-child" }.parent_folder_id shouldBe "folder-1"
+    }
+
+    @Test
+    fun `existing collections cannot be silently overwritten by a canonical restore`() = runBlocking {
+        database.tsuzuki_collectionsQueries.upsertTsuzukiCollection(
+            id = "existing",
+            title = "Personal",
+            origin = "USER",
+            sortOrder = 0,
+            schemaVersion = 2,
+            revision = 1,
+            createdAt = 1,
+            updatedAt = 1,
+            deletedAt = null,
+        )
+
+        shouldThrow<IllegalStateException> {
+            importer.restoreCore(sectionWithCollectionsAndBindings())
+        }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+        database.tsuzuki_collectionsQueries.getAllTsuzukiCollections()
+            .awaitAsList().single().id shouldBe "existing"
+    }
+
+    @Test
     fun `colliding provider binding external identities are rejected`() = runBlocking {
         val good = coreWithCollectionsAndBindings()
         val conflicting = good.copy(
