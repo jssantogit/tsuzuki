@@ -6,7 +6,10 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterOverride
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterUpdateState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreContentPreference
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreContinueReadingState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreIdentity
@@ -16,7 +19,11 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreProgress
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreProviderBinding
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreReaderPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreSourceMapping
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreSourcePreference
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleArtwork
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleFormat
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleName
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreVariant
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
@@ -87,6 +94,27 @@ class CanonicalCoreBackupExporter(
             .getAllTsuzukiReaderPreferences().awaitAsList()
         val chapterOverrides = database.tsuzuki_chapter_overridesQueries
             .getAllTsuzukiChapterOverrides().awaitAsList()
+
+        val contentPreferences = database.tsuzuki_content_preferencesQueries
+            .getAllTsuzukiContentPreferences().awaitAsList()
+        val continueReadingStates = database.tsuzuki_continue_reading_stateQueries
+            .getAllTsuzukiContinueReadingState().awaitAsList()
+        val chapterUpdateStates = database.tsuzuki_chapter_update_stateQueries
+            .getAllTsuzukiChapterUpdateState().awaitAsList()
+        val titleArtwork = database.tsuzuki_title_artwork_observationsQueries
+            .getAllTsuzukiTitleArtworkObservations().awaitAsList()
+        val titleFormats = database.tsuzuki_title_format_observationsQueries
+            .getAllTsuzukiTitleFormatObservations().awaitAsList()
+        val titleNames = titles.flatMap { title ->
+            database.tsuzuki_title_name_observationsQueries
+                .getTsuzukiTitleNameObservationsByTitle(title.id).awaitAsList()
+        }
+        val sourceLanguages = database.tsuzuki_source_preferencesQueries
+            .getConfiguredLanguages().awaitAsList()
+        val sourcePreferences = sourceLanguages.flatMap { language ->
+            database.tsuzuki_source_preferencesQueries
+                .getPreferencesForLanguage(language).awaitAsList()
+        }
 
         val core = BackupCanonicalCore(
             titles = titles.map {
@@ -227,6 +255,35 @@ class CanonicalCoreBackupExporter(
                     createdAt = it.created_at,
                     updatedAt = it.updated_at,
                     deletedAt = it.deleted_at,
+                )
+            },
+            contentPreferences = contentPreferences.map {
+                BackupCoreContentPreference(
+                    it.canonical_title_id, it.preferred_addon_id, it.preferred_language, it.updated_at,
+                )
+            },
+            sourcePreferences = sourcePreferences.map {
+                BackupCoreSourcePreference(it.language, it.source_id, it.position)
+            },
+            continueReadingStates = continueReadingStates.map {
+                BackupCoreContinueReadingState(it.canonical_title_id, it.hidden_at)
+            },
+            chapterUpdateStates = chapterUpdateStates.map {
+                BackupCoreChapterUpdateState(
+                    it.canonical_chapter_id, it.canonical_title_id, it.first_seen_at, it.acknowledged_at,
+                )
+            },
+            titleArtwork = titleArtwork.map {
+                BackupCoreTitleArtwork(
+                    it.canonical_title_id, it.provider, it.cover_url, it.banner_url, it.updated_at,
+                )
+            },
+            titleFormats = titleFormats.map {
+                BackupCoreTitleFormat(it.canonical_title_id, it.provider, it.format, it.updated_at)
+            },
+            titleNames = titleNames.map {
+                BackupCoreTitleName(
+                    it.canonical_title_id, it.provider, it.source_key, it.value, it.updated_at,
                 )
             },
         )
