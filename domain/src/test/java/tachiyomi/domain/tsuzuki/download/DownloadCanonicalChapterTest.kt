@@ -1,7 +1,9 @@
 package tachiyomi.domain.tsuzuki.download
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -85,6 +87,44 @@ class DownloadCanonicalChapterTest {
         fixture.download.execute("chapter-1")
             .shouldBeInstanceOf<CanonicalDownloadPreparation.Unavailable>()
         fixture.repository.value shouldBe stale
+        fixture.gateway.calls shouldBe 0
+    }
+
+    @Test
+    fun inaccessibleCacheWithRevokedPermissionCanRecoverWithoutDeletingMetadataFirst() = runTest {
+        val prior = artifact("unmounted")
+        val replacement = artifact("recovered")
+        val fixture = fixture(
+            preference = ContentPreference("title-1", AddonId("mangadex"), 1L),
+            providers = listOf(provider(option("mangadex"))),
+            existingArtifact = prior,
+            gatewayArtifact = replacement,
+        )
+        fixture.gateway.inspectionFailure = SecurityException("SAF permission revoked")
+
+        val result = fixture.download.execute("chapter-1")
+
+        result.shouldBeInstanceOf<CanonicalDownloadPreparation.Complete>()
+        result.artifact shouldBe replacement
+        fixture.repository.value shouldBe replacement
+        fixture.gateway.calls shouldBe 1
+    }
+
+    @Test
+    fun cancellationDuringPhysicalCacheInspectionPreservesMetadataAndAbortsRecovery() = runTest {
+        val prior = artifact("unmounted")
+        val fixture = fixture(
+            preference = ContentPreference("title-1", AddonId("mangadex"), 1L),
+            providers = listOf(provider(option("mangadex"))),
+            existingArtifact = prior,
+            gatewayArtifact = artifact("should-not-download"),
+        )
+        fixture.gateway.inspectionFailure = CancellationException("reader closed")
+
+        shouldThrow<CancellationException> {
+            fixture.download.execute("chapter-1")
+        }
+        fixture.repository.value shouldBe prior
         fixture.gateway.calls shouldBe 0
     }
 
@@ -304,12 +344,16 @@ class DownloadCanonicalChapterTest {
         private val artifact: CanonicalDownloadArtifact?,
         val existingArtifactAvailable: Boolean,
     ) : CanonicalDownloadGateway {
+        var inspectionFailure: Throwable? = null
         var calls = 0
         var lastOption: ContentOption? = null
 
         override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
 
-        override suspend fun isArtifactAvailable(artifact: CanonicalDownloadArtifact): Boolean = existingArtifactAvailable
+        override suspend fun isArtifactAvailable(artifact: CanonicalDownloadArtifact): Boolean {
+            inspectionFailure?.let { throw it }
+            return existingArtifactAvailable
+        }
 
         override suspend fun acquire(option: ContentOption): Result<CanonicalDownloadArtifact> {
             calls++
