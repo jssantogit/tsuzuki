@@ -68,19 +68,25 @@ data class BackupCanonicalCore(
         require(titleIds.none(String::isBlank) && chapterIds.none(String::isBlank)) {
             "Canonical ID must not be blank"
         }
-        require(collections.all {
-            it.id.isNotBlank() && it.title.isNotBlank() && it.origin in setOf("USER", "SYSTEM") &&
-                it.sortOrder >= 0 && it.schemaVersion > 0 && it.revision >= 0
-        }) { "Invalid collection metadata" }
-        require(folders.all {
-            it.id.isNotBlank() && it.title.isNotBlank() && it.collectionId in collectionIds &&
-                it.origin in setOf("USER", "SYSTEM") && it.sortOrder >= 0 &&
-                it.schemaVersion > 0 && it.revision >= 0
-        }) { "Invalid collection folder or orphan collection" }
-        require(folders.all {
-            it.parentFolderId == null ||
-                foldersById[it.parentFolderId]?.collectionId == it.collectionId
-        }) { "Folder parent must exist inside its collection" }
+        require(
+            collections.all {
+                it.id.isNotBlank() && it.title.isNotBlank() && it.origin in setOf("USER", "SYSTEM") &&
+                    it.sortOrder >= 0 && it.schemaVersion > 0 && it.revision >= 0
+            },
+        ) { "Invalid collection metadata" }
+        require(
+            folders.all {
+                it.id.isNotBlank() && it.title.isNotBlank() && it.collectionId in collectionIds &&
+                    it.origin in setOf("USER", "SYSTEM") && it.sortOrder >= 0 &&
+                    it.schemaVersion > 0 && it.revision >= 0
+            },
+        ) { "Invalid collection folder or orphan collection" }
+        require(
+            folders.all {
+                it.parentFolderId == null ||
+                    foldersById[it.parentFolderId]?.collectionId == it.collectionId
+            },
+        ) { "Folder parent must exist inside its collection" }
         // Reject both self-loops and multi-folder cycles before any database writes.
         for (folder in folders) {
             var cursor: BackupCoreFolder? = folder
@@ -90,28 +96,34 @@ data class BackupCanonicalCore(
                 cursor = cursor.parentFolderId?.let(foldersById::get)
             }
         }
-        require(lists.all {
-            it.id.isNotBlank() && it.title.isNotBlank() && it.providerId.isNotBlank() &&
-                foldersById[it.folderId]?.collectionId == it.collectionId &&
-                it.collectionId in collectionIds &&
-                it.origin in setOf("USER", "SYSTEM") && it.sortOrder >= 0 &&
-                it.schemaVersion > 0 && it.revision >= 0
-        }) { "Collection list must reference a folder in the same collection" }
-        require(providerBindings.all {
-            it.id.isNotBlank() && it.canonicalTitleId in titleIds &&
-                it.providerId.isNotBlank() && it.facetId.isNotBlank() && it.externalWorkId.isNotBlank()
-        }) { "Invalid provider binding or missing canonical title" }
+        require(
+            lists.all {
+                it.id.isNotBlank() && it.title.isNotBlank() && it.providerId.isNotBlank() &&
+                    foldersById[it.folderId]?.collectionId == it.collectionId &&
+                    it.collectionId in collectionIds &&
+                    it.origin in setOf("USER", "SYSTEM") && it.sortOrder >= 0 &&
+                    it.schemaVersion > 0 && it.revision >= 0
+            },
+        ) { "Collection list must reference a folder in the same collection" }
+        require(
+            providerBindings.all {
+                it.id.isNotBlank() && it.canonicalTitleId in titleIds &&
+                    it.providerId.isNotBlank() && it.facetId.isNotBlank() && it.externalWorkId.isNotBlank()
+            },
+        ) { "Invalid provider binding or missing canonical title" }
         require(readerPreferences.all { it.canonicalTitleId in titleIds }) {
             "Reader preference references a missing title"
         }
-        require(chapterOverrides.all {
-            it.id.isNotBlank() && it.canonicalTitleId in titleIds &&
-                it.kind.isNotBlank() && it.payloadJson.isNotBlank() &&
-                (it.sourceId == null) == (it.sourceTitleUrl == null) &&
-                (it.sourceChapterId == null || it.sourceId != null) &&
-                (it.canonicalChapterKey == null || it.canonicalChapterKey.isNotBlank()) &&
-                it.schemaVersion > 0 && it.revision >= 0
-        }) { "Invalid chapter override or missing canonical title" }
+        require(
+            chapterOverrides.all {
+                it.id.isNotBlank() && it.canonicalTitleId in titleIds &&
+                    it.kind.isNotBlank() && it.payloadJson.isNotBlank() &&
+                    (it.sourceId == null) == (it.sourceTitleUrl == null) &&
+                    (it.sourceChapterId == null || it.sourceId != null) &&
+                    (it.canonicalChapterKey == null || it.canonicalChapterKey.isNotBlank()) &&
+                    it.schemaVersion > 0 && it.revision >= 0
+            },
+        ) { "Invalid chapter override or missing canonical title" }
         require(chapters.all { it.canonicalTitleId in titleIds }) {
             "Chapter refers to absent canonical title"
         }
