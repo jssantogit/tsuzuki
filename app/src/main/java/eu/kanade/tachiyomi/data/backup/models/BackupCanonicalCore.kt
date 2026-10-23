@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.data.backup.models
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import tachiyomi.domain.tsuzuki.integration.model.PortableIntegrationConfig
 
 /**
  * Canonical archive's core graph. This is deliberately independent of the
@@ -64,6 +66,12 @@ data class BackupCanonicalCore(
         require(integrationSettings.all { it.integrationId.isNotBlank() }) {
             "Integration identifier must not be blank"
         }
+        require(
+            integrationSettings.all { setting ->
+                val redacted = PortableIntegrationConfig.redact(setting.configJson, Json)
+                Json.parseToJsonElement(setting.configJson) == Json.parseToJsonElement(redacted)
+            },
+        ) { "Nonportable integration credentials in canonical backup" }
         require(contentPreferences.isUniqueBy { it.canonicalTitleId }) { "Duplicate content preference" }
         require(sourcePreferences.isUniqueBy { it.language to it.sourceId }) { "Duplicate source priority" }
         require(sourcePreferences.isUniqueBy { it.language to it.position }) { "Duplicate source order" }
