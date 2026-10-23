@@ -5,15 +5,15 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
-import eu.kanade.tachiyomi.data.tsuzuki.supabase.AndroidKeystoreSessionStore
-import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseAccountRepository
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseAuthService
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseConfiguration
+import eu.kanade.tachiyomi.data.tsuzuki.supabase.PersistentAuthCallbackRequestStore
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import mihon.core.metro.metroGraph
 
 class SupabaseAuthCallbackActivity : ComponentActivity() {
 
@@ -34,20 +34,23 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching {
-                val store = AndroidKeystoreSessionStore(this@SupabaseAuthCallbackActivity)
-                val authService = SupabaseAuthService(
-                    client = OkHttpClient(),
-                    configuration = configuration,
-                )
-                val repository = SupabaseAccountRepository(
-                    authService = authService,
-                    sessionStore = store,
-                )
                 val values = callback.callbackValues()
                 val type = values["type"]
                     ?.takeIf { it in ALLOWED_TYPES }
                     ?: error("Unsupported Supabase callback type")
+                // Read only the original URI query, never a fragment-provided
+                // lookalike. Supabase session tokens normally live in fragment.
+                val state = callback.getQueryParameter("tsz_state")
+                    ?: error("Auth callback is missing request state")
+                val requests = PersistentAuthCallbackRequestStore(noBackupFilesDir)
+                check(requests.consume(type, state)) {
+                    "Auth callback was not initiated here, expired, or was already consumed"
+                }
 
+                val authService = SupabaseAuthService(
+                    client = OkHttpClient(),
+                    configuration = configuration,
+                )
                 val result = when {
                     values["token_hash"] != null -> {
                         authService.verifyCallbackToken(
@@ -68,7 +71,9 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
                 val session = requireNotNull(result.session) {
                     "Supabase callback did not create a session"
                 }
-                repository.acceptSession(session)
+                // Use the same scoped repository observed by Account/Sync UI.
+                // A separate instance would leave an older in-memory user active.
+                applicationContext.metroGraph().callbackAccountRepository.acceptSession(session)
             }
 
             withContext(Dispatchers.Main) {
@@ -84,7 +89,9 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
 
     private fun Uri.isAllowedCallback(): Boolean =
         scheme == SupabaseConfiguration.CALLBACK_SCHEME &&
-            host == SupabaseConfiguration.CALLBACK_HOST
+            host == SupabaseConfiguration.CALLBACK_HOST &&
+            port == -1 &&
+            encodedPath.isNullOrEmpty()
 
     private fun Uri.callbackValues(): Map<String, String> {
         val values = buildMap {
@@ -103,6 +110,6 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
     }
 
     companion object {
-        private val ALLOWED_TYPES = setOf("signup", "recovery", "email_change")
+        private val ALLOWED_TYPES = setOf("signup", "recovery")
     }
 }
