@@ -91,6 +91,15 @@ class HistoricalBackupVerificationTest(unittest.TestCase):
             verify_backup(self.backup, dangerous)
         self.assertEqual(self.backup.read_bytes(), original)
 
+    def test_live_wal_snapshot_is_refused_without_side_effects(self):
+        sidecar = self.backup.with_name(self.backup.name + "-wal")
+        sidecar.write_bytes(b"fixture")
+        original = self.backup.read_bytes()
+        with self.assertRaisesRegex(VerificationError, 'checkpointed offline'):
+            verify_backup(self.backup, MIGRATION)
+        self.assertEqual(self.backup.read_bytes(), original)
+        self.assertEqual(sidecar.read_bytes(), b"fixture")
+
     def test_renaming_unrelated_table_is_rejected(self):
         dangerous = Path(self.temp.name) / 'rename.sqm'
         dangerous.write_text(MIGRATION.read_text() + "\nALTER TABLE unrelated_binary RENAME TO deleted_name;\n")
