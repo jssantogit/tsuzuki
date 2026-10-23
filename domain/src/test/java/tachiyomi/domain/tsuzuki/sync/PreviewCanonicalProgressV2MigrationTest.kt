@@ -35,6 +35,28 @@ class PreviewCanonicalProgressV2MigrationTest {
     }
 
     @Test
+    fun `older v1 progress without a variant field can still be safely previewed`() {
+        val chapter = chapter("legacy-without-variant")
+        val legacy = document(chapter)
+        val original = legacy.records.values.single()
+        val withoutVariant = original.copy(
+            fields = buildJsonObject {
+                put("canonicalTitleId", chapter.canonicalTitleId)
+                put("chapterKey", CanonicalChapterSyncKey.from(chapter)!!.chapterKey)
+                put("read", false)
+                put("lastPageRead", 2)
+            },
+        )
+
+        preview.assess(
+            legacy.copy(records = mapOf(original.id to withoutVariant)),
+            listOf(chapter),
+        ) shouldBe ProgressMigrationPreview.Ready(
+            mapOf(original.id to CanonicalChapterSyncKey.fromVersion2(chapter)!!.recordId),
+        )
+    }
+
+    @Test
     fun `chapter numbering reset between volumes blocks ambiguous legacy remap`() {
         val first = chapter("volume-one").copy(volume = 1)
         val second = chapter("volume-two").copy(volume = 2)

@@ -66,7 +66,7 @@ class PreviewCanonicalProgressV2Migration {
                 read == null ||
                 lastPageRead == null ||
                 lastPageRead < 0 ||
-                (variantKey != JsonNull && (variantKey !is JsonPrimitive || !variantKey.isString)) ||
+                (variantKey != null && variantKey != JsonNull && (variantKey !is JsonPrimitive || !variantKey.isString)) ||
                 CanonicalChapterSyncKey(titleId, chapterKey).recordId != record.id
             ) {
                 return ProgressMigrationPreview.Blocked(ProgressMigrationPreview.Reason.MALFORMED_REMOTE_RECORD)
@@ -75,7 +75,7 @@ class PreviewCanonicalProgressV2Migration {
             // This preview has no source-variant inventory. An unresolved
             // per-source page checkpoint cannot be promoted safely merely
             // because its chapter identity was unambiguous.
-            if (variantKey != JsonNull) {
+            if (variantKey != null && variantKey != JsonNull) {
                 return ProgressMigrationPreview.Blocked(
                     ProgressMigrationPreview.Reason.VARIANT_EVIDENCE_REQUIRES_REVIEW,
                 )
