@@ -29,6 +29,7 @@ import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.tsuzuki.diagnostics.DiagnosticCaptureSession
 import eu.kanade.tachiyomi.data.tsuzuki.integration.BuiltinIntegrationProviderRegistry
+import eu.kanade.tachiyomi.data.tsuzuki.supabase.DefaultSupabaseAccountRepository
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseSyncJob
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseSyncRuntime
 import eu.kanade.tachiyomi.data.updater.AppUpdateChecker
@@ -152,6 +153,7 @@ interface AppGraph : ViewModelGraph {
     val addonSyncIntentRepository: AddonSyncIntentRepository
     val trackerManager: TrackerManager
     val accountRepository: AccountRepository
+    val callbackAccountRepository: DefaultSupabaseAccountRepository
     val refreshUserLibraries: RefreshUserLibraries
     val supabaseSyncRuntime: SupabaseSyncRuntime
     val extensionManager: ExtensionManager
