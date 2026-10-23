@@ -97,12 +97,13 @@ class SupabaseSyncRuntime(
     private val accountScopeGuard: SyncAccountScopeGuard = PersistentSupabaseAccountScopeGuard(
         directory = context.noBackupFilesDir,
         hasLegacyCloudState = {
-            SyncDocumentKind.supabaseDurableKinds.any { kind ->
-                supabaseStateStore.getCursor(kind) != null ||
-                    supabaseStateStore.getPending(kind) != null ||
-                    stateRepository.get(kind)?.acceptedBase != null ||
-                    conflictRepository.getForDocument(kind).isNotEmpty()
-            }
+            LegacySyncStateEvidence(
+                hasCursor = { kind -> supabaseStateStore.getCursor(kind) != null },
+                hasPending = { kind -> supabaseStateStore.getPending(kind) != null },
+                hasAcceptedBase = { kind -> stateRepository.get(kind)?.acceptedBase != null },
+                hasConflict = { kind -> conflictRepository.getForDocument(kind).isNotEmpty() },
+                hasOutbox = { kind -> outboxRepository.get(kind) != null },
+            ).hasUnscopedState()
         },
     )
     private val accountState = accountRepository
