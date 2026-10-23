@@ -51,6 +51,12 @@ data class BackupCanonicalCore(
         require(libraryCategories.isUniqueBy { it.canonicalTitleId to it.name }) {
             "Ambiguous category names for the same title"
         }
+        require(
+            libraryCategories.groupBy { it.name }.values.all { memberships ->
+                memberships.map { it.order to it.flags }.distinct().size == 1 &&
+                    memberships.mapNotNull { it.sourceCategoryId }.distinct().size <= 1
+            },
+        ) { "Distinct source categories cannot be silently merged by name" }
         require(contentPreferences.isUniqueBy { it.canonicalTitleId }) { "Duplicate content preference" }
         require(sourcePreferences.isUniqueBy { it.language to it.sourceId }) { "Duplicate source priority" }
         require(sourcePreferences.isUniqueBy { it.language to it.position }) { "Duplicate source order" }
@@ -337,6 +343,8 @@ data class BackupCoreLibraryCategory(
     val name: String,
     val order: Long,
     val flags: Long,
+    // Provenance only: never use this device-specific ID as a target FK.
+    val sourceCategoryId: Long? = null,
 )
 
 @Serializable
