@@ -66,7 +66,11 @@ class PreviewCanonicalProgressV2Migration {
                 read == null ||
                 lastPageRead == null ||
                 lastPageRead < 0 ||
-                (variantKey != null && variantKey != JsonNull && (variantKey !is JsonPrimitive || !variantKey.isString)) ||
+                (
+                    variantKey != null &&
+                        variantKey != JsonNull &&
+                        (variantKey !is JsonPrimitive || !variantKey.isString)
+                    ) ||
                 CanonicalChapterSyncKey(titleId, chapterKey).recordId != record.id
             ) {
                 return ProgressMigrationPreview.Blocked(ProgressMigrationPreview.Reason.MALFORMED_REMOTE_RECORD)
