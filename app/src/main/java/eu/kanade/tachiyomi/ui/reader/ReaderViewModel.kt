@@ -1382,11 +1382,12 @@ class ReaderViewModel(
 
             val canonicalSession = canonicalSessionFor(readerChapter)
             val lastPageSelected = readerChapter.pages?.lastIndex == pageIndex
-            val chapterCompleted = lastPageSelected && (
-                canonicalSession == null ||
-                    readerChapter.pageLoader !is LocalChapterLoader ||
-                    (page is ReaderPage && isCanonicalLocalPageReadable(page))
-                )
+            val chapterCompleted = when {
+                !lastPageSelected -> false
+                canonicalSession != null && readerChapter.pageLoader is LocalChapterLoader ->
+                    page is ReaderPage && isCanonicalLocalPageReadable(page)
+                else -> true
+            }
             // A local page list can expose a corrupt image as Ready before it
             // decodes. Keep the user's last-page checkpoint, but do not mark
             // the canonical chapter read until the last image header is valid.
