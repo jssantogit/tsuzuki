@@ -116,6 +116,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
+import java.net.InetAddress
 import java.net.URI
 import java.net.UnknownHostException
 import java.util.UUID
@@ -2701,8 +2702,11 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                     ),
                 )
                 server.dispatcher = dispatcher
-                server.start()
-                val baseUrl = server.url("/").toString().trimEnd('/')
+                // MockWebServer.start() resolves "localhost" through Android DNS.
+                // The disposable emulator occasionally has no localhost DNS entry,
+                // so bind and address the fixture with a literal IPv4 loopback.
+                server.start(InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)), 0)
+                val baseUrl = "http://127.0.0.1:${server.port}"
                 val sourceAInventoryCall = AtomicReference("NOT_STARTED")
                 val sourceBInventoryCall = AtomicReference("NOT_STARTED")
                 val sourceAInventoryCallEvents = AtomicReference("NONE")
