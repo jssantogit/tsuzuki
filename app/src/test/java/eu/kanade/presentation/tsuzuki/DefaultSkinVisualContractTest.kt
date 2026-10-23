@@ -85,6 +85,27 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
+    fun `editorial metadata uses compact labels and values instead of page headings`() {
+        val source = readSource("detail/CanonicalDetailsHero.kt")
+        val section = source.substringAfter("private fun EditorialSection(")
+            .substringBefore("private fun editorialFormatLabel(")
+        section shouldContain "MaterialTheme.typography.label"
+        section shouldContain "MaterialTheme.typography.bodyMedium"
+        section shouldNotContain "MaterialTheme.typography.titleLarge"
+        section shouldNotContain "MaterialTheme.typography.bodyLarge"
+    }
+
+    @Test
+    fun `selected chips center their text in compact touch targets`() {
+        val source = readSource("components/DefaultSkinPrimitives.kt")
+        val chip = source.substringAfter("fun DefaultSkinChoiceChip(")
+            .substringBefore("fun DefaultSkinTag(")
+        chip shouldContain "contentAlignment = Alignment.Center"
+        chip shouldContain ".heightIn(min = 48.dp)"
+        chip shouldContain ".heightIn(min = 32.dp)"
+    }
+
+    @Test
     fun `promoted root surfaces consume shared Default Skin primitives`() {
         readSource("entry/TsuzukiEntryScreen.kt") shouldContain "defaultSkinColors()"
         readSource("home/TsuzukiHomeScreen.kt") shouldContain "defaultSkinColors()"

@@ -17,26 +17,27 @@ class SettingsVisualPresetContractTest {
     }
 
     @Test
-    fun `visual preset represents only the current Default Skin without inventing a catalog`() {
+    fun `every supported AppTheme is exposed as a described visual preset`() {
         val source = readSource("SettingsTsuzukiVisualPresetScreen.kt")
-
+        source shouldContain "AppTheme.entries"
+        source shouldContain "presetDescription("
+        source shouldContain "TachiyomiTheme("
+        source shouldContain "AppTheme.DEFAULT"
         source shouldContain "MR.strings.tsuzuki_visual_preset_name"
-        source shouldContain "MR.strings.selected"
-        source shouldContain "MR.strings.tsuzuki_visual_preset_summary"
+        source shouldContain "AppThemePalettePreview("
+        source shouldNotContain "AppThemePreferenceWidget("
+        source shouldNotContain "Marketplace"
         source shouldNotContain "Download"
         source shouldNotContain "Install"
-        source shouldNotContain "Marketplace"
-        source shouldNotContain "PreferenceStore"
     }
 
     @Test
-    fun `palettes are selected inside Visual Preset while appearance retains theme mode`() {
+    fun `appearance owns light dark mode and visual presets own persisted palette`() {
         val appearance = readSource("SettingsAppearanceScreen.kt")
         val preset = readSource("SettingsTsuzukiVisualPresetScreen.kt")
         appearance shouldNotContain "AppThemePreferenceWidget("
-        preset shouldContain "AppThemePreferenceWidget("
-        preset shouldContain "appThemePref.set(it)"
-        preset shouldContain "compactPreview = true"
+        preset shouldContain "appThemePref.set(theme)"
+        preset shouldContain "ActivityCompat.recreate"
     }
 
     @Test
