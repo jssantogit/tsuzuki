@@ -243,6 +243,10 @@ class CanonicalLibraryScreenModelTest {
         repo.emitItems(listOf(canonicalItem("one", "Frieren"), canonicalItem("two", "Dungeon Meshi")))
         advanceUntilIdle()
 
+        // Clear the active search before inspecting the expanded library.
+        model.search(null)
+        advanceUntilIdle()
+
         val expanded = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items
         expanded.single { it.canonicalTitleId == "two" }.startYear shouldBe
             null

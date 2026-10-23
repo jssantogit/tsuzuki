@@ -10,8 +10,8 @@ import eu.kanade.presentation.tsuzuki.home.homeModuleTopSpacing
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
-import tachiyomi.domain.tsuzuki.integration.model.metadataStartYear
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.integration.model.metadataStartYear
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -135,8 +135,10 @@ class DefaultSkinVisualContractTest {
         (hero.indexOf("if (state.tsuzukiRating") > hero.indexOf("state.title.displayTitle")) shouldBe true
         hero shouldContain "DefaultSkinPrimaryButton("
         hero shouldContain "state.refreshError"
-        (hero.indexOf("editorialStatusLabel(state.editorialStatus)") >
-            hero.indexOf("if (state.tsuzukiRating")) shouldBe
+        (
+            hero.indexOf("editorialStatusLabel(state.editorialStatus)") >
+                hero.indexOf("if (state.tsuzukiRating")
+            ) shouldBe
             true
         (hero.indexOf("state.genres") > hero.indexOf("if (state.tsuzukiRating")) shouldBe true
         editorial shouldContain "state.description"
