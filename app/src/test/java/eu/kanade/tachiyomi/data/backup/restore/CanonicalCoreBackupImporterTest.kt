@@ -268,6 +268,113 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
+    fun `identical empty system collection is reused without rewriting its metadata`(): Unit = runBlocking {
+        val system = BackupCoreCollection(
+            id = "system-collection",
+            title = "Default",
+            origin = "SYSTEM",
+            sortOrder = 0,
+            schemaVersion = 2,
+            revision = 1,
+            createdAt = 10,
+            updatedAt = 20,
+            deletedAt = null,
+        )
+        insertExistingCollection(system)
+        val core = coreWithCollectionsAndBindings().copy(
+            collections = listOf(system) + coreWithCollectionsAndBindings().collections,
+        )
+
+        importer.restoreCore(coreSection(core))
+
+        val stored = database.tsuzuki_collectionsQueries.getAllTsuzukiCollections().awaitAsList()
+        stored.map { it.id }.toSet() shouldBe setOf("system-collection", "collection-1")
+        stored.single { it.id == "system-collection" }.created_at shouldBe 10L
+        database.tsuzuki_backup_restore_receiptsQueries
+            .listTsuzukiBackupRestoreReceipts().awaitAsList().size shouldBe 1
+    }
+
+    @Test
+    fun `changed or unmatched system collection blocks import without mutations`(): Unit = runBlocking {
+        val system = BackupCoreCollection("system-collection", "Local", "SYSTEM", 0, 2, 1, 10, 20, null)
+        insertExistingCollection(system)
+        val archived = system.copy(title = "Remote")
+        val core = coreWithCollectionsAndBindings().copy(
+            collections = listOf(archived) + coreWithCollectionsAndBindings().collections,
+        )
+
+        shouldThrow<IllegalStateException> { importer.restoreCore(coreSection(core)) }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+        database.tsuzuki_backup_restore_receiptsQueries
+            .listTsuzukiBackupRestoreReceipts().awaitAsList() shouldBe emptyList()
+        database.tsuzuki_collectionsQueries.getAllTsuzukiCollections()
+            .awaitAsList().single().title shouldBe "Local"
+    }
+
+    @Test
+    fun `unmatched local system collection cannot be silently attached to another backup`(): Unit = runBlocking {
+        insertExistingCollection(
+            BackupCoreCollection("unrelated-default", "System", "SYSTEM", 0, 2, 1, 10, 20, null),
+        )
+
+        shouldThrow<IllegalStateException> { importer.restoreCore(sectionWithCollectionsAndBindings()) }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+    }
+
+    @Test
+    fun `existing system collection with a local folder cannot be reused even if header matches`(): Unit = runBlocking {
+        val system = BackupCoreCollection("system-collection", "Default", "SYSTEM", 0, 2, 1, 10, 20, null)
+        insertExistingCollection(system)
+        database.tsuzuki_collectionsQueries.upsertTsuzukiFolder(
+            id = "local-folder",
+            collectionId = system.id,
+            parentFolderId = null,
+            title = "Local contents",
+            origin = "SYSTEM",
+            sortOrder = 0,
+            schemaVersion = 2,
+            revision = 1,
+            createdAt = 10,
+            updatedAt = 20,
+            deletedAt = null,
+        )
+        val core = coreWithCollectionsAndBindings().copy(
+            collections = listOf(system) + coreWithCollectionsAndBindings().collections,
+        )
+
+        shouldThrow<IllegalStateException> { importer.restoreCore(coreSection(core)) }
+        database.tsuzuki_collectionsQueries
+            .getAllTsuzukiFoldersByCollection(system.id).awaitAsList().single().id shouldBe "local-folder"
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+    }
+
+    @Test
+    fun `matching user-owned collection cannot bypass the clean-graph gate`(): Unit = runBlocking {
+        val user = BackupCoreCollection("user-collection", "My reading", "USER", 0, 2, 1, 10, 20, null)
+        insertExistingCollection(user)
+        val core = coreWithCollectionsAndBindings().copy(
+            collections = listOf(user) + coreWithCollectionsAndBindings().collections,
+        )
+
+        shouldThrow<IllegalStateException> { importer.restoreCore(coreSection(core)) }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+    }
+
+    private fun insertExistingCollection(collection: BackupCoreCollection) {
+        database.tsuzuki_collectionsQueries.upsertTsuzukiCollection(
+            id = collection.id,
+            title = collection.title,
+            origin = collection.origin,
+            sortOrder = collection.sortOrder,
+            schemaVersion = collection.schemaVersion,
+            revision = collection.revision,
+            createdAt = collection.createdAt,
+            updatedAt = collection.updatedAt,
+            deletedAt = collection.deletedAt,
+        )
+    }
+
+    @Test
     fun `reader preference and durable chapter override survive export restore`(): Unit = runBlocking {
         val core = coreWithCollectionsAndBindings().copy(
             readerPreferences = listOf(
