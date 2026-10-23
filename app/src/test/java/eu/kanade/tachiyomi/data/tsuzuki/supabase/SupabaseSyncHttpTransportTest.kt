@@ -53,6 +53,71 @@ class SupabaseSyncHttpTransportTest {
     }
 
     @Test
+    fun `progress protocol discovery accepts authenticated legacy-only server status`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """{"schemaVersion":1,"protocolEpoch":1,"activeDomain":"READING_PROGRESS","exactProgressEnabled":false,"migrationReady":false}""",
+                )
+                .build(),
+        )
+
+        val result = transport().getProgressProtocol()
+
+        (result as SyncTransportResult.Success).value.protocolEpoch shouldBe 1L
+        val request = server.takeRequest()
+        request.url.encodedPath shouldBe "/rest/v1/rpc/sync_get_progress_protocol"
+        request.headers["Authorization"] shouldBe "Bearer access-token"
+        request.body!!.utf8() shouldBe "{}"
+    }
+
+    @Test
+    fun `unexpected future progress epoch is rejected before enabling any migration`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """{"schemaVersion":2,"protocolEpoch":2,"activeDomain":"READING_PROGRESS_V2","exactProgressEnabled":true,"migrationReady":true}""",
+                )
+                .build(),
+        )
+
+        val result = transport().getProgressProtocol()
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+    }
+
+    @Test
+    fun `malformed progress protocol status is never treated as a negotiated rollout`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .addHeader("Content-Type", "application/json")
+                .body("""{"schemaVersion":1,"protocolEpoch":"invalid"}""")
+                .build(),
+        )
+
+        val result = transport().getProgressProtocol()
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe
+            SyncFailureReason.MALFORMED_REMOTE_DOCUMENT
+    }
+
+    @Test
+    fun `logged-out protocol discovery performs no remote request`() = runTest {
+        val result = transport(
+            account = FakeAccountRepository(AccountState.LoggedOut, token = null),
+        ).getProgressProtocol()
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe
+            SyncFailureReason.AUTHORIZATION_REQUIRED
+        server.requestCount shouldBe 0
+    }
+
+    @Test
     fun `push converts local mutation paths and returns mutation scoped conflicts`() = runTest {
         server.enqueue(
             MockResponse.Builder()
