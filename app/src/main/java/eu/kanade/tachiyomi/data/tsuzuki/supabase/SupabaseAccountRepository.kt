@@ -10,6 +10,7 @@ import tachiyomi.domain.tsuzuki.account.repository.AccountRepository
 class SupabaseAccountRepository(
     private val authService: SupabaseAuthService,
     private val sessionStore: SupabaseSessionStore,
+    private val callbackRequests: AuthCallbackRequestStore,
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000L },
 ) : AccountRepository {
 
@@ -21,13 +22,24 @@ class SupabaseAccountRepository(
 
     override suspend fun register(email: String, password: String): Result<AccountState> =
         runCatching {
-            val result = authService.register(email, password)
-            val next = result.session?.let {
-                sessionStore.save(it)
-                it.toAccountState()
-            } ?: AccountState.EmailConfirmationRequired(email)
-            mutableState.value = next
-            next
+            val nonce = callbackRequests.start("signup")
+            try {
+                val result = authService.register(
+                    email = email,
+                    password = password,
+                    redirectTo = authService.callbackRedirectUrl(nonce),
+                )
+                val next = result.session?.let {
+                    callbackRequests.cancel("signup", nonce)
+                    sessionStore.save(it)
+                    it.toAccountState()
+                } ?: AccountState.EmailConfirmationRequired(email)
+                mutableState.value = next
+                next
+            } catch (error: Throwable) {
+                callbackRequests.cancel("signup", nonce)
+                throw error
+            }
         }
 
     override suspend fun login(email: String, password: String): Result<AccountState> =
@@ -52,7 +64,16 @@ class SupabaseAccountRepository(
 
     override suspend fun sendPasswordRecovery(email: String): Result<Unit> =
         runCatching {
-            authService.sendPasswordRecovery(email)
+            val nonce = callbackRequests.start("recovery")
+            try {
+                authService.sendPasswordRecovery(
+                    email = email,
+                    redirectTo = authService.callbackRedirectUrl(nonce),
+                )
+            } catch (error: Throwable) {
+                callbackRequests.cancel("recovery", nonce)
+                throw error
+            }
         }
 
     override suspend fun refreshSession(): Result<AccountState> =
