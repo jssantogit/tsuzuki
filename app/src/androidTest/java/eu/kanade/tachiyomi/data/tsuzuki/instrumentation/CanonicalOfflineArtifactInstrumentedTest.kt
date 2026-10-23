@@ -5,12 +5,16 @@ import android.net.Uri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.data.tsuzuki.MihonCanonicalDownloadGateway
+import eu.kanade.tachiyomi.ui.reader.isCanonicalLocalPageReadable
+import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.domain.tsuzuki.download.model.CanonicalDownloadArtifact
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -48,6 +52,17 @@ class CanonicalOfflineArtifactInstrumentedTest {
             assertFalse(MihonCanonicalDownloadGateway.isArtifactReadable(context, archiveArtifact))
 
             val page = pngPage()
+            val validLastPage = ReaderPage(1).apply {
+                stream = { ByteArrayInputStream(page) }
+            }
+            val damagedLastPage = ReaderPage(1).apply {
+                stream = { ByteArrayInputStream(byteArrayOf(0x00, 0x01)) }
+            }
+            assertTrue(runBlocking { isCanonicalLocalPageReadable(validLastPage) })
+            assertFalse(
+                "A corrupt last image cannot qualify a canonical chapter for read completion",
+                runBlocking { isCanonicalLocalPageReadable(damagedLastPage) },
+            )
             writeZip(archive, mapOf("001.png" to page))
             assertTrue(MihonCanonicalDownloadGateway.isArtifactReadable(context, archiveArtifact))
             writeZip(archive, mapOf("000.jpg" to byteArrayOf(0x01), "001.png" to page))
