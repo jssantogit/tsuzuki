@@ -57,6 +57,22 @@ class PersistentAuthCallbackRequestStoreTest {
     }
 
     @Test
+    fun `accidental nonce reuse is rejected rather than permitting two callbacks`() {
+        val directory = Files.createTempDirectory("tsuzuki-nonce-collision").toFile()
+        val nonce = "same-nonce-value-12345678901234"
+        val store = PersistentAuthCallbackRequestStore(
+            directory = directory,
+            nowEpochMillis = { 1_000L },
+            nonceSource = { nonce },
+        )
+
+        store.start("signup") shouldBe nonce
+        runCatching { store.start("recovery") }.isFailure shouldBe true
+        store.consume("signup", nonce) shouldBe true
+        store.consume("recovery", nonce) shouldBe false
+    }
+
+    @Test
     fun `cancelled and malformed requests never authorize callbacks`() {
         val directory = Files.createTempDirectory("tsuzuki-callback-cancel").toFile()
         val store = PersistentAuthCallbackRequestStore(
