@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -233,16 +235,16 @@ class CanonicalLibraryScreenModel private constructor(
                     }
                 }
             }
-        }
+        }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
 
+        // Year changes should update labels only, not restart each title's cover/progress pipeline.
         val cards = combine(
-            librarySnapshots,
+            librarySnapshots.map { it.items }.distinctUntilChanged(),
             localCoverUrls,
             artworkObservations,
-        ) { inventory, covers, artwork ->
-            Triple(inventory, covers, artwork.groupBy { it.canonicalTitleId })
-        }.flatMapLatest { (inventory, covers, artworkByTitle) ->
-            val libraryItems = inventory.items
+        ) { libraryItems, covers, artwork ->
+            Triple(libraryItems, covers, artwork.groupBy { it.canonicalTitleId })
+        }.flatMapLatest { (libraryItems, covers, artworkByTitle) ->
             if (libraryItems.isEmpty()) {
                 flowOf(emptyList())
             } else {
@@ -276,7 +278,6 @@ class CanonicalLibraryScreenModel private constructor(
                                     localCoverUrl = localCover,
                                     sourceCover = sourceCover,
                                     canonicalCoverUrl = canonicalCover,
-                                    startYear = inventory.startYears[item.id],
                                 )
                             }
                     },
@@ -284,9 +285,13 @@ class CanonicalLibraryScreenModel private constructor(
             }
         }
 
+        val cardsWithYears = combine(cards, librarySnapshots) { items, inventory ->
+            items.map { item -> item.copy(startYear = inventory.startYears[item.canonicalTitleId]) }
+        }
+
         emitAll(
             combine(
-                cards,
+                cardsWithYears,
                 searchQuery,
                 filters,
             ) { items, query, filterState ->
