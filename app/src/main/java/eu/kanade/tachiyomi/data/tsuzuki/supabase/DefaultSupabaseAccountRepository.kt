@@ -27,6 +27,7 @@ class DefaultSupabaseAccountRepository(
             json = json,
         ),
         sessionStore = AndroidKeystoreSessionStore(context, json),
+        callbackRequests = PersistentAuthCallbackRequestStore(context.noBackupFilesDir),
     )
 
     override val state: StateFlow<AccountState>
