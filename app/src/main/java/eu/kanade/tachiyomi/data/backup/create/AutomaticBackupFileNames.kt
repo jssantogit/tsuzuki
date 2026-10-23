@@ -20,7 +20,7 @@ internal object AutomaticBackupFileNames {
     ): String {
         require(nonce.matches(Regex("[0-9a-f]{32}"))) { "Invalid automatic backup filename nonce" }
         val date = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss-SSS", Locale.ENGLISH).format(timestamp)
-        return "${applicationId}_${date}_${nonce}.tachibk"
+        return "${applicationId}_${date}_$nonce.tachibk"
     }
 
     fun pattern(applicationId: String): Regex = Regex(

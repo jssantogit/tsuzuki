@@ -11,6 +11,7 @@ class AutomaticBackupFilenameSafetyTest {
 
         filenames.toSet().size shouldBe filenames.size
     }
+
     @Test
     fun `legacy and nonce-bearing backup filenames both remain eligible for retention`() {
         val pattern = AutomaticBackupFileNames.pattern("org.example.tsuzuki")
@@ -25,5 +26,4 @@ class AutomaticBackupFilenameSafetyTest {
         pattern.matches("orgXexampleXtsuzuki_2026-10-23_13-45.tachibk") shouldBe false
         pattern.matches("org.example.tsuzuki_2026-10-23_13-45_other.tachibk") shouldBe false
     }
-
 }
