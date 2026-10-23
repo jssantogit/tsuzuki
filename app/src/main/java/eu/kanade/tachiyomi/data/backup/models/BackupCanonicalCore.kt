@@ -27,6 +27,13 @@ data class BackupCanonicalCore(
     val providerBindings: List<BackupCoreProviderBinding> = emptyList(),
     val readerPreferences: List<BackupCoreReaderPreference> = emptyList(),
     val chapterOverrides: List<BackupCoreChapterOverride> = emptyList(),
+    val contentPreferences: List<BackupCoreContentPreference> = emptyList(),
+    val sourcePreferences: List<BackupCoreSourcePreference> = emptyList(),
+    val continueReadingStates: List<BackupCoreContinueReadingState> = emptyList(),
+    val chapterUpdateStates: List<BackupCoreChapterUpdateState> = emptyList(),
+    val titleArtwork: List<BackupCoreTitleArtwork> = emptyList(),
+    val titleFormats: List<BackupCoreTitleFormat> = emptyList(),
+    val titleNames: List<BackupCoreTitleName> = emptyList(),
 ) {
     fun validate() {
         require(schemaVersion == VERSION) { "Unsupported canonical core schema" }
@@ -39,6 +46,16 @@ data class BackupCanonicalCore(
         require(chapterOverrides.isUniqueBy { it.id }) { "Duplicate chapter override" }
         require(providerBindings.isUniqueBy { Triple(it.providerId, it.facetId, it.externalWorkId) }) {
             "Duplicate provider binding external identity"
+        }
+        require(contentPreferences.isUniqueBy { it.canonicalTitleId }) { "Duplicate content preference" }
+        require(sourcePreferences.isUniqueBy { it.language to it.sourceId }) { "Duplicate source priority" }
+        require(sourcePreferences.isUniqueBy { it.language to it.position }) { "Duplicate source order" }
+        require(continueReadingStates.isUniqueBy { it.canonicalTitleId }) { "Duplicate continue reading state" }
+        require(chapterUpdateStates.isUniqueBy { it.canonicalChapterId }) { "Duplicate chapter update state" }
+        require(titleArtwork.isUniqueBy { it.canonicalTitleId to it.provider }) { "Duplicate title artwork" }
+        require(titleFormats.isUniqueBy { it.canonicalTitleId to it.provider }) { "Duplicate title format" }
+        require(titleNames.isUniqueBy { listOf(it.canonicalTitleId, it.provider, it.sourceKey, it.value) }) {
+            "Duplicate title name observation"
         }
         require(sourceMappings.isUniqueBy { it.id }) { "Duplicate source mapping" }
         require(sourceMappings.isUniqueBy { it.sourceId to it.sourceUrl }) {
@@ -124,6 +141,29 @@ data class BackupCanonicalCore(
                     it.schemaVersion > 0 && it.revision >= 0
             },
         ) { "Invalid chapter override or missing canonical title" }
+        require(contentPreferences.all { it.canonicalTitleId in titleIds }) {
+            "Content preference refers to absent title"
+        }
+        require(sourcePreferences.all { it.language.isNotBlank() && it.position >= 0 }) {
+            "Invalid source preference"
+        }
+        require(continueReadingStates.all { it.canonicalTitleId in titleIds }) {
+            "Continue reading state refers to absent title"
+        }
+        require(chapterUpdateStates.all {
+            it.canonicalChapterId in chapterIds &&
+                chaptersById[it.canonicalChapterId]?.canonicalTitleId == it.canonicalTitleId
+        }) { "Chapter update state refers to an unrelated title or missing chapter" }
+        require(titleArtwork.all { it.canonicalTitleId in titleIds && it.provider.isNotBlank() }) {
+            "Artwork observation refers to missing title"
+        }
+        require(titleFormats.all {
+            it.canonicalTitleId in titleIds && it.provider.isNotBlank() && it.format.isNotBlank()
+        }) { "Invalid title format observation" }
+        require(titleNames.all {
+            it.canonicalTitleId in titleIds && it.provider.isNotBlank() &&
+                it.sourceKey.isNotBlank() && it.value.isNotBlank()
+        }) { "Invalid title name observation" }
         require(chapters.all { it.canonicalTitleId in titleIds }) {
             "Chapter refers to absent canonical title"
         }
@@ -259,6 +299,61 @@ data class BackupCoreChapterOverride(
     val createdAt: Long,
     val updatedAt: Long,
     val deletedAt: Long?,
+)
+
+@Serializable
+data class BackupCoreContentPreference(
+    val canonicalTitleId: String,
+    val preferredAddonId: String?,
+    val preferredLanguage: String?,
+    val updatedAt: Long,
+)
+
+@Serializable
+data class BackupCoreSourcePreference(
+    val language: String,
+    val sourceId: Long,
+    val position: Long,
+)
+
+@Serializable
+data class BackupCoreContinueReadingState(
+    val canonicalTitleId: String,
+    val hiddenAt: Long?,
+)
+
+@Serializable
+data class BackupCoreChapterUpdateState(
+    val canonicalChapterId: String,
+    val canonicalTitleId: String,
+    val firstSeenAt: Long,
+    val acknowledgedAt: Long?,
+)
+
+@Serializable
+data class BackupCoreTitleArtwork(
+    val canonicalTitleId: String,
+    val provider: String,
+    val coverUrl: String?,
+    val bannerUrl: String?,
+    val updatedAt: Long,
+)
+
+@Serializable
+data class BackupCoreTitleFormat(
+    val canonicalTitleId: String,
+    val provider: String,
+    val format: String,
+    val updatedAt: Long,
+)
+
+@Serializable
+data class BackupCoreTitleName(
+    val canonicalTitleId: String,
+    val provider: String,
+    val sourceKey: String,
+    val value: String,
+    val updatedAt: Long,
 )
 
 @Serializable
