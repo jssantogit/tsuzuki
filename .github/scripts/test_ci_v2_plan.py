@@ -79,6 +79,17 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(result["selected_tests"], ["App — Tsuzuki"])
         self.assertEqual(result["selected_compiles"], [])
 
+    def test_canonical_offline_gateway_changes_cover_domain_and_app_contracts(self):
+        result = plan(
+            [
+                "domain/src/main/java/tachiyomi/domain/tsuzuki/download/service/CanonicalDownloadGateway.kt",
+                "app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/MihonCanonicalDownloadGateway.kt",
+            ],
+            "affected",
+        )
+        self.assertEqual(set(result["selected_tests"]), {"Domain — Tsuzuki", "App — Tsuzuki"})
+        self.assertTrue(result["run_format"])
+
     def test_runtime_binding_gateway_change_runs_domain_and_app_tsuzuki_tests(self):
         result = plan(
             ["app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/MihonReadingSourceGateway.kt"],
