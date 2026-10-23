@@ -41,3 +41,10 @@ None of steps 1–6 is implemented or approved for live use by this PR.
 | Android physical reader and user backup preservation | Separate device acceptance; do not duplicate PR #141 backup work | **Not run here** |
 
 No tests may use private user snapshots in public CI. Keep PR #140 in **draft**, do not merge or enable v2 until the remaining gates are independently approved.
+
+## Account epoch ledger and fail-closed downgrade foundation (pre-activation)
+
+- A new private, account-scoped protocol ledger is enrolled lazily at epoch 1 by the legacy progress RPC only. Discovery remains read-only and does not create a ledger row. No client has direct table privileges or an epoch-switching API.
+- Legacy `READING_PROGRESS` writes hold a per-account `FOR SHARE` row lock through the underlying v1 mutation, and reject every epoch other than 1 **before idempotency/replay processing**. A future cutover must use `FOR UPDATE` on this exact row in the same atomic transaction as its cursor CAS, migration receipt and v2 state materialization.
+- The v2 write namespace remains unconditionally rejected. An artificially elevated account epoch causes existing clients' protocol discovery to fail closed, rather than falsely advertising v1 readiness. Library and other compatible sync domains remain unchanged.
+- pgTAP simulates a privileged epoch transition for one synthetic account: it verifies rejected new v1 writes, rejected previously accepted replay, rejected v2 writes, unchanged checkpoints/receipts, private ledger permissions and unaffected second account. **A simulated epoch is not a real cutover**; the project still lacks device registration, capability leases, migration/backup, atomic state conversion and physical mixed-version validation.
