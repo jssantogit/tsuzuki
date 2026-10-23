@@ -22,6 +22,8 @@ Optional protobuf field 107 (Backup.canonicalSnapshot) is absent in legacy archi
 
 The exporter deliberately does not apply cloud-sync portability filters. A backup must preserve local-only chapters even when remote sync would omit them.
 
+**Fail-closed coverage guard:** the standalone core exporter now explicitly refuses export when opaque content-binding runtime payloads or account-linked external library memberships exist. Those records have not been given safe portable representations yet, and an incomplete archive must not be presented as a successful full backup. For provider-native payloads, design a versioned codec that strips local SQL row IDs and credentials; for external memberships, quarantine origin/account identity and require explicit owner-safe import.
+
 ## Gates before enabling writer and restore
 
 1. Export under a transaction-consistent SQLite snapshot and independently reopen/validate the eventual written archive. Core export currently uses one transaction, but the production writer is not yet wired.
