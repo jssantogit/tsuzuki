@@ -44,6 +44,12 @@ class SupabaseCallbackCodePolicyTest {
                 null,
             )
         }.isFailure shouldBe true
+        runCatching {
+            SupabaseCallbackCodePolicy.parse(
+                safe + ("refresh_token" to "attacker"),
+                null,
+            )
+        }.isFailure shouldBe true
     }
 
     @Test
