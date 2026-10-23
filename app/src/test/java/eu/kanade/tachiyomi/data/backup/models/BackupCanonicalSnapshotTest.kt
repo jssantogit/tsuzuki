@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.backup.models
 
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.protobuf.ProtoBuf
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 
 class BackupCanonicalSnapshotTest {
@@ -54,9 +55,12 @@ class BackupCanonicalSnapshotTest {
 
     @Test
     fun `checksum-valid core section with orphan library reference is rejected`() {
+        val invalidCore = BackupCanonicalCore(
+            library = listOf(BackupCoreLibraryEntry("missing", "READING", true, 1, 2)),
+        )
         val section = BackupCanonicalSection.fromJson(
             key = BackupCanonicalCore.SECTION_KEY,
-            json = """{"schemaVersion":1,"titles":[],"identities":[],"library":[{"canonicalTitleId":"missing","status":"READING","favorite":true,"addedAt":1,"updatedAt":2}],"chapters":[],"variants":[],"progress":[],"history":[]}""",
+            json = Json.encodeToString(BackupCanonicalCore.serializer(), invalidCore),
         )
         runCatching {
             BackupCanonicalSnapshot(sections = listOf(section)).validate()
