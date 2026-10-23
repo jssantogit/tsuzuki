@@ -1,8 +1,8 @@
 package eu.kanade.tachiyomi.data.backup.models
 
 import io.kotest.matchers.shouldBe
-import kotlinx.serialization.protobuf.ProtoBuf
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.protobuf.ProtoBuf
 import org.junit.jupiter.api.Test
 
 class BackupCanonicalSnapshotTest {
