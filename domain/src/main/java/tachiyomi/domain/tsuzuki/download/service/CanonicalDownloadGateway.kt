@@ -1,5 +1,6 @@
 package tachiyomi.domain.tsuzuki.download.service
 
+import kotlinx.coroutines.CancellationException
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.content.ContentOption
 import tachiyomi.domain.tsuzuki.download.model.CanonicalDownloadArtifact
@@ -30,3 +31,13 @@ interface CanonicalDownloadGateway {
         )
     }
 }
+
+/** A missing volume, revoked URI grant or failed inspection must not masquerade as a download. */
+suspend fun CanonicalDownloadGateway.canReuseArtifact(artifact: CanonicalDownloadArtifact): Boolean =
+    try {
+        isArtifactAvailable(artifact)
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Throwable) {
+        false
+    }
