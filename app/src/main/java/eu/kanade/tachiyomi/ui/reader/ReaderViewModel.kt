@@ -1382,12 +1382,12 @@ class ReaderViewModel(
 
             val canonicalSession = canonicalSessionFor(readerChapter)
             val lastPageSelected = readerChapter.pages?.lastIndex == pageIndex
+            val canonicalLocalPage = canonicalSession != null &&
+                canonicalSession.mihonChapterId == null &&
+                readerChapter.pageLoader?.isLocal == true
             val chapterCompleted = when {
                 !lastPageSelected -> false
-                canonicalSession != null &&
-                    canonicalSession.mihonChapterId == null &&
-                    readerChapter.pageLoader?.isLocal == true ->
-                    page is ReaderPage && isCanonicalLocalPageReadable(page)
+                canonicalLocalPage -> page is ReaderPage && isCanonicalLocalPageReadable(page)
                 else -> true
             }
             // A local page list can expose a corrupt image as Ready before it
