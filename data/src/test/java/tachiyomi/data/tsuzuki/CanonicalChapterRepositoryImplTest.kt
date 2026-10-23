@@ -41,6 +41,8 @@ import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.model.SourceChapterInventory
 import tachiyomi.domain.tsuzuki.chapter.model.SourceChapterSnapshot
+import tachiyomi.domain.tsuzuki.reader.interactor.GetAdjacentCanonicalChapter
+import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterDirection
 import java.nio.file.Files
 
 class CanonicalChapterRepositoryImplTest {
@@ -567,6 +569,34 @@ class CanonicalChapterRepositoryImplTest {
             val expectedIds = listOf("vol1-ch1", "vol1-ch2", "vol2-ch1", "vol2-ch2")
             repository.getByCanonicalTitleId("title-1").map { it.id } shouldContainExactly expectedIds
             repository.observeByCanonicalTitleId("title-1").first().map { it.id } shouldContainExactly expectedIds
+        }
+
+    @Test
+    fun `adjacent reader navigation crosses volume reset without changing a saved checkpoint`() =
+        runBlocking<Unit> {
+            listOf(
+                chapter("vol2-ch1", "1", 1).copy(volume = 2),
+                chapter("vol1-ch2", "2", 2).copy(volume = 1),
+                chapter("vol2-ch2", "2", 2).copy(volume = 2),
+                chapter("vol1-ch1", "1", 1).copy(volume = 1),
+            ).forEach { repository.upsert(it) }
+            database.tsuzuki_chapter_progressQueries.upsertTsuzukiChapterProgress(
+                canonicalChapterId = "vol1-ch2",
+                read = false,
+                lastPageRead = 6L,
+                lastVariantId = null,
+                updatedAt = 200L,
+            )
+            val adjacent = GetAdjacentCanonicalChapter(repository)
+
+            adjacent.execute("vol1-ch2", CanonicalChapterDirection.NEXT)?.id shouldBe "vol2-ch1"
+            adjacent.execute("vol2-ch1", CanonicalChapterDirection.PREVIOUS)?.id shouldBe "vol1-ch2"
+            adjacent.execute("vol2-ch1", CanonicalChapterDirection.NEXT)?.id shouldBe "vol2-ch2"
+            adjacent.execute("vol1-ch1", CanonicalChapterDirection.PREVIOUS) shouldBe null
+            adjacent.execute("vol2-ch2", CanonicalChapterDirection.NEXT) shouldBe null
+            database.tsuzuki_chapter_progressQueries
+                .getTsuzukiChapterProgress("vol1-ch2")
+                .awaitAsOneOrNull()?.last_page_read shouldBe 6L
         }
 
     @Test
