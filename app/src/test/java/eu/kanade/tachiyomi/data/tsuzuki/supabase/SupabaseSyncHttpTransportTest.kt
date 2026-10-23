@@ -223,7 +223,15 @@ class SupabaseSyncHttpTransportTest {
                 .code(200)
                 .addHeader("Content-Type", "application/json")
                 .body(
-                    """{"schemaVersion":1,"protocolEpoch":1,"leaseExpiresAt":"2026-11-22T12:00:00Z","exactProgressEnabled":false,"migrationReady":false}""",
+                    """
+                    {
+                      "schemaVersion":1,
+                      "protocolEpoch":1,
+                      "leaseExpiresAt":"2026-11-22T12:00:00Z",
+                      "exactProgressEnabled":false,
+                      "migrationReady":false
+                    }
+                    """.trimIndent(),
                 )
                 .build(),
         )
@@ -246,7 +254,15 @@ class SupabaseSyncHttpTransportTest {
                 .code(200)
                 .addHeader("Content-Type", "application/json")
                 .body(
-                    """{"schemaVersion":2,"protocolEpoch":2,"leaseExpiresAt":"2026-11-22T12:00:00Z","exactProgressEnabled":true,"migrationReady":true}""",
+                    """
+                    {
+                      "schemaVersion":2,
+                      "protocolEpoch":2,
+                      "leaseExpiresAt":"2026-11-22T12:00:00Z",
+                      "exactProgressEnabled":true,
+                      "migrationReady":true
+                    }
+                    """.trimIndent(),
                 )
                 .build(),
         )

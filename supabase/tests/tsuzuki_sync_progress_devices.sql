@@ -1,5 +1,5 @@
 begin;
-select plan(14);
+select plan(15);
 
 insert into auth.users (id, aud, role, email, encrypted_password, created_at, updated_at)
 values
@@ -115,6 +115,16 @@ select is(
     1,
     'device registry is account-scoped and does not collide between accounts'
 );
+
+set local role anon;
+select set_config('request.jwt.claim.sub', '', true);
+select set_config('request.jwt.claims', '{"role":"anon"}', true);
+select throws_ok(
+    $select public.sync_register_progress_device('22000000-0000-0000-0000-000000000004')$,
+    '42501', null,
+    'anonymous clients cannot register a legacy device'
+);
+reset role;
 
 select * from finish();
 rollback;
