@@ -65,6 +65,12 @@ class SupabaseSyncOrchestrator(
         const val EXACT_PROGRESS_SCHEMA_VERSION = 2
     }
 
+    private fun unnegotiatedExactProgressFailure(): SyncDocumentResult.Failed =
+        SyncDocumentResult.Failed(
+            SyncDocumentKind.READING_PROGRESS_V2,
+            SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA),
+        )
+
     init {
         require(this.adapters.size == adapters.size) {
             "Supabase sync adapters must have unique document kinds"
@@ -77,6 +83,14 @@ class SupabaseSyncOrchestrator(
     suspend fun sync(documentKind: SyncDocumentKind): SyncDocumentResult = mutex.withLock {
         if (accountRepository.state.value !is AccountState.Authenticated) {
             return@withLock authorizationFailure(documentKind)
+        }
+
+        // A separate v2 namespace is necessary but NOT sufficient for a safe
+        // rollout: old clients still mutate v1 progress. Until the server has
+        // an authenticated migration/epoch handshake with downgrade fencing,
+        // even a manually injected experimental v2 adapter cannot publish.
+        if (documentKind == SyncDocumentKind.READING_PROGRESS_V2) {
+            return@withLock unnegotiatedExactProgressFailure()
         }
 
         reconcileCanonicalIdentities()?.let { failure ->
@@ -120,6 +134,11 @@ class SupabaseSyncOrchestrator(
         documentKind: SyncDocumentKind,
         respectBackoff: Boolean,
     ): SyncDocumentResult {
+        // runOnce() reaches this path directly; reject before consulting a
+        // remote cursor, replaying pending mutations or creating new ones.
+        if (documentKind == SyncDocumentKind.READING_PROGRESS_V2) {
+            return unnegotiatedExactProgressFailure()
+        }
         val adapter = adapters[documentKind]
             ?: return SyncDocumentResult.Failed(
                 documentKind,
