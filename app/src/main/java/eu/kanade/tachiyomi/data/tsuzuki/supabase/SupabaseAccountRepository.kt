@@ -70,15 +70,23 @@ class SupabaseAccountRepository(
         }
 
     override suspend fun getAccessToken(): Result<String?> = runCatching {
-        if (state.value !is AccountState.Authenticated) return@runCatching null
+        val activeUserId = (state.value as? AccountState.Authenticated)
+            ?.account?.id ?: return@runCatching null
 
         val session = sessionStore.load() ?: return@runCatching null
+        check(session.userId == activeUserId) {
+            "Persisted Supabase session belongs to a different account"
+        }
         if (session.expiresAtEpochSeconds > nowEpochSeconds() + ACCESS_TOKEN_REFRESH_SKEW_SECONDS) {
             return@runCatching session.accessToken
         }
 
         refreshSession().getOrThrow()
-        sessionStore.load()?.accessToken
+        val refreshed = sessionStore.load() ?: return@runCatching null
+        check(refreshed.userId == activeUserId) {
+            "Supabase token refresh changed the active account identity"
+        }
+        refreshed.accessToken
     }
 
     fun acceptSession(session: SupabaseSession): AccountState {
