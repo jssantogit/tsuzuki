@@ -128,3 +128,5 @@ reset role;
 
 select * from finish();
 rollback;
+
+-- pgTAP heartbeat syntax regression corrected; no v2 activation.
