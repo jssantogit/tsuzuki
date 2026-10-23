@@ -236,7 +236,7 @@ class SupabaseSyncRuntime(
         return conflictResolver.resolve(conflict, choice)
     }
 
-    private suspend fun accountScopeFailure(): SyncFailure? {
+    override suspend fun accountScopeFailure(): SyncFailure? {
         val current = accountState.state.value as? tachiyomi.domain.tsuzuki.account.model.AccountState.Authenticated
             ?: return SyncFailure(SyncFailureReason.AUTHORIZATION_REQUIRED)
         return if (accountScopeGuard.permits(current.account.id)) {
