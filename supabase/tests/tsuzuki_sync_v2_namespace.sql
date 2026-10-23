@@ -33,6 +33,14 @@ select lives_ok(
     'legacy progress remains writable under the original domain'
 );
 
+-- Sequences are non-transactional. Do not assume the legacy event ID equals 1
+-- after another pgTAP file has run and rolled back its own synthetic events.
+select set_config(
+    'test.legacy_progress_cursor',
+    public.sync_get_cursor('READING_PROGRESS')::text,
+    true
+);
+
 select throws_ok(
     $$
     select public.sync_apply_mutation_batch(
@@ -127,7 +135,7 @@ select is(
 
 select is(
     public.sync_get_cursor('READING_PROGRESS'),
-    1::bigint,
+    current_setting('test.legacy_progress_cursor')::bigint,
     'v2 refusal does not advance the legacy event cursor'
 );
 
