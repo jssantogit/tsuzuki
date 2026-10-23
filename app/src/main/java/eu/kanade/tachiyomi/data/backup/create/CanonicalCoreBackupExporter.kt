@@ -1,12 +1,17 @@
 package eu.kanade.tachiyomi.data.backup.create
 
+import app.cash.sqldelight.async.coroutines.awaitAsList
 import dev.zacsweers.metro.Inject
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreIdentity
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryEntry
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreList
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreProviderBinding
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreProgress
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreSourceMapping
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
@@ -61,6 +66,20 @@ class CanonicalCoreBackupExporter(
         }
         val history = chapters.mapNotNull { chapter ->
             readingRepository.getHistory(chapter.id)
+        }
+        val collections = database.tsuzuki_collectionsQueries
+            .getAllTsuzukiCollections().awaitAsList()
+        val folders = collections.flatMap { collection ->
+            database.tsuzuki_collectionsQueries
+                .getAllTsuzukiFoldersByCollection(collection.id).awaitAsList()
+        }
+        val lists = collections.flatMap { collection ->
+            database.tsuzuki_collectionsQueries
+                .getAllTsuzukiListsByCollection(collection.id).awaitAsList()
+        }
+        val providerBindings = titles.flatMap { title ->
+            database.tsuzuki_provider_bindingsQueries
+                .getTsuzukiProviderBindingsByTitle(title.id).awaitAsList()
         }
 
         val core = BackupCanonicalCore(
@@ -133,6 +152,52 @@ class CanonicalCoreBackupExporter(
             },
             history = history.map {
                 BackupCoreHistory(it.canonicalChapterId, it.lastVariantId, it.lastReadAt, it.totalReadDuration)
+            },
+            collections = collections.map {
+                BackupCoreCollection(
+                    it.id, it.title, it.origin, it.sort_order,
+                    it.schema_version, it.revision, it.created_at, it.updated_at, it.deleted_at,
+                )
+            },
+            folders = folders.map {
+                BackupCoreFolder(
+                    it.id, it.collection_id, it.parent_folder_id, it.title, it.origin,
+                    it.sort_order, it.schema_version, it.revision, it.created_at, it.updated_at, it.deleted_at,
+                )
+            },
+            lists = lists.map {
+                BackupCoreList(
+                    id = it.id,
+                    collectionId = it.collection_id,
+                    folderId = it.folder_id,
+                    title = it.title,
+                    providerId = it.provider_id,
+                    queryJson = it.query_json,
+                    sort = it.sort,
+                    sortDirection = it.sort_direction,
+                    layoutType = it.layout_type,
+                    sortOrder = it.sort_order,
+                    enabled = it.enabled,
+                    origin = it.origin,
+                    schemaVersion = it.schema_version,
+                    revision = it.revision,
+                    createdAt = it.created_at,
+                    updatedAt = it.updated_at,
+                    deletedAt = it.deleted_at,
+                )
+            },
+            providerBindings = providerBindings.map {
+                BackupCoreProviderBinding(
+                    id = it.id,
+                    canonicalTitleId = it.canonical_title_id,
+                    providerId = it.provider_id,
+                    facetId = it.facet_id,
+                    externalWorkId = it.external_work_id,
+                    verification = it.verification,
+                    availability = it.availability,
+                    createdAt = it.created_at,
+                    updatedAt = it.updated_at,
+                )
             },
         )
         core.validate()
