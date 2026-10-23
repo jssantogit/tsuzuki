@@ -26,6 +26,20 @@ Status: **NOT EXECUTED / NOT RELEASE-APPROVED**. This is an acceptance matrix, n
 | Mixed-version sync | Attempt v1-to-v2 and v2-to-v1 transfer in an isolated test environment | Incompatible documents rejected without writing progress, with clear recovery path | **Not run** |
 | Downgrade and restore | Roll back app from a backed-up snapshot without v2 in-place mutation | No data loss, corruption or stale-identity promotion | **Not run** |
 
+## Offline historical SQLite backup preflight (tooling; acceptance NOT RUN)
+
+A read-only checker is available at `.github/scripts/verify_chapter_migration_43_backup.py`. It checks a **user-supplied, checkpointed pre-43 SQLite database** on an isolated temporary copy, never runs migration SQL against the supplied file, and prints only pass/fail and table/chapter counts. It verifies SQLite integrity, foreign keys, table definitions, unchanged pre-existing row values (including progress, history, downloads, evidence and variants), and NULL v2 fields after migration 43.
+
+Run from the repository root, on an independently exported SQLite snapshot (not an Android live database):
+
+```bash
+python3 .github/scripts/verify_chapter_migration_43_backup.py /path/to/offline-pre43.sqlite
+```
+
+The checker rejects sources with SQLite `-wal` or `-shm` sidecars: first create a consistent, **offline, checkpointed** snapshot using SQLite's backup API or a verified database-export workflow. It opens the original snapshot in immutable read-only mode and discards its temporary migration copy. Keep the database locally; do not attach it to public CI or the PR. The fixture tests for this tool run in the CI Change Planner.
+
+**Scope limit:** a passing result checks the additive migration 43 on that database snapshot only. It does not execute the Android backup/restore path, SQLDelight's full upgrade path from arbitrary old versions, Reader behavior, mixed-device synchronization, or downgrade behavior. The matrix's historical database upgrade, physical Reader and synchronization rows remain **Not run** until separately accepted on real device data.
+
 ## Additional automated gates (2026-10-22)
 
 - `.github/scripts/test_chapter_migration_43.py`: exercises migration 43 against a disposable pre-43-shaped SQLite fixture with two distinct chapter IDs sharing the legacy numeric part, preserved progress, history, downloads, mapped evidence and variants. This is a **synthetic compatibility smoke test**, not a restored Android user database.
