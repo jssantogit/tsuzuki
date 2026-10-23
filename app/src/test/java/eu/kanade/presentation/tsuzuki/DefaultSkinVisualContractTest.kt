@@ -184,13 +184,31 @@ class DefaultSkinVisualContractTest {
             ) shouldBe
             true
         (hero.indexOf("state.genres") < hero.indexOf("if (state.tsuzukiRating")) shouldBe true
-        editorial shouldContain "state.description"
-        editorial shouldNotContain "state.editorialStatus"
-        editorial shouldNotContain "state.genres"
+        editorial shouldNotContain "state.description"
+        editorial shouldContain "editorialGenres(state.genres)"
+        editorial shouldContain "state.author"
+        editorial shouldContain "state.artists"
+        editorial shouldContain "state.startDate"
+        editorial shouldContain "state.tags"
+        editorial shouldNotContain "stringResource(MR.strings.tsuzuki_details_synopsis)"
         screen shouldContain "defaultSkinColors().canvas"
         screen shouldNotContain "luminance()"
         hero shouldNotContain "Spacer(Modifier.weight(1f))"
         hero shouldNotContain "Arrangement.End"
+    }
+
+    @Test
+    fun `full chapter browsing uses a dedicated full width list without Material vertical slider`() {
+        val screen = readSource("detail/CanonicalTitleDetailScreen.kt")
+        val full = screen.substringAfter("CanonicalDetailsLowerMode.FULL -> {")
+            .substringBefore("DetailsToolbar(")
+        screen shouldNotContain "VerticalSlider("
+        screen shouldNotContain "CHAPTER_SCRUBBER_LANE_WIDTH"
+        screen shouldContain "FULL_CHAPTER_FIRST_ITEM = 1"
+        full shouldContain "DetailsChapterRow("
+        full shouldContain "Modifier.padding(horizontal = 16.dp)"
+        screen shouldContain "if (mode != CanonicalDetailsLowerMode.FULL)"
+        screen shouldContain "if (mode == CanonicalDetailsLowerMode.FULL)"
     }
 
     @Test
