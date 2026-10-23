@@ -11,6 +11,7 @@ import tachiyomi.data.Database
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
+import tachiyomi.domain.tsuzuki.chapter.model.ChapterOverrideKind
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.LibraryStatus
 import tachiyomi.domain.tsuzuki.model.SourceMappingAvailability
@@ -48,6 +49,10 @@ class CanonicalCoreBackupImporter(
         }
         core.lists.forEach { list ->
             list.queryJson?.let(json::parseToJsonElement)
+        }
+        core.chapterOverrides.forEach { override ->
+            ChapterOverrideKind.valueOf(override.kind)
+            json.parseToJsonElement(override.payloadJson)
         }
         val variantMetadata = core.variants.associate { variant ->
             variant.id to json.parseToJsonElement(variant.rawSourceMetadataJson).jsonObject
@@ -221,6 +226,30 @@ class CanonicalCoreBackupImporter(
                     availability = it.availability,
                     createdAt = it.createdAt,
                     updatedAt = it.updatedAt,
+                )
+            }
+            core.readerPreferences.forEach {
+                database.tsuzuki_reader_preferencesQueries.upsertTsuzukiReaderPreference(
+                    canonicalTitleId = it.canonicalTitleId,
+                    automaticFallback = it.automaticFallback,
+                    updatedAt = it.updatedAt,
+                )
+            }
+            core.chapterOverrides.forEach {
+                database.tsuzuki_chapter_overridesQueries.upsertTsuzukiChapterOverride(
+                    id = it.id,
+                    canonicalTitleId = it.canonicalTitleId,
+                    canonicalChapterKey = it.canonicalChapterKey,
+                    sourceId = it.sourceId,
+                    sourceTitleUrl = it.sourceTitleUrl,
+                    sourceChapterId = it.sourceChapterId,
+                    kind = it.kind,
+                    payloadJson = it.payloadJson,
+                    schemaVersion = it.schemaVersion,
+                    revision = it.revision,
+                    createdAt = it.createdAt,
+                    updatedAt = it.updatedAt,
+                    deletedAt = it.deletedAt,
                 )
             }
             core.library.forEach {
