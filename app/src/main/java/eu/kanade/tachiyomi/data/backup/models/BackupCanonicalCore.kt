@@ -224,7 +224,7 @@ data class BackupCanonicalCore(
                         evidence.mappedCanonicalChapterId == null ||
                             chaptersById[evidence.mappedCanonicalChapterId]?.canonicalTitleId ==
                             evidence.canonicalTitleId
-                    )
+                        )
             },
         ) { "Invalid chapter evidence provenance or cross-title mapping" }
         require(chapters.all { it.canonicalTitleId in titleIds }) {
