@@ -1174,21 +1174,23 @@ class ReaderViewModel(
     /**
      * Called when the user is going to load the prev/next chapter through the toolbar buttons.
      */
-    private suspend fun loadAdjacent(chapter: ReaderChapter) {
-        val loader = loader ?: return
+    private suspend fun loadAdjacent(chapter: ReaderChapter): Boolean {
+        val loader = loader ?: return false
 
         logcat { "Loading adjacent ${chapter.chapter.url}" }
 
         mutableState.update { it.copy(isLoadingAdjacentChapter = true) }
-        try {
+        return try {
             withIOContext {
                 loadChapter(loader, chapter)
             }
+            true
         } catch (e: Throwable) {
             if (e is CancellationException) {
                 throw e
             }
             logcat(LogPriority.ERROR, e)
+            false
         } finally {
             mutableState.update { it.copy(isLoadingAdjacentChapter = false) }
         }
@@ -1484,36 +1486,34 @@ class ReaderViewModel(
     /**
      * Called from the activity to load and set the next chapter as active.
      */
-    suspend fun loadNextChapter() {
+    suspend fun loadNextChapter(): Boolean {
         if (canonicalSession != null) {
-            loadAdjacentCanonical(CanonicalChapterDirection.NEXT)
-            return
+            return loadAdjacentCanonical(CanonicalChapterDirection.NEXT)
         }
-        val nextChapter = state.value.viewerChapters?.nextChapter ?: return
-        loadAdjacent(nextChapter)
+        val nextChapter = state.value.viewerChapters?.nextChapter ?: return false
+        return loadAdjacent(nextChapter)
     }
 
     /**
      * Called from the activity to load and set the previous chapter as active.
      */
-    suspend fun loadPreviousChapter() {
+    suspend fun loadPreviousChapter(): Boolean {
         if (canonicalSession != null) {
-            loadAdjacentCanonical(CanonicalChapterDirection.PREVIOUS)
-            return
+            return loadAdjacentCanonical(CanonicalChapterDirection.PREVIOUS)
         }
-        val prevChapter = state.value.viewerChapters?.prevChapter ?: return
-        loadAdjacent(prevChapter)
+        val prevChapter = state.value.viewerChapters?.prevChapter ?: return false
+        return loadAdjacent(prevChapter)
     }
 
-    private suspend fun loadAdjacentCanonical(direction: CanonicalChapterDirection) {
-        val session = canonicalSession ?: return
+    private suspend fun loadAdjacentCanonical(direction: CanonicalChapterDirection): Boolean {
+        val session = canonicalSession ?: return false
         val adjacent = getAdjacentCanonicalChapter.execute(
             canonicalChapterId = session.canonicalChapterId,
             direction = direction,
-        ) ?: return
+        ) ?: return false
 
         mutableState.update { it.copy(isLoadingAdjacentChapter = true) }
-        try {
+        return try {
             when (
                 val preparation = prepareCanonicalChapterForReader.execute(
                     canonicalChapterId = adjacent.id,
@@ -1527,6 +1527,7 @@ class ReaderViewModel(
                         selectedOption = preparation.selectedOption,
                         recordPreviousHistory = true,
                     )
+                    true
                 }
                 is CanonicalReaderPreparation.SelectionRequired -> {
                     showContentSelector(
@@ -1534,6 +1535,7 @@ class ReaderViewModel(
                         canonicalChapterId = preparation.canonicalChapterId,
                         closeReaderOnDismiss = false,
                     )
+                    false
                 }
                 is CanonicalReaderPreparation.Unavailable -> {
                     val chapter = canonicalChapterRepository.getById(adjacent.id)
@@ -1548,12 +1550,14 @@ class ReaderViewModel(
                             "Canonical adjacent chapter ${adjacent.id} has no readable content"
                         }
                     }
+                    false
                 }
                 is CanonicalReaderPreparation.Failed -> throw preparation.error
             }
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
             logcat(LogPriority.ERROR, error) { "Failed to load canonical adjacent chapter" }
+            false
         } finally {
             mutableState.update { it.copy(isLoadingAdjacentChapter = false) }
         }
