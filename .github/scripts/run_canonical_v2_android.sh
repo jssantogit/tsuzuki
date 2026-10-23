@@ -67,5 +67,9 @@ run_test "${class}#activityRecreationRestoresObservedCanonicalPosition" \
   androidSourceSwitchOptIn .github/results/canonical-v2-android/reader-recreate.txt
 
 adb shell pm clear "$app" | grep -Fq 'Success'
+run_test "${class}#boundaryNextPreviousKeepsObservedCanonicalPageAndProgress" \
+  androidSourceSwitchOptIn .github/results/canonical-v2-android/chapter-boundaries.txt
+
+adb shell pm clear "$app" | grep -Fq 'Success'
 run_test "${nav_class}#invalidDiscoveryIntentDoesNotOpenTitleOrMutateProgressAndPreferences" \
   androidNavigationOptIn .github/results/canonical-v2-android/navigation.txt
