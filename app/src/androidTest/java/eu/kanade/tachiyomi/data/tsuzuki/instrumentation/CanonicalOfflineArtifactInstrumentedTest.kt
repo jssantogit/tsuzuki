@@ -14,9 +14,9 @@ import tachiyomi.domain.tsuzuki.download.model.CanonicalDownloadArtifact
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-import java.util.UUID
 
 /** Real Android file/Uri preflight, confined to the disposable debug emulator's cache. */
 @RunWith(AndroidJUnit4::class)
