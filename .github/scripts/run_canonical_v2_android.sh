@@ -51,7 +51,7 @@ run_test() {
   echo "PASS: ${test_name}"
 }
 
-# All seven cases are isolated from the user's library and use app.tsuzuki.dev only.
+# All seven cases use app.tsuzuki.dev; offline fixtures include malformed ZIP/EPUB and valid image pages.
 echo 'Canonical Android gate: 7 disposable Reader/offline scenarios'
 mkdir -p .github/results/canonical-v2-android
 run_test "${class}#sourceAtoBLoadsPagesAndPreservesCanonicalChapterAndObservedPosition" \
