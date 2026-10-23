@@ -21,6 +21,7 @@ data class BackupCanonicalCore(
     val library: List<BackupCoreLibraryEntry> = emptyList(),
     val chapters: List<BackupCoreChapter> = emptyList(),
     val variants: List<BackupCoreVariant> = emptyList(),
+    val chapterEvidence: List<BackupCoreChapterEvidence> = emptyList(),
     val progress: List<BackupCoreProgress> = emptyList(),
     val history: List<BackupCoreHistory> = emptyList(),
     val collections: List<BackupCoreCollection> = emptyList(),
@@ -88,6 +89,11 @@ data class BackupCanonicalCore(
         }
         require(chapters.isUniqueBy { it.id }) { "Duplicate canonical chapter" }
         require(variants.isUniqueBy { it.id }) { "Duplicate chapter variant" }
+        require(chapterEvidence.isUniqueBy { it.id }) { "Duplicate chapter evidence ID" }
+        require(
+            chapterEvidence.filter { it.externalChapterKey != null }
+                .isUniqueBy { Triple(it.producerKind, it.producerId, it.externalChapterKey) },
+        ) { "Duplicate producer chapter evidence identity" }
         require(library.isUniqueBy { it.canonicalTitleId }) { "Duplicate library membership" }
         require(progress.isUniqueBy { it.canonicalChapterId }) { "Duplicate reading progress" }
         require(history.isUniqueBy { it.canonicalChapterId }) { "Duplicate reading history" }
@@ -204,6 +210,20 @@ data class BackupCanonicalCore(
                     it.sourceKey.isNotBlank() && it.value.isNotBlank()
             },
         ) { "Invalid title name observation" }
+        require(
+            chapterEvidence.all { evidence ->
+                evidence.id.isNotBlank() &&
+                    evidence.canonicalTitleId in titleIds &&
+                    evidence.producerKind in setOf("INTEGRATION", "ADDON", "PROVIDER") &&
+                    evidence.producerId.isNotBlank() &&
+                    (evidence.externalChapterKey == null || evidence.externalChapterKey.isNotBlank()) &&
+                    evidence.authorityClass in setOf("EDITORIAL", "ADDON_PROVISIONAL", "PROVIDER_PROVISIONAL") &&
+                    evidence.confidence.isFinite() &&
+                    (evidence.rawNumber == null || evidence.rawNumber.isFinite()) &&
+                    (evidence.mappedCanonicalChapterId == null ||
+                        chaptersById[evidence.mappedCanonicalChapterId]?.canonicalTitleId == evidence.canonicalTitleId)
+            },
+        ) { "Invalid chapter evidence provenance or cross-title mapping" }
         require(chapters.all { it.canonicalTitleId in titleIds }) {
             "Chapter refers to absent canonical title"
         }
@@ -302,6 +322,27 @@ data class BackupCoreList(
     val createdAt: Long,
     val updatedAt: Long,
     val deletedAt: Long?,
+)
+
+/**
+ * Portable chapter identity evidence. Opaque raw_metadata bytes are deliberately
+ * unsupported: the exporter refuses nonempty blobs rather than dropping them.
+ */
+@Serializable
+data class BackupCoreChapterEvidence(
+    val id: String,
+    val canonicalTitleId: String,
+    val producerKind: String,
+    val producerId: String,
+    val externalChapterKey: String?,
+    val rawLabel: String,
+    val rawNumber: Double?,
+    val volume: Long?,
+    val title: String?,
+    val observedAt: Long,
+    val confidence: Double,
+    val authorityClass: String,
+    val mappedCanonicalChapterId: String?,
 )
 
 @Serializable

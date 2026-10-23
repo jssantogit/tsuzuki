@@ -10,6 +10,7 @@ Optional protobuf field 107 (Backup.canonicalSnapshot) is absent in legacy archi
 
 - All canonical titles, identities (including unverified), source mappings, library entries
 - Canonical chapters (including provisional state), source chapter variants and raw metadata
+- Producer chapter evidence: observation origin, authority, raw label/number and canonical chapter mapping, including unmapped evidence
 - Chapter progress, last variant/page and aggregate reading history
 - Collections including soft-deleted records, nested folders and query-driven lists
 - Provider work/facet bindings including verification and availability
@@ -22,7 +23,7 @@ Optional protobuf field 107 (Backup.canonicalSnapshot) is absent in legacy archi
 
 The exporter deliberately does not apply cloud-sync portability filters. A backup must preserve local-only chapters even when remote sync would omit them.
 
-**Fail-closed coverage guard:** the standalone core exporter now explicitly refuses export when opaque content-binding runtime payloads or account-linked external library memberships exist. Those records have not been given safe portable representations yet, and an incomplete archive must not be presented as a successful full backup. For provider-native payloads, design a versioned codec that strips local SQL row IDs and credentials; for external memberships, quarantine origin/account identity and require explicit owner-safe import.
+**Fail-closed coverage guard:** the standalone core exporter now explicitly refuses export when opaque content-binding runtime payloads, nonempty third-party chapter evidence metadata BLOBs or account-linked external library memberships exist. Those records have not been given safe portable representations yet, and an incomplete archive must not be presented as a successful full backup. For provider-native payloads, design a versioned codec that strips local SQL row IDs and credentials; for external memberships, quarantine origin/account identity and require explicit owner-safe import.
 
 ## Gates before enabling writer and restore
 

@@ -10,6 +10,8 @@ import kotlinx.serialization.json.jsonObject
 import tachiyomi.data.Database
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
+import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterOverrideKind
 import tachiyomi.domain.tsuzuki.integration.model.PortableIntegrationConfig
@@ -47,6 +49,10 @@ class CanonicalCoreBackupImporter(
         core.chapters.forEach {
             CanonicalChapterType.valueOf(it.type)
             CanonicalChapterConfirmation.valueOf(it.confirmation)
+        }
+        core.chapterEvidence.forEach {
+            ProducerKind.valueOf(it.producerKind)
+            ChapterEvidenceAuthority.valueOf(it.authorityClass)
         }
         core.lists.forEach { list ->
             list.queryJson?.let(json::parseToJsonElement)
@@ -192,6 +198,24 @@ class CanonicalCoreBackupImporter(
                     rawSourceMetadata = MemoColumnAdapter.encode(variantMetadata.getValue(it.id)),
                     createdAt = it.createdAt,
                     updatedAt = it.updatedAt,
+                )
+            }
+            core.chapterEvidence.forEach {
+                database.tsuzuki_chapter_evidenceQueries.upsertTsuzukiChapterEvidence(
+                    id = it.id,
+                    canonicalTitleId = it.canonicalTitleId,
+                    producerKind = it.producerKind,
+                    producerId = it.producerId,
+                    externalChapterKey = it.externalChapterKey,
+                    rawLabel = it.rawLabel,
+                    rawNumber = it.rawNumber,
+                    volume = it.volume,
+                    title = it.title,
+                    observedAt = it.observedAt,
+                    confidence = it.confidence,
+                    authorityClass = it.authorityClass,
+                    mappedCanonicalChapterId = it.mappedCanonicalChapterId,
+                    rawMetadata = byteArrayOf(),
                 )
             }
             core.collections.forEach {

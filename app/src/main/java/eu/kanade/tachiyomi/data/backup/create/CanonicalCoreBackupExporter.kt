@@ -5,6 +5,7 @@ import dev.zacsweers.metro.Inject
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterEvidence
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterOverride
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterUpdateState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
@@ -71,6 +72,15 @@ class CanonicalCoreBackupExporter(
         }
         val variants = chapters.flatMap { chapter ->
             chapterRepository.getVariantsByCanonicalChapterId(chapter.id).sortedBy { it.id }
+        }
+        val chapterEvidence = titles.flatMap { title ->
+            database.tsuzuki_chapter_evidenceQueries
+                .getTsuzukiChapterEvidenceByTitle(title.id).awaitAsList()
+        }
+        // Opaque third-party BLOBs can contain device IDs or credentials.
+        // Refuse lossy or unsafe export until a portable codec exists.
+        check(chapterEvidence.all { it.raw_metadata.isEmpty() }) {
+            "Opaque chapter evidence metadata requires a portable codec"
         }
         val progress = titles.flatMap { title ->
             readingRepository.getProgressByCanonicalTitleId(title.id)
@@ -210,6 +220,23 @@ class CanonicalCoreBackupExporter(
                     rawSourceMetadataJson = it.rawSourceMetadata.toString(),
                     createdAt = it.createdAt,
                     updatedAt = it.updatedAt,
+                )
+            },
+            chapterEvidence = chapterEvidence.map {
+                BackupCoreChapterEvidence(
+                    id = it.id,
+                    canonicalTitleId = it.canonical_title_id,
+                    producerKind = it.producer_kind,
+                    producerId = it.producer_id,
+                    externalChapterKey = it.external_chapter_key,
+                    rawLabel = it.raw_label,
+                    rawNumber = it.raw_number,
+                    volume = it.volume,
+                    title = it.title,
+                    observedAt = it.observed_at,
+                    confidence = it.confidence,
+                    authorityClass = it.authority_class,
+                    mappedCanonicalChapterId = it.mapped_canonical_chapter_id,
                 )
             },
             progress = progress.map {
