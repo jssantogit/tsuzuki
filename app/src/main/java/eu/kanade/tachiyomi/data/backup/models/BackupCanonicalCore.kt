@@ -21,10 +21,21 @@ data class BackupCanonicalCore(
     val variants: List<BackupCoreVariant> = emptyList(),
     val progress: List<BackupCoreProgress> = emptyList(),
     val history: List<BackupCoreHistory> = emptyList(),
+    val collections: List<BackupCoreCollection> = emptyList(),
+    val folders: List<BackupCoreFolder> = emptyList(),
+    val lists: List<BackupCoreList> = emptyList(),
+    val providerBindings: List<BackupCoreProviderBinding> = emptyList(),
 ) {
     fun validate() {
         require(schemaVersion == VERSION) { "Unsupported canonical core schema" }
         require(titles.isUniqueBy { it.id }) { "Duplicate canonical title" }
+        require(collections.isUniqueBy { it.id }) { "Duplicate collection ID" }
+        require(folders.isUniqueBy { it.id }) { "Duplicate folder ID" }
+        require(lists.isUniqueBy { it.id }) { "Duplicate collection list ID" }
+        require(providerBindings.isUniqueBy { it.id }) { "Duplicate provider binding ID" }
+        require(providerBindings.isUniqueBy { Triple(it.providerId, it.facetId, it.externalWorkId) }) {
+            "Duplicate provider binding external identity"
+        }
         require(sourceMappings.isUniqueBy { it.id }) { "Duplicate source mapping" }
         require(sourceMappings.isUniqueBy { it.sourceId to it.sourceUrl }) {
             "Duplicate source mapping identity"
@@ -43,6 +54,9 @@ data class BackupCanonicalCore(
 
         val titleIds = titles.mapTo(mutableSetOf()) { it.id }
         val chapterIds = chapters.mapTo(mutableSetOf()) { it.id }
+        val collectionsById = collections.associateBy { it.id }
+        val foldersById = folders.associateBy { it.id }
+        val collectionIds = collectionsById.keys
         val mappingsById = sourceMappings.associateBy { it.id }
         val chaptersById = chapters.associateBy { it.id }
         val mappingIds = mappingsById.keys
@@ -50,6 +64,39 @@ data class BackupCanonicalCore(
         require(titleIds.none(String::isBlank) && chapterIds.none(String::isBlank)) {
             "Canonical ID must not be blank"
         }
+        require(collections.all {
+            it.id.isNotBlank() && it.title.isNotBlank() && it.origin in setOf("USER", "SYSTEM") &&
+                it.sortOrder >= 0 && it.schemaVersion > 0 && it.revision >= 0
+        }) { "Invalid collection metadata" }
+        require(folders.all {
+            it.id.isNotBlank() && it.title.isNotBlank() && it.collectionId in collectionIds &&
+                it.origin in setOf("USER", "SYSTEM") && it.sortOrder >= 0 &&
+                it.schemaVersion > 0 && it.revision >= 0
+        }) { "Invalid collection folder or orphan collection" }
+        require(folders.all {
+            it.parentFolderId == null ||
+                foldersById[it.parentFolderId]?.collectionId == it.collectionId
+        }) { "Folder parent must exist inside its collection" }
+        // Reject both self-loops and multi-folder cycles before any database writes.
+        for (folder in folders) {
+            var cursor: BackupCoreFolder? = folder
+            val visited = mutableSetOf<String>()
+            while (cursor != null) {
+                require(visited.add(cursor.id)) { "Cyclic collection folder hierarchy" }
+                cursor = cursor.parentFolderId?.let(foldersById::get)
+            }
+        }
+        require(lists.all {
+            it.id.isNotBlank() && it.title.isNotBlank() && it.providerId.isNotBlank() &&
+                foldersById[it.folderId]?.collectionId == it.collectionId &&
+                it.collectionId in collectionIds &&
+                it.origin in setOf("USER", "SYSTEM") && it.sortOrder >= 0 &&
+                it.schemaVersion > 0 && it.revision >= 0
+        }) { "Collection list must reference a folder in the same collection" }
+        require(providerBindings.all {
+            it.id.isNotBlank() && it.canonicalTitleId in titleIds &&
+                it.providerId.isNotBlank() && it.facetId.isNotBlank() && it.externalWorkId.isNotBlank()
+        }) { "Invalid provider binding or missing canonical title" }
         require(chapters.all { it.canonicalTitleId in titleIds }) {
             "Chapter refers to absent canonical title"
         }
@@ -100,6 +147,68 @@ data class BackupCanonicalCore(
         const val SECTION_KEY = "tsuzuki.core.v1"
     }
 }
+
+@Serializable
+data class BackupCoreCollection(
+    val id: String,
+    val title: String,
+    val origin: String,
+    val sortOrder: Long,
+    val schemaVersion: Long,
+    val revision: Long,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val deletedAt: Long?,
+)
+
+@Serializable
+data class BackupCoreFolder(
+    val id: String,
+    val collectionId: String,
+    val parentFolderId: String?,
+    val title: String,
+    val origin: String,
+    val sortOrder: Long,
+    val schemaVersion: Long,
+    val revision: Long,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val deletedAt: Long?,
+)
+
+@Serializable
+data class BackupCoreList(
+    val id: String,
+    val collectionId: String,
+    val folderId: String,
+    val title: String,
+    val providerId: String,
+    val queryJson: String?,
+    val sort: String,
+    val sortDirection: String?,
+    val layoutType: String?,
+    val sortOrder: Long,
+    val enabled: Boolean,
+    val origin: String,
+    val schemaVersion: Long,
+    val revision: Long,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val deletedAt: Long?,
+)
+
+@Serializable
+data class BackupCoreProviderBinding(
+    val id: String,
+    val canonicalTitleId: String,
+    val providerId: String,
+    val facetId: String,
+    val externalWorkId: String,
+    val verification: String,
+    val availability: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
 
 @Serializable
 data class BackupCoreTitle(
