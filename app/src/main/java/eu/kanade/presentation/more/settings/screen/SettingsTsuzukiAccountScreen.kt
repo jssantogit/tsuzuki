@@ -181,6 +181,9 @@ object SettingsTsuzukiAccountScreen : Screen() {
 private fun TsuzukiAccountScreenError.messageText(): String = when (this) {
     TsuzukiAccountScreenError.INVALID_INPUT ->
         "Enter a valid email address and a non-empty password."
+    TsuzukiAccountScreenError.ACCOUNT_SCOPE_MISMATCH ->
+        "Cloud sync is paused because existing sync state belongs to another or unknown " +
+            "account. No local data was deleted or uploaded."
     TsuzukiAccountScreenError.AUTHENTICATION_FAILED ->
         "The account request was rejected. Check your email and password."
     TsuzukiAccountScreenError.NETWORK_UNAVAILABLE ->
