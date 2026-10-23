@@ -35,7 +35,7 @@ begin
     -- Refuse both new writes and idempotent replays for the unnegotiated
     -- namespace before the legacy implementation allocates any state.
     if jsonb_typeof(p_request) = 'object'
-        and p_request ->> 'domain' = 'READING_PROGRESS_V2'
+        and btrim(p_request ->> 'domain') = 'READING_PROGRESS_V2'
     then
         raise exception using
             errcode = '0A000',
