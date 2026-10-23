@@ -37,6 +37,23 @@ This document does not claim that the live project configuration has been
 changed. Verify both registration and password recovery using real emails
 before release.
 
+## Residual P0 threat: interception by another Android app
+
+The request nonce rejects unsolicited session adoption **inside Tsuzuki**, but it
+does **not** make the native `tsuzuki://` scheme exclusive. Another installed app
+can register the same custom scheme and intercept the Supabase redirect,
+including any implicit-flow `access_token` or `refresh_token` fragments.
+Never advertise the nonce-only fix as complete credential-interception defense.
+
+**Release blocker:** replace bearer-token redirects with PKCE code exchange
+using a locally protected verifier (Supabase supports PKCE for signup and
+password recovery) and verify that the live backend returns a `code`, not
+bearer credentials. A verified HTTPS Android App Link with Digital Asset Links
+is preferable when a controlled domain/signing setup is available.
+Review:
+- https://supabase.com/docs/guides/auth/sessions/pkce-flow
+- https://mas.owasp.org/MASTG/best-practices/MASTG-BEST-0070/
+
 ## Acceptance matrix
 
 1. Signup from logged out app: callback carries same query nonce; session is
