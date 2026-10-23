@@ -109,6 +109,42 @@ class MihonCanonicalDownloadGatewayTest {
     }
 
     @Test
+    fun `unreadable located artifact cannot be reused as a completed download`() = runTest {
+        val selected = option()
+        var starterCalls = 0
+        val gateway = MihonCanonicalDownloadGateway(
+            mangaTitleProvider = { "Title" },
+            sourceProvider = { StubSource(it, "en", "Source") },
+            downloadLookup = { _, _, _ -> false },
+            artifactLocator = { artifact(selected) },
+            artifactAvailability = { false },
+            downloadStarter = { starterCalls++ },
+            downloadCompletion = { false },
+        )
+
+        gateway.acquire(selected).isFailure shouldBe true
+        starterCalls shouldBe 1
+    }
+
+    @Test
+    fun `download reported complete cannot publish unreadable artifact`() = runTest {
+        val selected = option()
+        var starterCalls = 0
+        val gateway = MihonCanonicalDownloadGateway(
+            mangaTitleProvider = { "Title" },
+            sourceProvider = { StubSource(it, "en", "Source") },
+            downloadLookup = { _, _, _ -> false },
+            artifactLocator = { artifact(selected) },
+            artifactAvailability = { false },
+            downloadStarter = { starterCalls++ },
+            downloadCompletion = { true },
+        )
+
+        gateway.acquire(selected).isFailure shouldBe true
+        starterCalls shouldBe 1
+    }
+
+    @Test
     fun `unmaterialized variant cannot claim a physical mihon download`() = runTest {
         var mangaLookupCalled = false
         var sourceLookupCalled = false
