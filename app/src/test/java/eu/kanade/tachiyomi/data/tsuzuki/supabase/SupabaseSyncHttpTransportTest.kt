@@ -53,6 +53,26 @@ class SupabaseSyncHttpTransportTest {
     }
 
     @Test
+    fun `transport never sends network traffic when the active account lacks sync ownership`() = runTest {
+        val transport = transport(
+            scopeGuard = SyncAccountScopeGuard { accountId ->
+                accountId shouldBe "user-2"
+                false
+            },
+            account = FakeAccountRepository(
+                AccountState.Authenticated(TsuzukiAccount("user-2", "other@example.com")),
+                token = "token-user-2",
+            ),
+        )
+
+        val result = transport.snapshot(SyncDocumentKind.LIBRARY)
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe
+            SyncFailureReason.ACCOUNT_SCOPE_MISMATCH
+        server.requestCount shouldBe 0
+    }
+
+    @Test
     fun `push converts local mutation paths and returns mutation scoped conflicts`() = runTest {
         server.enqueue(
             MockResponse.Builder()
@@ -209,6 +229,7 @@ class SupabaseSyncHttpTransportTest {
     }
 
     private fun transport(
+        scopeGuard: SyncAccountScopeGuard = SyncAccountScopeGuard { true },
         account: AccountRepository = FakeAccountRepository(
             AccountState.Authenticated(
                 TsuzukiAccount("user-1", "reader@example.com"),
@@ -222,6 +243,7 @@ class SupabaseSyncHttpTransportTest {
             publishableKey = "publishable-test-key",
         ),
         accountRepository = account,
+        accountScopeGuard = scopeGuard,
     )
 
     private class FakeAccountRepository(
