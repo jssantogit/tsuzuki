@@ -73,13 +73,14 @@ class PrepareCanonicalChapterForReader(
 
             if (selectedOption == null) {
                 val artifact = canonicalDownloadRepository.get(canonicalChapterId)
+                val cacheUsable = artifact != null && canonicalDownloadGateway.canReuseArtifact(artifact)
                 trace.event(
                     subsystem = DiagnosticSubsystem.READER,
                     name = DiagnosticEventName.CACHE_LOOKUP,
                     stage = DiagnosticStage.LOOKUP,
-                    outcome = if (artifact == null) DiagnosticOutcome.MISS else DiagnosticOutcome.HIT,
+                    outcome = if (cacheUsable) DiagnosticOutcome.HIT else DiagnosticOutcome.MISS,
                 )
-                if (artifact != null && canonicalDownloadGateway.canReuseArtifact(artifact)) {
+                if (cacheUsable && artifact != null) {
                     return complete(
                         trace,
                         started,
