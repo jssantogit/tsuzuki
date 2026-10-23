@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.backup.models
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoNumber
 import java.security.MessageDigest
 
@@ -21,11 +22,13 @@ data class BackupCanonicalSnapshot(
         require(sections.distinctBy { it.key }.size == sections.size) {
             "Duplicate canonical backup section"
         }
+        require(sections.size <= MAX_SECTIONS) { "Too many canonical backup sections" }
         sections.forEach(BackupCanonicalSection::validate)
     }
 
     companion object {
         const val FORMAT_VERSION = 1
+        private const val MAX_SECTIONS = 64
     }
 }
 
@@ -46,12 +49,18 @@ data class BackupCanonicalSection(
         require(sha256.matches(Regex("[0-9a-f]{64}"))) {
             "Malformed canonical section hash"
         }
+        require(payloadJson.toByteArray(Charsets.UTF_8).size <= MAX_SECTION_BYTES) {
+            "Canonical backup section exceeds size limit"
+        }
         require(sha256 == digest(payloadJson)) {
             "Canonical backup section checksum mismatch"
         }
+        Json.parseToJsonElement(payloadJson)
     }
 
     companion object {
+        private const val MAX_SECTION_BYTES = 128 * 1024 * 1024
+
         fun fromJson(key: String, json: String): BackupCanonicalSection =
             BackupCanonicalSection(
                 key = key,
