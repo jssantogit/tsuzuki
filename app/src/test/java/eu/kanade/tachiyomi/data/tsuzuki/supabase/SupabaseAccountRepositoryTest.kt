@@ -166,6 +166,29 @@ class SupabaseAccountRepositoryTest {
     }
 
     @Test
+    fun `PKCE code exchange sends private verifier in POST body and returns session`() = runTest {
+        server.enqueue(sessionResponse())
+        val auth = SupabaseAuthService(
+            client = OkHttpClient(),
+            configuration = SupabaseConfiguration(
+                url = server.url("/").toString().removeSuffix("/"),
+                publishableKey = "publishable-test-key",
+            ),
+        )
+        val verifier = "private-verifier-123456789012345678901234567890123"
+        val session = auth.exchangeAuthCode("authorization-code", verifier).session
+
+        session?.userId shouldBe "user-1"
+        val request = server.takeRequest()
+        request.url.encodedPath shouldBe "/auth/v1/token"
+        request.url.queryParameter("grant_type") shouldBe "pkce"
+        val body = request.body!!.utf8()
+        body.contains("\"auth_code\":\"authorization-code\"") shouldBe true
+        body.contains("\"code_verifier\":\"$verifier\"") shouldBe true
+        request.url.toString().contains(verifier) shouldBe false
+    }
+
+    @Test
     fun `password recovery uses recover endpoint`() = runTest {
         server.enqueue(MockResponse.Builder().code(200).body("{}").build())
         val repository = repository(InMemorySessionStore())
