@@ -204,9 +204,18 @@ def plan(paths: list[str], mode: str) -> dict[str, object]:
             if path.endswith(".md") or path.startswith(("docs/", "fastlane/")):
                 continue
 
+            if path in {
+                ".github/workflows/ci-v2.yml",
+                ".github/scripts/verify_backup_jdbc_report.py",
+                ".github/scripts/test_verify_backup_jdbc_report.py",
+            }:
+                # Critical test-discovery and execution-gate changes require real
+                # coverage, not a successful planner job with every lane skipped.
+                select_full(state)
+                continue
+
             if path.startswith(".github/"):
-                # The planner tests execute in the plan job itself; CI config edits should not
-                # burn a full Android build just because the workflow changed.
+                # Unrelated CI helpers still use the planner self-tests only.
                 continue
 
             if is_runtime_integration_path(path):

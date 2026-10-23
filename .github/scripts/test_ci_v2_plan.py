@@ -157,12 +157,25 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(result["selected_compiles"], [])
         self.assertTrue(result["run_native_package"])
 
-    def test_ci_configuration_change_uses_planner_self_test_only(self):
-        result = plan([".github/workflows/ci-v2.yml"], "affected")
+    def test_critical_ci_workflow_and_backup_discovery_changes_run_full_matrix(self):
+        for path in (
+            ".github/workflows/ci-v2.yml",
+            ".github/scripts/verify_backup_jdbc_report.py",
+            ".github/scripts/test_verify_backup_jdbc_report.py",
+        ):
+            with self.subTest(path=path):
+                result = plan([path], "affected")
+                self.assertEqual(set(result["selected_tests"]), {"Core Common", "Domain", "Data", "App"})
+                self.assertTrue(result["run_format"])
+                self.assertTrue(result["run_database"])
+                self.assertTrue(result["run_supabase"])
+                self.assertTrue(result["run_release"])
+                self.assertTrue(result["run_native_package"])
+
+    def test_unrelated_ci_helper_change_stays_planner_self_test_only(self):
+        result = plan([".github/scripts/test_extension_fixture.py"], "affected")
         self.assertEqual(result["selected_tests"], [])
-        self.assertEqual(result["selected_compiles"], [])
         self.assertFalse(result["run_format"])
-        self.assertFalse(result["run_database"])
         self.assertFalse(result["run_release"])
 
     def test_gradle_change_fails_safe_to_full_and_release(self):
