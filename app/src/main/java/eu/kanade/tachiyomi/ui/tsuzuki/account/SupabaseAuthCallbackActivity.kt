@@ -35,39 +35,32 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching {
-                val values = callback.callbackValues()
-                val type = values["type"]
-                    ?.takeIf { it in ALLOWED_TYPES }
-                    ?: error("Unsupported Supabase callback type")
-                // Read only the original URI query, never a fragment-provided
-                // lookalike. Supabase session tokens normally live in fragment.
-                val state = callback.getQueryParameter("tsz_state")
-                    ?: error("Auth callback is missing request state")
-                val requests = PersistentAuthCallbackRequestStore(noBackupFilesDir)
-                check(requests.consume(type, state)) {
-                    "Auth callback was not initiated here, expired, or was already consumed"
+                // Only accept a PKCE authorization code in the URI query.
+                // Never accept implicit-flow bearer tokens from a deep link.
+                check(callback.fragment.isNullOrEmpty()) {
+                    "Implicit-flow token fragments are not accepted"
                 }
+                val typeHint = callback.getQueryParameter("type")
+                    ?.also { check(it in ALLOWED_TYPES) { "Unsupported callback type" } }
+                check(
+                    callback.getQueryParameter("access_token") == null &&
+                        callback.getQueryParameter("refresh_token") == null &&
+                        callback.getQueryParameter("token_hash") == null
+                ) { "Bearer tokens are not accepted in callback URLs" }
+                val state = callback.getQueryParameter("tsz_state")
+                    ?: error("Auth callback is missing state")
+                val code = callback.getQueryParameter("code")
+                    ?.takeIf(String::isNotBlank)
+                    ?: error("Auth callback is missing its PKCE code")
+                val requests = PersistentAuthCallbackRequestStore(noBackupFilesDir)
+                val verifier = requests.consume(state, typeHint)
+                    ?: error("Auth callback was not initiated here or has expired")
 
                 val authService = SupabaseAuthService(
                     client = OkHttpClient(),
                     configuration = configuration,
                 )
-                val result = when {
-                    values["token_hash"] != null -> {
-                        authService.verifyCallbackToken(
-                            tokenHash = requireNotNull(values["token_hash"]),
-                            type = type,
-                        )
-                    }
-                    values["access_token"] != null && values["refresh_token"] != null -> {
-                        authService.verifyAccessToken(
-                            accessToken = requireNotNull(values["access_token"]),
-                            refreshToken = requireNotNull(values["refresh_token"]),
-                            expiresInSeconds = values["expires_in"]?.toLongOrNull() ?: 0L,
-                        )
-                    }
-                    else -> error("Supabase callback did not contain a supported token")
-                }
+                val result = authService.exchangeAuthCode(code, verifier)
 
                 val session = requireNotNull(result.session) {
                     "Supabase callback did not create a session"
@@ -94,22 +87,6 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
             host == SupabaseConfiguration.CALLBACK_HOST &&
             port == -1 &&
             encodedPath.isNullOrEmpty()
-
-    private fun Uri.callbackValues(): Map<String, String> {
-        val values = buildMap {
-            queryParameterNames.forEach { name ->
-                getQueryParameter(name)?.let { put(name, it) }
-            }
-        }.toMutableMap()
-
-        fragment?.takeIf(String::isNotBlank)?.let { rawFragment ->
-            val fragmentUri = Uri.parse("tsuzuki://fragment?$rawFragment")
-            fragmentUri.queryParameterNames.forEach { name ->
-                fragmentUri.getQueryParameter(name)?.let { values[name] = it }
-            }
-        }
-        return values
-    }
 
     companion object {
         private val ALLOWED_TYPES = setOf("signup", "recovery")
