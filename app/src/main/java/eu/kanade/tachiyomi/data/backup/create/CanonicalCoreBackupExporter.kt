@@ -272,7 +272,9 @@ class CanonicalCoreBackupExporter(
                 BackupCoreSourcePreference(it.language, it.source_id, it.position)
             },
             libraryCategories = libraryCategories.map {
-                BackupCoreLibraryCategory(it.canonical_title_id, it.name, it.category_order, it.flags)
+                BackupCoreLibraryCategory(
+                    it.canonical_title_id, it.name, it.category_order, it.flags, it.category_id,
+                )
             },
             continueReadingStates = continueReadingStates.map {
                 BackupCoreContinueReadingState(it.canonical_title_id, it.hidden_at)
