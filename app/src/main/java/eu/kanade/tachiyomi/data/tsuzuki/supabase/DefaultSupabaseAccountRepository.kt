@@ -47,4 +47,6 @@ class DefaultSupabaseAccountRepository(
     override suspend fun refreshSession() = delegate.refreshSession()
 
     override suspend fun getAccessToken() = delegate.getAccessToken()
+
+    fun acceptSession(session: SupabaseSession): AccountState = delegate.acceptSession(session)
 }
