@@ -54,6 +54,11 @@ run_test() {
 # All seven cases use app.tsuzuki.dev; offline fixtures also guard corrupt final-page completion.
 echo 'Canonical Android gate: 7 disposable Reader/offline scenarios'
 mkdir -p .github/results/canonical-v2-android
+# Diagnose archive and last-page corruption independently of source-switch UI state.
+adb shell pm clear "$app" | grep -Fq 'Success'
+run_test "${offline_class}#missingEmptyAndReadableOfflineArtifactsAreDistinguished" \
+  offlineArtifactOptIn .github/results/canonical-v2-android/offline-artifact.txt
+
 run_test "${class}#sourceAtoBLoadsPagesAndPreservesCanonicalChapterAndObservedPosition" \
   androidSourceSwitchOptIn .github/results/canonical-v2-android/source-switch.txt
 
@@ -72,10 +77,6 @@ run_test "${class}#activityRecreationRestoresObservedCanonicalPosition" \
 adb shell pm clear "$app" | grep -Fq 'Success'
 run_test "${class}#boundaryNextPreviousKeepsObservedCanonicalPageAndProgress" \
   androidSourceSwitchOptIn .github/results/canonical-v2-android/chapter-boundaries.txt
-
-adb shell pm clear "$app" | grep -Fq 'Success'
-run_test "${offline_class}#missingEmptyAndReadableOfflineArtifactsAreDistinguished" \
-  offlineArtifactOptIn .github/results/canonical-v2-android/offline-artifact.txt
 
 adb shell pm clear "$app" | grep -Fq 'Success'
 run_test "${nav_class}#invalidDiscoveryIntentDoesNotOpenTitleOrMutateProgressAndPreferences" \
