@@ -15,6 +15,12 @@ import tachiyomi.domain.tsuzuki.sync.model.SyncCycleReport
 interface CloudSyncRuntime {
     val state: StateFlow<SyncRuntimeState>
 
+    /**
+     * Read-only ownership preflight for UI diagnostics. A cloud state from
+     * another or unknown account must not be rendered as the current account's.
+     */
+    suspend fun accountScopeFailure(): tachiyomi.domain.tsuzuki.sync.model.SyncFailure? = null
+
     suspend fun run(trigger: SyncTrigger): SyncCycleReport
 
     suspend fun resolveConflict(
