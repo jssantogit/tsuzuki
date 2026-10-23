@@ -76,5 +76,4 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
             host == SupabaseConfiguration.CALLBACK_HOST &&
             port == -1 &&
             encodedPath.isNullOrEmpty()
-
 }
