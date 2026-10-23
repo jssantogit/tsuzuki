@@ -28,16 +28,23 @@ class PersistentAuthCallbackRequestStore(
         require(type in SUPPORTED_TYPES) { "Unsupported callback request type" }
 
         val nonce = nonceSource()
-        require(nonce.isNotBlank()) { "Callback nonce must not be blank" }
+        require(nonce.matches(Regex("[A-Za-z0-9_-]{16,128}"))) {
+            "Callback nonce must be a URL-safe high-entropy value"
+        }
         val issuedAt = nowEpochMillis()
-        val current = load()?.filter { it.isValidAt(issuedAt) }.orEmpty()
+        val loaded = load()
         // A corrupted ledger may NOT be overwritten with a newly trusted one.
-        check(!File(directory, FILE_NAME).exists() || load() != null) {
+        check(loaded != null) {
             "Cannot establish a callback request over a damaged ledger"
+        }
+        val current = loaded.filter { it.isValidAt(issuedAt) }
+        val fingerprint = hash(nonce)
+        check(current.none { it.nonceHash == fingerprint }) {
+            "Auth callback nonce collision"
         }
         val record = PendingRequest(
             type = type,
-            nonceHash = hash(nonce),
+            nonceHash = fingerprint,
             expiresAtEpochMillis = issuedAt + LIFETIME_MILLIS,
         )
         persist((current + record).takeLast(MAX_PENDING_REQUESTS))
