@@ -53,6 +53,17 @@ class BackupCanonicalSnapshotTest {
     }
 
     @Test
+    fun `checksum-valid core section with orphan library reference is rejected`() {
+        val section = BackupCanonicalSection.fromJson(
+            key = BackupCanonicalCore.SECTION_KEY,
+            json = """{"schemaVersion":1,"titles":[],"identities":[],"library":[{"canonicalTitleId":"missing","status":"READING","favorite":true,"addedAt":1,"updatedAt":2}],"chapters":[],"variants":[],"progress":[],"history":[]}""",
+        )
+        runCatching {
+            BackupCanonicalSnapshot(sections = listOf(section)).validate()
+        }.isFailure shouldBe true
+    }
+
+    @Test
     fun `unsupported snapshot version and duplicate sections are rejected`() {
         val section = BackupCanonicalSection.fromJson("tsuzuki.library.v1", "[]")
 
