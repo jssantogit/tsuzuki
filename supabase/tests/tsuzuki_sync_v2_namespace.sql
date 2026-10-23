@@ -53,7 +53,7 @@ select throws_ok(
 );
 
 select throws_ok(
-    $
+    $$
     select public.sync_apply_mutation_batch(
         '{
             "mutationId":"20000000-0000-0000-0000-000000000003",
@@ -65,7 +65,7 @@ select throws_ok(
             ]
         }'::jsonb
     );
-    $,
+    $$,
     '0A000',
     'exact progress requires a negotiated protocol rollout',
     'whitespace around the domain cannot bypass the v2 rollout guard'
