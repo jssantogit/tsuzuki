@@ -1486,6 +1486,8 @@
     <string name="tsuzuki_details_synopsis">Synopsis</string>
     <string name="tsuzuki_details_read_synopsis">Read synopsis</string>
     <string name="tsuzuki_details_creation">Creation</string>
+    <string name="tsuzuki_details_artists">Artists</string>
+    <string name="tsuzuki_details_editorial_empty">No additional editorial details available</string>
     <string name="tsuzuki_details_publication">Publication</string>
     <string name="tsuzuki_details_genres">Genres</string>
     <string name="tsuzuki_details_tags">Tags</string>

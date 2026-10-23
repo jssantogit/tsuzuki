@@ -78,6 +78,7 @@ sealed interface CanonicalTitleScreenState {
         val coverUrl: String? = null,
         val sourceCover: MangaCover? = null,
         val author: String? = null,
+        val artists: List<String> = emptyList(),
         val description: String? = null,
         val genres: List<String> = emptyList(),
         val tags: List<String> = emptyList(),
@@ -822,13 +823,11 @@ class CanonicalTitleScreenModel(
             coverUrl = metadata.artworkUrl?.value ?: coverUrl,
             author = metadata.authors
                 ?.value
-                ?.takeIf { it.isNotEmpty() }
+                ?.filter(String::isNotBlank)
+                ?.takeIf(List<String>::isNotEmpty)
                 ?.joinToString()
-                ?: metadata.artists
-                    ?.value
-                    ?.takeIf { it.isNotEmpty() }
-                    ?.joinToString()
                 ?: author,
+            artists = metadata.artists?.value?.filter(String::isNotBlank) ?: artists,
             description = metadata.synopsis?.value ?: description,
             genres = metadata.genres?.value ?: genres,
             tags = metadata.tags?.value ?: tags,
@@ -855,6 +854,7 @@ class CanonicalTitleScreenModel(
             coverUrl = coverUrl ?: previous.coverUrl,
             sourceCover = sourceCover ?: previous.sourceCover,
             author = author ?: previous.author,
+            artists = artists.ifEmpty { previous.artists },
             description = description ?: previous.description,
             genres = genres.ifEmpty { previous.genres },
             tags = tags.ifEmpty { previous.tags },

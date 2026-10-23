@@ -1191,6 +1191,8 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_details_synopsis">Sinopse</string>
     <string name="tsuzuki_details_read_synopsis">Ler sinopse</string>
     <string name="tsuzuki_details_creation">Criação</string>
+    <string name="tsuzuki_details_artists">Arte</string>
+    <string name="tsuzuki_details_editorial_empty">Não há outras informações editoriais disponíveis</string>
     <string name="tsuzuki_details_publication">Publicação</string>
     <string name="tsuzuki_details_genres">Gêneros</string>
     <string name="tsuzuki_details_tags">Tags</string>
