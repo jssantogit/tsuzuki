@@ -134,6 +134,36 @@ class SupabaseAccountRepositoryTest {
     }
 
     @Test
+    fun `access token is refused when callback replaced session behind live account state`() = runTest {
+        val store = InMemorySessionStore().apply {
+            save(
+                SupabaseSession(
+                    accessToken = "access-A",
+                    refreshToken = "refresh-A",
+                    expiresAtEpochSeconds = Long.MAX_VALUE,
+                    userId = "account-A",
+                    email = "a@example.com",
+                ),
+            )
+        }
+        val repository = repository(store)
+        // A separate callback Activity currently writes to the same persisted
+        // store without updating this live repository instance.
+        store.save(
+            SupabaseSession(
+                accessToken = "access-B",
+                refreshToken = "refresh-B",
+                expiresAtEpochSeconds = Long.MAX_VALUE,
+                userId = "account-B",
+                email = "b@example.com",
+            ),
+        )
+
+        repository.getAccessToken().isFailure shouldBe true
+        server.requestCount shouldBe 0
+    }
+
+    @Test
     fun `password recovery uses recover endpoint`() = runTest {
         server.enqueue(MockResponse.Builder().code(200).body("{}").build())
         val repository = repository(InMemorySessionStore())
