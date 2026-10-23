@@ -51,6 +51,8 @@ run_test() {
   echo "PASS: ${test_name}"
 }
 
+# All seven cases are isolated from the user's library and use app.tsuzuki.dev only.
+echo 'Canonical Android gate: 7 disposable Reader/offline scenarios'
 mkdir -p .github/results/canonical-v2-android
 run_test "${class}#sourceAtoBLoadsPagesAndPreservesCanonicalChapterAndObservedPosition" \
   androidSourceSwitchOptIn .github/results/canonical-v2-android/source-switch.txt
