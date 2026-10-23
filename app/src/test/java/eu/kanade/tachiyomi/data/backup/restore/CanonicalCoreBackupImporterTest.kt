@@ -551,6 +551,60 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
+    fun `matching first-run source priorities can be reused without a duplicate insert`(): Unit = runBlocking {
+        database.tsuzuki_source_preferencesQueries.insertPreference(
+            language = "pt-BR",
+            sourceId = 42,
+            position = 0,
+        )
+        val backup = coreWithCollectionsAndBindings().copy(
+            sourcePreferences = listOf(BackupCoreSourcePreference("pt-BR", 42, 0)),
+        )
+        importer.restoreCore(coreSection(backup))
+        val source = database.tsuzuki_source_preferencesQueries
+            .getPreferencesForLanguage("pt-BR").awaitAsList().single()
+        source.source_id shouldBe 42L
+        source.position shouldBe 0L
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList().size shouldBe 1
+    }
+
+    @Test
+    fun `unrecognized source priority cannot silently join a restored source order`(): Unit = runBlocking {
+        database.tsuzuki_source_preferencesQueries.insertPreference(
+            language = "pt-BR",
+            sourceId = 99,
+            position = 0,
+        )
+        val backup = coreWithCollectionsAndBindings().copy(
+            sourcePreferences = listOf(BackupCoreSourcePreference("pt-BR", 42, 0)),
+        )
+        shouldThrow<IllegalStateException> { importer.restoreCore(coreSection(backup)) }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+        database.tsuzuki_source_preferencesQueries
+            .getPreferencesForLanguage("pt-BR").awaitAsList().single().source_id shouldBe 99L
+    }
+
+    @Test
+    fun `existing secret-bearing integration settings are never silently erased by restore`(): Unit = runBlocking {
+        database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+            integrationId = "kitsu",
+            enabled = true,
+            configJson = """{"language":"pt-BR","access_token":"original-secret"}""",
+            updatedAt = 300,
+        )
+        val backup = coreWithCollectionsAndBindings().copy(
+            integrationSettings = listOf(
+                BackupCoreIntegrationSetting("kitsu", true, """{"language":"pt-BR"}""", 10),
+            ),
+        )
+        shouldThrow<IllegalStateException> { importer.restoreCore(coreSection(backup)) }
+        database.tsuzuki_integration_settingsQueries
+            .getAllTsuzukiIntegrationSettings().awaitAsList().single().config_json
+            .contains("original-secret") shouldBe true
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+    }
+
+    @Test
     fun `crafted backup cannot restore authentication credentials in integration config`(): Unit = runBlocking {
         val core = coreWithCollectionsAndBindings().copy(
             integrationSettings = listOf(

@@ -86,10 +86,38 @@ class CanonicalCoreBackupImporter(
                     .getAllTsuzukiCollections().awaitAsList().isEmpty(),
             ) { "Collections already exist: explicit merge is required" }
 
+            // No device/account ownership is portable through an archive.
+            // A clean canonical graph may still have local integration settings.
+            // Only exact non-secret equivalents can be safely reused.
+            val existingIntegrations = database.tsuzuki_integration_settingsQueries
+                .getAllTsuzukiIntegrationSettings().awaitAsList()
+            val archivedIntegrations = core.integrationSettings.associateBy { it.integrationId }
             check(
-                database.tsuzuki_source_preferencesQueries
-                    .getConfiguredLanguages().awaitAsList().isEmpty(),
-            ) { "Source preferences already exist; explicit merge is required" }
+                existingIntegrations.all { local ->
+                    val archived = archivedIntegrations[local.integration_id]
+                    archived != null &&
+                        local.enabled == archived.enabled &&
+                        json.parseToJsonElement(local.config_json) ==
+                        json.parseToJsonElement(archived.configJson)
+                },
+            ) { "Existing integration settings require explicit account-safe reconciliation" }
+            val existingIntegrationIds = existingIntegrations.mapTo(mutableSetOf()) { it.integration_id }
+
+            // Preserve matching first-run source defaults without modifying their
+            // order. Unrecognized or conflicting local rows require explicit merge.
+            val existingSourcePreferences = database.tsuzuki_source_preferencesQueries
+                .getConfiguredLanguages().awaitAsList().flatMap { language ->
+                    database.tsuzuki_source_preferencesQueries
+                        .getPreferencesForLanguage(language).awaitAsList()
+                }
+            val archivedSourcePreferences = core.sourcePreferences.associateBy { it.language to it.sourceId }
+            check(
+                existingSourcePreferences.all { local ->
+                    archivedSourcePreferences[local.language to local.source_id]?.position == local.position
+                },
+            ) { "Existing source priorities require explicit reconciliation" }
+            val existingSourceIds = existingSourcePreferences
+                .mapTo(mutableSetOf()) { it.language to it.source_id }
 
             core.titles.forEach {
                 database.tsuzuki_titlesQueries.insertTsuzukiTitle(
@@ -303,7 +331,7 @@ class CanonicalCoreBackupImporter(
                     categoryId = categoryIds.getValue(membership.name),
                 )
             }
-            core.integrationSettings.forEach {
+            core.integrationSettings.filterNot { it.integrationId in existingIntegrationIds }.forEach {
                 database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
                     integrationId = it.integrationId,
                     enabled = it.enabled,
@@ -319,13 +347,15 @@ class CanonicalCoreBackupImporter(
                     updatedAt = it.updatedAt,
                 )
             }
-            core.sourcePreferences.forEach {
-                database.tsuzuki_source_preferencesQueries.insertPreference(
-                    language = it.language,
-                    sourceId = it.sourceId,
-                    position = it.position,
-                )
-            }
+            core.sourcePreferences
+                .filterNot { (it.language to it.sourceId) in existingSourceIds }
+                .forEach {
+                    database.tsuzuki_source_preferencesQueries.insertPreference(
+                        language = it.language,
+                        sourceId = it.sourceId,
+                        position = it.position,
+                    )
+                }
             core.continueReadingStates.forEach {
                 database.tsuzuki_continue_reading_stateQueries.upsertTsuzukiContinueReadingState(
                     canonicalTitleId = it.canonicalTitleId,
