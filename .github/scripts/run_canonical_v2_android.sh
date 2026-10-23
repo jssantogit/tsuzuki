@@ -7,6 +7,7 @@ app='app.tsuzuki.dev'
 runner='app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner'
 class='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest'
 nav_class='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalTitleSourceNavigationInstrumentedTest'
+offline_class='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalOfflineArtifactInstrumentedTest'
 
 [[ "$(adb shell getprop ro.kernel.qemu | tr -d '\r')" == '1' ]] || {
   echo 'ERROR: Refusing to run destructive fixture outside an emulator' >&2
@@ -69,6 +70,10 @@ run_test "${class}#activityRecreationRestoresObservedCanonicalPosition" \
 adb shell pm clear "$app" | grep -Fq 'Success'
 run_test "${class}#boundaryNextPreviousKeepsObservedCanonicalPageAndProgress" \
   androidSourceSwitchOptIn .github/results/canonical-v2-android/chapter-boundaries.txt
+
+adb shell pm clear "$app" | grep -Fq 'Success'
+run_test "${offline_class}#missingEmptyAndReadableOfflineArtifactsAreDistinguished" \
+  offlineArtifactOptIn .github/results/canonical-v2-android/offline-artifact.txt
 
 adb shell pm clear "$app" | grep -Fq 'Success'
 run_test "${nav_class}#invalidDiscoveryIntentDoesNotOpenTitleOrMutateProgressAndPreferences" \
