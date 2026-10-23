@@ -44,7 +44,7 @@ class BackupCanonicalCoreTest {
     @Test
     fun `variant cannot be restored using a source mapping from a different title`() {
         val original = core()
-        val wrongTitle = BackupCoreTitle("title-2", "Other", "UNVERIFIED", 1, 2)
+        val wrongTitle = BackupCoreTitle("title-2", "Other", "SOURCE_ONLY", 1, 2)
         val wrongMapping = original.sourceMappings.single().copy(
             id = "mapping-2",
             canonicalTitleId = "title-2",
@@ -65,7 +65,7 @@ class BackupCanonicalCoreTest {
     }
 
     private fun core() = BackupCanonicalCore(
-        titles = listOf(BackupCoreTitle("title-1", "Book", "UNVERIFIED", 1, 2)),
+        titles = listOf(BackupCoreTitle("title-1", "Book", "SOURCE_ONLY", 1, 2)),
         identities = listOf(BackupCoreIdentity("title-1", "source", "remote-1", false, 1)),
         sourceMappings = listOf(
             BackupCoreSourceMapping(
