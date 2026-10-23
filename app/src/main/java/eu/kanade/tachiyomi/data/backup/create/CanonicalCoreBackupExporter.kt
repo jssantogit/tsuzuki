@@ -12,8 +12,8 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreContentPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContinueReadingState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
-import eu.kanade.tachiyomi.data.backup.models.BackupCoreIntegrationSetting
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreIdentity
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreIntegrationSetting
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryEntry
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreList
@@ -301,7 +301,11 @@ class CanonicalCoreBackupExporter(
             },
             libraryCategories = libraryCategories.map {
                 BackupCoreLibraryCategory(
-                    it.canonical_title_id, it.name, it.category_order, it.flags, it.category_id,
+                    it.canonical_title_id,
+                    it.name,
+                    it.category_order,
+                    it.flags,
+                    it.category_id,
                 )
             },
             continueReadingStates = continueReadingStates.map {
