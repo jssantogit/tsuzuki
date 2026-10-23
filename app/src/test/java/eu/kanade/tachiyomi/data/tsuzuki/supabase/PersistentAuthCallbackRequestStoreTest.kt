@@ -73,6 +73,32 @@ class PersistentAuthCallbackRequestStoreTest {
     }
 
     @Test
+    fun `corrupted persistent ledger cannot be silently rebound`() {
+        val directory = Files.createTempDirectory("tsuzuki-callback-corrupt").toFile()
+        directory.resolve(PersistentAuthCallbackRequestStore.FILE_NAME)
+            .writeText("{broken")
+        val store = PersistentAuthCallbackRequestStore(
+            directory = directory,
+            nonceSource = { "fresh-strong-nonce-1234567890" },
+        )
+
+        runCatching { store.start("signup") }.isFailure shouldBe true
+        store.consume("signup", "fresh-strong-nonce-1234567890") shouldBe false
+    }
+
+    @Test
+    fun `short callback nonce is rejected before it can be enrolled`() {
+        val directory = Files.createTempDirectory("tsuzuki-callback-weak").toFile()
+        val store = PersistentAuthCallbackRequestStore(
+            directory = directory,
+            nonceSource = { "short" },
+        )
+
+        runCatching { store.start("recovery") }.isFailure shouldBe true
+        directory.resolve(PersistentAuthCallbackRequestStore.FILE_NAME).exists() shouldBe false
+    }
+
+    @Test
     fun `cancelled and malformed requests never authorize callbacks`() {
         val directory = Files.createTempDirectory("tsuzuki-callback-cancel").toFile()
         val store = PersistentAuthCallbackRequestStore(
