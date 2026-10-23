@@ -36,9 +36,7 @@ class CanonicalCoreBackupExporter(
 ) {
     suspend fun export(): BackupCanonicalSection {
         val titles = titleSource.getAllTitles().sortedBy { it.id }
-        val titleIds = titles.mapTo(mutableSetOf()) { it.id }
         val library = libraryRepository.getAllAsFlow().first()
-            .filter { it.canonicalTitleId in titleIds }
             .sortedBy { it.canonicalTitleId }
 
         val identities = titles.flatMap { title ->
