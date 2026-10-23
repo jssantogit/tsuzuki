@@ -1,6 +1,6 @@
 begin;
 
-select plan(5);
+select plan(8);
 
 insert into auth.users (id, aud, role, email, encrypted_password, created_at, updated_at)
 values (
@@ -33,7 +33,7 @@ select lives_ok(
     'legacy progress remains writable under the original domain'
 );
 
-select lives_ok(
+select throws_ok(
     $$
     select public.sync_apply_mutation_batch(
         '{
@@ -47,7 +47,9 @@ select lives_ok(
         }'::jsonb
     );
     $$,
-    'exact progress uses an independent remote domain'
+    '0A000',
+    'exact progress requires a negotiated protocol rollout',
+    'v2 progress RPC rejects writes until account migration is coordinated'
 );
 
 select is(
@@ -59,25 +61,45 @@ select is(
           and field_path = 'lastPageRead'
     ),
     '7'::jsonb,
-    'v2 update cannot overwrite v1 progress even with an identical record ID'
+    'v2 refusal leaves legacy progress untouched'
 );
 
 select is(
     (
-        select value
+        select count(*)::integer
         from tsuzuki_private.tsuzuki_sync_fields
         where domain = 'READING_PROGRESS_V2'
-          and record_id = 'chapter-key'
-          and field_path = 'lastPageRead'
     ),
-    '3'::jsonb,
-    'v1 update cannot overwrite the independently stored v2 progress'
+    0,
+    'v2 refusal leaves no remote progress fields'
+);
+
+select is(
+    (
+        select count(*)::integer
+        from tsuzuki_private.tsuzuki_sync_mutations
+        where mutation_id = '20000000-0000-0000-0000-000000000002'::uuid
+    ),
+    0,
+    'v2 refusal creates no pending or idempotency record'
 );
 
 select is(
     jsonb_array_length(public.sync_pull_delta('READING_PROGRESS', 0, 100)),
     1,
-    'legacy client pulls only legacy-domain events, never exact-v2 events'
+    'legacy client still pulls legacy-domain events'
+);
+
+select is(
+    public.sync_get_progress_protocol(),
+    '{"schemaVersion":1,"protocolEpoch":1,"activeDomain":"READING_PROGRESS","exactProgressEnabled":false,"migrationReady":false}'::jsonb,
+    'server advertises only the safe legacy protocol with no v2 activation'
+);
+
+select is(
+    public.sync_get_cursor('READING_PROGRESS'),
+    1::bigint,
+    'v2 refusal does not advance the legacy event cursor'
 );
 
 select * from finish();
