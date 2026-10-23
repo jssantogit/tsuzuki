@@ -15,8 +15,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -27,13 +30,16 @@ import eu.kanade.presentation.more.settings.components.SettingsCanvas
 import eu.kanade.presentation.more.settings.components.SettingsGroup
 import eu.kanade.presentation.more.settings.components.SettingsGroupDivider
 import eu.kanade.presentation.more.settings.components.SettingsPageHeader
+import eu.kanade.presentation.more.settings.widget.AppThemePreferenceWidget
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.util.Screen
+import mihon.app.di.appGraph
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.roundedfilled.CheckCircle
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
 
 object SettingsTsuzukiVisualPresetScreen : Screen() {
 
@@ -41,6 +47,11 @@ object SettingsTsuzukiVisualPresetScreen : Screen() {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val colors = defaultSkinColors()
+        val context = LocalContext.current
+        val uiPreferences = remember(context) { context.appGraph.uiPreferences }
+        val appThemePref = uiPreferences.appTheme
+        val appTheme by appThemePref.collectAsState()
+        val amoled by uiPreferences.themeDarkAmoled.collectAsState()
 
         SettingsCanvas {
             LazyColumn {
@@ -91,6 +102,16 @@ object SettingsTsuzukiVisualPresetScreen : Screen() {
                                 modifier = Modifier.size(22.dp),
                             )
                         }
+                    }
+                }
+                item(key = "visual_palette_group") {
+                    SettingsGroup(title = stringResource(MR.strings.pref_app_theme)) {
+                        AppThemePreferenceWidget(
+                            value = appTheme,
+                            amoled = amoled,
+                            compactPreview = true,
+                            onItemClick = { appThemePref.set(it) },
+                        )
                     }
                 }
             }

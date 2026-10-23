@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -27,6 +28,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
@@ -36,6 +38,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -44,6 +47,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import eu.kanade.domain.ui.model.AppTheme
+import mihon.app.di.appGraph
 
 /** Shared visual language for the approved Default Skin. */
 @Immutable
@@ -60,9 +65,15 @@ data class DefaultSkinColors(
 
 @Composable
 fun defaultSkinColors(): DefaultSkinColors {
+    val context = LocalContext.current
+    val uiPreferences = remember(context) { context.appGraph.uiPreferences }
     val scheme = MaterialTheme.colorScheme
     val light = scheme.surface.luminance() > 0.5f
-    return remember(scheme, light) { defaultSkinPalette(light) }
+    val appTheme = uiPreferences.appTheme.get()
+    val amoled = uiPreferences.themeDarkAmoled.get()
+    return remember(scheme, light, appTheme, amoled) {
+        defaultSkinPalette(isLight = light, appTheme = appTheme, scheme = scheme, amoled = amoled)
+    }
 }
 
 /** Neutral interface roles stay independent from the Ink/Paper brand identity. */
@@ -90,6 +101,33 @@ internal fun defaultSkinPalette(isLight: Boolean): DefaultSkinColors =
             onAccent = Color(0xFF0B0C0D),
         )
     }
+
+/**
+ * Preserve Ink/Paper for Default; derive themed roles from the selected Material palette for
+ * every other preset. This keeps the existing theme preference as the only source of truth.
+ */
+internal fun defaultSkinPalette(
+    isLight: Boolean,
+    appTheme: AppTheme,
+    scheme: ColorScheme,
+    amoled: Boolean = false,
+): DefaultSkinColors {
+    val palette = if (appTheme == AppTheme.DEFAULT) {
+        defaultSkinPalette(isLight)
+    } else {
+        DefaultSkinColors(
+            canvas = scheme.background,
+            surface = scheme.surfaceContainerLow,
+            surfaceMuted = scheme.surfaceContainerHigh,
+            foreground = scheme.onBackground,
+            secondary = scheme.onSurfaceVariant,
+            outline = scheme.outlineVariant,
+            accent = scheme.primary,
+            onAccent = scheme.onPrimary,
+        )
+    }
+    return if (!isLight && amoled) palette.copy(canvas = Color.Black) else palette
+}
 
 object DefaultSkinSpacing {
     val PageHorizontal = 20.dp
@@ -207,15 +245,20 @@ fun DefaultSkinTextAction(
     enabled: Boolean = true,
 ) {
     val colors = defaultSkinColors()
-    Text(
-        text = text,
+    Box(
         modifier = modifier
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 10.dp),
-        color = if (enabled) colors.foreground else colors.secondary.copy(alpha = 0.55f),
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.SemiBold,
-    )
+            .heightIn(min = 48.dp)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp),
+            color = if (enabled) colors.foreground else colors.secondary.copy(alpha = 0.55f),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
 }
 
 @Composable
@@ -226,23 +269,31 @@ fun DefaultSkinChoiceChip(
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
-    Surface(
-        modifier = modifier.clickable(role = Role.Button, onClick = onClick),
-        shape = DefaultSkinShape.Pill,
-        color = if (selected) colors.accent else colors.surface,
-        contentColor = if (selected) colors.onAccent else colors.foreground,
-        border = BorderStroke(1.dp, if (selected) colors.accent else colors.outline),
-        shadowElevation = 0.dp,
-        tonalElevation = 0.dp,
+    Box(
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { this.selected = selected },
+        contentAlignment = Alignment.CenterStart,
     ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Surface(
+            modifier = Modifier.heightIn(min = 32.dp),
+            shape = DefaultSkinShape.Pill,
+            color = if (selected) colors.accent else colors.surface,
+            contentColor = if (selected) colors.onAccent else colors.foreground,
+            border = BorderStroke(1.dp, if (selected) colors.accent else colors.outline),
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp,
+        ) {
+            Text(
+                text = text,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
