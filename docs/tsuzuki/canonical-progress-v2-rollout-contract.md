@@ -10,7 +10,7 @@ This contract documents verifiable barriers, not permission to ship a migration.
 - Both direct and background `SupabaseSyncOrchestrator` entry points reject `READING_PROGRESS_V2` with `UNSUPPORTED_SCHEMA` before remote traffic for that domain. The opt-in adapter must not be installed in production composition.
 - A forward-only Supabase migration moves the previously exposed `sync_apply_mutation_batch(jsonb)` body unchanged to the non-exposed `tsuzuki_private` schema. Only its authenticated public wrapper may call it. The wrapper rejects v2 **before** the old idempotency or mutation logic and normalizes the domain exactly like the old RPC.
 - Authenticated `sync_get_progress_protocol()` is **read-only**, returning an epoch-1, legacy-only capability response: `schemaVersion=1`, `protocolEpoch=1`, `activeDomain=READING_PROGRESS`, `exactProgressEnabled=false`, `migrationReady=false`. The client decoder accepts only that combination. It does not authorize an epoch transition, and no activation RPC exists.
-- `PreviewCanonicalProgressV2Migration` inspects a remote **v1** progress snapshot against *all* locally known title siblings and optional stable evidence. It produces an old-ID → new-ID **review mapping only**, without copying, deleting or importing any progress. It rejects malformed/tombstone records, wrong document versions, unmatched keys, volume-number resets with ambiguous old keys and exact decimals requiring guessed provenance. A `Ready` review is **never** a migration permission.
+- `PreviewCanonicalProgressV2Migration` inspects a remote **v1** progress snapshot against *all* locally known title siblings and optional stable evidence. It produces an old-ID → new-ID **review mapping only**, without copying, deleting or importing any progress. It rejects malformed/tombstone records, wrong document versions, unmatched keys, volume-number resets with ambiguous old keys, variant-specific checkpoints without independently reviewed source mappings, and exact decimals requiring guessed provenance. A `Ready` review is **never** a migration permission.
 
 ## Why the server must own the epoch
 
@@ -35,7 +35,7 @@ None of steps 1–6 is implemented or approved for live use by this PR.
 | Remote v2 refusal; no idempotency/events leaked | pgTAP namespace and private-implementation privilege regressions | Await exact-head CI |
 | Legacy v1 unchanged | pgTAP original conflict/RLS/replay tests and HTTP transport tests | Await exact-head CI |
 | Capability discovery | Authenticated server RPC, strict client decode, malformed/future-status tests | Await exact-head CI |
-| Offline legacy→v2 mapping preview | Pure domain test cases for valid legacy, forged/missing, unnumbered evidence, decimal and volume collisions | Await exact-head CI |
+| Offline legacy→v2 mapping preview | Pure domain test cases for valid legacy, forged/missing, unnumbered evidence, source-variant checkpoints, decimal and volume collisions | Await exact-head CI |
 | Real account migration with historical keys | Requires signed-off server epoch transition and real remote snapshots | **Not run / not enabled** |
 | Older-client write fence and post-cutover downgrade | Requires future account-epoch server implementation | **Not implemented** |
 | Android physical reader and user backup preservation | Separate device acceptance; do not duplicate PR #141 backup work | **Not run here** |
