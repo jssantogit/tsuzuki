@@ -8,8 +8,12 @@ import eu.kanade.tachiyomi.data.backup.create.CanonicalCoreBackupExporter
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreLibraryEntry
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreList
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreProviderBinding
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreProgress
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreSourceMapping
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
@@ -155,6 +159,75 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
+    fun `collection folders lists and provider bindings survive SQLite export restore`() = runBlocking {
+        importer.restoreCore(sectionWithCollectionsAndBindings())
+        val restoredCollection = database.tsuzuki_collectionsQueries
+            .getAllTsuzukiCollections().awaitAsList().single()
+        restoredCollection.id shouldBe "collection-1"
+        restoredCollection.title shouldBe "Favorite manga"
+        val folder = database.tsuzuki_collectionsQueries
+            .getAllTsuzukiFoldersByCollection("collection-1").awaitAsList().single()
+        folder.id shouldBe "folder-1"
+        folder.parent_folder_id shouldBe null
+        val list = database.tsuzuki_collectionsQueries
+            .getAllTsuzukiListsByCollection("collection-1").awaitAsList().single()
+        list.folder_id shouldBe "folder-1"
+        list.provider_id shouldBe "kitsu"
+        val binding = database.tsuzuki_provider_bindingsQueries
+            .getTsuzukiProviderBindingsByTitle("title-1").awaitAsList().single()
+        binding.external_work_id shouldBe "remote-title-1"
+
+        val titles = CanonicalTitleRepositoryImpl(database)
+        val exporter = CanonicalCoreBackupExporter(
+            titleSource = CanonicalTitleSyncSource { titles.getAllAsFlow().first() },
+            titleRepository = titles,
+            libraryRepository = CanonicalLibraryRepositoryImpl(database),
+            chapterRepository = CanonicalChapterRepositoryImpl(database),
+            sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+            readingRepository = CanonicalReadingRepositoryImpl(database),
+            database = database,
+            json = Json,
+        )
+        val decoded = Json.decodeFromString(
+            BackupCanonicalCore.serializer(),
+            exporter.export().payloadJson,
+        )
+        decoded.validate()
+        decoded.collections.single().id shouldBe "collection-1"
+        decoded.folders.single().id shouldBe "folder-1"
+        decoded.lists.single().id shouldBe "list-1"
+        decoded.providerBindings.single().externalWorkId shouldBe "remote-title-1"
+    }
+
+    @Test
+    fun `collection cycle or list in another folder fails before database writes`() = runBlocking {
+        val good = coreWithCollectionsAndBindings()
+        val cycle = good.copy(
+            folders = good.folders.map { it.copy(parentFolderId = "folder-1") },
+        )
+        shouldThrow<IllegalArgumentException> {
+            importer.restoreCore(coreSection(cycle))
+        }
+        val badList = good.copy(
+            lists = good.lists.map { it.copy(collectionId = "other") },
+        )
+        shouldThrow<IllegalArgumentException> {
+            importer.restoreCore(coreSection(badList))
+        }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+    }
+
+    @Test
+    fun `colliding provider binding external identities are rejected`() = runBlocking {
+        val good = coreWithCollectionsAndBindings()
+        val conflicting = good.copy(
+            providerBindings = good.providerBindings + good.providerBindings.single().copy(id = "binding-2"),
+        )
+        shouldThrow<IllegalArgumentException> { importer.restoreCore(coreSection(conflicting)) }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+    }
+
+    @Test
     fun `injected failure before receipt rolls back all canonical writes`() = runBlocking {
         shouldThrow<IllegalStateException> {
             importer.restoreCore(section()) { error("forced crash before commit") }
@@ -195,6 +268,60 @@ class CanonicalCoreBackupImporterTest {
         shouldThrow<IllegalArgumentException> { importer.restoreCore(invalid) }
         database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
     }
+
+    private fun sectionWithCollectionsAndBindings() =
+        coreSection(coreWithCollectionsAndBindings())
+
+    private fun coreWithCollectionsAndBindings(): BackupCanonicalCore {
+        val core = Json.decodeFromString(BackupCanonicalCore.serializer(), section().payloadJson)
+        return core.copy(
+            collections = listOf(
+                BackupCoreCollection("collection-1", "Favorite manga", "USER", 0, 2, 1, 10, 20, null),
+            ),
+            folders = listOf(
+                BackupCoreFolder("folder-1", "collection-1", null, "All", "USER", 0, 2, 1, 10, 20, null),
+            ),
+            lists = listOf(
+                BackupCoreList(
+                    id = "list-1",
+                    collectionId = "collection-1",
+                    folderId = "folder-1",
+                    title = "Reading",
+                    providerId = "kitsu",
+                    queryJson = null,
+                    sort = "DEFAULT",
+                    sortDirection = null,
+                    layoutType = null,
+                    sortOrder = 0,
+                    enabled = true,
+                    origin = "USER",
+                    schemaVersion = 2,
+                    revision = 1,
+                    createdAt = 10,
+                    updatedAt = 20,
+                    deletedAt = null,
+                ),
+            ),
+            providerBindings = listOf(
+                BackupCoreProviderBinding(
+                    id = "binding-1",
+                    canonicalTitleId = "title-1",
+                    providerId = "provider.example",
+                    facetId = "reading",
+                    externalWorkId = "remote-title-1",
+                    verification = "VERIFIED",
+                    availability = "AVAILABLE",
+                    createdAt = 10,
+                    updatedAt = 20,
+                ),
+            ),
+        )
+    }
+
+    private fun coreSection(core: BackupCanonicalCore) = BackupCanonicalSection.fromJson(
+        BackupCanonicalCore.SECTION_KEY,
+        Json.encodeToString(BackupCanonicalCore.serializer(), core),
+    )
 
     private fun section(): BackupCanonicalSection {
         val core = BackupCanonicalCore(
