@@ -1384,7 +1384,9 @@ class ReaderViewModel(
             val lastPageSelected = readerChapter.pages?.lastIndex == pageIndex
             val chapterCompleted = when {
                 !lastPageSelected -> false
-                canonicalSession != null && readerChapter.pageLoader is LocalChapterLoader ->
+                canonicalSession != null &&
+                    canonicalSession.mihonChapterId == null &&
+                    readerChapter.pageLoader?.isLocal == true ->
                     page is ReaderPage && isCanonicalLocalPageReadable(page)
                 else -> true
             }
