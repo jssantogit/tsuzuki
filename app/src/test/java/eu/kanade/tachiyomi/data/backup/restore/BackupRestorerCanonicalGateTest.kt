@@ -71,13 +71,16 @@ class BackupRestorerCanonicalGateTest {
         )
 
         shouldThrow<IllegalStateException> {
-            restorer().restore(uri, RestoreOptions(
-                libraryEntries = false,
-                categories = false,
-                appSettings = false,
-                extensionStores = false,
-                sourceSettings = false,
-            ))
+            restorer().restore(
+                uri,
+                RestoreOptions(
+                    libraryEntries = false,
+                    categories = false,
+                    appSettings = false,
+                    extensionStores = false,
+                    sourceSettings = false,
+                ),
+            )
         }
         verify(exactly = 0) { notifier.showRestoreComplete(any(), any(), any(), any(), any()) }
     }
@@ -85,13 +88,16 @@ class BackupRestorerCanonicalGateTest {
     @Test
     fun `legacy archive without canonical field remains restorable`(): Unit = runBlocking {
         coEvery { backupDecoder.decode(uri) } returns Backup(backupManga = emptyList())
-        restorer().restore(uri, RestoreOptions(
-            libraryEntries = false,
-            categories = false,
-            appSettings = false,
-            extensionStores = false,
-            sourceSettings = false,
-        ))
+        restorer().restore(
+            uri,
+            RestoreOptions(
+                libraryEntries = false,
+                categories = false,
+                appSettings = false,
+                extensionStores = false,
+                sourceSettings = false,
+            ),
+        )
 
         verify(exactly = 1) { notifier.showRestoreComplete(any(), any(), any(), any(), any()) }
     }
