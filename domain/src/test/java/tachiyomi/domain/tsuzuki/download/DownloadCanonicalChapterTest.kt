@@ -309,6 +309,8 @@ class DownloadCanonicalChapterTest {
 
         override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
 
+        override suspend fun isArtifactAvailable(artifact: CanonicalDownloadArtifact): Boolean = existingArtifactAvailable
+
         override suspend fun acquire(option: ContentOption): Result<CanonicalDownloadArtifact> {
             calls++
             lastOption = option
