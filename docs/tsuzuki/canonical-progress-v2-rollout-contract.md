@@ -14,7 +14,7 @@ This contract documents verifiable barriers, not permission to ship a migration.
 
 ## Why the server must own the epoch
 
-There is currently no authoritative per-account/per-device protocol epoch. New clients could otherwise write v2 while old clients continue modifying v1, leading to two authoritative histories. An isolated namespace or client feature flag cannot solve this.
+The account now has a server-owned epoch-1 ledger and a downgrade write fence, but still has no trusted per-device compatibility proof or approved cutover. Without the full transaction, new clients could otherwise write v2 while old clients continue modifying v1, splitting history. An isolated namespace or client feature flag cannot solve this.
 
 A future activation design **must** require all of the following, in this order, before shipping:
 
@@ -25,7 +25,7 @@ A future activation design **must** require all of the following, in this order,
 5. **Old-client downgrade fence.** After cutover, **reject legacy `READING_PROGRESS` mutation requests server-side**, including retries and idempotent replays; do not silently accept v1 writes that the new client cannot see. Other document domains may continue unaffected where their schemas remain compatible.
 6. **Explicit failure/rollback.** A failed cutover must leave v1 authoritative. Any rollback after successful cutover needs an independently reviewed export/reconciliation and an epoch transition; changing a preference or installing an older APK must not silently roll back remote progress.
 
-None of steps 1–6 is implemented or approved for live use by this PR.
+Parts of step 1 (account epoch ledger and observational v1 device leases) and step 5 (a pre-activation downgrade fence) are implemented. The rest, especially a trusted cross-device handshake and atomic cutover, remains missing. **None of steps 1–6 is approved for live migration or v2 activation.**
 
 ## Test and sign-off gates
 
@@ -37,7 +37,7 @@ None of steps 1–6 is implemented or approved for live use by this PR.
 | Capability discovery | Authenticated server RPC, strict client decode, malformed/future-status tests | Await exact-head CI |
 | Offline legacy→v2 mapping preview | Pure domain test cases for valid legacy, forged/missing, unnumbered evidence, source-variant checkpoints, decimal and volume collisions | Await exact-head CI |
 | Real account migration with historical keys | Requires signed-off server epoch transition and real remote snapshots | **Not run / not enabled** |
-| Older-client write fence and post-cutover downgrade | Requires future account-epoch server implementation | **Not implemented** |
+| Older-client write fence and post-cutover downgrade | Pre-activation epoch1 gate rejects hypothetical epoch2 v1 writes; no live cutover or downgrade acceptance | **Foundation automated; live transition blocked** |
 | Android physical reader and user backup preservation | Separate device acceptance; do not duplicate PR #141 backup work | **Not run here** |
 
 No tests may use private user snapshots in public CI. Keep PR #140 in **draft**, do not merge or enable v2 until the remaining gates are independently approved.
@@ -47,7 +47,7 @@ No tests may use private user snapshots in public CI. Keep PR #140 in **draft**,
 - A new private, account-scoped protocol ledger is enrolled lazily at epoch 1 by the legacy progress RPC only. Discovery remains read-only and does not create a ledger row. No client has direct table privileges or an epoch-switching API.
 - Legacy `READING_PROGRESS` writes hold a per-account `FOR SHARE` row lock through the underlying v1 mutation, and reject every epoch other than 1 **before idempotency/replay processing**. A future cutover must use `FOR UPDATE` on this exact row in the same atomic transaction as its cursor CAS, migration receipt and v2 state materialization.
 - The v2 write namespace remains unconditionally rejected. An artificially elevated account epoch causes existing clients' protocol discovery to fail closed, rather than falsely advertising v1 readiness. Library and other compatible sync domains remain unchanged.
-- pgTAP simulates a privileged epoch transition for one synthetic account: it verifies rejected new v1 writes, rejected previously accepted replay, rejected v2 writes, unchanged checkpoints/receipts, private ledger permissions and unaffected second account. **A simulated epoch is not a real cutover**; the project still lacks device registration, capability leases, migration/backup, atomic state conversion and physical mixed-version validation.
+- pgTAP simulates a privileged epoch transition for one synthetic account: it verifies rejected new v1 writes, rejected previously accepted replay, rejected v2 writes, unchanged checkpoints/receipts, private ledger permissions and unaffected second account. **A simulated epoch is not a real cutover**; the project now has observational v1 device registration and bounded leases, but still lacks trusted capability proof, migration/backup, atomic state conversion and physical mixed-version validation.
  
 ## Device-presence registry — server-owned v1 foundation (still pre-activation)
 

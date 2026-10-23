@@ -25,7 +25,7 @@ begin
         );
     end loop;
 end;
-$;
+$$;
 
 reset role;
 select is(
