@@ -49,6 +49,22 @@ class MihonCanonicalDownloadGatewayTest {
     }
 
     @Test
+    fun `canonical artifact availability checks the physical resource delegate`() = runTest {
+        val downloaded = artifact(option())
+        val gateway = MihonCanonicalDownloadGateway(
+            mangaTitleProvider = { "Title" },
+            sourceProvider = { StubSource(it, "en", "Source") },
+            downloadLookup = { _, _, _ -> false },
+            artifactAvailable = { checked ->
+                checked shouldBe downloaded
+                false
+            },
+        )
+
+        gateway.isArtifactAvailable(downloaded) shouldBe false
+    }
+
+    @Test
     fun `acquire reuses existing physical artifact without queueing`() = runTest {
         val option = option()
         val artifact = artifact(option)
