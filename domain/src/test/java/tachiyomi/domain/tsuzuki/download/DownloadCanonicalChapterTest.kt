@@ -51,7 +51,6 @@ class DownloadCanonicalChapterTest {
         fixture.gateway.calls shouldBe 0
     }
 
-
     @Test
     fun staleCanonicalArtifactIsRemovedBeforeDownloadingARealReplacement() = runTest {
         val replacement = artifact("mangafire")
