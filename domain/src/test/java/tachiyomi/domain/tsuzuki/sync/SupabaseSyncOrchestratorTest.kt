@@ -71,7 +71,7 @@ class SupabaseSyncOrchestratorTest {
     }
 
     @Test
-    fun `isolated v2 progress domain never writes old v1 records`() = runTest {
+    fun `unnegotiated v2 progress adapter cannot sync despite isolated namespace`() = runTest {
         val v2 = SyncDocumentKind.READING_PROGRESS_V2
         val local = document(status = "READING").copy(
             kind = v2,
@@ -87,12 +87,37 @@ class SupabaseSyncOrchestratorTest {
             transport = transport,
         ).sync(v2)
 
-        (result is SyncDocumentResult.Failed) shouldBe false
-        transport.pushedBatches.isNotEmpty() shouldBe true
-        transport.pushedBatches.all { it.domain == v2.name } shouldBe true
-        transport.pushedBatches.none { it.domain == SyncDocumentKind.READING_PROGRESS.name } shouldBe true
-        adapter.current.schemaVersion shouldBe 2
-        adapter.current.kind shouldBe v2
+        (result as SyncDocumentResult.Failed).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        transport.networkCalls shouldBe 0
+        transport.pushedBatches.isEmpty() shouldBe true
+        adapter.current shouldBe local
+        outbox.get(v2) shouldNotBe null
+    }
+
+    @Test
+    fun `background sync cannot publish v2 progress without server negotiation`() = runTest {
+        val v2 = SyncDocumentKind.READING_PROGRESS_V2
+        val local = document(status = "READING").copy(
+            kind = v2,
+            schemaVersion = 2,
+        )
+        val adapter = FakeAdapter(local)
+        val transport = FakeTransport()
+        val outbox = FakeOutbox().apply { markDirty(v2, 1) }
+
+        val report = orchestrator(
+            adapter = adapter,
+            outbox = outbox,
+            transport = transport,
+        ).runOnce()
+
+        report.documentResults.single().let {
+            (it as SyncDocumentResult.Failed).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        }
+        transport.networkCalls shouldBe 0
+        transport.pushedBatches.isEmpty() shouldBe true
+        adapter.current shouldBe local
+        outbox.get(v2) shouldNotBe null
     }
 
     @Test
