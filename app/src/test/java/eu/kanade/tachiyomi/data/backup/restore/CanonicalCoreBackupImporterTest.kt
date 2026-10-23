@@ -504,6 +504,35 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
+    fun `unknown provider runtime payload blocks an incomplete portable export`() = runBlocking {
+        importer.restoreCore(section())
+        database.tsuzuki_content_bindingsQueries.upsertTsuzukiContentBinding(
+            id = "provider-runtime-1",
+            canonicalTitleId = "title-1",
+            addonId = "custom-provider",
+            providerTitleKey = "remote-id",
+            matchConfidence = 0.8,
+            verifiedByUser = true,
+            availability = "AVAILABLE",
+            runtimePayload = byteArrayOf(1, 2, 3),
+            createdAt = 1,
+            updatedAt = 2,
+        )
+        val titleRepo = CanonicalTitleRepositoryImpl(database)
+        val exporter = CanonicalCoreBackupExporter(
+            titleSource = CanonicalTitleSyncSource { titleRepo.getAllAsFlow().first() },
+            titleRepository = titleRepo,
+            libraryRepository = CanonicalLibraryRepositoryImpl(database),
+            chapterRepository = CanonicalChapterRepositoryImpl(database),
+            sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+            readingRepository = CanonicalReadingRepositoryImpl(database),
+            database = database,
+            json = Json,
+        )
+        shouldThrow<IllegalStateException> { exporter.export() }
+    }
+
+    @Test
     fun `ambiguous existing categories abort without importing canonical records`() = runBlocking {
         database.categoriesQueries.insert(name = "Favorites", order = 1, flags = 0)
         database.categoriesQueries.insert(name = "Favorites", order = 2, flags = 0)
