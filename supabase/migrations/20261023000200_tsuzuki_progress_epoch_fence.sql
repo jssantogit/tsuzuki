@@ -78,10 +78,12 @@ begin
 end;
 $$;
 
+-- This scoped reader must be SECURITY DEFINER: authenticated clients may
+-- execute the RPC but cannot SELECT the private account ledger themselves.
 create or replace function public.sync_get_progress_protocol()
 returns jsonb
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
@@ -94,35 +96,11 @@ begin
             message = 'authentication required';
     end if;
 
-    -- Invoker cannot SELECT the private ledger directly (by design).
-    return tsuzuki_private.sync_read_legacy_progress_protocol(v_user_id);
-end;
-$$;
-
--- Internal reader has a fixed output contract; it grants no switching power.
-create or replace function tsuzuki_private.sync_read_legacy_progress_protocol(
-    p_user_id uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-    v_epoch integer;
-begin
-    -- Caller identity is ALWAYS checked; accepting an arbitrary user's id
-    -- from an untrusted invoker must not disclose another account's epoch.
-    if auth.uid() is null or p_user_id is distinct from auth.uid() then
-        raise exception using
-            errcode = '42501',
-            message = 'authentication required';
-    end if;
-
+    -- Absent rows are legacy epoch 1. Reading does not enroll or mutate.
     select a.protocol_epoch
     into v_epoch
     from tsuzuki_private.tsuzuki_progress_protocol_accounts as a
-    where a.user_id = p_user_id;
+    where a.user_id = v_user_id;
 
     if coalesce(v_epoch, 1) <> 1 then
         raise exception using
@@ -140,8 +118,6 @@ begin
 end;
 $$;
 
-revoke all on function tsuzuki_private.sync_read_legacy_progress_protocol(uuid)
-    from public, anon, authenticated;
 revoke all on function public.sync_apply_mutation_batch(jsonb)
     from public, anon;
 grant execute on function public.sync_apply_mutation_batch(jsonb)
