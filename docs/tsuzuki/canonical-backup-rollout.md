@@ -4,6 +4,12 @@ Status: schema/validation + transactional core exporter and importer, in draft P
 
 ## Resource safety for existing backup files
 
+Automatic backups now use timestamped filenames with a random 128-bit suffix,
+so retries within one minute cannot reuse the prior archive path. Retention
+continues to recognize legacy minute-only filenames and newer unique filenames.
+This reduces accidental overwrite/deletion of previously validated automatic
+backups. It does not promise filesystem-level atomicity for every SAF provider.
+
 The legacy `.tachibk` decoder now reads both plain and gzip archives with a
 256 MiB **uncompressed** size ceiling before protobuf decoding. This avoids
 unbounded gzip expansion in the application process. Oversized files fail
@@ -24,6 +30,14 @@ checksum or authentication mechanism.
 ## Backward compatibility
 
 Optional protobuf field 107 (Backup.canonicalSnapshot) is absent in legacy archives. Sections have independent version keys, SHA-256 checksums, JSON validation, and core graph referential checks. Checksums identify corruption, not a trusted author.
+
+**Unsupported canonical-archive restore fails closed:** The current production
+`BackupRestorer` handles legacy Mihon records only. It now refuses every
+archive declaring `canonicalSnapshot` **before performing legacy mutations**,
+including an empty snapshot, until an end-to-end verified canonical
+writer/importer pair ships. Otherwise a purportedly successful restore could
+silently discard Tsuzuki's canonical books, progress and collections. Archives
+without field 107 remain on the normal legacy restore path.
 
 ## Core graph already modeled/exportable
 
