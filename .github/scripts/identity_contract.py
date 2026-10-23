@@ -190,7 +190,18 @@ def check_contract(root: Path) -> list[str]:
         if "BuildConfig.APPLICATION_ID" not in backup_creator:
             errors.append("backup filename must continue to derive from BuildConfig.APPLICATION_ID")
         if ".tachibk" not in backup_creator:
-            errors.append("backup filename must preserve .tachibk compatibility")
+            # The file naming implementation may live in its dedicated helper.
+            # Keep verifying the actual returned extension rather than
+            # requiring a suffix literal in BackupCreator's delegating code.
+            naming_helper = root / (
+                "app/src/main/java/eu/kanade/tachiyomi/"
+                "data/backup/create/AutomaticBackupFileNames.kt"
+            )
+            helper_content = naming_helper.read_text(encoding="utf-8") if naming_helper.is_file() else ""
+            delegated = "AutomaticBackupFileNames.generate(BuildConfig.APPLICATION_ID)" in backup_creator
+            returns_tachibk = re.search(r'\\breturn\\s+"[^"\\n]*\\.tachibk"', helper_content) is not None
+            if not (delegated and returns_tachibk):
+                errors.append("backup filename must preserve .tachibk compatibility")
 
     if apk_workflow:
         for name in SIGNING_SECRET_NAMES:
