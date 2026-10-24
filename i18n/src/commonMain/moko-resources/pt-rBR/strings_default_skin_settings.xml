@@ -34,7 +34,7 @@
     <string name="tsuzuki_preset_tokyonight_summary">Azuis noturnos, índigo e detalhes luminosos.</string>
     <string name="tsuzuki_preset_monochrome_summary">Paleta minimalista em cinza que destaca as capas.</string>
     <string name="tsuzuki_theme_mode_title">Modo do tema</string>
-    <string name="tsuzuki_collections_settings_title">Collections</string>
+    <string name="tsuzuki_collections_settings_title">Coleções</string>
     <string name="tsuzuki_collections_settings_summary">Organize coleções, pastas e listas exibidas pelo Tsuzuki</string>
 
     <string name="tsuzuki_download_network_files">Rede e arquivos</string>

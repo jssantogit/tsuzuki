@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -454,8 +455,20 @@ private fun CanonicalLibraryFilterSheet(
     val colors = defaultSkinColors()
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = colors.canvas,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = colors.surface,
         contentColor = colors.foreground,
+        scrimColor = colors.canvas.copy(alpha = 0.55f),
+        tonalElevation = 0.dp,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 12.dp, bottom = 8.dp)
+                    .width(36.dp)
+                    .height(4.dp)
+                    .background(colors.outline, DefaultSkinShape.Pill),
+            )
+        },
     ) {
         Column(
             modifier = Modifier
