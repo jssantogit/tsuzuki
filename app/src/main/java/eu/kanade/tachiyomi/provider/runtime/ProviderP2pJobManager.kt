@@ -92,7 +92,10 @@ class ProviderP2pJobManager internal constructor(
 
             val existing = jobs[key]
             if (existing != null) {
-                if (existing.request != request) {
+                // A Host-verified job must remain scoped to a currently approved selection.
+                // Matching operation IDs alone never authorize polling it from another
+                // Provider invocation, whether the job is pending or completed.
+                if (existing.request != request || (existing.hostApproved && approvedSelection != request)) {
                     ProviderP2pDiagnostics.record(
                         event = ProviderP2pDiagnosticEvent.JOB_REJECTED,
                         operationId = request.operationId,

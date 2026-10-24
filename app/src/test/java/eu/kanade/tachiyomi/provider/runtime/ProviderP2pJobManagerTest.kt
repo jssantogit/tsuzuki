@@ -238,8 +238,18 @@ class ProviderP2pJobManagerTest {
                 jobs.service("org.example.p2p", withGrant).acquire(withGrant)
                     is ProviderP2pAcquireResponse.Pending
                 ) shouldBe true
+            // A second Provider invocation with no Host selection approval must not
+            // poll an already-running privileged job just by repeating its operation ID.
+            jobs.service("org.example.p2p").acquire(withGrant) shouldBe
+                ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.FILE_MISMATCH)
             scope.advanceUntilIdle()
             seen shouldBe listOf(false, true)
+            // Completed privileged jobs are not transferable across invocations either.
+            jobs.service("org.example.p2p").acquire(withGrant) shouldBe
+                ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.FILE_MISMATCH)
+            // The originally approved invocation can continue to poll the result.
+            jobs.service("org.example.p2p", withGrant).acquire(withGrant) shouldBe
+                ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.METADATA_UNAVAILABLE)
 
             val differentSelection = approved.copy(
                 operationId = "mismatch",
