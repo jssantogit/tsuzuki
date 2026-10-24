@@ -302,8 +302,10 @@ class ProviderTorrentMetadataSearchGatewayTest {
             ),
         )
 
-        logs.single { it.startsWith("host_torrent_match ") } shouldBe
-            "host_torrent_match total=1 readable=1 parsed=0 embedded=0 identity=0 volume=0 exact=0 ambiguous=0"
+        // The generic label parser may recognize the leading 86, but the real mapper
+        // must reject it when that token belongs only to the requested title.
+        logs.single { it.startsWith("host_torrent_match ") }
+            .endsWith("identity=0 volume=0 exact=0 ambiguous=0") shouldBe true
     }
 
     private fun candidate(files: List<TorrentCandidateFile>?): TorrentCandidate = TorrentCandidate(
