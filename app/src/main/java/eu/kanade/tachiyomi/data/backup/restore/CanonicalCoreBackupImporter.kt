@@ -87,10 +87,35 @@ class CanonicalCoreBackupImporter(
                 "Canonical library is not empty: explicit merge or safe migration is required"
             }
 
-            check(
-                database.tsuzuki_collectionsQueries
-                    .getAllTsuzukiCollections().awaitAsList().isEmpty(),
-            ) { "Collections already exist: explicit merge is required" }
+            // A fresh install may create system defaults before archive restore.
+            // Reuse only an exact, empty SYSTEM collection already present in
+            // this archive. Never rename/overwrite local USER content or silently
+            // attach an unrelated default to the restored graph.
+            val existingCollections = database.tsuzuki_collectionsQueries
+                .getAllTsuzukiCollections().awaitAsList()
+            val archivedCollections = core.collections.associateBy { it.id }
+            for (local in existingCollections) {
+                val archived = archivedCollections[local.id]
+                check(
+                    local.origin == "SYSTEM" &&
+                        archived != null &&
+                        archived.origin == "SYSTEM" &&
+                        local.title == archived.title &&
+                        local.sort_order == archived.sortOrder &&
+                        local.schema_version == archived.schemaVersion &&
+                        local.revision == archived.revision &&
+                        local.created_at == archived.createdAt &&
+                        local.updated_at == archived.updatedAt &&
+                        local.deleted_at == archived.deletedAt,
+                ) { "Existing collections require exact, system-only reconciliation" }
+                check(
+                    database.tsuzuki_collectionsQueries
+                        .getAllTsuzukiFoldersByCollection(local.id).awaitAsList().isEmpty() &&
+                        database.tsuzuki_collectionsQueries
+                            .getAllTsuzukiListsByCollection(local.id).awaitAsList().isEmpty(),
+                ) { "Existing system collection has local contents requiring explicit reconciliation" }
+            }
+            val existingCollectionIds = existingCollections.mapTo(mutableSetOf()) { it.id }
 
             // No device/account ownership is portable through an archive.
             // A clean canonical graph may still have local integration settings.
@@ -218,7 +243,7 @@ class CanonicalCoreBackupImporter(
                     rawMetadata = byteArrayOf(),
                 )
             }
-            core.collections.forEach {
+            core.collections.filterNot { it.id in existingCollectionIds }.forEach {
                 database.tsuzuki_collectionsQueries.upsertTsuzukiCollection(
                     id = it.id,
                     title = it.title,
