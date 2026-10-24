@@ -34,6 +34,7 @@ import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.i18n.MR
 import java.io.FileOutputStream
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 
 @AssistedInject
@@ -143,6 +144,8 @@ class BackupCreator(
                         candidates.filter { it.uri.toString() in obsolete }
                             .forEach { it.delete() }
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (error: Exception) {
                     logcat(LogPriority.WARN, error) {
                         "Validated backup saved, but automatic retention could not be completed"
