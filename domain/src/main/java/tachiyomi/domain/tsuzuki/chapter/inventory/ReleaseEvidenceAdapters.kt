@@ -21,9 +21,10 @@ object MangaUpdatesReleaseEvidenceAdapter {
         observedAt: Long,
         releases: List<InventoryReleaseRecord>,
         hasNextPage: Boolean,
+    nextCursor: String? = null,
     ): InventoryEvidenceBatch {
         require(scope.producerId == "mangaupdates")
-        return releaseBatch(scope, pageKey, observedAt, releases, hasNextPage)
+        return releaseBatch(scope, pageKey, observedAt, releases, hasNextPage, nextCursor)
     }
 }
 
@@ -34,9 +35,10 @@ object MangaDexReleaseEvidenceAdapter {
         observedAt: Long,
         releases: List<InventoryReleaseRecord>,
         hasNextPage: Boolean,
+    nextCursor: String? = null,
     ): InventoryEvidenceBatch {
         require(scope.producerId == "mangadex")
-        return releaseBatch(scope, pageKey, observedAt, releases, hasNextPage)
+        return releaseBatch(scope, pageKey, observedAt, releases, hasNextPage, nextCursor)
     }
 }
 
@@ -46,6 +48,7 @@ private fun releaseBatch(
     observedAt: Long,
     releases: List<InventoryReleaseRecord>,
     hasNextPage: Boolean,
+    nextCursor: String? = null,
 ): InventoryEvidenceBatch {
     require(scope.workIdentityVerified) { "Release observations require a verified exact work ID" }
     require(releases.all { it.releaseId.isNotBlank() })
@@ -64,6 +67,7 @@ private fun releaseBatch(
         pageKey = pageKey,
         observedAt = observedAt,
         outcome = if (hasNextPage) InventoryFetchOutcome.PARTIAL else InventoryFetchOutcome.EXHAUSTED,
+        nextCursor = nextCursor?.takeIf { hasNextPage && it.isNotBlank() },
         claims = stableReleases.map { release ->
             InventoryClaim(
                 sourceRecordId = release.releaseId,
