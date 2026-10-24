@@ -1052,10 +1052,10 @@ private fun DescriptorStaticDropdown(
     val current = (predicate?.value as? QueryValue.StringValue)?.value
     Column(modifier = modifier) {
         BuilderDropdown(
-        label = label,
-        current = current,
-        options = listOf<String?>(null) + options.map { it.second },
-        optionText = { value -> options.firstOrNull { it.second == value }?.first.orEmpty() },
+            label = label,
+            current = current,
+            options = listOf<String?>(null) + options.map { it.second },
+            optionText = { value -> options.firstOrNull { it.second == value }?.first.orEmpty() },
         display = { value ->
             if (value == null) {
                 stringResource(MR.strings.tsuzuki_list_builder_any)
@@ -1824,7 +1824,7 @@ private fun QueryValue.numericText(): String? = when (this) {
 
 /** Local suggestions come only from options declared by the selected metadata provider. */
 internal fun optionPreviewLabels(options: List<Pair<String, String>>, limit: Int): List<String> =
-    options.take(limit.coerceAtLeast(0)).map(Pair<String, String>::first)
+    options.take(limit.coerceAtLeast(0)).map { it.first }
 
 internal fun matchingFilterOptions(
     options: List<Pair<String, String>>,

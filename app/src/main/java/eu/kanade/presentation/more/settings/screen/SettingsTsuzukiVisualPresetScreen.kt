@@ -26,9 +26,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
-import dev.icerock.moko.resources.StringResource
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.presentation.more.settings.components.SettingsCanvas
 import eu.kanade.presentation.more.settings.components.SettingsGroup
