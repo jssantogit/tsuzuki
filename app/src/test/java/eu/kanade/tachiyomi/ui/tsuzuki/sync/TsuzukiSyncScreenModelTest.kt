@@ -200,6 +200,7 @@ class TsuzukiSyncScreenModelTest {
         override suspend fun login(email: String, password: String) = error("not used")
         override suspend fun logout() = error("not used")
         override suspend fun sendPasswordRecovery(email: String) = error("not used")
+        override suspend fun updatePassword(password: String) = Result.success(Unit)
         override suspend fun refreshSession() = Result.success(mutable.value)
         override suspend fun getAccessToken() = Result.success(null)
     }
