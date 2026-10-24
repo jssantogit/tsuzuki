@@ -11,7 +11,8 @@ class BuildCanonicalChapterOutlineTest {
 
     @Test
     fun `Death Note metadata count of 108 does not establish any individual chapter`() {
-        buildCanonicalChapterOutline("death-note", emptyList(), listOf(count("death-note", 108))).isEmpty() shouldBe true
+        buildCanonicalChapterOutline("death-note", emptyList(), listOf(count("death-note", 108))).isEmpty() shouldBe
+            true
     }
 
     @Test
