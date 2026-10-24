@@ -141,9 +141,9 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         }
 
         graph.inject(this)
+        setupInjekt()
         // Host-only P2P events must reach exportable structured history, not just logcat.
         ProviderP2pDiagnostics.installRecorder(graph.structuredDiagnosticRecorder)
-        setupInjekt()
 
         TelemetryConfig.init(applicationContext)
 
