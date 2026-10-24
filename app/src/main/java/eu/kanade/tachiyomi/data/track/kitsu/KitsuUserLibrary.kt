@@ -5,6 +5,8 @@ import kotlinx.serialization.Serializable
 
 interface KitsuUserLibraryApi {
     suspend fun getUserMangaList(): List<KitsuUserListEntry>
+
+    suspend fun getAuthenticatedOwner(): String = error("Kitsu owner identity unavailable")
 }
 
 data class KitsuUserListEntry(
