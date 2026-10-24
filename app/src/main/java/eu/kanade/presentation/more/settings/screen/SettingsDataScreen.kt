@@ -7,11 +7,17 @@ import android.net.Uri
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -24,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -34,6 +41,9 @@ import eu.kanade.presentation.more.settings.screen.data.CreateBackupScreen
 import eu.kanade.presentation.more.settings.screen.data.RestoreBackupScreen
 import eu.kanade.presentation.more.settings.screen.data.StorageInfo
 import eu.kanade.presentation.more.settings.widget.BasePreferenceWidget
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.more.settings.widget.PrefsHorizontalPadding
 import eu.kanade.presentation.util.relativeTimeSpanString
 import eu.kanade.tachiyomi.data.backup.create.BackupCreateJob
@@ -56,7 +66,6 @@ import tachiyomi.domain.backup.service.BackupPreferences
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.storage.service.StoragePreferences
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.material.TextButton
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 
@@ -414,49 +423,83 @@ object SettingsDataScreen : SearchableSettings {
         var titleSelected by remember { mutableStateOf(options.includeTitle) }
         var authorSelected by remember { mutableStateOf(options.includeAuthor) }
         var artistSelected by remember { mutableStateOf(options.includeArtist) }
+        val colors = defaultSkinColors()
 
         AlertDialog(
             onDismissRequest = onDismissRequest,
+            shape = DefaultSkinShape.Card,
+            containerColor = colors.surface,
+            titleContentColor = colors.foreground,
+            textContentColor = colors.secondary,
+            tonalElevation = 0.dp,
             title = {
-                Text(text = stringResource(MR.strings.migration_dialog_what_to_include))
+                Text(
+                    text = stringResource(MR.strings.migration_dialog_what_to_include),
+                    style = MaterialTheme.typography.titleMedium,
+                )
             },
             text = {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = titleSelected,
-                            onCheckedChange = { checked ->
-                                titleSelected = checked
-                                if (!checked) {
-                                    authorSelected = false
-                                    artistSelected = false
-                                }
-                            },
-                        )
-                        Text(text = stringResource(MR.strings.title))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    @Composable
+                    fun ExportColumnChoice(label: String, selected: Boolean, enabled: Boolean, onSelect: (Boolean) -> Unit) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .toggleable(
+                                    value = selected,
+                                    enabled = enabled,
+                                    role = Role.Checkbox,
+                                    onValueChange = onSelect,
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Checkbox(
+                                checked = selected,
+                                onCheckedChange = null,
+                                enabled = enabled,
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = colors.accent,
+                                    uncheckedColor = colors.outline,
+                                    checkmarkColor = colors.onAccent,
+                                ),
+                            )
+                            Text(
+                                text = label,
+                                color = if (enabled) colors.foreground else colors.secondary,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
                     }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = authorSelected,
-                            onCheckedChange = { authorSelected = it },
-                            enabled = titleSelected,
-                        )
-                        Text(text = stringResource(MR.strings.author))
+                    ExportColumnChoice(
+                        label = stringResource(MR.strings.title),
+                        selected = titleSelected,
+                        enabled = true,
+                    ) { checked ->
+                        titleSelected = checked
+                        if (!checked) {
+                            authorSelected = false
+                            artistSelected = false
+                        }
                     }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = artistSelected,
-                            onCheckedChange = { artistSelected = it },
-                            enabled = titleSelected,
-                        )
-                        Text(text = stringResource(MR.strings.artist))
-                    }
+                    ExportColumnChoice(
+                        label = stringResource(MR.strings.author),
+                        selected = authorSelected,
+                        enabled = titleSelected,
+                        onSelect = { authorSelected = it },
+                    )
+                    ExportColumnChoice(
+                        label = stringResource(MR.strings.artist),
+                        selected = artistSelected,
+                        enabled = titleSelected,
+                        onSelect = { artistSelected = it },
+                    )
                 }
             },
             confirmButton = {
-                TextButton(
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.action_save),
                     enabled = titleSelected,
                     onClick = {
                         onConfirm(
@@ -468,15 +511,15 @@ object SettingsDataScreen : SearchableSettings {
                         )
                         onDismissRequest()
                     },
-                ) {
-                    Text(text = stringResource(MR.strings.action_save))
-                }
+                )
             },
             dismissButton = {
-                TextButton(onClick = onDismissRequest) {
-                    Text(text = stringResource(MR.strings.action_cancel))
-                }
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.action_cancel),
+                    onClick = onDismissRequest,
+                )
             },
         )
     }
+}
 }
