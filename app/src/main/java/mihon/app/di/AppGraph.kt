@@ -32,7 +32,6 @@ import eu.kanade.tachiyomi.data.tsuzuki.integration.BuiltinIntegrationProviderRe
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.DefaultSupabaseAccountRepository
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseSyncJob
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseSyncRuntime
-import eu.kanade.tachiyomi.data.updater.AppUpdateChecker
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.util.ExtensionInstallActivity
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -124,8 +123,6 @@ interface AppGraph : ViewModelGraph {
 
     val downloadManager: DownloadManager
 
-    val updateChecker: AppUpdateChecker
-
     val trustExtension: TrustExtension
 
     val sourceManager: SourceManager
@@ -153,8 +150,8 @@ interface AppGraph : ViewModelGraph {
     val addonSyncIntentRepository: AddonSyncIntentRepository
     val trackerManager: TrackerManager
     val accountRepository: AccountRepository
-    val callbackAccountRepository: DefaultSupabaseAccountRepository
     val refreshUserLibraries: RefreshUserLibraries
+    val callbackAccountRepository: DefaultSupabaseAccountRepository
     val supabaseSyncRuntime: SupabaseSyncRuntime
     val extensionManager: ExtensionManager
     val chapterCache: ChapterCache
