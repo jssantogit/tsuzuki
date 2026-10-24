@@ -52,6 +52,18 @@ class DefaultSkinF6HContractTest {
     }
 
     @Test
+    fun `chapter actions overflow adopts the Default Skin palette instead of Material defaults`() {
+        val details = source("presentation/tsuzuki/detail/CanonicalTitleDetailScreen.kt")
+        val toolbar = details.substringAfter("private fun DetailsToolbar(")
+            .substringBefore("private fun ChapterJumpSheet(")
+        toolbar shouldContain "val colors = defaultSkinColors()"
+        toolbar shouldContain "shape = DefaultSkinShape.Card"
+        toolbar shouldContain "containerColor = colors.surface"
+        toolbar shouldContain "colors.surface.copy(alpha = 0.94f)"
+        toolbar shouldNotContain "MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)"
+    }
+
+    @Test
     fun `backup and export use branded surfaces without altering SAF and export operations`() {
         val backup = source("presentation/more/settings/screen/data/CreateBackupScreen.kt")
         backup shouldContain "SettingsCanvas"
