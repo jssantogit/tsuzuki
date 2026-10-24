@@ -133,6 +133,9 @@ class SupabaseSyncHttpTransport(
                     preview.legacyTombstoneCount < 0 ||
                     preview.legacyTombstoneCount > preview.legacyRecordCount ||
                     preview.legacyEventCursor < 0 ||
+                    preview.legacyIncompleteRecordCount < 0 ||
+                    preview.legacyIncompleteRecordCount > preview.legacyRecordCount - preview.legacyTombstoneCount ||
+                    preview.unresolvedProgressConflictCount < 0 ||
                     preview.historicalDeviceCoverageProven ||
                     preview.pendingLocalWritesObservable ||
                     preview.exactProgressEnabled ||
@@ -148,6 +151,8 @@ class SupabaseSyncHttpTransport(
                             unexpiredLegacyDeviceCount = preview.unexpiredLegacyDeviceCount,
                             legacyRecordCount = preview.legacyRecordCount,
                             legacyTombstoneCount = preview.legacyTombstoneCount,
+                            legacyIncompleteRecordCount = preview.legacyIncompleteRecordCount,
+                            unresolvedProgressConflictCount = preview.unresolvedProgressConflictCount,
                             legacyEventCursor = preview.legacyEventCursor,
                         ),
                     )
@@ -512,6 +517,8 @@ data class LegacyProgressRolloutPreview(
     val unexpiredLegacyDeviceCount: Long,
     val legacyRecordCount: Long,
     val legacyTombstoneCount: Long,
+    val legacyIncompleteRecordCount: Long,
+    val unresolvedProgressConflictCount: Long,
     val legacyEventCursor: Long,
 )
 
@@ -524,6 +531,8 @@ private data class ProgressRolloutPreviewResponse(
     val unexpiredLegacyDeviceCount: Long,
     val legacyRecordCount: Long,
     val legacyTombstoneCount: Long,
+    val legacyIncompleteRecordCount: Long,
+    val unresolvedProgressConflictCount: Long,
     val legacyEventCursor: Long,
     val historicalDeviceCoverageProven: Boolean,
     val pendingLocalWritesObservable: Boolean,
