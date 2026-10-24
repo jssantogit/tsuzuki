@@ -2,6 +2,7 @@ package eu.kanade.presentation.tsuzuki.detail
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -57,6 +59,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalChapterDetailItem
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreenState
@@ -245,28 +248,74 @@ private fun LoadedDetails(
         )
     }
     sheet?.let { current ->
-        ModalBottomSheet(onDismissRequest = { sheet = null }, containerColor = background) {
+        val colors = defaultSkinColors()
+        ModalBottomSheet(
+            onDismissRequest = { sheet = null },
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            containerColor = colors.surface,
+            contentColor = colors.foreground,
+            scrimColor = colors.canvas.copy(alpha = 0.55f),
+            tonalElevation = 0.dp,
+            dragHandle = {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 12.dp, bottom = 8.dp)
+                        .heightIn(min = 4.dp)
+                        .fillMaxWidth(0.08f)
+                        .background(colors.outline, DefaultSkinShape.Pill),
+                )
+            },
+        ) {
             when (current) {
                 DetailsSheet.SORT -> Column(
-                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(stringResource(MR.strings.tsuzuki_details_sort), style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        stringResource(MR.strings.tsuzuki_details_sort),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.foreground,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
                     CanonicalChapterSort.entries.forEach { value ->
-                        TextButton(modifier = Modifier.semantics { selected = sort == value }, onClick = {
-                            sort = value
-                            sheet = null
-                        }) {
+                        val isSelected = sort == value
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (isSelected) colors.surfaceMuted else Color.Transparent,
+                                    DefaultSkinShape.Control,
+                                )
+                                .selectable(
+                                    selected = isSelected,
+                                    role = Role.RadioButton,
+                                    onClick = {
+                                        sort = value
+                                        sheet = null
+                                    },
+                                )
+                                .heightIn(min = 48.dp)
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             Text(
                                 stringResource(
-                                    if (value ==
-                                        CanonicalChapterSort.ORIGINAL
-                                    ) {
+                                    if (value == CanonicalChapterSort.ORIGINAL) {
                                         MR.strings.tsuzuki_details_order_original
                                     } else {
                                         MR.strings.tsuzuki_details_order_reversed
                                     },
                                 ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.foreground,
                             )
+                            if (isSelected) {
+                                Text("✓", color = colors.accent, style = MaterialTheme.typography.titleMedium)
+                            }
                         }
                     }
                 }
@@ -276,13 +325,20 @@ private fun LoadedDetails(
                     scope.launch { listState.animateScrollToItem(FULL_CHAPTER_FIRST_ITEM + index, -toolbarOffset) }
                 }
                 DetailsSheet.SOURCES -> Column(
-                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
                         stringResource(MR.strings.tsuzuki_details_metadata_sources),
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.foreground,
                     )
-                    state.metadataSources.forEach { Text(it, Modifier.padding(vertical = 8.dp)) }
+                    state.metadataSources.forEach {
+                        Text(it, color = colors.secondary, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
         }
@@ -399,12 +455,13 @@ private fun DetailsToolbar(
 
 @Composable
 private fun ChapterJumpSheet(chapters: List<CanonicalChapterDetailItem>, onJump: (CanonicalChapterDetailItem) -> Unit) {
+    val colors = defaultSkinColors()
     var input by rememberSaveable { mutableStateOf("") }
     var notFound by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     Column(Modifier.fillMaxWidth().imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(MR.strings.tsuzuki_details_jump), style = MaterialTheme.typography.titleLarge)
+        Text(stringResource(MR.strings.tsuzuki_details_jump), style = MaterialTheme.typography.titleMedium, color = colors.foreground)
         OutlinedTextField(
             value = input,
             onValueChange = {
@@ -415,6 +472,18 @@ private fun ChapterJumpSheet(chapters: List<CanonicalChapterDetailItem>, onJump:
             label = { Text(stringResource(MR.strings.tsuzuki_details_jump_label)) },
             singleLine = true,
             isError = notFound,
+            shape = DefaultSkinShape.Control,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = colors.accent,
+                unfocusedBorderColor = colors.outline,
+                focusedTextColor = colors.foreground,
+                unfocusedTextColor = colors.foreground,
+                focusedLabelColor = colors.secondary,
+                unfocusedLabelColor = colors.secondary,
+                cursorColor = colors.accent,
+                focusedContainerColor = colors.surfaceMuted,
+                unfocusedContainerColor = colors.surfaceMuted,
+            ),
             supportingText = if (notFound) {
                 (
                     {
@@ -425,10 +494,14 @@ private fun ChapterJumpSheet(chapters: List<CanonicalChapterDetailItem>, onJump:
                 null
             },
         )
-        TextButton(onClick = {
-            val chapter = resolveChapterJump(chapters, input)
-            if (chapter == null) notFound = true else onJump(chapter)
-        }) { Text(stringResource(MR.strings.tsuzuki_details_jump_go)) }
+        eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton(
+            text = stringResource(MR.strings.tsuzuki_details_jump_go),
+            modifier = Modifier.fillMaxWidth(),
+            onClick = {
+                val chapter = resolveChapterJump(chapters, input)
+                if (chapter == null) notFound = true else onJump(chapter)
+            },
+        )
     }
 }
 

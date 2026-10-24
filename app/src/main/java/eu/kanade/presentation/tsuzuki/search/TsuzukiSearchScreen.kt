@@ -435,7 +435,7 @@ internal fun SearchCompactCard(
             color = colors.foreground,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
-            minLines = 2,
+            minLines = 1,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp),
