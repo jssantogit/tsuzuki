@@ -1,5 +1,9 @@
 package eu.kanade.tachiyomi.provider.torrent
 
+import eu.kanade.tachiyomi.provider.runtime.HostVerifiedTorrentMetadataCache
+import eu.kanade.tachiyomi.provider.runtime.VerifiedTorrentDescription
+import eu.kanade.tachiyomi.provider.runtime.VerifiedTorrentFile
+import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
@@ -19,6 +23,54 @@ import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateFile
 
 class HttpProviderTorrentMetadataInspectorTest {
+
+    @Test
+    fun `policy checked Host inspection is the only source of cached torrent bytes`() = runTest {
+        val server = MockWebServer()
+        val metadata = byteArrayOf(1, 2, 3)
+        server.enqueue(MockResponse.Builder().body(okio.Buffer().write(metadata)).build())
+        server.start()
+        try {
+            val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+            val url = server.url("/verified.torrent").toString()
+            val files = listOf(TorrentCandidateFile(0, "pack/Chapter 12.cbz", 12L))
+            val verified = HostVerifiedTorrentMetadataCache(
+                describe = { bytes ->
+                    if (bytes.contentEquals(metadata)) {
+                        VerifiedTorrentDescription(
+                            infoHash = "0123456789abcdef0123456789abcdef01234567",
+                            files = listOf(VerifiedTorrentFile(0, "pack/Chapter 12.cbz", 12L)),
+                        )
+                    } else {
+                        null
+                    }
+                },
+            )
+            val inspector = HttpProviderTorrentMetadataInspector(
+                baseClient = OkHttpClient(),
+                verifiedMetadata = verified,
+                decoder = { _, item -> item.copy(files = files) },
+            )
+            val candidate = candidate(url)
+            inspector.inspect(
+                descriptor(origin, allowLocalNetwork = true),
+                candidate,
+            )?.files shouldBe files
+            val request = ProviderP2pAcquireRequest(
+                operationId = "host-inspector-verified",
+                infoHash = candidate.infoHash,
+                torrentUrl = url,
+                selectedFileIndex = 0,
+                selectedFilePath = "pack/Chapter 12.cbz",
+                selectedFileSizeBytes = 12L,
+            )
+            verified.find("app.tsuzuki.nyaa", request)?.toList() shouldBe listOf<Byte>(1, 2, 3)
+            verified.find("app.tsuzuki.other", request) shouldBe null
+            server.requestCount shouldBe 1
+        } finally {
+            server.close()
+        }
+    }
 
     @Test
     fun `downloads bounded Provider authorized torrent metadata`() = runTest {
