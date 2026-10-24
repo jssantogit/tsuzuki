@@ -113,6 +113,18 @@ class CanonicalTitleMergeRepositoryImpl(
                 localId = localId,
             )
 
+            // Preserve the additive issue #155 ledger before the source title
+            // is deleted. Its foreign keys cascade, so leaving it behind here
+            // would silently destroy the locally sourced inventory.
+            database.tsuzuki_independent_inventory_claimsQueries.mergeTsuzukiIndependentInventoryClaims(
+                targetId = targetId,
+                localId = localId,
+            )
+            database.tsuzuki_independent_inventory_claimsQueries.mergeTsuzukiIndependentInventoryPages(
+                targetId = targetId,
+                localId = localId,
+            )
+
             localMappings.forEach { mapping ->
                 database.tsuzuki_source_mappingsQueries.upsertTsuzukiSourceMapping(
                     id = mapping.id,

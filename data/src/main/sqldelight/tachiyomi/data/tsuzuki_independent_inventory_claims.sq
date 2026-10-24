@@ -174,3 +174,97 @@ DO UPDATE SET
     declared_total = excluded.declared_total,
     next_cursor = excluded.next_cursor
 WHERE excluded.observed_at > tsuzuki_independent_inventory_pages.observed_at;
+
+-- Transfer shadow evidence before deleting a merged title. This is an
+-- append/update-only projection: the newest observation wins any collision.
+mergeTsuzukiIndependentInventoryClaims:
+INSERT INTO tsuzuki_independent_inventory_claims(
+    canonical_title_id,
+    producer_id,
+    external_work_id,
+    edition_key,
+    scope_language,
+    source_record_id,
+    raw_label,
+    raw_volume,
+    language,
+    claim_kind,
+    derivation,
+    upstream_source_id,
+    work_verified,
+    edition_verified,
+    observed_at
+)
+SELECT
+    :targetId,
+    producer_id,
+    external_work_id,
+    edition_key,
+    scope_language,
+    source_record_id,
+    raw_label,
+    raw_volume,
+    language,
+    claim_kind,
+    derivation,
+    upstream_source_id,
+    work_verified,
+    edition_verified,
+    observed_at
+FROM tsuzuki_independent_inventory_claims
+WHERE canonical_title_id = :localId
+ON CONFLICT(canonical_title_id, producer_id, external_work_id, edition_key, scope_language, source_record_id)
+DO UPDATE SET
+    raw_label = excluded.raw_label,
+    raw_volume = excluded.raw_volume,
+    language = excluded.language,
+    claim_kind = excluded.claim_kind,
+    derivation = excluded.derivation,
+    upstream_source_id = excluded.upstream_source_id,
+    work_verified = excluded.work_verified,
+    edition_verified = excluded.edition_verified,
+    observed_at = excluded.observed_at
+WHERE excluded.observed_at > tsuzuki_independent_inventory_claims.observed_at;
+
+mergeTsuzukiIndependentInventoryPages:
+INSERT INTO tsuzuki_independent_inventory_pages(
+    canonical_title_id,
+    producer_id,
+    external_work_id,
+    edition_key,
+    page_key,
+    language,
+    work_verified,
+    edition_verified,
+    observed_at,
+    outcome,
+    item_count,
+    declared_total,
+    next_cursor
+)
+SELECT
+    :targetId,
+    producer_id,
+    external_work_id,
+    edition_key,
+    page_key,
+    language,
+    work_verified,
+    edition_verified,
+    observed_at,
+    outcome,
+    item_count,
+    declared_total,
+    next_cursor
+FROM tsuzuki_independent_inventory_pages
+WHERE canonical_title_id = :localId
+ON CONFLICT(canonical_title_id, producer_id, external_work_id, edition_key, language, page_key)
+DO UPDATE SET
+    work_verified = excluded.work_verified,
+    edition_verified = excluded.edition_verified,
+    observed_at = excluded.observed_at,
+    outcome = excluded.outcome,
+    item_count = excluded.item_count,
+    declared_total = excluded.declared_total,
+    next_cursor = excluded.next_cursor
+WHERE excluded.observed_at > tsuzuki_independent_inventory_pages.observed_at;
