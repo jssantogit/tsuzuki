@@ -294,6 +294,18 @@ class SupabaseSyncHttpTransportTest {
     }
 
     @Test
+    fun `logged-out direct v2 transport preserves authorization refusal without network`() = runTest {
+        val transport = transport(
+            account = FakeAccountRepository(AccountState.LoggedOut, token = null),
+        )
+
+        val result = transport.pullDelta(SyncDocumentKind.READING_PROGRESS_V2, 0)
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.AUTHORIZATION_REQUIRED
+        server.requestCount shouldBe 0
+    }
+
+    @Test
     fun `invalid mutation stays malformed document instead of protocol refusal`() = runTest {
         server.enqueue(
             MockResponse.Builder()

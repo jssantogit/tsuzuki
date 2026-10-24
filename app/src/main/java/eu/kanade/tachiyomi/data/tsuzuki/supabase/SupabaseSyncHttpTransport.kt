@@ -161,11 +161,23 @@ class SupabaseSyncHttpTransport(
         }
     }
 
+    private fun <T> unsupportedExactProgress(): SyncTransportResult<T> {
+        val reason = if (accountRepository.state.value is AccountState.Authenticated) {
+            SyncFailureReason.UNSUPPORTED_SCHEMA
+        } else {
+            SyncFailureReason.AUTHORIZATION_REQUIRED
+        }
+        return SyncTransportResult.Failure(SyncFailure(reason))
+    }
+
     override suspend fun pullDelta(
         documentKind: SyncDocumentKind,
         sinceEventId: Long,
         limit: Int,
     ): SyncTransportResult<List<SupabaseSyncEvent>> {
+        if (documentKind == SyncDocumentKind.READING_PROGRESS_V2) {
+            return unsupportedExactProgress()
+        }
         require(sinceEventId >= 0) { "Supabase delta cursor must not be negative" }
         require(limit in 1..1000) { "Supabase delta limit must be between 1 and 1000" }
 
@@ -189,6 +201,9 @@ class SupabaseSyncHttpTransport(
     override suspend fun snapshot(
         documentKind: SyncDocumentKind,
     ): SyncTransportResult<SupabaseSyncSnapshot> {
+        if (documentKind == SyncDocumentKind.READING_PROGRESS_V2) {
+            return unsupportedExactProgress()
+        }
         val body = buildJsonObject {
             put("p_domain", JsonPrimitive(documentKind.name))
         }
@@ -216,6 +231,9 @@ class SupabaseSyncHttpTransport(
     override suspend fun push(
         batch: SupabaseMutationBatch,
     ): SyncTransportResult<SupabasePushResult> {
+        if (batch.domain.trim() == SyncDocumentKind.READING_PROGRESS_V2.name) {
+            return unsupportedExactProgress()
+        }
         val payload = buildJsonObject {
             put("mutationId", JsonPrimitive(batch.mutationId))
             put("originClientId", JsonPrimitive(batch.originClientId))
