@@ -2,6 +2,7 @@ package tachiyomi.domain.tsuzuki.repository
 
 import kotlinx.coroutines.flow.Flow
 import tachiyomi.domain.tsuzuki.library.model.ExternalLibraryMembership
+import tachiyomi.domain.tsuzuki.library.model.VerifiedExternalLibraryOwner
 
 interface ExternalLibraryRepository {
     /**
@@ -13,6 +14,12 @@ interface ExternalLibraryRepository {
     val hasVerifiedOwnerScope: Boolean get() = false
 
     fun observeAll(): Flow<List<ExternalLibraryMembership>>
+
+    /** No unscoped read or writer may assign another account's list records. */
+    suspend fun replaceOwned(
+        owner: VerifiedExternalLibraryOwner,
+        memberships: List<ExternalLibraryMembership>,
+    )
 
     suspend fun replaceProvider(
         provider: String,

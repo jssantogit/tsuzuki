@@ -175,7 +175,9 @@ class CanonicalCoreBackupExporter(
         // work/list status. They cannot be silently attributed to a new user.
         check(
             database.tsuzuki_external_library_membershipsQueries
-                .getAllTsuzukiExternalLibraryMemberships().awaitAsList().isEmpty(),
+                .getAllTsuzukiExternalLibraryMemberships().awaitAsList().isEmpty() &&
+                database.tsuzuki_external_library_membershipsQueries
+                    .getAllTsuzukiScopedExternalLibraryMemberships().awaitAsList().isEmpty(),
         ) { "External account list memberships need an isolated backup migration" }
 
         val core = BackupCanonicalCore(
