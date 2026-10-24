@@ -79,6 +79,21 @@ class DefaultSkinF6HContractTest {
         dialog shouldContain "DefaultSkinTextAction("
     }
 
+    @Test
+    fun `collection and folder browsing use Default Skin surfaces and semantic navigation`() {
+        val browse = source("presentation/tsuzuki/collections/CollectionBrowseScreens.kt")
+        browse shouldContain "val colors = defaultSkinColors()"
+        browse shouldContain "DefaultSkinPageTitle("
+        browse shouldContain "DefaultSkinTextAction("
+        browse shouldContain "colors.canvas"
+        browse shouldContain "colors.secondary"
+        browse shouldContain "colors.foreground"
+        browse shouldContain "navigateUp()"
+        browse shouldNotContain "MaterialTheme.colorScheme"
+        browse shouldNotContain "AppBar("
+        browse shouldNotContain "TextButton("
+    }
+
     private fun source(relative: String): String = Files.readString(
         listOf(
             Path.of("src/main/java/eu/kanade/$relative"),
