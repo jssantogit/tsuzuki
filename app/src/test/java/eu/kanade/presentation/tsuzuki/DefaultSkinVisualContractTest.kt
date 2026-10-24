@@ -352,7 +352,7 @@ class DefaultSkinVisualContractTest {
             .substringBefore("private fun getDisplayGroup(")
         val preview = readSettingsWidgetSource("AppThemePreferenceWidget.kt")
         val themesList = sourceBlockStartingAt(preview, "private fun AppThemesList(")
-        val compactPreview = sourceBlockStartingAt(preview, "private fun AppThemePalettePreview(")
+        val compactPreview = sourceBlockStartingAt(preview, "internal fun AppThemePalettePreview(")
         val previewSample = sourceBlockStartingAt(preview, "private fun AppThemePaletteSample(")
         val baseSettings = readSettingsResource("base/strings_default_skin_settings.xml")
         val portugueseSettings = readSettingsResource("pt-rBR/strings_default_skin_settings.xml")
@@ -371,10 +371,12 @@ class DefaultSkinVisualContractTest {
         appearance shouldContain "setAppCompatDelegateThemeMode(it)"
         appearance shouldNotContain "AppThemePreferenceWidget("
         val preset = readSettingsSource("SettingsTsuzukiVisualPresetScreen.kt")
-        preset shouldContain "AppThemePreferenceWidget("
-        preset shouldContain "compactPreview = true"
-        preset shouldContain "stringResource(MR.strings.pref_app_theme)"
-        preset shouldContain "appThemePref.set(it)"
+        preset shouldContain "AppTheme.entries"
+        preset shouldContain "AppThemePalettePreview("
+        preset shouldContain "TachiyomiTheme("
+        preset shouldContain "appThemePref.set(theme)"
+        preset shouldContain "presetDescription(theme)"
+        preset shouldNotContain "AppThemePreferenceWidget("
         appearance shouldNotContain "AppThemeModePreferenceWidget("
         baseSettings shouldContain "<string name=\"tsuzuki_theme_mode_title\">Theme mode</string>"
         portugueseSettings shouldContain "<string name=\"tsuzuki_theme_mode_title\">Modo do tema</string>"
