@@ -1186,6 +1186,13 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_details_refresh_error">Não foi possível atualizar agora</string>
     <string name="tsuzuki_details_chapters">Capítulos</string>
     <string name="tsuzuki_details_all_chapters">Todos os capítulos</string>
+    <string name="tsuzuki_inventory_title">Evidências independentes de capítulos</string>
+    <string name="tsuzuki_inventory_unknown">Inventário editorial de capítulos desconhecido</string>
+    <string name="tsuzuki_inventory_partial">Completude editorial e disponibilidade de leitura não confirmadas</string>
+    <string name="tsuzuki_inventory_edition_unknown">Edição não verificada</string>
+    <string name="tsuzuki_inventory_individual">observações individuais admissíveis (leitura não garantida)</string>
+    <string name="tsuzuki_inventory_releases">observações de releases, não capítulos editoriais</string>
+    <string name="tsuzuki_inventory_totals">Totais informados (não verificados)</string>
     <string name="tsuzuki_details_view_all">Ver todos</string>
     <string name="tsuzuki_details_editorial">Detalhes</string>
     <string name="tsuzuki_details_synopsis">Sinopse</string>

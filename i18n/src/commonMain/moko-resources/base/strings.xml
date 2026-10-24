@@ -1481,6 +1481,13 @@
     <string name="tsuzuki_details_refresh_error">Could not refresh now</string>
     <string name="tsuzuki_details_chapters">Chapters</string>
     <string name="tsuzuki_details_all_chapters">All chapters</string>
+    <string name="tsuzuki_inventory_title">Independent chapter evidence</string>
+    <string name="tsuzuki_inventory_unknown">Editorial chapter inventory unknown</string>
+    <string name="tsuzuki_inventory_partial">Editorial completeness and reading availability are not confirmed</string>
+    <string name="tsuzuki_inventory_edition_unknown">Edition not verified</string>
+    <string name="tsuzuki_inventory_individual">individually admissible observations (not necessarily readable)</string>
+    <string name="tsuzuki_inventory_releases">release observations, not editorial chapters</string>
+    <string name="tsuzuki_inventory_totals">Reported totals (unverified)</string>
     <string name="tsuzuki_details_view_all">View all</string>
     <string name="tsuzuki_details_editorial">Details</string>
     <string name="tsuzuki_details_synopsis">Synopsis</string>

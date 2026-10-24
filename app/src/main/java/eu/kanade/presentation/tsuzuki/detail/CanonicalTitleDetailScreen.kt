@@ -63,6 +63,7 @@ import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalChapterDetailItem
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreenState
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
 import kotlinx.coroutines.launch
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.automirroredrounded.ArrowBack
@@ -186,9 +187,16 @@ private fun LoadedDetails(
                 item(key = "modes") { DetailsModes(mode, moveMode) }
             }
             when (mode) {
-                CanonicalDetailsLowerMode.COMPACT -> item(key = "context") {
-                    ContextualChapterRail(state, onOpenChapter, onProviders) {
-                        moveMode(CanonicalDetailsLowerAction.VIEW_ALL)
+                CanonicalDetailsLowerMode.COMPACT -> {
+                    item(key = "context") {
+                        ContextualChapterRail(state, onOpenChapter, onProviders) {
+                            moveMode(CanonicalDetailsLowerAction.VIEW_ALL)
+                        }
+                    }
+                    if (chapters.isEmpty() || state.independentInventory.sources.isNotEmpty()) {
+                        item(key = "independent-inventory") {
+                            IndependentInventoryInfo(state.independentInventory)
+                        }
                     }
                 }
                 CanonicalDetailsLowerMode.EDITORIAL -> item(key = "editorial") { DetailsEditorial(state) }
@@ -213,6 +221,9 @@ private fun LoadedDetails(
                             IconButton(onClick = { sheet = DetailsSheet.JUMP }) {
                                 Icon(MaterialSymbols.Rounded.Search, stringResource(MR.strings.tsuzuki_details_jump))
                             }
+                        }
+                        if (chapters.isEmpty() || state.independentInventory.sources.isNotEmpty()) {
+                            IndependentInventoryInfo(state.independentInventory)
                         }
                     }
                     if (chapters.isEmpty()) {
@@ -345,6 +356,71 @@ private fun LoadedDetails(
                         Text(it, color = colors.secondary, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IndependentInventoryInfo(snapshot: IndependentInventorySnapshot) {
+    val colors = defaultSkinColors()
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            stringResource(MR.strings.tsuzuki_inventory_title),
+            style = MaterialTheme.typography.labelLarge,
+            color = colors.foreground,
+        )
+        if (snapshot.sources.isEmpty()) {
+            Text(
+                stringResource(MR.strings.tsuzuki_inventory_unknown),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+            return@Column
+        }
+        Text(
+            stringResource(MR.strings.tsuzuki_inventory_partial),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.secondary,
+        )
+        snapshot.sources.forEach { source ->
+            val providerName = when (source.scope.producerId) {
+                "mangadex" -> "MangaDex"
+                "mangaupdates" -> "MangaUpdates"
+                else -> source.scope.producerId
+            }
+            Text(providerName, style = MaterialTheme.typography.labelMedium, color = colors.foreground)
+            if (!source.scope.editionIdentityVerified) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_edition_unknown),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.knownIndividualClaims > 0) {
+                Text(
+                    "${source.knownIndividualClaims} " + stringResource(MR.strings.tsuzuki_inventory_individual),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.releaseObservations > 0) {
+                Text(
+                    "${source.releaseObservations} " + stringResource(MR.strings.tsuzuki_inventory_releases),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.declaredTotals.isNotEmpty()) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_totals) + ": " +
+                        source.declaredTotals.sorted().joinToString(", "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
             }
         }
     }
