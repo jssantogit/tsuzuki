@@ -53,6 +53,20 @@ class BuildCanonicalChapterOutlineTest {
     }
 
     @Test
+    fun `volume-local chapter numbering never invents count-derived chapter identities`() {
+        val observed = listOf(
+            chapter(2).copy(id = "v2-ch2", volume = 2),
+            chapter(1).copy(id = "v1-ch1", volume = 1),
+            chapter(1).copy(id = "v2-ch1", volume = 2),
+            chapter(2).copy(id = "v1-ch2", volume = 1),
+        )
+        val outline = buildCanonicalChapterOutline("title", observed, listOf(count("title", 4)))
+
+        outline.map { it.chapter.id }.shouldContainExactly("v1-ch1", "v1-ch2", "v2-ch1", "v2-ch2")
+        outline.none(CanonicalChapterOutlineEntry::inferredFromReportedCount) shouldBe true
+    }
+
+    @Test
     fun `inferred slots are deterministic and disappear when evidence for number arrives`() {
         val metadata = listOf(count("title", 3))
         val initial = buildCanonicalChapterOutline("title", emptyList(), metadata)

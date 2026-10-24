@@ -1,0 +1,24 @@
+# Wave 6 — Reader Default Skin
+
+Baseline: `a4add0c02216c29812f65e93e68f65e35890d69a`.
+Scope: Reader overlay, session tools, canonical chapter presentation, source/recovery
+cards, session-only comfort tint and localization. Existing viewers, gestures,
+loaders, canonical progress/history and atomic source publication stay owners.
+
+Sequence: focused behavioral RED → existing runtime integration → floating chrome
+and cards → focused/affected CI → report. No APK or physical-phone automation.
+No Provider/P2P/security changes. Physical Android acceptance remains pending.
+
+RED: `c462d0ec3`, CI `38142794145`: Format passed; App compilation reached
+the new tests and failed on the absent session/chapter/recovery APIs as expected.
+The runtime uses one-based currentPage; the test and slider adapter preserve it.
+Local focused Gradle stopped before Android compilation at missing SDK location.
+
+`e861bd071`, CI `38143608465`: Format passed; Android compile stopped at the
+Back icon namespace and missing clip import. Correction cycle 1 fixes those APIs,
+retains bounded card lists/actions under small windows, and completes public copy.
+No viewer/loader/Provider/P2P/security implementation changed.
+
+`9d0a2f51e`, CI `38144018395`: Format passed; compilation exposed the remaining
+missing background import in the selected-state marker. Correction cycle 2 adds
+that import only. No new feature or broader cleanup is included in this retry.

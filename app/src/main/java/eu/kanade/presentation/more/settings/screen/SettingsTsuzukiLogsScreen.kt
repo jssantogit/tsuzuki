@@ -1,5 +1,8 @@
 package eu.kanade.presentation.more.settings.screen
 
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
@@ -34,6 +37,7 @@ object SettingsTsuzukiLogsScreen : SearchableSettings {
         var captureActive by remember {
             mutableStateOf(captureSession.current() != null)
         }
+        var showClearConfirmation by remember { mutableStateOf(false) }
 
         LaunchedEffect(captureActive) {
             if (captureActive) {
@@ -42,6 +46,39 @@ object SettingsTsuzukiLogsScreen : SearchableSettings {
                 }
                 captureActive = false
             }
+        }
+
+        if (showClearConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showClearConfirmation = false },
+                title = { Text(stringResource(MR.strings.tsuzuki_logs_clear_confirm_title)) },
+                text = { Text(stringResource(MR.strings.tsuzuki_logs_clear_confirm_message)) },
+                dismissButton = {
+                    TextButton(onClick = { showClearConfirmation = false }) {
+                        Text(stringResource(MR.strings.action_cancel))
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showClearConfirmation = false
+                            scope.launch {
+                                val cleared = crashLogUtil.clearLogs()
+                                captureActive = false
+                                context.toast(
+                                    if (cleared) {
+                                        MR.strings.tsuzuki_logs_cleared
+                                    } else {
+                                        MR.strings.tsuzuki_logs_clear_failed
+                                    },
+                                )
+                            }
+                        },
+                    ) {
+                        Text(stringResource(MR.strings.tsuzuki_action_clear))
+                    }
+                },
+            )
         }
 
         return listOf(
@@ -77,19 +114,10 @@ object SettingsTsuzukiLogsScreen : SearchableSettings {
             Preference.PreferenceItem.TextPreference(
                 title = stringResource(MR.strings.tsuzuki_logs_clear),
                 subtitle = stringResource(MR.strings.tsuzuki_logs_clear_summary),
-                onClick = {
-                    scope.launch {
-                        val cleared = crashLogUtil.clearLogs()
-                        captureActive = false
-                        context.toast(
-                            if (cleared) {
-                                MR.strings.tsuzuki_logs_cleared
-                            } else {
-                                MR.strings.tsuzuki_logs_clear_failed
-                            },
-                        )
-                    }
-                },
+                onClick = { showClearConfirmation = true },
+            ),
+            Preference.PreferenceItem.InfoPreference(
+                title = stringResource(MR.strings.tsuzuki_logs_share_privacy),
             ),
             Preference.PreferenceItem.TextPreference(
                 title = stringResource(MR.strings.tsuzuki_logs_share),

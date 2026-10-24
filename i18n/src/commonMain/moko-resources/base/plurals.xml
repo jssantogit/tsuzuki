@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <plurals name="tsuzuki_list_builder_active_filter_count">
+        <item quantity="one">%d active filter</item>
+        <item quantity="other">%d active filters</item>
+    </plurals>
+    <plurals name="tsuzuki_list_builder_selected_count">
+        <item quantity="one">%d selection</item>
+        <item quantity="other">%d selections</item>
+    </plurals>
     <plurals name="lock_after_mins">
         <item quantity="one">After %1$s minute</item>
         <item quantity="other">After %1$s minutes</item>
@@ -113,5 +121,14 @@
     <plurals name="notification_update_error">
         <item quantity="one">%1$d update failed</item>
         <item quantity="other">%1$d updates failed</item>
+    </plurals>
+
+    <plurals name="tsuzuki_collections_admin_folder_count">
+        <item quantity="one">%1$d folder</item>
+        <item quantity="other">%1$d folders</item>
+    </plurals>
+    <plurals name="tsuzuki_collections_admin_list_count">
+        <item quantity="one">%1$d list</item>
+        <item quantity="other">%1$d lists</item>
     </plurals>
 </resources>

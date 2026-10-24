@@ -1,5 +1,6 @@
 package tachiyomi.domain.tsuzuki.chapter.interactor
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -103,6 +104,59 @@ class MaterializeInferredChapterTest {
 
         actual.id shouldBe existing.id
         repo.getByCanonicalTitleId("title").size shouldBe 1
+    }
+
+    @Test
+    fun `stale inferred slot fails closed when multiple volumes share its number`() = runTest {
+        val repo = FakeChapters()
+        val firstVolume = CanonicalChapter(
+            id = "volume-one-37",
+            canonicalTitleId = "title",
+            displayNumber = "37",
+            type = tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType.REGULAR,
+            baseNumber = 37,
+            volume = 1,
+            confidence = 1.0,
+        )
+        repo.upsert(firstVolume)
+        repo.upsert(firstVolume.copy(id = "volume-two-37", volume = 2))
+        val inferred = buildCanonicalChapterOutline(
+            "title",
+            emptyList(),
+            listOf(ReportedChapterCount("title", "kitsu", 37, 1L)),
+        ).last().chapter
+
+        shouldThrow<IllegalStateException> {
+            MaterializeInferredChapter(repo, ChapterMutationGate(), { 2L }).execute(inferred)
+        }
+        repo.getByCanonicalTitleId("title").size shouldBe 2
+    }
+
+    @Test
+    fun `stale count slot cannot create a phantom after volume-local numbering is discovered`() = runTest {
+        val repo = FakeChapters()
+        val observed = CanonicalChapter(
+            id = "volume-one-chapter-one",
+            canonicalTitleId = "title",
+            displayNumber = "1",
+            type = tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType.REGULAR,
+            baseNumber = 1,
+            volume = 1,
+            confidence = 1.0,
+        )
+        repo.upsert(observed)
+        repo.upsert(observed.copy(id = "volume-two-chapter-one", volume = 2))
+        val staleSlot = buildCanonicalChapterOutline(
+            "title",
+            emptyList(),
+            listOf(ReportedChapterCount("title", "kitsu", 3, 1L)),
+        ).last().chapter
+
+        shouldThrow<IllegalStateException> {
+            MaterializeInferredChapter(repo, ChapterMutationGate(), { 2L }).execute(staleSlot)
+        }
+        repo.getByCanonicalTitleId("title").map { it.id } shouldBe
+            listOf("volume-one-chapter-one", "volume-two-chapter-one")
     }
 
     private class FakeChapters : CanonicalChapterRepository {

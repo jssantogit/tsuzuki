@@ -19,6 +19,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.download.model.CanonicalDownloadPreparation
 import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
 import tachiyomi.domain.tsuzuki.download.service.CanonicalDownloadGateway
+import tachiyomi.domain.tsuzuki.download.service.canReuseArtifact
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
@@ -51,13 +52,14 @@ class DownloadCanonicalChapter(
 
         val result = try {
             val cached = canonicalDownloadRepository.get(canonicalChapterId)
+            val cacheUsable = cached != null && canonicalDownloadGateway.canReuseArtifact(cached)
             trace.event(
                 subsystem = DiagnosticSubsystem.DOWNLOAD,
                 name = DiagnosticEventName.CACHE_LOOKUP,
                 stage = DiagnosticStage.LOOKUP,
-                outcome = if (cached == null) DiagnosticOutcome.MISS else DiagnosticOutcome.HIT,
+                outcome = if (cacheUsable) DiagnosticOutcome.HIT else DiagnosticOutcome.MISS,
             )
-            if (cached != null) {
+            if (cacheUsable && cached != null) {
                 return complete(
                     trace,
                     started,

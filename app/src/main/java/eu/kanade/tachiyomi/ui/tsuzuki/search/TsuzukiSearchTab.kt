@@ -8,6 +8,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -21,6 +22,8 @@ import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreen
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 data object TsuzukiSearchTab : Tab {
 
@@ -28,7 +31,7 @@ data object TsuzukiSearchTab : Tab {
         @Composable
         get() = TabOptions(
             index = 1u,
-            title = "Search",
+            title = stringResource(MR.strings.tsuzuki_navigation_search),
             icon = painterResource(R.drawable.ic_search_24dp),
         )
 
@@ -73,7 +76,7 @@ data object TsuzukiSearchTab : Tab {
             onClearRecent = screenModel::clearRecentSearches,
             onRetry = screenModel::loadDiscover,
             onOpenIntegrations = {
-                navigator.push(SettingsTsuzukiIntegrationsScreen())
+                navigator.push(searchIntegrationsDestination())
             },
         )
     }
@@ -86,3 +89,5 @@ data object TsuzukiSearchTab : Tab {
 
     private val queryEvent = Channel<String>(capacity = Channel.CONFLATED)
 }
+
+internal fun searchIntegrationsDestination(): Screen = SettingsTsuzukiIntegrationsScreen()

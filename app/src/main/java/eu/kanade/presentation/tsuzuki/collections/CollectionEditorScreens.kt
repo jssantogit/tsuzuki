@@ -17,13 +17,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,9 +28,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionDraftPreviewState
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionFilterLookupKey
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionFilterLookupState
@@ -54,6 +50,9 @@ import tachiyomi.domain.tsuzuki.collections.capability.CollectionProviderDescrip
 import tachiyomi.domain.tsuzuki.collections.capability.ProviderQueryCapabilities
 import tachiyomi.domain.tsuzuki.collections.model.CollectionList
 import tachiyomi.domain.tsuzuki.collections.model.CollectionOrigin
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.pluralStringResource
+import tachiyomi.presentation.core.i18n.stringResource
 import java.util.UUID
 
 @Composable
@@ -202,44 +201,48 @@ internal fun CollectionEditorScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            AppBar(
-                title = if (persistentMode) "Edit Collection" else "New Collection",
-                navigateUp = onClose,
-            )
+    CollectionsAdminEditorPage(
+        title = stringResource(
+            if (persistentMode) {
+                MR.strings.tsuzuki_collections_admin_edit_collection
+            } else {
+                MR.strings.tsuzuki_collections_admin_new_collection
+            },
+        ),
+        onBack = onClose,
+        footerLabel = stringResource(
+            if (persistentMode) {
+                MR.strings.tsuzuki_collections_admin_save_changes
+            } else {
+                MR.strings.tsuzuki_collections_admin_create_collection
+            },
+        ),
+        footerEnabled = title.isNotBlank(),
+        onFooterClick = {
+            if (persistentMode) {
+                if (title.trim() != collection.title) {
+                    onAction(
+                        CollectionsAction.RenameCollection(
+                            collection = collection,
+                            title = title.trim(),
+                        ),
+                    )
+                }
+            } else {
+                onAction(
+                    CollectionsAction.CreateCollection(
+                        title = title.trim(),
+                        folders = draftFolders.map(DraftFolderEntry::draft),
+                    ),
+                )
+            }
+            onClose()
         },
-        bottomBar = {
-            EditorBottomBar(
-                label = if (persistentMode) "Save changes" else "Create collection",
-                enabled = title.isNotBlank(),
-                onClick = {
-                    if (persistentMode) {
-                        if (title.trim() != collection.title) {
-                            onAction(
-                                CollectionsAction.RenameCollection(
-                                    collection = collection,
-                                    title = title.trim(),
-                                ),
-                            )
-                        }
-                    } else {
-                        onAction(
-                            CollectionsAction.CreateCollection(
-                                title = title.trim(),
-                                folders = draftFolders.map(DraftFolderEntry::draft),
-                            ),
-                        )
-                    }
-                    onClose()
-                },
-            )
-        },
-    ) { padding ->
+    ) {
         LazyColumn(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+                .fillMaxWidth()
+                .weight(1f),
             state = listState,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
                 start = 20.dp,
@@ -253,23 +256,25 @@ internal fun CollectionEditorScreen(
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    EditorSectionLabel("BASIC")
-                    EditorSurface {
-                        OutlinedTextField(
-                            modifier = Modifier.fillMaxWidth(),
-                            value = title,
-                            onValueChange = { title = it },
-                            label = { Text("Collection name") },
-                            singleLine = true,
-                        )
+                    CollectionsAdminSectionHeader(
+                        title = stringResource(MR.strings.tsuzuki_collections_admin_basic),
+                    )
+                    CollectionsAdminSurface {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            CollectionsAdminNameField(
+                                value = title,
+                                onValueChange = { title = it },
+                                label = stringResource(MR.strings.tsuzuki_collections_admin_collection_name),
+                            )
+                        }
                     }
                 }
             }
 
             item(key = "folders_header") {
-                EditorSectionHeader(
-                    title = "FOLDERS",
-                    actionLabel = "Add folder",
+                CollectionsAdminSectionHeader(
+                    title = stringResource(MR.strings.tsuzuki_collections_admin_folders),
+                    actionLabel = stringResource(MR.strings.tsuzuki_collections_admin_add_folder),
                     onAction = {
                         folderEditor = if (persistentMode) {
                             CollectionFolderEditorRoute.NewPersisted
@@ -282,9 +287,12 @@ internal fun CollectionEditorScreen(
 
             if (folderCount == 0) {
                 item(key = "empty_folders") {
-                    EditorEmptyCard(
-                        title = "No folders yet",
-                        body = "Add one now or organize this Collection later.",
+                    val colors = defaultSkinColors()
+                    Text(
+                        text = stringResource(MR.strings.tsuzuki_collections_no_folders),
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        color = colors.secondary,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             }
@@ -303,6 +311,13 @@ internal fun CollectionEditorScreen(
                         EditorFolderCard(
                             title = model.folder.title,
                             listCount = model.lists.size,
+                            deleteLabel = stringResource(
+                                if (model.folder.origin == CollectionOrigin.SYSTEM) {
+                                    MR.strings.tsuzuki_collections_hide
+                                } else {
+                                    MR.strings.action_delete
+                                },
+                            ),
                             isDragging = isDragging,
                             reorderEnabled = reorderEnabled,
                             reorderHandleModifier = if (reorderEnabled) {
@@ -352,6 +367,7 @@ internal fun CollectionEditorScreen(
                         EditorFolderCard(
                             title = entry.draft.title,
                             listCount = entry.draft.lists.size,
+                            deleteLabel = stringResource(MR.strings.tsuzuki_collections_admin_remove_draft),
                             isDragging = isDragging,
                             reorderEnabled = reorderEnabled,
                             reorderHandleModifier = if (reorderEnabled) {
@@ -419,7 +435,7 @@ internal fun FolderEditorScreen(
             is FolderListEditorTarget.EditPersisted -> ListEditorState.from(target.list)
         }
         ListBuilderScreen(
-            title = if (target is FolderListEditorTarget.New) "New List" else "Edit List",
+            mode = if (target is FolderListEditorTarget.New) ListBuilderMode.CREATE else ListBuilderMode.EDIT,
             initial = initial,
             providerDescriptors = providerDescriptors,
             providerCapabilities = providerCapabilities,
@@ -484,66 +500,63 @@ internal fun FolderEditorScreen(
     }
 
     val screenTitle = when {
-        editingPersisted -> "Edit Folder"
-        parentFolderId != null -> "New Subfolder"
-        else -> "New Folder"
+        editingPersisted -> stringResource(MR.strings.tsuzuki_collections_admin_edit_folder)
+        parentFolderId != null -> stringResource(MR.strings.tsuzuki_collections_admin_new_subfolder)
+        else -> stringResource(MR.strings.tsuzuki_collections_admin_new_folder)
     }
 
-    Scaffold(
-        topBar = {
-            AppBar(
-                title = screenTitle,
-                navigateUp = onClose,
-            )
-        },
-        bottomBar = {
-            EditorBottomBar(
-                label = if (editingPersisted) "Save changes" else "Create folder",
-                enabled = title.isNotBlank(),
-                onClick = {
-                    val normalizedTitle = title.trim()
-                    when {
-                        editingPersisted -> {
-                            if (normalizedTitle != existing.folder.title) {
-                                onAction(
-                                    CollectionsAction.RenameFolder(
-                                        folder = existing.folder,
-                                        title = normalizedTitle,
-                                    ),
-                                )
-                            }
-                        }
-
-                        creatingPersisted -> {
-                            onAction(
-                                CollectionsAction.CreateFolder(
-                                    collectionId = requireNotNull(collectionId),
-                                    parentFolderId = parentFolderId,
-                                    title = normalizedTitle,
-                                    lists = draftLists.map(DraftListEntry::draft),
-                                ),
-                            )
-                        }
-
-                        else -> {
-                            onSubmitDraft?.invoke(
-                                CollectionFolderDraft(
-                                    title = normalizedTitle,
-                                    lists = draftLists.map(DraftListEntry::draft),
-                                ),
-                            )
-                            return@EditorBottomBar
-                        }
+    CollectionsAdminEditorPage(
+        title = screenTitle,
+        onBack = onClose,
+        footerLabel = stringResource(
+            if (editingPersisted) {
+                MR.strings.tsuzuki_collections_admin_save_changes
+            } else {
+                MR.strings.tsuzuki_collections_admin_create_folder
+            },
+        ),
+        footerEnabled = title.isNotBlank(),
+        onFooterClick = {
+            val normalizedTitle = title.trim()
+            when {
+                editingPersisted -> {
+                    if (normalizedTitle != existing.folder.title) {
+                        onAction(
+                            CollectionsAction.RenameFolder(
+                                folder = existing.folder,
+                                title = normalizedTitle,
+                            ),
+                        )
                     }
-                    onClose()
-                },
-            )
+                }
+
+                creatingPersisted -> {
+                    onAction(
+                        CollectionsAction.CreateFolder(
+                            collectionId = requireNotNull(collectionId),
+                            parentFolderId = parentFolderId,
+                            title = normalizedTitle,
+                            lists = draftLists.map(DraftListEntry::draft),
+                        ),
+                    )
+                }
+
+                else -> {
+                    onSubmitDraft?.invoke(
+                        CollectionFolderDraft(
+                            title = normalizedTitle,
+                            lists = draftLists.map(DraftListEntry::draft),
+                        ),
+                    )
+                }
+            }
+            if (editingPersisted || creatingPersisted) onClose()
         },
-    ) { padding ->
+    ) {
         LazyColumn(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+                .fillMaxWidth()
+                .weight(1f),
             state = listState,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
                 start = 20.dp,
@@ -553,46 +566,41 @@ internal fun FolderEditorScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            item(key = "about") {
-                EditorSurface {
-                    Text(
-                        text = "Define the folder identity and add catalog Lists to organize what it contains.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
             item(key = "basic") {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    EditorSectionLabel("BASIC")
-                    EditorSurface {
-                        OutlinedTextField(
-                            modifier = Modifier.fillMaxWidth(),
-                            value = title,
-                            onValueChange = { title = it },
-                            label = { Text("Folder name") },
-                            singleLine = true,
-                        )
+                    CollectionsAdminSectionHeader(
+                        title = stringResource(MR.strings.tsuzuki_collections_admin_basic),
+                    )
+                    CollectionsAdminSurface {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            CollectionsAdminNameField(
+                                value = title,
+                                onValueChange = { title = it },
+                                label = stringResource(MR.strings.tsuzuki_collections_admin_folder_name),
+                            )
+                        }
                     }
                 }
             }
 
             item(key = "lists_header") {
-                EditorSectionHeader(
-                    title = "LISTS",
-                    actionLabel = "Add list",
+                CollectionsAdminSectionHeader(
+                    title = stringResource(MR.strings.tsuzuki_collections_admin_lists),
+                    actionLabel = stringResource(MR.strings.tsuzuki_collections_admin_add_list),
                     onAction = { listEditor = FolderListEditorTarget.New },
                 )
             }
 
             if (renderedListCount == 0) {
                 item(key = "empty_lists") {
-                    EditorEmptyCard(
-                        title = "No Lists yet",
-                        body = "Add a catalog query now or configure this folder later.",
+                    val colors = defaultSkinColors()
+                    Text(
+                        text = stringResource(MR.strings.tsuzuki_collections_admin_no_lists),
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        color = colors.secondary,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             }
@@ -610,7 +618,13 @@ internal fun FolderEditorScreen(
                     ) { isDragging ->
                         EditorListCard(
                             title = list.title,
-                            subtitle = "${list.providerId} • ${list.sort.cacheKey}",
+                            deleteLabel = stringResource(
+                                if (list.origin == CollectionOrigin.SYSTEM) {
+                                    MR.strings.tsuzuki_collections_hide
+                                } else {
+                                    MR.strings.action_delete
+                                },
+                            ),
                             isDragging = isDragging,
                             reorderEnabled = reorderEnabled,
                             reorderHandleModifier = if (reorderEnabled) {
@@ -655,6 +669,10 @@ internal fun FolderEditorScreen(
                 ) { entry ->
                     val index = draftLists.indexOfFirst { it.key == entry.key }
                     val draft = entry.draft
+                    val copiedDraftTitle = stringResource(
+                        MR.strings.tsuzuki_collections_admin_copy_name,
+                        draft.title,
+                    )
                     val reorderEnabled = draftLists.size > 1
                     ReorderableItem(
                         state = reorderableState,
@@ -663,7 +681,7 @@ internal fun FolderEditorScreen(
                     ) { isDragging ->
                         EditorListCard(
                             title = draft.title,
-                            subtitle = "${draft.providerId} • ${draft.sort.cacheKey}",
+                            deleteLabel = stringResource(MR.strings.tsuzuki_collections_admin_remove_draft),
                             isDragging = isDragging,
                             reorderEnabled = reorderEnabled,
                             reorderHandleModifier = if (reorderEnabled) {
@@ -680,7 +698,7 @@ internal fun FolderEditorScreen(
                                         index + 1,
                                         DraftListEntry(
                                             key = UUID.randomUUID().toString(),
-                                            draft = draft.copy(title = "${draft.title} Copy"),
+                                            draft = draft.copy(title = copiedDraftTitle),
                                         ),
                                     )
                                 }
@@ -702,6 +720,7 @@ internal fun FolderEditorScreen(
 private fun EditorFolderCard(
     title: String,
     listCount: Int,
+    deleteLabel: String,
     isDragging: Boolean,
     reorderEnabled: Boolean,
     reorderHandleModifier: Modifier,
@@ -709,66 +728,70 @@ private fun EditorFolderCard(
     onDelete: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val colors = defaultSkinColors()
+    val menuActions = listOf(
+        CollectionsAdminMenuAction(
+            title = deleteLabel,
+            onClick = {
+                menuExpanded = false
+                onDelete()
+            },
+        ),
+    )
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isDragging) 6.dp else 0.dp,
-        ),
-        shape = MaterialTheme.shapes.extraLarge,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    CollectionsAdminSurface(isDragging = isDragging) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            EditorDragHandle(
-                modifier = reorderHandleModifier,
-                enabled = reorderEnabled,
-            )
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.foreground,
                 )
                 Text(
-                    text = editorCountLabel(listCount, "List"),
+                    text = pluralStringResource(
+                        MR.plurals.tsuzuki_collections_admin_list_count,
+                        listCount,
+                        listCount,
+                    ),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = colors.secondary,
                 )
             }
-            IconButton(onClick = onEdit) {
-                Icon(
-                    imageVector = MaterialSymbols.Rounded.Edit,
-                    contentDescription = "Edit folder",
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                EditorDragHandle(
+                    modifier = reorderHandleModifier,
+                    enabled = reorderEnabled,
                 )
-            }
-            Box {
-                IconButton(onClick = { menuExpanded = true }) {
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(onClick = onEdit) {
                     Icon(
-                        imageVector = MaterialSymbols.Rounded.MoreVert,
-                        contentDescription = "Folder actions",
+                        imageVector = MaterialSymbols.Rounded.Edit,
+                        contentDescription = stringResource(MR.strings.tsuzuki_collections_admin_edit_folder),
+                        tint = colors.foreground,
                     )
                 }
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Delete") },
-                        onClick = {
-                            menuExpanded = false
-                            onDelete()
-                        },
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(
+                            imageVector = MaterialSymbols.Rounded.MoreVert,
+                            contentDescription = stringResource(MR.strings.tsuzuki_collections_admin_folder_actions),
+                            tint = colors.foreground,
+                        )
+                    }
+                    CollectionsAdminOverflowMenu(
+                        expanded = menuExpanded,
+                        onDismiss = { menuExpanded = false },
+                        actions = menuActions,
                     )
                 }
             }
@@ -779,7 +802,7 @@ private fun EditorFolderCard(
 @Composable
 private fun EditorListCard(
     title: String,
-    subtitle: String,
+    deleteLabel: String,
     isDragging: Boolean,
     reorderEnabled: Boolean,
     reorderHandleModifier: Modifier,
@@ -788,75 +811,64 @@ private fun EditorListCard(
     onDelete: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val colors = defaultSkinColors()
+    val menuActions = listOf(
+        CollectionsAdminMenuAction(
+            title = stringResource(MR.strings.tsuzuki_collections_duplicate),
+            onClick = {
+                menuExpanded = false
+                onDuplicate()
+            },
+        ),
+        CollectionsAdminMenuAction(
+            title = deleteLabel,
+            onClick = {
+                menuExpanded = false
+                onDelete()
+            },
+        ),
+    )
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isDragging) 6.dp else 0.dp,
-        ),
-        shape = MaterialTheme.shapes.extraLarge,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    CollectionsAdminSurface(isDragging = isDragging) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            EditorDragHandle(
-                modifier = reorderHandleModifier,
-                enabled = reorderEnabled,
+            Text(
+                text = title,
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.foreground,
             )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                EditorDragHandle(
+                    modifier = reorderHandleModifier,
+                    enabled = reorderEnabled,
                 )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            IconButton(onClick = onEdit) {
-                Icon(
-                    imageVector = MaterialSymbols.Rounded.Edit,
-                    contentDescription = "Edit list",
-                )
-            }
-            Box {
-                IconButton(onClick = { menuExpanded = true }) {
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(onClick = onEdit) {
                     Icon(
-                        imageVector = MaterialSymbols.Rounded.MoreVert,
-                        contentDescription = "List actions",
+                        imageVector = MaterialSymbols.Rounded.Edit,
+                        contentDescription = stringResource(MR.strings.tsuzuki_collections_admin_edit_list),
+                        tint = colors.foreground,
                     )
                 }
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Duplicate") },
-                        onClick = {
-                            menuExpanded = false
-                            onDuplicate()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Delete") },
-                        onClick = {
-                            menuExpanded = false
-                            onDelete()
-                        },
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(
+                            imageVector = MaterialSymbols.Rounded.MoreVert,
+                            contentDescription = stringResource(MR.strings.tsuzuki_collections_admin_list_actions),
+                            tint = colors.foreground,
+                        )
+                    }
+                    CollectionsAdminOverflowMenu(
+                        expanded = menuExpanded,
+                        onDismiss = { menuExpanded = false },
+                        actions = menuActions,
                     )
                 }
             }
@@ -869,6 +881,7 @@ private fun EditorDragHandle(
     modifier: Modifier,
     enabled: Boolean,
 ) {
+    val colors = defaultSkinColors()
     Box(
         modifier = Modifier
             .size(48.dp)
@@ -877,11 +890,11 @@ private fun EditorDragHandle(
     ) {
         Icon(
             imageVector = MaterialSymbols.Rounded.DragHandle,
-            contentDescription = "Drag to reorder",
+            contentDescription = stringResource(MR.strings.tsuzuki_collections_admin_reorder),
             tint = if (enabled) {
-                MaterialTheme.colorScheme.onSurfaceVariant
+                colors.secondary
             } else {
-                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                colors.secondary.copy(alpha = 0.38f)
             },
         )
     }

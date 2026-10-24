@@ -41,6 +41,7 @@ sealed class Preference {
             override val subtitle: String? = null,
             override val enabled: Boolean = true,
             override val onValueChanged: suspend (value: Boolean) -> Boolean = { true },
+            val testTag: String? = null,
         ) : PreferenceItem<Boolean, Boolean>() {
             override val icon: ImageVector? = null
         }
@@ -75,6 +76,7 @@ sealed class Preference {
             override val icon: ImageVector? = null,
             override val enabled: Boolean = true,
             override val onValueChanged: suspend (value: T) -> Boolean = { true },
+            val testTag: String? = null,
         ) : PreferenceItem<T, Boolean>() {
             internal fun internalSet(value: Any) = preference.set(value as T)
             internal suspend fun internalOnValueChanged(value: Any) = onValueChanged(value as T)

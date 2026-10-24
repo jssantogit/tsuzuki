@@ -47,6 +47,19 @@ class ObserveHomeContinueReadingTest {
     }
 
     @Test
+    fun `profile limit keeps five most recent canonical titles in existing order`() = runTest {
+        val fixture = Fixture()
+        fixture.progress.value = (1..7).map { index ->
+            seed(lastPageRead = 1, updatedAt = index.toLong()).copy(
+                canonicalTitleId = "title-$index",
+                canonicalChapterId = "chapter-$index",
+            )
+        }
+        fixture.observe.subscribe(limit = 5).first().map { it.canonicalTitleId } shouldBe
+            listOf("title-7", "title-6", "title-5", "title-4", "title-3")
+    }
+
+    @Test
     fun `new chapter badge excludes chapters already read`() = runTest {
         val fixture = Fixture()
         fixture.progress.value = listOf(

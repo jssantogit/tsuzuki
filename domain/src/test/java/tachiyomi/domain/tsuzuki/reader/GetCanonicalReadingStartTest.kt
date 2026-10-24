@@ -36,6 +36,67 @@ class GetCanonicalReadingStartTest {
     }
 
     @Test
+    fun `equal progress timestamps prefer the later canonical volume after numbering resets`() = runTest {
+        val chapters = FakeCanonicalChapterRepository(
+            listOf(
+                chapter("volume-1-chapter-1", 1).copy(volume = 1),
+                chapter("volume-1-chapter-2", 2).copy(volume = 1),
+                chapter("volume-2-chapter-1", 1).copy(volume = 2),
+                chapter("volume-2-chapter-2", 2).copy(volume = 2),
+            ),
+        )
+        val reading = FakeCanonicalReadingRepository(
+            listOf(
+                progress("volume-1-chapter-2", read = false, updatedAt = 300L),
+                progress("volume-2-chapter-1", read = false, updatedAt = 300L),
+            ),
+        )
+
+        // Chapter 2 (volume 1) must not outrank chapter 1 (volume 2)
+        // merely because its numeric legacy sort key is larger.
+        GetCanonicalReadingStart(chapters, reading).execute("title-1") shouldBe
+            CanonicalReadingStart.Ready("volume-2-chapter-1")
+    }
+
+    @Test
+    fun `newer checkpoint wins even when its volume precedes a newer numbered volume`() = runTest {
+        val chapters = FakeCanonicalChapterRepository(
+            listOf(
+                chapter("volume-2-chapter-1", 1).copy(volume = 2),
+                chapter("volume-1-chapter-2", 2).copy(volume = 1),
+                chapter("volume-1-chapter-1", 1).copy(volume = 1),
+            ),
+        )
+        val reading = FakeCanonicalReadingRepository(
+            listOf(
+                progress("volume-1-chapter-2", read = false, updatedAt = 400L),
+                progress("volume-2-chapter-1", read = false, updatedAt = 300L),
+            ),
+        )
+
+        GetCanonicalReadingStart(chapters, reading).execute("title-1") shouldBe
+            CanonicalReadingStart.Ready("volume-1-chapter-2")
+    }
+
+    @Test
+    fun `first unread uses canonical volume order when repository rows are shuffled`() = runTest {
+        val chapters = FakeCanonicalChapterRepository(
+            listOf(
+                chapter("volume-2-chapter-2", 2).copy(volume = 2),
+                chapter("volume-1-chapter-2", 2).copy(volume = 1),
+                chapter("volume-2-chapter-1", 1).copy(volume = 2),
+                chapter("volume-1-chapter-1", 1).copy(volume = 1),
+            ),
+        )
+        val reading = FakeCanonicalReadingRepository(
+            listOf(progress("volume-1-chapter-1", read = true, updatedAt = 200L)),
+        )
+
+        GetCanonicalReadingStart(chapters, reading).execute("title-1") shouldBe
+            CanonicalReadingStart.Ready("volume-1-chapter-2")
+    }
+
+    @Test
     fun `first unread chapter starts when there is no active progress`() = runTest {
         val chapters = FakeCanonicalChapterRepository(
             listOf(chapter("chapter-1", 1), chapter("chapter-2", 2), chapter("chapter-3", 3)),
@@ -72,6 +133,31 @@ class GetCanonicalReadingStartTest {
         ).execute("title-1")
 
         result shouldBe CanonicalReadingStart.Unavailable("title-1")
+    }
+
+    @Test
+    fun `irregular loaded identities remain the reading gateway targets`() = runTest {
+        val realChapters = listOf(
+            chapter("ten", 10),
+            chapter("fraction", 10).copy(displayNumber = "10.5", part = 5),
+            chapter("special", 11).copy(displayNumber = "Special", type = CanonicalChapterType.SPECIAL),
+            chapter("gap", 642),
+        )
+        val inventory = FakeCanonicalChapterRepository(realChapters)
+
+        GetCanonicalReadingStart(inventory, FakeCanonicalReadingRepository(emptyList()))
+            .execute("title-1") shouldBe CanonicalReadingStart.Ready("ten")
+        GetCanonicalReadingStart(
+            inventory,
+            FakeCanonicalReadingRepository(listOf(progress("fraction", read = false, updatedAt = 100))),
+        ).execute("title-1") shouldBe CanonicalReadingStart.Ready("fraction")
+        // When all chapters are read, the last chapter follows canonical type
+        // ordering. Specials follow numbered regular chapters even if the source
+        // returned them earlier than a high-numbered regular chapter.
+        GetCanonicalReadingStart(
+            inventory,
+            FakeCanonicalReadingRepository(realChapters.map { progress(it.id, read = true, updatedAt = 100) }),
+        ).execute("title-1") shouldBe CanonicalReadingStart.Ready("special")
     }
 
     private fun chapter(id: String, number: Int) = CanonicalChapter(

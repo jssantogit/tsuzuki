@@ -1,20 +1,12 @@
 package eu.kanade.presentation.more.settings.screen
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionsScreen
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 object SettingsTsuzukiPersonalizationsScreen : Screen() {
 
@@ -22,34 +14,30 @@ object SettingsTsuzukiPersonalizationsScreen : Screen() {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
 
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("Personalizações") },
-                    navigationIcon = {
-                        TextButton(onClick = navigator::pop) { Text("Voltar") }
-                    },
-                )
-            },
-        ) { contentPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(contentPadding),
-            ) {
-                ListItem(
-                    headlineContent = { Text("Aparência") },
-                    supportingContent = { Text("Tema, idioma visual, data e hora") },
-                    modifier = Modifier.clickable { navigator.push(SettingsAppearanceScreen) },
-                )
-                ListItem(
-                    headlineContent = { Text("Collections") },
-                    supportingContent = {
-                        Text("Organize coleções, pastas e listas exibidas pelo Tsuzuki")
-                    },
-                    modifier = Modifier.clickable { navigator.push(CollectionsScreen()) },
-                )
-            }
-        }
+        DefaultSkinSettingsNavigationScreen(
+            title = stringResource(MR.strings.tsuzuki_personalizations_title),
+            navigateUp = navigator::pop,
+            groups = listOf(
+                DefaultSkinSettingsNavGroup(
+                    items = listOf(
+                        DefaultSkinSettingsNavItem(
+                            title = stringResource(MR.strings.tsuzuki_visual_preset_title),
+                            subtitle = stringResource(MR.strings.tsuzuki_visual_preset_summary),
+                            onClick = { navigator.push(SettingsTsuzukiVisualPresetScreen) },
+                        ),
+                        DefaultSkinSettingsNavItem(
+                            title = stringResource(MR.strings.pref_category_appearance),
+                            subtitle = stringResource(MR.strings.pref_appearance_summary),
+                            onClick = { navigator.push(SettingsAppearanceScreen) },
+                        ),
+                        DefaultSkinSettingsNavItem(
+                            title = stringResource(MR.strings.tsuzuki_collections_settings_title),
+                            subtitle = stringResource(MR.strings.tsuzuki_collections_settings_summary),
+                            onClick = { navigator.push(CollectionsScreen()) },
+                        ),
+                    ),
+                ),
+            ),
+        )
     }
 }

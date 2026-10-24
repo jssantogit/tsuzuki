@@ -586,7 +586,7 @@ class CanonicalTitleSourceNavigationInstrumentedTest {
             throw AssertionError("Timed out waiting for $description")
         }
 
-        const val EXPECTED_TARGET_PACKAGE = "app.mihon.dev"
+        const val EXPECTED_TARGET_PACKAGE = "app.tsuzuki.dev"
         const val ACTION_FIND_OR_ADD_READING_SOURCE =
             "eu.kanade.tachiyomi.internal.FIND_OR_ADD_READING_SOURCE"
         const val EXTRA_CANONICAL_TITLE_ID = "eu.kanade.tachiyomi.internal.CANONICAL_TITLE_ID"

@@ -14,9 +14,11 @@ import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.subscribeToList
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
-import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
+import tachiyomi.domain.tsuzuki.chapter.model.orderCanonicalChapters
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 
 @Inject
@@ -30,14 +32,14 @@ class CanonicalChapterRepositoryImpl(
         return database.tsuzuki_canonical_chaptersQueries
             .getTsuzukiCanonicalChaptersByTitle(canonicalTitleId, ::mapChapter)
             .awaitAsList()
-            .sortedWith(CHAPTER_COMPARATOR)
+            .let(::orderCanonicalChapters)
     }
 
     override fun observeByCanonicalTitleId(canonicalTitleId: String): Flow<List<CanonicalChapter>> {
         return database.tsuzuki_canonical_chaptersQueries
             .getTsuzukiCanonicalChaptersByTitle(canonicalTitleId, ::mapChapter)
             .subscribeToList()
-            .map { chapters -> chapters.sortedWith(CHAPTER_COMPARATOR) }
+            .map(::orderCanonicalChapters)
     }
 
     override suspend fun getById(id: String): CanonicalChapter? {
@@ -72,21 +74,27 @@ class CanonicalChapterRepositoryImpl(
     }
 
     override suspend fun upsert(chapter: CanonicalChapter) {
-        database.tsuzuki_canonical_chaptersQueries.upsertTsuzukiCanonicalChapter(
-            id = chapter.id,
-            canonicalTitleId = chapter.canonicalTitleId,
-            displayNumber = chapter.displayNumber,
-            volume = chapter.volume?.toLong(),
-            title = chapter.title,
-            type = chapter.type.name,
-            baseNumber = chapter.baseNumber?.toLong(),
-            part = chapter.part?.toLong(),
-            alphaSuffix = chapter.alphaSuffix,
-            confidence = chapter.confidence,
-            createdAt = chapter.createdAt,
-            updatedAt = chapter.updatedAt,
-            confirmationState = chapter.confirmation.name,
-        )
+        database.transaction {
+            validateExactChapterWrite(chapter, getById(chapter.id))
+            database.tsuzuki_canonical_chaptersQueries.upsertTsuzukiCanonicalChapter(
+                id = chapter.id,
+                canonicalTitleId = chapter.canonicalTitleId,
+                displayNumber = chapter.displayNumber,
+                volume = chapter.volume?.toLong(),
+                title = chapter.title,
+                type = chapter.type.name,
+                baseNumber = chapter.baseNumber?.toLong(),
+                part = chapter.part?.toLong(),
+                alphaSuffix = chapter.alphaSuffix,
+                confidence = chapter.confidence,
+                createdAt = chapter.createdAt,
+                updatedAt = chapter.updatedAt,
+                confirmationState = chapter.confirmation.name,
+                numberingKind = chapter.numberingKind?.name,
+                decimalNumerator = chapter.decimalFraction?.numerator?.toLong(),
+                decimalScale = chapter.decimalFraction?.scale?.toLong(),
+            )
+        }
     }
 
     override suspend fun upsertVariant(variant: ChapterVariant) {
@@ -135,7 +143,19 @@ class CanonicalChapterRepositoryImpl(
         variants: List<ChapterVariant>,
     ) {
         database.transaction {
+            require(chapters.map(CanonicalChapter::id).distinct().size == chapters.size) {
+                "A reconciliation batch cannot write the same canonical chapter ID twice"
+            }
+            val existingById = if (chapters.isEmpty()) {
+                emptyMap()
+            } else {
+                database.tsuzuki_canonical_chaptersQueries
+                    .getTsuzukiCanonicalChaptersByIds(chapters.map(CanonicalChapter::id), ::mapChapter)
+                    .awaitAsList()
+                    .associateBy(CanonicalChapter::id)
+            }
             chapters.forEach { chapter ->
+                validateExactChapterWrite(chapter, existingById[chapter.id])
                 database.tsuzuki_canonical_chaptersQueries.upsertTsuzukiCanonicalChapter(
                     id = chapter.id,
                     canonicalTitleId = chapter.canonicalTitleId,
@@ -150,9 +170,31 @@ class CanonicalChapterRepositoryImpl(
                     createdAt = chapter.createdAt,
                     updatedAt = chapter.updatedAt,
                     confirmationState = chapter.confirmation.name,
+                    numberingKind = chapter.numberingKind?.name,
+                    decimalNumerator = chapter.decimalFraction?.numerator?.toLong(),
+                    decimalScale = chapter.decimalFraction?.scale?.toLong(),
                 )
             }
             variants.forEach { variant -> upsertVariantInternal(variant) }
+        }
+    }
+
+    /**
+     * Surface a deterministic conflict to repository callers. The SQLDelight
+     * upsert has its own atomic WHERE guard, so another writer racing this
+     * read cannot silently replace an already stored exact identity.
+     */
+    private fun validateExactChapterWrite(chapter: CanonicalChapter, existing: CanonicalChapter?) {
+        if (chapter.numberingKind != null) {
+            // Validate newly constructed exact rows before persisting them.
+            chapter.identity
+        }
+        if (existing != null && (existing.numberingKind != null || chapter.numberingKind != null)) {
+            // Ordinary upserts never promote a legacy ID into v2 in place:
+            // evidence, protected user state and sync need a separate audit.
+            check(existing.identity == chapter.identity && existing.volume == chapter.volume) {
+                "Cannot rewrite exact chapter identity for ${chapter.id}"
+            }
         }
     }
 
@@ -205,21 +247,81 @@ class CanonicalChapterRepositoryImpl(
         createdAt: Long,
         updatedAt: Long,
         confirmationState: String,
-    ) = CanonicalChapter(
-        id = id,
-        canonicalTitleId = canonicalTitleId,
-        displayNumber = displayNumber,
-        volume = volume?.toInt(),
-        title = title,
-        type = CanonicalChapterType.valueOf(type),
-        baseNumber = baseNumber?.toInt(),
-        part = part?.toInt(),
-        alphaSuffix = alphaSuffix,
-        confidence = confidence,
-        createdAt = createdAt,
-        updatedAt = updatedAt,
-        confirmation = CanonicalChapterConfirmation.valueOf(confirmationState),
-    )
+        numberingKind: String?,
+        decimalNumerator: Long?,
+        decimalScale: Long?,
+    ): CanonicalChapter {
+        if (numberingKind != null) {
+            // Never narrow a corrupted SQLite INTEGER into another valid v2
+            // chapter number. Legacy rows retain their historical decoding.
+            check(baseNumber != null && baseNumber in 0L..Int.MAX_VALUE.toLong()) {
+                "Out-of-range exact chapter base number for chapter $id"
+            }
+            check(part != null && part in 0L..Int.MAX_VALUE.toLong()) {
+                "Out-of-range exact chapter part for chapter $id"
+            }
+            check(volume == null || volume in 0L..Int.MAX_VALUE.toLong()) {
+                "Out-of-range exact chapter volume for chapter $id"
+            }
+        }
+        val fraction = decodeStoredDecimalFraction(
+            chapterId = id,
+            numberingKind = numberingKind,
+            decimalNumerator = decimalNumerator,
+            decimalScale = decimalScale,
+        )
+        return CanonicalChapter(
+            id = id,
+            canonicalTitleId = canonicalTitleId,
+            displayNumber = displayNumber,
+            volume = volume?.toInt(),
+            title = title,
+            type = CanonicalChapterType.valueOf(type),
+            baseNumber = baseNumber?.toInt(),
+            part = part?.toInt(),
+            alphaSuffix = alphaSuffix,
+            confidence = confidence,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+            confirmation = CanonicalChapterConfirmation.valueOf(confirmationState),
+            numberingKind = numberingKind?.let(CanonicalChapterNumberingKind::valueOf),
+            decimalFraction = fraction,
+        ).also { chapter ->
+            if (chapter.numberingKind != null) {
+                try {
+                    chapter.identity
+                } catch (error: IllegalArgumentException) {
+                    throw IllegalStateException("Stored exact chapter identity is inconsistent for chapter $id", error)
+                }
+            }
+        }
+    }
+
+    private fun decodeStoredDecimalFraction(
+        chapterId: String,
+        numberingKind: String?,
+        decimalNumerator: Long?,
+        decimalScale: Long?,
+    ): CanonicalChapterDecimalFraction? {
+        if (numberingKind != CanonicalChapterNumberingKind.DECIMAL.name) {
+            check(decimalNumerator == null && decimalScale == null) {
+                "Unexpected decimal metadata on non-decimal chapter $chapterId"
+            }
+            return null
+        }
+
+        check(decimalNumerator != null && decimalScale != null) {
+            "Incomplete exact decimal metadata for chapter $chapterId"
+        }
+        check(decimalNumerator in 1L..Int.MAX_VALUE.toLong() && decimalScale in 1L..9L) {
+            "Out-of-range exact decimal metadata for chapter $chapterId"
+        }
+        return try {
+            CanonicalChapterDecimalFraction(decimalNumerator.toInt(), decimalScale.toInt())
+        } catch (error: IllegalArgumentException) {
+            throw IllegalStateException("Invalid exact decimal metadata for chapter $chapterId", error)
+        }
+    }
 
     private fun mapVariant(
         id: String,
@@ -260,15 +362,4 @@ class CanonicalChapterRepositoryImpl(
         createdAt = createdAt,
         updatedAt = updatedAt,
     )
-
-    private companion object {
-        val CHAPTER_COMPARATOR = compareBy<CanonicalChapter>({
-            CanonicalChapterIdentity(
-                type = it.type,
-                baseNumber = it.baseNumber,
-                part = it.part,
-                alphaSuffix = it.alphaSuffix,
-            )
-        }, { it.id })
-    }
 }

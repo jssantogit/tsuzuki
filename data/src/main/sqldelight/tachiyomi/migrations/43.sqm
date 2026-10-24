@@ -1,5 +1,6 @@
-CREATE TABLE tsuzuki_backup_restore_receipts(
-    snapshot_hash TEXT NOT NULL PRIMARY KEY,
-    format_version INTEGER NOT NULL,
-    imported_at INTEGER NOT NULL
-);
+-- Additive v2 chapter numbering metadata; existing chapters remain legacy/NULL.
+-- Do not backfill fractional scale from legacy part: 12.05 and 12.5 used
+-- to collapse to the same part integer, so auto-migration would be unsafe.
+ALTER TABLE tsuzuki_canonical_chapters ADD COLUMN numbering_kind TEXT;
+ALTER TABLE tsuzuki_canonical_chapters ADD COLUMN decimal_numerator INTEGER;
+ALTER TABLE tsuzuki_canonical_chapters ADD COLUMN decimal_scale INTEGER;

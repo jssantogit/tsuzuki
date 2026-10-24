@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import tachiyomi.data.Database
 import tachiyomi.data.subscribeToList
+import tachiyomi.data.subscribeToOne
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterHistory
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterHistoryUpdate
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterProgress
@@ -53,8 +54,26 @@ class CanonicalReadingRepositoryImpl(
             .subscribeToList()
     }
 
+    override fun observeReadChapterCount(): Flow<Long> {
+        return database.tsuzuki_chapter_progressQueries
+            .observeTsuzukiReadChapterCount()
+            .subscribeToOne()
+    }
+
     override suspend fun upsertProgress(progress: CanonicalChapterProgress) {
         upsertProgressInternal(progress)
+    }
+
+    override suspend fun upsertProgressBatch(progress: List<CanonicalChapterProgress>) {
+        require(progress.map(CanonicalChapterProgress::canonicalChapterId).distinct().size == progress.size) {
+            "A remote progress batch cannot update the same canonical chapter twice"
+        }
+        require(progress.all { it.lastPageRead >= 0L }) {
+            "Remote chapter page numbers must not be negative"
+        }
+        database.transaction {
+            progress.forEach { upsertProgressInternal(it) }
+        }
     }
 
     override suspend fun recordProgressWithProjection(

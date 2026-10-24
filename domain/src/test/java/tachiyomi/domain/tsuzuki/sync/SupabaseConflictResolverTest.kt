@@ -351,6 +351,8 @@ class SupabaseConflictResolverTest {
         override suspend fun sendPasswordRecovery(email: String) =
             error("not used")
 
+        override suspend fun updatePassword(password: String) = error("not used")
+
         override suspend fun refreshSession() = error("not used")
 
         override suspend fun getAccessToken() = Result.success("token")

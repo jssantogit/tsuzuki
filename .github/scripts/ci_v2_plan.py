@@ -115,6 +115,15 @@ DOMAIN_RUNTIME_INTEGRATION_MARKERS = (
     "/tachiyomi/domain/tsuzuki/source/",
 )
 
+# Remote checkpoint imports cross the domain adapter/repository contract and
+# the SQLDelight transaction boundary. Both suites must run for any edit to
+# those interfaces, even if the changed file belongs to only one module.
+ATOMIC_PROGRESS_INTEGRATION_PATHS = {
+    "domain/src/main/java/tachiyomi/domain/tsuzuki/sync/adapter/CanonicalReadingProgressSyncAdapter.kt",
+    "domain/src/main/java/tachiyomi/domain/tsuzuki/reader/repository/CanonicalReadingRepository.kt",
+    "data/src/main/java/tachiyomi/data/tsuzuki/CanonicalReadingRepositoryImpl.kt",
+}
+
 
 def is_test_path(path: str, module: str) -> bool:
     return path.startswith(f"{module}/src/test/")
@@ -205,20 +214,29 @@ def plan(paths: list[str], mode: str) -> dict[str, object]:
                 continue
 
             if path in {
-                ".github/workflows/ci-v2.yml",
                 ".github/scripts/verify_backup_jdbc_report.py",
                 ".github/scripts/test_verify_backup_jdbc_report.py",
             }:
-                # Critical test-discovery and execution-gate changes require real
-                # coverage, not a successful planner job with every lane skipped.
+                # A broken execution-discovery gate is a false-green risk.
                 select_full(state)
                 continue
 
             if path.startswith(".github/"):
-                # Unrelated CI helpers still use the planner self-tests only.
+                # The planner tests execute in the plan job itself; CI config edits should not
+                # burn a full Android build just because the workflow changed.
+                continue
+
+            if path in ATOMIC_PROGRESS_INTEGRATION_PATHS:
+                state["run_format"] = True
+                add_test(state["tests"], "domain", tsuzuki=True)
+                add_test(state["tests"], "data", tsuzuki=True)
+                state["compiles"].add("app")
                 continue
 
             if is_runtime_integration_path(path):
+                # Runtime integration Kotlin must not bypass Spotless just because
+                # it receives the broader Domain + App test matrix.
+                state["run_format"] = True
                 add_test(state["tests"], "domain", tsuzuki=True)
                 add_test(state["tests"], "app", tsuzuki=True)
                 if path.startswith("domain/src/main/"):

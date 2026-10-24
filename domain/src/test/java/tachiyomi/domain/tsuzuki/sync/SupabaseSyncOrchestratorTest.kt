@@ -51,6 +51,111 @@ import tachiyomi.domain.tsuzuki.sync.service.VerifiedCanonicalIdentity
 class SupabaseSyncOrchestratorTest {
 
     @Test
+    fun `unnegotiated v2 schema never contacts legacy Supabase sync transport`() = runTest {
+        val local = document(status = "READING").copy(schemaVersion = 2)
+        val adapter = FakeAdapter(local)
+        val transport = FakeTransport()
+        val outbox = FakeOutbox().apply { markDirty(SyncDocumentKind.LIBRARY, 1) }
+        val orchestrator = orchestrator(
+            adapter = adapter,
+            outbox = outbox,
+            transport = transport,
+        )
+
+        val result = orchestrator.sync(SyncDocumentKind.LIBRARY)
+
+        (result as SyncDocumentResult.Failed).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        adapter.current shouldBe local
+        transport.networkCalls shouldBe 0
+        outbox.get(SyncDocumentKind.LIBRARY) shouldNotBe null
+    }
+
+    @Test
+    fun `unnegotiated v2 progress adapter cannot sync despite isolated namespace`() = runTest {
+        val v2 = SyncDocumentKind.READING_PROGRESS_V2
+        val local = document(status = "READING").copy(
+            kind = v2,
+            schemaVersion = 2,
+        )
+        val adapter = FakeAdapter(local)
+        val transport = FakeTransport()
+        val outbox = FakeOutbox().apply { markDirty(v2, 1) }
+
+        val result = orchestrator(
+            adapter = adapter,
+            outbox = outbox,
+            transport = transport,
+        ).sync(v2)
+
+        (result as SyncDocumentResult.Failed).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        transport.networkCalls shouldBe 0
+        transport.pushedBatches.isEmpty() shouldBe true
+        adapter.current shouldBe local
+        outbox.get(v2) shouldNotBe null
+    }
+
+    @Test
+    fun `background sync cannot publish v2 progress without server negotiation`() = runTest {
+        val v2 = SyncDocumentKind.READING_PROGRESS_V2
+        val local = document(status = "READING").copy(
+            kind = v2,
+            schemaVersion = 2,
+        )
+        val adapter = FakeAdapter(local)
+        val transport = FakeTransport()
+        val outbox = FakeOutbox().apply { markDirty(v2, 1) }
+
+        val report = orchestrator(
+            adapter = adapter,
+            outbox = outbox,
+            transport = transport,
+        ).runOnce()
+
+        report.documentResults.single().let {
+            (it as SyncDocumentResult.Failed).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        }
+        transport.networkCalls shouldBe 0
+        transport.pushedBatches.isEmpty() shouldBe true
+        adapter.current shouldBe local
+        outbox.get(v2) shouldNotBe null
+    }
+
+    @Test
+    fun `stored schema mismatch refuses sync before pulling or applying remote records`() = runTest {
+        val local = document(status = "READING")
+        val adapter = FakeAdapter(local)
+        val stored = FakeStoredState().apply {
+            put(
+                SyncStoredState(
+                    documentKind = SyncDocumentKind.LIBRARY,
+                    acceptedBase = document(status = "OLD").copy(schemaVersion = 2),
+                    remoteRevision = null,
+                    lastSuccessfulSyncAtEpochMillis = 1,
+                ),
+            )
+        }
+        val cloud = FakeCloudState().apply {
+            putCursor(
+                documentKind = SyncDocumentKind.LIBRARY,
+                eventCursor = 5,
+                lastSuccessfulSyncAtEpochMillis = 1,
+            )
+        }
+        val transport = FakeTransport()
+        val result = orchestrator(
+            adapter = adapter,
+            storedState = stored,
+            cloudState = cloud,
+            transport = transport,
+        ).sync(SyncDocumentKind.LIBRARY)
+
+        (result as SyncDocumentResult.Failed).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        adapter.current shouldBe local
+        transport.networkCalls shouldBe 0
+        cloud.getCursor(SyncDocumentKind.LIBRARY)?.eventCursor shouldBe 5L
+    }
+
+    @Test
     fun `timeout after server apply reuses persisted mutation id on retry`() = runTest {
         val adapter = FakeAdapter(document(status = "READING"))
         val outbox = FakeOutbox().apply { markDirty(SyncDocumentKind.LIBRARY, 1) }
@@ -87,6 +192,92 @@ class SupabaseSyncOrchestratorTest {
         cloudState.getCursor(SyncDocumentKind.LIBRARY)?.eventCursor shouldBe 12
         transport.mutationIds.toSet().shouldHaveSize(1)
         outbox.get(SyncDocumentKind.LIBRARY) shouldBe null
+    }
+
+    @Test
+    fun `server epoch fence retains unsent v1 progress and pending mutation`() = runTest {
+        val progress = SyncDocumentKind.READING_PROGRESS
+        val local = document(status = "READING").copy(kind = progress)
+        val adapter = FakeAdapter(local)
+        val outbox = FakeOutbox().apply { markDirty(progress, 1) }
+        val cloudState = FakeCloudState()
+        val transport = FakeTransport().apply {
+            pushOutcomes += PushOutcome.UnsupportedEpoch
+        }
+
+        val result = orchestrator(
+            adapter = adapter,
+            outbox = outbox,
+            cloudState = cloudState,
+            transport = transport,
+        ).sync(progress)
+
+        (result as SyncDocumentResult.Failed).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        adapter.current shouldBe local
+        outbox.get(progress) shouldNotBe null
+        cloudState.getPending(progress)?.attemptCount shouldBe 1
+        // The successful initial remote read may persist the accepted cursor 0.
+        // A rejected push must not advance it to an unaccepted write frontier.
+        cloudState.getCursor(progress)?.eventCursor shouldBe 0L
+        transport.pushedBatches.shouldHaveSize(1)
+    }
+
+    @Test
+    fun `refused legacy progress delta cannot overwrite local state or replay pending writes`() = runTest {
+        val progress = SyncDocumentKind.READING_PROGRESS
+        val local = document(status = "READING").copy(kind = progress)
+        val adapter = FakeAdapter(local)
+        val outbox = FakeOutbox().apply { markDirty(progress, 1) }
+        val cloudState = FakeCloudState()
+        val transport = FakeTransport().apply {
+            pullFailure = SyncFailureReason.UNSUPPORTED_SCHEMA
+        }
+
+        val result = orchestrator(
+            adapter = adapter,
+            outbox = outbox,
+            cloudState = cloudState,
+            transport = transport,
+        ).sync(progress)
+
+        (result as SyncDocumentResult.Failed).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        adapter.current shouldBe local
+        outbox.get(progress) shouldNotBe null
+        cloudState.getCursor(progress) shouldBe null
+        transport.networkCalls shouldBe 1
+        transport.pushedBatches.shouldHaveSize(0)
+    }
+
+    @Test
+    fun `refused legacy progress snapshot preserves last accepted local frontier`() = runTest {
+        val progress = SyncDocumentKind.READING_PROGRESS
+        val local = document(status = "READING").copy(kind = progress)
+        val adapter = FakeAdapter(local)
+        val outbox = FakeOutbox().apply { markDirty(progress, 1) }
+        val cloudState = FakeCloudState().apply {
+            putCursor(
+                documentKind = progress,
+                eventCursor = 5,
+                lastSuccessfulSyncAtEpochMillis = 1,
+            )
+        }
+        val transport = FakeTransport().apply {
+            snapshotFailure = SyncFailureReason.UNSUPPORTED_SCHEMA
+        }
+
+        val result = orchestrator(
+            adapter = adapter,
+            outbox = outbox,
+            cloudState = cloudState,
+            transport = transport,
+        ).sync(progress)
+
+        (result as SyncDocumentResult.Failed).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        adapter.current shouldBe local
+        cloudState.getCursor(progress)?.eventCursor shouldBe 5L
+        outbox.get(progress) shouldNotBe null
+        transport.networkCalls shouldBe 1
+        transport.pushedBatches.shouldHaveSize(0)
     }
 
     @Test
@@ -427,7 +618,8 @@ class SupabaseSyncOrchestratorTest {
     private class FakeAdapter(
         var current: SyncDocumentEnvelope,
     ) : SyncDocumentAdapter {
-        override val documentKind = SyncDocumentKind.LIBRARY
+        override val documentKind: SyncDocumentKind
+            get() = current.kind
 
         override suspend fun exportDocument(): SyncDocumentEnvelope = current
 
@@ -454,6 +646,8 @@ class SupabaseSyncOrchestratorTest {
 
         override suspend fun sendPasswordRecovery(email: String) =
             error("not used")
+
+        override suspend fun updatePassword(password: String) = error("not used")
 
         override suspend fun refreshSession() = error("not used")
 
@@ -567,6 +761,8 @@ class SupabaseSyncOrchestratorTest {
     }
 
     private sealed interface PushOutcome {
+        data object UnsupportedEpoch : PushOutcome
+
         data class AppliedResponseLost(
             val cursor: Long,
             val events: List<SupabaseSyncEvent>,
@@ -586,6 +782,8 @@ class SupabaseSyncOrchestratorTest {
         val acknowledgedConflictIds = mutableListOf<Long>()
         val events = mutableListOf<SupabaseSyncEvent>()
         var snapshotValue: SupabaseSyncSnapshot? = null
+        var pullFailure: SyncFailureReason? = null
+        var snapshotFailure: SyncFailureReason? = null
         var networkCalls = 0
 
         override suspend fun pullDelta(
@@ -594,6 +792,7 @@ class SupabaseSyncOrchestratorTest {
             limit: Int,
         ): SyncTransportResult<List<SupabaseSyncEvent>> {
             networkCalls += 1
+            pullFailure?.let { return SyncTransportResult.Failure(SyncFailure(it)) }
             return SyncTransportResult.Success(
                 events.filter { it.eventId > sinceEventId }
                     .sortedBy { it.eventId }
@@ -605,6 +804,7 @@ class SupabaseSyncOrchestratorTest {
             documentKind: SyncDocumentKind,
         ): SyncTransportResult<SupabaseSyncSnapshot> {
             networkCalls += 1
+            snapshotFailure?.let { return SyncTransportResult.Failure(SyncFailure(it)) }
             return SyncTransportResult.Success(
                 snapshotValue ?: SupabaseSyncSnapshot(
                     documentKind = documentKind,
@@ -629,6 +829,9 @@ class SupabaseSyncOrchestratorTest {
             mutationIds += batch.mutationId
             pushedBatches += batch
             return when (val outcome = pushOutcomes.removeFirstOrNull()) {
+                PushOutcome.UnsupportedEpoch -> SyncTransportResult.Failure(
+                    SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA),
+                )
                 is PushOutcome.AppliedResponseLost -> {
                     events += outcome.events
                     SyncTransportResult.Failure(

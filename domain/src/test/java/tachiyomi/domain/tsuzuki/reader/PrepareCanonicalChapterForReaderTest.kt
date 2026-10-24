@@ -28,6 +28,7 @@ import tachiyomi.domain.tsuzuki.content.repository.ContentPreferenceRepository
 import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.download.model.CanonicalDownloadArtifact
 import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
+import tachiyomi.domain.tsuzuki.download.service.CanonicalDownloadGateway
 import tachiyomi.domain.tsuzuki.reader.interactor.PrepareCanonicalChapterForReader
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterHistory
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterHistoryUpdate
@@ -96,6 +97,56 @@ class PrepareCanonicalChapterForReaderTest {
         )
         result.selectedOption shouldBe null
         fixture.preparer.calls shouldBe 0
+    }
+
+    @Test
+    fun `stale offline cache is not selected and reader can use online source`() = runTest {
+        val artifact = CanonicalDownloadArtifact(
+            canonicalChapterId = "chapter-1",
+            localUri = "content://downloads/missing.cbz",
+            format = "CBZ",
+            originatingAddonId = AddonId("removed-addon"),
+            originatingOptionKey = "old-option",
+            completedAt = 100L,
+            checksum = null,
+        )
+        val fixture = fixture(
+            preference = ContentPreference("title-1", AddonId("mangadex"), 1L),
+            providers = listOf(provider(option("mangadex"))),
+            downloadArtifact = artifact,
+            downloadArtifactAvailable = false,
+        )
+
+        val result = fixture.prepare.execute("chapter-1")
+
+        result.shouldBeInstanceOf<CanonicalReaderPreparation.Ready>()
+        result.target.shouldBeInstanceOf<PreparedChapterContent.MihonOperational>()
+        result.canonicalChapterId shouldBe "chapter-1"
+        fixture.preparer.calls shouldBe 1
+        fixture.downloads.artifact shouldBe artifact
+    }
+
+    @Test
+    fun `stale offline cache without another source is unavailable but preserved`() = runTest {
+        val artifact = CanonicalDownloadArtifact(
+            canonicalChapterId = "chapter-1",
+            localUri = "content://downloads/disconnected.cbz",
+            format = "CBZ",
+            originatingAddonId = null,
+            originatingOptionKey = null,
+            completedAt = 100L,
+            checksum = null,
+        )
+        val fixture = fixture(
+            preference = null,
+            providers = emptyList(),
+            downloadArtifact = artifact,
+            downloadArtifactAvailable = false,
+        )
+
+        fixture.prepare.execute("chapter-1")
+            .shouldBeInstanceOf<CanonicalReaderPreparation.Unavailable>()
+        fixture.downloads.artifact shouldBe artifact
     }
 
     @Test
@@ -212,6 +263,7 @@ class PrepareCanonicalChapterForReaderTest {
         providers: List<ContentProvider>,
         downloadArtifact: CanonicalDownloadArtifact? = null,
         addonRepository: AddonRepository? = null,
+        downloadArtifactAvailable: Boolean = true,
     ): Fixture {
         val readerPreferences = CanonicalReaderPreferences(InMemoryPreferenceStore())
         val resolver = ResolveChapterContent(
@@ -226,21 +278,30 @@ class PrepareCanonicalChapterForReaderTest {
         val chapters = FakeCanonicalChapterRepository()
         val reading = FakeCanonicalReadingRepository()
         val preparer = FakeChapterContentPreparer()
+        val downloads = FakeCanonicalDownloadRepository(downloadArtifact)
         val prepare = PrepareCanonicalChapterForReader(
             resolveChapterContent = resolver,
             canonicalChapterRepository = chapters,
             canonicalReadingRepository = reading,
-            canonicalDownloadRepository = FakeCanonicalDownloadRepository(downloadArtifact),
+            canonicalDownloadRepository = downloads,
+            canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+
+                override suspend fun isArtifactAvailable(artifact: CanonicalDownloadArtifact): Boolean =
+                    downloadArtifactAvailable
+            },
             chapterContentPreparer = preparer,
             structuredDiagnostics = NoOpStructuredDiagnosticRecorder,
         )
-        return Fixture(prepare, reading, preparer)
+        return Fixture(prepare, reading, preparer, downloads, downloadArtifactAvailable)
     }
 
     private data class Fixture(
         val prepare: PrepareCanonicalChapterForReader,
         val reading: FakeCanonicalReadingRepository,
         val preparer: FakeChapterContentPreparer,
+        val downloads: FakeCanonicalDownloadRepository,
+        val downloadArtifactAvailable: Boolean,
     )
 
     private fun provider(vararg options: ContentOption): ContentProvider = object : ContentProvider {
@@ -331,7 +392,7 @@ class PrepareCanonicalChapterForReaderTest {
     }
 
     private class FakeCanonicalDownloadRepository(
-        private var artifact: CanonicalDownloadArtifact?,
+        var artifact: CanonicalDownloadArtifact?,
     ) : CanonicalDownloadRepository {
         override suspend fun get(canonicalChapterId: String): CanonicalDownloadArtifact? =
             artifact?.takeIf { it.canonicalChapterId == canonicalChapterId }

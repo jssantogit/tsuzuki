@@ -1,11 +1,5 @@
 package eu.kanade.presentation.more.settings.widget
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.StartOffset
-import androidx.compose.animation.core.StartOffsetType
-import androidx.compose.animation.core.repeatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -14,25 +8,24 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.more.settings.LocalPreferenceEnabled
 import eu.kanade.presentation.more.settings.LocalPreferenceHighlighted
 import eu.kanade.presentation.more.settings.LocalPreferenceMinHeight
-import kotlinx.coroutines.delay
-import kotlin.time.Duration.Companion.seconds
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 
 @Composable
 internal fun BasePreferenceWidget(
@@ -41,21 +34,45 @@ internal fun BasePreferenceWidget(
     subcomponent: @Composable (ColumnScope.() -> Unit)? = null,
     icon: @Composable (() -> Unit)? = null,
     onClick: (() -> Unit)? = null,
+    toggleableState: Boolean? = null,
     widget: @Composable (() -> Unit)? = null,
 ) {
     val highlighted = LocalPreferenceHighlighted.current
+    val enabled = LocalPreferenceEnabled.current
     val minHeight = LocalPreferenceMinHeight.current
+    val colors = defaultSkinColors()
+    val interactionModifier = if (toggleableState != null) {
+        Modifier.toggleable(
+            value = toggleableState,
+            enabled = enabled && onClick != null,
+            role = Role.Switch,
+            onValueChange = { onClick?.invoke() },
+        )
+    } else {
+        Modifier.clickable(
+            enabled = enabled && onClick != null,
+            role = Role.Button,
+            onClick = { onClick?.invoke() },
+        )
+    }
+
     Row(
         modifier = modifier
-            .highlightBackground(highlighted)
+            .fillMaxWidth()
             .sizeIn(minHeight = minHeight)
-            .clickable(enabled = onClick != null, onClick = { onClick?.invoke() })
-            .fillMaxWidth(),
+            .clip(DefaultSkinShape.Control)
+            .settingsPreferenceHighlightBackground(highlighted)
+            .then(interactionModifier),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
             Box(
-                modifier = Modifier.padding(start = PrefsHorizontalPadding, end = 8.dp),
+                modifier = Modifier
+                    .padding(start = PrefsHorizontalPadding, end = 8.dp)
+                    .size(32.dp)
+                    .clip(DefaultSkinShape.Control)
+                    .background(colors.surfaceMuted),
+                contentAlignment = Alignment.Center,
                 content = { icon() },
             )
         }
@@ -68,10 +85,9 @@ internal fun BasePreferenceWidget(
                 Text(
                     modifier = Modifier.padding(horizontal = PrefsHorizontalPadding),
                     text = title,
-                    overflow = TextOverflow.Ellipsis,
-                    maxLines = 2,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontSize = TitleFontSize,
+                    color = if (enabled) colors.foreground else colors.secondary,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
                 )
             }
             subcomponent?.invoke(this)
@@ -85,41 +101,7 @@ internal fun BasePreferenceWidget(
     }
 }
 
-@Composable
-internal fun Modifier.highlightBackground(highlighted: Boolean): Modifier {
-    var highlightFlag by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        if (highlighted) {
-            highlightFlag = true
-            delay(3.seconds)
-            highlightFlag = false
-        }
-    }
-    val highlight by animateColorAsState(
-        targetValue = if (highlightFlag) {
-            MaterialTheme.colorScheme.surfaceTint.copy(alpha = .12f)
-        } else {
-            Color.Transparent
-        },
-        animationSpec = if (highlightFlag) {
-            repeatable(
-                iterations = 5,
-                animation = tween(durationMillis = 200),
-                repeatMode = RepeatMode.Reverse,
-                initialStartOffset = StartOffset(
-                    offsetMillis = 600,
-                    offsetType = StartOffsetType.Delay,
-                ),
-            )
-        } else {
-            tween(200)
-        },
-        label = "highlight",
-    )
-    return this.background(color = highlight)
-}
-
 internal val TrailingWidgetBuffer = 16.dp
 internal val PrefsHorizontalPadding = 16.dp
-internal val PrefsVerticalPadding = 16.dp
+internal val PrefsVerticalPadding = 12.dp
 internal val TitleFontSize = 16.sp

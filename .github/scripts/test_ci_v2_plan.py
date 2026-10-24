@@ -45,6 +45,25 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(result["selected_tests"], ["Domain"])
         self.assertEqual(result["selected_compiles"], ["App Compile"])
 
+    def test_reading_progress_adapter_change_checks_domain_and_sqlite_data(self):
+        result = plan(
+            ["domain/src/main/java/tachiyomi/domain/tsuzuki/sync/adapter/CanonicalReadingProgressSyncAdapter.kt"],
+            "affected",
+        )
+        self.assertEqual(set(result["selected_tests"]), {"Domain — Tsuzuki", "Data — Tsuzuki"})
+        self.assertEqual(result["selected_compiles"], ["App Compile"])
+        self.assertTrue(result["run_format"])
+
+    def test_atomic_progress_repository_change_checks_both_interfaces(self):
+        for path in (
+            "domain/src/main/java/tachiyomi/domain/tsuzuki/reader/repository/CanonicalReadingRepository.kt",
+            "data/src/main/java/tachiyomi/data/tsuzuki/CanonicalReadingRepositoryImpl.kt",
+        ):
+            with self.subTest(path=path):
+                result = plan([path], "affected")
+                self.assertEqual(set(result["selected_tests"]), {"Domain — Tsuzuki", "Data — Tsuzuki"})
+                self.assertEqual(result["selected_compiles"], ["App Compile"])
+
     def test_tsuzuki_data_production_change_runs_filtered_data_tests_and_app_compile(self):
         result = plan(["data/src/main/java/tachiyomi/data/tsuzuki/Foo.kt"], "affected")
         self.assertEqual(result["selected_tests"], ["Data — Tsuzuki"])
@@ -60,6 +79,17 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(result["selected_tests"], ["App — Tsuzuki"])
         self.assertEqual(result["selected_compiles"], [])
 
+    def test_canonical_offline_gateway_changes_cover_domain_and_app_contracts(self):
+        result = plan(
+            [
+                "domain/src/main/java/tachiyomi/domain/tsuzuki/download/service/CanonicalDownloadGateway.kt",
+                "app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/MihonCanonicalDownloadGateway.kt",
+            ],
+            "affected",
+        )
+        self.assertEqual(set(result["selected_tests"]), {"Domain — Tsuzuki", "App — Tsuzuki"})
+        self.assertTrue(result["run_format"])
+
     def test_runtime_binding_gateway_change_runs_domain_and_app_tsuzuki_tests(self):
         result = plan(
             ["app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/MihonReadingSourceGateway.kt"],
@@ -67,6 +97,20 @@ class PlannerTest(unittest.TestCase):
         )
         self.assertEqual(set(result["selected_tests"]), {"Domain — Tsuzuki", "App — Tsuzuki"})
         self.assertEqual(result["selected_compiles"], [])
+
+    def test_runtime_chapter_kotlin_change_runs_format_in_affected_mode(self):
+        result = plan(
+            ["domain/src/main/java/tachiyomi/domain/tsuzuki/chapter/interactor/ParseCanonicalChapterLabel.kt"],
+            "affected",
+        )
+        self.assertTrue(result["run_format"])
+
+    def test_runtime_mihon_content_change_runs_format_in_affected_mode(self):
+        result = plan(
+            ["app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/addon/MihonContentProvider.kt"],
+            "affected",
+        )
+        self.assertTrue(result["run_format"])
 
     def test_runtime_domain_binding_change_runs_domain_and_app_tests_and_compile(self):
         result = plan(
@@ -97,6 +141,15 @@ class PlannerTest(unittest.TestCase):
     def test_shared_app_change_runs_full_app_tests(self):
         result = plan(["app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt"], "affected")
         self.assertEqual(result["selected_tests"], ["App"])
+        self.assertEqual(result["selected_compiles"], [])
+
+    def test_reader_activity_navigation_change_keeps_full_app_regressions(self):
+        result = plan(
+            ["app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt"],
+            "affected",
+        )
+        self.assertEqual(result["selected_tests"], ["App"])
+        self.assertTrue(result["run_format"])
         self.assertEqual(result["selected_compiles"], [])
 
     def test_core_common_change_runs_core_tests_and_app_compile(self):
@@ -157,25 +210,12 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(result["selected_compiles"], [])
         self.assertTrue(result["run_native_package"])
 
-    def test_critical_ci_workflow_and_backup_discovery_changes_run_full_matrix(self):
-        for path in (
-            ".github/workflows/ci-v2.yml",
-            ".github/scripts/verify_backup_jdbc_report.py",
-            ".github/scripts/test_verify_backup_jdbc_report.py",
-        ):
-            with self.subTest(path=path):
-                result = plan([path], "affected")
-                self.assertEqual(set(result["selected_tests"]), {"Core Common", "Domain", "Data", "App"})
-                self.assertTrue(result["run_format"])
-                self.assertTrue(result["run_database"])
-                self.assertTrue(result["run_supabase"])
-                self.assertTrue(result["run_release"])
-                self.assertTrue(result["run_native_package"])
-
-    def test_unrelated_ci_helper_change_stays_planner_self_test_only(self):
-        result = plan([".github/scripts/test_extension_fixture.py"], "affected")
+    def test_ci_configuration_change_uses_planner_self_test_only(self):
+        result = plan([".github/workflows/ci-v2.yml"], "affected")
         self.assertEqual(result["selected_tests"], [])
+        self.assertEqual(result["selected_compiles"], [])
         self.assertFalse(result["run_format"])
+        self.assertFalse(result["run_database"])
         self.assertFalse(result["run_release"])
 
     def test_gradle_change_fails_safe_to_full_and_release(self):
@@ -238,6 +278,19 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(set(result["selected_tests"]), {"Core Common", "Domain", "Data", "App"})
         self.assertTrue(result["run_database"])
         self.assertTrue(result["run_release"])
+
+    def test_backup_sqlite_discovery_gate_change_requires_full_matrix(self):
+        for path in (
+            ".github/scripts/verify_backup_jdbc_report.py",
+            ".github/scripts/test_verify_backup_jdbc_report.py",
+        ):
+            with self.subTest(path=path):
+                result = plan([path], "affected")
+                self.assertEqual(set(result["selected_tests"]), {"Core Common", "Domain", "Data", "App"})
+                self.assertTrue(result["run_database"])
+                self.assertTrue(result["run_supabase"])
+                self.assertTrue(result["run_release"])
+                self.assertTrue(result["run_native_package"])
 
     def test_research_documents_and_csv_data_do_not_trigger_release_build(self):
         result = plan(
