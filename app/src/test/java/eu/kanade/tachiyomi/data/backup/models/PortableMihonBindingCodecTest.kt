@@ -90,7 +90,10 @@ class PortableMihonBindingCodecTest {
             BackupCanonicalCore(titles = titles, contentBindings = listOf(base, base.copy(id = "b2"))).validate()
         }.isFailure shouldBe true
         runCatching {
-            BackupCanonicalCore(titles = titles, contentBindings = listOf(base.copy(canonicalTitleId = "other"))).validate()
+            BackupCanonicalCore(
+                titles = titles,
+                contentBindings = listOf(base.copy(canonicalTitleId = "other")),
+            ).validate()
         }.isFailure shouldBe true
         runCatching {
             BackupCanonicalCore(titles = titles, contentBindings = listOf(base.copy(codecVersion = 7))).validate()
