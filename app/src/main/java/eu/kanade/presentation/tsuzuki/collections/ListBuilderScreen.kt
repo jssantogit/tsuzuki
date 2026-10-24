@@ -245,6 +245,7 @@ internal fun ListBuilderScreen(
                 editor = editor,
                 onEditorChange = { editor = it },
                 descriptor = providerDescriptors.firstOrNull { it.providerId == editor.providerId },
+                previewState = previewState,
                 filterLookupStates = filterLookupStates,
                 onFilterLookup = onFilterLookup,
                 modifier = Modifier
@@ -439,84 +440,92 @@ private fun QuickListBuilder(
 
         item(key = "preview") {
             BuilderGroup(title = stringResource(MR.strings.tsuzuki_list_builder_preview)) {
-                val activeCount = editor.currentQuery()?.predicateCount() ?: 0
-                if (activeCount == 0) {
-                    Text(
-                        text = stringResource(MR.strings.tsuzuki_list_builder_no_filters),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                } else {
-                    Text(
-                        text = pluralStringResource(
-                            MR.plurals.tsuzuki_list_builder_active_filter_count,
-                            activeCount,
-                            activeCount,
-                        ),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                }
-                when (previewState) {
-                    CollectionDraftPreviewState.Idle -> {
-                        Text(
-                            text = stringResource(MR.strings.tsuzuki_list_builder_preview_idle),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = defaultSkinColors().secondary,
-                        )
-                    }
-                    CollectionDraftPreviewState.Loading -> {
-                        Text(
-                            text = stringResource(MR.strings.tsuzuki_list_builder_preview_loading),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = defaultSkinColors().secondary,
-                        )
-                    }
-                    is CollectionDraftPreviewState.Content -> {
-                        if (previewState.items.isEmpty()) {
+                ListBuilderPreviewContent(editor, previewState)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ListBuilderPreviewContent(
+    editor: ListEditorState,
+    previewState: CollectionDraftPreviewState,
+) {
+    val activeCount = editor.currentQuery()?.predicateCount() ?: 0
+    if (activeCount == 0) {
+        Text(
+            text = stringResource(MR.strings.tsuzuki_list_builder_no_filters),
+            style = MaterialTheme.typography.titleSmall,
+        )
+    } else {
+        Text(
+            text = pluralStringResource(
+                MR.plurals.tsuzuki_list_builder_active_filter_count,
+                activeCount,
+                activeCount,
+            ),
+            style = MaterialTheme.typography.titleSmall,
+        )
+    }
+    when (previewState) {
+        CollectionDraftPreviewState.Idle -> {
+            Text(
+                text = stringResource(MR.strings.tsuzuki_list_builder_preview_idle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = defaultSkinColors().secondary,
+            )
+        }
+        CollectionDraftPreviewState.Loading -> {
+            Text(
+                text = stringResource(MR.strings.tsuzuki_list_builder_preview_loading),
+                style = MaterialTheme.typography.bodyMedium,
+                color = defaultSkinColors().secondary,
+            )
+        }
+        is CollectionDraftPreviewState.Content -> {
+            if (previewState.items.isEmpty()) {
+                Text(
+                    text = stringResource(MR.strings.tsuzuki_list_builder_preview_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = defaultSkinColors().secondary,
+                )
+            } else {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(previewState.items.take(PREVIEW_TITLE_LIMIT)) { item ->
+                        Column(
+                            modifier = Modifier.width(88.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            MangaCover.Book(
+                                data = item.coverUrl,
+                                contentDescription = item.title,
+                                modifier = Modifier.fillMaxWidth(),
+                                contentScale = ContentScale.Fit,
+                            )
                             Text(
-                                text = stringResource(MR.strings.tsuzuki_list_builder_preview_empty),
+                                text = item.title,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = defaultSkinColors().secondary,
-                            )
-                        } else {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                items(previewState.items.take(PREVIEW_TITLE_LIMIT)) { item ->
-                                    Column(
-                                        modifier = Modifier.width(88.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                                    ) {
-                                        MangaCover.Book(
-                                            data = item.coverUrl,
-                                            contentDescription = item.title,
-                                            modifier = Modifier.fillMaxWidth(),
-                                            contentScale = ContentScale.Fit,
-                                        )
-                                        Text(
-                                            text = item.title,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        if (previewState.scanBudgetReason != null) {
-                            Text(
-                                text = stringResource(MR.strings.tsuzuki_list_builder_preview_scan_limited),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = defaultSkinColors().secondary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
-                    }
-                    is CollectionDraftPreviewState.Error -> {
-                        Text(
-                            text = previewState.message,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                        )
                     }
                 }
             }
+            if (previewState.scanBudgetReason != null) {
+                Text(
+                    text = stringResource(MR.strings.tsuzuki_list_builder_preview_scan_limited),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = defaultSkinColors().secondary,
+                )
+            }
+        }
+        is CollectionDraftPreviewState.Error -> {
+            Text(
+                text = previewState.message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
 }
@@ -526,6 +535,7 @@ private fun AdvancedListFilters(
     editor: ListEditorState,
     onEditorChange: (ListEditorState) -> Unit,
     descriptor: CollectionProviderDescriptor?,
+    previewState: CollectionDraftPreviewState,
     filterLookupStates: Map<CollectionFilterLookupKey, CollectionFilterLookupState>,
     onFilterLookup: (String, String, String) -> Unit,
     modifier: Modifier = Modifier,
@@ -580,6 +590,11 @@ private fun AdvancedListFilters(
                             )
                         }
                     }
+                }
+            }
+            item(key = "advanced_live_preview") {
+                AdvancedSection(stringResource(MR.strings.tsuzuki_list_builder_preview)) {
+                    ListBuilderPreviewContent(editor, previewState)
                 }
             }
         }
@@ -1056,32 +1071,32 @@ private fun DescriptorStaticDropdown(
             current = current,
             options = listOf<String?>(null) + options.map { it.second },
             optionText = { value -> options.firstOrNull { it.second == value }?.first.orEmpty() },
-        display = { value ->
-            if (value == null) {
-                stringResource(MR.strings.tsuzuki_list_builder_any)
-            } else {
-                options.firstOrNull { it.second == value }?.first ?: value
-            }
-        },
-        onSelect = { selected ->
-            val predicateExpression = selected?.let { value ->
-                QueryExpression.Predicate(
-                    field = capability.field,
-                    operator = capability.preferredScalarOperator(),
-                    value = QueryValue.of(value),
+            display = { value ->
+                if (value == null) {
+                    stringResource(MR.strings.tsuzuki_list_builder_any)
+                } else {
+                    options.firstOrNull { it.second == value }?.first ?: value
+                }
+            },
+            onSelect = { selected ->
+                val predicateExpression = selected?.let { value ->
+                    QueryExpression.Predicate(
+                        field = capability.field,
+                        operator = capability.preferredScalarOperator(),
+                        value = QueryValue.of(value),
+                    )
+                }
+                onEditorChange(
+                    editor.replaceFieldTerm(
+                        field = capability.field,
+                        negated = negated,
+                        predicate = predicateExpression,
+                    ),
                 )
-            }
-            onEditorChange(
-                editor.replaceFieldTerm(
-                    field = capability.field,
-                    negated = negated,
-                    predicate = predicateExpression,
-                ),
-            )
-        },
-        modifier = Modifier.fillMaxWidth(),
-        enabled = editor.filtersEditable,
-    )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = editor.filtersEditable,
+        )
         if (current == null && !negated && options.isNotEmpty()) {
             Text(
                 text = stringResource(
