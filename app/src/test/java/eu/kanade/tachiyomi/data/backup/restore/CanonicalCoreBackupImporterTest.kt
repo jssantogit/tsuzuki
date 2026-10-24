@@ -360,7 +360,7 @@ class CanonicalCoreBackupImporterTest {
         database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
     }
 
-    private fun insertExistingCollection(collection: BackupCoreCollection) {
+    private suspend fun insertExistingCollection(collection: BackupCoreCollection) {
         database.tsuzuki_collectionsQueries.upsertTsuzukiCollection(
             id = collection.id,
             title = collection.title,
