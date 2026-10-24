@@ -353,6 +353,7 @@ object StructuredDiagnosticSanitizer {
     private val providerErrorCodePattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
     private val p2pEventPattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
     private val p2pOperationPattern = Regex("^opRef=[0-9a-f]{16}$")
+    private val p2pProviderIdPattern = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
     private val p2pClassPattern = Regex("^[A-Za-z_][A-Za-z0-9_.$]{0,127}$")
     private val p2pCodePattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
     private val p2pCodeFields = setOf(
@@ -420,7 +421,6 @@ object StructuredDiagnosticSanitizer {
         )
     }
 
-
     /** A strictly delimited rendition of Host-only, content-free P2P fields. */
     private fun isSafeP2pLine(line: String): Boolean {
         if (line.length !in 40..2048 || line.any { it.code !in 32..126 }) return false
@@ -437,7 +437,7 @@ object StructuredDiagnosticSanitizer {
             val value = field.substring(equal + 1)
             when {
                 key == "jobId" -> uuidPattern.matches(value)
-                key == "providerId" -> providerIdPattern.matches(value)
+                key == "providerId" -> p2pProviderIdPattern.matches(value)
                 key == "exceptionClass" -> p2pClassPattern.matches(value)
                 key in p2pCodeFields -> p2pCodePattern.matches(value)
                 key in p2pNumberFields || key in p2pAlertFields ->
