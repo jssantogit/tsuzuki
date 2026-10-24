@@ -166,12 +166,53 @@ class RefreshUserLibrariesTest {
         externalRepository.memberships.value shouldBe listOf(previous)
     }
 
+    @Test
+    fun `missing verified account scope blocks remote fetch and preserves legacy snapshot`() = runTest {
+        val legacy = ExternalLibraryMembership(
+            canonicalTitleId = "previous-A",
+            provider = "mal",
+            externalId = "7",
+            listKey = "mal:status:reading",
+            status = LibraryStatus.READING,
+            remoteStatus = "reading",
+            progress = 2.0,
+            score = null,
+            syncedAt = 100L,
+        )
+        val repository = FakeExternalLibraryRepository(listOf(legacy), ownerScoped = false)
+        val provider = FakeUserListProvider(Result.success(UserLibrarySnapshot(emptyList(), emptyList())))
+        val interactor = RefreshUserLibraries(
+            registry = FakeRegistry(provider),
+            materializeCanonicalTitleFromCatalog = MaterializeCanonicalTitleFromCatalog(
+                MaterializeCanonicalTitle(
+                    repository = FakeTitleRepository(),
+                    idFactory = { "unexpected-new-title" },
+                    clock = { 200L },
+                ),
+            ),
+            externalLibraryRepository = repository,
+            clock = { 300L },
+        )
+
+        interactor.refreshProvider(IntegrationId("mal")).isFailure shouldBe true
+        provider.fetchCount shouldBe 0
+        repository.memberships.value shouldBe listOf(legacy)
+        val connected = interactor.refreshConnected()
+        connected[IntegrationId("mal")]?.isFailure shouldBe true
+        provider.fetchCount shouldBe 0
+        repository.memberships.value shouldBe listOf(legacy)
+    }
+
     private class FakeUserListProvider(
         private val result: Result<UserLibrarySnapshot>,
     ) : UserListProvider {
         override val integrationId = IntegrationId("mal")
         override val connection: Flow<Boolean> = flowOf(true)
-        override suspend fun fetchLibrary(): Result<UserLibrarySnapshot> = result
+        var fetchCount = 0
+        override suspend fun fetchLibrary(): Result<UserLibrarySnapshot> {
+            fetchCount++
+            return result
+        }
     }
 
     private class FakeRegistry(
@@ -201,7 +242,9 @@ class RefreshUserLibrariesTest {
 
     private class FakeExternalLibraryRepository(
         initial: List<ExternalLibraryMembership> = emptyList(),
+        private val ownerScoped: Boolean = true,
     ) : ExternalLibraryRepository {
+        override val hasVerifiedOwnerScope: Boolean get() = ownerScoped
         val memberships = MutableStateFlow(initial)
 
         override fun observeAll(): Flow<List<ExternalLibraryMembership>> =

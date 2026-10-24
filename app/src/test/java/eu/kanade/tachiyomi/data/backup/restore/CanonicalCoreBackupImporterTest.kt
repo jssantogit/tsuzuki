@@ -161,6 +161,41 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
+    fun `exported source and chapter variants omit local Mihon row identifiers`(): Unit = runBlocking {
+        importer.restoreCore(section())
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_source_mappings SET mihon_manga_id = 987654321 WHERE id = 'mapping-1'",
+            0,
+        ).await()
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_chapter_variants SET mihon_manga_id = 987654321, " +
+                "mihon_chapter_id = 87654321 WHERE id = 'variant-1'",
+            0,
+        ).await()
+
+        val titleRepo = CanonicalTitleRepositoryImpl(database)
+        val exporter = CanonicalCoreBackupExporter(
+            titleSource = CanonicalTitleSyncSource { titleRepo.getAllAsFlow().first() },
+            titleRepository = titleRepo,
+            libraryRepository = CanonicalLibraryRepositoryImpl(database),
+            chapterRepository = CanonicalChapterRepositoryImpl(database),
+            sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+            readingRepository = CanonicalReadingRepositoryImpl(database),
+            database = database,
+            json = Json,
+        )
+        val exported = exporter.export()
+        exported.payloadJson.contains("987654321") shouldBe false
+        exported.payloadJson.contains("87654321") shouldBe false
+        val core = Json.decodeFromString(BackupCanonicalCore.serializer(), exported.payloadJson)
+        core.sourceMappings.single().mihonMangaId shouldBe null
+        core.variants.single().mihonMangaId shouldBe null
+        core.variants.single().mihonChapterId shouldBe null
+    }
+
+    @Test
     fun `foreign device operational Mihon IDs are not rebound to unrelated local rows`(): Unit = runBlocking {
         importer.restoreCore(section())
 
