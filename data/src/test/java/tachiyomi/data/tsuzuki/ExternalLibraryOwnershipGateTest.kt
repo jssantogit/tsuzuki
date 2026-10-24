@@ -19,6 +19,7 @@ import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
 import tachiyomi.domain.tsuzuki.library.model.ExternalLibraryMembership
+import tachiyomi.domain.tsuzuki.library.model.VerifiedExternalLibraryOwner
 import java.nio.file.Files
 
 class ExternalLibraryOwnershipGateTest {
@@ -118,6 +119,62 @@ class ExternalLibraryOwnershipGateTest {
         stored.size shouldBe 1
         stored.single().external_id shouldBe "123"
         stored.single().synced_at shouldBe 100L
+    }
+
+    @Test
+    fun `A and B memberships coexist and replacement only clears its own account`() = runBlocking {
+        val accountA = VerifiedExternalLibraryOwner.fromAuthenticatedIdentity("mal", "owner-A")
+        val accountB = VerifiedExternalLibraryOwner.fromAuthenticatedIdentity("mal", "owner-B")
+        val source = ExternalLibraryMembership(
+            canonicalTitleId = "A-title",
+            provider = "mal",
+            externalId = "123",
+            listKey = "mal:reading",
+            status = null,
+            remoteStatus = null,
+            progress = null,
+            score = null,
+            syncedAt = 300L,
+        )
+        repository.replaceOwned(accountA, listOf(source.copy(listTitle = "A list")))
+        repository.replaceOwned(accountB, listOf(source.copy(listTitle = "B list")))
+        val queries = database.tsuzuki_external_library_membershipsQueries
+        queries.getTsuzukiScopedExternalLibraryMemberships("mal", accountA.ownerKey)
+            .awaitAsList().single().list_title shouldBe "A list"
+        queries.getTsuzukiScopedExternalLibraryMemberships("mal", accountB.ownerKey)
+            .awaitAsList().single().list_title shouldBe "B list"
+
+        repository.replaceOwned(accountB, emptyList())
+        queries.getTsuzukiScopedExternalLibraryMemberships("mal", accountB.ownerKey)
+            .awaitAsList() shouldBe emptyList()
+        queries.getTsuzukiScopedExternalLibraryMemberships("mal", accountA.ownerKey)
+            .awaitAsList().single().list_title shouldBe "A list"
+        queries.getAllTsuzukiExternalLibraryMemberships().awaitAsList().single()
+            .list_title shouldBe "A's private list"
+        repository.observeAll().first() shouldBe emptyList()
+    }
+
+    @Test
+    fun `invalid foreign owner snapshot is transactional and preserves original account rows`() = runBlocking {
+        val account = VerifiedExternalLibraryOwner.fromAuthenticatedIdentity("mal", "owner-A")
+        val source = ExternalLibraryMembership(
+            canonicalTitleId = "A-title",
+            provider = "mal",
+            externalId = "123",
+            listKey = "mal:reading",
+            status = null,
+            remoteStatus = null,
+            progress = null,
+            score = null,
+            syncedAt = 300L,
+        )
+        repository.replaceOwned(account, listOf(source))
+        shouldThrow<IllegalArgumentException> {
+            repository.replaceOwned(account, listOf(source.copy(provider = "kitsu")))
+        }
+        database.tsuzuki_external_library_membershipsQueries
+            .getTsuzukiScopedExternalLibraryMemberships("mal", account.ownerKey)
+            .awaitAsList().single().external_id shouldBe "123"
     }
 
     @Test
