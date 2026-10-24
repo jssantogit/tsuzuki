@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
@@ -561,6 +562,7 @@ private fun DiscoverProviderCards(
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(top = 18.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (entries.isEmpty()) {
             item(key = "empty") {
@@ -573,51 +575,57 @@ private fun DiscoverProviderCards(
             }
         }
         if (entries.isNotEmpty()) {
-            item(key = "discover_group") {
-                SettingsGroup {
-                    entries.forEachIndexed { index, entry ->
-                        val operationKey = "install:${entry.repositoryId}:${entry.descriptor.providerId}"
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
+            items(
+                items = entries,
+                key = { "${it.repositoryId}:${it.descriptor.providerId}" },
+            ) { entry ->
+                val operationKey = "install:${entry.repositoryId}:${entry.descriptor.providerId}"
+                DefaultSkinCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = DefaultSkinSpacing.PageHorizontal),
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            text = entry.descriptor.providerId,
+                            color = colors.foreground,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "${entry.descriptor.versionName} · ${providerRepositoryStatusLabelDefaultSkin(
+                                entry.status,
+                            )}",
+                            color = colors.secondary,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            text = entry.repositoryId,
+                            color = colors.secondary,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        if (
+                            entry.status == ProviderRepositoryEntryStatus.AVAILABLE ||
+                            entry.status == ProviderRepositoryEntryStatus.UPDATE_AVAILABLE
                         ) {
-                            Text(
-                                text = entry.descriptor.providerId,
-                                color = colors.foreground,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
+                            DefaultSkinPrimaryButton(
+                                text = stringResource(
+                                    if (entry.status == ProviderRepositoryEntryStatus.UPDATE_AVAILABLE) {
+                                        MR.strings.tsuzuki_providers_update
+                                    } else {
+                                        MR.strings.tsuzuki_providers_install
+                                    },
+                                ),
+                                enabled = operationKey !in operationKeys,
+                                modifier = Modifier.padding(top = 4.dp).heightIn(min = 40.dp),
+                                minimumHeight = 40.dp,
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                                onClick = { onInstall(entry) },
                             )
-                            Text(
-                                text = "${entry.descriptor.versionName} · ${providerRepositoryStatusLabelDefaultSkin(
-                                    entry.status,
-                                )}",
-                                color = colors.secondary,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            Text(
-                                text = entry.repositoryId,
-                                color = colors.secondary,
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                            if (
-                                entry.status == ProviderRepositoryEntryStatus.AVAILABLE ||
-                                entry.status == ProviderRepositoryEntryStatus.UPDATE_AVAILABLE
-                            ) {
-                                DefaultSkinPrimaryButton(
-                                    text = stringResource(
-                                        if (entry.status == ProviderRepositoryEntryStatus.UPDATE_AVAILABLE) {
-                                            MR.strings.tsuzuki_providers_update
-                                        } else {
-                                            MR.strings.tsuzuki_providers_install
-                                        },
-                                    ),
-                                    enabled = operationKey !in operationKeys,
-                                    modifier = Modifier.heightIn(min = 48.dp),
-                                    onClick = { onInstall(entry) },
-                                )
-                            }
                         }
-                        if (index < entries.lastIndex) SettingsGroupDivider()
                     }
                 }
             }
