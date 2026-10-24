@@ -5,7 +5,10 @@ import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -18,6 +21,10 @@ import tachiyomi.data.Mangas
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
+import tachiyomi.domain.tsuzuki.integration.IntegrationId
+import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
+import tachiyomi.domain.tsuzuki.integration.UserListProvider
+import tachiyomi.domain.tsuzuki.integration.model.UserLibrarySnapshot
 import tachiyomi.domain.tsuzuki.library.model.ExternalLibraryMembership
 import tachiyomi.domain.tsuzuki.library.model.VerifiedExternalLibraryOwner
 import java.nio.file.Files
@@ -152,6 +159,52 @@ class ExternalLibraryOwnershipGateTest {
         queries.getAllTsuzukiExternalLibraryMemberships().awaitAsList().single()
             .list_title shouldBe "A's private list"
         repository.observeAll().first() shouldBe emptyList()
+    }
+
+    @Test
+    fun `observed library switches accounts without leaking another account or legacy rows`() = runBlocking {
+        val active = MutableStateFlow("account-A")
+        val provider = object : UserListProvider {
+            override val integrationId = IntegrationId("mal")
+            override val connection: Flow<Boolean> = active.map { true }
+            override suspend fun authenticatedOwnerSubject() = Result.success(active.value)
+            override suspend fun fetchLibrary() =
+                Result.success(UserLibrarySnapshot(emptyList(), emptyList()))
+        }
+        val registry = object : IntegrationRegistry {
+            override fun searchProviders() = emptyList<tachiyomi.domain.tsuzuki.integration.SearchProvider>()
+            override fun discoveryProviders() = emptyList<tachiyomi.domain.tsuzuki.integration.DiscoveryProvider>()
+            override fun metadataProviders() = emptyList<tachiyomi.domain.tsuzuki.integration.MetadataProvider>()
+            override fun chapterEvidenceProviders() =
+                emptyList<tachiyomi.domain.tsuzuki.integration.ChapterEvidenceProvider>()
+            override fun ratingsProviders() = emptyList<tachiyomi.domain.tsuzuki.integration.RatingsProvider>()
+            override fun trackingProviders() = emptyList<tachiyomi.domain.tsuzuki.integration.TrackingProvider>()
+            override fun userListProviders() = listOf(provider)
+        }
+        val scoped = ExternalLibraryRepositoryImpl(database, registry)
+        val a = VerifiedExternalLibraryOwner.fromAuthenticatedIdentity("mal", "account-A")
+        val b = VerifiedExternalLibraryOwner.fromAuthenticatedIdentity("mal", "account-B")
+        val template = ExternalLibraryMembership(
+            canonicalTitleId = "A-title",
+            provider = "mal",
+            externalId = "123",
+            listKey = "mal:reading",
+            status = null,
+            remoteStatus = null,
+            progress = null,
+            score = null,
+            syncedAt = 300L,
+        )
+        scoped.replaceOwned(a, listOf(template.copy(listTitle = "A's list")))
+        scoped.replaceOwned(b, listOf(template.copy(listTitle = "B's list")))
+
+        scoped.observeAll().first().single().listTitle shouldBe "A's list"
+        active.value = "account-B"
+        scoped.observeAll().first().single().listTitle shouldBe "B's list"
+        active.value = "account-A"
+        scoped.observeAll().first().single().listTitle shouldBe "A's list"
+        scoped.clearProvider("mal")
+        scoped.observeAll().first().single().listTitle shouldBe "A's list"
     }
 
     @Test
