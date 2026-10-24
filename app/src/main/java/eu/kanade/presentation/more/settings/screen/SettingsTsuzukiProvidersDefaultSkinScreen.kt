@@ -52,7 +52,6 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.more.settings.components.SettingsCanvas
 import eu.kanade.presentation.more.settings.components.SettingsGroup
-import eu.kanade.presentation.more.settings.components.SettingsGroupDivider
 import eu.kanade.presentation.more.settings.components.SettingsPageHeader
 import eu.kanade.presentation.more.settings.widget.SettingsPreferenceSwitchIndicator
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinCard
@@ -428,6 +427,7 @@ private fun InstalledProviderCards(
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(top = 18.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (registrations.isEmpty()) {
             item(key = "empty") {
@@ -440,20 +440,24 @@ private fun InstalledProviderCards(
             }
         }
         if (registrations.isNotEmpty()) {
-            item(key = "installed_group") {
-                SettingsGroup {
-                    registrations.forEachIndexed { index, registration ->
-                        val providerId = registration.descriptor.id.value
-                        InstalledProviderRow(
-                            registration = registration,
-                            rollbackAvailable = providerId in rollbackProviderIds,
-                            rollbackEnabled = "rollback:$providerId" !in operationKeys,
-                            onOpen = { onOpen(registration) },
-                            onEnabledChange = { onEnabledChange(registration, it) },
-                            onRollback = { onRollback(providerId) },
-                        )
-                        if (index < registrations.lastIndex) SettingsGroupDivider()
-                    }
+            items(
+                items = registrations,
+                key = { it.descriptor.id.value },
+            ) { registration ->
+                val providerId = registration.descriptor.id.value
+                DefaultSkinCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = DefaultSkinSpacing.PageHorizontal),
+                ) {
+                    InstalledProviderRow(
+                        registration = registration,
+                        rollbackAvailable = providerId in rollbackProviderIds,
+                        rollbackEnabled = "rollback:$providerId" !in operationKeys,
+                        onOpen = { onOpen(registration) },
+                        onEnabledChange = { onEnabledChange(registration, it) },
+                        onRollback = { onRollback(providerId) },
+                    )
                 }
             }
         }

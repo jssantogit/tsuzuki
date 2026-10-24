@@ -5,10 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -21,6 +19,8 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.more.LogoHeader
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinCard
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.BuildConfig
@@ -46,8 +46,11 @@ object AboutScreen : Screen() {
         val uriHandler = LocalUriHandler.current
         val handleBack = LocalBackPress.current
         val navigator = LocalNavigator.currentOrThrow
+        val colors = defaultSkinColors()
 
         Scaffold(
+            containerColor = colors.canvas,
+            contentColor = colors.foreground,
             topBar = { scrollBehavior ->
                 AppBar(
                     title = "",
@@ -64,7 +67,7 @@ object AboutScreen : Screen() {
                         text = stringResource(MR.strings.pref_category_about),
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = colors.foreground,
                         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
                     )
                 }
@@ -77,13 +80,10 @@ object AboutScreen : Screen() {
                 }
 
                 item {
-                    Surface(
+                    DefaultSkinCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 1.dp,
                     ) {
                         Column {
                             TextPreferenceWidget(
@@ -97,7 +97,7 @@ object AboutScreen : Screen() {
                             )
                             HorizontalDivider(
                                 modifier = Modifier.padding(start = 16.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                                color = colors.outline.copy(alpha = 0.6f),
                             )
                             TextPreferenceWidget(
                                 title = stringResource(MR.strings.tsuzuki_project_source),
@@ -107,7 +107,7 @@ object AboutScreen : Screen() {
                             )
                             HorizontalDivider(
                                 modifier = Modifier.padding(start = 16.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                                color = colors.outline.copy(alpha = 0.6f),
                             )
                             TextPreferenceWidget(
                                 title = stringResource(MR.strings.tsuzuki_upstream_mihon),
@@ -117,7 +117,7 @@ object AboutScreen : Screen() {
                             )
                             HorizontalDivider(
                                 modifier = Modifier.padding(start = 16.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                                color = colors.outline.copy(alpha = 0.6f),
                             )
                             TextPreferenceWidget(
                                 title = stringResource(MR.strings.licenses),

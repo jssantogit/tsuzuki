@@ -22,6 +22,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSecondaryButton
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.ui.reader.ReaderRecovery
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkState
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentOptionPresentation
@@ -320,18 +323,25 @@ private fun UnavailableActions(
     onFindSource: () -> Unit,
     enabled: Boolean,
 ) {
+    val colors = defaultSkinColors()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = stringResource(MR.strings.tsuzuki_reader_source_unavailable),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = colors.secondary,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onRetry, enabled = enabled) {
-                Text(stringResource(MR.strings.tsuzuki_reader_retry))
-            }
-            OutlinedButton(onClick = onFindSource, enabled = enabled) {
-                Text(stringResource(MR.strings.tsuzuki_reader_find_source))
-            }
+            DefaultSkinPrimaryButton(
+                text = stringResource(MR.strings.tsuzuki_reader_retry),
+                onClick = onRetry,
+                enabled = enabled,
+                modifier = Modifier.weight(1f),
+            )
+            DefaultSkinSecondaryButton(
+                text = stringResource(MR.strings.tsuzuki_reader_find_source),
+                onClick = onFindSource,
+                enabled = enabled,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
