@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import tachiyomi.data.Database
 import tachiyomi.data.subscribeToList
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
@@ -40,12 +41,15 @@ class ExternalLibraryRepositoryImpl(
     override val hasVerifiedOwnerScope: Boolean = true
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    override fun observeAll(): Flow<List<ExternalLibraryMembership>> {
-        val providers = registry.userListProviders()
-        if (providers.isEmpty()) return flowOf(emptyList())
-        val ownerStreams = providers.map(::observeVerifiedProvider)
-        return combine(ownerStreams) { values -> values.flatMap { it } }
-    }
+    override fun observeAll(): Flow<List<ExternalLibraryMembership>> =
+        registry.observeChanges().onStart { emit(Unit) }.flatMapLatest {
+            val providers = registry.userListProviders()
+            if (providers.isEmpty()) {
+                flowOf(emptyList())
+            } else {
+                combine(providers.map(::observeVerifiedProvider)) { values -> values.flatMap { it } }
+            }
+        }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeVerifiedProvider(provider: UserListProvider): Flow<List<ExternalLibraryMembership>> =
