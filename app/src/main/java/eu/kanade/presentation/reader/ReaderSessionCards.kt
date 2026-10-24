@@ -44,6 +44,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.ui.reader.ReaderRecovery
 import eu.kanade.tachiyomi.ui.reader.ReaderVisualProtection
 import eu.kanade.tachiyomi.ui.reader.readerChapterPosition
@@ -64,6 +67,7 @@ fun ReaderContextCard(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
+        val colors = defaultSkinColors()
         val view = LocalView.current
         LaunchedEffect(view) {
             val window = (view.parent as? DialogWindowProvider)?.window
@@ -83,12 +87,12 @@ fun ReaderContextCard(
                     .widthIn(max = 420.dp)
                     .fillMaxWidth()
                     .heightIn(max = maxHeight),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                tonalElevation = 6.dp,
-                shadowElevation = 12.dp,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                shape = DefaultSkinShape.Card,
+                color = colors.surface,
+                contentColor = colors.foreground,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                border = BorderStroke(1.dp, colors.outline),
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp),
@@ -106,12 +110,11 @@ fun ReaderContextCard(
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.titleMedium,
                         )
-                        androidx.compose.material3.TextButton(
+                        DefaultSkinTextAction(
+                            text = stringResource(MR.strings.tsuzuki_reader_close),
                             onClick = onDismiss,
                             modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp),
-                        ) {
-                            Text(stringResource(MR.strings.tsuzuki_reader_close))
-                        }
+                        )
                     }
                     content()
                 }
