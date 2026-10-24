@@ -29,6 +29,23 @@ class ProviderP2pStructuredHistoryTest {
                         flags = mapOf("hasMagnet" to true),
                     )
                     ProviderP2pDiagnostics.record(
+                        event = ProviderP2pDiagnosticEvent.TRANSFER_PROGRESS,
+                        operationId = operation,
+                        numbers = mapOf(
+                            "wantedBytes" to 4096L,
+                            "doneBytes" to 1024L,
+                            "peerCount" to 1L,
+                            "progressPercent" to 25L,
+                        ),
+                        flags = mapOf("firstPeerObserved" to true),
+                    )
+                    ProviderP2pDiagnostics.record(
+                        event = ProviderP2pDiagnosticEvent.NATIVE_ALERT_SUMMARY,
+                        operationId = operation,
+                        codes = mapOf("phase" to "METADATA_FAILED"),
+                        numbers = mapOf("alertDhtGetPeers" to 2L),
+                    )
+                    ProviderP2pDiagnostics.record(
                         event = ProviderP2pDiagnosticEvent.METADATA_FAILED,
                         operationId = operation,
                         codes = mapOf("source" to "MAGNET", "failure" to "METADATA_UNAVAILABLE"),
@@ -41,6 +58,9 @@ class ProviderP2pStructuredHistoryTest {
                 exported.contains("\"name\":\"provider_p2p_event\"") shouldBe true
                 exported.contains("METADATA_START") shouldBe true
                 exported.contains("METADATA_FAILED") shouldBe true
+                exported.contains("TRANSFER_PROGRESS") shouldBe true
+                exported.contains("wantedBytes=4096") shouldBe true
+                exported.contains("alertDhtGetPeers=2") shouldBe true
                 exported.contains("source=MAGNET") shouldBe true
                 exported.contains("elapsedMs=30001") shouldBe true
                 exported.contains("failure=METADATA_UNAVAILABLE") shouldBe true
