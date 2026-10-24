@@ -28,16 +28,17 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
         session: SessionManager,
         request: ProviderP2pAcquireRequest,
         workingDirectory: File,
-    ) -> TorrentInfo? = DEFAULT_METADATA_RESOLVER,
+    ) -> TorrentInfo? = null,
     private val initialPeers: (ProviderP2pAcquireRequest) -> List<TcpEndpoint> = { emptyList() },
     private val sessionParamsFactory: () -> SessionParams = DEFAULT_SESSION_PARAMS_FACTORY,
     private val downloadTimeoutMs: Long = DEFAULT_DOWNLOAD_TIMEOUT_MS,
     private val nativeSupport: () -> Boolean = JlibtorrentNativeSupport::isCurrentRuntimeSupported,
     private val sessionManagerFactory: () -> SessionManager = { SessionManager() },
+    private val metadataTimeoutSeconds: Int = METADATA_TIMEOUT_SECONDS,
 ) : ProviderP2pDownloadEngine {
 
     constructor() : this(
-        metadataResolver = DEFAULT_METADATA_RESOLVER,
+        metadataResolver = null,
         initialPeers = { emptyList() },
         sessionParamsFactory = DEFAULT_SESSION_PARAMS_FACTORY,
         downloadTimeoutMs = DEFAULT_DOWNLOAD_TIMEOUT_MS,
@@ -48,6 +49,9 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
     init {
         require(downloadTimeoutMs in 1_000L..MAX_DOWNLOAD_TIMEOUT_MS) {
             "Provider P2P download timeout is outside supported bounds"
+        }
+        require(metadataTimeoutSeconds in 1..METADATA_TIMEOUT_SECONDS) {
+            "Provider P2P metadata timeout is outside supported bounds"
         }
     }
 
@@ -113,9 +117,12 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             ProviderP2pDiagnostics.record(
                 event = ProviderP2pDiagnosticEvent.METADATA_START,
                 operationId = request.operationId,
-                codes = mapOf("source" to metadataSource(request)),
+                codes = mapOf(
+                    "source" to metadataSource(request),
+                    "phase" to metadataResolutionMode(),
+                ),
                 numbers = mapOf(
-                    "timeoutMs" to METADATA_TIMEOUT_SECONDS * 1_000L,
+                    "timeoutMs" to metadataTimeoutSeconds.toLong() * 1_000L,
                     "magnetTrackerCount" to trackerCount,
                 ),
                 flags = mapOf(
@@ -124,18 +131,28 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                     "hasTorrentUrl" to !request.torrentUrl.isNullOrBlank(),
                 ),
             )
-            val torrent = metadataResolver(session, request, workingDirectory)
+            val torrent = if (metadataResolver == null) {
+                fetchProductionMetadata(session, request, workingDirectory)
+            } else {
+                metadataResolver(session, request, workingDirectory)
+            }
             if (torrent == null) {
                 ProviderP2pDiagnostics.record(
                     event = ProviderP2pDiagnosticEvent.METADATA_FAILED,
                     operationId = request.operationId,
                     codes = mapOf(
                         "source" to metadataSource(request),
+                        "phase" to metadataResolutionMode(),
+                        "reason" to when {
+                            metadataResolver != null -> "RESOLVER_RETURNED_NULL"
+                            request.magnetUri.isNullOrBlank() && request.infoHash?.length != 40 -> "NO_MAGNET_SOURCE"
+                            else -> "FETCH_RETURNED_NULL"
+                        },
                         "failure" to ProviderP2pFailureCode.METADATA_UNAVAILABLE.name,
                     ),
                     numbers = mapOf(
                         "elapsedMs" to elapsedMillis(metadataStartedAt),
-                        "timeoutMs" to METADATA_TIMEOUT_SECONDS * 1_000L,
+                        "timeoutMs" to metadataTimeoutSeconds.toLong() * 1_000L,
                         "magnetTrackerCount" to trackerCount,
                     ),
                     priority = LogPriority.WARN,
@@ -148,7 +165,10 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             ProviderP2pDiagnostics.record(
                 event = ProviderP2pDiagnosticEvent.METADATA_READY,
                 operationId = request.operationId,
-                codes = mapOf("source" to metadataSource(request)),
+                codes = mapOf(
+                    "source" to metadataSource(request),
+                    "phase" to metadataResolutionMode(),
+                ),
                 numbers = mapOf(
                     "elapsedMs" to elapsedMillis(metadataStartedAt),
                     "fileCount" to torrent.files().numFiles().toLong(),
@@ -556,10 +576,10 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             throw error
         } catch (error: IllegalArgumentException) {
             ProviderP2pDiagnostics.record(
-                event = if (currentStage == "SESSION_START") {
-                    ProviderP2pDiagnosticEvent.SESSION_FAILED
-                } else {
-                    ProviderP2pDiagnosticEvent.METADATA_FAILED
+                event = when (currentStage) {
+                    "SESSION_START" -> ProviderP2pDiagnosticEvent.SESSION_FAILED
+                    "METADATA" -> ProviderP2pDiagnosticEvent.METADATA_FAILED
+                    else -> ProviderP2pDiagnosticEvent.TRANSFER_FAILED
                 },
                 operationId = request.operationId,
                 codes = mapOf(
@@ -574,10 +594,10 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             )
         } catch (error: Throwable) {
             ProviderP2pDiagnostics.record(
-                event = if (currentStage == "SESSION_START") {
-                    ProviderP2pDiagnosticEvent.SESSION_FAILED
-                } else {
-                    ProviderP2pDiagnosticEvent.TRANSFER_FAILED
+                event = when (currentStage) {
+                    "SESSION_START" -> ProviderP2pDiagnosticEvent.SESSION_FAILED
+                    "METADATA" -> ProviderP2pDiagnosticEvent.METADATA_FAILED
+                    else -> ProviderP2pDiagnosticEvent.TRANSFER_FAILED
                 },
                 operationId = request.operationId,
                 codes = mapOf(
@@ -629,6 +649,28 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
         if (!directory.isDirectory && !directory.mkdirs()) {
             throw IllegalStateException("Provider P2P directory could not be created")
         }
+    }
+
+    private fun metadataResolutionMode(): String =
+        if (metadataResolver == null) "FETCH_MAGNET" else "INJECTED"
+
+    private suspend fun fetchProductionMetadata(
+        session: SessionManager,
+        request: ProviderP2pAcquireRequest,
+        workingDirectory: File,
+    ): TorrentInfo? {
+        val magnet = request.magnetUri
+            ?: request.infoHash
+                ?.takeIf { it.length == 40 }
+                ?.let { hash -> "magnet:?xt=urn:btih:$hash" }
+            ?: return null
+
+        val metadataDirectory = File(workingDirectory, "metadata").apply { mkdirs() }
+        return session.fetchMagnet(
+            magnet,
+            metadataTimeoutSeconds,
+            metadataDirectory,
+        )?.let(::TorrentInfo)
     }
 
     private fun metadataSource(request: ProviderP2pAcquireRequest): String = when {
@@ -700,25 +742,7 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             SessionParams(settings)
         }
 
-        private val DEFAULT_METADATA_RESOLVER:
-            suspend (SessionManager, ProviderP2pAcquireRequest, File) -> TorrentInfo? =
-            { session, request, workingDirectory ->
-                val magnet = request.magnetUri
-                    ?: request.infoHash
-                        ?.takeIf { it.length == 40 }
-                        ?.let { hash -> "magnet:?xt=urn:btih:$hash" }
 
-                magnet?.let { value ->
-                    val metadataDirectory = File(workingDirectory, "metadata").apply {
-                        mkdirs()
-                    }
-                    session.fetchMagnet(
-                        value,
-                        METADATA_TIMEOUT_SECONDS,
-                        metadataDirectory,
-                    )?.let(::TorrentInfo)
-                }
-            }
     }
 }
 
