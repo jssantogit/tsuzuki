@@ -73,6 +73,24 @@ class SupabaseAuthService(
         }
     }
 
+    suspend fun updatePassword(accessToken: String, password: String) {
+        request(
+            Request.Builder()
+                .url(configuration.endpoint("auth/v1/user"))
+                .put(
+                    json.encodeToString(PasswordUpdateRequest.serializer(), PasswordUpdateRequest(password))
+                        .toRequestBody(JSON_MEDIA_TYPE),
+                )
+                .header("apikey", configuration.publishableKey)
+                .header("Authorization", "Bearer $accessToken")
+                .build(),
+        ).use { response ->
+            check(response.isSuccessful) {
+                "Supabase auth request failed with HTTP ${response.code}"
+            }
+        }
+    }
+
     suspend fun logout(accessToken: String) {
         request(
             Request.Builder()
@@ -234,6 +252,11 @@ private data class CredentialsRequest(
 private data class RefreshRequest(
     @SerialName("refresh_token")
     val refreshToken: String,
+)
+
+@Serializable
+private data class PasswordUpdateRequest(
+    val password: String,
 )
 
 @Serializable
