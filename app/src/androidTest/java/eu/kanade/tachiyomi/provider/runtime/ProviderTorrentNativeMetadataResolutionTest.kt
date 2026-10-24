@@ -5,11 +5,15 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.frostwire.jlibtorrent.LibTorrent
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
 import tachiyomi.core.provider.runtime.ProviderP2pFailureCode
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import java.io.File
 
 /**
@@ -39,23 +43,73 @@ class ProviderTorrentNativeMetadataResolutionTest {
                 sessionParamsFactory = { ProviderTorrentAcceptanceFixtures.localOnlyParams(49402) },
                 nativeSupport = { true },
             )
-            val result = engine.download(
-                request = ProviderP2pAcquireRequest(
-                    operationId = "native-metadata-magnet-no-discovery",
+            val recorder = RecordingRecorder()
+            ProviderP2pDiagnostics.installRecorder(recorder)
+            val result = try {
+                engine.download(
+                    request = ProviderP2pAcquireRequest(
+                        operationId = "native-metadata-magnet-no-discovery",
                     magnetUri = fixture.torrent.makeMagnetUri(),
                     infoHash = fixture.torrent.infoHashV1()?.toHex(),
                     selectedFileIndex = fixture.selectedFileIndex,
                     selectedFilePath = fixture.selectedFilePath,
                     selectedFileSizeBytes = fixture.selectedArchiveBytes.size.toLong(),
-                ),
-                workingDirectory = File(root, "work"),
-            )
+                    ),
+                    workingDirectory = File(root, "work"),
+                )
+            } finally {
+                ProviderP2pDiagnostics.installRecorder(null)
+            }
+            assertTrue(recorder.lines.any { "event=METADATA_START" in it && "phase=FETCH_MAGNET" in it && "source=MAGNET" in it })
+            assertTrue(recorder.lines.any { "event=METADATA_FAILED" in it && "reason=FETCH_RETURNED_NULL" in it })
             assertTrue("without discovery, production fetchMagnet must fail closed: $result", result is ProviderP2pDownloadResult.Failure)
             assertEquals(
                 ProviderP2pFailureCode.METADATA_UNAVAILABLE,
                 (result as ProviderP2pDownloadResult.Failure).reason,
             )
         } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun exceptionWhileFetchingMetadata_isNotMisclassifiedAsTransferFailure() = runBlocking {
+        assertTrue("native libtorrent failed to load", LibTorrent.version().isNotBlank())
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "native-metadata-probe-exception").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        val recorder = RecordingRecorder()
+        ProviderP2pDiagnostics.installRecorder(recorder)
+        try {
+            val engine = JlibtorrentProviderP2pDownloadEngine(
+                metadataResolver = { _, _, _ -> throw IllegalStateException("private magnet URI must not be logged") },
+                sessionParamsFactory = { ProviderTorrentAcceptanceFixtures.localOnlyParams(49406) },
+                nativeSupport = { true },
+            )
+            val result = engine.download(
+                request = ProviderP2pAcquireRequest(
+                    operationId = "private-content-identity-should-be-salted",
+                    magnetUri = "magnet:?xt=urn:btih:0123456789012345678901234567890123456789",
+                    selectedFileIndex = 0,
+                    selectedFilePath = "Acceptance Series 012.cbz",
+                ),
+                workingDirectory = File(root, "work"),
+            )
+            assertTrue(result is ProviderP2pDownloadResult.Failure)
+            assertEquals(
+                ProviderP2pFailureCode.NETWORK_ERROR,
+                (result as ProviderP2pDownloadResult.Failure).reason,
+            )
+            assertTrue(recorder.lines.any {
+                "event=METADATA_FAILED" in it && "stage=METADATA" in it &&
+                    "failure=NETWORK_ERROR" in it && "exceptionClass=java.lang.IllegalStateException" in it
+            })
+            assertFalse(recorder.lines.any { "event=TRANSFER_FAILED" in it })
+            assertFalse(recorder.lines.any { "private" in it || "magnet:?" in it || "01234567890123456789" in it })
+        } finally {
+            ProviderP2pDiagnostics.installRecorder(null)
             root.deleteRecursively()
         }
     }
@@ -92,6 +146,21 @@ class ProviderTorrentNativeMetadataResolutionTest {
             )
         } finally {
             root.deleteRecursively()
+        }
+    }
+
+    private class RecordingRecorder : StructuredDiagnosticRecorder {
+        override val sessionId = "11111111-1111-1111-1111-111111111111"
+        val lines = mutableListOf<String>()
+
+        override fun canonicalTitleReference(canonicalTitleId: String): String? = null
+
+        override fun mihonMangaReference(mihonMangaId: Long): String? = null
+
+        override fun record(event: StructuredDiagnosticEvent) {
+            (event.attributes["provider_p2p_line"] as? DiagnosticAttributeValue.Text)
+                ?.value
+                ?.let(lines::add)
         }
     }
 }
