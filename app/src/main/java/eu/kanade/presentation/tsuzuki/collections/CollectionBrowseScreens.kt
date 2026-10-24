@@ -286,7 +286,7 @@ private fun BrowseScaffold(
                 IconButton(onClick = { navigateUp() }) {
                     Icon(
                         MaterialSymbols.AutoMirroredRounded.ArrowBack,
-                        contentDescription = stringResource(MR.strings.tsuzuki_details_back),
+                        contentDescription = stringResource(MR.strings.tsuzuki_collections_admin_back),
                         tint = colors.foreground,
                     )
                 }
