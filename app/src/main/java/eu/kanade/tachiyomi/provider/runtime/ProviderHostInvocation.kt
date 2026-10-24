@@ -92,8 +92,7 @@ class ProviderHostInvocationFactory(
     private val logSink: (providerId: String, message: String) -> Unit = { _, _ -> },
     private val httpSessions: ProviderHttpSessionStore = ProviderHttpSessionStore(),
     private val p2pServiceFactory: (String) -> ProviderP2pHostService? = { null },
-    private val approvedP2pServiceFactory:
-        ((String, ProviderP2pAcquireRequest?) -> ProviderP2pHostService?)? = null,
+    private val approvedP2pServiceFactory: ((String, ProviderP2pAcquireRequest?) -> ProviderP2pHostService?)? = null,
     val managedFiles: ProviderManagedFileStore = ProviderManagedFileStore(context.applicationContext),
 ) {
 

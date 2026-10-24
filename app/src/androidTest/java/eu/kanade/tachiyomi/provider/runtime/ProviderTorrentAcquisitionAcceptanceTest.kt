@@ -31,6 +31,8 @@ import tachiyomi.domain.tsuzuki.provider.ProviderPermissionSet
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedFileFormat
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceRef
 import tachiyomi.domain.tsuzuki.provider.torrent.DebridResolveGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.P2pAcquireGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.ProviderTorrentAcquisitionCoordinator
@@ -46,8 +48,6 @@ import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterFileMatch
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterMapper
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterRequest
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentReadableResource
-import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedFileFormat
-import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceRef
 import java.io.File
 
 @RunWith(AndroidJUnit4::class)

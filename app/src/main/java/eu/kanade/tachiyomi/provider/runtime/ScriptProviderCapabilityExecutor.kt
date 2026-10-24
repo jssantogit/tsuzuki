@@ -127,8 +127,10 @@ class ScriptProviderCapabilityExecutor(
         }
 
         if (
-            (privilegedHostGrants.directP2p &&
-                capability != tachiyomi.domain.tsuzuki.provider.ProviderCapabilities.AcquisitionP2pV1) ||
+            (
+                privilegedHostGrants.directP2p &&
+                    capability != tachiyomi.domain.tsuzuki.provider.ProviderCapabilities.AcquisitionP2pV1
+                ) ||
             (!privilegedHostGrants.directP2p && privilegedHostGrants.approvedP2pSelection != null)
         ) {
             return failure(
