@@ -440,6 +440,8 @@ class MangaUpdatesApi(
         }
     }
 
+    override suspend fun getAuthenticatedOwner(): String = getCurrentUser().username
+
     suspend fun getCurrentUser(): MUCurrentUser {
         return with(json) {
             authClient.newCall(GET("$BASE_URL/v1/account/profile"))
