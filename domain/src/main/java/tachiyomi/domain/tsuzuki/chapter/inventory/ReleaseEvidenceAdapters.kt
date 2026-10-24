@@ -21,7 +21,7 @@ object MangaUpdatesReleaseEvidenceAdapter {
         observedAt: Long,
         releases: List<InventoryReleaseRecord>,
         hasNextPage: Boolean,
-    nextCursor: String? = null,
+        nextCursor: String? = null,
     ): InventoryEvidenceBatch {
         require(scope.producerId == "mangaupdates")
         return releaseBatch(scope, pageKey, observedAt, releases, hasNextPage, nextCursor)
@@ -35,7 +35,7 @@ object MangaDexReleaseEvidenceAdapter {
         observedAt: Long,
         releases: List<InventoryReleaseRecord>,
         hasNextPage: Boolean,
-    nextCursor: String? = null,
+        nextCursor: String? = null,
     ): InventoryEvidenceBatch {
         require(scope.producerId == "mangadex")
         return releaseBatch(scope, pageKey, observedAt, releases, hasNextPage, nextCursor)
