@@ -14,6 +14,7 @@ import tachiyomi.domain.tsuzuki.sync.service.SyncDocumentAdapter
  * This is NOT a migration gate or an atomic snapshot: concurrent local writes,
  * other installations and their offline outboxes are not observable here.
  * Neither an empty set of risks nor a cursor matching the server can enable v2.
+ * Server-side epoch CAS and reconciliation remain separate, mandatory gates.
  */
 class InspectLocalProgressCutover(
     private val outboxRepository: SyncOutboxRepository,
