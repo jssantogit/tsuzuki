@@ -3,10 +3,9 @@ package tachiyomi.domain.tsuzuki.sync.adapter
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.long
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
@@ -249,16 +248,37 @@ private fun ambiguousVersion2NumberedChapterIds(chapters: Collection<CanonicalCh
         .map(CanonicalChapter::id)
         .toSet()
 
-private fun JsonObject.requiredString(name: String): String =
-    getValue(name).jsonPrimitive.content
+private fun JsonObject.requiredString(name: String): String {
+    val value = getValue(name) as? JsonPrimitive
+    require(value != null && value.isString && value.content.isNotBlank()) {
+        "Reading progress $name must be a nonblank JSON string"
+    }
+    return value.content
+}
 
-private fun JsonObject.requiredLong(name: String): Long =
-    getValue(name).jsonPrimitive.long
+private fun JsonObject.requiredLong(name: String): Long {
+    val primitive = getValue(name) as? JsonPrimitive
+    val value = primitive?.takeUnless { it.isString }?.longOrNull
+    require(value != null && value >= 0L) {
+        "Reading progress $name must be a nonnegative JSON integer"
+    }
+    return value
+}
 
-private fun JsonObject.requiredBoolean(name: String): Boolean =
-    getValue(name).jsonPrimitive.boolean
+private fun JsonObject.requiredBoolean(name: String): Boolean {
+    val primitive = getValue(name) as? JsonPrimitive
+    val value = primitive?.takeUnless { it.isString }?.booleanOrNull
+    require(value != null) {
+        "Reading progress $name must be a JSON boolean"
+    }
+    return value
+}
 
 private fun JsonObject.optionalString(name: String): String? {
     val value = getValue(name)
-    return if (value is JsonNull) null else value.jsonPrimitive.content
+    if (value == JsonNull) return null
+    require(value is JsonPrimitive && value.isString && value.content.isNotBlank()) {
+        "Reading progress $name must be null or a nonblank JSON string"
+    }
+    return value.content
 }
