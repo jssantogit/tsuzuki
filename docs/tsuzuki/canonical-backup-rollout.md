@@ -32,8 +32,12 @@ without partial restore; they are not truncated or silently accepted.
 The writer applies the same cap before opening the destination output stream,
 so it does not overwrite a manual backup with a newly generated archive that
 the decoder would refuse.
-Failure cleanup now removes **only** an output created by that automatic
-backup attempt; it never calls delete on a caller-supplied manual destination.
+Failure cleanup removes **only** an output created by that automatic
+backup attempt which **has not yet passed archive validation**. Once validated,
+the automatic archive is retained even if later retention or persistence of the
+last-backup timestamp fails; the catch block must not erase the only newly
+verified copy after older archives may already have been pruned. A caller-
+supplied manual destination is never deleted.
 This prevents loss of a preexisting manual backup on failures that occur
 before opening the destination. A failure **during** an in-place manual write
 can still leave a damaged file: fully atomic staging/replace for SAF destinations
