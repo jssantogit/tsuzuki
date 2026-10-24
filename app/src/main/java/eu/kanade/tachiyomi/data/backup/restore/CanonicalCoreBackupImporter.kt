@@ -5,6 +5,7 @@ import app.cash.sqldelight.async.coroutines.awaitAsOneOrNull
 import dev.zacsweers.metro.Inject
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
+import eu.kanade.tachiyomi.data.backup.models.PortableMihonBindingCodec
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import tachiyomi.data.Database
@@ -66,6 +67,12 @@ class CanonicalCoreBackupImporter(
             require(json.parseToJsonElement(setting.configJson) == json.parseToJsonElement(sanitized)) {
                 "Backup cannot import authentication secrets in integration settings"
             }
+        }
+        // Build all device-neutral dormant payloads BEFORE opening the SQLite
+        // transaction. Imported bindings are never live until a local source
+        // is explicitly rematerialized on this installation.
+        val dormantContentPayloads = core.contentBindings.associate { binding ->
+            binding.id to PortableMihonBindingCodec.restoreDormant(binding)
         }
         val variantMetadata = core.variants.associate { variant ->
             variant.id to json.parseToJsonElement(variant.rawSourceMetadataJson).jsonObject
@@ -313,6 +320,22 @@ class CanonicalCoreBackupImporter(
                     externalWorkId = it.externalWorkId,
                     verification = it.verification,
                     availability = it.availability,
+                    createdAt = it.createdAt,
+                    updatedAt = it.updatedAt,
+                )
+            }
+            core.contentBindings.forEach {
+                database.tsuzuki_content_bindingsQueries.upsertTsuzukiContentBinding(
+                    id = it.id,
+                    canonicalTitleId = it.canonicalTitleId,
+                    addonId = it.addonId,
+                    providerTitleKey = it.providerTitleKey,
+                    matchConfidence = it.matchConfidence,
+                    verifiedByUser = it.verifiedByUser,
+                    // NEVER trust the previous device's operational IDs or
+                    // availability. Explicit relink is needed before reading.
+                    availability = "UNAVAILABLE",
+                    runtimePayload = dormantContentPayloads.getValue(it.id),
                     createdAt = it.createdAt,
                     updatedAt = it.updatedAt,
                 )
