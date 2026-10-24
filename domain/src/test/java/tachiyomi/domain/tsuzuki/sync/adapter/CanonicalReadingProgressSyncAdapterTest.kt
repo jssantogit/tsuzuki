@@ -331,6 +331,68 @@ class CanonicalReadingProgressSyncAdapterTest {
     }
 
     @Test
+    fun `negative remote pages cannot mutate an earlier valid checkpoint`() = runTest {
+        val first = chapter("aa-valid")
+        val second = chapter("zz-invalid").copy(baseNumber = 13, displayNumber = "13")
+        val chapters = FakeChapterRepository(listOf(first, second), emptyList())
+        for (version2 in listOf(false, true)) {
+            for (negativeValue in listOf(JsonPrimitive(-1), JsonPrimitive("-1"))) {
+                val source = FakeReadingRepository().apply {
+                    upsertProgress(CanonicalChapterProgress(first.id, lastPageRead = 3, updatedAt = 1))
+                    upsertProgress(CanonicalChapterProgress(second.id, lastPageRead = 4, updatedAt = 2))
+                }
+                val document = adapter(chapters, source, exactVersion2Enabled = version2).exportDocument()
+                val invalidRecord = document.records.values.first { it.fields["chapterKey"]?.toString()?.contains("13") == true }
+                val records = document.records + (
+                    invalidRecord.id to invalidRecord.copy(
+                        fields = JsonObject(invalidRecord.fields + ("lastPageRead" to negativeValue)),
+                    )
+                )
+                val target = FakeReadingRepository().apply {
+                    upsertProgress(CanonicalChapterProgress(first.id, lastPageRead = 10, updatedAt = 100))
+                }
+
+                shouldThrow<IllegalArgumentException> {
+                    adapter(chapters, target, exactVersion2Enabled = version2)
+                        .applyDocument(document.copy(records = records))
+                }
+                target.atomicBatchCalls shouldBe 0
+                target.getProgress(first.id)?.lastPageRead shouldBe 10L
+                target.getProgress(second.id) shouldBe null
+            }
+        }
+    }
+
+    @Test
+    fun `remote scalar types and variant evidence must not be coerced`() = runTest {
+        val localChapter = chapter("source-chapter")
+        val chapters = FakeChapterRepository(listOf(localChapter), emptyList())
+        for (version2 in listOf(false, true)) {
+            val source = FakeReadingRepository().apply {
+                upsertProgress(CanonicalChapterProgress(localChapter.id, lastPageRead = 7, updatedAt = 1))
+            }
+            val document = adapter(chapters, source, exactVersion2Enabled = version2).exportDocument()
+            val record = document.records.values.single()
+            val malformed = listOf(
+                "read" to JsonPrimitive("true"),
+                "lastPageRead" to JsonPrimitive("7"),
+                "lastVariantEvidenceKey" to JsonPrimitive(true),
+                "lastVariantEvidenceKey" to JsonPrimitive("  "),
+            )
+            for ((field, value) in malformed) {
+                val target = FakeReadingRepository()
+                val modified = record.copy(fields = JsonObject(record.fields + (field to value)))
+                shouldThrow<IllegalArgumentException> {
+                    adapter(chapters, target, exactVersion2Enabled = version2)
+                        .applyDocument(document.copy(records = mapOf(modified.id to modified)))
+                }
+                target.atomicBatchCalls shouldBe 0
+                target.getProgress(localChapter.id) shouldBe null
+            }
+        }
+    }
+
+    @Test
     fun `tampered portable record fields cannot redirect a checkpoint to another chapter`() = runTest {
         val first = chapter("aa-first")
         val second = chapter("zz-second").copy(baseNumber = 13, displayNumber = "13")
