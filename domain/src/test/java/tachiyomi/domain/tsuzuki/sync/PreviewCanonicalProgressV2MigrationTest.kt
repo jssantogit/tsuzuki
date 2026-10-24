@@ -2,6 +2,8 @@ package tachiyomi.domain.tsuzuki.sync
 
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
@@ -171,6 +173,45 @@ class PreviewCanonicalProgressV2MigrationTest {
             ProgressMigrationPreview.Blocked(ProgressMigrationPreview.Reason.UNSUPPORTED_DOCUMENT)
         preview.assess(legacy.copy(kind = SyncDocumentKind.READING_PROGRESS_V2), listOf(chapter)) shouldBe
             ProgressMigrationPreview.Blocked(ProgressMigrationPreview.Reason.UNSUPPORTED_DOCUMENT)
+    }
+
+    @Test
+    fun `migration preview refuses quoted numeric and boolean scalars`() {
+        val chapter = chapter("strict-preview")
+        val original = document(chapter)
+        val record = original.records.values.single()
+
+        for ((field, forgedValue) in listOf(
+            "read" to JsonPrimitive("false"),
+            "lastPageRead" to JsonPrimitive("2"),
+        )) {
+            val forged = record.copy(
+                fields = JsonObject(record.fields + (field to forgedValue)),
+            )
+            preview.assess(
+                original.copy(records = mapOf(record.id to forged)),
+                listOf(chapter),
+            ) shouldBe ProgressMigrationPreview.Blocked(
+                ProgressMigrationPreview.Reason.MALFORMED_REMOTE_RECORD,
+            )
+        }
+    }
+
+    @Test
+    fun `blank variant evidence cannot become a reviewed mapping`() {
+        val chapter = chapter("blank-variant")
+        val original = document(chapter)
+        val record = original.records.values.single()
+        val forged = record.copy(
+            fields = JsonObject(record.fields + ("lastVariantEvidenceKey" to JsonPrimitive(" "))),
+        )
+
+        preview.assess(
+            original.copy(records = mapOf(record.id to forged)),
+            listOf(chapter),
+        ) shouldBe ProgressMigrationPreview.Blocked(
+            ProgressMigrationPreview.Reason.MALFORMED_REMOTE_RECORD,
+        )
     }
 
     private fun chapter(id: String) = CanonicalChapter(
