@@ -223,6 +223,64 @@ class SupabaseSyncOrchestratorTest {
     }
 
     @Test
+    fun `refused legacy progress delta cannot overwrite local state or replay pending writes`() = runTest {
+        val progress = SyncDocumentKind.READING_PROGRESS
+        val local = document(status = "READING").copy(kind = progress)
+        val adapter = FakeAdapter(local)
+        val outbox = FakeOutbox().apply { markDirty(progress, 1) }
+        val cloudState = FakeCloudState()
+        val transport = FakeTransport().apply {
+            pullFailure = SyncFailureReason.UNSUPPORTED_SCHEMA
+        }
+
+        val result = orchestrator(
+            adapter = adapter,
+            outbox = outbox,
+            cloudState = cloudState,
+            transport = transport,
+        ).sync(progress)
+
+        (result as SyncDocumentResult.Failed).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        adapter.current shouldBe local
+        outbox.get(progress) shouldNotBe null
+        cloudState.getCursor(progress) shouldBe null
+        transport.networkCalls shouldBe 1
+        transport.pushedBatches.shouldHaveSize(0)
+    }
+
+    @Test
+    fun `refused legacy progress snapshot preserves last accepted local frontier`() = runTest {
+        val progress = SyncDocumentKind.READING_PROGRESS
+        val local = document(status = "READING").copy(kind = progress)
+        val adapter = FakeAdapter(local)
+        val outbox = FakeOutbox().apply { markDirty(progress, 1) }
+        val cloudState = FakeCloudState().apply {
+            putCursor(
+                documentKind = progress,
+                eventCursor = 5,
+                lastSuccessfulSyncAtEpochMillis = 1,
+            )
+        }
+        val transport = FakeTransport().apply {
+            snapshotFailure = SyncFailureReason.UNSUPPORTED_SCHEMA
+        }
+
+        val result = orchestrator(
+            adapter = adapter,
+            outbox = outbox,
+            cloudState = cloudState,
+            transport = transport,
+        ).sync(progress)
+
+        (result as SyncDocumentResult.Failed).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        adapter.current shouldBe local
+        cloudState.getCursor(progress)?.eventCursor shouldBe 5L
+        outbox.get(progress) shouldNotBe null
+        transport.networkCalls shouldBe 1
+        transport.pushedBatches.shouldHaveSize(0)
+    }
+
+    @Test
     fun `logged out sync keeps local mutation pending and performs no network request`() = runTest {
         val adapter = FakeAdapter(document(status = "READING"))
         val outbox = FakeOutbox().apply { markDirty(SyncDocumentKind.LIBRARY, 1) }
@@ -722,6 +780,8 @@ class SupabaseSyncOrchestratorTest {
         val acknowledgedConflictIds = mutableListOf<Long>()
         val events = mutableListOf<SupabaseSyncEvent>()
         var snapshotValue: SupabaseSyncSnapshot? = null
+        var pullFailure: SyncFailureReason? = null
+        var snapshotFailure: SyncFailureReason? = null
         var networkCalls = 0
 
         override suspend fun pullDelta(
@@ -730,6 +790,7 @@ class SupabaseSyncOrchestratorTest {
             limit: Int,
         ): SyncTransportResult<List<SupabaseSyncEvent>> {
             networkCalls += 1
+            pullFailure?.let { return SyncTransportResult.Failure(SyncFailure(it)) }
             return SyncTransportResult.Success(
                 events.filter { it.eventId > sinceEventId }
                     .sortedBy { it.eventId }
@@ -741,6 +802,7 @@ class SupabaseSyncOrchestratorTest {
             documentKind: SyncDocumentKind,
         ): SyncTransportResult<SupabaseSyncSnapshot> {
             networkCalls += 1
+            snapshotFailure?.let { return SyncTransportResult.Failure(SyncFailure(it)) }
             return SyncTransportResult.Success(
                 snapshotValue ?: SupabaseSyncSnapshot(
                     documentKind = documentKind,

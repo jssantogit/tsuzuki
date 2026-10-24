@@ -175,6 +175,44 @@ class SupabaseSyncHttpTransportTest {
     }
 
     @Test
+    fun `downgraded client refuses stale progress delta from server epoch fence`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(400)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """{"code":"0A000","message":"progress protocol epoch is not supported by this client"}""",
+                )
+                .build(),
+        )
+
+        val result = transport().pullDelta(SyncDocumentKind.READING_PROGRESS, 0)
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        server.requestCount shouldBe 1
+        server.takeRequest().url.encodedPath shouldBe "/rest/v1/rpc/sync_pull_delta"
+    }
+
+    @Test
+    fun `downgraded client refuses stale progress snapshot from server epoch fence`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(400)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """{"code":"0A000","message":"progress protocol epoch is not supported by this client"}""",
+                )
+                .build(),
+        )
+
+        val result = transport().snapshot(SyncDocumentKind.READING_PROGRESS)
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        server.requestCount shouldBe 1
+        server.takeRequest().url.encodedPath shouldBe "/rest/v1/rpc/sync_snapshot_domain"
+    }
+
+    @Test
     fun `invalid mutation stays malformed document instead of protocol refusal`() = runTest {
         server.enqueue(
             MockResponse.Builder()
