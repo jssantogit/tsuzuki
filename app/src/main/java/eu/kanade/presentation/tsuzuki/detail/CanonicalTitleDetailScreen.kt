@@ -38,7 +38,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,6 +59,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalChapterDetailItem
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreenState
@@ -88,14 +88,15 @@ fun CanonicalTitleDetailScreen(
     onOpenProvidersSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val background = defaultSkinColors().canvas
+    val colors = defaultSkinColors()
+    val background = colors.canvas
     Box(
         modifier.fillMaxSize().background(background)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).navigationBarsPadding(),
     ) {
         when (state) {
             CanonicalTitleScreenState.Loading -> {
-                CircularProgressIndicator(Modifier.align(Alignment.Center))
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = colors.accent)
                 DetailsToolbar(navigateUp, onAtualizar, onOpenProvidersSettings)
             }
             is CanonicalTitleScreenState.Error -> {
@@ -107,8 +108,12 @@ fun CanonicalTitleDetailScreen(
                     Text(
                         stringResource(MR.strings.tsuzuki_details_load_error),
                         style = MaterialTheme.typography.titleLarge,
+                        color = colors.foreground,
                     )
-                    TextButton(onClick = onAtualizar) { Text(stringResource(MR.strings.action_retry)) }
+                    DefaultSkinTextAction(
+                        text = stringResource(MR.strings.action_retry),
+                        onClick = onAtualizar,
+                    )
                 }
                 DetailsToolbar(navigateUp, onAtualizar, onOpenProvidersSettings)
             }
@@ -347,6 +352,7 @@ private fun LoadedDetails(
 
 @Composable
 private fun DetailsModes(mode: CanonicalDetailsLowerMode, onAction: (CanonicalDetailsLowerAction) -> Unit) {
+    val colors = defaultSkinColors()
     Column {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             listOf(CanonicalDetailsLowerAction.CHAPTERS, CanonicalDetailsLowerAction.EDITORIAL).forEach { action ->
@@ -374,20 +380,20 @@ private fun DetailsModes(mode: CanonicalDetailsLowerMode, onAction: (CanonicalDe
                         ),
                         Modifier.heightIn(min = 48.dp).padding(vertical = 14.dp),
                         color = if (selected) {
-                            MaterialTheme.colorScheme.onSurface
+                            colors.foreground
                         } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                            colors.secondary
                         },
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                     )
                     HorizontalDivider(
                         thickness = 2.dp,
-                        color = if (selected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                        color = if (selected) colors.foreground else Color.Transparent,
                     )
                 }
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        HorizontalDivider(color = colors.outline)
     }
 }
 
