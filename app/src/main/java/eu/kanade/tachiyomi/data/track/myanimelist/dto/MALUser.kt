@@ -5,4 +5,5 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class MALUser(
     val name: String,
+    val id: Long? = null,
 )
