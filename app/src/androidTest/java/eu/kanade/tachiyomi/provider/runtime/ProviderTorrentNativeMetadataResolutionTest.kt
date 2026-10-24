@@ -49,20 +49,32 @@ class ProviderTorrentNativeMetadataResolutionTest {
                 engine.download(
                     request = ProviderP2pAcquireRequest(
                         operationId = "native-metadata-magnet-no-discovery",
-                    magnetUri = fixture.torrent.makeMagnetUri(),
-                    infoHash = fixture.torrent.infoHashV1()?.toHex(),
-                    selectedFileIndex = fixture.selectedFileIndex,
-                    selectedFilePath = fixture.selectedFilePath,
-                    selectedFileSizeBytes = fixture.selectedArchiveBytes.size.toLong(),
+                        magnetUri = fixture.torrent.makeMagnetUri(),
+                        infoHash = fixture.torrent.infoHashV1()?.toHex(),
+                        selectedFileIndex = fixture.selectedFileIndex,
+                        selectedFilePath = fixture.selectedFilePath,
+                        selectedFileSizeBytes = fixture.selectedArchiveBytes.size.toLong(),
                     ),
                     workingDirectory = File(root, "work"),
                 )
             } finally {
                 ProviderP2pDiagnostics.installRecorder(null)
             }
-            assertTrue(recorder.lines.any { "event=METADATA_START" in it && "phase=FETCH_MAGNET" in it && "source=MAGNET" in it })
-            assertTrue(recorder.lines.any { "event=METADATA_FAILED" in it && "reason=FETCH_RETURNED_NULL" in it })
-            assertTrue("without discovery, production fetchMagnet must fail closed: $result", result is ProviderP2pDownloadResult.Failure)
+            assertTrue(
+                recorder.lines.any {
+                    "event=METADATA_START" in it && "phase=FETCH_MAGNET" in it &&
+                        "source=MAGNET" in it && "timeoutMs=1000" in it
+                },
+            )
+            assertTrue(
+                recorder.lines.any {
+                    "event=METADATA_FAILED" in it && "reason=FETCH_RETURNED_NULL" in it
+                },
+            )
+            assertTrue(
+                "without discovery, production fetchMagnet must fail closed: $result",
+                result is ProviderP2pDownloadResult.Failure,
+            )
             assertEquals(
                 ProviderP2pFailureCode.METADATA_UNAVAILABLE,
                 (result as ProviderP2pDownloadResult.Failure).reason,
@@ -107,7 +119,11 @@ class ProviderTorrentNativeMetadataResolutionTest {
                     "failure=NETWORK_ERROR" in it && "exceptionClass=java.lang.IllegalStateException" in it
             })
             assertFalse(recorder.lines.any { "event=TRANSFER_FAILED" in it })
-            assertFalse(recorder.lines.any { "private" in it || "magnet:?" in it || "01234567890123456789" in it })
+            assertFalse(
+                recorder.lines.any {
+                    "private" in it || "magnet:?" in it || "01234567890123456789" in it
+                },
+            )
         } finally {
             ProviderP2pDiagnostics.installRecorder(null)
             root.deleteRecursively()
@@ -129,17 +145,32 @@ class ProviderTorrentNativeMetadataResolutionTest {
                 sessionParamsFactory = { ProviderTorrentAcceptanceFixtures.localOnlyParams(49404) },
                 nativeSupport = { true },
             )
-            val result = engine.download(
-                request = ProviderP2pAcquireRequest(
-                    operationId = "native-metadata-url-only",
-                    torrentUrl = "http://127.0.0.1:49405/unreachable.torrent",
-                    selectedFileIndex = fixture.selectedFileIndex,
-                    selectedFilePath = fixture.selectedFilePath,
-                    selectedFileSizeBytes = fixture.selectedArchiveBytes.size.toLong(),
-                ),
-                workingDirectory = File(root, "work"),
+            val recorder = RecordingRecorder()
+            ProviderP2pDiagnostics.installRecorder(recorder)
+            val result = try {
+                engine.download(
+                    request = ProviderP2pAcquireRequest(
+                        operationId = "native-metadata-url-only",
+                        torrentUrl = "http://127.0.0.1:49405/unreachable.torrent",
+                        selectedFileIndex = fixture.selectedFileIndex,
+                        selectedFilePath = fixture.selectedFilePath,
+                        selectedFileSizeBytes = fixture.selectedArchiveBytes.size.toLong(),
+                    ),
+                    workingDirectory = File(root, "work"),
+                )
+            } finally {
+                ProviderP2pDiagnostics.installRecorder(null)
+            }
+            assertTrue(
+                recorder.lines.any {
+                    "event=METADATA_FAILED" in it && "source=TORRENT_URL_UNUSED" in it &&
+                        "reason=NO_MAGNET_SOURCE" in it
+                },
             )
-            assertTrue("torrentUrl without a magnet/hash must not silently fetch: $result", result is ProviderP2pDownloadResult.Failure)
+            assertTrue(
+                "torrentUrl without a magnet/hash must not silently fetch: $result",
+                result is ProviderP2pDownloadResult.Failure,
+            )
             assertEquals(
                 ProviderP2pFailureCode.METADATA_UNAVAILABLE,
                 (result as ProviderP2pDownloadResult.Failure).reason,

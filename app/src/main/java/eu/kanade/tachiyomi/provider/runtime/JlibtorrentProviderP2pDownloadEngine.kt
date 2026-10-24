@@ -582,10 +582,14 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                     else -> ProviderP2pDiagnosticEvent.TRANSFER_FAILED
                 },
                 operationId = request.operationId,
-                codes = mapOf(
-                    "stage" to currentStage,
-                    "failure" to ProviderP2pFailureCode.METADATA_UNAVAILABLE.name,
-                ),
+                codes = buildMap {
+                    put("stage", currentStage)
+                    if (currentStage == "METADATA") {
+                        put("source", metadataSource(request))
+                        put("phase", metadataResolutionMode())
+                    }
+                    put("failure", ProviderP2pFailureCode.METADATA_UNAVAILABLE.name)
+                },
                 exceptionClass = error.javaClass.name,
                 priority = LogPriority.WARN,
             )
@@ -600,10 +604,14 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                     else -> ProviderP2pDiagnosticEvent.TRANSFER_FAILED
                 },
                 operationId = request.operationId,
-                codes = mapOf(
-                    "stage" to currentStage,
-                    "failure" to ProviderP2pFailureCode.NETWORK_ERROR.name,
-                ),
+                codes = buildMap {
+                    put("stage", currentStage)
+                    if (currentStage == "METADATA") {
+                        put("source", metadataSource(request))
+                        put("phase", metadataResolutionMode())
+                    }
+                    put("failure", ProviderP2pFailureCode.NETWORK_ERROR.name)
+                },
                 exceptionClass = error.javaClass.name,
                 priority = LogPriority.ERROR,
             )
