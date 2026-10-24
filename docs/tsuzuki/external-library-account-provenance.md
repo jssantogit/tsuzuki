@@ -1,62 +1,38 @@
-# External library memberships — owner-safe portability contract (draft)
+# Account-scoped external library memberships
 
-**Status:** Audit PR #141 design and audit evidence only. No schema migration, account cutover, backup import, or user-facing recovery is enabled by this document. The production canonical backup writer/restorer remain disconnected.
+**Status (2026-10-24):** implemented on [audit PR #141](https://github.com/jssantogit/tsuzuki/pull/141), pending exact-head full CI and physical A/B acceptance. No automatic adoption of old records, no main-branch feature enablement, and no canonical backup activation.
 
-## Confirmed current boundary
+## Architecture and migration
 
-`tsuzuki_external_library_memberships` is keyed by `(provider, external_id, list_key)` and does **not** retain the authenticated external account identity that produced the membership. The domain `ExternalLibraryMembership` likewise has no owner field. `ExternalLibraryRepositoryImpl.replaceProvider(provider, memberships)` deletes all existing rows for that provider before inserting the new snapshot, while `observeAll()` returns every row with no account filter. Thus a successful login to a different account under the **same provider** cannot establish that persisted rows belong to the new user. The current canonical exporter correctly refuses backup when any external membership exists.
+- Resolver PR #140 owns migration `43.sqm` (canonical chapter numbering). The audit receipt migration was moved to `44.sqm`. Migration `45.sqm` creates `tsuzuki_external_library_memberships_scoped` and its provider/owner index. The old `tsuzuki_external_library_memberships` schema is kept unchanged and its records remain **UNOWNED_LEGACY**, invisible and never auto-adopted or deleted.
+- An account-owned row is keyed by `(provider, owner_key, external_id, list_key)`, with `owner_key = SHA-256(provider || NUL || provider_issued_authenticated_account_id)`. Raw account identifiers, passwords, cookies and bearer tokens never go into the scoped table. Distinct A/B owners can persist the same remote work/list key independently.
+- `ExternalLibraryRepository.replaceOwned` validates provider consistency and transactionally deletes/inserts only the requested owner. The former `replaceProvider` fails closed; `clearProvider` never deletes another account's snapshot or legacy bytes. On account logout, records remain stored but are not visible.
+- `observeAll` subscribes only to each **currently connected and authenticated owner** and maps only that owner's scoped query. It re-evaluates both on tracker credential/connection emissions and on IntegrationRegistry configuration changes. Unknown, disconnected or unverifiable identities produce no account-linked list rows; other local canonical library records remain intact.
+- `RefreshUserLibraries` verifies the provider's current authenticated identity before network fetch, again after fetch, and before the scoped transaction. A→B changes fail without writing fetched A records to B's scope. SQL rows also remain scoped to the original identity if a session transition occurs immediately after verification. Repeated identity checks may add profile requests during refresh; these should later be benchmarked without weakening authority boundaries.
+- MAL `/users/@me` and Bangumi `/v0/me` use numeric user IDs; MangaUpdates `/v1/account/profile` uses `user_id`; Kitsu `currentAccount.id` is used directly. A missing/unparseable ID is a hard failure, never a fallback to display name or login state. All identities originate from authenticated provider requests.
+- `CanonicalCoreBackupExporter` refuses portable export whenever either legacy unowned or account-scoped external memberships exist. **No provider-account records may silently disappear from a purported complete backup.** Owner-safe export, portable restore and detached recovery require a separate design and explicit consent before enabling canonical backup.
 
-Do not treat the provider name, display name, integration toggle, local canonical ID, token value, email string, or time of last sync as reliable ownership evidence.
+## Boundaries and acceptance
 
-## Required invariants before account-scoped memberships
+The scope protects local confidentiality and prevents account collision, but the following **pre-release validations remain mandatory**:
 
-1. Classify each membership source explicitly: `PUBLIC` non-authenticated discovery, or `ACCOUNT` data linked to a verified remote account. This classification must come from provider identity capabilities, not heuristics. Account-linked records need a stable provider-issued subject identifier verified by a fresh authenticated identity request, and a local owner key that cannot be silently adopted by another login. Never serialize bearer tokens, refresh tokens or cookies as provenance.
-2. Persist owner scope *with each durable membership*. Reads, observed UI lists, import/reconciliation, replacement and deletion must all be keyed by `(provider, owner_scope)`. The index/uniqueness constraint must include owner scope. Switching accounts cannot surface, overwrite, delete, or reinterpret another owner's records.
-3. Treat pre-migration rows as `UNOWNED_LEGACY`. Quarantine them from authenticated current-account views and writes. Never infer owner from the current session; never silently migrate or delete them. A verified backup and explicit recovery decision are prerequisites to an adoption path.
-4. Capture account identity for the entire refresh operation. Re-check identity/epoch immediately before commit; abort rather than attributing an in-flight A fetch to a subsequently signed-in B account. A failed re-authentication must never fall back to showing stale A membership as current B membership.
-5. Provider-specific public lists and account-linked private lists must not share a provider-only replacement operation. Missing providers and offline devices retain quarantined records but expose no read/write authority to a different account.
-6. Portable backups must not promote A-origin memberships to B merely because the canonical title ID or external work matches. Export only versioned, credential-free provenance records with an explicit detached status; restore as quarantined until the same remote owner is verified or the user authorizes a separate **copy** of portable library data. Never replay A's remote mutations or cursors into B.
-7. Carry original canonical work identity and external list key for reconciliation; do not use local Mihon numeric row IDs for identity. Retain distinct provenance for merged works rather than assuming an old account link applies to a new title.
+1. Real authenticated A→B→A transitions and switching while a remote fetch/reconciliation is in flight (MAL, Kitsu, Bangumi, MangaUpdates); confirm filtered UI and correct account-owned records after process restart.
+2. Session token refresh/logout/relogin and provider disabling while observing lists; confirm no transient exposure of the old account. No remote owner verification means the account lists stay hidden (fail closed), including offline startup.
+3. Migration from a physical database containing legacy unowned rows; confirm 43→44→45 preserve them byte-for-byte and run successfully across app upgrades. Nothing should be silently assigned to whichever user logs in first.
+4. Crash and SQLite rollback during per-owner replacement. Confirm failed writes preserve A/B snapshots and do not partially replace records.
+5. Cross-device restore and SAF interruption gate separately. The canonical backup writer/importer are still not active in production, and scoped external lists remain unexportable by that standalone exporter.
 
-## Migration and integration constraints
+## Automated regression matrix
 
-- Add a new SQLDelight migration *only after* the existing resolver PR #140 vs audit PR #141 collision at `43.sqm` is resolved. Do not allocate conflicting version numbers on parallel branches or overwrite #140's migration.
-- Introduce the new repository contract and queries atomically with the migration. A partially updated caller that uses provider-only `replaceProvider` is a data-leak risk. Verify all callers and integration adapters before enabling the new tables/queries.
-- Carry a compatibility/quarantine path for existing on-device rows that are not yet owner-scoped, including offline users. The existing `ExternalLibraryRepository` API cannot unambiguously represent a provider account and needs an explicit scope parameter or new typed interface; do not simply append an optional nullable owner.
-- Once implemented, the canonical backup importer must refuse an account-linked archive unless it can perform a separate explicitly approved, fully verified owner-safe restore. Preserve atomicity and restore receipts.
-
-## Acceptance matrix (must be automated before activation)
-
-| Case | Expected result |
+| Case | Expected |
 | --- | --- |
-| Account A fetches a list, then B logs into the same provider | B never sees or overwrites A rows |
-| A refresh is in flight while session switches to B | No A data committed under B |
-| Legacy unowned rows exist before migration | Quarantined and preserved byte-for-byte; no guessed adoption |
-| B has an unrelated list key with A's external work ID | No cross-owner collision |
-| Provider goes offline, disabled, or uninstalled | No cross-owner visibility or deletion |
-| Fresh device imports A's canonical backup without A login | Account-linked lists remain detached; no remote requests or outbox replay |
-| Fresh device verifies same provider-issued A account subject | Only specifically approved same-owner recovery allowed |
-| B explicitly copies canonical works from A | New B-owned sync state; no old remote cursor, mutation ID, or secrets |
-| Duplicate/malformed owner scope or crafted account claims | Fail closed before database mutations |
-| Process dies mid-migration or mid-refresh | All changes rolled back or quarantined; no partial ownership |
+| A and B share provider/work/list key | Separate persisted rows, scoped by hashed authenticated ID |
+| Remote fetch starts as A but identity changes to B | No wrong-owner commit |
+| New account B snapshot replaces old B | A rows untouched, even for identical list keys |
+| Owner A logs out | No account rows visible, none deleted |
+| Existing provider-only legacy row | Quarantined; never shown or adopted as A/B |
+| Missing/invalid authenticated user ID | No fetch admission or trusted write |
+| Integration enabled/disabled while observing | Active owner scope recomputed |
+| Canonical backup sees scoped or legacy lists | Explicit incomplete-backup error, no silent omission |
 
-**Next action:** inventory every external-library writer/reader and the provider authentication identity surfaces, then define a typed `ExternalMembershipScope` and a migration plan **in the integration branch after version conflicts are resolved**. Until then, canonical export must continue refusing external memberships.
-
-## Interim fail-closed branch barrier (audit #141)
-
-Before any versioned SQLDelight account-owner migration is approved, the draft branch intentionally quarantines existing `tsuzuki_external_library_memberships` records:
-
-- The old repository reports `hasVerifiedOwnerScope=false`, exposes no legacy membership to `ObserveUnifiedLibrary`, refuses `replaceProvider`, and never deletes legacy records on disconnect or provider removal.
-- `RefreshUserLibraries.refreshProvider/refreshConnected` refuses private fetches **before** canonical title materialization, including the account-switch window. Existing local canonical works/progress remain usable. This **temporarily disables connected remote user lists in the draft branch**. It is a security release gate, not a production-complete account switch implementation.
-- This protects legacy bytes and prevents presenting unowned list statuses as belonging to a different login; it does not reassign identities, export external membership, connect a new owner, or make the old schema safe for writes.
-- The gate must not be lifted until the owner-scoped repository, per-row storage migration, authenticated provider subject, in-flight epoch check, and physical A/B acceptance all exist together. Keeping the old unscoped API as a bypass is forbidden.
-
-The canonical exporter also omits `mihonMangaId` and `mihonChapterId` from serialized source mappings/variants. Those numeric IDs are device-local and are already cleared by the importer; leaking them into the archive provides no portable utility.
-
-## Audit #141 closeout / deferred activation gate (2026-10-24)
-
-The ownerless-list quarantine is the final **risk-containment** change for this audit wave, not an implementation of account-scoped persistence. Expanded regressions prove that even a disconnected integration and an empty remote snapshot cannot erase unknown-owner records. Existing canonical local works/progress stay separate. The provider-owned list feature is intentionally unavailable on the draft branch.
-
-**Do not merge/enable owner-linked lists as a finished feature.** The account-scoped replacement must be designed and landed as a coordinated subsequent change after migration `43.sqm` is reconciled with resolver PR #140. That work must include verified remote account identity for MAL/Kitsu/Bangumi/MangaUpdates, row-scoped owner keys and indexes, transaction-time revalidation against session changes, read filtering on account switch, migration quarantine of unowned rows, and automated A/B + Android smoke acceptance.
-
-The broader audit can be paused here without declaring a production or release go/no-go. The canonical backup importer/writer stays disconnected and the PR stays draft until integration/physical gates and the migration conflict are resolved. Deferring unrelated enhancements does not waive critical pre-merge or pre-release blockers.
+**Merge discipline:** do not present a green CI alone as Android physical acceptance. Keep PR #141 in draft until code integration gates are verified, and do not enable the canonical backup writer without a dedicated portable account-list recovery contract.
