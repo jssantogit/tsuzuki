@@ -207,6 +207,9 @@ class CanonicalCoreBackupImporter(
                     createdAt = it.createdAt,
                     updatedAt = it.updatedAt,
                     confirmationState = it.confirmation,
+                    numberingKind = it.numberingKind,
+                    decimalNumerator = it.decimalNumerator?.toLong(),
+                    decimalScale = it.decimalScale?.toLong(),
                 )
             }
             core.variants.forEach {

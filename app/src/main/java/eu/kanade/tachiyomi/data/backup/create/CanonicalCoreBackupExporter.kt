@@ -222,6 +222,9 @@ class CanonicalCoreBackupExporter(
                     createdAt = it.createdAt,
                     updatedAt = it.updatedAt,
                     confirmation = it.confirmation.name,
+                    numberingKind = it.numberingKind?.name,
+                    decimalNumerator = it.decimalFraction?.numerator,
+                    decimalScale = it.decimalFraction?.scale,
                 )
             },
             variants = variants.map {

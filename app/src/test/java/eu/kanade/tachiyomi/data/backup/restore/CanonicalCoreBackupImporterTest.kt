@@ -105,6 +105,29 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
+    fun `exact decimal chapter restores scale and numerator without a legacy downgrade`() = runBlocking {
+        val source = Json.decodeFromString(BackupCanonicalCore.serializer(), section().payloadJson)
+        val exact = source.copy(
+            chapters = source.chapters.map {
+                it.copy(
+                    displayNumber = "12.05",
+                    baseNumber = 12,
+                    part = 5,
+                    numberingKind = "DECIMAL",
+                    decimalNumerator = 5,
+                    decimalScale = 2,
+                )
+            },
+        )
+        importer.restoreCore(coreSection(exact))
+        val chapter = database.tsuzuki_canonical_chaptersQueries
+            .getTsuzukiCanonicalChaptersByTitle("title-1").awaitAsList().single()
+        chapter.numbering_kind shouldBe "DECIMAL"
+        chapter.decimal_numerator shouldBe 5L
+        chapter.decimal_scale shouldBe 2L
+    }
+
+    @Test
     fun `clean restore keeps exact chapter history and remains idempotent after a local edit`(): Unit = runBlocking {
         val section = section()
         importer.restoreCore(section)

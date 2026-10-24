@@ -60,6 +60,40 @@ class BackupCanonicalCoreTest {
     }
 
     @Test
+    fun `exact decimal chapter survives portable JSON roundtrip`() {
+        val source = core()
+        val exact = source.copy(
+            chapters = source.chapters.map {
+                it.copy(
+                    displayNumber = "12.05",
+                    baseNumber = 12,
+                    part = 5,
+                    numberingKind = "DECIMAL",
+                    decimalNumerator = 5,
+                    decimalScale = 2,
+                )
+            },
+        )
+        exact.validate()
+        val encoded = Json.encodeToString(BackupCanonicalCore.serializer(), exact)
+        Json.decodeFromString(BackupCanonicalCore.serializer(), encoded) shouldBe exact
+        source.chapters.single().numberingKind shouldBe null
+    }
+
+    @Test
+    fun `malformed exact chapter fraction cannot enter a backup`() {
+        val source = core()
+        listOf(
+            source.chapters.single().copy(numberingKind = "DECIMAL", decimalNumerator = 5),
+            source.chapters.single().copy(numberingKind = "DECIMAL", decimalNumerator = 5, decimalScale = 2),
+            source.chapters.single().copy(numberingKind = "UNKNOWN"),
+            source.chapters.single().copy(decimalNumerator = 5, decimalScale = 2),
+        ).forEach { malformed ->
+            runCatching { source.copy(chapters = listOf(malformed)).validate() }.isFailure shouldBe true
+        }
+    }
+
+    @Test
     fun `unknown schema version is not silently imported`() {
         runCatching { core().copy(schemaVersion = 200).validate() }.isFailure shouldBe true
     }

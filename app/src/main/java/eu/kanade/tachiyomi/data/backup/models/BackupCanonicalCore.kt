@@ -2,6 +2,10 @@ package eu.kanade.tachiyomi.data.backup.models
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.integration.model.PortableIntegrationConfig
 
 /**
@@ -93,6 +97,7 @@ data class BackupCanonicalCore(
             "Duplicate source mapping identity"
         }
         require(chapters.isUniqueBy { it.id }) { "Duplicate canonical chapter" }
+        chapters.forEach(BackupCoreChapter::validateExactNumbering)
         require(variants.isUniqueBy { it.id }) { "Duplicate chapter variant" }
         require(chapterEvidence.isUniqueBy { it.id }) { "Duplicate chapter evidence ID" }
         require(
@@ -525,7 +530,34 @@ data class BackupCoreChapter(
     val createdAt: Long,
     val updatedAt: Long,
     val confirmation: String,
-)
+    // Additive and optional: pre-v2 archives must keep their legacy semantics.
+    val numberingKind: String? = null,
+    val decimalNumerator: Int? = null,
+    val decimalScale: Int? = null,
+) {
+    fun validateExactNumbering() {
+        val kind = numberingKind?.let(CanonicalChapterNumberingKind::valueOf)
+        require(kind != null || (decimalNumerator == null && decimalScale == null)) {
+            "Legacy chapter cannot carry exact fractional metadata"
+        }
+        require((decimalNumerator == null) == (decimalScale == null)) {
+            "Incomplete exact decimal chapter fraction"
+        }
+        val fraction = if (decimalNumerator != null && decimalScale != null) {
+            CanonicalChapterDecimalFraction(decimalNumerator, decimalScale)
+        } else {
+            null
+        }
+        CanonicalChapterIdentity(
+            type = CanonicalChapterType.valueOf(type),
+            baseNumber = baseNumber,
+            part = part,
+            alphaSuffix = alphaSuffix,
+            numberingKind = kind,
+            decimalFraction = fraction,
+        )
+    }
+}
 
 @Serializable
 data class BackupCoreVariant(
