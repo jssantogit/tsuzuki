@@ -87,8 +87,9 @@ class HostVerifiedTorrentMetadataCache internal constructor(
         val hash = request.infoHash?.takeIf { V1_HASH.matches(it) }?.lowercase() ?: return null
         val url = request.torrentUrl ?: return null
         val size = request.selectedFileSizeBytes ?: return null
-        if (request.magnetUri != null) {
-            val xts = BTIH.findAll(request.magnetUri).map { it.groupValues[1] }.toList()
+        val magnet = request.magnetUri
+        if (magnet != null) {
+            val xts = BTIH.findAll(magnet).map { it.groupValues[1] }.toList()
             if (xts.size != 1 || !xts.single().equals(hash, ignoreCase = true)) return null
         }
         val now = clock()

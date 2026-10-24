@@ -599,8 +599,8 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 codes = buildMap {
                     put("stage", currentStage)
                     if (currentStage == "METADATA") {
-                        put("source", metadataSource(request))
-                        put("phase", metadataResolutionMode())
+                        put("source", metadataSource(request, hostVerifiedBytes))
+                        put("phase", metadataResolutionMode(hostVerifiedBytes))
                     }
                     put("failure", ProviderP2pFailureCode.METADATA_UNAVAILABLE.name)
                 },
@@ -621,8 +621,8 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 codes = buildMap {
                     put("stage", currentStage)
                     if (currentStage == "METADATA") {
-                        put("source", metadataSource(request))
-                        put("phase", metadataResolutionMode())
+                        put("source", metadataSource(request, hostVerifiedBytes))
+                        put("phase", metadataResolutionMode(hostVerifiedBytes))
                     }
                     put("failure", ProviderP2pFailureCode.NETWORK_ERROR.name)
                 },
