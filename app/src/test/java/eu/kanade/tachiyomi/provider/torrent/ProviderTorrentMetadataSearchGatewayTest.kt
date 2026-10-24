@@ -235,6 +235,77 @@ class ProviderTorrentMetadataSearchGatewayTest {
         encoded.contains("0123456789abcdef0123456789abcdef01234567") shouldBe false
     }
 
+    @Test
+    fun `match summary agrees with canonical title aware chapter mapping`() = runTest {
+        val matchable = candidate(
+            files = listOf(
+                TorrentCandidateFile(index = 0, path = "pack/Secret Example Manga 012.cbz"),
+            ),
+        )
+        val titleNumberOnly = candidate(
+            files = listOf(
+                TorrentCandidateFile(index = 0, path = "pack/Secret Example Manga.cbz"),
+            ),
+        )
+        val logs = mutableListOf<String>()
+        val gateway = ProviderTorrentMetadataSearchGateway(
+            delegate = TorrentSearchGateway { _, _ ->
+                ProviderCallResult.Success(ProviderPage(listOf(matchable, titleNumberOnly), nextCursor = null))
+            },
+            registry = registry(),
+            inspector = ProviderTorrentMetadataInspector { _, _ ->
+                error("pre-hydrated candidates must not be inspected")
+            },
+            diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
+            logSink = ProviderRuntimeLogSink { _, message -> logs += message },
+        )
+
+        gateway.search(
+            providerId = providerId,
+            request = TorrentSearchRequest(
+                titles = listOf("Secret Example Manga"),
+                chapterNumber = "12",
+            ),
+        )
+
+        logs.single { it.startsWith("host_torrent_match ") } shouldBe
+            "host_torrent_match total=2 readable=2 parsed=0 embedded=0 identity=1 volume=1 exact=1 ambiguous=0"
+        val text = logs.joinToString("\n")
+        text.contains("Secret Example Manga") shouldBe false
+        text.contains("0123456789abcdef0123456789abcdef01234567") shouldBe false
+    }
+
+    @Test
+    fun `match summary never mistakes title only numbers for chapter identity`() = runTest {
+        val onlyTitle = candidate(
+            files = listOf(
+                TorrentCandidateFile(index = 0, path = "pack/86 Eighty-Six.cbz"),
+            ),
+        )
+        val logs = mutableListOf<String>()
+        val gateway = ProviderTorrentMetadataSearchGateway(
+            delegate = TorrentSearchGateway { _, _ ->
+                ProviderCallResult.Success(ProviderPage(listOf(onlyTitle), nextCursor = null))
+            },
+            registry = registry(),
+            inspector = ProviderTorrentMetadataInspector { _, _ ->
+                error("pre-hydrated candidates must not be inspected")
+            },
+            diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
+            logSink = ProviderRuntimeLogSink { _, message -> logs += message },
+        )
+        gateway.search(
+            providerId = providerId,
+            request = TorrentSearchRequest(
+                titles = listOf("86 Eighty-Six"),
+                chapterNumber = "86",
+            ),
+        )
+
+        logs.single { it.startsWith("host_torrent_match ") } shouldBe
+            "host_torrent_match total=1 readable=1 parsed=0 embedded=0 identity=0 volume=0 exact=0 ambiguous=0"
+    }
+
     private fun candidate(files: List<TorrentCandidateFile>?): TorrentCandidate = TorrentCandidate(
         infoHash = "0123456789abcdef0123456789abcdef01234567",
         magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
