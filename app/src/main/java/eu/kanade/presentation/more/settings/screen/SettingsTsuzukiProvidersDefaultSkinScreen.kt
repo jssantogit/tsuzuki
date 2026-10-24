@@ -1,6 +1,7 @@
 package eu.kanade.presentation.more.settings.screen
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,8 +21,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -355,6 +358,8 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
                         onClick = { repositoryToRemove = null },
                     )
                 },
+                shape = DefaultSkinShape.Card,
+                tonalElevation = 0.dp,
                 containerColor = colors.surface,
                 titleContentColor = colors.foreground,
                 textContentColor = colors.secondary,
@@ -648,7 +653,13 @@ private fun DefaultSkinRepositoriesDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(MR.strings.tsuzuki_providers_repositories)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 if (repositories.isEmpty()) {
                     Text(
                         stringResource(MR.strings.tsuzuki_providers_no_repositories),
@@ -709,6 +720,8 @@ private fun DefaultSkinRepositoriesDialog(
                 onClick = onDismiss,
             )
         },
+        shape = DefaultSkinShape.Card,
+        tonalElevation = 0.dp,
         containerColor = colors.surface,
         titleContentColor = colors.foreground,
         textContentColor = colors.foreground,
@@ -759,7 +772,13 @@ private fun DefaultSkinAddRepositoryDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(MR.strings.tsuzuki_providers_add_repository)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 DefaultSkinTextField(
                     value = displayName,
                     onValueChange = { displayName = it },
@@ -796,21 +815,43 @@ private fun DefaultSkinAddRepositoryDialog(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .toggleable(
+                            value = trustConfirmed,
+                            enabled = trustToken != null,
+                            role = Role.Checkbox,
+                            onValueChange = { checked ->
+                                confirmedTrustToken = if (checked) trustToken else null
+                            },
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     Checkbox(
                         checked = trustConfirmed,
                         enabled = trustToken != null,
-                        onCheckedChange = { checked ->
-                            confirmedTrustToken = if (checked) trustToken else null
-                        },
+                        onCheckedChange = null,
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = colors.accent,
+                            uncheckedColor = colors.outline,
+                            checkmarkColor = colors.onAccent,
+                        ),
                     )
-                    Text(stringResource(MR.strings.tsuzuki_providers_repository_trust_confirm))
+                    Text(
+                        text = stringResource(MR.strings.tsuzuki_providers_repository_trust_confirm),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (trustToken != null) colors.foreground else colors.secondary,
+                    )
                 }
             }
         },
         confirmButton = {
             DefaultSkinTextAction(
                 text = stringResource(MR.strings.action_add),
+                enabled = canConfirm,
                 onClick = {
                     if (!canConfirm) return@DefaultSkinTextAction
                     onConfirm(
@@ -832,6 +873,8 @@ private fun DefaultSkinAddRepositoryDialog(
                 onClick = onDismiss,
             )
         },
+        shape = DefaultSkinShape.Card,
+        tonalElevation = 0.dp,
         containerColor = colors.surface,
         titleContentColor = colors.foreground,
         textContentColor = colors.foreground,
