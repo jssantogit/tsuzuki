@@ -128,14 +128,11 @@ class BackupCreator(
                 // The SAF CreateDocument picker must not accidentally give us
                 // a populated URI. Refuse the write when it does (or when its
                 // existing content cannot be read).
-                ManualBackupDestinationPolicy.requireEmpty(context.contentResolver.openInputStream(fileUri))
-                preparedArchive.inputStream().use { prepared ->
-                    file.openOutputStream().use { output ->
-                        (output as? FileOutputStream)?.channel?.truncate(0)
-                        prepared.copyTo(output)
-                        output.flush()
-                    }
-                }
+                ManualBackupDestinationPolicy.copyVerifiedArchive(
+                    verifiedArchive = preparedArchive,
+                    openExistingDocument = { context.contentResolver.openInputStream(fileUri) },
+                    openDocumentOutput = { file.openOutputStream() },
+                )
             }
 
             // Reopen the final SAF document, not just the staged local file.
