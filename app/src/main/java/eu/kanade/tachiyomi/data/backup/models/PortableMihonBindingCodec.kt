@@ -74,6 +74,13 @@ internal object PortableMihonBindingCodec {
         require(binding.id.isNotBlank() && binding.canonicalTitleId.isNotBlank() && binding.addonId.isNotBlank()) {
             "Invalid portable content binding identity"
         }
+        // The binary v1 payload has no discriminator beyond its version.
+        // Do not reinterpret an arbitrary SCRIPT provider's similarly shaped
+        // bytes as a legacy Mihon extension binding.
+        require(
+            binding.addonId.startsWith("eu.kanade.tachiyomi.extension.") &&
+                binding.addonId.substringAfterLast('.').isNotBlank(),
+        ) { "Unrecognized legacy Mihon extension identity" }
         require(binding.providerTitleKey == "${binding.sourceId}:${binding.sourceUrl}") {
             "Content binding source identity does not match its provider title key"
         }
