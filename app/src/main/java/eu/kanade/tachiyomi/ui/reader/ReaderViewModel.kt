@@ -1553,16 +1553,21 @@ class ReaderViewModel(
             direction = direction,
         ) ?: return false
 
-        openCanonicalChapter(adjacent.id)
+        return openCanonicalChapterInternal(adjacent.id)
     }
 
     private var failedCanonicalChapterId: String? = null
 
-    /** Same preparation/publication gateway for adjacency and a real chapter-card selection. */
+    /** Keep the public chapter-card command while sharing preparation with adjacency navigation. */
     suspend fun openCanonicalChapter(chapterId: String) {
-        if (state.value.isLoadingAdjacentChapter || chapterId == canonicalSession?.canonicalChapterId) return
-        val adjacent = canonicalChapterRepository.getById(chapterId) ?: return
-        if (adjacent.canonicalTitleId != state.value.canonicalTitleId) return
+        openCanonicalChapterInternal(chapterId)
+    }
+
+    /** Returns true only when a new canonical chapter was actually opened. */
+    private suspend fun openCanonicalChapterInternal(chapterId: String): Boolean {
+        if (state.value.isLoadingAdjacentChapter || chapterId == canonicalSession?.canonicalChapterId) return false
+        val adjacent = canonicalChapterRepository.getById(chapterId) ?: return false
+        if (adjacent.canonicalTitleId != state.value.canonicalTitleId) return false
 
         mutableState.update { it.copy(isLoadingAdjacentChapter = true) }
         return try {
