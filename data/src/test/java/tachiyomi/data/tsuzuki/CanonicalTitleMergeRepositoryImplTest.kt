@@ -21,7 +21,14 @@ import tachiyomi.data.Mangas
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
+import tachiyomi.data.tsuzuki.chapter.IndependentInventoryRepositoryImpl
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaim
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaimKind
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryDerivation
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
@@ -412,6 +419,61 @@ class CanonicalTitleMergeRepositoryImplTest {
 
         chapterRepository.getById("winner-12-05") shouldBe exact
         chapterRepository.getById("duplicate-12-05")?.canonicalTitleId shouldBe "duplicate"
+    }
+
+    @Test
+    fun `merging titles retains every independent claim and the newest matching page atomically`() = runBlocking<Unit> {
+        seedTitle("winner", "Winner")
+        seedTitle("duplicate", "Duplicate")
+        val ledger = IndependentInventoryRepositoryImpl(database)
+        fun scope(title: String) = InventoryScope(
+            canonicalTitleId = title,
+            producerId = "mangadex",
+            externalWorkId = "external-123",
+            editionKey = "edition-1",
+            language = "pt-br",
+            workIdentityVerified = true,
+            editionIdentityVerified = true,
+        )
+        suspend fun record(title: String, release: String, label: String, at: Long) {
+            ledger.saveBatch(
+                InventoryEvidenceBatch(
+                    scope = scope(title),
+                    pageKey = "page:$release",
+                    observedAt = at,
+                    outcome = InventoryFetchOutcome.EXHAUSTED,
+                    claims = listOf(
+                        InventoryClaim(
+                            sourceRecordId = release,
+                            label = label,
+                            volumeLabel = "1",
+                            language = "pt-br",
+                            kind = InventoryClaimKind.INDIVIDUAL,
+                            derivation = InventoryDerivation.RELEASE_RECORD,
+                            upstreamSourceId = "origin",
+                            observedAt = at,
+                        ),
+                    ),
+                ),
+            )
+        }
+        record("winner", "same", "older", 10L)
+        record("winner", "target-only", "untouched", 20L)
+        record("duplicate", "same", "newer", 30L)
+        record("duplicate", "local-only", "retained", 40L)
+
+        repository.convergeTo(targetId = "winner", localId = "duplicate")
+
+        titleRepository.getById("duplicate") shouldBe null
+        ledger.byTitle("duplicate") shouldBe emptyList()
+        val claims = ledger.byTitle("winner")
+        claims.size shouldBe 3
+        claims.single { it.claim.sourceRecordId == "same" }.claim.label shouldBe "newer"
+        claims.single { it.claim.sourceRecordId == "target-only" }.claim.label shouldBe "untouched"
+        claims.single { it.claim.sourceRecordId == "local-only" }.claim.label shouldBe "retained"
+        ledger.batchesByTitle("winner").size shouldBe 3
+        ledger.batchesByTitle("winner")
+            .single { it.pageKey == "page:same" }.observedAt shouldBe 30L
     }
 
     private suspend fun seedTitle(id: String, displayTitle: String) {

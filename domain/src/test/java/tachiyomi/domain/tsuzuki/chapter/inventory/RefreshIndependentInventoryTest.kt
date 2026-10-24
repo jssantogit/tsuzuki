@@ -30,7 +30,9 @@ class RefreshIndependentInventoryTest {
         }
 
         val result = RefreshIndependentInventory(titles, ledger).execute(
-            "canonical", producer, isEnabled = { true },
+            "canonical",
+            producer,
+            isEnabled = { true },
         )
         result shouldBe InventoryRefreshResult(InventoryRefreshStop.EXHAUSTED, 2, 2)
         calls shouldBe listOf("start", "next")
@@ -80,7 +82,9 @@ class RefreshIndependentInventoryTest {
             Result.success(batch(scope, page, "late", "1", InventoryFetchOutcome.EXHAUSTED))
         }
         RefreshIndependentInventory(titles, ledger).execute(
-            "canonical", producer, { true },
+            "canonical",
+            producer,
+            { true },
         ).stop shouldBe InventoryRefreshStop.NO_VERIFIED_WORK
         ledger.saved.size shouldBe 0
     }
@@ -93,7 +97,13 @@ class RefreshIndependentInventoryTest {
                 "canonical",
                 producer { scope, page ->
                     Result.success(
-                        batch(scope.copy(externalWorkId = "other"), page, "wrong", "1", InventoryFetchOutcome.EXHAUSTED),
+                        batch(
+                            scope.copy(externalWorkId = "other"),
+                            page,
+                            "wrong",
+                            "1",
+                            InventoryFetchOutcome.EXHAUSTED,
+                        ),
                     )
                 },
                 { true },
