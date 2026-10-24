@@ -8,11 +8,13 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -22,9 +24,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,13 +35,17 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPageTitle
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.TsuzukiDefaultSkinCover
 import eu.kanade.presentation.tsuzuki.components.TsuzukiDefaultSkinCoverSize
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.tsuzuki.components.defaultSkinWorkGridColumnCount
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionBrowseScreenState
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.FolderCatalogContent
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.FolderCatalogScreenState
+import mihon.icons.materialsymbols.MaterialSymbols
+import mihon.icons.materialsymbols.automirroredrounded.ArrowBack
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.integration.model.metadataStartYear
 import tachiyomi.i18n.MR
@@ -143,6 +150,7 @@ private fun FolderCatalogReady(
     onRetry: () -> Unit,
     modifier: Modifier,
 ) {
+    val colors = defaultSkinColors()
     val direct = state.preferredListId != null
     val enabledLists = state.folder.lists.filter { it.enabled }.sortedWith(compareBy({ it.sortOrder }, { it.id }))
     BoxWithConstraints(modifier) {
@@ -178,9 +186,9 @@ private fun FolderCatalogReady(
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                                     color = if (selected) {
-                                        MaterialTheme.colorScheme.onSurface
+                                        colors.foreground
                                     } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                        colors.secondary
                                     },
                                     modifier = Modifier.padding(vertical = 12.dp),
                                     maxLines = 1,
@@ -189,7 +197,7 @@ private fun FolderCatalogReady(
                                 Box(
                                     Modifier.fillMaxWidth().height(2.dp).background(
                                         if (selected) {
-                                            MaterialTheme.colorScheme.onSurface
+                                            colors.foreground
                                         } else {
                                             androidx.compose.ui.graphics.Color.Transparent
                                         },
@@ -211,7 +219,7 @@ private fun FolderCatalogReady(
                             },
                         ),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = colors.secondary,
                     )
                 }
                 FolderCatalogContent.Loading -> item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
@@ -221,9 +229,9 @@ private fun FolderCatalogReady(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             stringResource(MR.strings.tsuzuki_catalog_error),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = colors.secondary,
                         )
-                        TextButton(onClick = onRetry) { Text(stringResource(MR.strings.action_retry)) }
+                        DefaultSkinTextAction(text = stringResource(MR.strings.action_retry), onClick = onRetry)
                     }
                 }
                 is FolderCatalogContent.Content -> {
@@ -231,7 +239,7 @@ private fun FolderCatalogReady(
                         item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 stringResource(MR.strings.tsuzuki_catalog_empty),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = colors.secondary,
                             )
                         }
                     } else {
@@ -242,9 +250,10 @@ private fun FolderCatalogReady(
                     if (content.nextCursor != null) {
                         item(key = "load_more", span = { GridItemSpan(maxLineSpan) }) {
                             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                TextButton(onClick = onLoadMore) {
-                                    Text(stringResource(MR.strings.tsuzuki_catalog_load_more))
-                                }
+                                DefaultSkinTextAction(
+                                    text = stringResource(MR.strings.tsuzuki_catalog_load_more),
+                                    onClick = onLoadMore,
+                                )
                             }
                         }
                     }
@@ -261,20 +270,48 @@ private fun BrowseScaffold(
     statusTitle: String? = null,
     content: @Composable (Modifier) -> Unit,
 ) {
-    Scaffold(modifier = modifier, topBar = {
-        AppBar(
-            titleContent = {
-                statusTitle?.let { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            },
-            navigateUp = navigateUp,
-        )
-    }) { padding ->
-        content(Modifier.fillMaxSize().padding(padding))
+    val colors = defaultSkinColors()
+    Scaffold(
+        modifier = modifier,
+        topBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.canvas)
+                    .statusBarsPadding()
+                    .heightIn(min = 56.dp)
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = { navigateUp() }) {
+                    Icon(
+                        MaterialSymbols.AutoMirroredRounded.ArrowBack,
+                        contentDescription = stringResource(MR.strings.tsuzuki_details_back),
+                        tint = colors.foreground,
+                    )
+                }
+                statusTitle?.let {
+                    Text(
+                        text = it,
+                        modifier = Modifier.padding(start = 8.dp),
+                        color = colors.foreground,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        },
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding).background(colors.canvas)) {
+            content(Modifier.fillMaxSize())
+        }
     }
 }
 
 @Composable
 private fun CatalogGridItem(item: CatalogItem, onClick: () -> Unit) {
+    val colors = defaultSkinColors()
     Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.TopCenter,
@@ -300,7 +337,7 @@ private fun CatalogGridItem(item: CatalogItem, onClick: () -> Unit) {
             Text(
                 metadataStartYear(item.startDate).orEmpty(),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = colors.secondary,
                 maxLines = 1,
             )
         }
@@ -309,22 +346,20 @@ private fun CatalogGridItem(item: CatalogItem, onClick: () -> Unit) {
 
 @Composable
 private fun BrowseLoading(modifier: Modifier = Modifier) {
-    Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+    Box(modifier, contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(color = defaultSkinColors().accent)
+    }
 }
 
 @Composable
 private fun BrowseMessage(message: String, modifier: Modifier = Modifier) {
+    val colors = defaultSkinColors()
     Box(modifier.padding(24.dp), contentAlignment = Alignment.Center) {
-        Text(message, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(message, style = MaterialTheme.typography.bodyLarge, color = colors.secondary)
     }
 }
 
 @Composable
 private fun BrowseTitle(title: String) {
-    Text(
-        title,
-        Modifier.fillMaxWidth(),
-        style = MaterialTheme.typography.headlineLarge,
-        fontWeight = FontWeight.Bold,
-    )
+    DefaultSkinPageTitle(text = title, modifier = Modifier.fillMaxWidth())
 }
