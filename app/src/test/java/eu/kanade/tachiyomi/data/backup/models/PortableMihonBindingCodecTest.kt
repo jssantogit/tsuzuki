@@ -47,14 +47,24 @@ class PortableMihonBindingCodecTest {
     fun `unknown runtime bytes and identity mismatch must fail closed`() {
         runCatching {
             PortableMihonBindingCodec.export(
-                "b", "t", "addon", "42:/title/other", 0.9, true, "AVAILABLE",
+                "b", "t", "eu.kanade.tachiyomi.extension.pt.example", "42:/title/other", 0.9, true, "AVAILABLE",
                 sourcePayload(), 1L, 2L,
             )
         }.isFailure shouldBe true
         runCatching {
             PortableMihonBindingCodec.export(
-                "b", "t", "addon", "42:/title/blue-lock", 0.9, true, "AVAILABLE",
+                "b", "t", "eu.kanade.tachiyomi.extension.pt.example", "42:/title/blue-lock", 0.9, true, "AVAILABLE",
                 byteArrayOf(1, 2, 3), 1L, 2L,
+            )
+        }.isFailure shouldBe true
+    }
+
+    @Test
+    fun `SCRIPT provider bytes masquerading as a Mihon payload are rejected`() {
+        runCatching {
+            PortableMihonBindingCodec.export(
+                "b", "t", "script.provider", "42:/title/blue-lock", 0.9, true, "AVAILABLE",
+                sourcePayload(), 1L, 2L,
             )
         }.isFailure shouldBe true
     }
@@ -70,7 +80,7 @@ class PortableMihonBindingCodecTest {
         for (url in unsafeUrls) {
             runCatching {
                 PortableMihonBindingCodec.export(
-                    "b", "t", "addon", "42:$url", 0.9, true, "AVAILABLE",
+                    "b", "t", "eu.kanade.tachiyomi.extension.pt.example", "42:$url", 0.9, true, "AVAILABLE",
                     sourcePayload(url), 1L, 2L,
                 )
             }.isFailure shouldBe true
@@ -80,7 +90,7 @@ class PortableMihonBindingCodecTest {
     @Test
     fun `invalid or conflicting backup binding references are rejected`() {
         val base = PortableMihonBindingCodec.export(
-            "b", "title-1", "addon", "42:/title/blue-lock", 0.9, true, "AVAILABLE",
+            "b", "title-1", "eu.kanade.tachiyomi.extension.pt.example", "42:/title/blue-lock", 0.9, true, "AVAILABLE",
             sourcePayload(), 1L, 2L,
         )
         val titles = listOf(BackupCoreTitle("title-1", "Work", "SOURCE_ONLY", 1L, 2L))
