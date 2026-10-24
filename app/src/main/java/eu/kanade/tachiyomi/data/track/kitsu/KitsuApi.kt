@@ -443,6 +443,8 @@ class KitsuApi(
         }
     }
 
+    override suspend fun getAuthenticatedOwner(): String = getCurrentUser().id
+
     suspend fun getCurrentUser(): KitsuAccount {
         return withIOContext {
             val query = """
