@@ -138,6 +138,9 @@ class BangumiIntegrationProvider private constructor(
             )
         }
 
+    override suspend fun authenticatedOwnerSubject(): Result<String> =
+        capture { userLibraryApi.getAuthenticatedOwner() }
+
     override suspend fun fetchLibrary(): Result<UserLibrarySnapshot> = capture {
         UserLibrarySnapshot(
             lists = BANGUMI_USER_LISTS,
