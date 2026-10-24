@@ -12,6 +12,11 @@ FROM tsuzuki_metadata_snapshot
 WHERE canonical_title_id = :canonicalTitleId
 LIMIT 1;
 
+getManyTsuzukiMetadataSnapshots:
+SELECT *
+FROM tsuzuki_metadata_snapshot
+WHERE canonical_title_id IN :canonicalTitleIds;
+
 upsertTsuzukiMetadataSnapshot:
 INSERT INTO tsuzuki_metadata_snapshot(
     canonical_title_id,

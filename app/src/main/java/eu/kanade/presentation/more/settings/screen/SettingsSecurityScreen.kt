@@ -1,17 +1,26 @@
 package eu.kanade.presentation.more.settings.screen
 
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.fragment.app.FragmentActivity
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.tachiyomi.core.security.PrivacyPreferences
 import eu.kanade.tachiyomi.core.security.SecurityPreferences
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentPreferences
 import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.authenticate
 import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.isAuthenticationSupported
 import eu.kanade.tachiyomi.util.system.telemetryIncluded
+import kotlinx.coroutines.launch
 import mihon.app.di.appGraph
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
@@ -28,12 +37,48 @@ object SettingsSecurityScreen : SearchableSettings {
     @Composable
     override fun getPreferences(): List<Preference> {
         val context = LocalContext.current
-        val securityPreferences = remember { context.appGraph.securityPreferences }
-        val privacyPreferences = remember { context.appGraph.privacyPreferences }
-        return buildList(2) {
+        val graph = remember { context.appGraph }
+        val securityPreferences = remember { graph.securityPreferences }
+        val privacyPreferences = remember { graph.privacyPreferences }
+        val providerTorrentPreferences = remember { graph.providerTorrentPreferences }
+        val directP2pPreference = providerTorrentPreferences.directP2pAllowed
+        val scope = rememberCoroutineScope()
+        var showDirectP2pConfirmation by rememberSaveable { mutableStateOf(false) }
+
+        if (showDirectP2pConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showDirectP2pConfirmation = false },
+                title = { Text(stringResource(MR.strings.tsuzuki_direct_p2p_confirm_title)) },
+                text = { Text(stringResource(MR.strings.tsuzuki_direct_p2p_confirm_message)) },
+                dismissButton = {
+                    TextButton(onClick = { showDirectP2pConfirmation = false }) {
+                        Text(stringResource(MR.strings.action_cancel))
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showDirectP2pConfirmation = false
+                            scope.launch { directP2pPreference.set(true) }
+                        },
+                    ) {
+                        Text(stringResource(MR.strings.tsuzuki_action_allow))
+                    }
+                },
+            )
+        }
+
+        return buildList(3) {
             add(getSecurityGroup(securityPreferences))
-            if (!telemetryIncluded) return@buildList
-            add(getFirebaseGroup(privacyPreferences))
+            add(
+                getNetworkPrivacyGroup(
+                    providerTorrentPreferences = providerTorrentPreferences,
+                    onDirectP2pEnableRequested = { showDirectP2pConfirmation = true },
+                ),
+            )
+            if (telemetryIncluded) {
+                add(getTelemetryGroup(privacyPreferences))
+            }
         }
     }
 
@@ -77,16 +122,15 @@ object SettingsSecurityScreen : SearchableSettings {
                         )
                     },
                 ),
-
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = securityPreferences.hideNotificationContent,
-                    title = stringResource(MR.strings.hide_notification_content),
-                ),
                 Preference.PreferenceItem.ListPreference(
                     preference = securityPreferences.secureScreen,
                     entries = SecurityPreferences.SecureScreenMode.entries
                         .associateWith { stringResource(it.titleRes) },
                     title = stringResource(MR.strings.secure_screen),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = securityPreferences.hideNotificationContent,
+                    title = stringResource(MR.strings.hide_notification_content),
                 ),
                 Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.secure_screen_summary)),
             ),
@@ -94,11 +138,38 @@ object SettingsSecurityScreen : SearchableSettings {
     }
 
     @Composable
-    private fun getFirebaseGroup(
+    private fun getNetworkPrivacyGroup(
+        providerTorrentPreferences: ProviderTorrentPreferences,
+        onDirectP2pEnableRequested: () -> Unit,
+    ): Preference.PreferenceGroup {
+        val directP2pPreference = providerTorrentPreferences.directP2pAllowed
+
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.tsuzuki_network_privacy_title),
+            preferenceItems = listOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = directP2pPreference,
+                    title = stringResource(MR.strings.tsuzuki_provider_direct_p2p),
+                    subtitle = stringResource(MR.strings.tsuzuki_direct_p2p_summary),
+                    onValueChanged = { enabled ->
+                        if (!enabled) {
+                            true
+                        } else {
+                            onDirectP2pEnableRequested()
+                            false
+                        }
+                    },
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getTelemetryGroup(
         privacyPreferences: PrivacyPreferences,
     ): Preference.PreferenceGroup {
         return Preference.PreferenceGroup(
-            title = stringResource(MR.strings.pref_firebase),
+            title = stringResource(MR.strings.tsuzuki_telemetry_title),
             preferenceItems = listOf(
                 Preference.PreferenceItem.SwitchPreference(
                     preference = privacyPreferences.crashlytics,
@@ -110,7 +181,6 @@ object SettingsSecurityScreen : SearchableSettings {
                     title = stringResource(MR.strings.onboarding_permission_analytics),
                     subtitle = stringResource(MR.strings.onboarding_permission_analytics_description),
                 ),
-                Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.firebase_summary)),
             ),
         )
     }

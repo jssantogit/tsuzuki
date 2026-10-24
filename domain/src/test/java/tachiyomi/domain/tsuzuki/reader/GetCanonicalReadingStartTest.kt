@@ -135,6 +135,28 @@ class GetCanonicalReadingStartTest {
         result shouldBe CanonicalReadingStart.Unavailable("title-1")
     }
 
+    @Test
+    fun `irregular loaded identities remain the reading gateway targets`() = runTest {
+        val realChapters = listOf(
+            chapter("ten", 10),
+            chapter("fraction", 10).copy(displayNumber = "10.5", part = 5),
+            chapter("special", 11).copy(displayNumber = "Special", type = CanonicalChapterType.SPECIAL),
+            chapter("gap", 642),
+        )
+        val inventory = FakeCanonicalChapterRepository(realChapters)
+
+        GetCanonicalReadingStart(inventory, FakeCanonicalReadingRepository(emptyList()))
+            .execute("title-1") shouldBe CanonicalReadingStart.Ready("ten")
+        GetCanonicalReadingStart(
+            inventory,
+            FakeCanonicalReadingRepository(listOf(progress("fraction", read = false, updatedAt = 100))),
+        ).execute("title-1") shouldBe CanonicalReadingStart.Ready("fraction")
+        GetCanonicalReadingStart(
+            inventory,
+            FakeCanonicalReadingRepository(realChapters.map { progress(it.id, read = true, updatedAt = 100) }),
+        ).execute("title-1") shouldBe CanonicalReadingStart.Ready("gap")
+    }
+
     private fun chapter(id: String, number: Int) = CanonicalChapter(
         id = id,
         canonicalTitleId = "title-1",

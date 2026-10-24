@@ -5,6 +5,7 @@ import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -142,6 +143,128 @@ class SupabaseAccountRepositoryTest {
 
         server.takeRequest().url.encodedPath shouldBe "/auth/v1/recover"
     }
+
+    @Test
+    fun `password update uses accepted session bearer and only sends new password`() = runTest {
+        server.enqueue(MockResponse.Builder().code(200).body("{}").build())
+        val store = InMemorySessionStore()
+        val repository = repository(store)
+        repository.acceptSession(recoverySession())
+
+        repository.updatePassword("replacement123").getOrThrow()
+
+        val request = server.takeRequest()
+        request.method shouldBe "PUT"
+        request.url.encodedPath shouldBe "/auth/v1/user"
+        request.url.query shouldBe null
+        request.headers["apikey"] shouldBe "publishable-test-key"
+        request.headers["Authorization"] shouldBe "Bearer recovery-access"
+        request.body!!.utf8() shouldBe """{"password":"replacement123"}"""
+        store.load()?.refreshToken shouldBe "recovery-refresh"
+        repository.state.value shouldBe AccountState.Authenticated(
+            tachiyomi.domain.tsuzuki.account.model.TsuzukiAccount("user-1", "reader@example.com"),
+        )
+    }
+
+    @Test
+    fun `password update observes recovery accepted after repository initialization`() = runTest {
+        server.enqueue(MockResponse.Builder().code(200).body("{}").build())
+        val store = InMemorySessionStore()
+        val repository = repository(store)
+        repository(store).acceptSession(recoverySession())
+
+        repository.updatePassword("replacement123").getOrThrow()
+
+        server.takeRequest().headers["Authorization"] shouldBe "Bearer recovery-access"
+        (repository.state.value is AccountState.Authenticated) shouldBe true
+    }
+
+    @Test
+    fun `password update refreshes expired accepted session before updating user`() = runTest {
+        server.enqueue(sessionResponse(accessToken = "refreshed-access"))
+        server.enqueue(MockResponse.Builder().code(200).body("{}").build())
+        val repository = repository(InMemorySessionStore())
+        repository.acceptSession(recoverySession().copy(expiresAtEpochSeconds = 1))
+
+        repository.updatePassword("replacement123").getOrThrow()
+
+        val refresh = server.takeRequest()
+        refresh.url.queryParameter("grant_type") shouldBe "refresh_token"
+        refresh.body!!.utf8() shouldBe """{"refresh_token":"recovery-refresh"}"""
+        val update = server.takeRequest()
+        update.method shouldBe "PUT"
+        update.headers["Authorization"] shouldBe "Bearer refreshed-access"
+    }
+
+    @Test
+    fun `password update fails without session and sends no request`() = runTest {
+        val repository = repository(InMemorySessionStore())
+
+        repository.updatePassword("replacement123").isFailure shouldBe true
+
+        server.requestCount shouldBe 0
+        repository.state.value shouldBe AccountState.LoggedOut
+    }
+
+    @Test
+    fun `blank password update fails before network`() = runTest {
+        val repository = repository(InMemorySessionStore())
+        repository.acceptSession(recoverySession())
+
+        repository.updatePassword("   ").isFailure shouldBe true
+
+        server.requestCount shouldBe 0
+    }
+
+    @Test
+    fun `password update backend failure excludes response credentials from error`() = runTest {
+        server.enqueue(
+            MockResponse.Builder().code(422)
+                .body("""{"message":"replacement123 recovery-access recovery-refresh"}""")
+                .build(),
+        )
+        val repository = repository(InMemorySessionStore())
+        repository.acceptSession(recoverySession())
+
+        val result = repository.updatePassword("replacement123")
+
+        result.isFailure shouldBe true
+        val error = result.exceptionOrNull()!!.message.orEmpty()
+        error.contains("422") shouldBe true
+        listOf("replacement123", "recovery-access", "recovery-refresh").forEach {
+            error.contains(it) shouldBe false
+        }
+    }
+
+    @Test
+    fun `password update does not pass credentials to HTTP logging interceptors`() = runTest {
+        server.enqueue(MockResponse.Builder().code(200).body("{}").build())
+        val logs = mutableListOf<String>()
+        val logger = HttpLoggingInterceptor { logs += it }.apply {
+            level = HttpLoggingInterceptor.Level.BODY
+        }
+        val client = OkHttpClient.Builder().addInterceptor(logger).addNetworkInterceptor(logger).build()
+        val service = SupabaseAuthService(
+            client = supabaseSafeClient(client),
+            configuration = SupabaseConfiguration(
+                server.url("/").toString().removeSuffix("/"),
+                "publishable-test-key",
+            ),
+        )
+
+        service.updatePassword("recovery-access", "replacement123")
+
+        logs shouldBe emptyList()
+        server.takeRequest().headers["Authorization"] shouldBe "Bearer recovery-access"
+    }
+
+    private fun recoverySession() = SupabaseSession(
+        accessToken = "recovery-access",
+        refreshToken = "recovery-refresh",
+        expiresAtEpochSeconds = Long.MAX_VALUE,
+        userId = "user-1",
+        email = "reader@example.com",
+    )
 
     private fun repository(store: SupabaseSessionStore): SupabaseAccountRepository {
         val config = SupabaseConfiguration(

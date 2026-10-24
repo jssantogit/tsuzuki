@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tsuzuki_settings_section_content">Content</string>
+    <string name="tsuzuki_settings_section_privacy_security">Privacy and security</string>
+    <string name="tsuzuki_settings_section_diagnostics">Diagnostics</string>
+    <string name="tsuzuki_account_sync_section">Synchronization</string>
+    <string name="tsuzuki_settings_group_account">Account</string>
+    <string name="tsuzuki_settings_group_experience">Experience</string>
+    <string name="tsuzuki_settings_group_content">Content</string>
+    <string name="tsuzuki_settings_group_data">Data</string>
+    <string name="tsuzuki_settings_group_system">System</string>
+    <string name="tsuzuki_settings_group_about">About</string>
+    <string name="tsuzuki_integration_status_disabled">Disabled</string>
+    <string name="tsuzuki_integration_status_not_configured">Not configured</string>
+    <string name="tsuzuki_integration_status_configured">Configured</string>
+    <string name="tsuzuki_integration_status_active">Active</string>
+
+    <string name="tsuzuki_visual_preset_title">Visual preset</string>
+    <string name="tsuzuki_visual_preset_current">Visual presets</string>
+    <string name="tsuzuki_visual_preset_name">Tsuzuki Default Skin</string>
+    <string name="tsuzuki_visual_preset_summary">The original Tsuzuki look: neutral surfaces and artwork-first contrast.</string>
+    <string name="tsuzuki_preset_monet_summary">Colors inspired by your device wallpaper, adapting automatically.</string>
+    <string name="tsuzuki_preset_catppuccin_summary">Soft pastel accents and warm, understated surfaces.</string>
+    <string name="tsuzuki_preset_green_apple_summary">Fresh green accents over crisp, calm surfaces.</string>
+    <string name="tsuzuki_preset_lavender_summary">Gentle violet accents for a softer reading space.</string>
+    <string name="tsuzuki_preset_midnight_dusk_summary">Deep blue and twilight tones with subtle contrast.</string>
+    <string name="tsuzuki_preset_nord_summary">Cool Nordic blues and restrained, balanced contrast.</string>
+    <string name="tsuzuki_preset_strawberry_daiquiri_summary">Playful berry and rose accents with warm details.</string>
+    <string name="tsuzuki_preset_tako_summary">Moody purple accents with a distinct dark identity.</string>
+    <string name="tsuzuki_preset_tealturquoise_summary">Fresh turquoise accents for a clear, bright interface.</string>
+    <string name="tsuzuki_preset_tidal_wave_summary">Ocean-inspired blue and aqua tones.</string>
+    <string name="tsuzuki_preset_yinyang_summary">Bold monochrome-inspired balance and contrast.</string>
+    <string name="tsuzuki_preset_yotsuba_summary">Warm green and cream accents with a relaxed feel.</string>
+    <string name="tsuzuki_preset_tokyonight_summary">City-night blues, indigo and luminous accents.</string>
+    <string name="tsuzuki_preset_monochrome_summary">A minimal grayscale palette focused on the artwork.</string>
+    <string name="tsuzuki_theme_mode_title">Theme mode</string>
+    <string name="tsuzuki_collections_settings_title">Collections</string>
+    <string name="tsuzuki_collections_settings_summary">Organize collections, folders, and lists shown by Tsuzuki</string>
+
+    <string name="tsuzuki_download_network_files">Network and files</string>
+    <string name="tsuzuki_download_performance">Performance</string>
+
+    <string name="tsuzuki_storage_usage_summary">Available space, cache, and temporary files</string>
+    <string name="tsuzuki_backup_settings_summary">Create, restore, and schedule backups</string>
+    <string name="tsuzuki_export_library_title">Export library</string>
+    <string name="tsuzuki_export_library_summary">CSV with title, author, and artist</string>
+    <string name="tsuzuki_backup_create_summary">Choose components before saving the file</string>
+    <string name="tsuzuki_backup_restore_summary">Validates the backup before choosing what to restore</string>
+    <string name="tsuzuki_storage_temporary_info">Temporary files may be created during acquisition and processing. They do not represent P2P consent or a Provider route.</string>
+    <string name="tsuzuki_export_csv_title">Export CSV</string>
+    <string name="tsuzuki_export_csv_summary">Title is required to include author or artist</string>
+
+    <string name="tsuzuki_network_privacy_title">Network privacy</string>
+    <string name="tsuzuki_direct_p2p_confirm_title">Allow direct P2P?</string>
+    <string name="tsuzuki_direct_p2p_confirm_message">Direct P2P connections can expose your IP address to other network participants. Enable it only if you understand and accept that exposure.</string>
+    <string name="tsuzuki_action_allow">Allow</string>
+    <string name="tsuzuki_direct_p2p_summary">Allows direct P2P connections when a Provider needs them. Your IP address may be visible to other network participants.</string>
+    <string name="tsuzuki_telemetry_title">Data and telemetry</string>
+
+    <string name="tsuzuki_logs_clear_confirm_title">Clear logs?</string>
+    <string name="tsuzuki_logs_clear_confirm_message">This removes Tsuzuki diagnostics and the last saved crash. The system logcat is not cleared.</string>
+    <string name="tsuzuki_action_clear">Clear</string>
+    <string name="tsuzuki_logs_share_privacy">The shared file may contain device and app diagnostic data. Review the destination before sending it.</string>
+</resources>

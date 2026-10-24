@@ -14,6 +14,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -24,7 +26,12 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.manga.repository.MangaRepository
+import tachiyomi.domain.tsuzuki.artwork.model.TitleArtworkObservation
 import tachiyomi.domain.tsuzuki.artwork.repository.TitleArtworkRepository
+import tachiyomi.domain.tsuzuki.integration.IntegrationId
+import tachiyomi.domain.tsuzuki.integration.interactor.ResolveCanonicalMetadata
+import tachiyomi.domain.tsuzuki.integration.model.ProvenancedMetadata
+import tachiyomi.domain.tsuzuki.integration.model.ResolvedMetadata
 import tachiyomi.domain.tsuzuki.interactor.MaterializeCanonicalTitle
 import tachiyomi.domain.tsuzuki.library.interactor.ObserveCanonicalLibrary
 import tachiyomi.domain.tsuzuki.library.interactor.ObserveUnifiedLibrary
@@ -102,6 +109,9 @@ class CanonicalLibraryScreenModelTest {
         every { artworkRepository.observeAll() } returns MutableStateFlow(emptyList())
         val refreshUserLibraries = mockk<RefreshUserLibraries>()
         coEvery { refreshUserLibraries.refreshConnected() } returns emptyMap()
+        val metadataResolver = mockk<ResolveCanonicalMetadata>()
+        val observedMetadata = MutableStateFlow<Map<String, ResolvedMetadata>>(emptyMap())
+        every { metadataResolver.observeCached(any()) } returns observedMetadata
 
         val screenModel = CanonicalLibraryScreenModel(
             observeUnifiedLibrary = observeUnifiedLibrary,
@@ -111,6 +121,7 @@ class CanonicalLibraryScreenModelTest {
             resolveCanonicalReadingStart = FakeCanonicalReadingStartResolver(),
             canonicalReadingRepository = FakeCanonicalReadingRepository(),
             refreshUserLibraries = refreshUserLibraries,
+            resolveCanonicalMetadata = metadataResolver,
             mangaRepository = mangaRepository,
             resolveCanonicalSourceManga = sourceResolver,
             titleArtworkRepository = artworkRepository,
@@ -121,6 +132,17 @@ class CanonicalLibraryScreenModelTest {
         screenModel.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>()
         coVerify(exactly = 1) { sourceResolver.execute(title.id, allowNetwork = false) }
         coVerify(exactly = 0) { sourceResolver.execute(title.id, allowNetwork = true) }
+
+        // An independently loaded year must update only the text, not re-resolve every cover.
+        observedMetadata.value = mapOf(
+            title.id to ResolvedMetadata(
+                startDate = ProvenancedMetadata("2021-05-04", IntegrationId("mal"), "m1", "MAL"),
+            ),
+        )
+        advanceUntilIdle()
+        screenModel.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>()
+            .items.single().startYear shouldBe "2021"
+        coVerify(exactly = 1) { sourceResolver.execute(title.id, allowNetwork = false) }
     }
 
     @Test
@@ -165,6 +187,161 @@ class CanonicalLibraryScreenModelTest {
         state.items.map { it.canonicalTitleId } shouldBe listOf("title-1")
         state.items.first().title shouldBe "Frieren"
         state.items.first().status shouldBe LibraryStatus.READING
+    }
+
+    @Test
+    fun `cached start years load by library identity and survive filter and progress updates`() = runTest(
+        testDispatcher,
+    ) {
+        val repo = FakeCanonicalLibraryRepository()
+        val readingRepository = FakeCanonicalReadingRepository()
+        val artworkUpdates = MutableStateFlow(emptyList<TitleArtworkObservation>())
+        val artworkRepository = mockk<TitleArtworkRepository>()
+        every { artworkRepository.observeAll() } returns artworkUpdates
+        val metadataResolver = mockk<ResolveCanonicalMetadata>()
+        val metadataUpdates = MutableStateFlow(
+            mapOf(
+                "one" to ResolvedMetadata(
+                    startDate = ProvenancedMetadata("2020-06-12", IntegrationId("mal"), "m1", "MAL"),
+                ),
+            ),
+        )
+        val requestedBatches = mutableListOf<List<String>>()
+        every { metadataResolver.observeCached(any()) } answers {
+            val ids = firstArg<Collection<String>>().toList()
+            requestedBatches += ids
+            metadataUpdates.map { snapshots -> snapshots.filterKeys(ids::contains) }
+        }
+        val model = CanonicalLibraryScreenModel(
+            observeCanonicalLibrary = ObserveCanonicalLibrary(repo),
+            setCanonicalLibraryStatus = SetCanonicalLibraryStatus(repo),
+            removeUnifiedLibraryTitle = RemoveUnifiedLibraryTitle(
+                getFavoriteMihonMangaIds = { emptyList() },
+                setMihonFavorite = { _, _ -> true },
+                removeCanonical = repo::remove,
+            ),
+            migrateMihonLibraryToCanonical = FakeMigrateMihonLibraryToCanonical(),
+            resolveCanonicalReadingStart = FakeCanonicalReadingStartResolver(),
+            canonicalReadingRepository = readingRepository,
+            resolveCanonicalMetadata = metadataResolver,
+            titleArtworkRepository = artworkRepository,
+        )
+        repo.emitItems(listOf(canonicalItem("one", "Frieren")))
+        advanceUntilIdle()
+
+        model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items.single().startYear shouldBe
+            "2020"
+        model.search("Frieren")
+        readingRepository.emitProgress(
+            "one",
+            listOf(CanonicalChapterProgress(canonicalChapterId = "chapter-one", lastPageRead = 1L)),
+        )
+        artworkUpdates.value = listOf(
+            TitleArtworkObservation(
+                canonicalTitleId = "one",
+                provider = "kitsu",
+                coverUrl = "cover",
+                updatedAt = 1L,
+            ),
+        )
+        advanceUntilIdle()
+
+        val updated = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items.single()
+        updated.startYear shouldBe "2020"
+        updated.readingState shouldBe
+            CanonicalLibraryReadingState.IN_PROGRESS
+        updated.coverUrl shouldBe "cover"
+        requestedBatches shouldBe listOf(listOf("one"))
+
+        // Details updates the local snapshot while the canonical inventory IDs stay unchanged.
+        metadataUpdates.value = mapOf(
+            "one" to ResolvedMetadata(
+                startDate = ProvenancedMetadata("2021-04-01", IntegrationId("mal"), "m1", "MAL"),
+            ),
+        )
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items.single().startYear shouldBe
+            "2021"
+
+        repo.emitItems(listOf(canonicalItem("one", "Frieren"), canonicalItem("two", "Dungeon Meshi")))
+        advanceUntilIdle()
+
+        // Clear the active search before inspecting the expanded library.
+        model.search(null)
+        advanceUntilIdle()
+
+        val expanded = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items
+        expanded.single { it.canonicalTitleId == "two" }.startYear shouldBe
+            null
+        requestedBatches shouldBe
+            listOf(listOf("one"), listOf("one", "two"))
+        listOf<ProvenancedMetadata<String>?>(
+            null,
+            ProvenancedMetadata("invalid", IntegrationId("mal"), "m1", "MAL"),
+            ProvenancedMetadata("2021-02-30", IntegrationId("mal"), "m1", "MAL"),
+        ).forEach { date ->
+            metadataUpdates.value = mapOf("one" to ResolvedMetadata(startDate = date))
+            advanceUntilIdle()
+            model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>()
+                .items.single { it.canonicalTitleId == "one" }.startYear shouldBe null
+        }
+        io.mockk.verify(exactly = 2) { metadataResolver.observeCached(any()) }
+        coVerify(atMost = 1) { metadataResolver.execute("one", any()) }
+        coVerify(exactly = 0) { metadataResolver.cached(any<Collection<String>>()) }
+    }
+
+    @Test
+    fun `library enriches absent years without opening Details and without repeated requests`() = runTest(
+        testDispatcher,
+    ) {
+        val repo = FakeCanonicalLibraryRepository()
+        val metadataUpdates = MutableStateFlow<Map<String, ResolvedMetadata>>(emptyMap())
+        val metadataResolver = mockk<ResolveCanonicalMetadata>()
+        every { metadataResolver.observeCached(any()) } answers {
+            val ids = firstArg<Collection<String>>().toSet()
+            metadataUpdates.map { values -> values.filterKeys(ids::contains) }
+        }
+        val calls = mutableListOf<String>()
+        coEvery { metadataResolver.execute(any(), any()) } coAnswers {
+            val id = firstArg<String>()
+            calls += id
+            val resolved = ResolvedMetadata(
+                startDate = ProvenancedMetadata(
+                    if (id == "one") "2020-06-12" else "2019-03-01",
+                    IntegrationId("mal"),
+                    "mal-$id",
+                    "MAL",
+                ),
+            )
+            metadataUpdates.value = metadataUpdates.value + (id to resolved)
+            Result.success(resolved)
+        }
+        val model = CanonicalLibraryScreenModel(
+            observeCanonicalLibrary = ObserveCanonicalLibrary(repo),
+            setCanonicalLibraryStatus = SetCanonicalLibraryStatus(repo),
+            removeUnifiedLibraryTitle = RemoveUnifiedLibraryTitle(
+                getFavoriteMihonMangaIds = { emptyList() },
+                setMihonFavorite = { _, _ -> true },
+                removeCanonical = repo::remove,
+            ),
+            migrateMihonLibraryToCanonical = FakeMigrateMihonLibraryToCanonical(),
+            resolveCanonicalReadingStart = FakeCanonicalReadingStartResolver(),
+            canonicalReadingRepository = FakeCanonicalReadingRepository(),
+            resolveCanonicalMetadata = metadataResolver,
+        )
+        repo.emitItems(listOf(canonicalItem("one", "Frieren"), canonicalItem("two", "Spy x Family")))
+        advanceUntilIdle()
+
+        val cards = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().items
+        cards.associate { it.canonicalTitleId to it.startYear } shouldBe
+            mapOf("one" to "2020", "two" to "2019")
+        calls shouldBe listOf("one", "two")
+
+        model.search("Spy")
+        advanceUntilIdle()
+        model.search(null)
+        advanceUntilIdle()
+        calls shouldBe listOf("one", "two")
     }
 
     @Test
@@ -487,6 +664,89 @@ class CanonicalLibraryScreenModelTest {
         flags = 0L,
     )
 
+    @Test
+    fun `empty inventory is distinct from query with no results`() = runTest(testDispatcher) {
+        val repo = FakeCanonicalLibraryRepository()
+        val model = libraryModel(repo)
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().totalItemCount shouldBe 0
+        repo.emitItems(listOf(canonicalItem("one", "Frieren")))
+        model.search("missing")
+        advanceUntilIdle()
+        val filtered = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>()
+        filtered.items shouldBe emptyList()
+        filtered.totalItemCount shouldBe 1
+        filtered.searchQuery shouldBe "missing"
+    }
+
+    @Test
+    fun `advanced filters and search preserve original inventory count`() = runTest(testDispatcher) {
+        val repo = FakeCanonicalLibraryRepository()
+        repo.emitItems(listOf(canonicalItem("one", "Frieren"), canonicalItem("two", "Dungeon Meshi")))
+        val model = libraryModel(repo)
+        model.search("Frieren")
+        model.selectCategory(99L)
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>().totalItemCount shouldBe 2
+        model.selectCategory(null)
+        model.search(null)
+        advanceUntilIdle()
+        val restored = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>()
+        restored.items.map { it.canonicalTitleId } shouldBe listOf("one", "two")
+        restored.totalItemCount shouldBe 2
+    }
+
+    @Test
+    fun `clearing advanced filters preserves status and search`() = runTest(testDispatcher) {
+        val repo = FakeCanonicalLibraryRepository()
+        repo.emitItems(listOf(canonicalItem("one", "Frieren")))
+        val model = libraryModel(repo)
+        model.selectStatus(LibraryStatus.READING)
+        model.search("Frieren")
+        model.selectOrigin("kitsu")
+        model.selectProviderList("custom")
+        model.selectCategory(42L)
+        model.toggleFormat(tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat.MANGA)
+        model.clearAdvancedFilters()
+        advanceUntilIdle()
+        val state = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>()
+        state.searchQuery shouldBe "Frieren"
+        state.filters shouldBe CanonicalLibraryFilterState(status = LibraryStatus.READING)
+        state.items.map { it.canonicalTitleId } shouldBe listOf("one")
+    }
+
+    @Test
+    fun `exiting contextual search preserves status and advanced choices`() = runTest(testDispatcher) {
+        val repo = FakeCanonicalLibraryRepository()
+        val model = libraryModel(repo)
+        model.selectStatus(LibraryStatus.PLANNING)
+        model.selectOrigin("kitsu")
+        model.selectCategory(42L)
+        model.search("missing")
+        model.search(null)
+        advanceUntilIdle()
+        val state = model.state.value.shouldBeInstanceOf<CanonicalLibraryScreenState.Success>()
+        state.searchQuery shouldBe null
+        state.filters shouldBe CanonicalLibraryFilterState(
+            status = LibraryStatus.PLANNING,
+            origin = "kitsu",
+            categoryId = 42L,
+        )
+    }
+
+    private fun libraryModel(repo: FakeCanonicalLibraryRepository) = CanonicalLibraryScreenModel(
+        observeCanonicalLibrary = ObserveCanonicalLibrary(repo),
+        setCanonicalLibraryStatus = SetCanonicalLibraryStatus(repo),
+        removeUnifiedLibraryTitle = RemoveUnifiedLibraryTitle(
+            getFavoriteMihonMangaIds = { emptyList() },
+            setMihonFavorite = { _, _ -> true },
+            removeCanonical = repo::remove,
+        ),
+        migrateMihonLibraryToCanonical = FakeMigrateMihonLibraryToCanonical(),
+        resolveCanonicalReadingStart = FakeCanonicalReadingStartResolver(),
+        canonicalReadingRepository = FakeCanonicalReadingRepository(),
+    )
+
     private fun canonicalItem(
         id: String,
         title: String,
@@ -563,6 +823,10 @@ class CanonicalLibraryScreenModelTest {
 
     private class FakeCanonicalReadingRepository : CanonicalReadingRepository {
         private val progressByTitle = mutableMapOf<String, MutableStateFlow<List<CanonicalChapterProgress>>>()
+
+        fun emitProgress(canonicalTitleId: String, progress: List<CanonicalChapterProgress>) {
+            progressByTitle.getOrPut(canonicalTitleId) { MutableStateFlow(emptyList()) }.value = progress
+        }
 
         override suspend fun getProgress(
             canonicalChapterId: String,

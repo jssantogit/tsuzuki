@@ -18,6 +18,7 @@ import eu.kanade.tachiyomi.R
 @Composable
 fun LogoHeader(
     iconPadding: PaddingValues = PaddingValues(),
+    showDivider: Boolean = true,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -32,6 +33,8 @@ fun LogoHeader(
                 .size(width = 288.dp, height = 63.dp),
         )
 
-        HorizontalDivider()
+        if (showDivider) {
+            HorizontalDivider()
+        }
     }
 }

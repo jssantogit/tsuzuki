@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import tachiyomi.data.Database
 import tachiyomi.data.subscribeToList
+import tachiyomi.data.subscribeToOne
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterHistory
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterHistoryUpdate
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterProgress
@@ -51,6 +52,12 @@ class CanonicalReadingRepositoryImpl(
         return database.tsuzuki_chapter_progressQueries
             .observeTsuzukiChapterProgressByTitle(canonicalTitleId, ::mapProgress)
             .subscribeToList()
+    }
+
+    override fun observeReadChapterCount(): Flow<Long> {
+        return database.tsuzuki_chapter_progressQueries
+            .observeTsuzukiReadChapterCount()
+            .subscribeToOne()
     }
 
     override suspend fun upsertProgress(progress: CanonicalChapterProgress) {

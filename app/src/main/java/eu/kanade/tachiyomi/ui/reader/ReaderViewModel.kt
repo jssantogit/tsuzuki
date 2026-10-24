@@ -65,6 +65,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
@@ -188,6 +190,20 @@ class ReaderViewModel(
      */
     private val canonicalChapterId = savedState.get<String>("canonical_chapter")
     private val canonicalPreferredLanguage = savedState.get<String>("canonical_language")
+
+    init {
+        viewModelScope.launchIO {
+            state.map { it.canonicalTitleId }.distinctUntilChanged().collectLatest { titleId ->
+                if (titleId != null) {
+                    canonicalChapterRepository.observeByCanonicalTitleId(titleId).collect { chapters ->
+                        mutableState.update {
+                            it.copy(canonicalChapters = readerCanonicalChapters(chapters))
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     var mangaId = savedState.get<Long>("manga") ?: -1L
         private set(value) {
@@ -438,7 +454,10 @@ class ReaderViewModel(
                 if (e is CancellationException) {
                     throw e
                 }
-                mutableState.update { it.copy(initError = e) }
+                val recovery = if (canonicalChapterId != null) classifyReaderRecovery(e) else null
+                mutableState.update {
+                    if (recovery != null) it.copy(recovery = recovery) else it.copy(initError = e)
+                }
             }
         }
     }
@@ -526,6 +545,7 @@ class ReaderViewModel(
                     readerChapterId = readerChapter.chapter.id!!,
                     mihonChapterId = readerChapter.chapter.id,
                 )
+                mutableState.update { it.copy(activeCanonicalChapterId = variant.canonicalChapterId) }
             }
         } catch (error: CancellationException) {
             throw error
@@ -806,6 +826,9 @@ class ReaderViewModel(
                                 source = nextSource,
                                 activeContentLabel = canonicalContentLabel(nextSource?.name, selectedOption),
                                 activeContentOptionKey = selectedOption?.key,
+                                activeCanonicalChapterId = session.canonicalChapterId,
+                                recovery = null,
+                                sessionPresentation = it.sessionPresentation.dismiss(),
                                 viewerChapters = nextViewerChapters,
                                 currentPage = nextChapter.requestedPage + 1,
                                 bookmarked = nextChapter.chapter.bookmark,
@@ -929,6 +952,7 @@ class ReaderViewModel(
             mutableState.update {
                 it.copy(
                     canonicalTitleId = canonicalTitleId,
+                    sessionPresentation = it.sessionPresentation.dismiss(),
                     dialog = Dialog.ContentSelector(
                         canonicalTitleId = canonicalTitleId,
                         canonicalChapterId = canonicalChapterId,
@@ -955,6 +979,7 @@ class ReaderViewModel(
     }
 
     private var contentSelectionInProgress = false
+    private var failedContentSelection: SelectionResult? = null
 
     fun selectCanonicalContent(selection: SelectionResult) {
         val selector = mutableState.value.dialog as? Dialog.ContentSelector ?: return
@@ -965,6 +990,7 @@ class ReaderViewModel(
         // chapter halfway through the atomic viewer publication.
         if (contentSelectionInProgress) return
         contentSelectionInProgress = true
+        mutableState.update { it.copy(sourceSelectionInProgress = true, recovery = null) }
         val hadActiveSession = canonicalSession != null
         viewModelScope.launchIO {
             try {
@@ -995,6 +1021,7 @@ class ReaderViewModel(
                             }
                         }
                         eventChannel.trySend(Event.ContentSelectionReady(selection))
+                        failedContentSelection = null
                         if (selection.offerSetAsPreferred) {
                             withUIContext {
                                 mutableState.update {
@@ -1024,13 +1051,15 @@ class ReaderViewModel(
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 logcat(LogPriority.ERROR, error) { "Failed to prepare selected canonical content" }
-                eventChannel.trySend(
-                    Event.ContentSwitchFailed(error.message ?: "Could not load the selected source"),
-                )
+                failedContentSelection = selection
+                mutableState.update {
+                    it.copy(recovery = classifyReaderRecovery(error) ?: ReaderRecovery.SOURCE_UNAVAILABLE)
+                }
                 // The selector remains open on failure, including an initial
                 // selection: initError would finish the ReaderActivity instead.
             } finally {
                 contentSelectionInProgress = false
+                mutableState.update { it.copy(sourceSelectionInProgress = false) }
             }
         }
     }
@@ -1049,7 +1078,7 @@ class ReaderViewModel(
 
     fun dismissContentSelector() {
         val selector = mutableState.value.dialog as? Dialog.ContentSelector ?: return
-        mutableState.update { it.copy(dialog = null) }
+        mutableState.update { it.copy(dialog = null, recovery = null) }
         if (selector.closeReaderOnDismiss && canonicalSession == null) {
             eventChannel.trySend(Event.CloseReader)
         }
@@ -1524,6 +1553,17 @@ class ReaderViewModel(
             direction = direction,
         ) ?: return false
 
+        openCanonicalChapter(adjacent.id)
+    }
+
+    private var failedCanonicalChapterId: String? = null
+
+    /** Same preparation/publication gateway for adjacency and a real chapter-card selection. */
+    suspend fun openCanonicalChapter(chapterId: String) {
+        if (state.value.isLoadingAdjacentChapter || chapterId == canonicalSession?.canonicalChapterId) return
+        val adjacent = canonicalChapterRepository.getById(chapterId) ?: return
+        if (adjacent.canonicalTitleId != state.value.canonicalTitleId) return
+
         mutableState.update { it.copy(isLoadingAdjacentChapter = true) }
         return try {
             when (
@@ -1569,6 +1609,10 @@ class ReaderViewModel(
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
             logcat(LogPriority.ERROR, error) { "Failed to load canonical adjacent chapter" }
+            failedCanonicalChapterId = chapterId
+            mutableState.update {
+                it.copy(recovery = classifyReaderRecovery(error) ?: ReaderRecovery.SOURCE_UNAVAILABLE)
+            }
             false
         } finally {
             mutableState.update { it.copy(isLoadingAdjacentChapter = false) }
@@ -1751,6 +1795,39 @@ class ReaderViewModel(
         mutableState.update { it.copy(menuVisible = visible) }
     }
 
+    fun openSessionTool(tool: ReaderSessionTool) {
+        mutableState.update { it.copy(dialog = null, sessionPresentation = it.sessionPresentation.open(tool)) }
+    }
+
+    fun dismissSessionCard() {
+        mutableState.update { it.copy(sessionPresentation = it.sessionPresentation.dismiss(), recovery = null) }
+    }
+
+    fun setVisualProtection(mode: ReaderVisualProtection) {
+        mutableState.update { it.copy(sessionPresentation = it.sessionPresentation.withProtection(mode)) }
+    }
+
+    fun retryReaderRecovery() {
+        val selection = failedContentSelection
+        if (selection != null && state.value.dialog is Dialog.ContentSelector) {
+            selectCanonicalContent(selection)
+            return
+        }
+        mutableState.update { it.copy(recovery = null, initError = null) }
+        viewModelScope.launchIO {
+            val failedChapterId = failedCanonicalChapterId
+            if (failedChapterId != null) openCanonicalChapter(failedChapterId) else init()
+        }
+    }
+
+    fun openRecoverySources() {
+        val id = failedCanonicalChapterId ?: canonicalSession?.canonicalChapterId ?: canonicalChapterId ?: return
+        viewModelScope.launchIO {
+            val chapter = canonicalChapterRepository.getById(id) ?: return@launchIO
+            showContentSelector(chapter.canonicalTitleId, id, closeReaderOnDismiss = canonicalSession == null)
+        }
+    }
+
     fun showLoadingDialog() {
         mutableState.update { it.copy(dialog = Dialog.Loading) }
     }
@@ -1765,10 +1842,6 @@ class ReaderViewModel(
 
     fun openPageDialog(page: ReaderPage) {
         mutableState.update { it.copy(dialog = Dialog.PageActions(page)) }
-    }
-
-    fun openSettingsDialog() {
-        mutableState.update { it.copy(dialog = Dialog.Settings) }
     }
 
     fun closeDialog() {
@@ -1948,6 +2021,11 @@ class ReaderViewModel(
         val canonicalTitleId: String? = null,
         val activeContentLabel: String? = null,
         val activeContentOptionKey: String? = null,
+        val activeCanonicalChapterId: String? = null,
+        val canonicalChapters: List<CanonicalChapter> = emptyList(),
+        val sessionPresentation: ReaderSessionPresentation = ReaderSessionPresentation(),
+        val recovery: ReaderRecovery? = null,
+        val sourceSelectionInProgress: Boolean = false,
         val initError: Throwable? = null,
         val viewerChapters: ViewerChapters? = null,
         val bookmarked: Boolean = false,
@@ -1973,7 +2051,6 @@ class ReaderViewModel(
 
     sealed interface Dialog {
         data object Loading : Dialog
-        data object Settings : Dialog
         data object ReadingModeSelect : Dialog
         data object OrientationModeSelect : Dialog
         data class PageActions(val page: ReaderPage) : Dialog

@@ -11,6 +11,31 @@ on:
         options:
           - affected
           - full
+      default_skin_rendered:
+        description: Run opt-in Default Skin rendered layout/semantics suite on disposable Android emulator
+        required: false
+        default: false
+        type: boolean
+      default_skin_emulator_pre_menu:
+        description: Run an opt-in fresh-emulator HOME/ANR diagnostic before one MENU input
+        required: false
+        default: false
+        type: boolean
+      default_skin_emulator_menu_ab:
+        description: Compare fresh-emulator zero-input control with immediate-MENU treatment
+        required: false
+        default: false
+        type: boolean
+      default_skin_emulator_output_forwarding_ab:
+        description: Compare emulator output retained-only vs retained-and-forwarded from launch
+        required: false
+        default: false
+        type: boolean
+      default_skin_emulator_preboot_logcat_d4:
+        description: Compare continuous pre-boot Logcat observation with one post-window final dump
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -63,6 +88,8 @@ jobs:
           python3 .github/scripts/test_apk_lane.py
           python3 .github/scripts/test_extension_fixture.py
           python3 .github/scripts/test_identity_contract.py
+          python3 .github/scripts/test_inherited_application_updater_removal.py
+          python3 -B .github/scripts/test_default_skin_rendered_evidence.py
           python3 .github/scripts/test_chapter_migration_43.py
           # Uses synthetic local fixtures only; private historical backups never reach CI.
           python3 .github/scripts/test_verify_chapter_migration_43_backup.py
@@ -437,6 +464,601 @@ jobs:
       - name: Compile release
         run: ./gradlew assembleRelease -Penable-updater
 
+  default-skin-rendered:
+    name: Default Skin rendered validation
+    if: ${{ inputs.default_skin_rendered }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Preinstall and verify rendered-test emulator image
+        shell: bash
+        run: |
+          set -uo pipefail
+          results_dir='.github/results/default-skin-rendered'
+          mkdir -p "$results_dir"
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          package='system-images;android-35;google_apis;x86_64'
+          image_dir="$sdk_root/system-images/android-35/google_apis/x86_64"
+          sdkmanager=''
+          if [[ -n "$sdk_root" && -d "$sdk_root/cmdline-tools" ]]; then
+            sdkmanager="$(find "$sdk_root/cmdline-tools" -type f -name sdkmanager -print 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          if [[ -z "$sdk_root" || ! -x "$sdkmanager" ]]; then
+            printf 'RESULT=INFRASTRUCTURE_FAILURE\nREASON=SDKMANAGER_NOT_FOUND\n' > "$results_dir/run-info.txt"
+            echo '::error::Could not locate the Android SDK manager for the rendered-test emulator image'
+            exit 1
+          fi
+
+          package_operation_archives() {
+            if [[ -d "$sdk_root/temp" ]]; then
+              find "$sdk_root/temp" -maxdepth 1 -type f -name 'PackageOperation*.zip' -print | sort
+            fi
+          }
+
+          install_and_verify_image() {
+            attempt="$1"
+            log_file="$results_dir/sdkmanager-attempt-$attempt.log"
+            "$sdkmanager" --install "$package" > "$log_file" 2>&1
+            install_status=$?
+            if (( install_status != 0 )); then
+              cat "$log_file"
+              return "$install_status"
+            fi
+            if [[ ! -s "$image_dir/source.properties" || ! -s "$image_dir/system.img" ]]; then
+              echo 'SDK manager completed, but the emulator image is incomplete.'
+              cat "$log_file"
+              return 1
+            fi
+          }
+
+          archives_before="$(package_operation_archives)"
+          if ! install_and_verify_image 1; then
+            echo '::warning::First emulator-image install was incomplete; clearing its partial image and transient package-operation archives before one clean retry.'
+            rm -rf "$image_dir"
+            while IFS= read -r archive; do
+              [[ -z "$archive" ]] && continue
+              if ! grep -Fxq "$archive" <<< "$archives_before"; then
+                rm -f -- "$archive"
+              fi
+            done < <(package_operation_archives)
+            if ! install_and_verify_image 2; then
+              printf 'RESULT=INFRASTRUCTURE_FAILURE\nREASON=EMULATOR_IMAGE_INSTALL_FAILED_AFTER_ONE_RETRY\nPACKAGE=%s\n' \
+                "$package" > "$results_dir/run-info.txt"
+              echo '::error::Could not install and verify the rendered-test emulator image after one clean retry'
+              exit 1
+            fi
+          fi
+          printf 'SYSTEM_IMAGE=%s\nSOURCE_PROPERTIES=%s\n' \
+            "$package" "$image_dir/source.properties" > "$results_dir/emulator-image.txt"
+          echo 'Verified API 35 Google APIs x86_64 system image for the isolated rendered-test emulator.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run deterministic Default Skin instrumentation and collect evidence
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_default_skin_rendered_validation.sh
+
+      - name: Report rendered validation outcome
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f .github/results/default-skin-rendered/run-info.txt ]]; then
+            cat .github/results/default-skin-rendered/run-info.txt
+          else
+            echo '::warning::Rendered validation produced no runner status file; inspect emulator provisioning and startup output above.'
+          fi
+
+      - name: Upload rendered and measured evidence (not a golden approval)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: default-skin-rendered-${{ github.sha }}
+          path: .github/results/default-skin-rendered/**
+          if-no-files-found: warn
+          retention-days: 7
+
+  default-skin-emulator-pre-menu:
+    name: Default Skin emulator pre-MENU diagnostic
+    if: ${{ inputs.default_skin_emulator_pre_menu }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+
+      - name: Test pre-MENU diagnostic helpers
+        run: python3 -B .github/scripts/test_default_skin_emulator_pre_menu.py
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install emulator runtime library
+        shell: bash
+        run: |
+          set +e
+          results_dir='.github/results/default-skin-pre-menu/runtime-dependencies'
+          mkdir -p "$results_dir/config"
+          dpkg-query -W -f='${Status} ${Version}\n' libpulse0 \
+            > "$results_dir/config/libpulse-before.txt" 2>&1
+          before_status=$?
+          sudo apt-get update > "$results_dir/config/apt-update.log" 2>&1
+          update_status=$?
+          sudo apt-get install -y libpulse0 > "$results_dir/config/libpulse-install.log" 2>&1
+          install_status=$?
+          dpkg-query -W -f='${Status} ${Version}\n' libpulse0 \
+            > "$results_dir/config/libpulse-after.txt" 2>&1
+          after_status=$?
+          printf 'BEFORE_QUERY_EXIT=%s\nAPT_UPDATE_EXIT=%s\nINSTALL_EXIT=%s\nAFTER_QUERY_EXIT=%s\n' \
+            "$before_status" "$update_status" "$install_status" "$after_status" \
+            > "$results_dir/config/libpulse-status.txt"
+          if (( update_status != 0 || install_status != 0 || after_status != 0 )); then
+            echo '::error::Could not install or verify the emulator runtime library libpulse0'
+            exit 1
+          fi
+
+      - name: Observe fresh emulator before and after one MENU input
+        shell: bash
+        run: bash .github/scripts/probe_default_skin_emulator_pre_menu.sh
+
+      - name: Report pre-MENU diagnostic classification
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f .github/results/default-skin-pre-menu/run-info.txt ]]; then
+            cat .github/results/default-skin-pre-menu/run-info.txt
+          else
+            echo '::warning::The pre-MENU diagnostic produced no run-info file; inspect provisioning logs.'
+          fi
+
+      - name: Upload pre-MENU diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: default-skin-emulator-pre-menu-${{ github.sha }}
+          path: .github/results/default-skin-pre-menu/**
+          if-no-files-found: warn
+          retention-days: 7
+
+  default-skin-emulator-menu-ab:
+    name: Default Skin emulator MENU A/B (${{ matrix.arm }})
+    if: ${{ inputs.default_skin_emulator_menu_ab }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [control, treatment]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+
+      - name: Test emulator MENU A/B helpers
+        run: |
+          python3 -B .github/scripts/test_default_skin_emulator_pre_menu.py
+          python3 -B .github/scripts/test_default_skin_emulator_menu_ab.py
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install emulator runtime library
+        shell: bash
+        env:
+          MENU_AB_ARM: ${{ matrix.arm }}
+        run: |
+          set +e
+          results_dir=".github/results/default-skin-menu-ab/$MENU_AB_ARM/runtime-dependencies"
+          mkdir -p "$results_dir/config"
+          dpkg-query -W -f='${Status} ${Version}\n' libpulse0 \
+            > "$results_dir/config/libpulse-before.txt" 2>&1
+          before_status=$?
+          sudo apt-get update > "$results_dir/config/apt-update.log" 2>&1
+          update_status=$?
+          sudo apt-get install -y libpulse0 > "$results_dir/config/libpulse-install.log" 2>&1
+          install_status=$?
+          dpkg-query -W -f='${Status} ${Version}\n' libpulse0 \
+            > "$results_dir/config/libpulse-after.txt" 2>&1
+          after_status=$?
+          printf 'BEFORE_QUERY_EXIT=%s\nAPT_UPDATE_EXIT=%s\nINSTALL_EXIT=%s\nAFTER_QUERY_EXIT=%s\n' \
+            "$before_status" "$update_status" "$install_status" "$after_status" \
+            > "$results_dir/config/libpulse-status.txt"
+          if (( update_status != 0 || install_status != 0 || after_status != 0 )); then
+            echo '::error::Could not install or verify the emulator runtime library libpulse0'
+            exit 1
+          fi
+
+      - name: Observe fresh emulator in the selected A/B arm
+        shell: bash
+        env:
+          MENU_AB_ARM: ${{ matrix.arm }}
+        run: bash .github/scripts/probe_default_skin_emulator_pre_menu.sh --menu-ab-arm "$MENU_AB_ARM"
+
+      - name: Report A/B arm evidence
+        if: always()
+        shell: bash
+        env:
+          MENU_AB_ARM: ${{ matrix.arm }}
+        run: |
+          result=".github/results/default-skin-menu-ab/$MENU_AB_ARM/run-info.txt"
+          if [[ -f "$result" ]]; then
+            cat "$result"
+          else
+            echo '::warning::The emulator MENU A/B arm produced no run-info file; inspect provisioning output.'
+          fi
+
+      - name: Upload A/B arm evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: default-skin-emulator-menu-ab-${{ matrix.arm }}-${{ github.sha }}
+          path: .github/results/default-skin-menu-ab/${{ matrix.arm }}/**
+          if-no-files-found: warn
+          retention-days: 7
+
+  default-skin-emulator-menu-ab-compare:
+    name: Compare Default Skin emulator MENU A/B
+    if: ${{ always() && inputs.default_skin_emulator_menu_ab }}
+    needs: [default-skin-emulator-menu-ab]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download A/B arm artifacts without masking missing evidence
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          root='.github/results/default-skin-emulator-menu-ab-bundle'
+          mkdir -p "$root/control" "$root/treatment"
+          for arm in control treatment; do
+            artifact="default-skin-emulator-menu-ab-$arm-$GITHUB_SHA"
+            set +e
+            gh run download "$GITHUB_RUN_ID" --name "$artifact" --dir "$root/$arm" \
+              > "$root/$arm-download.log" 2>&1
+            status=$?
+            set -e
+            printf 'ARTIFACT=%s\nDOWNLOAD_EXIT=%s\n' "$artifact" "$status" \
+              > "$root/$arm-download-status.txt"
+          done
+
+      - name: Compare matched A/B evidence
+        shell: bash
+        run: |
+          python3 -B .github/scripts/compare_default_skin_emulator_menu_ab.py \
+            --control .github/results/default-skin-emulator-menu-ab-bundle/control/result.json \
+            --treatment .github/results/default-skin-emulator-menu-ab-bundle/treatment/result.json \
+            --output .github/results/default-skin-emulator-menu-ab-bundle
+
+      - name: Report A/B comparison
+        if: always()
+        shell: bash
+        run: |
+          report='.github/results/default-skin-emulator-menu-ab-bundle/run-info.txt'
+          if [[ -f "$report" ]]; then
+            cat "$report"
+          else
+            echo '::warning::A/B comparison produced no classification file.'
+          fi
+
+      - name: Upload combined A/B evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: default-skin-emulator-menu-ab-${{ github.sha }}
+          path: .github/results/default-skin-emulator-menu-ab-bundle/**
+          if-no-files-found: warn
+          retention-days: 7
+
+  default-skin-emulator-output-forwarding-ab:
+    name: Default Skin emulator output-forwarding A/B (${{ matrix.arm }})
+    if: ${{ inputs.default_skin_emulator_output_forwarding_ab }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [control, treatment]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+
+      - name: Test output-forwarding comparison helpers
+        run: |
+          python3 -B .github/scripts/test_default_skin_emulator_pre_menu.py
+          python3 -B .github/scripts/test_default_skin_emulator_output_forwarding_ab.py
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install emulator runtime library
+        shell: bash
+        env:
+          OUTPUT_FORWARDING_ARM: ${{ matrix.arm }}
+        run: |
+          set +e
+          results_dir=".github/results/default-skin-emulator-output-forwarding-ab/$OUTPUT_FORWARDING_ARM/runtime-dependencies"
+          mkdir -p "$results_dir/config"
+          dpkg-query -W -f='${Status} ${Version}\n' libpulse0 > "$results_dir/config/libpulse-before.txt" 2>&1
+          before_status=$?
+          sudo apt-get update > "$results_dir/config/apt-update.log" 2>&1
+          update_status=$?
+          sudo apt-get install -y libpulse0 > "$results_dir/config/libpulse-install.log" 2>&1
+          install_status=$?
+          dpkg-query -W -f='${Status} ${Version}\n' libpulse0 > "$results_dir/config/libpulse-after.txt" 2>&1
+          after_status=$?
+          printf 'BEFORE_QUERY_EXIT=%s\nAPT_UPDATE_EXIT=%s\nINSTALL_EXIT=%s\nAFTER_QUERY_EXIT=%s\n' \
+            "$before_status" "$update_status" "$install_status" "$after_status" \
+            > "$results_dir/config/libpulse-status.txt"
+          if (( update_status != 0 || install_status != 0 || after_status != 0 )); then
+            echo '::error::Could not install or verify emulator runtime library libpulse0'
+            exit 1
+          fi
+
+      - name: Observe emulator with the selected output sink
+        shell: bash
+        env:
+          OUTPUT_FORWARDING_ARM: ${{ matrix.arm }}
+        run: bash .github/scripts/probe_default_skin_emulator_pre_menu.sh --output-forwarding-ab-arm "$OUTPUT_FORWARDING_ARM"
+
+      - name: Report output-forwarding arm evidence
+        if: always()
+        shell: bash
+        env:
+          OUTPUT_FORWARDING_ARM: ${{ matrix.arm }}
+        run: |
+          report=".github/results/default-skin-emulator-output-forwarding-ab/$OUTPUT_FORWARDING_ARM/run-info.txt"
+          if [[ -f "$report" ]]; then cat "$report"; else echo '::warning::Output-forwarding arm produced no run-info file.'; fi
+
+      - name: Upload output-forwarding arm evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: default-skin-emulator-output-forwarding-${{ matrix.arm }}-${{ github.sha }}
+          path: .github/results/default-skin-emulator-output-forwarding-ab/${{ matrix.arm }}/**
+          if-no-files-found: warn
+          retention-days: 7
+
+  default-skin-emulator-output-forwarding-ab-compare:
+    name: Compare Default Skin emulator output-forwarding A/B
+    if: ${{ always() && inputs.default_skin_emulator_output_forwarding_ab }}
+    needs: [default-skin-emulator-output-forwarding-ab]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download arm evidence without masking missing artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          root='.github/results/default-skin-emulator-output-forwarding-ab-bundle'
+          mkdir -p "$root/control" "$root/treatment"
+          for arm in control treatment; do
+            artifact="default-skin-emulator-output-forwarding-$arm-$GITHUB_SHA"
+            set +e
+            gh run download "$GITHUB_RUN_ID" --name "$artifact" --dir "$root/$arm" \
+              > "$root/$arm-download.log" 2>&1
+            status=$?
+            set -e
+            printf 'ARTIFACT=%s\nDOWNLOAD_EXIT=%s\n' "$artifact" "$status" \
+              > "$root/$arm-download-status.txt"
+          done
+
+      - name: Compare matched output-forwarding evidence
+        shell: bash
+        run: |
+          python3 -B .github/scripts/compare_default_skin_emulator_output_forwarding_ab.py \
+            --control .github/results/default-skin-emulator-output-forwarding-ab-bundle/control/result.json \
+            --treatment .github/results/default-skin-emulator-output-forwarding-ab-bundle/treatment/result.json \
+            --output .github/results/default-skin-emulator-output-forwarding-ab-bundle
+
+      - name: Report output-forwarding comparison
+        if: always()
+        shell: bash
+        run: |
+          report='.github/results/default-skin-emulator-output-forwarding-ab-bundle/run-info.txt'
+          if [[ -f "$report" ]]; then cat "$report"; else echo '::warning::Output-forwarding comparison produced no classification file.'; fi
+
+      - name: Upload combined output-forwarding evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: default-skin-emulator-output-forwarding-${{ github.sha }}
+          path: .github/results/default-skin-emulator-output-forwarding-ab-bundle/**
+          if-no-files-found: warn
+          retention-days: 7
+
+  default-skin-emulator-preboot-logcat-d4:
+    name: Default Skin emulator pre-boot Logcat D4 (${{ matrix.arm }})
+    if: ${{ inputs.default_skin_emulator_preboot_logcat_d4 }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [control, treatment]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+
+      - name: Test pre-boot Logcat evidence helpers
+        run: |
+          python3 -B .github/scripts/test_default_skin_emulator_pre_menu.py
+          python3 -B .github/scripts/test_default_skin_emulator_preboot_logcat_d4.py
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install emulator runtime library
+        shell: bash
+        env:
+          D4_ARM: ${{ matrix.arm }}
+        run: |
+          set +e
+          results_dir=".github/results/default-skin-emulator-preboot-logcat-d4/$D4_ARM/runtime-dependencies"
+          mkdir -p "$results_dir/config"
+          dpkg-query -W -f='${Status} ${Version}\n' libpulse0 > "$results_dir/config/libpulse-before.txt" 2>&1
+          before_status=$?
+          sudo apt-get update > "$results_dir/config/apt-update.log" 2>&1
+          update_status=$?
+          sudo apt-get install -y libpulse0 > "$results_dir/config/libpulse-install.log" 2>&1
+          install_status=$?
+          dpkg-query -W -f='${Status} ${Version}\n' libpulse0 > "$results_dir/config/libpulse-after.txt" 2>&1
+          after_status=$?
+          printf 'BEFORE_QUERY_EXIT=%s\nAPT_UPDATE_EXIT=%s\nINSTALL_EXIT=%s\nAFTER_QUERY_EXIT=%s\n' \
+            "$before_status" "$update_status" "$install_status" "$after_status" \
+            > "$results_dir/config/libpulse-status.txt"
+          if (( update_status != 0 || install_status != 0 || after_status != 0 )); then
+            echo '::error::Could not install or verify emulator runtime library libpulse0'
+            exit 1
+          fi
+
+      - name: Observe the matched 15-second window with the selected Logcat policy
+        shell: bash
+        env:
+          D4_ARM: ${{ matrix.arm }}
+        run: bash .github/scripts/probe_default_skin_emulator_pre_menu.sh --preboot-logcat-d4-arm "$D4_ARM"
+
+      - name: Report pre-boot Logcat arm evidence
+        if: always()
+        shell: bash
+        env:
+          D4_ARM: ${{ matrix.arm }}
+        run: |
+          report=".github/results/default-skin-emulator-preboot-logcat-d4/$D4_ARM/run-info.txt"
+          if [[ -f "$report" ]]; then cat "$report"; else echo '::warning::D4 arm produced no run-info file.'; fi
+
+      - name: Upload pre-boot Logcat arm evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: default-skin-emulator-preboot-logcat-d4-${{ matrix.arm }}-${{ github.sha }}
+          path: .github/results/default-skin-emulator-preboot-logcat-d4/${{ matrix.arm }}/**
+          if-no-files-found: warn
+          retention-days: 7
+
+  default-skin-emulator-preboot-logcat-d4-compare:
+    name: Compare Default Skin emulator pre-boot Logcat D4
+    if: ${{ always() && inputs.default_skin_emulator_preboot_logcat_d4 }}
+    needs: [default-skin-emulator-preboot-logcat-d4]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download arm evidence without masking missing artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          root='.github/results/default-skin-emulator-preboot-logcat-d4-bundle'
+          mkdir -p "$root/control" "$root/treatment"
+          for arm in control treatment; do
+            artifact="default-skin-emulator-preboot-logcat-d4-$arm-$GITHUB_SHA"
+            set +e
+            gh run download "$GITHUB_RUN_ID" --name "$artifact" --dir "$root/$arm" \
+              > "$root/$arm-download.log" 2>&1
+            status=$?
+            set -e
+            printf 'ARTIFACT=%s\nDOWNLOAD_EXIT=%s\n' "$artifact" "$status" \
+              > "$root/$arm-download-status.txt"
+          done
+
+      - name: Compare matched pre-boot Logcat evidence
+        shell: bash
+        run: |
+          python3 -B .github/scripts/compare_default_skin_emulator_preboot_logcat_d4.py \
+            --control .github/results/default-skin-emulator-preboot-logcat-d4-bundle/control/result.json \
+            --treatment .github/results/default-skin-emulator-preboot-logcat-d4-bundle/treatment/result.json \
+            --output .github/results/default-skin-emulator-preboot-logcat-d4-bundle
+
+      - name: Report D4 comparison
+        if: always()
+        shell: bash
+        run: |
+          report='.github/results/default-skin-emulator-preboot-logcat-d4-bundle/run-info.txt'
+          if [[ -f "$report" ]]; then cat "$report"; else echo '::warning::D4 comparison produced no classification file.'; fi
+
+      - name: Upload combined D4 evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: default-skin-emulator-preboot-logcat-d4-${{ github.sha }}
+          path: .github/results/default-skin-emulator-preboot-logcat-d4-bundle/**
+          if-no-files-found: warn
+          retention-days: 7
+
   gate:
     name: CI Gate
     if: always()
@@ -449,6 +1071,7 @@ jobs:
       - supabase
       - native-package
       - release
+      - default-skin-rendered
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -463,6 +1086,7 @@ jobs:
           SUPABASE: ${{ needs.supabase.result }}
           NATIVE: ${{ needs.native-package.result }}
           RELEASE: ${{ needs.release.result }}
+          DEFAULT_SKIN_RENDERED: ${{ needs.default-skin-rendered.result }}
         run: |
           failed=0
 
@@ -488,5 +1112,6 @@ jobs:
           check_result "Supabase Backend" "$SUPABASE"
           check_result "Native Package Gate" "$NATIVE"
           check_result "Release Compile" "$RELEASE"
+          check_result "Default Skin rendered validation" "$DEFAULT_SKIN_RENDERED"
 
           exit "$failed"

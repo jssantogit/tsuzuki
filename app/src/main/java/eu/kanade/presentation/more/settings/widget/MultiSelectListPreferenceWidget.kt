@@ -1,19 +1,21 @@
 package eu.kanade.presentation.more.settings.widget
 
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSecondaryButton
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.LabeledCheckbox
+import tachiyomi.presentation.core.components.ScrollbarLazyColumn
 import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
@@ -40,47 +42,49 @@ fun <T> MultiSelectListPreferenceWidget(
                 .filter { values.contains(it) }
                 .toMutableStateList()
         }
-        AlertDialog(
+        val state = rememberLazyListState()
+        PreferenceControlSheet(
+            title = title,
             onDismissRequest = { isDialogShown = false },
-            title = { Text(text = title) },
-            text = {
-                LazyColumn {
-                    entries.forEach { current ->
-                        item {
-                            val isSelected = selected.contains(current.key)
-                            LabeledCheckbox(
-                                label = current.value,
-                                checked = isSelected,
-                                onCheckedChange = {
-                                    if (it) {
-                                        selected.add(current.key)
-                                    } else {
-                                        selected.remove(current.key)
-                                    }
-                                },
-                            )
-                        }
-                    }
-                }
-            },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = true,
-            ),
-            confirmButton = {
-                TextButton(
+            actions = {
+                DefaultSkinSecondaryButton(
+                    text = stringResource(MR.strings.action_cancel),
+                    onClick = { isDialogShown = false },
+                )
+                DefaultSkinPrimaryButton(
+                    text = stringResource(MR.strings.action_ok),
                     onClick = {
                         onValuesChange(selected.toMutableSet())
                         isDialogShown = false
                     },
-                ) {
-                    Text(text = stringResource(MR.strings.action_ok))
-                }
+                )
             },
-            dismissButton = {
-                TextButton(onClick = { isDialogShown = false }) {
-                    Text(text = stringResource(MR.strings.action_cancel))
+        ) {
+            ScrollbarLazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height((entries.size * 72).coerceIn(56, 420).dp),
+                state = state,
+            ) {
+                entries.entries.forEachIndexed { index, current ->
+                    item {
+                        val isSelected = selected.contains(current.key)
+                        PreferenceOptionRow(
+                            label = current.value,
+                            selected = isSelected,
+                            toggleable = true,
+                            showDivider = index < entries.size - 1,
+                            onSelectionChange = { selectedValue ->
+                                if (selectedValue) {
+                                    selected.add(current.key)
+                                } else {
+                                    selected.remove(current.key)
+                                }
+                            },
+                        )
+                    }
                 }
-            },
-        )
+            }
+        }
     }
 }

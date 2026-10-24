@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tsuzuki_providers_permission_browser">Browser</string>
+    <string name="tsuzuki_providers_permission_storage">Storage</string>
+    <string name="tsuzuki_providers_permission_secrets">Secrets</string>
+    <string name="tsuzuki_providers_permission_local_network">Local network</string>
+    <string name="tsuzuki_providers_setting_required">Required</string>
+</resources>

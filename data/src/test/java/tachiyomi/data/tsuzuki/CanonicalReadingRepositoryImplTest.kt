@@ -8,8 +8,12 @@ import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.buildJsonObject
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -97,6 +101,86 @@ class CanonicalReadingRepositoryImplTest {
 
         repository.getProgress("chapter-1") shouldBe completed
         repository.getProgressByCanonicalTitleId("title-1") shouldContainExactly listOf(completed)
+    }
+
+    @Test
+    fun `read chapter count includes only read canonical progress and ignores page checkpoints`() = runBlocking<Unit> {
+        repository.observeReadChapterCount().first() shouldBe 0L
+
+        repository.upsertProgress(
+            CanonicalChapterProgress(
+                canonicalChapterId = "chapter-1",
+                read = false,
+                lastPageRead = 7L,
+                updatedAt = 100L,
+            ),
+        )
+        repository.observeReadChapterCount().first() shouldBe 0L
+
+        repository.upsertProgress(
+            CanonicalChapterProgress(
+                canonicalChapterId = "chapter-1",
+                read = true,
+                lastPageRead = 7L,
+                updatedAt = 200L,
+            ),
+        )
+        repository.observeReadChapterCount().first() shouldBe 1L
+
+        // Re-upserting the same canonical chapter and changing page progress must not add another read.
+        repository.upsertProgress(
+            CanonicalChapterProgress(
+                canonicalChapterId = "chapter-1",
+                read = true,
+                lastPageRead = 42L,
+                updatedAt = 300L,
+            ),
+        )
+        repository.observeReadChapterCount().first() shouldBe 1L
+
+        repository.upsertProgress(
+            CanonicalChapterProgress(
+                canonicalChapterId = "chapter-2",
+                read = true,
+                lastPageRead = 0L,
+                updatedAt = 400L,
+            ),
+        )
+        repository.observeReadChapterCount().first() shouldBe 2L
+    }
+
+    @Test
+    fun `read chapter count flow emits persisted changes`() = runBlocking<Unit> {
+        val emissions = Channel<Long>(Channel.UNLIMITED)
+        val collector = launch {
+            repository.observeReadChapterCount().collect(emissions::send)
+        }
+
+        try {
+            withTimeout(5_000L) { emissions.receive() } shouldBe 0L
+            repository.upsertProgress(
+                CanonicalChapterProgress(
+                    canonicalChapterId = "chapter-1",
+                    read = false,
+                    lastPageRead = 3L,
+                    updatedAt = 100L,
+                ),
+            )
+            withTimeout(5_000L) { emissions.receive() } shouldBe 0L
+
+            repository.upsertProgress(
+                CanonicalChapterProgress(
+                    canonicalChapterId = "chapter-1",
+                    read = true,
+                    lastPageRead = 3L,
+                    updatedAt = 200L,
+                ),
+            )
+            withTimeout(5_000L) { emissions.receive() } shouldBe 1L
+        } finally {
+            collector.cancel()
+            emissions.close()
+        }
     }
 
     @Test
