@@ -76,7 +76,7 @@ class ProviderTorrentAcquisitionAcceptanceTest {
         try {
             assertTrue(
                 "genuine Host-parsed torrent metadata should be reusable",
-                cache.offer(PROVIDER_ID.value, candidate, fixture.metadataBytes),
+                cache.offer("org.example.torrent.search.acceptance", candidate, fixture.metadataBytes),
             )
             ProviderTorrentAcceptanceFixtures.startLoopbackSeeder(seeder, fixture, seedPort)
             val engine = JlibtorrentProviderP2pDownloadEngine(
@@ -102,7 +102,7 @@ class ProviderTorrentAcquisitionAcceptanceTest {
                 selectedFileSizeBytes = selected.sizeBytes,
             )
             assertTrue(
-                cache.find("wrong.provider", request) == null,
+                cache.find(PROVIDER_ID.value, request)?.contentEquals(fixture.metadataBytes) == true,
             )
             val service = jobs.service(PROVIDER_ID.value)
             assertTrue(service.acquire(request) is ProviderP2pAcquireResponse.Pending)

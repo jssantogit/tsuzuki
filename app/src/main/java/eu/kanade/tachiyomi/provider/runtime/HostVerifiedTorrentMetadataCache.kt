@@ -34,11 +34,12 @@ class HostVerifiedTorrentMetadataCache internal constructor(
         require(ttlMillis in 1..5 * 60_000L)
     }
 
-    private data class Key(val providerId: String, val url: String, val infoHash: String)
+    private data class Key(val url: String, val infoHash: String)
     private data class Entry(
         val bytes: ByteArray,
         val description: VerifiedTorrentDescription,
         val createdAtMillis: Long,
+        val sourceProviderId: String,
     )
 
     private val entries = LinkedHashMap<Key, Entry>()
@@ -63,9 +64,9 @@ class HostVerifiedTorrentMetadataCache internal constructor(
 
         val now = clock()
         prune(now)
-        val key = Key(providerId, url, hash)
+        val key = Key(url, hash)
         entries.remove(key)
-        entries[key] = Entry(bytes.copyOf(), description, now)
+        entries[key] = Entry(bytes.copyOf(), description, now, providerId)
         while (entries.size > maxEntries) {
             entries.remove(entries.keys.first())
         }
@@ -74,11 +75,15 @@ class HostVerifiedTorrentMetadataCache internal constructor(
 
     /**
      * Executed only after Host consent/Provider policy routes to an authenticated P2P
-     * service. Revalidates the selected file and torrent identity before handing a
+     * service. The original discovery Provider can differ from the acquisition Provider;
+     * source provenance stays Host-private, while the cross-Provider reuse key is the
+     * exact cryptographically pinned torrent URL + v1 info hash, not an asserted JS ID.
+     * Revalidates the selected file and torrent identity before handing a
      * defensive copy to the privileged engine, which rechecks native identity/path.
      */
     @Synchronized
-    fun find(providerId: String, request: ProviderP2pAcquireRequest): ByteArray? {
+    fun find(acquisitionProviderId: String, request: ProviderP2pAcquireRequest): ByteArray? {
+        if (acquisitionProviderId.isBlank()) return null
         val hash = request.infoHash?.takeIf { V1_HASH.matches(it) }?.lowercase() ?: return null
         val url = request.torrentUrl ?: return null
         val size = request.selectedFileSizeBytes ?: return null
@@ -88,7 +93,7 @@ class HostVerifiedTorrentMetadataCache internal constructor(
         }
         val now = clock()
         prune(now)
-        val item = entries[Key(providerId, url, hash)] ?: return null
+        val item = entries[Key(url, hash)] ?: return null
         if (
             item.description.files.none {
                 it.index == request.selectedFileIndex &&

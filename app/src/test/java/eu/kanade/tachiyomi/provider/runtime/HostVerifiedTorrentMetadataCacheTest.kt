@@ -54,7 +54,7 @@ class HostVerifiedTorrentMetadataCacheTest {
     )
 
     @Test
-    fun `accepted Host bytes can only be reused by their provider and exact selection`() {
+    fun `Host authenticated acquisition can reuse source bytes only by exact torrent and selection`() {
         val cache = store()
         val source = byteArrayOf(1, 2, 3)
         cache.offer("app.tsuzuki.alpha", candidate(), source) shouldBe true
@@ -64,7 +64,8 @@ class HostVerifiedTorrentMetadataCacheTest {
         first?.toList() shouldBe listOf<Byte>(1, 2, 3)
         first!![0] = 8
         cache.find("app.tsuzuki.alpha", request())?.toList() shouldBe listOf<Byte>(1, 2, 3)
-        cache.find("app.tsuzuki.beta", request()) shouldBe null
+        // Acquisition Providers need not be the same as the authorized source Provider.
+        cache.find("app.tsuzuki.beta", request())?.toList() shouldBe listOf<Byte>(1, 2, 3)
         cache.find("app.tsuzuki.alpha", request(filePath = "Other.cbz")) shouldBe null
         cache.find("app.tsuzuki.alpha", request(fileSize = 4)) shouldBe null
     }

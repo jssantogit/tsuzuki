@@ -65,7 +65,8 @@ class HttpProviderTorrentMetadataInspectorTest {
                 selectedFileSizeBytes = 12L,
             )
             verified.find("app.tsuzuki.nyaa", request)?.toList() shouldBe listOf<Byte>(1, 2, 3)
-            verified.find("app.tsuzuki.other", request) shouldBe null
+            // Trusted Host source metadata is usable by a separately authorized P2P Provider.
+            verified.find("app.tsuzuki.p2p", request)?.toList() shouldBe listOf<Byte>(1, 2, 3)
             server.requestCount shouldBe 1
         } finally {
             server.close()
