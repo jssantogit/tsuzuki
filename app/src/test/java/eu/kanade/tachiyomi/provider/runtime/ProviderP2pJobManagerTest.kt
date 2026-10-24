@@ -14,10 +14,10 @@ import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireResponse
 import tachiyomi.core.provider.runtime.ProviderP2pFailureCode
 import tachiyomi.domain.tsuzuki.provider.ProviderId
-import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
-import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateFile
 import tachiyomi.domain.tsuzuki.provider.ProviderManagedFileFormat
 import tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceRef
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateFile
 import java.io.ByteArrayOutputStream
 import java.nio.file.Path
 import java.util.zip.ZipEntry
