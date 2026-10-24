@@ -19,6 +19,16 @@ class MihonContentBindingPayloadCodecTest {
     }
 
     @Test
+    fun `zero manga ID cannot become an operational binding`() {
+        val unmaterialized = MihonContentBindingPayloadCodec.encode(
+            MihonContentBindingPayload(42L, 0L, "/title/blue-lock", "pt-BR"),
+        )
+        shouldThrow<IllegalArgumentException> {
+            MihonContentBindingPayloadCodec.decodeOperational(unmaterialized)
+        }
+    }
+
+    @Test
     fun `materialized local binding remains eligible for chapter access`() {
         val live = MihonContentBindingPayloadCodec.encode(
             MihonContentBindingPayload(42L, 901L, "/title/blue-lock", "pt-BR"),
