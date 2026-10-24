@@ -11,6 +11,7 @@ data class InventoryReleaseRecord(
     val volumeLabel: String?,
     val language: String?,
     val upstreamSourceId: String?,
+    val externalWorkId: String,
 )
 
 object MangaUpdatesReleaseEvidenceAdapter {
@@ -48,6 +49,9 @@ private fun releaseBatch(
 ): InventoryEvidenceBatch {
     require(scope.workIdentityVerified) { "Release observations require a verified exact work ID" }
     require(releases.all { it.releaseId.isNotBlank() })
+    require(releases.all { it.externalWorkId == scope.externalWorkId }) {
+        "Source page contains a release for a different work"
+    }
     val stableReleases = releases.distinctBy(InventoryReleaseRecord::releaseId)
     require(stableReleases.size == releases.size || releases.groupBy { it.releaseId }.values.all { group ->
         group.distinct().size == 1

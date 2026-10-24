@@ -1,0 +1,44 @@
+-- Local-only metadata claims. These rows are never chapter identities or v1 sync entries.
+CREATE TABLE tsuzuki_independent_inventory_claims(
+    canonical_title_id TEXT NOT NULL,
+    producer_id TEXT NOT NULL,
+    external_work_id TEXT NOT NULL,
+    edition_key TEXT NOT NULL,
+    source_record_id TEXT NOT NULL,
+    raw_label TEXT,
+    raw_volume TEXT,
+    language TEXT,
+    claim_kind TEXT NOT NULL,
+    derivation TEXT NOT NULL,
+    upstream_source_id TEXT,
+    work_verified INTEGER NOT NULL,
+    edition_verified INTEGER NOT NULL,
+    observed_at INTEGER NOT NULL,
+    PRIMARY KEY(canonical_title_id, producer_id, external_work_id, edition_key, source_record_id),
+    FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
+);
+
+CREATE INDEX tsuzuki_inventory_claims_title_index
+ON tsuzuki_independent_inventory_claims(canonical_title_id);
+
+-- Technical per-page fetch status; EXHAUSTED does not mean editorial completeness.
+CREATE TABLE tsuzuki_independent_inventory_pages(
+    canonical_title_id TEXT NOT NULL,
+    producer_id TEXT NOT NULL,
+    external_work_id TEXT NOT NULL,
+    edition_key TEXT NOT NULL,
+    page_key TEXT NOT NULL,
+    language TEXT,
+    work_verified INTEGER NOT NULL,
+    edition_verified INTEGER NOT NULL,
+    observed_at INTEGER NOT NULL,
+    outcome TEXT NOT NULL,
+    item_count INTEGER NOT NULL,
+    declared_total INTEGER,
+    next_cursor TEXT,
+    PRIMARY KEY(canonical_title_id, producer_id, external_work_id, edition_key, page_key),
+    FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
+);
+
+CREATE INDEX tsuzuki_inventory_pages_title_index
+ON tsuzuki_independent_inventory_pages(canonical_title_id);

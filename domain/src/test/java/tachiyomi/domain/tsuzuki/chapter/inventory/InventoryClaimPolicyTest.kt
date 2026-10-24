@@ -28,9 +28,9 @@ class InventoryClaimPolicyTest {
             pageKey = "p1",
             observedAt = 100L,
             releases = listOf(
-                InventoryReleaseRecord("range", "246-251", "12", null, "mu"),
-                InventoryReleaseRecord("first", "1", null, null, "mu"),
-                InventoryReleaseRecord("reupload", "1v2", null, null, "mu"),
+                InventoryReleaseRecord("range", "246-251", "12", null, "mu", "work-id"),
+                InventoryReleaseRecord("first", "1", null, null, "mu", "work-id"),
+                InventoryReleaseRecord("reupload", "1v2", null, null, "mu", "work-id"),
             ),
             hasNextPage = false,
         )
@@ -51,9 +51,9 @@ class InventoryClaimPolicyTest {
             "offset:0",
             200L,
             listOf(
-                InventoryReleaseRecord("one", "0.01", "1", "pt-br", "md"),
-                InventoryReleaseRecord("two", "0.1", "1", "en", "md"),
-                InventoryReleaseRecord("three", null, null, "en", "md"),
+                InventoryReleaseRecord("one", "0.01", "1", "pt-br", "md", "work-id"),
+                InventoryReleaseRecord("two", "0.1", "1", "en", "md", "work-id"),
+                InventoryReleaseRecord("three", null, null, "en", "md", "work-id"),
             ),
             hasNextPage = true,
         )
@@ -99,8 +99,8 @@ class InventoryClaimPolicyTest {
             .copy(language = "en")
         InventoryClaimPolicy.mayPromote(scope, wrongLanguage) shouldBe false
         val duplicates = listOf(
-            InventoryReleaseRecord("same", "12", null, "pt-br", "md"),
-            InventoryReleaseRecord("same", "12", null, "pt-br", "md"),
+            InventoryReleaseRecord("same", "12", null, "pt-br", "md", "work-id"),
+            InventoryReleaseRecord("same", "12", null, "pt-br", "md", "work-id"),
         )
         MangaDexReleaseEvidenceAdapter.adapt(scope, "p", 1L, duplicates, true).claims.size shouldBe 1
         shouldThrow<IllegalArgumentException> {
@@ -108,7 +108,7 @@ class InventoryClaimPolicyTest {
                 scope,
                 "p",
                 1L,
-                duplicates + InventoryReleaseRecord("same", "13", null, "pt-br", "md"),
+                duplicates + InventoryReleaseRecord("same", "13", null, "pt-br", "md", "work-id"),
                 true,
             )
         }
@@ -123,6 +123,20 @@ class InventoryClaimPolicyTest {
             failed.copy(claims = listOf(claim("2", InventoryClaimKind.INDIVIDUAL, InventoryDerivation.RELEASE_RECORD)))
         }
         summarizeInventory(emptyList()).editorialCompletenessConfirmed shouldBe false
+    }
+
+    @Test
+    fun `wrong external work id on a successful page is rejected before persistence`() {
+        val scope = verifiedScope("mangadex")
+        shouldThrow<IllegalArgumentException> {
+            MangaDexReleaseEvidenceAdapter.adapt(
+                scope,
+                "p1",
+                10L,
+                listOf(InventoryReleaseRecord("bad", "1", null, "en", "md", "other-work")),
+                true,
+            )
+        }
     }
 
     private fun verifiedScope(producer: String = "editorial") = InventoryScope(
