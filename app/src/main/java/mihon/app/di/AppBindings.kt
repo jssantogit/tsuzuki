@@ -19,10 +19,10 @@ import eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGateway
 import eu.kanade.tachiyomi.provider.reading.StoredProviderScriptPackageSource
 import eu.kanade.tachiyomi.provider.repository.AndroidProviderRepositoryTransport
 import eu.kanade.tachiyomi.provider.repository.InstalledScriptProviderRegistry
+import eu.kanade.tachiyomi.provider.runtime.HostVerifiedTorrentMetadataCache
 import eu.kanade.tachiyomi.provider.runtime.IsolatedProviderPackageContractValidator
 import eu.kanade.tachiyomi.provider.runtime.JlibtorrentNativeSupport
 import eu.kanade.tachiyomi.provider.runtime.JlibtorrentProviderP2pDownloadEngine
-import eu.kanade.tachiyomi.provider.runtime.HostVerifiedTorrentMetadataCache
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import eu.kanade.tachiyomi.provider.runtime.ProviderP2pJobManager

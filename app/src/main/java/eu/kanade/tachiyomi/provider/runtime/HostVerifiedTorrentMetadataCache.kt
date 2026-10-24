@@ -21,7 +21,7 @@ internal data class VerifiedTorrentFile(
  * inspection and the post-consent native P2P worker. Never exported to JS or IPC.
  * A cache miss preserves the original magnet resolver. No disk persistence.
  */
-internal class HostVerifiedTorrentMetadataCache(
+class HostVerifiedTorrentMetadataCache internal constructor(
     private val clock: () -> Long = System::currentTimeMillis,
     private val maxMetadataBytes: Int = 4 * 1024 * 1024,
     private val maxEntries: Int = 8,
@@ -57,7 +57,9 @@ internal class HostVerifiedTorrentMetadataCache(
                     it.index == file.index && it.path == file.path && it.sizeBytes == file.sizeBytes
                 }
             }
-        ) return false
+        ) {
+            return false
+        }
 
         val now = clock()
         prune(now)
@@ -93,7 +95,9 @@ internal class HostVerifiedTorrentMetadataCache(
                     it.path == request.selectedFilePath &&
                     it.sizeBytes == size
             }
-        ) return null
+        ) {
+            return null
+        }
         return item.bytes.copyOf()
     }
 
