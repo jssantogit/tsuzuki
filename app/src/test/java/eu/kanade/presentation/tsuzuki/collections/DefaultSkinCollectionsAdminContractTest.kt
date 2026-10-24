@@ -114,7 +114,8 @@ class DefaultSkinCollectionsAdminContractTest {
 
         source shouldContain "CollectionsAdminRootPage("
         source shouldContain "tsuzuki_collections_admin_title"
-        source shouldNotContain "DefaultSkinSectionLabel(text = stringResource(MR.strings.tsuzuki_collections_overview))"
+        source shouldNotContain
+            "DefaultSkinSectionLabel(text = stringResource(MR.strings.tsuzuki_collections_overview))"
         source shouldContain "DefaultSkinPrimaryButton("
         source shouldContain "CollectionsAdminSurface("
         source shouldContain "CollectionCardAction.OPEN"
