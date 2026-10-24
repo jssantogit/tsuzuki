@@ -54,7 +54,7 @@ import java.io.File
 class ProviderTorrentAcquisitionAcceptanceTest {
 
     @Test
-    fun HostVerifiedMetadata_skipsMagnetResolutionAndReadsOnlySelectedChapter() = runBlocking {
+    fun hostVerifiedMetadata_skipsMagnetResolutionAndReadsOnlySelectedChapter() = runBlocking {
         assertTrue("native libtorrent failed to load", LibTorrent.version().isNotBlank())
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val root = File(context.cacheDir, "provider-torrent-host-verified-acceptance").apply {
