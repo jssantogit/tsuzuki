@@ -114,6 +114,23 @@ class DefaultSkinF6HContractTest {
         sheet shouldContain "DefaultSkinShape.Pill"
     }
 
+    @Test
+    fun `detail tabs and failure state resolve Default Skin tokens`() {
+        val detail = source("presentation/tsuzuki/detail/CanonicalTitleDetailScreen.kt")
+        val modes = detail.substringAfter("private fun DetailsModes(")
+            .substringBefore("private fun DetailsToolbar(")
+        modes shouldContain "val colors = defaultSkinColors()"
+        modes shouldContain "colors.foreground"
+        modes shouldContain "colors.secondary"
+        modes shouldContain "colors.outline"
+        modes shouldNotContain "MaterialTheme.colorScheme"
+        val states = detail.substringAfter("fun CanonicalTitleDetailScreen(")
+            .substringBefore("private fun LoadedDetails(")
+        states shouldContain "DefaultSkinTextAction("
+        states shouldContain "color = colors.accent"
+        states shouldNotContain "TextButton("
+    }
+
     private fun source(relative: String): String = Files.readString(
         listOf(
             Path.of("src/main/java/eu/kanade/$relative"),
