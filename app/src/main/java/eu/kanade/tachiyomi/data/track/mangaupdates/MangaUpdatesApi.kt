@@ -440,7 +440,9 @@ class MangaUpdatesApi(
         }
     }
 
-    override suspend fun getAuthenticatedOwner(): String = getCurrentUser().username
+    override suspend fun getAuthenticatedOwner(): String =
+        getCurrentUser().userId?.takeIf { it > 0L }?.toString()
+            ?: error("MangaUpdates account profile did not provide a verified user ID")
 
     suspend fun getCurrentUser(): MUCurrentUser {
         return with(json) {
