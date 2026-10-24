@@ -103,6 +103,7 @@ begin
                          and case
                              when jsonb_typeof(f.value) = 'number'
                              then (f.value #>> '{}')::numeric < 0
+                               or (f.value #>> '{}')::numeric > 9223372036854775807
                                or (f.value #>> '{}')::numeric <>
                                   trunc((f.value #>> '{}')::numeric)
                              else true
