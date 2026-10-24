@@ -41,7 +41,7 @@ class GetIndependentInventorySnapshotTest {
     }
 
     @Test
-    fun `release-only pages and failed refresh cannot assert editorial identities or erase old observations`() = runTest {
+    fun `releases and failed refresh do not create editorial identities`() = runTest {
         val ledger = FakeLedger()
         val scope = scope("mangadex", null, false)
         ledger.saveBatch(
@@ -51,7 +51,13 @@ class GetIndependentInventorySnapshotTest {
                 10L,
                 InventoryFetchOutcome.PARTIAL,
                 listOf(
-                    claim("release-a", "246-251", InventoryDerivation.RELEASE_RECORD, 10L, InventoryClaimKind.RELEASE_RANGE),
+                    claim(
+                        "release-a",
+                        "246-251",
+                        InventoryDerivation.RELEASE_RECORD,
+                        10L,
+                        InventoryClaimKind.RELEASE_RANGE,
+                    ),
                     claim("release-b", "12.05", InventoryDerivation.RELEASE_RECORD, 10L),
                 ),
                 declaredTotal = 1000,
@@ -74,8 +80,24 @@ class GetIndependentInventorySnapshotTest {
         val ledger = FakeLedger()
         val first = scope("editorial", "original")
         val second = scope("editorial", "colored")
-        ledger.saveBatch(batch(first, "one", 10L, InventoryFetchOutcome.EXHAUSTED, listOf(claim("unit", "0.01", InventoryDerivation.PRIMARY_EDITORIAL, 10L))))
-        ledger.saveBatch(batch(second, "one", 11L, InventoryFetchOutcome.EXHAUSTED, listOf(claim("unit", "0.1", InventoryDerivation.PRIMARY_EDITORIAL, 11L))))
+        ledger.saveBatch(
+            batch(
+                first,
+                "one",
+                10L,
+                InventoryFetchOutcome.EXHAUSTED,
+                listOf(claim("unit", "0.01", InventoryDerivation.PRIMARY_EDITORIAL, 10L)),
+            ),
+        )
+        ledger.saveBatch(
+            batch(
+                second,
+                "one",
+                11L,
+                InventoryFetchOutcome.EXHAUSTED,
+                listOf(claim("unit", "0.1", InventoryDerivation.PRIMARY_EDITORIAL, 11L)),
+            ),
+        )
 
         val result = GetIndependentInventorySnapshot(ledger).execute("title")
 
