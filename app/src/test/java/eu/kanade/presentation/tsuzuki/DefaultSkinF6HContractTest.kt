@@ -131,6 +131,17 @@ class DefaultSkinF6HContractTest {
         states shouldNotContain "TextButton("
     }
 
+    @Test
+    fun `editorial facts follow Default Skin foreground and secondary roles`() {
+        val hero = source("presentation/tsuzuki/detail/CanonicalDetailsHero.kt")
+        val editorial = hero.substringAfter("internal fun DetailsEditorial(")
+            .substringBefore("private fun editorialFormatLabel(")
+        editorial shouldContain "val colors = defaultSkinColors()"
+        editorial shouldContain "colors.secondary"
+        editorial shouldContain "colors.foreground"
+        editorial shouldNotContain "MaterialTheme.colorScheme"
+    }
+
     private fun source(relative: String): String = Files.readString(
         listOf(
             Path.of("src/main/java/eu/kanade/$relative"),
