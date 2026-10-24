@@ -151,10 +151,13 @@ class GetCanonicalReadingStartTest {
             inventory,
             FakeCanonicalReadingRepository(listOf(progress("fraction", read = false, updatedAt = 100))),
         ).execute("title-1") shouldBe CanonicalReadingStart.Ready("fraction")
+        // When all chapters are read, the last chapter follows canonical type
+        // ordering. Specials follow numbered regular chapters even if the source
+        // returned them earlier than a high-numbered regular chapter.
         GetCanonicalReadingStart(
             inventory,
             FakeCanonicalReadingRepository(realChapters.map { progress(it.id, read = true, updatedAt = 100) }),
-        ).execute("title-1") shouldBe CanonicalReadingStart.Ready("gap")
+        ).execute("title-1") shouldBe CanonicalReadingStart.Ready("special")
     }
 
     private fun chapter(id: String, number: Int) = CanonicalChapter(
