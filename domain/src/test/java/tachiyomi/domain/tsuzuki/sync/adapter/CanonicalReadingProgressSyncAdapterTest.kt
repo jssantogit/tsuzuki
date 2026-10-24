@@ -342,12 +342,13 @@ class CanonicalReadingProgressSyncAdapterTest {
                     upsertProgress(CanonicalChapterProgress(second.id, lastPageRead = 4, updatedAt = 2))
                 }
                 val document = adapter(chapters, source, exactVersion2Enabled = version2).exportDocument()
-                val invalidRecord = document.records.values.first { it.fields["chapterKey"]?.toString()?.contains("13") == true }
-                val records = document.records + (
-                    invalidRecord.id to invalidRecord.copy(
-                        fields = JsonObject(invalidRecord.fields + ("lastPageRead" to negativeValue)),
-                    )
+                val invalidRecord = document.records.values.first { record ->
+                    record.fields["chapterKey"]?.toString()?.contains("13") == true
+                }
+                val corrupted = invalidRecord.copy(
+                    fields = JsonObject(invalidRecord.fields + ("lastPageRead" to negativeValue)),
                 )
+                val records = document.records + (invalidRecord.id to corrupted)
                 val target = FakeReadingRepository().apply {
                     upsertProgress(CanonicalChapterProgress(first.id, lastPageRead = 10, updatedAt = 100))
                 }
