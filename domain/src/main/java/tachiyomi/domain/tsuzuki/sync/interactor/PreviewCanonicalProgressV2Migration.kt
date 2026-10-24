@@ -64,11 +64,7 @@ class PreviewCanonicalProgressV2Migration {
             val variantKey = record.fields["lastVariantEvidenceKey"]
             val malformedVariantKey = variantKey != null &&
                 variantKey != JsonNull &&
-                (
-                    variantKey !is JsonPrimitive ||
-                        !variantKey.isString ||
-                        variantKey.content.isBlank()
-                    )
+                (variantKey !is JsonPrimitive || !variantKey.isString || variantKey.content.isBlank())
 
             if (
                 record.isTombstone ||
