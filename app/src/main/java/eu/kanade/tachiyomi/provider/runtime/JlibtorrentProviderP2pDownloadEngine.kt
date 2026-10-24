@@ -749,8 +749,6 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             settings.setEnableLsd(false)
             SessionParams(settings)
         }
-
-
     }
 }
 
