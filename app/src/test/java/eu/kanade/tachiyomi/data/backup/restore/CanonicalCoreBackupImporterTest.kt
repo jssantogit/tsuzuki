@@ -926,7 +926,7 @@ class CanonicalCoreBackupImporterTest {
         val unsafe = BackupCoreContentBinding(
             id = "content-1",
             canonicalTitleId = "title-1",
-            addonId = "addon",
+            addonId = "eu.kanade.tachiyomi.extension.pt.example",
             providerTitleKey = "42:https://example.com/book?token=secret",
             sourceId = 42L,
             sourceUrl = "https://example.com/book?token=secret",
