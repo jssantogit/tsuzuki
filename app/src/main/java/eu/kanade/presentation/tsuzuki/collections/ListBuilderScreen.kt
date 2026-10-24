@@ -1836,7 +1836,6 @@ private fun QueryValue.numericText(): String? = when (this) {
     else -> null
 }
 
-
 /** Local suggestions come only from options declared by the selected metadata provider. */
 internal fun optionPreviewLabels(options: List<Pair<String, String>>, limit: Int): List<String> =
     options.take(limit.coerceAtLeast(0)).map { it.first }
