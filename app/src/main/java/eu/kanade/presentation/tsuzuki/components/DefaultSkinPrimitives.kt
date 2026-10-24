@@ -274,7 +274,7 @@ fun DefaultSkinChoiceChip(
             .heightIn(min = 48.dp)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { this.selected = selected },
-        contentAlignment = Alignment.CenterStart,
+        contentAlignment = Alignment.Center,
     ) {
         Surface(
             modifier = Modifier.heightIn(min = 32.dp),

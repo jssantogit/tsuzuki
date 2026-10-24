@@ -295,10 +295,11 @@ internal fun AppThemePalettePreview(
     unselectedBorderColor: Color,
     onClick: () -> Unit,
     interactive: Boolean = true,
+    modifier: Modifier = Modifier,
 ) {
     val frameShape = DefaultSkinShape.Control
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .aspectRatio(1.28f)
             .border(
