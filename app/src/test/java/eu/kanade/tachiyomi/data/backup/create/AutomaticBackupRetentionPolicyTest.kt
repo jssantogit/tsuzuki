@@ -40,6 +40,23 @@ class AutomaticBackupRetentionPolicyTest {
     }
 
     @Test
+    fun `older simultaneous backup cannot retire newer validated sibling archives`() {
+        val backups = listOf(
+            backup("older-writer", "app_2026-10-23_12-00-00-001_0123456789abcdef0123456789abcdef.tachibk"),
+            backup("newer-1", "app_2026-10-23_12-00-00-002_0123456789abcdef0123456789abcdef.tachibk"),
+            backup("newer-2", "app_2026-10-23_12-00-00-003_0123456789abcdef0123456789abcdef.tachibk"),
+            backup("newer-3", "app_2026-10-23_12-00-00-004_0123456789abcdef0123456789abcdef.tachibk"),
+            backup("newer-4", "app_2026-10-23_12-00-00-005_0123456789abcdef0123456789abcdef.tachibk"),
+        )
+
+        AutomaticBackupRetentionPolicy.obsoleteAfterSuccess(
+            backups = backups,
+            validatedUri = "older-writer",
+            maximumCopies = 4,
+        ) shouldBe emptySet()
+    }
+
+    @Test
     fun `unknown validated uri cannot authorize backup deletion`() {
         val backups = listOf(backup("only", "app_2026-10-21_12-00.tachibk"))
         kotlin.runCatching {
