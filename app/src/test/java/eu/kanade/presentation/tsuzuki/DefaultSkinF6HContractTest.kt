@@ -43,7 +43,7 @@ class DefaultSkinF6HContractTest {
     @Test
     fun `chapter sort sheet uses selected Default Skin rows instead of stock text buttons`() {
         val details = source("presentation/tsuzuki/detail/CanonicalTitleDetailScreen.kt")
-        val sheet = details.substringAfter("DetailsSheet.SORT ->").substringBefore("DetailsSheet.JUMP ->")
+        val sheet = details.substringAfter("sheet?.let { current ->").substringBefore("DetailsSheet.JUMP ->")
         sheet shouldContain "defaultSkinColors()"
         sheet shouldContain "selectable("
         sheet shouldNotContain "TextButton("
