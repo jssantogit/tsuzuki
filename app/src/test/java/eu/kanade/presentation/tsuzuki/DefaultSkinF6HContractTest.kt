@@ -94,6 +94,13 @@ class DefaultSkinF6HContractTest {
         browse shouldNotContain "TextButton("
     }
 
+    @Test
+    fun `catalog collection shortcut respects the selected locale`() {
+        val catalog = source("presentation/tsuzuki/catalog/CatalogScreen.kt")
+        catalog shouldContain "stringResource(MR.strings.tsuzuki_collections_admin_title)"
+        catalog shouldNotContain "Text(\"Collections\")"
+    }
+
     private fun source(relative: String): String = Files.readString(
         listOf(
             Path.of("src/main/java/eu/kanade/$relative"),
