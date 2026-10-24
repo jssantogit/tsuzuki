@@ -1,4 +1,5 @@
 name: CI v2.1
+# Resolver PR #140 integration with main: verify the combined tree before merge.
 
 on:
   workflow_dispatch:
