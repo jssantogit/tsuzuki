@@ -10,6 +10,7 @@ import tachiyomi.domain.tsuzuki.chapter.update.repository.ChapterUpdateStateRepo
 import tachiyomi.domain.tsuzuki.home.model.ContinueReadingVisibility
 import tachiyomi.domain.tsuzuki.home.model.HomeContinueReadingItem
 import tachiyomi.domain.tsuzuki.home.model.HomeContinueReadingSeed
+import tachiyomi.domain.tsuzuki.home.model.isResumableCheckpoint
 import tachiyomi.domain.tsuzuki.home.repository.ContinueReadingVisibilityRepository
 import tachiyomi.domain.tsuzuki.home.repository.HomeContinueReadingSource
 
@@ -85,7 +86,6 @@ class ObserveHomeContinueReading(
     }
 
     private fun isContinueReadingProgress(progress: HomeContinueReadingSeed): Boolean {
-        if (progress.read || progress.updatedAt <= 0L) return false
-        return progress.lastPageRead > 0L || progress.lastVariantId != null
+        return isResumableCheckpoint(progress.read, progress.updatedAt, progress.lastPageRead, progress.lastVariantId)
     }
 }

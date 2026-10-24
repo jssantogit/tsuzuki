@@ -46,7 +46,9 @@ RULES = (
     (
         (
             "main",
+            "design/default-skin-consolidation",
             "tsuzuki/bootstrap",
+            "tsuzuki/default-skin-*",
             "tsuzuki/diagnostic-chapter-inventory",
             "tsuzuki/fix-mangafire-binding",
             "tsuzuki/fix-cover-rendering",

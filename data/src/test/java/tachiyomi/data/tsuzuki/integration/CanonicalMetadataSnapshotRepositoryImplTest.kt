@@ -1,11 +1,16 @@
 package tachiyomi.data.tsuzuki.integration
 
 import app.cash.sqldelight.async.coroutines.await
+import app.cash.sqldelight.async.coroutines.awaitAsOneOrNull
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -81,6 +86,33 @@ class CanonicalMetadataSnapshotRepositoryImplTest {
     }
 
     @Test
+    fun `local snapshot emits factual year after details writes with unchanged title ids`() = runBlocking<Unit> {
+        val initial = CompletableDeferred<Unit>()
+        val updated = CompletableDeferred<CanonicalMetadataSnapshot>()
+        val job = launch {
+            repository.observeMany(listOf("title")).collect { snapshots ->
+                if (snapshots.isEmpty()) initial.complete(Unit)
+                snapshots["title"]?.let { updated.complete(it) }
+            }
+        }
+        try {
+            withTimeout(5_000L) { initial.await() }
+            val snapshot = CanonicalMetadataSnapshot(
+                canonicalTitleId = "title",
+                configurationFingerprint = "cfg",
+                metadata = ResolvedMetadata(
+                    startDate = ProvenancedMetadata("2021-04-01", IntegrationId("mal"), "m1"),
+                ),
+                refreshedAt = 100L,
+            )
+            repository.upsertIfNewer(snapshot)
+            withTimeout(5_000L) { updated.await() } shouldBe snapshot
+        } finally {
+            job.cancelAndJoin()
+        }
+    }
+
+    @Test
     fun `resolved metadata snapshot round trips every detail-facing field`() = runBlocking {
         val rating = ProvenancedMetadata(
             value = ResolvedRating(
@@ -133,6 +165,43 @@ class CanonicalMetadataSnapshotRepositoryImplTest {
         repository.upsertIfNewer(snapshot)
 
         repository.get("title") shouldBe snapshot
+    }
+
+    @Test
+    fun `batch reads omit corrupt rows without invalidating their persisted snapshots`() = runBlocking {
+        database.tsuzuki_titlesQueries.insertTsuzukiTitle(
+            id = "corrupt-title",
+            displayTitle = "Corrupt",
+            identityState = "SOURCE_ONLY",
+            createdAt = 1L,
+            updatedAt = 1L,
+        )
+        val valid = CanonicalMetadataSnapshot(
+            canonicalTitleId = "title",
+            configurationFingerprint = "cfg-a",
+            metadata = ResolvedMetadata(
+                startDate = ProvenancedMetadata("2020-06-12", IntegrationId("mal"), "m1", "MAL"),
+            ),
+            refreshedAt = 1234L,
+        )
+        repository.upsertIfNewer(valid)
+        database.tsuzuki_metadata_snapshotQueries.upsertTsuzukiMetadataSnapshot(
+            canonicalTitleId = "corrupt-title",
+            configurationFingerprint = "cfg-a",
+            payloadJson = "{not-valid-json",
+            refreshedAt = 1234L,
+        )
+
+        val snapshots = repository.getMany(listOf("title", "corrupt-title"))
+        val corruptRow = database.tsuzuki_metadata_snapshotQueries
+            .getTsuzukiMetadataSnapshot("corrupt-title") { id, fingerprint, payload, refreshedAt ->
+                listOf(id, fingerprint, payload, refreshedAt.toString())
+            }
+            .awaitAsOneOrNull()
+
+        snapshots.keys shouldBe setOf("title")
+        snapshots["title"]?.metadata?.startDate?.value shouldBe "2020-06-12"
+        corruptRow shouldBe listOf("corrupt-title", "cfg-a", "{not-valid-json", "1234")
     }
 
     private fun nativeLibraryArchitecture(): String = when (System.getProperty("os.arch").orEmpty().lowercase()) {

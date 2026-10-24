@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tsuzuki_providers_title">Providers</string>
+    <string name="tsuzuki_providers_installed">Instalados</string>
+    <string name="tsuzuki_providers_discover">Descobrir</string>
+    <string name="tsuzuki_providers_repositories">Repositórios</string>
+    <string name="tsuzuki_providers_add_repository">Adicionar repositório</string>
+    <string name="tsuzuki_providers_no_installed">Nenhum Provider de conteúdo instalado</string>
+    <string name="tsuzuki_providers_no_discover">Nenhum Provider disponível nos repositórios configurados</string>
+    <string name="tsuzuki_providers_no_repositories">Nenhum repositório de Providers configurado</string>
+    <string name="tsuzuki_providers_refresh">Atualizar</string>
+    <string name="tsuzuki_providers_install">Instalar</string>
+    <string name="tsuzuki_providers_update">Atualizar</string>
+    <string name="tsuzuki_providers_rollback">Reverter versão</string>
+    <string name="tsuzuki_providers_enabled">Ativado</string>
+    <string name="tsuzuki_providers_disabled">Desativado</string>
+    <string name="tsuzuki_providers_blocked">Bloqueado</string>
+    <string name="tsuzuki_providers_invalid">Inválido</string>
+    <string name="tsuzuki_providers_update_available">Atualização disponível</string>
+    <string name="tsuzuki_providers_available">Disponível</string>
+    <string name="tsuzuki_providers_installed_newer">A versão instalada é mais recente</string>
+    <string name="tsuzuki_providers_incompatible">Requer uma versão mais recente da API do host</string>
+    <string name="tsuzuki_providers_revoked">Revogado</string>
+    <string name="tsuzuki_providers_origin_conflict">Este ID de Provider pertence a outro repositório</string>
+    <string name="tsuzuki_providers_repository_name">Nome do repositório</string>
+    <string name="tsuzuki_providers_repository_id">ID do repositório</string>
+    <string name="tsuzuki_providers_repository_index_url">URL do índice assinado</string>
+    <string name="tsuzuki_providers_repository_key_id">ID da chave de assinatura</string>
+    <string name="tsuzuki_providers_repository_public_key">Chave pública P-256 (Base64)</string>
+    <string name="tsuzuki_providers_repository_fingerprint">Impressão digital SHA-256</string>
+    <string name="tsuzuki_providers_repository_trust_confirm">Verifiquei e confio nesta impressão digital da chave de assinatura</string>
+    <string name="tsuzuki_providers_repository_remove">Remover repositório</string>
+    <string name="tsuzuki_providers_repository_remove_confirm">Remover este repositório? Os Providers já instalados serão mantidos, mas deixarão de receber atualizações por ele.</string>
+    <string name="tsuzuki_providers_capabilities">Capacidades</string>
+    <string name="tsuzuki_providers_permissions">Permissões</string>
+    <string name="tsuzuki_providers_languages">Idiomas do conteúdo</string>
+    <string name="tsuzuki_providers_settings">Configurações declaradas pelo Provider</string>
+    <string name="tsuzuki_providers_no_settings">Este Provider não declarou configurações</string>
+    <string name="tsuzuki_providers_secret_notice">Configurações secretas nunca são armazenadas no arquivo de configuração simples do Provider.</string>
+</resources>

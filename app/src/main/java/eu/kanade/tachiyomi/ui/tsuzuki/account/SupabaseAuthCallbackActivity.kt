@@ -33,7 +33,7 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
         }
 
         lifecycleScope.launch(Dispatchers.IO) {
-            runCatching {
+            val action = runCatching {
                 val store = AndroidKeystoreSessionStore(this@SupabaseAuthCallbackActivity)
                 val authService = SupabaseAuthService(
                     client = OkHttpClient(),
@@ -43,40 +43,17 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
                     authService = authService,
                     sessionStore = store,
                 )
-                val values = callback.callbackValues()
-                val type = values["type"]
-                    ?.takeIf { it in ALLOWED_TYPES }
-                    ?: error("Unsupported Supabase callback type")
-
-                val result = when {
-                    values["token_hash"] != null -> {
-                        authService.verifyCallbackToken(
-                            tokenHash = requireNotNull(values["token_hash"]),
-                            type = type,
-                        )
-                    }
-                    values["access_token"] != null && values["refresh_token"] != null -> {
-                        authService.verifyAccessToken(
-                            accessToken = requireNotNull(values["access_token"]),
-                            refreshToken = requireNotNull(values["refresh_token"]),
-                            expiresInSeconds = values["expires_in"]?.toLongOrNull() ?: 0L,
-                        )
-                    }
-                    else -> error("Supabase callback did not contain a supported token")
-                }
-
-                val session = requireNotNull(result.session) {
-                    "Supabase callback did not create a session"
-                }
-                repository.acceptSession(session)
-            }
+                acceptSupabaseAuthCallback(callback.callbackValues(), authService, repository)
+            }.getOrNull()
 
             withContext(Dispatchers.Main) {
-                startActivity(
-                    Intent(this@SupabaseAuthCallbackActivity, MainActivity::class.java)
-                        .setAction(Intent.ACTION_APPLICATION_PREFERENCES)
-                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-                )
+                if (action != null) {
+                    startActivity(
+                        Intent(this@SupabaseAuthCallbackActivity, MainActivity::class.java)
+                            .setAction(action)
+                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                    )
+                }
                 finish()
             }
         }
@@ -100,9 +77,5 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
             }
         }
         return values
-    }
-
-    companion object {
-        private val ALLOWED_TYPES = setOf("signup", "recovery", "email_change")
     }
 }

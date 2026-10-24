@@ -16,7 +16,10 @@ import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import eu.kanade.tachiyomi.ui.tsuzuki.collections.FolderCatalogScreen
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreen
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 data object TsuzukiHomeTab : Tab {
 
@@ -24,7 +27,7 @@ data object TsuzukiHomeTab : Tab {
         @Composable
         get() = TabOptions(
             index = 0u,
-            title = "Home",
+            title = stringResource(MR.strings.tsuzuki_navigation_home),
             icon = painterResource(R.drawable.ic_tsuzuki_home_24dp),
         )
 
@@ -39,7 +42,6 @@ data object TsuzukiHomeTab : Tab {
 
         TsuzukiHomeScreen(
             state = state,
-            onHeroRead = screenModel::openCatalogItem,
             onHeroDetails = screenModel::openCatalogItem,
             onContinueReading = { item ->
                 context.startActivity(
@@ -51,7 +53,7 @@ data object TsuzukiHomeTab : Tab {
             },
             onFolder = { collectionId, folderId ->
                 navigator.push(
-                    HomeFolderScreen(
+                    homeFolderDestination(
                         collectionId = collectionId,
                         folderId = folderId,
                     ),
@@ -74,3 +76,6 @@ data object TsuzukiHomeTab : Tab {
         }
     }
 }
+
+internal fun homeFolderDestination(collectionId: String, folderId: String) =
+    FolderCatalogScreen(collectionId = collectionId, folderId = folderId)

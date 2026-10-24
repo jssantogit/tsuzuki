@@ -23,6 +23,11 @@ interface CanonicalReadingRepository {
         emit(getProgressByCanonicalTitleId(canonicalTitleId))
     }
 
+    /** Observes the number of distinct canonical chapters marked read. */
+    fun observeReadChapterCount(): Flow<Long> = throw UnsupportedOperationException(
+        "Read-chapter aggregate is not supported",
+    )
+
     suspend fun upsertProgress(progress: CanonicalChapterProgress)
 
     /**

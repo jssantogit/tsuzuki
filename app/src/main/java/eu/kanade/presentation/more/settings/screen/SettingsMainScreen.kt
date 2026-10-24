@@ -1,37 +1,25 @@
 package eu.kanade.presentation.more.settings.screen
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.core.graphics.ColorUtils
+import androidx.compose.ui.platform.testTag
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.icerock.moko.resources.StringResource
-import eu.kanade.presentation.components.AppBar
-import eu.kanade.presentation.components.AppBarActions
+import eu.kanade.presentation.more.settings.components.SettingsCanvas
+import eu.kanade.presentation.more.settings.components.SettingsGroup
+import eu.kanade.presentation.more.settings.components.SettingsGroupDivider
+import eu.kanade.presentation.more.settings.components.SettingsNavigationRow
+import eu.kanade.presentation.more.settings.components.SettingsPageHeader
 import eu.kanade.presentation.more.settings.screen.about.AboutScreen
-import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
 import mihon.icons.materialsymbols.MaterialSymbols
@@ -44,7 +32,6 @@ import mihon.icons.materialsymbols.rounded.Palette
 import mihon.icons.materialsymbols.rounded.Search
 import mihon.icons.materialsymbols.rounded.Security
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import cafe.adriel.voyager.core.screen.Screen as VoyagerScreen
 
@@ -53,35 +40,13 @@ object SettingsMainScreen : Screen() {
     @Composable
     override fun Content() {
         val backPress = LocalBackPress.currentOrThrow
-        Content(
-            twoPane = false,
-            navigateUp = backPress,
-        )
-    }
-
-    @Composable
-    private fun getPalerSurface(): Color {
-        val surface = MaterialTheme.colorScheme.surface
-        val dark = isSystemInDarkTheme()
-        return remember(surface, dark) {
-            val arr = FloatArray(3)
-            ColorUtils.colorToHSL(surface.toArgb(), arr)
-            arr[2] = if (dark) {
-                arr[2] - 0.05f
-            } else {
-                arr[2] + 0.02f
-            }.coerceIn(0f, 1f)
-            Color.hsl(arr[0], arr[1], arr[2])
-        }
+        Content(twoPane = false, navigateUp = backPress)
     }
 
     @Composable
     fun Content(twoPane: Boolean) {
         val backPress = LocalBackPress.currentOrThrow
-        Content(
-            twoPane = twoPane,
-            navigateUp = backPress,
-        )
+        Content(twoPane = twoPane, navigateUp = backPress)
     }
 
     @Composable
@@ -90,96 +55,67 @@ object SettingsMainScreen : Screen() {
         navigateUp: (() -> Unit)?,
     ) {
         val navigator = LocalNavigator.currentOrThrow
-        val containerColor = if (twoPane) getPalerSurface() else MaterialTheme.colorScheme.surface
-        val topBarState = rememberTopAppBarState()
+        val selectedClass = if (twoPane) navigator.items.firstOrNull()?.let { it::class } else null
+        val state = rememberLazyListState()
 
-        Scaffold(
-            topBarScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(topBarState),
-            topBar = { scrollBehavior ->
-                AppBar(
-                    title = stringResource(MR.strings.label_settings),
-                    navigateUp = navigateUp,
-                    actions = {
-                        AppBarActions(
-                            listOf(
-                                AppBar.Action(
-                                    title = stringResource(MR.strings.action_search),
-                                    icon = MaterialSymbols.Rounded.Search,
-                                    onClick = { navigator.navigate(SettingsSearchScreen(), twoPane) },
-                                ),
-                            ),
-                        )
-                    },
-                    scrollBehavior = scrollBehavior,
-                )
-            },
-            containerColor = containerColor,
-            content = { contentPadding ->
-                val state = rememberLazyListState()
-                val flatItems = sections.flatMap { it.items }
-                val indexSelected = if (twoPane) {
-                    flatItems.indexOfFirst { it.screen::class == navigator.items.first()::class }
-                        .also {
-                            LaunchedEffect(Unit) {
-                                if (it >= 0) state.animateScrollToItem(it)
+        LaunchedEffect(selectedClass) {
+            if (selectedClass == null) return@LaunchedEffect
+            val selectedGroup = settingsGroups.indexOfFirst { group ->
+                group.items.any { it.screen::class == selectedClass }
+            }
+            if (selectedGroup >= 0) state.animateScrollToItem(1 + selectedGroup)
+        }
+
+        SettingsCanvas {
+            LazyColumn(
+                state = state,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                item(key = "settings_header") {
+                    SettingsPageHeader(
+                        title = stringResource(MR.strings.label_settings),
+                        navigateUp = navigateUp,
+                        actions = {
+                            IconButton(onClick = { navigator.navigate(SettingsSearchScreen(), twoPane) }) {
+                                Icon(
+                                    imageVector = MaterialSymbols.Rounded.Search,
+                                    contentDescription = stringResource(MR.strings.action_search),
+                                )
                             }
-                        }
-                } else {
-                    null
+                        },
+                    )
                 }
 
-                LazyColumn(
-                    state = state,
-                    contentPadding = contentPadding,
-                ) {
-                    var flatIndex = 0
-                    sections.forEach { section ->
-                        item(key = "section_${section.title}") {
-                            Text(
-                                text = section.title,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 4.dp),
-                            )
-                        }
-                        itemsIndexed(
-                            items = section.items,
-                            key = { _, item -> item.hashCode() },
-                        ) { _, item ->
-                            val selected = indexSelected == flatIndex
-                            flatIndex += 1
-                            var modifier: Modifier = Modifier
-                            var contentColor = LocalContentColor.current
-                            if (twoPane) {
-                                modifier = Modifier
-                                    .padding(horizontal = 8.dp)
-                                    .clip(RoundedCornerShape(24.dp))
-                                    .then(
-                                        if (selected) {
-                                            Modifier.background(
-                                                MaterialTheme.colorScheme.surfaceVariant,
-                                            )
-                                        } else {
-                                            Modifier
-                                        },
-                                    )
-                                if (selected) contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                            CompositionLocalProvider(LocalContentColor provides contentColor) {
-                                TextPreferenceWidget(
-                                    modifier = modifier,
+                settingsGroups.forEach { group ->
+                    item(key = "section_${group.key}") {
+                        SettingsGroup(
+                            title = stringResource(group.titleRes),
+                            surfaceTestTag = "settings_surface_${group.key}",
+                            headingTestTag = "settings_heading_${group.key}",
+                        ) {
+                            group.items.forEachIndexed { index, item ->
+                                val selected = selectedClass != null && item.screen::class == selectedClass
+                                SettingsNavigationRow(
                                     title = stringResource(item.titleRes),
                                     subtitle = item.formatSubtitle(),
                                     icon = item.icon,
-                                    onPreferenceClick = { navigator.navigate(item.screen, twoPane) },
+                                    selected = selected,
+                                    modifier = Modifier.testTag("settings_destination_${item.visualKey}"),
+                                    onClick = { navigator.navigate(item.screen, twoPane) },
                                 )
+                                if (index < group.items.lastIndex) {
+                                    SettingsGroupDivider(
+                                        modifier = Modifier.testTag(
+                                            "settings_divider_${group.key}_after_${item.visualKey}",
+                                        ),
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            },
-        )
+            }
+        }
     }
 
     private fun Navigator.navigate(screen: VoyagerScreen, twoPane: Boolean) {
@@ -187,6 +123,7 @@ object SettingsMainScreen : Screen() {
     }
 
     private data class Item(
+        val visualKey: String,
         val titleRes: StringResource,
         val subtitleRes: StringResource? = null,
         val formatSubtitle: @Composable () -> String? = { subtitleRes?.let { stringResource(it) } },
@@ -194,73 +131,124 @@ object SettingsMainScreen : Screen() {
         val screen: VoyagerScreen,
     )
 
-    private data class Section(
-        val title: String,
+    private data class SettingsMacroGroup(
+        val key: String,
+        val titleRes: StringResource,
         val items: List<Item>,
     )
 
-    private val sections = listOf(
-        Section(
-            title = "Conta",
+    private val settingsGroups = listOf(
+        SettingsMacroGroup(
+            key = "account",
+            titleRes = MR.strings.tsuzuki_settings_group_account,
             items = listOf(
                 Item(
+                    visualKey = "account",
                     titleRes = MR.strings.tsuzuki_account_title,
                     icon = MaterialSymbols.Rounded.Security,
                     screen = SettingsTsuzukiAccountScreen,
                 ),
+                Item(
+                    visualKey = "tracking",
+                    titleRes = MR.strings.pref_category_tracking,
+                    icon = MaterialSymbols.Rounded.Security,
+                    screen = SettingsTrackingScreen,
+                ),
             ),
         ),
-        Section(
-            title = "Geral",
+        SettingsMacroGroup(
+            key = "experience",
+            titleRes = MR.strings.tsuzuki_settings_group_experience,
             items = listOf(
                 Item(
+                    visualKey = "personalization",
                     titleRes = MR.strings.tsuzuki_personalizations_title,
                     icon = MaterialSymbols.Rounded.Palette,
                     screen = SettingsTsuzukiPersonalizationsScreen,
                 ),
                 Item(
+                    visualKey = "reading",
                     titleRes = MR.strings.tsuzuki_reading_settings_title,
                     icon = MaterialSymbols.AutoMirroredRounded.ChromeReaderMode,
                     screen = SettingsTsuzukiReadingHubScreen,
                 ),
+                Item(
+                    visualKey = "library",
+                    titleRes = MR.strings.pref_category_library,
+                    subtitleRes = MR.strings.pref_library_summary,
+                    icon = MaterialSymbols.AutoMirroredRounded.ChromeReaderMode,
+                    screen = SettingsLibraryScreen,
+                ),
             ),
         ),
-        Section(
-            title = "Conteúdo",
+        SettingsMacroGroup(
+            key = "content",
+            titleRes = MR.strings.tsuzuki_settings_group_content,
             items = listOf(
                 Item(
+                    visualKey = "integrations",
+                    titleRes = MR.strings.tsuzuki_integrations_title,
+                    icon = MaterialSymbols.Rounded.Explore,
+                    screen = SettingsTsuzukiIntegrationsScreen(),
+                ),
+                Item(
+                    visualKey = "providers",
                     titleRes = MR.strings.tsuzuki_providers_title,
                     icon = MaterialSymbols.Rounded.Explore,
-                    screen = SettingsTsuzukiProvidersScreen(),
-                ),
-                Item(
-                    titleRes = MR.strings.tsuzuki_addons_title,
-                    icon = MaterialSymbols.Rounded.Code,
-                    screen = SettingsTsuzukiAddonsScreen,
+                    screen = SettingsTsuzukiProvidersDefaultSkinScreen(),
                 ),
             ),
         ),
-        Section(
-            title = "Avançado",
+        SettingsMacroGroup(
+            key = "data",
+            titleRes = MR.strings.tsuzuki_settings_group_data,
             items = listOf(
                 Item(
+                    visualKey = "downloads",
                     titleRes = MR.strings.pref_category_downloads,
                     subtitleRes = MR.strings.pref_downloads_summary,
                     icon = MaterialSymbols.Rounded.Download,
                     screen = SettingsDownloadScreen,
                 ),
                 Item(
-                    titleRes = MR.strings.pref_category_advanced,
-                    subtitleRes = MR.strings.pref_advanced_summary,
-                    icon = MaterialSymbols.Rounded.Code,
-                    screen = SettingsTsuzukiAdvancedHubScreen,
+                    visualKey = "data_storage",
+                    titleRes = MR.strings.label_data_storage,
+                    icon = MaterialSymbols.Rounded.Info,
+                    screen = SettingsDataScreen,
                 ),
             ),
         ),
-        Section(
-            title = "Sobre",
+        SettingsMacroGroup(
+            key = "system",
+            titleRes = MR.strings.tsuzuki_settings_group_system,
             items = listOf(
                 Item(
+                    visualKey = "security",
+                    titleRes = MR.strings.pref_category_security,
+                    icon = MaterialSymbols.Rounded.Security,
+                    screen = SettingsSecurityScreen,
+                ),
+                Item(
+                    visualKey = "diagnostics",
+                    titleRes = MR.strings.pref_debug_info,
+                    icon = MaterialSymbols.Rounded.Code,
+                    screen = SettingsTsuzukiDiagnosticsScreen,
+                ),
+                Item(
+                    visualKey = "advanced",
+                    titleRes = MR.strings.pref_category_advanced,
+                    subtitleRes = MR.strings.pref_advanced_summary,
+                    icon = MaterialSymbols.Rounded.Code,
+                    screen = SettingsAdvancedScreen,
+                ),
+            ),
+        ),
+        SettingsMacroGroup(
+            key = "about",
+            titleRes = MR.strings.tsuzuki_settings_group_about,
+            items = listOf(
+                Item(
+                    visualKey = "about",
                     titleRes = MR.strings.pref_category_about,
                     formatSubtitle = {
                         "${stringResource(MR.strings.app_name)} ${AboutScreen.getVersionName(withBuildDate = false)}"

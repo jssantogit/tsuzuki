@@ -53,15 +53,20 @@ import dev.zacsweers.metro.Inject
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.presentation.reader.DisplayRefreshHost
 import eu.kanade.presentation.reader.OrientationSelectDialog
+import eu.kanade.presentation.reader.ReaderBindingCard
+import eu.kanade.presentation.reader.ReaderBrightnessCard
+import eu.kanade.presentation.reader.ReaderChaptersCard
 import eu.kanade.presentation.reader.ReaderContentOverlay
+import eu.kanade.presentation.reader.ReaderContextCard
+import eu.kanade.presentation.reader.ReaderCropCard
+import eu.kanade.presentation.reader.ReaderDefaultSkinChrome
+import eu.kanade.presentation.reader.ReaderFitCard
 import eu.kanade.presentation.reader.ReaderPageActionsDialog
 import eu.kanade.presentation.reader.ReaderPageIndicator
+import eu.kanade.presentation.reader.ReaderProtectionCard
+import eu.kanade.presentation.reader.ReaderRecoveryCard
+import eu.kanade.presentation.reader.ReaderSourceCard
 import eu.kanade.presentation.reader.ReadingModeSelectDialog
-import eu.kanade.presentation.reader.appbars.ReaderAppBars
-import eu.kanade.presentation.reader.components.ChapterNavigatorType
-import eu.kanade.presentation.reader.settings.ReaderSettingsDialog
-import eu.kanade.presentation.tsuzuki.content.ContentBindingLinkSheet
-import eu.kanade.presentation.tsuzuki.content.ContentOptionSelectorSheet
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
@@ -80,9 +85,8 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsViewModel
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
-import eu.kanade.tachiyomi.ui.reader.viewer.pager.R2LPagerViewer
+import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.webgpu.WebGpuViewer
-import eu.kanade.tachiyomi.ui.setting.SettingsScreen
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkScreenModel
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentSelectorScreenModel
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleActivity
@@ -263,9 +267,7 @@ class ReaderActivity : BaseActivity() {
                             contentSelectorViewModel.confirmInitialPreferred(event.selection)
                         }
                     }
-                    is ReaderViewModel.Event.ContentSwitchFailed -> {
-                        toast(event.message)
-                    }
+                    is ReaderViewModel.Event.ContentSwitchFailed -> Unit
                     is ReaderViewModel.Event.SetOrientation -> {
                         setOrientation(event.orientation)
                     }
@@ -324,8 +326,10 @@ class ReaderActivity : BaseActivity() {
 
             ContentOverlay(state = state)
 
-            AppBars(state = state)
+            DefaultSkinChrome(state = state)
         }
+
+        SessionCard(state)
 
         val onDismissRequest = viewModel::closeDialog
         when (state.dialog) {
@@ -342,14 +346,6 @@ class ReaderActivity : BaseActivity() {
                             Text(stringResource(MR.strings.loading))
                         }
                     },
-                )
-            }
-            is ReaderViewModel.Dialog.Settings -> {
-                ReaderSettingsDialog(
-                    onDismissRequest = onDismissRequest,
-                    onShowMenus = { setMenuVisibility(true) },
-                    onHideMenus = { setMenuVisibility(false) },
-                    viewModel = settingsviewModel,
                 )
             }
             is ReaderViewModel.Dialog.ReadingModeSelect -> {
@@ -393,47 +389,50 @@ class ReaderActivity : BaseActivity() {
                         canonicalChapterId = selector.canonicalChapterId,
                     )
                 }
-                if (bindingLinkTitleId == selector.canonicalTitleId) {
-                    ContentBindingLinkSheet(
-                        state = bindingLinkState,
-                        onSelectAddon = contentBindingLinkViewModel::selectAddon,
-                        onConfirmCandidate = contentBindingLinkViewModel::confirm,
-                        onSearchMore = contentBindingLinkViewModel::searchMore,
-                        onBack = contentBindingLinkViewModel::backToAddons,
-                        onDismiss = {
+                ReaderContextCard(
+                    title = stringResource(MR.strings.tsuzuki_reader_source),
+                    onDismiss = {
+                        if (bindingLinkTitleId != null) {
                             contentBindingLinkViewModel.close()
                             bindingLinkTitleId = null
-                        },
-                    )
-                } else {
-                    ContentOptionSelectorSheet(
-                        state = selectorState,
-                        activeOptionKey = state.activeContentOptionKey,
-                        activeContentLabel = state.activeContentLabel,
-                        onSelect = { item ->
-                            viewModel.selectCanonicalContent(contentSelectorViewModel.select(item))
-                        },
-                        onRetry = { contentSelectorViewModel.retry() },
-                        onOpenAddonsSettings = {
-                            startActivity(
-                                Intent(this@ReaderActivity, MainActivity::class.java)
-                                    .setAction(Intent.ACTION_APPLICATION_PREFERENCES)
-                                    .putExtra(
-                                        SettingsScreen.EXTRA_DESTINATION,
-                                        SettingsScreen.Destination.TsuzukiAddons.id,
-                                    ),
-                            )
-                        },
-                        onFindOrAddSource = { canonicalTitleId ->
-                            contentSelectorViewModel.cancelDiscovery()
-                            bindingLinkTitleId = canonicalTitleId
-                        },
-                        onCancelDiscovery = contentSelectorViewModel::cancelDiscovery,
-                        onDismissRequest = {
+                        } else {
                             contentSelectorViewModel.cancelDiscovery()
                             viewModel.dismissContentSelector()
-                        },
-                    )
+                        }
+                    },
+                ) {
+                    if (bindingLinkTitleId == selector.canonicalTitleId) {
+                        ReaderBindingCard(
+                            state = bindingLinkState,
+                            onSelectProvider = contentBindingLinkViewModel::selectAddon,
+                            onConfirm = contentBindingLinkViewModel::confirm,
+                            onSearchMore = contentBindingLinkViewModel::searchMore,
+                            onBack = contentBindingLinkViewModel::backToAddons,
+                        )
+                    } else {
+                        ReaderSourceCard(
+                            state = selectorState,
+                            activeOptionKey = state.activeContentOptionKey,
+                            activeContentLabel = state.activeContentLabel,
+                            failure = state.recovery,
+                            selectionInProgress = state.sourceSelectionInProgress,
+                            onSelect = { item ->
+                                viewModel.selectCanonicalContent(contentSelectorViewModel.select(item))
+                            },
+                            onRetry = {
+                                if (state.recovery != null) {
+                                    viewModel.retryReaderRecovery()
+                                } else {
+                                    contentSelectorViewModel.retry()
+                                }
+                            },
+                            onFindSource = { canonicalTitleId ->
+                                contentSelectorViewModel.cancelDiscovery()
+                                bindingLinkTitleId = canonicalTitleId
+                            },
+                            onCancelDiscovery = contentSelectorViewModel::cancelDiscovery,
+                        )
+                    }
                 }
             }
             is ReaderViewModel.Dialog.SetPreferredAddon -> {
@@ -441,10 +440,10 @@ class ReaderActivity : BaseActivity() {
                 AlertDialog(
                     onDismissRequest = { viewModel.finishAddonPreferencePrompt(preference.selection) },
                     title = {
-                        Text(stringResource(MR.strings.tsuzuki_content_set_preferred_title))
+                        Text(stringResource(MR.strings.tsuzuki_reader_source))
                     },
                     text = {
-                        Text(stringResource(MR.strings.tsuzuki_content_set_preferred_message))
+                        Text(stringResource(MR.strings.tsuzuki_reader_preferred_provider))
                     },
                     confirmButton = {
                         TextButton(
@@ -469,11 +468,13 @@ class ReaderActivity : BaseActivity() {
                 val preference = state.dialog as ReaderViewModel.Dialog.SetPreferredLanguage
                 AlertDialog(
                     onDismissRequest = viewModel::closeDialog,
-                    title = { Text("Preferred language") },
+                    title = { Text(stringResource(MR.strings.tsuzuki_reader_preferred_language)) },
                     text = {
                         Text(
-                            "Use ${preference.selection.option.language} as the preferred " +
-                                "language for this manga?",
+                            stringResource(
+                                MR.strings.tsuzuki_reader_preferred_language_message,
+                                preference.selection.option.language.orEmpty(),
+                            ),
                         )
                     },
                     confirmButton = {
@@ -611,6 +612,7 @@ class ReaderActivity : BaseActivity() {
             brightness = state.brightnessOverlayValue,
             color = colorOverlay.takeIf { colorOverlayEnabled },
             colorBlendMode = colorOverlayBlendMode,
+            protectionTint = state.sessionPresentation.protection.tintArgb,
         )
 
         if (flashOnPageChange) {
@@ -619,82 +621,129 @@ class ReaderActivity : BaseActivity() {
     }
 
     @Composable
-    fun AppBars(state: ReaderViewModel.State) {
-        val isHttpSource = state.source is HttpSource
-
-        val cropBorderPaged by readerPreferences.cropBorders.collectAsState()
-        val cropBorderWebtoon by readerPreferences.cropBordersWebtoon.collectAsState()
-        val isPagerType = ReadingMode.isPagerType(viewModel.getMangaReadingMode())
-        val cropEnabled = if (isPagerType) cropBorderPaged else cropBorderWebtoon
-
-        val verticalNavigatorModes by readerPreferences.verticalNavigator.collectAsState()
-        val verticalNavigator = verticalNavigatorModes.contains(
-            ReadingMode.fromPreference(viewModel.getMangaReadingMode()),
-        )
-        val verticalNavigatorOnLeft by readerPreferences.verticalNavigatorOnLeft.collectAsState()
-        val verticalNavigatorHeight by readerPreferences.verticalNavigatorHeight.collectAsState()
-
-        ReaderAppBars(
+    private fun DefaultSkinChrome(state: ReaderViewModel.State) {
+        val cropPaged by readerPreferences.cropBorders.collectAsState()
+        val cropWebtoon by readerPreferences.cropBordersWebtoon.collectAsState()
+        val keepScreenOn by readerPreferences.keepScreenOn.collectAsState()
+        val isPager = ReadingMode.isPagerType(viewModel.getMangaReadingMode())
+        val fitAvailable = state.viewer is PagerViewer || state.viewer is WebGpuViewer
+        val canonical = state.activeCanonicalChapterId != null
+        ReaderDefaultSkinChrome(
             visible = state.menuVisible,
-
-            mangaTitle = state.manga?.title,
-            chapterTitle = listOfNotNull(
-                state.currentChapter?.chapter?.name,
-                state.activeContentLabel,
-            ).joinToString(" · "),
-            navigateUp = onBackPressedDispatcher::onBackPressed,
-            onClickTopAppBar = ::openTitleDetails,
-            bookmarked = state.bookmarked,
-            onToggleBookmarked = viewModel::toggleChapterBookmark,
-            onChangeSource = viewModel::openContentSelector.takeIf { viewModel.canChangeCanonicalSource() },
-            onOpenInWebView = ::openChapterInWebView.takeIf { isHttpSource },
-            onOpenInBrowser = ::openChapterInBrowser.takeIf { isHttpSource },
-            onShare = ::shareChapter.takeIf { isHttpSource },
-
-            chapterNavigatorType = if (!verticalNavigator) {
-                if (state.viewer is R2LPagerViewer || (state.viewer as? WebGpuViewer)?.isReversed ?: false) {
-                    ChapterNavigatorType.HORIZONTAL_RTL
-                } else {
-                    ChapterNavigatorType.HORIZONTAL_LTR
-                }
-            } else {
-                if (verticalNavigatorOnLeft) {
-                    ChapterNavigatorType.VERTICAL_LEFT
-                } else {
-                    ChapterNavigatorType.VERTICAL_RIGHT
-                }
-            },
-            verticalNavigatorHeight = verticalNavigatorHeight / 100f,
-            onNextChapter = ::loadNextChapter,
-            enabledNext = state.canonicalCanNavigateNext || state.viewerChapters?.nextChapter != null,
-            onPreviousChapter = ::loadPreviousChapter,
-            enabledPrevious = state.canonicalCanNavigatePrevious || state.viewerChapters?.prevChapter != null,
+            workTitle = state.manga?.title,
+            chapterTitle = state.canonicalChapters.firstOrNull { it.id == state.activeCanonicalChapterId }
+                ?.let { it.title?.takeIf(String::isNotBlank) ?: it.displayNumber }
+                ?: state.currentChapter?.chapter?.name,
             currentPage = state.currentPage,
             totalPages = state.totalPages,
+            enabledPrevious = !state.isLoadingAdjacentChapter && if (canonical) {
+                state.canonicalCanNavigatePrevious
+            } else {
+                state.viewerChapters?.prevChapter != null
+            },
+            enabledNext = !state.isLoadingAdjacentChapter && if (canonical) {
+                state.canonicalCanNavigateNext
+            } else {
+                state.viewerChapters?.nextChapter != null
+            },
+            chaptersAvailable = canonical,
+            sourceAvailable = viewModel.canChangeCanonicalSource(),
+            fitAvailable = fitAvailable,
+            cropEnabled = if (isPager) cropPaged else cropWebtoon,
+            keepScreenOn = keepScreenOn,
+            protectionActive = state.sessionPresentation.protection != ReaderVisualProtection.OFF,
+            onBack = onBackPressedDispatcher::onBackPressed,
+            onTitle = ::openTitleDetails,
+            onTool = { tool ->
+                when (tool) {
+                    ReaderSessionTool.PREVIOUS -> loadPreviousChapter()
+                    ReaderSessionTool.NEXT -> loadNextChapter()
+                    ReaderSessionTool.KEEP_SCREEN_ON -> readerPreferences.keepScreenOn.set(!keepScreenOn)
+                    ReaderSessionTool.SOURCE -> viewModel.openContentSelector()
+                    else -> viewModel.openSessionTool(tool)
+                }
+            },
             onPageIndexChange = {
                 isScrollingThroughPages = true
                 moveToPageIndex(it)
             },
-            onPageIndexChangeFinished = {
-                isScrollingThroughPages = false
-            },
-
-            readingMode = ReadingMode.fromPreference(
-                viewModel.getMangaReadingMode(resolveDefault = false),
-            ),
-            onClickReadingMode = viewModel::openReadingModeSelectDialog,
-            orientation = ReaderOrientation.fromPreference(
-                viewModel.getMangaOrientation(resolveDefault = false),
-            ),
-            onClickOrientation = viewModel::openOrientationModeSelectDialog,
-            cropEnabled = cropEnabled,
-            onClickCropBorder = {
-                val enabled = viewModel.toggleCropBorders()
-                menuToggleToast?.cancel()
-                menuToggleToast = toast(if (enabled) MR.strings.on else MR.strings.off)
-            },
-            onClickSettings = viewModel::openSettingsDialog,
+            onPageIndexChangeFinished = { isScrollingThroughPages = false },
         )
+    }
+
+    @Composable
+    private fun SessionCard(state: ReaderViewModel.State) {
+        if (state.dialog != null) return
+        val recovery = state.recovery
+        if (recovery != null) {
+            ReaderContextCard(
+                title = stringResource(MR.strings.tsuzuki_reader_source),
+                onDismiss = {
+                    if (state.currentChapter == null) finish() else viewModel.dismissSessionCard()
+                },
+            ) {
+                ReaderRecoveryCard(recovery, viewModel::retryReaderRecovery, viewModel::openRecoverySources)
+            }
+            return
+        }
+        val tool = state.sessionPresentation.card ?: return
+        val cropPaged by readerPreferences.cropBorders.collectAsState()
+        val cropWebtoon by readerPreferences.cropBordersWebtoon.collectAsState()
+        val customBrightness by readerPreferences.customBrightness.collectAsState()
+        val brightness by readerPreferences.customBrightnessValue.collectAsState()
+        val imageScale by readerPreferences.imageScaleType.collectAsState()
+        val title = stringResource(
+            when (tool) {
+                ReaderSessionTool.CHAPTERS -> MR.strings.tsuzuki_reader_chapters
+                ReaderSessionTool.BRIGHTNESS -> MR.strings.tsuzuki_reader_brightness
+                ReaderSessionTool.FIT -> MR.strings.tsuzuki_reader_fit
+                ReaderSessionTool.CROP -> MR.strings.tsuzuki_reader_crop
+                ReaderSessionTool.VISUAL_PROTECTION -> MR.strings.tsuzuki_reader_visual_protection
+                else -> MR.strings.tsuzuki_reader_source
+            },
+        )
+        ReaderContextCard(title = title, onDismiss = viewModel::dismissSessionCard) {
+            when (tool) {
+                ReaderSessionTool.CHAPTERS -> ReaderChaptersCard(
+                    chapters = state.canonicalChapters,
+                    currentChapterId = state.activeCanonicalChapterId,
+                    loading = state.isLoadingAdjacentChapter,
+                    onSelect = { chapter ->
+                        viewModel.dismissSessionCard()
+                        lifecycleScope.launch { viewModel.openCanonicalChapter(chapter.id) }
+                    },
+                )
+                ReaderSessionTool.BRIGHTNESS -> ReaderBrightnessCard(
+                    customBrightness,
+                    brightness,
+                    readerPreferences.customBrightness::set,
+                    readerPreferences.customBrightnessValue::set,
+                )
+                ReaderSessionTool.FIT -> {
+                    val supported = if (state.viewer is WebGpuViewer) {
+                        ReaderPreferences.ImageScaleTypeWebGpuViewer
+                    } else {
+                        ReaderPreferences.ImageScaleType
+                    }
+                    ReaderFitCard(
+                        options = ReaderPreferences.ImageScaleType.mapIndexedNotNull { index, resource ->
+                            (index + 1 to stringResource(resource)).takeIf { resource in supported }
+                        },
+                        selected = imageScale,
+                        onSelect = readerPreferences.imageScaleType::set,
+                    )
+                }
+                ReaderSessionTool.CROP -> ReaderCropCard(
+                    enabled = if (ReadingMode.isPagerType(viewModel.getMangaReadingMode())) cropPaged else cropWebtoon,
+                    onToggle = { viewModel.toggleCropBorders() },
+                )
+                ReaderSessionTool.VISUAL_PROTECTION -> ReaderProtectionCard(
+                    state.sessionPresentation.protection,
+                    viewModel::setVisualProtection,
+                )
+                else -> Unit
+            }
+        }
     }
 
     /**
@@ -836,7 +885,7 @@ class ReaderActivity : BaseActivity() {
         if (show) {
             viewModel.showLoadingDialog()
         } else {
-            viewModel.closeDialog()
+            if (viewModel.state.value.dialog is ReaderViewModel.Dialog.Loading) viewModel.closeDialog()
         }
     }
 
