@@ -35,11 +35,11 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.RefreshChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.interactor.MaterializeInferredChapter
 import tachiyomi.domain.tsuzuki.chapter.interactor.OpenCanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.interactor.buildCanonicalChapterOutline
+import tachiyomi.domain.tsuzuki.chapter.interactor.isVisibleCanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.inventory.GetIndependentInventorySnapshot
 import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryKnowledge
-import tachiyomi.domain.tsuzuki.chapter.interactor.buildCanonicalChapterOutline
-import tachiyomi.domain.tsuzuki.chapter.interactor.isVisibleCanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.content.ContentOption

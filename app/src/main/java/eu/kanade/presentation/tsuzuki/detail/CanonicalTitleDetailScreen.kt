@@ -63,13 +63,13 @@ import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalChapterDetailItem
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreenState
-import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
 import kotlinx.coroutines.launch
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.automirroredrounded.ArrowBack
 import mihon.icons.materialsymbols.automirroredrounded.Sort
 import mihon.icons.materialsymbols.rounded.MoreVert
 import mihon.icons.materialsymbols.rounded.Search
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
