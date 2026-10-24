@@ -107,6 +107,20 @@ class ExternalLibraryOwnershipGateTest {
     }
 
     @Test
+    fun `empty remote response cannot erase unknown owner membership`() = runBlocking {
+        shouldThrow<IllegalStateException> {
+            repository.replaceProvider("mal", emptyList())
+        }
+        repository.clearProvider("mal")
+        repository.clearProvider("other")
+        val stored = database.tsuzuki_external_library_membershipsQueries
+            .getAllTsuzukiExternalLibraryMemberships().awaitAsList()
+        stored.size shouldBe 1
+        stored.single().external_id shouldBe "123"
+        stored.single().synced_at shouldBe 100L
+    }
+
+    @Test
     fun `unverified B refresh cannot overwrite A private membership`() = runBlocking {
         shouldThrow<IllegalStateException> {
             repository.replaceProvider(

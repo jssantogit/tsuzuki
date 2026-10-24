@@ -167,6 +167,44 @@ class RefreshUserLibrariesTest {
     }
 
     @Test
+    fun `disconnected ownerless provider cannot delete legacy private snapshot`() = runTest {
+        val legacy = ExternalLibraryMembership(
+            canonicalTitleId = "A-canonical",
+            provider = "mal",
+            externalId = "123",
+            listKey = "mal:status:reading",
+            status = LibraryStatus.READING,
+            remoteStatus = "reading",
+            progress = 4.0,
+            score = null,
+            syncedAt = 100L,
+        )
+        val repository = FakeExternalLibraryRepository(listOf(legacy), ownerScoped = false)
+        val provider = FakeUserListProvider(
+            Result.success(UserLibrarySnapshot(emptyList(), emptyList())),
+            connected = false,
+        )
+        val interactor = RefreshUserLibraries(
+            registry = FakeRegistry(provider),
+            materializeCanonicalTitleFromCatalog = MaterializeCanonicalTitleFromCatalog(
+                MaterializeCanonicalTitle(
+                    repository = FakeTitleRepository(),
+                    idFactory = { "must-not-materialize" },
+                    clock = { 200L },
+                ),
+            ),
+            externalLibraryRepository = repository,
+            clock = { 300L },
+        )
+
+        interactor.refreshProvider(IntegrationId("mal")).isFailure shouldBe true
+        interactor.refreshConnected()[IntegrationId("mal")]?.isFailure shouldBe true
+        interactor.clearForLegacyTracker(1L)
+        repository.memberships.value shouldBe listOf(legacy)
+        provider.fetchCount shouldBe 0
+    }
+
+    @Test
     fun `missing verified account scope blocks remote fetch and preserves legacy snapshot`() = runTest {
         val legacy = ExternalLibraryMembership(
             canonicalTitleId = "previous-A",
@@ -210,9 +248,10 @@ class RefreshUserLibrariesTest {
 
     private class FakeUserListProvider(
         private val result: Result<UserLibrarySnapshot>,
+        private val connected: Boolean = true,
     ) : UserListProvider {
         override val integrationId = IntegrationId("mal")
-        override val connection: Flow<Boolean> = flowOf(true)
+        override val connection: Flow<Boolean> = flowOf(connected)
         var fetchCount = 0
         override suspend fun fetchLibrary(): Result<UserLibrarySnapshot> {
             fetchCount++

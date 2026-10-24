@@ -52,3 +52,11 @@ Before any versioned SQLDelight account-owner migration is approved, the draft b
 - The gate must not be lifted until the owner-scoped repository, per-row storage migration, authenticated provider subject, in-flight epoch check, and physical A/B acceptance all exist together. Keeping the old unscoped API as a bypass is forbidden.
 
 The canonical exporter also omits `mihonMangaId` and `mihonChapterId` from serialized source mappings/variants. Those numeric IDs are device-local and are already cleared by the importer; leaking them into the archive provides no portable utility.
+
+## Audit #141 closeout / deferred activation gate (2026-10-24)
+
+The ownerless-list quarantine is the final **risk-containment** change for this audit wave, not an implementation of account-scoped persistence. Expanded regressions prove that even a disconnected integration and an empty remote snapshot cannot erase unknown-owner records. Existing canonical local works/progress stay separate. The provider-owned list feature is intentionally unavailable on the draft branch.
+
+**Do not merge/enable owner-linked lists as a finished feature.** The account-scoped replacement must be designed and landed as a coordinated subsequent change after migration `43.sqm` is reconciled with resolver PR #140. That work must include verified remote account identity for MAL/Kitsu/Bangumi/MangaUpdates, row-scoped owner keys and indexes, transaction-time revalidation against session changes, read filtering on account switch, migration quarantine of unowned rows, and automated A/B + Android smoke acceptance.
+
+The broader audit can be paused here without declaring a production or release go/no-go. The canonical backup importer/writer stays disconnected and the PR stays draft until integration/physical gates and the migration conflict are resolved. Deferring unrelated enhancements does not waive critical pre-merge or pre-release blockers.
