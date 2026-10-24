@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -35,8 +36,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,6 +58,8 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalChapterDetailItem
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreenState
@@ -85,14 +88,15 @@ fun CanonicalTitleDetailScreen(
     onOpenProvidersSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val background = defaultSkinColors().canvas
+    val colors = defaultSkinColors()
+    val background = colors.canvas
     Box(
         modifier.fillMaxSize().background(background)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).navigationBarsPadding(),
     ) {
         when (state) {
             CanonicalTitleScreenState.Loading -> {
-                CircularProgressIndicator(Modifier.align(Alignment.Center))
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = colors.accent)
                 DetailsToolbar(navigateUp, onAtualizar, onOpenProvidersSettings)
             }
             is CanonicalTitleScreenState.Error -> {
@@ -104,8 +108,12 @@ fun CanonicalTitleDetailScreen(
                     Text(
                         stringResource(MR.strings.tsuzuki_details_load_error),
                         style = MaterialTheme.typography.titleLarge,
+                        color = colors.foreground,
                     )
-                    TextButton(onClick = onAtualizar) { Text(stringResource(MR.strings.action_retry)) }
+                    DefaultSkinTextAction(
+                        text = stringResource(MR.strings.action_retry),
+                        onClick = onAtualizar,
+                    )
                 }
                 DetailsToolbar(navigateUp, onAtualizar, onOpenProvidersSettings)
             }
@@ -245,28 +253,74 @@ private fun LoadedDetails(
         )
     }
     sheet?.let { current ->
-        ModalBottomSheet(onDismissRequest = { sheet = null }, containerColor = background) {
+        val colors = defaultSkinColors()
+        ModalBottomSheet(
+            onDismissRequest = { sheet = null },
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            containerColor = colors.surface,
+            contentColor = colors.foreground,
+            scrimColor = colors.canvas.copy(alpha = 0.55f),
+            tonalElevation = 0.dp,
+            dragHandle = {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 12.dp, bottom = 8.dp)
+                        .heightIn(min = 4.dp)
+                        .fillMaxWidth(0.08f)
+                        .background(colors.outline, DefaultSkinShape.Pill),
+                )
+            },
+        ) {
             when (current) {
                 DetailsSheet.SORT -> Column(
-                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(stringResource(MR.strings.tsuzuki_details_sort), style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        stringResource(MR.strings.tsuzuki_details_sort),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.foreground,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
                     CanonicalChapterSort.entries.forEach { value ->
-                        TextButton(modifier = Modifier.semantics { selected = sort == value }, onClick = {
-                            sort = value
-                            sheet = null
-                        }) {
+                        val isSelected = sort == value
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (isSelected) colors.surfaceMuted else Color.Transparent,
+                                    DefaultSkinShape.Control,
+                                )
+                                .selectable(
+                                    selected = isSelected,
+                                    role = Role.RadioButton,
+                                    onClick = {
+                                        sort = value
+                                        sheet = null
+                                    },
+                                )
+                                .heightIn(min = 48.dp)
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             Text(
                                 stringResource(
-                                    if (value ==
-                                        CanonicalChapterSort.ORIGINAL
-                                    ) {
+                                    if (value == CanonicalChapterSort.ORIGINAL) {
                                         MR.strings.tsuzuki_details_order_original
                                     } else {
                                         MR.strings.tsuzuki_details_order_reversed
                                     },
                                 ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.foreground,
                             )
+                            if (isSelected) {
+                                Text("✓", color = colors.accent, style = MaterialTheme.typography.titleMedium)
+                            }
                         }
                     }
                 }
@@ -276,13 +330,20 @@ private fun LoadedDetails(
                     scope.launch { listState.animateScrollToItem(FULL_CHAPTER_FIRST_ITEM + index, -toolbarOffset) }
                 }
                 DetailsSheet.SOURCES -> Column(
-                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
                         stringResource(MR.strings.tsuzuki_details_metadata_sources),
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.foreground,
                     )
-                    state.metadataSources.forEach { Text(it, Modifier.padding(vertical = 8.dp)) }
+                    state.metadataSources.forEach {
+                        Text(it, color = colors.secondary, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
         }
@@ -291,6 +352,7 @@ private fun LoadedDetails(
 
 @Composable
 private fun DetailsModes(mode: CanonicalDetailsLowerMode, onAction: (CanonicalDetailsLowerAction) -> Unit) {
+    val colors = defaultSkinColors()
     Column {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             listOf(CanonicalDetailsLowerAction.CHAPTERS, CanonicalDetailsLowerAction.EDITORIAL).forEach { action ->
@@ -318,20 +380,20 @@ private fun DetailsModes(mode: CanonicalDetailsLowerMode, onAction: (CanonicalDe
                         ),
                         Modifier.heightIn(min = 48.dp).padding(vertical = 14.dp),
                         color = if (selected) {
-                            MaterialTheme.colorScheme.onSurface
+                            colors.foreground
                         } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                            colors.secondary
                         },
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                     )
                     HorizontalDivider(
                         thickness = 2.dp,
-                        color = if (selected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                        color = if (selected) colors.foreground else Color.Transparent,
                     )
                 }
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        HorizontalDivider(color = colors.outline)
     }
 }
 
@@ -343,6 +405,7 @@ private fun DetailsToolbar(
     background: Color = Color.Transparent,
     onSources: (() -> Unit)? = null,
 ) {
+    val colors = defaultSkinColors()
     var expanded by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().background(
@@ -354,8 +417,8 @@ private fun DetailsToolbar(
         IconButton(
             onClick = onBack,
             modifier = Modifier.background(
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                MaterialTheme.shapes.large,
+                colors.surface.copy(alpha = 0.94f),
+                DefaultSkinShape.Control,
             ),
         ) {
             Icon(MaterialSymbols.AutoMirroredRounded.ArrowBack, stringResource(MR.strings.tsuzuki_details_back))
@@ -366,26 +429,36 @@ private fun DetailsToolbar(
                     expanded = true
                 },
                 modifier = Modifier.background(
-                    MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                    MaterialTheme.shapes.large,
+                    colors.surface.copy(alpha = 0.94f),
+                    DefaultSkinShape.Control,
                 ),
             ) {
                 Icon(MaterialSymbols.Rounded.MoreVert, stringResource(MR.strings.tsuzuki_details_actions))
             }
-            DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-                DropdownMenuItem(text = { Text(stringResource(MR.strings.tsuzuki_details_refresh)) }, onClick = {
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                shape = DefaultSkinShape.Card,
+                containerColor = colors.surface,
+                tonalElevation = 0.dp,
+            ) {
+                DropdownMenuItem(text = {
+                    Text(stringResource(MR.strings.tsuzuki_details_refresh), color = colors.foreground)
+                }, onClick = {
                     expanded =
                         false
                     onRefresh()
                 })
-                DropdownMenuItem(text = { Text(stringResource(MR.strings.tsuzuki_details_providers)) }, onClick = {
+                DropdownMenuItem(text = {
+                    Text(stringResource(MR.strings.tsuzuki_details_providers), color = colors.foreground)
+                }, onClick = {
                     expanded =
                         false
                     onProviders()
                 })
                 onSources?.let { action ->
                     DropdownMenuItem(text = {
-                        Text(stringResource(MR.strings.tsuzuki_details_metadata_sources))
+                        Text(stringResource(MR.strings.tsuzuki_details_metadata_sources), color = colors.foreground)
                     }, onClick = {
                         expanded =
                             false
@@ -399,12 +472,17 @@ private fun DetailsToolbar(
 
 @Composable
 private fun ChapterJumpSheet(chapters: List<CanonicalChapterDetailItem>, onJump: (CanonicalChapterDetailItem) -> Unit) {
+    val colors = defaultSkinColors()
     var input by rememberSaveable { mutableStateOf("") }
     var notFound by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     Column(Modifier.fillMaxWidth().imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(MR.strings.tsuzuki_details_jump), style = MaterialTheme.typography.titleLarge)
+        Text(
+            stringResource(MR.strings.tsuzuki_details_jump),
+            style = MaterialTheme.typography.titleMedium,
+            color = colors.foreground,
+        )
         OutlinedTextField(
             value = input,
             onValueChange = {
@@ -415,6 +493,18 @@ private fun ChapterJumpSheet(chapters: List<CanonicalChapterDetailItem>, onJump:
             label = { Text(stringResource(MR.strings.tsuzuki_details_jump_label)) },
             singleLine = true,
             isError = notFound,
+            shape = DefaultSkinShape.Control,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = colors.accent,
+                unfocusedBorderColor = colors.outline,
+                focusedTextColor = colors.foreground,
+                unfocusedTextColor = colors.foreground,
+                focusedLabelColor = colors.secondary,
+                unfocusedLabelColor = colors.secondary,
+                cursorColor = colors.accent,
+                focusedContainerColor = colors.surfaceMuted,
+                unfocusedContainerColor = colors.surfaceMuted,
+            ),
             supportingText = if (notFound) {
                 (
                     {
@@ -425,10 +515,14 @@ private fun ChapterJumpSheet(chapters: List<CanonicalChapterDetailItem>, onJump:
                 null
             },
         )
-        TextButton(onClick = {
-            val chapter = resolveChapterJump(chapters, input)
-            if (chapter == null) notFound = true else onJump(chapter)
-        }) { Text(stringResource(MR.strings.tsuzuki_details_jump_go)) }
+        eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton(
+            text = stringResource(MR.strings.tsuzuki_details_jump_go),
+            modifier = Modifier.fillMaxWidth(),
+            onClick = {
+                val chapter = resolveChapterJump(chapters, input)
+                if (chapter == null) notFound = true else onJump(chapter)
+            },
+        )
     }
 }
 

@@ -471,7 +471,6 @@ private fun CollectionsOverview(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        DefaultSkinSectionLabel(text = stringResource(MR.strings.tsuzuki_collections_overview))
         val colors = defaultSkinColors()
         Text(
             stringResource(MR.strings.tsuzuki_collections_totals, collections.size, folderCount),
