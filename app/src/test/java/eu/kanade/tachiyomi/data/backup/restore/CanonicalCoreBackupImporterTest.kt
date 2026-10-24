@@ -837,6 +837,42 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
+    fun `recognized live Mihon payload exports without local manga ID`(): Unit = runBlocking {
+        importer.restoreCore(section())
+        database.tsuzuki_content_bindingsQueries.upsertTsuzukiContentBinding(
+            id = "local-content-1",
+            canonicalTitleId = "title-1",
+            addonId = "eu.kanade.tachiyomi.extension.pt.example",
+            providerTitleKey = "42:/title/blue-lock",
+            matchConfidence = 0.9,
+            verifiedByUser = false,
+            availability = "AVAILABLE",
+            runtimePayload = MihonContentBindingPayloadCodec.encode(
+                MihonContentBindingPayload(42L, 987654321L, "/title/blue-lock", "pt-BR"),
+            ),
+            createdAt = 1L,
+            updatedAt = 2L,
+        )
+        val titleRepo = CanonicalTitleRepositoryImpl(database)
+        val exporter = CanonicalCoreBackupExporter(
+            titleSource = CanonicalTitleSyncSource { titleRepo.getAllAsFlow().first() },
+            titleRepository = titleRepo,
+            libraryRepository = CanonicalLibraryRepositoryImpl(database),
+            chapterRepository = CanonicalChapterRepositoryImpl(database),
+            sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+            readingRepository = CanonicalReadingRepositoryImpl(database),
+            database = database,
+            json = Json,
+        )
+        val section = exporter.export()
+        section.payloadJson.contains("987654321") shouldBe false
+        val exported = Json.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
+        exported.contentBindings.single().id shouldBe "local-content-1"
+        exported.contentBindings.single().sourceAvailability shouldBe "AVAILABLE"
+        exported.validate()
+    }
+
+    @Test
     fun `Mihon binding portable archive strips row ID and reimports dormant`(): Unit = runBlocking {
         val archive = PortableMihonBindingCodec.export(
             id = "content-1",
