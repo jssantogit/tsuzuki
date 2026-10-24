@@ -91,6 +91,7 @@ import tachiyomi.domain.tsuzuki.collections.query.QueryValue
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
+import java.text.Normalizer
 
 internal enum class ListBuilderMode {
     CREATE,
@@ -873,6 +874,11 @@ private fun DescriptorFilterControl(
             val range = positivePredicate.toNumericBounds()
             Column(modifier = modifier) {
                 Text(capability.localizedLabel(), style = MaterialTheme.typography.labelMedium)
+                Text(
+                    stringResource(MR.strings.tsuzuki_list_builder_range_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = defaultSkinColors().secondary,
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -925,6 +931,11 @@ private fun DescriptorFilterControl(
             val range = positivePredicate.toStringBounds()
             Column(modifier = modifier) {
                 Text(capability.localizedLabel(), style = MaterialTheme.typography.labelMedium)
+                Text(
+                    stringResource(MR.strings.tsuzuki_list_builder_date_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = defaultSkinColors().secondary,
+                )
                 if (editor.filtersEditable) {
                     DefaultSkinTextField(
                         value = range.first,
@@ -1039,10 +1050,12 @@ private fun DescriptorStaticDropdown(
     modifier: Modifier = Modifier,
 ) {
     val current = (predicate?.value as? QueryValue.StringValue)?.value
-    BuilderDropdown(
-        label = label,
-        current = current,
-        options = listOf<String?>(null) + options.map { it.second },
+    Column(modifier = modifier) {
+        BuilderDropdown(
+            label = label,
+            current = current,
+            options = listOf<String?>(null) + options.map { it.second },
+            optionText = { value -> options.firstOrNull { it.second == value }?.first.orEmpty() },
         display = { value ->
             if (value == null) {
                 stringResource(MR.strings.tsuzuki_list_builder_any)
@@ -1066,9 +1079,21 @@ private fun DescriptorStaticDropdown(
                 ),
             )
         },
-        modifier = modifier,
+        modifier = Modifier.fillMaxWidth(),
         enabled = editor.filtersEditable,
     )
+        if (current == null && !negated && options.isNotEmpty()) {
+            Text(
+                text = stringResource(
+                    MR.strings.tsuzuki_list_builder_option_preview,
+                    optionPreviewLabels(options, 3).joinToString(" · "),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = defaultSkinColors().secondary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
 }
 
 @Composable
@@ -1104,6 +1129,12 @@ private fun DescriptorTextField(
             label = label,
             singleLine = true,
         )
+        Text(
+            stringResource(MR.strings.tsuzuki_list_builder_text_hint),
+            modifier = Modifier.padding(top = 4.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = defaultSkinColors().secondary,
+        )
     } else {
         BuilderReadOnlyValue(label, value)
     }
@@ -1132,6 +1163,7 @@ private fun RemoteLookupFilterControl(
 
     LaunchedEffect(providerId, source.lookupId, transaction?.query, transaction?.isOpen) {
         transaction?.takeIf(RemoteLookupSheetState::isOpen)?.let { open ->
+            if (open.query.isNotBlank()) kotlinx.coroutines.delay(250L)
             onFilterLookup(providerId, source.lookupId, open.query)
         }
     }
@@ -1175,6 +1207,13 @@ private fun RemoteLookupFilterControl(
                 text = stringResource(MR.strings.tsuzuki_list_builder_change_action),
                 color = colors.accent,
                 style = MaterialTheme.typography.labelLarge,
+            )
+        }
+        if (editor.filtersEditable) {
+            Text(
+                stringResource(MR.strings.tsuzuki_list_builder_lookup_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
             )
         }
     }
@@ -1782,6 +1821,24 @@ private fun QueryValue.numericText(): String? = when (this) {
     else -> null
 }
 
+
+/** Local suggestions come only from options declared by the selected metadata provider. */
+internal fun optionPreviewLabels(options: List<Pair<String, String>>, limit: Int): List<String> =
+    options.take(limit.coerceAtLeast(0)).map { it.first }
+
+internal fun matchingFilterOptions(
+    options: List<Pair<String, String>>,
+    query: String,
+): List<Pair<String, String>> = options.filter { matchesOptionQuery(it.first, query) }
+
+private fun matchesOptionQuery(label: String, query: String): Boolean =
+    filterSearchKey(label).contains(filterSearchKey(query))
+
+private fun filterSearchKey(text: String): String =
+    Normalizer.normalize(text.trim(), Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}+"), "")
+        .lowercase()
+
 @Composable
 private fun <T> BuilderDropdown(
     label: String,
@@ -1791,8 +1848,10 @@ private fun <T> BuilderDropdown(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    optionText: ((T) -> String)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var query by remember(label) { mutableStateOf("") }
     val colors = defaultSkinColors()
     val shape = eu.kanade.presentation.tsuzuki.components.DefaultSkinShape.Control
 
@@ -1813,7 +1872,10 @@ private fun <T> BuilderDropdown(
                     .clickable(
                         enabled = enabled,
                         role = Role.Button,
-                        onClick = { expanded = true },
+                        onClick = {
+                            query = ""
+                            expanded = true
+                        },
                     )
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1846,7 +1908,29 @@ private fun <T> BuilderDropdown(
                             .border(1.dp, colors.outline, shape)
                             .padding(vertical = 4.dp),
                     ) {
-                        options.forEach { option ->
+                        if (optionText != null && options.size > 6) {
+                            DefaultSkinTextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                label = stringResource(MR.strings.tsuzuki_list_builder_search_options),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                singleLine = true,
+                            )
+                        }
+                        val visibleOptions = if (optionText != null && query.isNotBlank()) {
+                            options.filter { option -> matchesOptionQuery(optionText(option), query) }
+                        } else {
+                            options
+                        }
+                        if (visibleOptions.isEmpty()) {
+                            Text(
+                                stringResource(MR.strings.tsuzuki_list_builder_lookup_no_results),
+                                modifier = Modifier.padding(16.dp),
+                                color = colors.secondary,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                        visibleOptions.forEach { option ->
                             Text(
                                 text = display(option),
                                 modifier = Modifier
@@ -2041,7 +2125,10 @@ private fun CollectionProviderDescriptor?.localizedSortDisplayName(
 @Composable
 private fun CollectionFilterCapability.localizedLabel(): String = when (val queryField = field) {
     is QueryField.Standard -> queryField.localizedLabel()
-    is QueryField.Custom -> id
+    is QueryField.Custom -> id.substringAfterLast('.')
+        .replace('_', ' ')
+        .replace('-', ' ')
+        .replaceFirstChar { it.titlecase() }
 }
 
 @Composable

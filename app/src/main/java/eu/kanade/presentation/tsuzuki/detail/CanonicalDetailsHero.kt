@@ -417,8 +417,8 @@ internal fun DetailsEditorial(state: CanonicalTitleScreenState.Loaded) {
         state.tags.any(String::isNotBlank)
 
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         state.author?.takeIf(String::isNotBlank)?.let {
             EditorialSection(stringResource(MR.strings.tsuzuki_details_creation), it)
@@ -454,9 +454,17 @@ internal fun editorialGenres(genres: List<String>): List<String> =
 
 @Composable
 private fun EditorialSection(title: String, text: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, style = MaterialTheme.typography.titleLarge)
-        Text(text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 

@@ -16,9 +16,23 @@
     <string name="tsuzuki_integration_status_active">Active</string>
 
     <string name="tsuzuki_visual_preset_title">Visual preset</string>
-    <string name="tsuzuki_visual_preset_current">Current preset</string>
+    <string name="tsuzuki_visual_preset_current">Visual presets</string>
     <string name="tsuzuki_visual_preset_name">Tsuzuki Default Skin</string>
-    <string name="tsuzuki_visual_preset_summary">The preview follows the current theme without creating another preset.</string>
+    <string name="tsuzuki_visual_preset_summary">The original Tsuzuki look: neutral surfaces and artwork-first contrast.</string>
+    <string name="tsuzuki_preset_monet_summary">Colors inspired by your device wallpaper, adapting automatically.</string>
+    <string name="tsuzuki_preset_catppuccin_summary">Soft pastel accents and warm, understated surfaces.</string>
+    <string name="tsuzuki_preset_green_apple_summary">Fresh green accents over crisp, calm surfaces.</string>
+    <string name="tsuzuki_preset_lavender_summary">Gentle violet accents for a softer reading space.</string>
+    <string name="tsuzuki_preset_midnight_dusk_summary">Deep blue and twilight tones with subtle contrast.</string>
+    <string name="tsuzuki_preset_nord_summary">Cool Nordic blues and restrained, balanced contrast.</string>
+    <string name="tsuzuki_preset_strawberry_daiquiri_summary">Playful berry and rose accents with warm details.</string>
+    <string name="tsuzuki_preset_tako_summary">Moody purple accents with a distinct dark identity.</string>
+    <string name="tsuzuki_preset_tealturquoise_summary">Fresh turquoise accents for a clear, bright interface.</string>
+    <string name="tsuzuki_preset_tidal_wave_summary">Ocean-inspired blue and aqua tones.</string>
+    <string name="tsuzuki_preset_yinyang_summary">Bold monochrome-inspired balance and contrast.</string>
+    <string name="tsuzuki_preset_yotsuba_summary">Warm green and cream accents with a relaxed feel.</string>
+    <string name="tsuzuki_preset_tokyonight_summary">City-night blues, indigo and luminous accents.</string>
+    <string name="tsuzuki_preset_monochrome_summary">A minimal grayscale palette focused on the artwork.</string>
     <string name="tsuzuki_theme_mode_title">Theme mode</string>
     <string name="tsuzuki_collections_settings_title">Collections</string>
     <string name="tsuzuki_collections_settings_summary">Organize collections, folders, and lists shown by Tsuzuki</string>
