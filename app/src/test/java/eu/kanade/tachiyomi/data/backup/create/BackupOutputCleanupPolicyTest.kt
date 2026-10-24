@@ -17,6 +17,19 @@ class BackupOutputCleanupPolicyTest {
     }
 
     @Test
+    fun `validated automatic backup survives errors after retention or timestamp update`() {
+        val verifiedArchive = mockk<UniFile>(relaxed = true)
+
+        BackupOutputCleanupPolicy.onFailure(
+            verifiedArchive,
+            createdByThisBackup = true,
+            successfullyValidated = true,
+        )
+
+        verify(exactly = 0) { verifiedArchive.delete() }
+    }
+
+    @Test
     fun `failed newly created automatic backup removes only its own output`() {
         val newFile = mockk<UniFile>(relaxed = true)
 
