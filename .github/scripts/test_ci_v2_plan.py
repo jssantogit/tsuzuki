@@ -279,6 +279,19 @@ class PlannerTest(unittest.TestCase):
         self.assertTrue(result["run_database"])
         self.assertTrue(result["run_release"])
 
+    def test_backup_sqlite_discovery_gate_change_requires_full_matrix(self):
+        for path in (
+            ".github/scripts/verify_backup_jdbc_report.py",
+            ".github/scripts/test_verify_backup_jdbc_report.py",
+        ):
+            with self.subTest(path=path):
+                result = plan([path], "affected")
+                self.assertEqual(set(result["selected_tests"]), {"Core Common", "Domain", "Data", "App"})
+                self.assertTrue(result["run_database"])
+                self.assertTrue(result["run_supabase"])
+                self.assertTrue(result["run_release"])
+                self.assertTrue(result["run_native_package"])
+
     def test_research_documents_and_csv_data_do_not_trigger_release_build(self):
         result = plan(
             [

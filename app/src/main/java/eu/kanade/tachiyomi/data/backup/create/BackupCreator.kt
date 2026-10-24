@@ -7,6 +7,7 @@ import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedFactory
 import dev.zacsweers.metro.AssistedInject
 import eu.kanade.tachiyomi.BuildConfig
+import eu.kanade.tachiyomi.data.backup.BackupArchiveByteLimit
 import eu.kanade.tachiyomi.data.backup.BackupFileValidator
 import eu.kanade.tachiyomi.data.backup.create.creators.CategoriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.ExtensionStoresBackupCreator
@@ -32,10 +33,9 @@ import tachiyomi.domain.manga.interactor.GetFavorites
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.i18n.MR
+import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 
 @AssistedInject
@@ -60,20 +60,19 @@ class BackupCreator(
 
     suspend fun backup(uri: Uri, options: BackupOptions): String {
         var file: UniFile? = null
+        var createdByThisBackup = false
+        var successfullyValidated = false
+        var stagedManualArchive: File? = null
         try {
             file = if (isAutoBackup) {
                 // Get dir of file and create
                 val dir = UniFile.fromUri(context, uri)
 
-                // Delete older backups
-                dir?.listFiles { _, filename -> FILENAME_REGEX.matches(filename) }
-                    .orEmpty()
-                    .sortedByDescending { it.name }
-                    .drop(MAX_AUTO_BACKUPS - 1)
-                    .forEach { it.delete() }
-
-                // Create new file to place backup
-                dir?.createFile(getFilename())
+                // Only the automatic output created by this attempt is ours
+                // to clean up after failure; never delete a manual URI.
+                val created = dir?.createFile(getFilename())
+                createdByThisBackup = created != null
+                created
             } else {
                 UniFile.fromUri(context, uri)
             }
@@ -99,9 +98,23 @@ class BackupCreator(
                 throw IllegalStateException(context.stringResource(MR.strings.empty_backup_error))
             }
 
-            file.openOutputStream()
+            // Never overwrite a destination with an archive the decoder
+            // would reject because its decoded size exceeds the safety cap.
+            BackupArchiveByteLimit.requireRestorableSize(byteArray.size.toLong())
+
+            // For manual SAF documents, finish and validate the gzip archive
+            // privately BEFORE opening the caller-owned destination for output.
+            // A mid-write crash then cannot destroy a previously populated file:
+            // only a confirmed-empty, newly created document may be written.
+            val preparedArchive = if (isAutoBackup) {
+                null
+            } else {
+                File.createTempFile("tsuzuki-manual-backup-", ".tachibk", context.cacheDir)
+                    .also { stagedManualArchive = it }
+            }
+            (preparedArchive?.outputStream() ?: file.openOutputStream())
                 .also {
-                    // Force overwrite old file
+                    // File output streams may otherwise retain old trailing bytes.
                     (it as? FileOutputStream)?.channel?.truncate(0)
                 }
                 .sink().gzip().buffer().use {
@@ -109,18 +122,78 @@ class BackupCreator(
                 }
             val fileUri = file.uri
 
-            // Make sure it's a valid backup file
+            if (preparedArchive != null) {
+                // Check that the exact staged gzip can be decoded and validated.
+                backupFileValidator.validate(Uri.fromFile(preparedArchive))
+                // The SAF CreateDocument picker must not accidentally give us
+                // a populated URI. Refuse the write when it does (or when its
+                // existing content cannot be read).
+                ManualBackupDestinationPolicy.copyVerifiedArchive(
+                    verifiedArchive = preparedArchive,
+                    openExistingDocument = { context.contentResolver.openInputStream(fileUri) },
+                    openDocumentOutput = { file.openOutputStream() },
+                )
+            }
+
+            // Reopen the final SAF document, not just the staged local file.
             backupFileValidator.validate(fileUri)
+            successfullyValidated = true
 
             if (isAutoBackup) {
+                // Retire older backups only after the new archive is verified.
+                // Any listing error conservatively retains existing copies.
+                try {
+                    val candidates = UniFile.fromUri(context, uri)
+                        ?.listFiles { _, filename -> FILENAME_REGEX.matches(filename) }
+                        .orEmpty()
+                    val files = candidates.mapNotNull { candidate ->
+                        candidate.name?.let { name ->
+                            AutomaticBackupRetentionPolicy.BackupFile(
+                                uri = candidate.uri.toString(),
+                                filename = name,
+                                verifiedRestorable = candidate.uri == fileUri,
+                            )
+                        }
+                    }
+                    if (files.any { it.uri == fileUri.toString() }) {
+                        val obsolete = AutomaticBackupRetentionPolicy.obsoleteAfterVerifying(
+                            backups = files,
+                            validatedUri = fileUri.toString(),
+                            maximumCopies = MAX_AUTO_BACKUPS,
+                            maximumInspectionCount = MAX_AUTO_RETENTION_INSPECTION,
+                            verify = { candidate ->
+                                // Only a complete, decodable backup is eligible.
+                                // Files in progress and corrupt archives stay.
+                                backupFileValidator.validate(Uri.parse(candidate.uri))
+                                true
+                            },
+                        )
+                        candidates.filter { it.uri.toString() in obsolete }
+                            .forEach { it.delete() }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    logcat(LogPriority.WARN, error) {
+                        "Validated backup saved, but automatic retention could not be completed"
+                    }
+                }
                 backupPreferences.lastAutoBackupTimestamp.set(Clock.System.now().toEpochMilliseconds())
             }
 
             return fileUri.toString()
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
-            file?.delete()
+            BackupOutputCleanupPolicy.onFailure(
+                file,
+                createdByThisBackup = createdByThisBackup,
+                successfullyValidated = successfullyValidated,
+            )
             throw e
+        } finally {
+            // Includes cancellation, staging validation errors and failed SAF
+            // writes. Never retain backup bytes in private cache.
+            stagedManualArchive?.delete()
         }
     }
 
@@ -160,11 +233,9 @@ class BackupCreator(
 
     companion object {
         private const val MAX_AUTO_BACKUPS: Int = 4
-        private val FILENAME_REGEX = """${BuildConfig.APPLICATION_ID}_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}.tachibk""".toRegex()
+        private const val MAX_AUTO_RETENTION_INSPECTION: Int = 16
+        private val FILENAME_REGEX = AutomaticBackupFileNames.pattern(BuildConfig.APPLICATION_ID)
 
-        fun getFilename(): String {
-            val date = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.ENGLISH).format(Date())
-            return "${BuildConfig.APPLICATION_ID}_$date.tachibk"
-        }
+        fun getFilename(): String = AutomaticBackupFileNames.generate(BuildConfig.APPLICATION_ID)
     }
 }

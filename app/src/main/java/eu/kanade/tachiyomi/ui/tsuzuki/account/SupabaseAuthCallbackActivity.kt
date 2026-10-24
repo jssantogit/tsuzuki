@@ -5,14 +5,15 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
-import eu.kanade.tachiyomi.data.tsuzuki.supabase.AndroidKeystoreSessionStore
-import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseAccountRepository
+import eu.kanade.tachiyomi.data.tsuzuki.supabase.PersistentAuthCallbackRequestStore
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseAuthService
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseConfiguration
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import mihon.app.di.AppGraph
+import mihon.core.metro.metroGraph
 import okhttp3.OkHttpClient
 
 class SupabaseAuthCallbackActivity : ComponentActivity() {
@@ -33,27 +34,38 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
         }
 
         lifecycleScope.launch(Dispatchers.IO) {
-            val action = runCatching {
-                val store = AndroidKeystoreSessionStore(this@SupabaseAuthCallbackActivity)
+            runCatching {
+                val query = callback.queryParameterNames.associateWith { key ->
+                    val values = callback.getQueryParameters(key)
+                    check(values.size == 1) { "Duplicate auth callback parameter" }
+                    values.single()
+                }
+                val payload = SupabaseCallbackCodePolicy.parse(query, callback.fragment)
+                val requests = PersistentAuthCallbackRequestStore(noBackupFilesDir)
+                val verifier = requests.consume(payload.state, payload.typeHint)
+                    ?: error("Auth callback was not initiated here or has expired")
+
                 val authService = SupabaseAuthService(
                     client = OkHttpClient(),
                     configuration = configuration,
                 )
-                val repository = SupabaseAccountRepository(
-                    authService = authService,
-                    sessionStore = store,
-                )
-                acceptSupabaseAuthCallback(callback.callbackValues(), authService, repository)
-            }.getOrNull()
+                val result = authService.exchangeAuthCode(payload.code, verifier)
+
+                val session = requireNotNull(result.session) {
+                    "Supabase callback did not create a session"
+                }
+                // Use the same scoped repository observed by Account/Sync UI.
+                // A separate instance would leave an older in-memory user active.
+                val graph: AppGraph = applicationContext.metroGraph()
+                graph.callbackAccountRepository.acceptSession(session)
+            }
 
             withContext(Dispatchers.Main) {
-                if (action != null) {
-                    startActivity(
-                        Intent(this@SupabaseAuthCallbackActivity, MainActivity::class.java)
-                            .setAction(action)
-                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-                    )
-                }
+                startActivity(
+                    Intent(this@SupabaseAuthCallbackActivity, MainActivity::class.java)
+                        .setAction(Intent.ACTION_APPLICATION_PREFERENCES)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                )
                 finish()
             }
         }
@@ -61,21 +73,7 @@ class SupabaseAuthCallbackActivity : ComponentActivity() {
 
     private fun Uri.isAllowedCallback(): Boolean =
         scheme == SupabaseConfiguration.CALLBACK_SCHEME &&
-            host == SupabaseConfiguration.CALLBACK_HOST
-
-    private fun Uri.callbackValues(): Map<String, String> {
-        val values = buildMap {
-            queryParameterNames.forEach { name ->
-                getQueryParameter(name)?.let { put(name, it) }
-            }
-        }.toMutableMap()
-
-        fragment?.takeIf(String::isNotBlank)?.let { rawFragment ->
-            val fragmentUri = Uri.parse("tsuzuki://fragment?$rawFragment")
-            fragmentUri.queryParameterNames.forEach { name ->
-                fragmentUri.getQueryParameter(name)?.let { values[name] = it }
-            }
-        }
-        return values
-    }
+            host == SupabaseConfiguration.CALLBACK_HOST &&
+            port == -1 &&
+            encodedPath.isNullOrEmpty()
 }

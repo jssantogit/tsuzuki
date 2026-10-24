@@ -37,6 +37,9 @@ import tachiyomi.domain.tsuzuki.sync.model.SyncConflict
 import tachiyomi.domain.tsuzuki.sync.model.SyncConflictResolutionChoice
 import tachiyomi.domain.tsuzuki.sync.model.SyncConflictResolutionResult
 import tachiyomi.domain.tsuzuki.sync.model.SyncCycleReport
+import tachiyomi.domain.tsuzuki.sync.model.SyncDocumentKind
+import tachiyomi.domain.tsuzuki.sync.model.SyncFailure
+import tachiyomi.domain.tsuzuki.sync.model.SyncFailureReason
 import tachiyomi.domain.tsuzuki.sync.model.SyncRevision
 import tachiyomi.domain.tsuzuki.sync.repository.SyncConflictRepository
 import tachiyomi.domain.tsuzuki.sync.repository.SyncOutboxRepository
@@ -91,6 +94,19 @@ class SupabaseSyncRuntime(
 
     private val clock: SyncClock = AndroidSupabaseSyncClock
     private val clientIdentity = SyncClientIdentityStore(context)
+    private val accountScopeGuard: SyncAccountScopeGuard = PersistentSupabaseAccountScopeGuard(
+        directory = context.noBackupFilesDir,
+        hasLegacyCloudState = {
+            LegacySyncStateEvidence(
+                hasCursor = { kind -> supabaseStateStore.getCursor(kind) != null },
+                hasPending = { kind -> supabaseStateStore.getPending(kind) != null },
+                hasAcceptedBase = { kind -> stateRepository.get(kind)?.acceptedBase != null },
+                hasConflict = { kind -> conflictRepository.getForDocument(kind).isNotEmpty() },
+                hasOutbox = { kind -> outboxRepository.get(kind) != null },
+            ).hasUnscopedState()
+        },
+    )
+    private val accountState = accountRepository
     private val revisionSource: SyncRevisionSource = AndroidSupabaseRevisionSource(
         clientIdentity = clientIdentity,
     )
@@ -98,6 +114,7 @@ class SupabaseSyncRuntime(
         client = supabaseSafeClient(networkHelper.client),
         configuration = SupabaseConfiguration.fromBuildConfig(),
         accountRepository = accountRepository,
+        accountScopeGuard = accountScopeGuard,
         json = json,
     )
     private val adapters = listOf(
@@ -200,14 +217,35 @@ class SupabaseSyncRuntime(
     override val state: StateFlow<SyncRuntimeState>
         get() = controller.state
 
-    override suspend fun run(trigger: SyncTrigger): SyncCycleReport =
-        controller.run(trigger)
+    override suspend fun run(trigger: SyncTrigger): SyncCycleReport {
+        val failure = accountScopeFailure()
+        if (failure != null) {
+            return SyncCycleReport(
+                documentResults = emptyList(),
+                globalFailure = failure,
+            )
+        }
+        return controller.run(trigger)
+    }
 
     override suspend fun resolveConflict(
         conflict: SyncConflict,
         choice: SyncConflictResolutionChoice,
-    ): SyncConflictResolutionResult =
-        conflictResolver.resolve(conflict, choice)
+    ): SyncConflictResolutionResult {
+        val failure = accountScopeFailure()
+        if (failure != null) return SyncConflictResolutionResult.Failed(failure)
+        return conflictResolver.resolve(conflict, choice)
+    }
+
+    override suspend fun accountScopeFailure(): SyncFailure? {
+        val current = accountState.state.value as? tachiyomi.domain.tsuzuki.account.model.AccountState.Authenticated
+            ?: return SyncFailure(SyncFailureReason.AUTHORIZATION_REQUIRED)
+        return if (accountScopeGuard.permits(current.account.id)) {
+            null
+        } else {
+            SyncFailure(SyncFailureReason.ACCOUNT_SCOPE_MISMATCH)
+        }
+    }
 }
 
 private data object AndroidSupabaseSyncClock : SyncClock {

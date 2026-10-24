@@ -386,6 +386,9 @@ dependencies {
 
     // Tests
     testImplementation(libs.bundles.test)
+    // Canonical backup SQLite integration tests run using JDBC on the JVM.
+    testImplementation("app.cash.sqldelight:sqlite-driver:2.3.2")
+    testImplementation("org.xerial:sqlite-jdbc:3.51.3.0")
     testRuntimeOnly(libs.junit.platform.launcher)
 
     // Separate, opt-in real-extension Android test lane.

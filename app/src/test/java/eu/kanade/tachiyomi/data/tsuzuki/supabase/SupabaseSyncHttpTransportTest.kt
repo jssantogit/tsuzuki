@@ -37,6 +37,17 @@ class SupabaseSyncHttpTransportTest {
     }
 
     @Test
+    fun `unowned account cannot emit a network request`() = runTest {
+        val transport = transport(accountScopeGuard = SyncAccountScopeGuard { false })
+        val result = transport.pullDelta(
+            documentKind = SyncDocumentKind.LIBRARY,
+            sinceEventId = 0,
+        )
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.ACCOUNT_SCOPE_MISMATCH
+        server.requestCount shouldBe 0
+    }
+
+    @Test
     fun `logged out transport returns authorization required without request`() = runTest {
         val transport = transport(
             account = FakeAccountRepository(AccountState.LoggedOut, token = null),
@@ -858,6 +869,7 @@ class SupabaseSyncHttpTransportTest {
     }
 
     private fun transport(
+        accountScopeGuard: SyncAccountScopeGuard = SyncAccountScopeGuard { true },
         account: AccountRepository = FakeAccountRepository(
             AccountState.Authenticated(
                 TsuzukiAccount("user-1", "reader@example.com"),
@@ -871,6 +883,7 @@ class SupabaseSyncHttpTransportTest {
             publishableKey = "publishable-test-key",
         ),
         accountRepository = account,
+        accountScopeGuard = accountScopeGuard,
     )
 
     private class FakeAccountRepository(

@@ -213,6 +213,14 @@ def plan(paths: list[str], mode: str) -> dict[str, object]:
             if path.endswith(".md") or path.startswith(("docs/", "fastlane/")):
                 continue
 
+            if path in {
+                ".github/scripts/verify_backup_jdbc_report.py",
+                ".github/scripts/test_verify_backup_jdbc_report.py",
+            }:
+                # A broken execution-discovery gate is a false-green risk.
+                select_full(state)
+                continue
+
             if path.startswith(".github/"):
                 # The planner tests execute in the plan job itself; CI config edits should not
                 # burn a full Android build just because the workflow changed.

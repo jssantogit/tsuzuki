@@ -4,6 +4,8 @@ import eu.kanade.tachiyomi.data.track.model.TrackSearch
 
 interface BangumiUserLibraryApi {
     suspend fun getUserLibrary(): List<BangumiUserListEntry>
+
+    suspend fun getAuthenticatedOwner(): String = error("Bangumi owner identity unavailable")
 }
 
 data class BangumiUserListEntry(

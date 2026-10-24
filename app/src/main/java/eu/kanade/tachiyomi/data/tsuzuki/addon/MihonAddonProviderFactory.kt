@@ -66,7 +66,7 @@ class MihonAddonProviderFactory(
         snapshot: SourceChapterSnapshot,
     ): Result<ContentDelivery.Mihon> {
         return try {
-            val payload = MihonContentBindingPayloadCodec.decode(binding.runtimePayload)
+            val payload = MihonContentBindingPayloadCodec.decodeOperational(binding.runtimePayload)
             chapterInventoryGateway.materializeOperationalChapter(snapshot).map { chapterId ->
                 ContentDelivery.Mihon(
                     sourceId = snapshot.sourceId,

@@ -42,6 +42,7 @@ on:
       - main
       - 'tsuzuki/**'
       - 'fix/canonical-chapter-resolver-hardening'
+      - 'audit/**'
     paths:
       - '**'
       - '!**.md'
@@ -260,6 +261,14 @@ jobs:
             args+=(--tests "$TEST_FILTER")
           fi
           "${args[@]}"
+
+      - name: Verify canonical backup SQLite test discovery
+        if: matrix.key == 'app'
+        run: |
+          if [ -f app/src/test/java/eu/kanade/tachiyomi/data/backup/restore/CanonicalCoreBackupImporterTest.kt ]; then
+            python3 -m unittest discover -s .github/scripts -p 'test_verify_backup_jdbc_report.py'
+            python3 .github/scripts/verify_backup_jdbc_report.py app/build/test-results/testDebugUnitTest
+          fi
 
       - name: Upload performance benchmark report
         if: always() && contains(github.event.head_commit.message, '[perf-benchmark]')

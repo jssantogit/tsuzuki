@@ -35,6 +35,25 @@ ON CONFLICT(canonical_chapter_id) DO UPDATE SET
     time_read = tsuzuki_chapter_history.time_read + excluded.time_read;
 
 
+-- Backup restore must set the aggregate, not add a new reading session.
+restoreTsuzukiChapterHistorySnapshot:
+INSERT INTO tsuzuki_chapter_history(
+    canonical_chapter_id,
+    last_variant_id,
+    last_read_at,
+    time_read
+)
+VALUES (
+    :canonicalChapterId,
+    :lastVariantId,
+    :lastReadAt,
+    :totalReadDuration
+)
+ON CONFLICT(canonical_chapter_id) DO UPDATE SET
+    last_variant_id = excluded.last_variant_id,
+    last_read_at = excluded.last_read_at,
+    time_read = excluded.time_read;
+
 getTotalTsuzukiReadDuration:
 SELECT coalesce(sum(time_read), 0)
 FROM tsuzuki_chapter_history;

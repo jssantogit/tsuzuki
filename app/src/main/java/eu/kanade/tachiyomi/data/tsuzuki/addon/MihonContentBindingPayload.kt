@@ -26,6 +26,16 @@ object MihonContentBindingPayloadCodec {
         return bytes.toByteArray()
     }
 
+    /**
+     * Restored portable bindings intentionally have no device-local manga row.
+     * They may be decoded for relinking but must never reach live chapter fetch
+     * or reader materialization with their invalid sentinel ID.
+     */
+    fun decodeOperational(payload: ByteArray): MihonContentBindingPayload =
+        decode(payload).also {
+            require(it.mihonMangaId > 0L) { "Mihon content binding needs local rematerialization" }
+        }
+
     fun decode(payload: ByteArray): MihonContentBindingPayload {
         DataInputStream(ByteArrayInputStream(payload)).use { input ->
             require(input.readInt() == VERSION) { "Unsupported Mihon binding payload version" }

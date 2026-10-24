@@ -18,12 +18,29 @@ class SupabaseAuthService(
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000L },
 ) {
 
-    suspend fun register(email: String, password: String): AuthResult =
+    fun callbackRedirectUrl(nonce: String): String {
+        require(nonce.matches(Regex("[A-Za-z0-9_-]{16,128}"))) {
+            "Callback state must be a high-entropy URL-safe nonce"
+        }
+        return configuration.callbackUrl + "?tsz_state=$nonce"
+    }
+
+    suspend fun register(
+        email: String,
+        password: String,
+        redirectTo: String,
+        codeChallenge: String,
+    ): AuthResult =
         postAuth(
-            url = endpointWithRedirect("auth/v1/signup"),
+            url = endpointWithRedirect("auth/v1/signup", redirectTo),
             body = json.encodeToString(
                 CredentialsRequest.serializer(),
-                CredentialsRequest(email = email, password = password),
+                CredentialsRequest(
+                    email = email,
+                    password = password,
+                    codeChallenge = codeChallenge,
+                    codeChallengeMethod = "s256",
+                ),
             ),
         )
 
@@ -45,10 +62,10 @@ class SupabaseAuthService(
             ),
         )
 
-    suspend fun sendPasswordRecovery(email: String) {
+    suspend fun sendPasswordRecovery(email: String, redirectTo: String, codeChallenge: String) {
         postRaw(
-            url = endpointWithRedirect("auth/v1/recover"),
-            body = json.encodeToString(RecoveryRequest.serializer(), RecoveryRequest(email)),
+            url = endpointWithRedirect("auth/v1/recover", redirectTo),
+            body = json.encodeToString(RecoveryRequest.serializer(), RecoveryRequest(email, codeChallenge, "s256")),
         ).use { response ->
             check(response.isSuccessful) {
                 "Supabase auth request failed with HTTP ${response.code}"
@@ -83,6 +100,21 @@ class SupabaseAuthService(
                 .header("Authorization", "Bearer $accessToken")
                 .build(),
         ).close()
+    }
+
+    /** Exchange a one-time code only with the device-private PKCE verifier. */
+    suspend fun exchangeAuthCode(code: String, verifier: String): AuthResult {
+        require(code.isNotBlank()) { "Missing Supabase auth code" }
+        require(verifier.matches(Regex("[A-Za-z0-9_-]{43,128}"))) {
+            "Invalid PKCE verifier"
+        }
+        return postAuth(
+            url = configuration.endpoint("auth/v1/token?grant_type=pkce"),
+            body = json.encodeToString(
+                PkceExchangeRequest.serializer(),
+                PkceExchangeRequest(authCode = code, codeVerifier = verifier),
+            ),
+        )
     }
 
     suspend fun verifyCallbackToken(tokenHash: String, type: String): AuthResult =
@@ -178,11 +210,11 @@ class SupabaseAuthService(
                 .build(),
         )
 
-    private fun endpointWithRedirect(path: String): String =
+    private fun endpointWithRedirect(path: String, redirectTo: String): String =
         configuration.endpoint(path)
             .toHttpUrl()
             .newBuilder()
-            .addQueryParameter("redirect_to", configuration.callbackUrl)
+            .addQueryParameter("redirect_to", redirectTo)
             .build()
             .toString()
 
@@ -212,6 +244,8 @@ data class SupabaseSession(
 private data class CredentialsRequest(
     val email: String,
     val password: String,
+    @SerialName("code_challenge") val codeChallenge: String? = null,
+    @SerialName("code_challenge_method") val codeChallengeMethod: String? = null,
 )
 
 @Serializable
@@ -221,13 +255,21 @@ private data class RefreshRequest(
 )
 
 @Serializable
-private data class RecoveryRequest(
-    val email: String,
+private data class PasswordUpdateRequest(
+    val password: String,
 )
 
 @Serializable
-private data class PasswordUpdateRequest(
-    val password: String,
+private data class RecoveryRequest(
+    val email: String,
+    @SerialName("code_challenge") val codeChallenge: String,
+    @SerialName("code_challenge_method") val codeChallengeMethod: String,
+)
+
+@Serializable
+private data class PkceExchangeRequest(
+    @SerialName("auth_code") val authCode: String,
+    @SerialName("code_verifier") val codeVerifier: String,
 )
 
 @Serializable

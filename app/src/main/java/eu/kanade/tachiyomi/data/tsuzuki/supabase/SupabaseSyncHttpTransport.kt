@@ -33,6 +33,7 @@ class SupabaseSyncHttpTransport(
     private val client: OkHttpClient,
     private val configuration: SupabaseConfiguration,
     private val accountRepository: AccountRepository,
+    private val accountScopeGuard: SyncAccountScopeGuard,
     private val json: Json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
@@ -362,10 +363,11 @@ class SupabaseSyncHttpTransport(
         request: Request,
         decode: (String) -> T,
     ): SyncTransportResult<T> {
-        if (accountRepository.state.value !is AccountState.Authenticated) {
-            return SyncTransportResult.Failure(
-                SyncFailure(SyncFailureReason.AUTHORIZATION_REQUIRED),
-            )
+        val current = accountRepository.state.value as? AccountState.Authenticated
+            ?: return SyncTransportResult.Failure(SyncFailure(SyncFailureReason.AUTHORIZATION_REQUIRED))
+        val accountId = current.account.id
+        if (!accountScopeGuard.permits(accountId)) {
+            return SyncTransportResult.Failure(SyncFailure(SyncFailureReason.ACCOUNT_SCOPE_MISMATCH))
         }
 
         val tokenResult = accountRepository.getAccessToken()
@@ -376,6 +378,14 @@ class SupabaseSyncHttpTransport(
             return SyncTransportResult.Failure(
                 SyncFailure(SyncFailureReason.AUTHORIZATION_REQUIRED),
             )
+        }
+
+        // A token refresh may suspend while the user switches accounts. Never
+        // send a retained token or reuse a response with a different owner.
+        if ((accountRepository.state.value as? AccountState.Authenticated)?.account?.id != accountId ||
+            !accountScopeGuard.permits(accountId)
+        ) {
+            return SyncTransportResult.Failure(SyncFailure(SyncFailureReason.ACCOUNT_SCOPE_MISMATCH))
         }
 
         val authenticated = request.newBuilder()
@@ -394,6 +404,12 @@ class SupabaseSyncHttpTransport(
                             responseBody = raw,
                         ),
                     )
+                }
+
+                if ((accountRepository.state.value as? AccountState.Authenticated)?.account?.id != accountId ||
+                    !accountScopeGuard.permits(accountId)
+                ) {
+                    return SyncTransportResult.Failure(SyncFailure(SyncFailureReason.ACCOUNT_SCOPE_MISMATCH))
                 }
 
                 runCatching { decode(raw) }

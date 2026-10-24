@@ -206,7 +206,7 @@ class MihonChapterInventoryGateway(
         refresh: Boolean = false,
     ): Result<SourceChapterInventory> {
         return try {
-            val payload = MihonContentBindingPayloadCodec.decode(binding.runtimePayload)
+            val payload = MihonContentBindingPayloadCodec.decodeOperational(binding.runtimePayload)
             fetch(
                 SourceTitleMapping(
                     id = binding.id,

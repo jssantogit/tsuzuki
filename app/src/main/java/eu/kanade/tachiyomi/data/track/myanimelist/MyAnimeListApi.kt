@@ -50,6 +50,8 @@ interface MalIntegrationApi {
     suspend fun getMangaDetails(id: Int): TrackSearch
 
     suspend fun getUserMangaList(): List<MalUserListEntry>
+
+    suspend fun getAuthenticatedOwner(): String = error("MAL owner identity unavailable")
 }
 
 class MyAnimeListApi(
@@ -90,7 +92,13 @@ class MyAnimeListApi(
         }
     }
 
-    suspend fun getCurrentUser(): String {
+    override suspend fun getAuthenticatedOwner(): String =
+        getCurrentUserRecord().id?.takeIf { it > 0L }?.toString()
+            ?: error("MAL /users/@me did not provide a verified account ID")
+
+    suspend fun getCurrentUser(): String = getCurrentUserRecord().name
+
+    private suspend fun getCurrentUserRecord(): MALUser {
         return withIOContext {
             val request = Request.Builder()
                 .url("$BASE_API_URL/users/@me")
@@ -100,7 +108,6 @@ class MyAnimeListApi(
                 authClient.newCall(request)
                     .awaitSuccess()
                     .parseAs<MALUser>()
-                    .name
             }
         }
     }

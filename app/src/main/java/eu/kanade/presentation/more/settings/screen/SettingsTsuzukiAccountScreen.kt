@@ -486,6 +486,7 @@ private fun TsuzukiAccountScreenError.messageText(): String = when (this) {
     TsuzukiAccountScreenError.CONFIGURATION_UNAVAILABLE -> {
         stringResource(MR.strings.tsuzuki_entry_error_configuration)
     }
+    TsuzukiAccountScreenError.ACCOUNT_SCOPE_MISMATCH -> stringResource(MR.strings.drive_sync_failed)
     TsuzukiAccountScreenError.SYNC_FAILED -> stringResource(MR.strings.drive_sync_failed)
     TsuzukiAccountScreenError.UNKNOWN -> stringResource(MR.strings.tsuzuki_entry_error_unknown)
 }
