@@ -17,6 +17,7 @@ object ProviderTorrentAcceptanceFixtures {
 
     data class ThreeChapterTorrent(
         val torrent: TorrentInfo,
+        val metadataBytes: ByteArray,
         val seedRoot: File,
         val selectedFileIndex: Int,
         val selectedFilePath: String,
@@ -47,13 +48,13 @@ object ProviderTorrentAcceptanceFixtures {
         File(pack, "Acceptance Series 012.cbz").writeBytes(chapter012)
         File(pack, "Acceptance Series 013.cbz").writeBytes(chapter013)
 
-        val torrent = TorrentBuilder()
+        val metadataBytes = TorrentBuilder()
             .path(pack)
             .pieceSize(16 * 1024)
             .generate()
             .entry()
             .bencode()
-            .let(::TorrentInfo)
+        val torrent = TorrentInfo(metadataBytes)
         val files = torrent.files()
         val selectedFileIndex = (0 until files.numFiles())
             .single { files.filePath(it).endsWith("Acceptance Series 012.cbz") }
@@ -63,6 +64,7 @@ object ProviderTorrentAcceptanceFixtures {
 
         return ThreeChapterTorrent(
             torrent = torrent,
+            metadataBytes = metadataBytes,
             seedRoot = seedRoot,
             selectedFileIndex = selectedFileIndex,
             selectedFilePath = selectedFilePath,

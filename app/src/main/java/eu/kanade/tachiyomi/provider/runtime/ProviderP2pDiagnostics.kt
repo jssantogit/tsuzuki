@@ -2,6 +2,14 @@ package eu.kanade.tachiyomi.provider.runtime
 
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import java.security.MessageDigest
 import java.security.SecureRandom
 
@@ -17,6 +25,7 @@ internal enum class ProviderP2pDiagnosticEvent {
     SESSION_READY,
     SESSION_FAILED,
     NATIVE_ALERT_SUMMARY,
+    METADATA_CACHE_LOOKUP,
     METADATA_START,
     METADATA_READY,
     METADATA_FAILED,
@@ -54,6 +63,14 @@ internal enum class ProviderP2pDiagnosticEvent {
  */
 internal object ProviderP2pDiagnostics {
 
+    @Volatile
+    private var structuredRecorder: StructuredDiagnosticRecorder? = null
+
+    /** Installed once in the non-isolated Host process; never forwarded to Provider JS/Binder. */
+    fun installRecorder(recorder: StructuredDiagnosticRecorder?) {
+        structuredRecorder = recorder
+    }
+
     private val salt: ByteArray by lazy(LazyThreadSafetyMode.PUBLICATION) {
         ByteArray(32).also(SecureRandom()::nextBytes)
     }
@@ -69,8 +86,8 @@ internal object ProviderP2pDiagnostics {
         exceptionClass: String? = null,
         priority: LogPriority = LogPriority.INFO,
     ) {
-        runCatching {
-            val line = format(
+        val line = runCatching {
+            format(
                 event = event,
                 operationId = operationId,
                 jobId = jobId,
@@ -80,7 +97,44 @@ internal object ProviderP2pDiagnostics {
                 flags = flags,
                 exceptionClass = exceptionClass,
             )
-            logcat(priority) { line }
+        }.getOrNull() ?: return
+
+        // Independent best-effort mirrors: a logcat failure must not suppress durable evidence.
+        runCatching { logcat(priority) { line } }
+        val recorder = structuredRecorder ?: return
+        runCatching {
+            recorder.record(
+                StructuredDiagnosticEvent(
+                    timestampMillis = System.currentTimeMillis().coerceAtLeast(0L),
+                    severity = when (priority) {
+                        LogPriority.ERROR -> DiagnosticSeverity.ERROR
+                        LogPriority.WARN -> DiagnosticSeverity.WARN
+                        LogPriority.DEBUG -> DiagnosticSeverity.DEBUG
+                        else -> DiagnosticSeverity.INFO
+                    },
+                    subsystem = DiagnosticSubsystem.CONTENT,
+                    name = DiagnosticEventName.PROVIDER_P2P_EVENT,
+                    sessionId = recorder.sessionId,
+                    operationId = null,
+                    stage = DiagnosticStage.SUMMARY,
+                    outcome = when (event) {
+                        ProviderP2pDiagnosticEvent.METADATA_FAILED,
+                        ProviderP2pDiagnosticEvent.HANDLE_FAILED,
+                        ProviderP2pDiagnosticEvent.TRANSFER_FAILED,
+                        ProviderP2pDiagnosticEvent.ADOPTION_FAILED,
+                        ProviderP2pDiagnosticEvent.READER_ACQUISITION_FAILED,
+                        ProviderP2pDiagnosticEvent.SESSION_FAILED,
+                        -> DiagnosticOutcome.FAILED
+                        ProviderP2pDiagnosticEvent.JOB_CANCELLED -> DiagnosticOutcome.CANCELLED
+                        ProviderP2pDiagnosticEvent.JOB_REJECTED -> DiagnosticOutcome.REJECTED
+                        ProviderP2pDiagnosticEvent.TRANSFER_TIMEOUT -> DiagnosticOutcome.TIMEOUT
+                        else -> DiagnosticOutcome.PARTIAL
+                    },
+                    attributes = mapOf(
+                        "provider_p2p_line" to DiagnosticAttributeValue.Text(line),
+                    ),
+                ),
+            )
         }
     }
 

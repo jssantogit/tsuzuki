@@ -41,6 +41,7 @@ import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseSyncJob
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
+import eu.kanade.tachiyomi.provider.runtime.ProviderP2pDiagnostics
 import eu.kanade.tachiyomi.ui.base.delegate.SecureActivityDelegate
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.WebViewUtil
@@ -141,6 +142,8 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 
         graph.inject(this)
         setupInjekt()
+        // Host-only P2P events must reach exportable structured history, not just logcat.
+        ProviderP2pDiagnostics.installRecorder(graph.structuredDiagnosticRecorder)
 
         TelemetryConfig.init(applicationContext)
 

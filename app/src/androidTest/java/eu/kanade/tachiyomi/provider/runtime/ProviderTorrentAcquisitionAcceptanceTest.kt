@@ -31,6 +31,8 @@ import tachiyomi.domain.tsuzuki.provider.ProviderPermissionSet
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedFileFormat
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceRef
 import tachiyomi.domain.tsuzuki.provider.torrent.DebridResolveGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.P2pAcquireGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.ProviderTorrentAcquisitionCoordinator
@@ -50,6 +52,92 @@ import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class ProviderTorrentAcquisitionAcceptanceTest {
+
+    @Test
+    fun hostVerifiedMetadata_skipsMagnetResolutionAndReadsOnlySelectedChapter() = runBlocking {
+        assertTrue("native libtorrent failed to load", LibTorrent.version().isNotBlank())
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "provider-torrent-host-verified-acceptance").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        val fixture = ProviderTorrentAcceptanceFixtures.createThreeChapterTorrent(root)
+        val managedFiles = ProviderManagedFileStore(context).apply { clearAll() }
+        val sourceUrl = "https://example.invalid/fixture.torrent"
+        val candidate = candidate(fixture).copy(torrentUrl = sourceUrl)
+        val selected = (TorrentChapterMapper().map(chapter12Request(), candidate) as TorrentChapterFileMatch.Exact).file
+        val cache = HostVerifiedTorrentMetadataCache()
+        val seeder = SessionManager()
+        val seedPort = 49431
+        val leecherPort = 49432
+        val jobRoot = File(root, "jobs")
+        var jobs: ProviderP2pJobManager? = null
+
+        try {
+            assertTrue(
+                "genuine Host-parsed torrent metadata should be reusable",
+                cache.offer("org.example.torrent.search.acceptance", candidate, fixture.metadataBytes),
+            )
+            ProviderTorrentAcceptanceFixtures.startLoopbackSeeder(seeder, fixture, seedPort)
+            val engine = JlibtorrentProviderP2pDownloadEngine(
+                initialPeers = { listOf(TcpEndpoint("127.0.0.1", seedPort)) },
+                sessionParamsFactory = { ProviderTorrentAcceptanceFixtures.localOnlyParams(leecherPort) },
+                metadataTimeoutSeconds = 1,
+                downloadTimeoutMs = 30_000L,
+                nativeSupport = { true },
+            )
+            jobs = ProviderP2pJobManager(
+                root = jobRoot,
+                managedFiles = managedFiles,
+                engine = engine,
+                verifiedMetadata = cache,
+            )
+            val request = ProviderP2pAcquireRequest(
+                operationId = "host-verified-chapter-012",
+                infoHash = candidate.infoHash,
+                magnetUri = candidate.magnetUri,
+                torrentUrl = sourceUrl,
+                selectedFileIndex = selected.index,
+                selectedFilePath = selected.path,
+                selectedFileSizeBytes = selected.sizeBytes,
+            )
+            assertTrue(
+                cache.find(PROVIDER_ID.value, request)?.contentEquals(fixture.metadataBytes) == true,
+            )
+            assertTrue(
+                "a different archive cannot borrow Host-verified chapter metadata",
+                cache.find(PROVIDER_ID.value, request.copy(selectedFilePath = "Other.cbz")) == null,
+            )
+            val service = jobs.service(PROVIDER_ID.value, request)
+            assertTrue(service.acquire(request) is ProviderP2pAcquireResponse.Pending)
+
+            val ready = withTimeout(35_000L) {
+                while (true) {
+                    when (val result = service.acquire(request)) {
+                        is ProviderP2pAcquireResponse.Ready -> return@withTimeout result
+                        is ProviderP2pAcquireResponse.Failure -> error("cached Host P2P failed: ${result.reason}")
+                        is ProviderP2pAcquireResponse.Pending -> delay(100L)
+                    }
+                }
+                error("unreachable")
+            }
+            val uri = managedFiles.resolve(
+                PROVIDER_ID,
+                ProviderManagedResourceRef(ready.resource),
+                ProviderManagedFileFormat.CBZ,
+            )
+            assertTrue("Reader resource should be available", uri?.startsWith("content://") == true)
+            val bytes = context.contentResolver.openInputStream(Uri.parse(uri))!!.use { it.readBytes() }
+            assertArrayEquals(fixture.selectedArchiveBytes, bytes)
+            val downloadRoot = File(jobRoot, "download")
+            assertFalse("unexpected global torrent output", downloadRoot.isFile)
+        } finally {
+            jobs?.close()
+            ProviderTorrentAcceptanceFixtures.stopLoopbackSeeder(seeder)
+            managedFiles.clearAll()
+            root.deleteRecursively()
+        }
+    }
 
     @Test
     fun canonicalChapter12_acquiresOnlyExactArchiveThroughManagedLoopbackP2p() = runBlocking {

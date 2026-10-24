@@ -18,7 +18,11 @@ class ProviderRuntimeLogBindingTest {
     fun productionHostBindingRoutesProviderLogInfoToConfiguredSink() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val managedFiles = AppBindings.providesProviderManagedFileStore(context)
-        val p2pJobs = AppBindings.providesProviderP2pJobManager(context, managedFiles)
+        val p2pJobs = AppBindings.providesProviderP2pJobManager(
+            context,
+            managedFiles,
+            AppBindings.providesHostVerifiedTorrentMetadataCache(),
+        )
         val observed = mutableListOf<Pair<String, String>>()
         val logSink = ProviderRuntimeLogSink { providerId, message ->
             observed += providerId to message
@@ -59,7 +63,11 @@ class ProviderRuntimeLogBindingTest {
     fun productionHostBindingRoutesHttpLifecycleDiagnosticsWithoutUrlDetails() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val managedFiles = AppBindings.providesProviderManagedFileStore(context)
-        val p2pJobs = AppBindings.providesProviderP2pJobManager(context, managedFiles)
+        val p2pJobs = AppBindings.providesProviderP2pJobManager(
+            context,
+            managedFiles,
+            AppBindings.providesHostVerifiedTorrentMetadataCache(),
+        )
         val observed = mutableListOf<Pair<String, String>>()
         val logSink = ProviderRuntimeLogSink { providerId, message ->
             observed += providerId to message

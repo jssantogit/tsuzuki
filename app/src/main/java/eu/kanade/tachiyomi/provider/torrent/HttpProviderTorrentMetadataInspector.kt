@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.provider.torrent
 
 import com.frostwire.jlibtorrent.TorrentInfo
+import eu.kanade.tachiyomi.provider.runtime.HostVerifiedTorrentMetadataCache
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,6 +19,7 @@ class HttpProviderTorrentMetadataInspector internal constructor(
     private val maxMetadataBytes: Long = DEFAULT_MAX_METADATA_BYTES,
     private val maxRedirects: Int = DEFAULT_MAX_REDIRECTS,
     private val decoder: (ByteArray, TorrentCandidate) -> TorrentCandidate? = ::decodeTorrentMetadata,
+    private val verifiedMetadata: HostVerifiedTorrentMetadataCache? = null,
 ) : ProviderTorrentMetadataInspector {
 
     private val baseClient = baseClient.newBuilder()
@@ -92,7 +94,11 @@ class HttpProviderTorrentMetadataInspector internal constructor(
                 if (declared > maxMetadataBytes) return null
                 val bytes = body.readBounded() ?: return null
                 if (bytes.isEmpty()) return null
-                return decoder(bytes, candidate)
+                val inspected = decoder(bytes, candidate) ?: return null
+                // Only a Host-validated file table can populate the privileged cache.
+                // The cache independently revalidates the native info hash and every file.
+                runCatching { verifiedMetadata?.offer(descriptor.id.value, inspected, bytes) }
+                return inspected
             } finally {
                 response.close()
             }

@@ -46,6 +46,40 @@ class StructuredDiagnosticEventTest {
     }
 
     @Test
+    fun `P2P Host traces are bounded and reject unrecognized content identity fields`() {
+        val safeLine = "provider_p2p event=METADATA_FAILED opRef=0123456789abcdef " +
+            "source=MAGNET failure=METADATA_UNAVAILABLE elapsedMs=30001"
+
+        fun sanitizeLine(line: String) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000,
+                severity = DiagnosticSeverity.WARN,
+                subsystem = DiagnosticSubsystem.CONTENT,
+                name = DiagnosticEventName.PROVIDER_P2P_EVENT,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.SUMMARY,
+                outcome = DiagnosticOutcome.FAILED,
+                attributes = mapOf(
+                    "provider_p2p_line" to DiagnosticAttributeValue.Text(line),
+                ),
+            ),
+        )?.attributes
+
+        sanitizeLine(safeLine) shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_P2P_LINE to DiagnosticAttributeValue.Text(safeLine),
+        )
+        listOf(
+            safeLine + " filePath=secret.cbz",
+            safeLine + " source=https://example.org/?token=secret",
+            safeLine + " magnet=magnet:?xt=secret",
+            safeLine + "\nAuthorization: Bearer secret",
+        ).forEach { unsafe ->
+            sanitizeLine(unsafe) shouldBe emptyMap()
+        }
+    }
+
+    @Test
     fun `sanitizer keeps bounded Tsuzuki Rating composition fields`() {
         val event = StructuredDiagnosticEvent(
             timestampMillis = 1_790_755_200_000,

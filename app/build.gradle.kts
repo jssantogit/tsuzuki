@@ -391,6 +391,12 @@ dependencies {
     testImplementation("org.xerial:sqlite-jdbc:3.51.3.0")
     testRuntimeOnly(libs.junit.platform.launcher)
 
+    // Android Compose behavioral tests share the debug instrumentation source set.
+    // Explicitly package the test harness rather than relying on UI dependency leakage.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.uiTestJunit4)
+    debugImplementation(libs.androidx.compose.uiTestManifest)
+
     // Separate, opt-in real-extension Android test lane.
     androidTestImplementation(libs.androidx.test.junit)
     // The runner is the instrumentation entry point; ext:junit alone does not guarantee its DEX is packaged.

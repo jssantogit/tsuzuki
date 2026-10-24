@@ -16,6 +16,8 @@ import tachiyomi.core.provider.runtime.ProviderP2pFailureCode
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderManagedFileFormat
 import tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceRef
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateFile
 import java.io.ByteArrayOutputStream
 import java.nio.file.Path
 import java.util.zip.ZipEntry
@@ -172,6 +174,96 @@ class ProviderP2pJobManagerTest {
             ProviderP2pFailureCode.METADATA_UNAVAILABLE,
         )
         manager.close()
+    }
+
+    @Test
+    fun `Host cached metadata requires an exact per invocation selection grant`() = runTest {
+        val cache = HostVerifiedTorrentMetadataCache(
+            describe = {
+                VerifiedTorrentDescription(
+                    infoHash = "0123456789abcdef0123456789abcdef01234567",
+                    files = listOf(VerifiedTorrentFile(1, "pack/chapter-012.cbz", 2048L)),
+                )
+            },
+        )
+        val url = "https://example.invalid/test.torrent"
+        val approved = request().copy(
+            infoHash = "0123456789abcdef0123456789abcdef01234567",
+            torrentUrl = url,
+        )
+        cache.offer(
+            "org.example.source",
+            TorrentCandidate(
+                infoHash = approved.infoHash,
+                magnetUri = approved.magnetUri,
+                torrentUrl = url,
+                displayName = "Chapter 12",
+                files = listOf(TorrentCandidateFile(1, "pack/chapter-012.cbz", 2048L)),
+            ),
+            byteArrayOf(1, 2, 3),
+        ) shouldBe true
+
+        val seen = mutableListOf<Boolean>()
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        val engine = object : ProviderP2pDownloadEngine {
+            override suspend fun download(
+                request: ProviderP2pAcquireRequest,
+                workingDirectory: java.io.File,
+            ) = ProviderP2pDownloadResult.Failure(ProviderP2pFailureCode.METADATA_UNAVAILABLE)
+
+            override suspend fun downloadWithHostMetadata(
+                request: ProviderP2pAcquireRequest,
+                workingDirectory: java.io.File,
+                verifiedBytes: ByteArray?,
+            ): ProviderP2pDownloadResult {
+                seen += verifiedBytes != null
+                return ProviderP2pDownloadResult.Failure(ProviderP2pFailureCode.METADATA_UNAVAILABLE)
+            }
+        }
+        val jobs = ProviderP2pJobManager(
+            root = tempDir.resolve("host-grants").toFile(),
+            managedFiles = managedStore(),
+            engine = engine,
+            verifiedMetadata = cache,
+            scope = scope,
+        )
+        try {
+            val withoutGrant = approved.copy(operationId = "no-grant")
+            (jobs.service("org.example.p2p").acquire(withoutGrant) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            scope.advanceUntilIdle()
+            seen shouldBe listOf(false)
+
+            val withGrant = approved.copy(operationId = "approved")
+            (
+                jobs.service("org.example.p2p", withGrant).acquire(withGrant)
+                    is ProviderP2pAcquireResponse.Pending
+                ) shouldBe true
+            // A second Provider invocation with no Host selection approval must not
+            // poll an already-running privileged job just by repeating its operation ID.
+            jobs.service("org.example.p2p").acquire(withGrant) shouldBe
+                ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.FILE_MISMATCH)
+            scope.advanceUntilIdle()
+            seen shouldBe listOf(false, true)
+            // Completed privileged jobs are not transferable across invocations either.
+            jobs.service("org.example.p2p").acquire(withGrant) shouldBe
+                ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.FILE_MISMATCH)
+            // The originally approved invocation can continue to poll the result.
+            jobs.service("org.example.p2p", withGrant).acquire(withGrant) shouldBe
+                ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.METADATA_UNAVAILABLE)
+
+            val differentSelection = approved.copy(
+                operationId = "mismatch",
+                selectedFilePath = "pack/other.cbz",
+            )
+            (
+                jobs.service("org.example.p2p", withGrant).acquire(differentSelection)
+                    is ProviderP2pAcquireResponse.Pending
+                ) shouldBe true
+            scope.advanceUntilIdle()
+            seen shouldBe listOf(false, true, false)
+        } finally {
+            jobs.close()
+        }
     }
 
     private fun request() = ProviderP2pAcquireRequest(

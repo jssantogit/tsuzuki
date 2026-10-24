@@ -10,6 +10,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
+import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderCursor
@@ -123,12 +124,26 @@ class ScriptProviderTorrentGateway(
         request: TorrentAcquisitionRequest,
     ): ProviderCallResult<P2pAcquireState> {
         val startedAtNanos = System.nanoTime()
+        // Host-approved canonical selection is attached to the private invocation policy.
+        // Never rely on the script's response as a grant or expose metadata bytes via JSON.
+        val approvedSelection = runCatching {
+            ProviderP2pAcquireRequest(
+                operationId = request.operationId,
+                magnetUri = request.candidate.magnetUri,
+                torrentUrl = request.candidate.torrentUrl,
+                infoHash = request.candidate.infoHash,
+                selectedFileIndex = request.selectedFile.index,
+                selectedFilePath = request.selectedFile.path,
+                selectedFileSizeBytes = request.selectedFile.sizeBytes,
+            )
+        }.getOrNull()
         val result = executor.invoke(
             providerId = providerId,
             capability = ProviderCapabilities.AcquisitionP2pV1,
             inputJson = json.encodeToString(request.toDto()),
             privilegedHostGrants = ScriptProviderPrivilegedHostGrants(
                 directP2p = true,
+                approvedP2pSelection = approvedSelection,
             ),
         ) { value, _ ->
             val decoded = json.decodeFromString<P2pResultDto>(value)

@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.provider.runtime
 import kotlinx.coroutines.CancellationException
 import tachiyomi.core.provider.packageformat.ParsedProviderPackage
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
+import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
@@ -61,6 +62,7 @@ class StoredScriptProviderPackageSource(
 
 data class ScriptProviderPrivilegedHostGrants(
     val directP2p: Boolean = false,
+    val approvedP2pSelection: ProviderP2pAcquireRequest? = null,
 )
 
 fun interface ScriptProviderRuntimeInvoker {
@@ -125,8 +127,11 @@ class ScriptProviderCapabilityExecutor(
         }
 
         if (
-            privilegedHostGrants.directP2p &&
-            capability != tachiyomi.domain.tsuzuki.provider.ProviderCapabilities.AcquisitionP2pV1
+            (
+                privilegedHostGrants.directP2p &&
+                    capability != tachiyomi.domain.tsuzuki.provider.ProviderCapabilities.AcquisitionP2pV1
+                ) ||
+            (!privilegedHostGrants.directP2p && privilegedHostGrants.approvedP2pSelection != null)
         ) {
             return failure(
                 ProviderErrorCode.PERMISSION_DENIED,
@@ -141,6 +146,7 @@ class ScriptProviderCapabilityExecutor(
                 invocationId = invocationId,
             ).copy(
                 directP2pEnabled = privilegedHostGrants.directP2p,
+                approvedP2pSelection = privilegedHostGrants.approvedP2pSelection,
             )
         } catch (_: Throwable) {
             return malformed()
