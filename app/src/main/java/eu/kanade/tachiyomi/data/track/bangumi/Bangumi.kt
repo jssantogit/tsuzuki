@@ -60,6 +60,7 @@ class Bangumi(id: Long) : BaseTracker(id, "Bangumi") {
     private val api by lazy { BangumiApi(id, client, interceptor) }
 
     internal val userLibraryApi: BangumiUserLibraryApi = object : BangumiUserLibraryApi {
+        override suspend fun getAuthenticatedOwner(): String = api.getCurrentUser().username
         override suspend fun getUserLibrary(): List<BangumiUserListEntry> =
             api.getUserBookCollections(getUsername())
     }
