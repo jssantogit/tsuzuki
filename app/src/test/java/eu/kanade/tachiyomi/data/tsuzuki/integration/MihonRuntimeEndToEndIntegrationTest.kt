@@ -79,6 +79,7 @@ import tachiyomi.domain.tsuzuki.content.repository.ContentPreferenceRepository
 import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.download.model.CanonicalDownloadArtifact
 import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
+import tachiyomi.domain.tsuzuki.download.service.CanonicalDownloadGateway
 import tachiyomi.domain.tsuzuki.integration.ChapterEvidenceProvider
 import tachiyomi.domain.tsuzuki.integration.DiscoveryProvider
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
@@ -905,6 +906,9 @@ class MihonRuntimeEndToEndIntegrationTest {
                 canonicalChapterRepository = canonicalChapters,
                 canonicalReadingRepository = readingRepository,
                 canonicalDownloadRepository = EmptyCanonicalDownloadRepository,
+                canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                    override suspend fun isDownloaded(variant: ChapterVariant) = false
+                },
                 chapterContentPreparer = MihonChapterContentPreparer(
                     MihonCanonicalReaderGateway(chapterRows.repository),
                 ),

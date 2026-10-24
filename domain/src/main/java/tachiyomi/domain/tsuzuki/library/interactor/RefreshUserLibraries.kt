@@ -21,6 +21,7 @@ import tachiyomi.domain.tsuzuki.integration.UserListProvider
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.interactor.MaterializeCanonicalTitleFromCatalog
 import tachiyomi.domain.tsuzuki.library.model.ExternalLibraryMembership
+import tachiyomi.domain.tsuzuki.library.model.VerifiedExternalLibraryOwner
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.repository.ExternalLibraryRepository
 import kotlin.time.Clock
@@ -66,6 +67,15 @@ class RefreshUserLibraries internal constructor(
     suspend fun refreshConnected(): Map<IntegrationId, Result<Int>> {
         registry.awaitReady()
         val providers = registry.userListProviders()
+        if (!externalLibraryRepository.hasVerifiedOwnerScope) {
+            // Do not fetch private lists, materialize canonical titles, or delete
+            // unowned rows when the repository cannot prove their account scope.
+            return providers.associate { provider ->
+                provider.integrationId to Result.failure<Int>(
+                    IllegalStateException("External library requires verified account-scoped persistence"),
+                )
+            }
+        }
         val enabledProviderIds = providers.mapTo(mutableSetOf()) { it.integrationId.value }
 
         externalLibraryRepository.getProviderIds()
@@ -93,6 +103,11 @@ class RefreshUserLibraries internal constructor(
                 IllegalArgumentException("No user-list provider for ${integrationId.value}"),
             )
 
+        if (!externalLibraryRepository.hasVerifiedOwnerScope) {
+            return Result.failure(
+                IllegalStateException("External library requires verified account-scoped persistence"),
+            )
+        }
         if (!provider.connection.first()) {
             externalLibraryRepository.clearProvider(integrationId.value)
             return Result.success(0)
@@ -113,7 +128,10 @@ class RefreshUserLibraries internal constructor(
     }
 
     suspend fun clearProvider(integrationId: IntegrationId) {
-        externalLibraryRepository.clearProvider(integrationId.value)
+        if (externalLibraryRepository.hasVerifiedOwnerScope) {
+            externalLibraryRepository.clearProvider(integrationId.value)
+        }
+        // A logged-out session cannot authorize destroying unowned rows.
     }
 
     private fun integrationIdForLegacyTracker(trackerId: Long): IntegrationId? {
@@ -143,6 +161,16 @@ class RefreshUserLibraries internal constructor(
             attributes = providerAttributes,
         )
 
+        val initialOwner = provider.authenticatedOwnerSubject().getOrElse { error ->
+            if (error is CancellationException) throw error
+            return Result.failure(error)
+        }
+        val verifiedOwner = try {
+            VerifiedExternalLibraryOwner.fromAuthenticatedIdentity(provider.integrationId.value, initialOwner)
+        } catch (error: IllegalArgumentException) {
+            return Result.failure(error)
+        }
+
         val snapshot = provider.fetchLibrary()
         val error = snapshot.exceptionOrNull()
         if (error != null) {
@@ -160,6 +188,9 @@ class RefreshUserLibraries internal constructor(
         }
 
         return try {
+            check(provider.authenticatedOwnerSubject().getOrThrow() == initialOwner) {
+                "Authenticated external library owner changed during fetch"
+            }
             val syncedAt = clock()
             val librarySnapshot = snapshot.getOrThrow()
             val entries = librarySnapshot.entries
@@ -198,8 +229,13 @@ class RefreshUserLibraries internal constructor(
                 }
             }
 
-            externalLibraryRepository.replaceProvider(
-                provider = provider.integrationId.value,
+            // Never attribute a fetch made for A to B, including an account
+            // switch while canonical titles were being reconciled.
+            check(provider.authenticatedOwnerSubject().getOrThrow() == initialOwner) {
+                "Authenticated external library owner changed before commit"
+            }
+            externalLibraryRepository.replaceOwned(
+                owner = verifiedOwner,
                 memberships = memberships,
             )
             trace.event(

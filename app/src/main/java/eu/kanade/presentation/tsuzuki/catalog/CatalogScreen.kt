@@ -33,6 +33,7 @@ import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.DiscoverFeed
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
+import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.EmptyScreenAction
 import tachiyomi.presentation.core.screens.LoadingScreen
@@ -79,7 +80,7 @@ fun CatalogScreen(
                 actions = {
                     if (!searchOpen) {
                         TextButton(onClick = onOpenCollections) {
-                            Text("Collections")
+                            Text(stringResource(MR.strings.tsuzuki_collections_admin_title))
                         }
                     }
                 },

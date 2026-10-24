@@ -465,7 +465,25 @@ class ReconcileChapterEvidence internal constructor(
                 reasonCounts.increment(ChapterInventoryDiagnosticReason.IDENTITY_MISMATCH)
             }
 
-            val identityCandidates = chaptersByIdentity[parsed.identity].orEmpty()
+            if (mappedIdentityConflicts && mappedChapter?.numberingKind != null) {
+                // The active v1 parser cannot prove or replace a previously stored
+                // exact v2 identity. A new label on the same stable source key
+                // must not fork that chapter, downgrade it or re-home its source
+                // mapping to a sibling legacy row with the same integer part.
+                // Retain the raw evidence for an explicit future v2 review.
+                provisionalCount++
+                stageEvidence(observation, mappedCanonicalChapterId = null)
+                continue
+            }
+
+            // Unnumbered semantic types (Extra, Prologue, One-shot, etc.) do not
+            // identify an individual release across source keys. Reuse a stable
+            // external-key mapping instead of merging every release of one type.
+            val identityCandidates = if (parsed.identity.isNumbered) {
+                chaptersByIdentity[parsed.identity].orEmpty()
+            } else {
+                emptyList()
+            }
             val legacyUnqualifiedMergeTarget = if (
                 parsedIdentityIsReliable &&
                 observation.producerKind == ProducerKind.ADDON &&

@@ -1,0 +1,105 @@
+# Canonical chapter v2 — Android and mixed-device acceptance
+
+Status: **NOT EXECUTED / NOT RELEASE-APPROVED**. This is an acceptance matrix, not evidence that these flows work on a physical device. The exact-numbering migration writer and sync-v2 mode are internal opt-in pilots and are not connected to production.
+
+## Preconditions
+
+1. Take an exportable/restorable backup of the existing Tsuzuki library, reading progress, chapter history, downloads, title mappings and signed-in sync state. Do not run on the only copy of a user's data.
+2. Capture the starting app version, SQLite schema/version, Git commit and Android device version. Retain a reproducible database snapshot representative of the version **before** SQLDelight migration 43.
+3. Prepare independent editorial and source fixtures for **12.05**, **12.5**, **12 Part 5**, **Vol. 1 Ch. 12**, **Vol. 2 Ch. 12**, multiple unnumbered Extras and mixed scanlation sources.
+4. Keep the v2 writer and v2 sync codec **disabled in production**. Both sides of a sync test must use explicitly isolated development accounts and disposable data.
+5. Reject release if any failed test causes silent chapter-ID reassignment, progress loss or a portable-key collision.
+
+## Acceptance matrix
+
+| Area | Procedure | Pass criteria | State |
+| --- | --- | --- | --- |
+| Historical database upgrade | Upgrade a real pre-43 snapshot with progress, downloads, history and source variants; compare rows and FKs before/after | All IDs, FKs, reading checkpoints, history and downloads retained; v2 columns NULL on old rows | **Not run** |
+| Reader identity | Open chapters 12.05, 12.5, 12 Part 5 and ordinary 12 in a controlled inventory | Four distinct chapter identities, correct order and no accidental reassignment | **Not run** |
+| Volume reset | Browse chapter 12 in two volumes, then select Next/Previous across volume boundary | Both chapters retained and correctly navigated, no duplicate progress key | **Not run** |
+| Source switching | Read a chapter using one source and switch to a different variant/language | Exact canonical ID stable; page position not reused across incompatible variants | **Not run** |
+| Downloads | Download variants, restart app, re-open offline, switch sources and return online | Existing downloads and associated canonical IDs unchanged | **Not run** |
+| Unnumbered extras | Import two Extras without stable common identifiers | Extras remain separate; no guessed cross-source merge | **Not run** |
+| Conflicting historical evidence | Change a trusted exact label from 12.05 to 12.5 while preserving source key | Previous exact identity not silently downgraded or rehomed | **Not run** |
+| Android app recovery | Force-stop/relaunch during background refresh and retry | No partial identity write or lost reading state | **Not run** |
+| Same-version sync pilot | Isolated v2-to-v2 progress exchange on two development devices with distinct local IDs | Fraction + volume keys resolve exactly once; checkpoints correct | **Not run** |
+| Mixed-version sync | Attempt v1-to-v2 and v2-to-v1 transfer in an isolated test environment | Incompatible documents rejected without writing progress, with clear recovery path | **Not run** |
+| Downgrade and restore | Roll back app from a backed-up snapshot without v2 in-place mutation | No data loss, corruption or stale-identity promotion | **Not run** |
+
+## Cached-download recovery preflight (automated fixture; physical acceptance NOT RUN)
+
+The canonical Reader and chapter-download path no longer trust a persisted `CanonicalDownloadArtifact` without a physical readability check. The Mihon boundary checks for **at least one actual recognizable image header** (via the archive reader for CBZ/ZIP/RAR/CBR and page references in EPUB, or via image files in a directory) before reusing the download. It **also** verifies freshly acquired files before reporting completion. A truncated archive, image-free ZIP, fake `.jpg` with non-image bytes, empty directory or missing EPUB page is rejected as a reusable cache hit. A stale record falls through to normal source/option resolution or download acquisition; the record is **not automatically deleted** if an SD card is detached or an SAF grant is revoked. Validation failures other than cancellation fail closed; cancellation still propagates.
+
+Domain regressions cover stale files masking healthy online sources, reacquisition, absent providers without metadata loss, permission-denied inspection and cancellation. App regressions reject unreadable located/post-download artifacts. The disposable Android gate adds a real file-URI fixture for missing, zero-byte, readable-file and directory cases under the isolated debug package's cache. The gate now exercises actual ZIP and EPUB entry parsing and basic image-header recognition on disposable files; it does **not** decode every image, stream the entire archive for CRC/checksum verification, certify every compression format, exercise actual downloaded content, validate physical removable storage, restore SAF permissions, or restart across app versions. Real device/download acceptance remains **Not run**. Those remain **Not run** in the Downloads matrix row.
+
+## Canonical local final-page decode gate (automated fixture; device acceptance pending)
+
+The Reader previously used image-type/header recognition for the last local page. This prevents arbitrary bytes from marking a canonical chapter complete, but a truncated PNG can retain a valid signature and dimensions. The canonical-local-only completion gate now samples an **actual BitmapFactory decode** (scaling the largest dimension down to at most 512 pixels) for Android-decodable image types before writing `completed=true`. The user's last-page index is preserved on decode failure; the chapter is **not** marked read. Legacy/Mihon and HTTP Reader paths retain their existing completion behavior. For JXL and JPEG 2000, which rely on external decoders, the existing header-only check remains; they are not certified by this new decode gate.
+
+The disposable emulator fixture includes a valid PNG, a PNG with a valid header and truncated pixel payload, arbitrary corrupt bytes, and an unavailable stream. The fixture executes **before source-switch UI tests** so a failure in an unrelated UI scenario cannot conceal this regression. Decoding one sampled page is not equivalent to verifying the archive's full CRC, all pages, or hardware-/device-specific image renderers. Full content-integrity and physical-device tests remain **Not run** in the acceptance matrix.
+
+## Read-only progress migration and protocol fence (automated; rollout NOT RUN)
+
+The client now refuses `READING_PROGRESS_V2` both for direct and background sync. The server-side public `sync_apply_mutation_batch` wrapper denies the same domain before mutation idempotency or writes; the unmodified legacy implementation is internal and is no longer executable directly by app roles. The read-only, authenticated `sync_get_progress_protocol()` advertises only schema/epoch 1; the HTTP client decoder refuses unknown future versions and inconsistent capability flags. Neither the server nor the client has an epoch-promotion entry point.
+
+A pure `PreviewCanonicalProgressV2Migration` inspects a v1 remote document against the complete local title inventory and optional stable evidence. It can return old-record-ID to new-record-ID **review pairs**, but it blocks ambiguous volume-number resets, exact numbering guessed from legacy parts, unresolved or forged keys and tombstones. A passing preview is never a write permit. The remote v1 document and all local progress remain unchanged.
+
+The safe migration still requires an account-scoped authoritative server epoch, durable compatibility and device registry, approved frontier/record conversion, a **server-side fence** against old-client v1 writes after cutover, transactional receipts, downgrade behavior and physical mixed-device acceptance. All are **Not implemented / Not run**, independently of whether SQL pgTAP and Kotlin CI gates are green. Technical contract: [canonical-progress-v2-rollout-contract.md](canonical-progress-v2-rollout-contract.md).
+
+## Offline historical SQLite backup preflight (tooling; acceptance NOT RUN)
+
+A read-only checker is available at `.github/scripts/verify_chapter_migration_43_backup.py`. It checks a **user-supplied, checkpointed pre-43 SQLite database** on an isolated temporary copy, never runs migration SQL against the supplied file, and prints only pass/fail and table/chapter counts. It verifies SQLite integrity, foreign keys, table definitions, unchanged pre-existing row values (including progress, history, downloads, evidence and variants), and NULL v2 fields after migration 43.
+
+Run from the repository root, on an independently exported SQLite snapshot (not an Android live database):
+
+```bash
+python3 .github/scripts/verify_chapter_migration_43_backup.py /path/to/offline-pre43.sqlite
+```
+
+The checker rejects sources with SQLite `-wal`, `-shm` or `-journal` sidecars (also when accessed through a symbolic link): first create a consistent, **offline, checkpointed** snapshot using SQLite's backup API or a verified database-export workflow. It opens the original snapshot in immutable read-only mode and discards its temporary migration copy. Keep the database locally; do not attach it to public CI or the PR. The fixture tests for this tool run in the CI Change Planner.
+
+**Scope limit:** a passing result checks the additive migration 43 on that database snapshot only. It does not execute the Android backup/restore path, SQLDelight's full upgrade path from arbitrary old versions, Reader behavior, mixed-device synchronization, or downgrade behavior. The matrix's historical database upgrade, physical Reader and synchronization rows remain **Not run** until separately accepted on real device data.
+
+## Additional automated gates (2026-10-22)
+
+- `.github/scripts/test_chapter_migration_43.py`: exercises migration 43 against a disposable pre-43-shaped SQLite fixture with two distinct chapter IDs sharing the legacy numeric part, preserved progress, history, downloads, mapped evidence and variants. This is a **synthetic compatibility smoke test**, not a restored Android user database.
+- `.github/workflows/ci-v2.yml`: runs that fixture in the planner plus Kotlin domain/data/app tests and SQLDelight's schema migration verification. Final full CI verdict must be read from the exact tested commit.
+- `.github/workflows/canonical-chapter-v2-android.yml`: separate opt-in-guarded emulator test lane with a disposable debug package, exercising Reader source switching and invalid navigation. It requires a successful instrumentation report and clears app data afterward. This gate is **not** evidence for real user backups or cross-device sync until the GitHub run completes successfully.
+- The Supabase orchestration code now **rejects unnegotiated v2 documents** and incompatible accepted-base versions **before using the legacy unversioned transport**. This protects data but deliberately leaves live sync v2 unavailable, pending server-side protocol negotiations, v1 remote record migration and older-client downgrade protection.
+
+## Verified disposable emulator smoke (2026-10-22)
+
+GitHub Actions [run 39817021141](https://github.com/jssantogit/tsuzuki/actions/runs/39817021141) **PASSED** on exact commit `b983b3fede189f8dcf3ff44c17a5dc53a0aa6f1a`, with real installed debug and instrumentation APKs on an API 35 Android emulator:
+
+- `CanonicalReaderSourceSwitchInstrumentedTest#sourceAtoBLoadsPagesAndPreservesCanonicalChapterAndObservedPosition`: PASS — Reader switched from source A to B while retaining the canonical chapter and observed page position.
+- `CanonicalTitleSourceNavigationInstrumentedTest#invalidDiscoveryIntentDoesNotOpenTitleOrMutateProgressAndPreferences`: PASS — invalid source discovery left canonical reading progress and preferences unchanged.
+- Both tests completed with instrumented JUnit success; full logs were uploaded as a short-lived GitHub Actions artifact (3-day retention).
+- This is **only two synthetic-fixture emulator scenarios**. It does not cover a real pre-v2 database upgrade, all Reader Next/Previous controls, offline downloads, cross-device migration, older-client coexistence, or actual users' libraries. Keep those matrix rows **Not run** until independently verified.
+
+## Progress-import integrity and expanded emulator gate
+
+The reading-progress import path (v1 and opt-in v2) now **resolves and validates every incoming record before writing any local checkpoint**, verifies each record's full length-prefixed ID against its title ID and chapter key, and refuses two different remote records that resolve to the same local chapter. Regression tests assert that a malformed later record cannot partially apply an earlier valid record, and that a forged chapter key cannot redirect reading progress. The production reading repository now also exposes an atomic SQLDelight `upsertProgressBatch` path: after prevalidation the adapter writes all checkpoints in one SQLite transaction. Data regression tests inject a later invalid chapter foreign key to verify that earlier progress is rolled back; duplicate IDs are rejected before writing. Nontransactional test adapters fail closed on multi-record updates unless they explicitly implement atomic batches. This is an automated rollback guarantee for the production SQLite repository, **not** validation of remote cross-device migration on users' devices.
+
+The disposable Android gate script now requests three additional existing source-switching tests: keeping the old Reader session when a replacement source is empty/failing, clamping page positions when a new source has fewer pages, and restoring position through Reader Activity recreation. **All five scenarios passed** in run 39820322683; see the run-specific report below. This does not cover production databases or mixed-device protocol negotiation.
+
+## Extended disposable emulator validation — 2026-10-22
+
+GitHub Actions [run 39820322683](https://github.com/jssantogit/tsuzuki/actions/runs/39820322683) **PASSED 5/5** instrumentation scenarios on exact commit `66baf4e1f3f67139a0ffcd3ab1480b317c37ea95` (Android emulator API 35, disposable `app.tsuzuki.dev` install):
+
+- `sourceAtoBLoadsPagesAndPreservesCanonicalChapterAndObservedPosition`: PASS
+- `emptyOrFailingSourceKeepsPreviouslyLoadedReaderSession`: PASS
+- `pageCountDifferenceClampsPositionToValidPage`: PASS
+- `activityRecreationRestoresObservedCanonicalPosition`: PASS
+- `invalidDiscoveryIntentDoesNotOpenTitleOrMutateProgressAndPreferences`: PASS
+
+This expands the previous 2-scenario smoke and validates actual app instrumentation behavior for source failure recovery and Reader recreation. The matrix's physical-device, historical database, true next/previous volume navigation, downloads/offline and mixed-account synchronization requirements remain **NOT RUN**. A passing emulator is not evidence of safe production rollout.
+
+## Existing automated checks
+
+- Domain and Data tests cover decimal precision, volume-aware identities, conflicting evidence, SQLDelight schema migrations, protected state and compare-and-swap writer behavior.
+- The ordinary reading-progress sync adapter **remains schema v1**. Its batch import now uses a single rollback-safe SQLite transaction. The opt-in version-2 path is not connected to live Supabase sync or the user's account.
+- A green GitHub Actions release compile or native package gate demonstrates buildability, **not** completion of the physical-device acceptance matrix above.
+
+## Release decision
+
+Do **not** merge or enable migration on existing user accounts until the Android matrix has documented results, legacy database snapshots have been upgraded and restored successfully, and the remote sync protocol supports a coordinated rollout across devices. Capture test build SHA, emulator/physical-device identity, DB comparison evidence and any failure logs alongside the release sign-off.

@@ -16,11 +16,15 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -354,6 +358,8 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
                         onClick = { repositoryToRemove = null },
                     )
                 },
+                shape = DefaultSkinShape.Card,
+                tonalElevation = 0.dp,
                 containerColor = colors.surface,
                 titleContentColor = colors.foreground,
                 textContentColor = colors.secondary,
@@ -561,6 +567,7 @@ private fun DiscoverProviderCards(
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(top = 18.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (entries.isEmpty()) {
             item(key = "empty") {
@@ -573,51 +580,57 @@ private fun DiscoverProviderCards(
             }
         }
         if (entries.isNotEmpty()) {
-            item(key = "discover_group") {
-                SettingsGroup {
-                    entries.forEachIndexed { index, entry ->
-                        val operationKey = "install:${entry.repositoryId}:${entry.descriptor.providerId}"
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
+            items(
+                items = entries,
+                key = { "${it.repositoryId}:${it.descriptor.providerId}" },
+            ) { entry ->
+                val operationKey = "install:${entry.repositoryId}:${entry.descriptor.providerId}"
+                DefaultSkinCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = DefaultSkinSpacing.PageHorizontal),
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            text = entry.descriptor.providerId,
+                            color = colors.foreground,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "${entry.descriptor.versionName} · ${providerRepositoryStatusLabelDefaultSkin(
+                                entry.status,
+                            )}",
+                            color = colors.secondary,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            text = entry.repositoryId,
+                            color = colors.secondary,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        if (
+                            entry.status == ProviderRepositoryEntryStatus.AVAILABLE ||
+                            entry.status == ProviderRepositoryEntryStatus.UPDATE_AVAILABLE
                         ) {
-                            Text(
-                                text = entry.descriptor.providerId,
-                                color = colors.foreground,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
+                            DefaultSkinPrimaryButton(
+                                text = stringResource(
+                                    if (entry.status == ProviderRepositoryEntryStatus.UPDATE_AVAILABLE) {
+                                        MR.strings.tsuzuki_providers_update
+                                    } else {
+                                        MR.strings.tsuzuki_providers_install
+                                    },
+                                ),
+                                enabled = operationKey !in operationKeys,
+                                modifier = Modifier.padding(top = 4.dp).heightIn(min = 40.dp),
+                                minimumHeight = 40.dp,
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                                onClick = { onInstall(entry) },
                             )
-                            Text(
-                                text = "${entry.descriptor.versionName} · ${providerRepositoryStatusLabelDefaultSkin(
-                                    entry.status,
-                                )}",
-                                color = colors.secondary,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            Text(
-                                text = entry.repositoryId,
-                                color = colors.secondary,
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                            if (
-                                entry.status == ProviderRepositoryEntryStatus.AVAILABLE ||
-                                entry.status == ProviderRepositoryEntryStatus.UPDATE_AVAILABLE
-                            ) {
-                                DefaultSkinPrimaryButton(
-                                    text = stringResource(
-                                        if (entry.status == ProviderRepositoryEntryStatus.UPDATE_AVAILABLE) {
-                                            MR.strings.tsuzuki_providers_update
-                                        } else {
-                                            MR.strings.tsuzuki_providers_install
-                                        },
-                                    ),
-                                    enabled = operationKey !in operationKeys,
-                                    modifier = Modifier.heightIn(min = 48.dp),
-                                    onClick = { onInstall(entry) },
-                                )
-                            }
                         }
-                        if (index < entries.lastIndex) SettingsGroupDivider()
                     }
                 }
             }
@@ -640,7 +653,13 @@ private fun DefaultSkinRepositoriesDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(MR.strings.tsuzuki_providers_repositories)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 if (repositories.isEmpty()) {
                     Text(
                         stringResource(MR.strings.tsuzuki_providers_no_repositories),
@@ -701,6 +720,8 @@ private fun DefaultSkinRepositoriesDialog(
                 onClick = onDismiss,
             )
         },
+        shape = DefaultSkinShape.Card,
+        tonalElevation = 0.dp,
         containerColor = colors.surface,
         titleContentColor = colors.foreground,
         textContentColor = colors.foreground,
@@ -751,7 +772,13 @@ private fun DefaultSkinAddRepositoryDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(MR.strings.tsuzuki_providers_add_repository)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 DefaultSkinTextField(
                     value = displayName,
                     onValueChange = { displayName = it },
@@ -788,21 +815,43 @@ private fun DefaultSkinAddRepositoryDialog(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .toggleable(
+                            value = trustConfirmed,
+                            enabled = trustToken != null,
+                            role = Role.Checkbox,
+                            onValueChange = { checked ->
+                                confirmedTrustToken = if (checked) trustToken else null
+                            },
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     Checkbox(
                         checked = trustConfirmed,
                         enabled = trustToken != null,
-                        onCheckedChange = { checked ->
-                            confirmedTrustToken = if (checked) trustToken else null
-                        },
+                        onCheckedChange = null,
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = colors.accent,
+                            uncheckedColor = colors.outline,
+                            checkmarkColor = colors.onAccent,
+                        ),
                     )
-                    Text(stringResource(MR.strings.tsuzuki_providers_repository_trust_confirm))
+                    Text(
+                        text = stringResource(MR.strings.tsuzuki_providers_repository_trust_confirm),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (trustToken != null) colors.foreground else colors.secondary,
+                    )
                 }
             }
         },
         confirmButton = {
             DefaultSkinTextAction(
                 text = stringResource(MR.strings.action_add),
+                enabled = canConfirm,
                 onClick = {
                     if (!canConfirm) return@DefaultSkinTextAction
                     onConfirm(
@@ -824,6 +873,8 @@ private fun DefaultSkinAddRepositoryDialog(
                 onClick = onDismiss,
             )
         },
+        shape = DefaultSkinShape.Card,
+        tonalElevation = 0.dp,
         containerColor = colors.surface,
         titleContentColor = colors.foreground,
         textContentColor = colors.foreground,

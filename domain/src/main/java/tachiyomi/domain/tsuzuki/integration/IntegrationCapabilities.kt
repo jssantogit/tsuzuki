@@ -105,5 +105,9 @@ interface UserListProvider {
 
     val connection: Flow<Boolean>
 
+    /** Fresh authenticated provider-issued owner identity. Never infer it from connection alone. */
+    suspend fun authenticatedOwnerSubject(): Result<String> =
+        Result.failure(IllegalStateException("Authenticated library owner unsupported"))
+
     suspend fun fetchLibrary(): Result<UserLibrarySnapshot>
 }

@@ -10,6 +10,7 @@ import tachiyomi.domain.tsuzuki.account.repository.AccountRepository
 class SupabaseAccountRepository(
     private val authService: SupabaseAuthService,
     private val sessionStore: SupabaseSessionStore,
+    private val callbackRequests: AuthCallbackRequestStore,
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000L },
 ) : AccountRepository {
 
@@ -21,13 +22,24 @@ class SupabaseAccountRepository(
 
     override suspend fun register(email: String, password: String): Result<AccountState> =
         runCatching {
-            val result = authService.register(email, password)
-            val next = result.session?.let {
-                sessionStore.save(it)
-                it.toAccountState()
-            } ?: AccountState.EmailConfirmationRequired(email)
-            mutableState.value = next
-            next
+            val request = callbackRequests.start("signup")
+            try {
+                val result = authService.register(
+                    email = email,
+                    password = password,
+                    redirectTo = authService.callbackRedirectUrl(request.nonce),
+                    codeChallenge = request.codeChallenge,
+                )
+                check(result.session == null) {
+                    "PKCE signup must not return bearer tokens before email verification"
+                }
+                val next = AccountState.EmailConfirmationRequired(email)
+                mutableState.value = next
+                next
+            } catch (error: Throwable) {
+                callbackRequests.cancel("signup", request.nonce)
+                throw error
+            }
         }
 
     override suspend fun login(email: String, password: String): Result<AccountState> =
@@ -52,15 +64,26 @@ class SupabaseAccountRepository(
 
     override suspend fun sendPasswordRecovery(email: String): Result<Unit> =
         runCatching {
-            authService.sendPasswordRecovery(email)
+            val request = callbackRequests.start("recovery")
+            try {
+                authService.sendPasswordRecovery(
+                    email = email,
+                    redirectTo = authService.callbackRedirectUrl(request.nonce),
+                    codeChallenge = request.codeChallenge,
+                )
+            } catch (error: Throwable) {
+                callbackRequests.cancel("recovery", request.nonce)
+                throw error
+            }
         }
 
     override suspend fun updatePassword(password: String): Result<Unit> = runCatching {
         require(password.isNotBlank()) { "Password must not be blank" }
-        // The callback can accept a session while this repository is already alive.
         val session = requireNotNull(sessionStore.load()) { "No authenticated session is available" }
         mutableState.value = session.toAccountState()
-        val accessToken = requireNotNull(getAccessToken().getOrThrow()) { "No authenticated session is available" }
+        val accessToken = requireNotNull(getAccessToken().getOrThrow()) {
+            "No authenticated session is available"
+        }
         require(accessToken.isNotBlank()) { "No authenticated session is available" }
         authService.updatePassword(accessToken, password)
     }
@@ -80,15 +103,23 @@ class SupabaseAccountRepository(
         }
 
     override suspend fun getAccessToken(): Result<String?> = runCatching {
-        if (state.value !is AccountState.Authenticated) return@runCatching null
+        val activeUserId = (state.value as? AccountState.Authenticated)
+            ?.account?.id ?: return@runCatching null
 
         val session = sessionStore.load() ?: return@runCatching null
+        check(session.userId == activeUserId) {
+            "Persisted Supabase session belongs to a different account"
+        }
         if (session.expiresAtEpochSeconds > nowEpochSeconds() + ACCESS_TOKEN_REFRESH_SKEW_SECONDS) {
             return@runCatching session.accessToken
         }
 
         refreshSession().getOrThrow()
-        sessionStore.load()?.accessToken
+        val refreshed = sessionStore.load() ?: return@runCatching null
+        check(refreshed.userId == activeUserId) {
+            "Supabase token refresh changed the active account identity"
+        }
+        refreshed.accessToken
     }
 
     fun acceptSession(session: SupabaseSession): AccountState {

@@ -4,6 +4,8 @@ import eu.kanade.tachiyomi.data.track.model.TrackSearch
 
 interface MangaUpdatesUserLibraryApi {
     suspend fun getUserLibrary(): MangaUpdatesUserLibrarySnapshot
+
+    suspend fun getAuthenticatedOwner(): String = error("MangaUpdates owner identity unavailable")
 }
 
 data class MangaUpdatesUserLibrarySnapshot(

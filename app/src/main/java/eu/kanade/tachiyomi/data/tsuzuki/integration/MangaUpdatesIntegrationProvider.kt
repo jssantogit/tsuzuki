@@ -150,6 +150,9 @@ class MangaUpdatesIntegrationProvider private constructor(
             )
         }
 
+    override suspend fun authenticatedOwnerSubject(): Result<String> =
+        capture { userLibraryApi.getAuthenticatedOwner() }
+
     override suspend fun fetchLibrary(): Result<UserLibrarySnapshot> = capture {
         val remote = userLibraryApi.getUserLibrary()
         val listsById = remote.lists.associateBy(MangaUpdatesUserList::id)

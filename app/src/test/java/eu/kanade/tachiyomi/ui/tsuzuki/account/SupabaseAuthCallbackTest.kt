@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.ui.tsuzuki.account
 
 import android.content.Intent
+import eu.kanade.tachiyomi.data.tsuzuki.supabase.AuthCallbackPkceRequest
+import eu.kanade.tachiyomi.data.tsuzuki.supabase.AuthCallbackRequestStore
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseAccountRepository
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseAuthService
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseConfiguration
@@ -30,7 +32,15 @@ class SupabaseAuthCallbackTest {
             OkHttpClient(),
             SupabaseConfiguration(server.url("/").toString().removeSuffix("/"), "publishable-test-key"),
         )
-        repository = SupabaseAccountRepository(service, store)
+        repository = SupabaseAccountRepository(
+            service,
+            store,
+            object : AuthCallbackRequestStore {
+                override fun start(type: String): AuthCallbackPkceRequest = error("not exercised")
+                override fun consume(nonce: String, typeHint: String?): String? = null
+                override fun cancel(type: String, nonce: String) = Unit
+            },
+        )
     }
 
     @AfterEach

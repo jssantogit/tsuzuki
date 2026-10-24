@@ -114,7 +114,8 @@ class DefaultSkinCollectionsAdminContractTest {
 
         source shouldContain "CollectionsAdminRootPage("
         source shouldContain "tsuzuki_collections_admin_title"
-        source shouldContain "tsuzuki_collections_overview"
+        source shouldNotContain
+            "DefaultSkinSectionLabel(text = stringResource(MR.strings.tsuzuki_collections_overview))"
         source shouldContain "DefaultSkinPrimaryButton("
         source shouldContain "CollectionsAdminSurface("
         source shouldContain "CollectionCardAction.OPEN"
@@ -304,7 +305,7 @@ class DefaultSkinCollectionsAdminContractTest {
             ptBr shouldContain "name=\"$key\""
         }
 
-        ptBr shouldContain ">Collections</string>"
+        ptBr shouldContain ">Coleções</string>"
         ptBr shouldContain ">BÁSICO</string>"
         ptBr shouldContain ">Nome da coleção</string>"
         ptBr shouldContain ">PASTAS</string>"

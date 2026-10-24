@@ -1,5 +1,5 @@
 <resources>
-    <string name="tsuzuki_collections_admin_title">Collections</string>
+    <string name="tsuzuki_collections_admin_title">Coleções</string>
     <string name="tsuzuki_collections_admin_back">Voltar</string>
     <string name="tsuzuki_collections_admin_basic">BÁSICO</string>
     <string name="tsuzuki_collections_admin_new_collection">Nova coleção</string>
@@ -24,10 +24,10 @@
     <string name="tsuzuki_collections_admin_remove_draft">Remover</string>
     <string name="tsuzuki_collections_admin_copy_name">%1$s (cópia)</string>
     <string name="tsuzuki_collections_admin_ok">OK</string>
-    <string name="tsuzuki_collections_admin_working">Processando dados das Collections…</string>
+    <string name="tsuzuki_collections_admin_working">Processando dados das coleções…</string>
     <string name="tsuzuki_collections_admin_import_success_title">Importação concluída</string>
-    <string name="tsuzuki_collections_admin_import_success_message">%1$d Collections, %2$d pastas e %3$d listas; %4$d IDs ajustados.</string>
-    <string name="tsuzuki_collections_admin_transfer_error_title">Erro em Collections</string>
+    <string name="tsuzuki_collections_admin_import_success_message">%1$d coleções, %2$d pastas e %3$d listas; %4$d IDs ajustados.</string>
+    <string name="tsuzuki_collections_admin_transfer_error_title">Erro nas coleções</string>
     <string name="tsuzuki_collections_admin_delete_folder_title">Excluir pasta?</string>
     <string name="tsuzuki_collections_admin_delete_folder_message">A pasta e suas listas serão excluídas.</string>
     <string name="tsuzuki_collections_admin_hide_folder_title">Ocultar pasta integrada?</string>

@@ -9,6 +9,7 @@ import android.graphics.Color
 import android.graphics.PointF
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityWindowInfo
@@ -114,6 +115,7 @@ import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterProgress
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.ConnectException
+import java.net.InetAddress
 import java.net.SocketTimeoutException
 import java.net.URI
 import java.net.UnknownHostException
@@ -267,6 +269,44 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                 details = "sourceAPageCount=${first.second}|sourceBPageCount=${after.second}" +
                     "|positionBefore=$positionBefore|positionAfter=${after.first}",
             )
+        }
+    }
+
+    @Test(timeout = 240_000L)
+    fun boundaryNextPreviousKeepsObservedCanonicalPageAndProgress() {
+        requireOptIn()
+        withFixture { fixture ->
+            fixture.launchReader()
+            val reader = awaitActivity(ReaderActivity::class.java)
+            awaitReaderPages(reader, fixture.sourceA.name, expectedCount = 10)
+            val position = advanceToPage(reader, fixture, 4, "CHAPTER_BOUNDARIES")
+            val progressBefore = awaitValue("persisted canonical progress before boundary keys") {
+                runBlocking { fixture.reading.getProgress(fixture.chapter.id) }
+                    ?.takeIf { it.lastPageRead >= position.toLong() }
+            }
+            val historyBefore = runBlocking { fixture.reading.getHistory(fixture.chapter.id) }
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+
+            // The fixture intentionally contains exactly one canonical chapter.
+            // Next and Previous must therefore be no-ops, not a jump to page zero.
+            for (keyCode in listOf(KeyEvent.KEYCODE_N, KeyEvent.KEYCODE_P)) {
+                instrumentation.sendKeyDownUpSync(keyCode)
+                instrumentation.waitForIdleSync()
+                SystemClock.sleep(500L)
+                assertEquals(
+                    "Unavailable adjacent navigation must retain the observed Reader page",
+                    position,
+                    awaitReaderPages(reader, fixture.sourceA.name, expectedCount = 10).first,
+                )
+                assertEquals(fixture.chapter.id, reader.intent.getStringExtra("canonical_chapter"))
+                assertEquals(
+                    "Unavailable adjacent navigation must not update canonical progress",
+                    progressBefore,
+                    runBlocking { fixture.reading.getProgress(fixture.chapter.id) },
+                )
+                assertEquals(historyBefore, runBlocking { fixture.reading.getHistory(fixture.chapter.id) })
+            }
+            report("CHAPTER_BOUNDARIES", 10, position, details = "next=NOOP|previous=NOOP|progress=UNCHANGED")
         }
     }
 
@@ -2662,8 +2702,11 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                     ),
                 )
                 server.dispatcher = dispatcher
-                server.start()
-                val baseUrl = server.url("/").toString().trimEnd('/')
+                // MockWebServer.start() resolves "localhost" through Android DNS.
+                // The disposable emulator occasionally has no localhost DNS entry,
+                // so bind and address the fixture with a literal IPv4 loopback.
+                server.start(InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)), 0)
+                val baseUrl = "http://127.0.0.1:${server.port}"
                 val sourceAInventoryCall = AtomicReference("NOT_STARTED")
                 val sourceBInventoryCall = AtomicReference("NOT_STARTED")
                 val sourceAInventoryCallEvents = AtomicReference("NONE")
@@ -3122,7 +3165,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
     }
 
     private companion object {
-        const val EXPECTED_TARGET_PACKAGE = "app.mihon.dev"
+        const val EXPECTED_TARGET_PACKAGE = "app.tsuzuki.dev"
         const val UI_TIMEOUT_MS = 60_000L
         const val REGISTRY_READY_TIMEOUT_MS = 15_000L
         const val MIN_IMAGE_COLOR_SAMPLES = 80

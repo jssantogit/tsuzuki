@@ -39,6 +39,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.download.model.CanonicalDownloadArtifact
 import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
+import tachiyomi.domain.tsuzuki.download.service.CanonicalDownloadGateway
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
@@ -203,6 +204,9 @@ class PrepareCanonicalChapterProviderFallbackTest {
             canonicalChapterRepository = chapterRepository,
             canonicalReadingRepository = readingRepository(),
             canonicalDownloadRepository = emptyDownloadRepository(),
+            canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+            },
             chapterContentPreparer = object : ChapterContentPreparer {
                 override suspend fun prepare(
                     option: ContentOption,

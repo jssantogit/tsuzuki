@@ -403,6 +403,7 @@ internal fun canonicalDetailsHeroFadeStops(background: Color): List<Pair<Float, 
 
 @Composable
 internal fun DetailsEditorial(state: CanonicalTitleScreenState.Loaded) {
+    val colors = defaultSkinColors()
     val genres = editorialGenres(state.genres)
     val artists = state.artists.filter(String::isNotBlank).distinct()
         .filterNot { name -> state.author?.split(",")?.any { it.trim() == name } == true }
@@ -442,7 +443,7 @@ internal fun DetailsEditorial(state: CanonicalTitleScreenState.Loaded) {
             Text(
                 stringResource(MR.strings.tsuzuki_details_editorial_empty),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = colors.secondary,
             )
         }
     }
@@ -454,16 +455,17 @@ internal fun editorialGenres(genres: List<String>): List<String> =
 
 @Composable
 private fun EditorialSection(title: String, text: String) {
+    val colors = defaultSkinColors()
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             title,
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = colors.secondary,
         )
         Text(
             text,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = colors.foreground,
         )
     }
 }

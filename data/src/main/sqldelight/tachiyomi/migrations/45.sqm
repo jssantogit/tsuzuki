@@ -1,0 +1,25 @@
+-- Keep all legacy provider-only memberships quarantined and untouched.
+CREATE TABLE tsuzuki_external_library_memberships_scoped(
+    canonical_title_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    owner_key TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    list_key TEXT NOT NULL,
+    list_title TEXT,
+    selection_group TEXT,
+    status TEXT,
+    remote_status TEXT,
+    progress REAL,
+    score REAL,
+    listed_at INTEGER,
+    synced_at INTEGER NOT NULL,
+    cover_url TEXT,
+    PRIMARY KEY(provider, owner_key, external_id, list_key),
+    FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
+);
+
+CREATE INDEX tsuzuki_scoped_external_library_title_index
+ON tsuzuki_external_library_memberships_scoped(canonical_title_id);
+
+CREATE INDEX tsuzuki_scoped_external_library_owner_index
+ON tsuzuki_external_library_memberships_scoped(provider, owner_key);

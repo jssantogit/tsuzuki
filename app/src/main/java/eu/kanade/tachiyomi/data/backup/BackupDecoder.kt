@@ -35,10 +35,12 @@ class BackupDecoder(
                     throw IOException(context.stringResource(MR.strings.invalid_backup_file_json))
                 }
                 else -> source
-            }.use { it.readByteArray() }
+            }.use { buffered -> BackupArchiveByteLimit.read(buffered) }
 
             try {
-                parser.decodeFromByteArray(Backup.serializer(), backupString)
+                parser.decodeFromByteArray(Backup.serializer(), backupString).also { backup ->
+                    backup.canonicalSnapshot?.validate()
+                }
             } catch (_: SerializationException) {
                 throw IOException(context.stringResource(MR.strings.invalid_backup_file_unknown))
             }

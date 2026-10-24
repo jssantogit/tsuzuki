@@ -7,4 +7,5 @@ import kotlinx.serialization.Serializable
 data class BGMUser(
     val username: String,
     val nickname: String?,
+    val id: Long? = null,
 )

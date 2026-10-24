@@ -96,6 +96,13 @@ class BackupRestorer(
     private suspend fun restoreFromFile(uri: Uri, options: RestoreOptions) {
         val backup = backupDecoder.decode(uri)
 
+        // The production restorer currently handles Mihon's legacy fields only.
+        // Never report a successful restore after silently dropping any declared
+        // canonical Tsuzuki content. Release a tested writer/importer pair first.
+        check(backup.canonicalSnapshot == null) {
+            "canonical Tsuzuki backup restoration is not supported yet; no data was changed"
+        }
+
         // Store source mapping for error messages
         val backupMaps = backup.backupSources
         sourceMapping = backupMaps.associate { it.sourceId to it.name }

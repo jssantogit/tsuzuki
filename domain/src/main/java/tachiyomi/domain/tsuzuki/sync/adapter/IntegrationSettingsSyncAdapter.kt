@@ -2,7 +2,6 @@ package tachiyomi.domain.tsuzuki.sync.adapter
 
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
@@ -12,6 +11,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationSettings
+import tachiyomi.domain.tsuzuki.integration.model.PortableIntegrationConfig
 import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
 import tachiyomi.domain.tsuzuki.sync.model.SyncDocumentEnvelope
 import tachiyomi.domain.tsuzuki.sync.model.SyncDocumentKind
@@ -41,7 +41,7 @@ class IntegrationSettingsSyncAdapter(
                     updatedAtEpochMillis = settings.updatedAt,
                     fields = buildJsonObject {
                         put("enabled", settings.enabled)
-                        put("config", sanitizeConfig(parseConfig(settings.configJson)))
+                        put("config", PortableIntegrationConfig.sanitize(parseConfig(settings.configJson)))
                     },
                 )
             }
@@ -85,7 +85,7 @@ class IntegrationSettingsSyncAdapter(
                     ?.let(::parseConfig)
                     ?: JsonObject(emptyMap())
                 val mergedConfig = mergeObjects(
-                    remote = sanitizeConfig(remoteConfig).jsonObject,
+                    remote = PortableIntegrationConfig.sanitize(remoteConfig).jsonObject,
                     localSecrets = extractSecrets(localConfig),
                 )
 
@@ -111,25 +111,11 @@ class IntegrationSettingsSyncAdapter(
         }
     }
 
-    private fun sanitizeConfig(element: JsonElement): JsonElement {
-        return when (element) {
-            is JsonObject -> JsonObject(
-                element.entries
-                    .filterNot { (key, _) -> key.isSensitiveConfigKey() }
-                    .associate { (key, value) ->
-                        key to sanitizeConfig(value)
-                    },
-            )
-            is JsonArray -> JsonArray(element.map(::sanitizeConfig))
-            else -> element
-        }
-    }
-
     private fun extractSecrets(source: JsonObject): JsonObject {
         val secrets = linkedMapOf<String, JsonElement>()
         source.forEach { (key, value) ->
             when {
-                key.isSensitiveConfigKey() -> secrets[key] = value
+                PortableIntegrationConfig.isSensitiveKey(key) -> secrets[key] = value
                 value is JsonObject -> {
                     val nested = extractSecrets(value)
                     if (nested.isNotEmpty()) {
@@ -157,26 +143,7 @@ class IntegrationSettingsSyncAdapter(
         return JsonObject(merged)
     }
 
-    private fun String.isSensitiveConfigKey(): Boolean {
-        val normalized = lowercase()
-            .replace("_", "")
-            .replace("-", "")
-        return SENSITIVE_KEY_MARKERS.any(normalized::contains)
-    }
-
     private companion object {
         const val SCHEMA_VERSION = 1
-        val SENSITIVE_KEY_MARKERS = listOf(
-            "token",
-            "secret",
-            "password",
-            "credential",
-            "clientid",
-            "clientreference",
-            "apikey",
-            "authorization",
-            "cookie",
-            "session",
-        )
     }
 }

@@ -30,13 +30,19 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.LegacyInventoryEvidenceAdapter
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileLegacyChapterEvidence
+import tachiyomi.domain.tsuzuki.chapter.interactor.LegacyExactPromotionReview
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterVolume
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.model.SourceChapterInventory
 import tachiyomi.domain.tsuzuki.chapter.model.SourceChapterSnapshot
+import tachiyomi.domain.tsuzuki.reader.interactor.GetAdjacentCanonicalChapter
+import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterDirection
 import java.nio.file.Files
 
 class CanonicalChapterRepositoryImplTest {
@@ -108,6 +114,505 @@ class CanonicalChapterRepositoryImplTest {
         repository.getById(first.id) shouldBe updatedFirst
         repository.observeByCanonicalTitleId("title-1").first() shouldContainExactly listOf(updatedFirst, second)
     }
+
+    @Test
+    fun `exact fractional metadata round trips beside unchanged legacy rows`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-12-5", "12.5", 12).copy(part = 5)
+        val exact = chapter("exact-12-05", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(legacy)
+        repository.upsert(exact)
+
+        val chapters = repository.getByCanonicalTitleId("title-1").associateBy(CanonicalChapter::id)
+        chapters.getValue(legacy.id) shouldBe legacy
+        chapters.getValue(exact.id) shouldBe exact
+        (chapters.getValue(legacy.id).identity == chapters.getValue(exact.id).identity) shouldBe false
+
+        repository.upsertBatch(listOf(exact.copy(updatedAt = 250L)), emptyList())
+        repository.getById(exact.id) shouldBe exact.copy(updatedAt = 250L)
+        repository.getById(legacy.id) shouldBe legacy
+    }
+
+    @Test
+    fun `historical database preflight reads evidence and proposes no mutation`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-review", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+        seedHistoricalExactEvidence("legacy-review", "source-a", "Chapter 12.5")
+        seedHistoricalExactEvidence("legacy-review", "source-b", "Chapter 12.50")
+
+        val preflight = LegacyExactChapterMigrationPreflight(database).inspect(
+            chapterId = legacy.id,
+            remoteSyncStateAuditedAbsent = true,
+        )
+
+        preflight shouldBe LegacyExactMigrationPreflight.ReviewOnly(
+            chapterId = legacy.id,
+            evidenceReview = LegacyExactPromotionReview.Candidate(
+                identity = CanonicalChapterIdentity(
+                    type = CanonicalChapterType.REGULAR,
+                    baseNumber = 12,
+                    part = 5,
+                    numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+                    decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+                ),
+                supportingProducers = 2,
+            ),
+        )
+        repository.getById(legacy.id) shouldBe legacy
+        database.tsuzuki_chapter_evidenceQueries
+            .getTsuzukiChapterEvidenceByMappedChapter(legacy.id)
+            .awaitAsList().size shouldBe 2
+    }
+
+    @Test
+    fun `historical preflight does not re-promote already exact persisted rows`() = runBlocking<Unit> {
+        val exact = chapter("exact-previous", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+        seedHistoricalExactEvidence(exact.id, "source-a", "Chapter 12.05")
+        seedHistoricalExactEvidence(exact.id, "source-b", "Chapter 12.05")
+
+        LegacyExactChapterMigrationPreflight(database).inspect(
+            chapterId = exact.id,
+            remoteSyncStateAuditedAbsent = true,
+        ) shouldBe LegacyExactMigrationPreflight.Blocked(
+            reason = LegacyExactMigrationPreflight.Reason.EVIDENCE_BLOCKED,
+            evidenceReason = LegacyExactPromotionReview.Reason.ALREADY_EXACT,
+        )
+        repository.getById(exact.id) shouldBe exact
+    }
+
+    @Test
+    fun `historical preflight refuses unverified portable sync status by default`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-sync", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+        seedHistoricalExactEvidence(legacy.id, "source-a", "Chapter 12.5")
+        seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.50")
+
+        LegacyExactChapterMigrationPreflight(database).inspect(legacy.id) shouldBe
+            LegacyExactMigrationPreflight.Blocked(LegacyExactMigrationPreflight.Reason.REMOTE_SYNC_UNVERIFIED)
+    }
+
+    @Test
+    fun `historical preflight rejects protected reading progress without changing it`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-protected", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+        seedHistoricalExactEvidence(legacy.id, "source-a", "Chapter 12.5")
+        seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.50")
+        database.tsuzuki_chapter_progressQueries.upsertTsuzukiChapterProgress(
+            canonicalChapterId = legacy.id,
+            read = true,
+            lastPageRead = 7L,
+            lastVariantId = null,
+            updatedAt = 200L,
+        )
+
+        LegacyExactChapterMigrationPreflight(database).inspect(
+            chapterId = legacy.id,
+            remoteSyncStateAuditedAbsent = true,
+        ) shouldBe LegacyExactMigrationPreflight.Blocked(LegacyExactMigrationPreflight.Reason.PROTECTED_STATE)
+
+        repository.getById(legacy.id) shouldBe legacy
+        database.tsuzuki_chapter_progressQueries
+            .getTsuzukiChapterProgress(legacy.id)
+            .awaitAsOneOrNull()?.last_page_read shouldBe 7L
+    }
+
+    @Test
+    fun `historical preflight refuses existing reader variants without manually rechecking them`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-variant", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+        seedHistoricalExactEvidence(legacy.id, "source-a", "Chapter 12.5")
+        seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.50")
+        repository.upsertVariant(
+            variant("v-legacy", canonicalChapterId = legacy.id, sourceChapterId = "legacy-variant"),
+        )
+
+        LegacyExactChapterMigrationPreflight(database).inspect(
+            chapterId = legacy.id,
+            remoteSyncStateAuditedAbsent = true,
+        ) shouldBe LegacyExactMigrationPreflight.Blocked(LegacyExactMigrationPreflight.Reason.VARIANTS_REQUIRE_REVIEW)
+
+        repository.getById(legacy.id) shouldBe legacy
+    }
+
+    @Test
+    fun `historical preflight rejects missing rows and competing siblings from fresh snapshot`() = runBlocking<Unit> {
+        val preflight = LegacyExactChapterMigrationPreflight(database)
+        preflight.inspect("missing-id", remoteSyncStateAuditedAbsent = true) shouldBe
+            LegacyExactMigrationPreflight.Blocked(LegacyExactMigrationPreflight.Reason.MISSING_CHAPTER)
+
+        val legacy = chapter("legacy-with-peer", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+        repository.upsert(legacy.copy(id = "competing-peer"))
+        seedHistoricalExactEvidence(legacy.id, "source-a", "Chapter 12.5")
+        seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.50")
+
+        preflight.inspect(legacy.id, remoteSyncStateAuditedAbsent = true) shouldBe
+            LegacyExactMigrationPreflight.Blocked(
+                reason = LegacyExactMigrationPreflight.Reason.EVIDENCE_BLOCKED,
+                evidenceReason = LegacyExactPromotionReview.Reason.COMPETING_CHAPTER,
+            )
+        repository.getById(legacy.id) shouldBe legacy
+    }
+
+    @Test
+    fun `historical preflight re-reads changed evidence instead of trusting prior review`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-stale", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+        seedHistoricalExactEvidence(legacy.id, "source-a", "Chapter 12.5")
+        seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.50")
+        val preflight = LegacyExactChapterMigrationPreflight(database)
+
+        (
+            preflight.inspect(legacy.id, remoteSyncStateAuditedAbsent = true) is
+                LegacyExactMigrationPreflight.ReviewOnly
+            ) shouldBe true
+
+        seedHistoricalExactEvidence(legacy.id, "source-b", "Chapter 12.05")
+        preflight.inspect(legacy.id, remoteSyncStateAuditedAbsent = true) shouldBe
+            LegacyExactMigrationPreflight.Blocked(
+                reason = LegacyExactMigrationPreflight.Reason.EVIDENCE_BLOCKED,
+                evidenceReason = LegacyExactPromotionReview.Reason.CONFLICTING_EVIDENCE,
+            )
+        repository.getById(legacy.id) shouldBe legacy
+    }
+
+    @Test
+    fun `ordinary writes cannot promote a legacy chapter id into exact numbering`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-kept", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+        database.tsuzuki_chapter_progressQueries.upsertTsuzukiChapterProgress(
+            canonicalChapterId = legacy.id,
+            read = false,
+            lastPageRead = 7L,
+            lastVariantId = null,
+            updatedAt = 150L,
+        )
+
+        val guessedPromotion = legacy.copy(
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+            updatedAt = 300L,
+        )
+        shouldThrow<IllegalStateException> { repository.upsert(guessedPromotion) }
+
+        repository.getById(legacy.id) shouldBe legacy
+        database.tsuzuki_chapter_progressQueries
+            .getTsuzukiChapterProgress(legacy.id)
+            .awaitAsOneOrNull()?.last_page_read shouldBe 7L
+    }
+
+    @Test
+    fun `generated SQL upsert cannot silently promote a legacy chapter id`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-direct", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+
+        database.tsuzuki_canonical_chaptersQueries.upsertTsuzukiCanonicalChapter(
+            id = legacy.id,
+            canonicalTitleId = legacy.canonicalTitleId,
+            displayNumber = legacy.displayNumber,
+            volume = legacy.volume?.toLong(),
+            title = "Guessed promotion",
+            type = legacy.type.name,
+            baseNumber = legacy.baseNumber?.toLong(),
+            part = legacy.part?.toLong(),
+            alphaSuffix = legacy.alphaSuffix,
+            confidence = legacy.confidence,
+            createdAt = legacy.createdAt,
+            updatedAt = 500L,
+            confirmationState = legacy.confirmation.name,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL.name,
+            decimalNumerator = 5L,
+            decimalScale = 1L,
+        )
+
+        repository.getById(legacy.id) shouldBe legacy
+    }
+
+    @Test
+    fun `legacy refresh cannot erase exact numbering on an existing chapter id`() = runBlocking<Unit> {
+        val exact = chapter("exact-immutable", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+        val staleLegacy = exact.copy(
+            displayNumber = "12.5",
+            title = "Stale label",
+            numberingKind = null,
+            decimalFraction = null,
+            updatedAt = 300L,
+        )
+
+        shouldThrow<Throwable> { repository.upsert(staleLegacy) }
+
+        repository.getById(exact.id) shouldBe exact
+    }
+
+    @Test
+    fun `exact numbering may refresh metadata but cannot switch fractional identity`() = runBlocking<Unit> {
+        val exact = chapter("exact-stable", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+        val refreshed = exact.copy(title = "Updated safely", updatedAt = 300L)
+        repository.upsert(refreshed)
+        repository.getById(exact.id) shouldBe refreshed
+
+        shouldThrow<Throwable> {
+            repository.upsert(
+                refreshed.copy(
+                    displayNumber = "12.5",
+                    decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+                    updatedAt = 400L,
+                ),
+            )
+        }
+
+        repository.getById(exact.id) shouldBe refreshed
+    }
+
+    @Test
+    fun `batch exact identity conflict rolls back preceding legacy writes`() = runBlocking<Unit> {
+        val exact = chapter("exact-batch", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        val ordinary = chapter("ordinary-batch", "Chapter 9", 9)
+        repository.upsert(exact)
+        repository.upsert(ordinary)
+
+        shouldThrow<Throwable> {
+            repository.upsertBatch(
+                chapters = listOf(
+                    ordinary.copy(updatedAt = 200L, title = "Should rollback"),
+                    exact.copy(numberingKind = null, decimalFraction = null, updatedAt = 200L),
+                ),
+                variants = emptyList(),
+            )
+        }
+
+        repository.getById(exact.id) shouldBe exact
+        repository.getById(ordinary.id) shouldBe ordinary
+    }
+
+    @Test
+    fun `generated SQL upsert cannot downgrade exact numbering outside Kotlin repository`() = runBlocking<Unit> {
+        val exact = chapter("exact-direct", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+
+        // This deliberately bypasses the Kotlin repository and invokes the
+        // generated SQLDelight statement used by other application writers.
+        database.tsuzuki_canonical_chaptersQueries.upsertTsuzukiCanonicalChapter(
+            id = exact.id,
+            canonicalTitleId = exact.canonicalTitleId,
+            displayNumber = "12.5",
+            volume = exact.volume?.toLong(),
+            title = "Stale update",
+            type = exact.type.name,
+            baseNumber = exact.baseNumber?.toLong(),
+            part = exact.part?.toLong(),
+            alphaSuffix = exact.alphaSuffix,
+            confidence = exact.confidence,
+            createdAt = exact.createdAt,
+            updatedAt = exact.updatedAt + 1L,
+            confirmationState = exact.confirmation.name,
+            numberingKind = null,
+            decimalNumerator = null,
+            decimalScale = null,
+        )
+
+        repository.getById(exact.id) shouldBe exact
+    }
+
+    @Test
+    fun `incomplete exact numbering metadata fails closed instead of reading as legacy`() = runBlocking<Unit> {
+        val exact = chapter("exact-incomplete", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_canonical_chapters SET decimal_scale = NULL WHERE id = 'exact-incomplete'",
+            0,
+        ).await()
+
+        shouldThrow<IllegalStateException> {
+            repository.getById(exact.id)
+        }
+    }
+
+    @Test
+    fun `oversized stored decimal metadata cannot wrap into a different chapter identity`() = runBlocking<Unit> {
+        val exact = chapter("exact-overflow", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_canonical_chapters SET decimal_numerator = 4294967301 WHERE id = 'exact-overflow'",
+            0,
+        ).await()
+
+        shouldThrow<IllegalStateException> {
+            repository.getById(exact.id)
+        }
+    }
+
+    @Test
+    fun `inconsistent legacy part and exact numerator is rejected when loading a chapter`() = runBlocking<Unit> {
+        val exact = chapter("exact-part-mismatch", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_canonical_chapters SET part = 6 WHERE id = 'exact-part-mismatch'",
+            0,
+        ).await()
+
+        shouldThrow<IllegalStateException> {
+            repository.getById(exact.id)
+        }
+    }
+
+    @Test
+    fun `oversized stored legacy part cannot wrap within exact ordinal identity`() = runBlocking<Unit> {
+        val ordinal = chapter("ordinal-overflow", "12 Part 5", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.ORDINAL_PART,
+        )
+        repository.upsert(ordinal)
+
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_canonical_chapters SET part = 4294967301 WHERE id = 'ordinal-overflow'",
+            0,
+        ).await()
+
+        shouldThrow<IllegalStateException> {
+            repository.getById(ordinal.id)
+        }
+    }
+
+    @Test
+    fun `oversized stored base number cannot wrap within an exact chapter identity`() = runBlocking<Unit> {
+        val exact = chapter("exact-base-overflow", "12.05", 12).copy(
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+        repository.upsert(exact)
+
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_canonical_chapters SET base_number = 4294967308 WHERE id = 'exact-base-overflow'",
+            0,
+        ).await()
+
+        shouldThrow<IllegalStateException> {
+            repository.getById(exact.id)
+        }
+    }
+
+    @Test
+    fun `stray decimal metadata on a legacy chapter is not silently discarded`() = runBlocking<Unit> {
+        val legacy = chapter("legacy-stray", "12.5", 12).copy(part = 5)
+        repository.upsert(legacy)
+
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_canonical_chapters SET decimal_numerator = 5 WHERE id = 'legacy-stray'",
+            0,
+        ).await()
+
+        shouldThrow<IllegalStateException> {
+            repository.getById(legacy.id)
+        }
+    }
+
+    @Test
+    fun `local numbering resets across volumes preserve volume reading order for list and flow`() =
+        runBlocking<Unit> {
+            val chapters = listOf(
+                chapter("vol2-ch2", "2", 2).copy(volume = 2),
+                chapter("vol1-ch2", "2", 2).copy(volume = 1),
+                chapter("vol2-ch1", "1", 1).copy(volume = 2),
+                chapter("vol1-ch1", "1", 1).copy(volume = 1),
+            )
+            chapters.forEach { repository.upsert(it) }
+
+            val expectedIds = listOf("vol1-ch1", "vol1-ch2", "vol2-ch1", "vol2-ch2")
+            repository.getByCanonicalTitleId("title-1").map { it.id } shouldContainExactly expectedIds
+            repository.observeByCanonicalTitleId("title-1").first().map { it.id } shouldContainExactly expectedIds
+        }
+
+    @Test
+    fun `adjacent reader navigation crosses volume reset without changing a saved checkpoint`() =
+        runBlocking<Unit> {
+            listOf(
+                chapter("vol2-ch1", "1", 1).copy(volume = 2),
+                chapter("vol1-ch2", "2", 2).copy(volume = 1),
+                chapter("vol2-ch2", "2", 2).copy(volume = 2),
+                chapter("vol1-ch1", "1", 1).copy(volume = 1),
+            ).forEach { repository.upsert(it) }
+            database.tsuzuki_chapter_progressQueries.upsertTsuzukiChapterProgress(
+                canonicalChapterId = "vol1-ch2",
+                read = false,
+                lastPageRead = 6L,
+                lastVariantId = null,
+                updatedAt = 200L,
+            )
+            val adjacent = GetAdjacentCanonicalChapter(repository)
+
+            adjacent.execute("vol1-ch2", CanonicalChapterDirection.NEXT)?.id shouldBe "vol2-ch1"
+            adjacent.execute("vol2-ch1", CanonicalChapterDirection.PREVIOUS)?.id shouldBe "vol1-ch2"
+            adjacent.execute("vol2-ch1", CanonicalChapterDirection.NEXT)?.id shouldBe "vol2-ch2"
+            adjacent.execute("vol1-ch1", CanonicalChapterDirection.PREVIOUS) shouldBe null
+            adjacent.execute("vol2-ch2", CanonicalChapterDirection.NEXT) shouldBe null
+            database.tsuzuki_chapter_progressQueries
+                .getTsuzukiChapterProgress("vol1-ch2")
+                .awaitAsOneOrNull()?.last_page_read shouldBe 6L
+        }
+
+    @Test
+    fun `global chapter numbering stays numeric even when volume metadata interleaves`() =
+        runBlocking<Unit> {
+            val chapters = listOf(
+                chapter("four", "4", 4).copy(volume = 2),
+                chapter("three", "3", 3).copy(volume = 1),
+                chapter("two", "2", 2).copy(volume = 2),
+                chapter("one", "1", 1).copy(volume = 1),
+            )
+            chapters.forEach { repository.upsert(it) }
+
+            repository.getByCanonicalTitleId("title-1").map { it.id } shouldContainExactly
+                listOf("one", "two", "three", "four")
+        }
 
     @Test
     fun `variant upsert is idempotent and preserves lossless metadata`() = runBlocking<Unit> {
@@ -1180,6 +1685,26 @@ class CanonicalChapterRepositoryImplTest {
             preferredOverride = false,
             createdAt = 100L,
             updatedAt = 100L,
+        )
+    }
+
+    private suspend fun seedHistoricalExactEvidence(chapterId: String, producerId: String, rawLabel: String) {
+        tachiyomi.data.tsuzuki.chapter.ChapterEvidenceRepositoryImpl(database).upsert(
+            evidence = ChapterEvidence(
+                id = "evidence-$producerId",
+                canonicalTitleId = "title-1",
+                producerKind = ProducerKind.ADDON,
+                producerId = producerId,
+                externalChapterKey = "key-$producerId",
+                rawLabel = rawLabel,
+                rawNumber = null,
+                volume = null,
+                title = null,
+                observedAt = 300L,
+                confidence = 1.0,
+                authority = ChapterEvidenceAuthority.ADDON_PROVISIONAL,
+            ),
+            mappedCanonicalChapterId = chapterId,
         )
     }
 

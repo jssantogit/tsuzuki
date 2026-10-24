@@ -27,6 +27,8 @@ import tachiyomi.domain.tsuzuki.sync.model.SyncConflictResolutionResult
 import tachiyomi.domain.tsuzuki.sync.model.SyncConflictValue
 import tachiyomi.domain.tsuzuki.sync.model.SyncCycleReport
 import tachiyomi.domain.tsuzuki.sync.model.SyncDocumentKind
+import tachiyomi.domain.tsuzuki.sync.model.SyncFailure
+import tachiyomi.domain.tsuzuki.sync.model.SyncFailureReason
 import tachiyomi.domain.tsuzuki.sync.repository.SyncConflictRepository
 import tachiyomi.domain.tsuzuki.sync.service.CloudSyncRuntime
 import tachiyomi.domain.tsuzuki.sync.service.SupabaseSyncStateStore
@@ -144,6 +146,50 @@ class TsuzukiSyncScreenModelTest {
         )
     }
 
+    @Test
+    fun `legacy unowned sync diagnostics remain hidden from newly signed in account`() = runTest(dispatcher) {
+        val account = FakeAccountRepository(
+            AccountState.Authenticated(TsuzukiAccount("user-B", "b@example.com")),
+        )
+        val runtime = FakeCloudSyncRuntime().apply {
+            scopeFailure = SyncFailure(SyncFailureReason.ACCOUNT_SCOPE_MISMATCH)
+        }
+        val stateStore = FakeStateStore().apply {
+            cursors[SyncDocumentKind.LIBRARY] = SupabaseSyncCursor(
+                documentKind = SyncDocumentKind.LIBRARY,
+                eventCursor = 21,
+                lastSuccessfulSyncAtEpochMillis = 300,
+            )
+        }
+        val conflict = StoredSyncConflict(
+            conflict = SyncConflict(
+                documentKind = SyncDocumentKind.LIBRARY,
+                recordId = "secret-from-user-A",
+                propertyPath = listOf("status"),
+                kind = SyncConflictKind.FIELD_DIVERGENCE,
+                base = SyncConflictValue.Missing,
+                local = SyncConflictValue.Present(JsonPrimitive("READING")),
+                remote = SyncConflictValue.Present(JsonPrimitive("COMPLETED")),
+            ),
+            createdAtEpochMillis = 1,
+        )
+        val conflicts = FakeConflictRepository().apply {
+            values[SyncDocumentKind.LIBRARY] = listOf(conflict)
+        }
+        val model = TsuzukiSyncScreenModel(account, runtime, stateStore, conflicts)
+
+        advanceUntilIdle()
+
+        model.state.value.cloudEnabled shouldBe false
+        model.state.value.pendingMutationCount shouldBe 0
+        model.state.value.lastSuccessfulSyncAtEpochMillis shouldBe null
+        model.state.value.conflicts shouldBe emptyList()
+        model.state.value.error shouldBe TsuzukiSyncScreenError.ACCOUNT_SCOPE_MISMATCH
+        model.resolveConflict(conflict, SyncConflictResolutionChoice.KEEP_REMOTE)
+        advanceUntilIdle()
+        runtime.resolveCalls shouldBe emptyList()
+    }
+
     private class FakeAccountRepository(
         initial: AccountState,
     ) : AccountRepository {
@@ -154,7 +200,7 @@ class TsuzukiSyncScreenModelTest {
         override suspend fun login(email: String, password: String) = error("not used")
         override suspend fun logout() = error("not used")
         override suspend fun sendPasswordRecovery(email: String) = error("not used")
-        override suspend fun updatePassword(password: String) = error("not used")
+        override suspend fun updatePassword(password: String) = Result.success(Unit)
         override suspend fun refreshSession() = Result.success(mutable.value)
         override suspend fun getAccessToken() = Result.success(null)
     }
@@ -162,6 +208,10 @@ class TsuzukiSyncScreenModelTest {
     private class FakeCloudSyncRuntime : CloudSyncRuntime {
         private val mutableState = MutableStateFlow<SyncRuntimeState>(SyncRuntimeState.Idle)
         override val state: StateFlow<SyncRuntimeState> = mutableState
+
+        var scopeFailure: SyncFailure? = null
+
+        override suspend fun accountScopeFailure(): SyncFailure? = scopeFailure
 
         var runCalls = 0
         var lastTrigger: SyncTrigger? = null

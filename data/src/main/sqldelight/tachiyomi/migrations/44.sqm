@@ -1,0 +1,5 @@
+CREATE TABLE tsuzuki_backup_restore_receipts(
+    snapshot_hash TEXT NOT NULL PRIMARY KEY,
+    format_version INTEGER NOT NULL,
+    imported_at INTEGER NOT NULL
+);

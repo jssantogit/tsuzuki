@@ -1,5 +1,8 @@
 package eu.kanade.tachiyomi.data.tsuzuki
 
+import android.content.Context
+import android.net.Uri
+import com.hippo.unifile.UniFile
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -10,7 +13,10 @@ import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.source.Source
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
+import mihon.core.archive.archiveReader
+import mihon.core.archive.epubReader
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.domain.chapter.repository.ChapterRepository
 import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.domain.source.service.SourceManager
@@ -30,10 +36,12 @@ class MihonCanonicalDownloadGateway internal constructor(
     private val artifactLocator: suspend (ContentOption) -> CanonicalDownloadArtifact? = { null },
     private val downloadStarter: (Long) -> Unit = {},
     private val downloadCompletion: suspend (Long) -> Boolean = { false },
+    private val artifactAvailability: suspend (CanonicalDownloadArtifact) -> Boolean = { false },
 ) : CanonicalDownloadGateway {
 
     @Inject
     constructor(
+        context: Context,
         mangaRepository: MangaRepository,
         chapterRepository: ChapterRepository,
         sourceManager: SourceManager,
@@ -82,7 +90,13 @@ class MihonCanonicalDownloadGateway internal constructor(
         downloadCompletion = { chapterId ->
             awaitDownloadCompletion(downloadManager, chapterId)
         },
+        artifactAvailability = { artifact ->
+            withIOContext { isArtifactReadable(context, artifact) }
+        },
     )
+
+    override suspend fun isArtifactAvailable(artifact: CanonicalDownloadArtifact): Boolean =
+        artifactAvailability(artifact)
 
     override suspend fun isDownloaded(variant: ChapterVariant): Boolean {
         val mangaId = variant.mihonMangaId ?: return false
@@ -100,7 +114,7 @@ class MihonCanonicalDownloadGateway internal constructor(
                 )
 
             artifactLocator(option)?.let { artifact ->
-                return Result.success(artifact)
+                if (artifactAvailability(artifact)) return Result.success(artifact)
             }
 
             downloadStarter(delivery.chapterId)
@@ -114,6 +128,11 @@ class MihonCanonicalDownloadGateway internal constructor(
                 ?: return Result.failure(
                     IllegalStateException("Completed chapter download could not be located"),
                 )
+            if (!artifactAvailability(artifact)) {
+                return Result.failure(
+                    IllegalStateException("Completed chapter download is not physically readable"),
+                )
+            }
             Result.success(artifact)
         } catch (error: CancellationException) {
             throw error
@@ -123,6 +142,55 @@ class MihonCanonicalDownloadGateway internal constructor(
     }
 
     companion object {
+        /**
+         * This bounded content preflight opens an archive and identifies at least one
+         * viable image header. It does not decode every page or verify checksums.
+         * A detached SD card/revoked SAF permission must not delete the DB reference.
+         */
+        internal fun isArtifactReadable(context: Context, artifact: CanonicalDownloadArtifact): Boolean {
+            if (artifact.localUri.isBlank()) return false
+            return try {
+                val local = UniFile.fromUri(context, Uri.parse(artifact.localUri)) ?: return false
+                if (!local.exists()) return false
+
+                if (artifact.format.equals("DIRECTORY", ignoreCase = true)) {
+                    local.isDirectory && local.listFiles()
+                        ?.any { entry ->
+                            !entry.isDirectory && entry.exists() &&
+                                entry.openInputStream()?.use { ImageUtil.findImageType(it) != null } == true
+                        } == true
+                } else {
+                    if (local.isDirectory) return false
+                    if (artifact.format.equals("EPUB", ignoreCase = true)) {
+                        local.epubReader(context).use { reader ->
+                            reader.getImagesFromPages().any { path ->
+                                reader.getInputStream(path)?.use { ImageUtil.findImageType(it) != null } == true
+                            }
+                        }
+                    } else {
+                        // Verify a real image entry through the archive decoder, not
+                        // just a ZIP signature. Full multi-page integrity remains
+                        // the Reader's responsibility.
+                        local.archiveReader(context).use { reader ->
+                            reader.useEntries { entries ->
+                                entries.any { entry ->
+                                    entry.isFile &&
+                                        reader.getInputStream(entry.name)?.use {
+                                            ImageUtil.findImageType(it) != null
+                                        } == true
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // Preserve the row when an archive is corrupt or storage is detached.
+                false
+            }
+        }
+
         private suspend fun locateArtifact(
             option: ContentOption,
             mangaRepository: MangaRepository,

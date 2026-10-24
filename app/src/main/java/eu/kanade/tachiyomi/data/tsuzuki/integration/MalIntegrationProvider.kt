@@ -156,6 +156,9 @@ class MalIntegrationProvider private constructor(
         )
     }
 
+    override suspend fun authenticatedOwnerSubject(): Result<String> =
+        captureResult { api.getAuthenticatedOwner() }
+
     override suspend fun fetchLibrary(): Result<UserLibrarySnapshot> = captureResult {
         UserLibrarySnapshot(
             lists = MAL_USER_LISTS,

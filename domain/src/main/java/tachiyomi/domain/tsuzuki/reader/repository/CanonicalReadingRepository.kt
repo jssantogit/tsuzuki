@@ -31,6 +31,20 @@ interface CanonicalReadingRepository {
     suspend fun upsertProgress(progress: CanonicalChapterProgress)
 
     /**
+     * Applies an entire remote progress document atomically.
+     *
+     * The default refuses multi-record updates: a nontransactional fallback
+     * would silently leave partial checkpoints after a failed later write.
+     * Production SQL implementations MUST override this with a transaction.
+     */
+    suspend fun upsertProgressBatch(progress: List<CanonicalChapterProgress>) {
+        require(progress.size <= 1) {
+            "Multi-record remote progress imports require an atomic repository implementation"
+        }
+        progress.singleOrNull()?.let { upsertProgress(it) }
+    }
+
+    /**
      * The production SQL repository atomically persists canonical progress and
      * the pending Mihon projection. The default exists only for non-SQL fakes.
      */

@@ -288,6 +288,29 @@ class IdentityContractTest(unittest.TestCase):
         root = self.make_repo(backup_creator=VALID_BACKUP_CREATOR.replace("BuildConfig.APPLICATION_ID", '"tsuzuki"'))
         self.assertIn("backup filename must continue to derive from BuildConfig.APPLICATION_ID", check_contract(root))
 
+    def test_delegated_backup_filename_helper_still_preserves_extension(self):
+        creator = "fun getFilename(): String = AutomaticBackupFileNames.generate(BuildConfig.APPLICATION_ID)"
+        root = self.make_repo(backup_creator=creator)
+        helper = root / (
+            "app/src/main/java/eu/kanade/tachiyomi/data/backup/create/AutomaticBackupFileNames.kt"
+        )
+        helper.write_text(
+            'fun generate(applicationId: String): String { return "${applicationId}_new.tachibk" }',
+            encoding="utf-8",
+        )
+        self.assertNotIn("backup filename must preserve .tachibk compatibility", check_contract(root))
+
+        helper.write_text(
+            'fun generate(applicationId: String): String { return "${applicationId}_new.bin" }',
+            encoding="utf-8",
+        )
+        self.assertIn("backup filename must preserve .tachibk compatibility", check_contract(root))
+
+    def test_backup_filename_helper_must_exist_if_creator_delegates(self):
+        creator = "fun getFilename(): String = AutomaticBackupFileNames.generate(BuildConfig.APPLICATION_ID)"
+        root = self.make_repo(backup_creator=creator)
+        self.assertIn("backup filename must preserve .tachibk compatibility", check_contract(root))
+
     def test_inherited_mihon_telemetry_is_rejected(self):
         root = self.make_repo(
             apk_workflow=VALID_APK_WORKFLOW + "\nflags: -Pinclude-telemetry\n",
