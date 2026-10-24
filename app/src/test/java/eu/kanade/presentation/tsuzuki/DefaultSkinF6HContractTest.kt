@@ -142,6 +142,27 @@ class DefaultSkinF6HContractTest {
         editorial shouldNotContain "MaterialTheme.colorScheme"
     }
 
+    @Test
+    fun `provider repository dialogs use branded surfaces and clearly disabled confirmation`() {
+        val providers = source("presentation/more/settings/screen/SettingsTsuzukiProvidersDefaultSkinScreen.kt")
+        val remove = providers.substringAfter("repositoryToRemove?.let { repository ->")
+            .substringBefore("private fun ProviderTabs(")
+        val repositories = providers.substringAfter("private fun DefaultSkinRepositoriesDialog(")
+            .substringBefore("private fun DefaultSkinAddRepositoryDialog(")
+        val add = providers.substringAfter("private fun DefaultSkinAddRepositoryDialog(")
+            .substringBefore("private fun providerLifecycleLabelDefaultSkin(")
+        listOf(remove, repositories, add).forEach { dialog ->
+            dialog shouldContain "shape = DefaultSkinShape.Card"
+            dialog shouldContain "tonalElevation = 0.dp"
+        }
+        repositories shouldContain ".verticalScroll(rememberScrollState())"
+        add shouldContain ".verticalScroll(rememberScrollState())"
+        add shouldContain "enabled = canConfirm"
+        add shouldContain "role = Role.Checkbox"
+        add shouldContain "onCheckedChange = null"
+        add shouldContain "CheckboxDefaults.colors("
+    }
+
     private fun source(relative: String): String = Files.readString(
         listOf(
             Path.of("src/main/java/eu/kanade/$relative"),
