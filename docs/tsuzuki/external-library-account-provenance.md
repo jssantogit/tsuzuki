@@ -41,3 +41,14 @@ Do not treat the provider name, display name, integration toggle, local canonica
 | Process dies mid-migration or mid-refresh | All changes rolled back or quarantined; no partial ownership |
 
 **Next action:** inventory every external-library writer/reader and the provider authentication identity surfaces, then define a typed `ExternalMembershipScope` and a migration plan **in the integration branch after version conflicts are resolved**. Until then, canonical export must continue refusing external memberships.
+
+## Interim fail-closed branch barrier (audit #141)
+
+Before any versioned SQLDelight account-owner migration is approved, the draft branch intentionally quarantines existing `tsuzuki_external_library_memberships` records:
+
+- The old repository reports `hasVerifiedOwnerScope=false`, exposes no legacy membership to `ObserveUnifiedLibrary`, refuses `replaceProvider`, and never deletes legacy records on disconnect or provider removal.
+- `RefreshUserLibraries.refreshProvider/refreshConnected` refuses private fetches **before** canonical title materialization, including the account-switch window. Existing local canonical works/progress remain usable. This **temporarily disables connected remote user lists in the draft branch**. It is a security release gate, not a production-complete account switch implementation.
+- This protects legacy bytes and prevents presenting unowned list statuses as belonging to a different login; it does not reassign identities, export external membership, connect a new owner, or make the old schema safe for writes.
+- The gate must not be lifted until the owner-scoped repository, per-row storage migration, authenticated provider subject, in-flight epoch check, and physical A/B acceptance all exist together. Keeping the old unscoped API as a bypass is forbidden.
+
+The canonical exporter also omits `mihonMangaId` and `mihonChapterId` from serialized source mappings/variants. Those numeric IDs are device-local and are already cleared by the importer; leaking them into the archive provides no portable utility.

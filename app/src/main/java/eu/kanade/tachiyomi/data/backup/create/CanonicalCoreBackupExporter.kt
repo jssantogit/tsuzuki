@@ -189,7 +189,8 @@ class CanonicalCoreBackupExporter(
                 BackupCoreSourceMapping(
                     id = it.id,
                     canonicalTitleId = it.canonicalTitleId,
-                    mihonMangaId = it.mihonMangaId,
+                    // Never serialize a device-local operational Mihon row ID.
+                    mihonMangaId = null,
                     sourceId = it.sourceId,
                     sourceUrl = it.sourceUrl,
                     language = it.language,
@@ -227,8 +228,9 @@ class CanonicalCoreBackupExporter(
                     canonicalChapterId = it.canonicalChapterId,
                     sourceMappingId = it.sourceMappingId,
                     sourceId = it.sourceId,
-                    mihonMangaId = it.mihonMangaId,
-                    mihonChapterId = it.mihonChapterId,
+                    // Variant operational IDs belong to the original device.
+                    mihonMangaId = null,
+                    mihonChapterId = null,
                     sourceChapterId = it.sourceChapterId,
                     sourceChapterUrl = it.sourceChapterUrl,
                     language = it.language,

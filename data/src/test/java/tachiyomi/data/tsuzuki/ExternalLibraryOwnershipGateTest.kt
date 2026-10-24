@@ -87,6 +87,13 @@ class ExternalLibraryOwnershipGateTest {
         nativeDirectory?.toFile()?.deleteRecursively()
     }
 
+    private fun nativeLibraryArchitecture(): String = when (System.getProperty("os.arch").orEmpty().lowercase()) {
+        "aarch64", "arm64" -> "aarch64"
+        "x86_64", "amd64" -> "x86_64"
+        "x86", "i386", "i486", "i586", "i686" -> "x86"
+        else -> error("Unsupported test host architecture: ${System.getProperty("os.arch").orEmpty()}")
+    }
+
     @Test
     fun `unowned legacy memberships are invisible and remain unchanged after account switch`() = runBlocking {
         repository.hasVerifiedOwnerScope shouldBe false

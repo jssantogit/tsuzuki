@@ -1,99 +1,50 @@
 package tachiyomi.data.tsuzuki
 
-import app.cash.sqldelight.async.coroutines.awaitAsList
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import tachiyomi.data.Database
-import tachiyomi.data.subscribeToList
 import tachiyomi.domain.tsuzuki.library.model.ExternalLibraryMembership
-import tachiyomi.domain.tsuzuki.model.LibraryStatus
 import tachiyomi.domain.tsuzuki.repository.ExternalLibraryRepository
 
+/**
+ * Quarantines every legacy membership until a provider-issued remote account
+ * identity is stored with each row and checked for every read and mutation.
+ *
+ * The previous table is keyed only by provider/external work/list. Applying a
+ * login for account B to those rows would expose A's reading status and can
+ * overwrite A's private lists. Do not adopt existing rows, reset the table,
+ * or silently promote provider-only authority to owner authority.
+ *
+ * This deliberately makes connected external lists unavailable while the
+ * versioned account-scoped migration is blocked by the parallel 43.sqm work.
+ * Canonical local library titles and progress remain accessible separately.
+ */
 @Inject
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 class ExternalLibraryRepositoryImpl(
-    private val database: Database,
+    @Suppress("unused") private val database: Database,
 ) : ExternalLibraryRepository {
 
-    override fun observeAll(): Flow<List<ExternalLibraryMembership>> =
-        database.tsuzuki_external_library_membershipsQueries
-            .getAllTsuzukiExternalLibraryMemberships(::mapMembership)
-            .subscribeToList()
+    override val hasVerifiedOwnerScope: Boolean = false
+
+    override fun observeAll(): Flow<List<ExternalLibraryMembership>> = flowOf(emptyList())
 
     override suspend fun replaceProvider(
         provider: String,
         memberships: List<ExternalLibraryMembership>,
-    ) {
-        require(memberships.all { it.provider == provider }) {
-            "Every external membership must belong to provider $provider"
-        }
-
-        database.transactionWithResult {
-            database.tsuzuki_external_library_membershipsQueries
-                .deleteTsuzukiExternalLibraryMembershipsByProvider(provider)
-            memberships.forEach { membership ->
-                database.tsuzuki_external_library_membershipsQueries
-                    .upsertTsuzukiExternalLibraryMembership(
-                        canonicalTitleId = membership.canonicalTitleId,
-                        provider = membership.provider,
-                        externalId = membership.externalId,
-                        listKey = membership.listKey,
-                        listTitle = membership.listTitle,
-                        selectionGroup = membership.selectionGroup,
-                        status = membership.status?.name,
-                        remoteStatus = membership.remoteStatus,
-                        progress = membership.progress,
-                        score = membership.score,
-                        listedAt = membership.listedAt,
-                        syncedAt = membership.syncedAt,
-                        coverUrl = membership.coverUrl,
-                    )
-            }
-        }
-    }
+    ): Unit = throw IllegalStateException(
+        "Cannot replace external lists without verified account ownership",
+    )
 
     override suspend fun clearProvider(provider: String) {
-        database.tsuzuki_external_library_membershipsQueries
-            .deleteTsuzukiExternalLibraryMembershipsByProvider(provider)
+        // A disconnect or provider update is not authorization to delete
+        // unowned legacy rows. Retain the original bytes for explicit recovery.
     }
 
-    override suspend fun getProviderIds(): Set<String> =
-        database.tsuzuki_external_library_membershipsQueries
-            .getTsuzukiExternalLibraryProviderIds()
-            .awaitAsList()
-            .toSet()
-
-    private fun mapMembership(
-        canonicalTitleId: String,
-        provider: String,
-        externalId: String,
-        listKey: String,
-        listTitle: String?,
-        selectionGroup: String?,
-        status: String?,
-        remoteStatus: String?,
-        progress: Double?,
-        score: Double?,
-        listedAt: Long?,
-        syncedAt: Long,
-        coverUrl: String?,
-    ) = ExternalLibraryMembership(
-        canonicalTitleId = canonicalTitleId,
-        provider = provider,
-        externalId = externalId,
-        listKey = listKey,
-        listTitle = listTitle,
-        selectionGroup = selectionGroup,
-        status = status?.let(LibraryStatus::valueOf),
-        remoteStatus = remoteStatus,
-        progress = progress,
-        score = score,
-        listedAt = listedAt,
-        syncedAt = syncedAt,
-        coverUrl = coverUrl,
-    )
+    override suspend fun getProviderIds(): Set<String> = emptySet()
 }

@@ -66,6 +66,15 @@ class RefreshUserLibraries internal constructor(
     suspend fun refreshConnected(): Map<IntegrationId, Result<Int>> {
         registry.awaitReady()
         val providers = registry.userListProviders()
+        if (!externalLibraryRepository.hasVerifiedOwnerScope) {
+            // Do not fetch private lists, materialize canonical titles, or delete
+            // unowned rows when the repository cannot prove their account scope.
+            return providers.associate { provider ->
+                provider.integrationId to Result.failure<Int>(
+                    IllegalStateException("External library requires verified account-scoped persistence"),
+                )
+            }
+        }
         val enabledProviderIds = providers.mapTo(mutableSetOf()) { it.integrationId.value }
 
         externalLibraryRepository.getProviderIds()
@@ -93,6 +102,11 @@ class RefreshUserLibraries internal constructor(
                 IllegalArgumentException("No user-list provider for ${integrationId.value}"),
             )
 
+        if (!externalLibraryRepository.hasVerifiedOwnerScope) {
+            return Result.failure(
+                IllegalStateException("External library requires verified account-scoped persistence"),
+            )
+        }
         if (!provider.connection.first()) {
             externalLibraryRepository.clearProvider(integrationId.value)
             return Result.success(0)
@@ -113,7 +127,10 @@ class RefreshUserLibraries internal constructor(
     }
 
     suspend fun clearProvider(integrationId: IntegrationId) {
-        externalLibraryRepository.clearProvider(integrationId.value)
+        if (externalLibraryRepository.hasVerifiedOwnerScope) {
+            externalLibraryRepository.clearProvider(integrationId.value)
+        }
+        // A logged-out session cannot authorize destroying unowned rows.
     }
 
     private fun integrationIdForLegacyTracker(trackerId: Long): IntegrationId? {
