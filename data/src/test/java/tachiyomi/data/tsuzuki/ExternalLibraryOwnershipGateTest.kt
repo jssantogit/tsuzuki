@@ -208,6 +208,34 @@ class ExternalLibraryOwnershipGateTest {
     }
 
     @Test
+    fun `failed SQLite insert rolls back previous owner deletion without touching A or legacy rows`() = runBlocking {
+        val owner = VerifiedExternalLibraryOwner.fromAuthenticatedIdentity("mal", "owner-A")
+        val existing = ExternalLibraryMembership(
+            canonicalTitleId = "A-title",
+            provider = "mal",
+            externalId = "123",
+            listKey = "mal:reading",
+            status = null,
+            remoteStatus = null,
+            progress = null,
+            score = null,
+            syncedAt = 100L,
+        )
+        repository.replaceOwned(owner, listOf(existing))
+        shouldThrow<Exception> {
+            repository.replaceOwned(
+                owner,
+                listOf(existing.copy(canonicalTitleId = "missing-title", externalId = "456")),
+            )
+        }
+        val queries = database.tsuzuki_external_library_membershipsQueries
+        queries.getTsuzukiScopedExternalLibraryMemberships("mal", owner.ownerKey)
+            .awaitAsList().single().external_id shouldBe "123"
+        queries.getAllTsuzukiExternalLibraryMemberships().awaitAsList().single()
+            .external_id shouldBe "123"
+    }
+
+    @Test
     fun `invalid foreign owner snapshot is transactional and preserves original account rows`() = runBlocking {
         val account = VerifiedExternalLibraryOwner.fromAuthenticatedIdentity("mal", "owner-A")
         val source = ExternalLibraryMembership(
