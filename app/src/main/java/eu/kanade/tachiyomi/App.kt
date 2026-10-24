@@ -41,6 +41,7 @@ import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseSyncJob
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
+import eu.kanade.tachiyomi.provider.runtime.ProviderP2pDiagnostics
 import eu.kanade.tachiyomi.ui.base.delegate.SecureActivityDelegate
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.WebViewUtil
@@ -56,7 +57,6 @@ import logcat.AndroidLogcatLogger
 import logcat.LogPriority
 import logcat.LogcatLogger
 import mihon.app.di.AppGraph
-import eu.kanade.tachiyomi.provider.runtime.ProviderP2pDiagnostics
 import mihon.app.di.injekt.MetroInteropModule
 import mihon.core.metro.GraphProvider
 import mihon.core.migration.Migration
