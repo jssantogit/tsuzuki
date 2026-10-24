@@ -20,6 +20,9 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceSupportSnapshot
 import tachiyomi.domain.tsuzuki.chapter.evidence.RefreshChapterEvidence
+import tachiyomi.domain.tsuzuki.chapter.inventory.GetIndependentInventorySnapshot
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryKnowledge
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
@@ -120,12 +123,16 @@ class CanonicalTitleRefreshPreservationTest {
         coEvery { artwork.execute("title") } returns null
         val source = mockk<ResolveCanonicalSourceManga>()
         coEvery { source.execute("title", any()) } returns null
+        val independent = mockk<GetIndependentInventorySnapshot>()
+        coEvery { independent.execute("title") } returns
+            IndependentInventorySnapshot(InventoryKnowledge.UNKNOWN, emptyList())
         return CanonicalTitleScreenModel(
             canonicalTitleRepository = titles,
             canonicalLibraryRepository = library,
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = evidence,
+            getIndependentInventorySnapshot = independent,
             canonicalReadingRepository = reading,
             getCanonicalChapterDownloadState = mockk(relaxed = true),
             downloadCanonicalChapter = mockk(relaxed = true),

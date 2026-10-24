@@ -458,7 +458,6 @@ class CanonicalTitleScreenModelTest {
             addonRepository = FakeAddonRepository(),
             refreshReportedChapterCounts = metadataRefresh(),
             refreshChapterEvidence = chapterRefresh ?: refresh,
-            getIndependentInventorySnapshot = inventorySnapshot,
             resolveCanonicalMetadata = metadata,
             resolveCanonicalSourceManga = source,
             resolveCanonicalArtwork = artwork,
