@@ -2,7 +2,6 @@ package eu.kanade.presentation.tsuzuki.detail
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -461,7 +461,11 @@ private fun ChapterJumpSheet(chapters: List<CanonicalChapterDetailItem>, onJump:
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     Column(Modifier.fillMaxWidth().imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(MR.strings.tsuzuki_details_jump), style = MaterialTheme.typography.titleMedium, color = colors.foreground)
+        Text(
+            stringResource(MR.strings.tsuzuki_details_jump),
+            style = MaterialTheme.typography.titleMedium,
+            color = colors.foreground,
+        )
         OutlinedTextField(
             value = input,
             onValueChange = {
