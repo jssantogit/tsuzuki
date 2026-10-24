@@ -1,0 +1,15 @@
+/* Sobre shares the existing Default Skin tokens and source components. */
+body.about-comparison{display:block;padding:32px;background:#e9ebee;color:#17181a}
+body.about-comparison> :not(.about-board):not(script):not(style){display:none!important}
+.about-board{display:grid;grid-template-columns:repeat(4,432px);gap:32px;justify-content:center;margin:0 auto;--dl-pad:16px;--dl-gap:24px;--dl-radius:16px;--dl-motion:180ms;--av-danger:#96352f;--dg-danger:#96352f;--dg-status:#e9edef;--dg-mono:ui-monospace,Consolas,monospace;--ab-brand-gap:48px}
+.about-board figure{margin:0;min-width:0}.about-board .phone-frame{zoom:1}.about-board .phone-content{padding:0;overflow:hidden}
+.ab-app{height:auto;grid-template-rows:auto minmax(0,1fr)}.ab-app .dl-header h1{font-size:36px;line-height:1.2;letter-spacing:-.5px;text-wrap:balance}.ab-app .dl-label{font-weight:500}.ab-app .dl-help,.ab-app .dl-value{font-size:16px;line-height:1.5}
+.ab-brand{display:grid;justify-items:center;gap:24px;padding:var(--ab-brand-gap) 0;margin-bottom:24px}.ab-brand img{display:block;width:min(100%,294px);height:auto;aspect-ratio:294/64}.ab-version{display:grid;gap:4px;text-align:center;color:var(--secondary);font-size:16px;line-height:1.5}.ab-version p{margin:0}
+.ab-app a.dl-row{color:var(--text);text-decoration:none}.ab-license-row{display:flex;gap:16px;align-items:center;width:100%;min-height:80px;border:0;padding:16px;text-align:left;background:transparent;color:var(--text);font:inherit;cursor:pointer}.ab-license-row+.ab-license-row{border-top:1px solid var(--divider)}.ab-license-row .dl-field{gap:4px}.ab-license-row .dl-label{overflow-wrap:anywhere}
+.ab-detail{display:grid;gap:16px;padding-top:8px}.ab-detail p{margin:0;overflow-wrap:anywhere}.ab-app .dl-scroll{padding-bottom:48px}.about-board :focus-visible{outline:2px solid var(--text);outline-offset:3px}
+@media(hover:hover){.ab-app .dl-row:hover,.ab-license-row:hover{background:var(--icon-surface)}}
+@media(max-width:1919px){.about-board{grid-template-columns:repeat(3,432px)}}
+@media(max-width:1439px){.about-board{grid-template-columns:repeat(2,432px)}}
+@media(max-width:959px){.about-board{grid-template-columns:minmax(0,432px)}}
+@media(max-width:479px){body.about-comparison{padding:0}.about-board{grid-template-columns:minmax(0,1fr);gap:24px}}
+@media(prefers-reduced-motion:reduce){.about-board *{transition:none!important;scroll-behavior:auto}}

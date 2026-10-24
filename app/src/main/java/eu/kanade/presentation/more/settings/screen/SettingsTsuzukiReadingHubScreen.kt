@@ -1,50 +1,37 @@
 package eu.kanade.presentation.more.settings.screen
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.util.Screen
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 object SettingsTsuzukiReadingHubScreen : Screen() {
+
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("Leitura") },
-                    navigationIcon = {
-                        TextButton(onClick = navigator::pop) { Text("Voltar") }
-                    },
-                )
-            },
-        ) { padding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-            ) {
-                ListItem(
-                    headlineContent = { Text("Leitor") },
-                    supportingContent = { Text("Modo de leitura, exibição e navegação") },
-                    modifier = Modifier.clickable { navigator.push(SettingsReaderScreen) },
-                )
-                ListItem(
-                    headlineContent = { Text("Comportamento da biblioteca") },
-                    supportingContent = { Text("Categorias, atualização e ações de capítulos") },
-                    modifier = Modifier.clickable { navigator.push(SettingsLibraryScreen) },
-                )
-            }
-        }
+
+        DefaultSkinSettingsNavigationScreen(
+            title = stringResource(MR.strings.tsuzuki_reading_settings_title),
+            navigateUp = navigator::pop,
+            groups = listOf(
+                DefaultSkinSettingsNavGroup(
+                    items = listOf(
+                        DefaultSkinSettingsNavItem(
+                            title = stringResource(MR.strings.pref_category_reader),
+                            subtitle = stringResource(MR.strings.pref_reader_summary),
+                            onClick = { navigator.push(SettingsReaderScreen) },
+                        ),
+                        DefaultSkinSettingsNavItem(
+                            title = stringResource(MR.strings.pref_category_library),
+                            subtitle = stringResource(MR.strings.pref_library_summary),
+                            onClick = { navigator.push(SettingsLibraryScreen) },
+                        ),
+                    ),
+                ),
+            ),
+        )
     }
 }

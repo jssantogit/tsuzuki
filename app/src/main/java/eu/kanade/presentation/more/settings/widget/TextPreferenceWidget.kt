@@ -2,6 +2,7 @@ package eu.kanade.presentation.more.settings.widget
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -11,10 +12,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.PreviewLightDark
+import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.rounded.Preview
-import tachiyomi.presentation.core.util.secondaryItemAlpha
 
 @Composable
 fun TextPreferenceWidget(
@@ -22,10 +24,12 @@ fun TextPreferenceWidget(
     title: String? = null,
     subtitle: String? = null,
     icon: ImageVector? = null,
-    iconTint: Color = MaterialTheme.colorScheme.primary,
+    iconTint: Color = Color.Unspecified,
     widget: @Composable (() -> Unit)? = null,
     onPreferenceClick: (() -> Unit)? = null,
+    toggleableState: Boolean? = null,
 ) {
+    val colors = defaultSkinColors()
     BasePreferenceWidget(
         modifier = modifier,
         title = title,
@@ -34,10 +38,9 @@ fun TextPreferenceWidget(
                 Text(
                     text = subtitle,
                     modifier = Modifier
-                        .padding(horizontal = PrefsHorizontalPadding)
-                        .secondaryItemAlpha(),
+                        .padding(horizontal = PrefsHorizontalPadding),
+                    color = colors.secondary,
                     style = MaterialTheme.typography.bodySmall,
-                    maxLines = 10,
                 )
             }
         } else {
@@ -47,14 +50,16 @@ fun TextPreferenceWidget(
             {
                 Icon(
                     imageVector = icon,
-                    tint = iconTint,
+                    tint = if (iconTint == Color.Unspecified) colors.secondary else iconTint,
                     contentDescription = null,
+                    modifier = Modifier.size(18.dp),
                 )
             }
         } else {
             null
         },
         onClick = onPreferenceClick,
+        toggleableState = toggleableState,
         widget = widget,
     )
 }

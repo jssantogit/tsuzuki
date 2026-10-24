@@ -49,7 +49,6 @@ android {
         buildConfigField("String", "COMMIT_SHA", "\"${getLatestCommitSha()}\"")
         buildConfigField("String", "BUILD_TIME", "\"${getBuildTime(useLatestCommitTime = false)}\"")
         buildConfigField("boolean", "TELEMETRY_INCLUDED", "${Config.includeTelemetry}")
-        buildConfigField("boolean", "UPDATER_ENABLED", "${Config.enableUpdater}")
         buildConfigField("String", "TSUZUKI_SUPABASE_URL", tsuzukiSupabaseUrl.asBuildConfigString())
         buildConfigField(
             "String",
@@ -133,8 +132,6 @@ android {
             versionNameSuffix = "-deva-${getLatestCommitCount()}"
 
             matchingFallbacks.addAll(commonMatchingFallbacks)
-
-            buildConfigField("boolean", "UPDATER_ENABLED", "false")
         }
         create("devb") {
             initWith(release)
@@ -143,8 +140,6 @@ android {
             versionNameSuffix = "-devb-${getLatestCommitCount()}"
 
             matchingFallbacks.addAll(commonMatchingFallbacks)
-
-            buildConfigField("boolean", "UPDATER_ENABLED", "false")
         }
         create("devc") {
             initWith(release)
@@ -153,8 +148,6 @@ android {
             versionNameSuffix = "-devc-${getLatestCommitCount()}"
 
             matchingFallbacks.addAll(commonMatchingFallbacks)
-
-            buildConfigField("boolean", "UPDATER_ENABLED", "false")
         }
         create("generic") {
             initWith(release)
@@ -163,8 +156,6 @@ android {
             versionNameSuffix = "-generic-${getLatestCommitCount()}"
 
             matchingFallbacks.addAll(commonMatchingFallbacks)
-
-            buildConfigField("boolean", "UPDATER_ENABLED", "false")
         }
         create("benchmark") {
             initWith(release)

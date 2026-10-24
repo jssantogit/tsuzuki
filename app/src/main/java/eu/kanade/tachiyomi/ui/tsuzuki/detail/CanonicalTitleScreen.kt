@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.ui.tsuzuki.detail
 
 import android.app.Activity
-import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -14,13 +13,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.zacsweers.metrox.viewmodel.metroViewModel
+import eu.kanade.presentation.more.settings.screen.SettingsTsuzukiProvidersDefaultSkinScreen
 import eu.kanade.presentation.tsuzuki.content.ContentBindingLinkSheet
 import eu.kanade.presentation.tsuzuki.content.ContentOptionSelectorSheet
 import eu.kanade.presentation.tsuzuki.detail.CanonicalTitleDetailScreen
+import eu.kanade.presentation.tsuzuki.detail.canonicalDetailsProviderLabels
 import eu.kanade.presentation.util.Screen
-import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
-import eu.kanade.tachiyomi.ui.setting.SettingsScreen
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkScreenModel
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkState
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentSelectorScreenModel
@@ -59,6 +58,12 @@ data class CanonicalTitleScreen(
         val loaded = (state as? CanonicalTitleScreenState.Loaded)
             ?.takeIf { it.title.id == canonicalTitleId }
         val downloadSelectionChapterId = loaded?.downloadSelectionChapterId
+        val openReader: (String) -> Unit = { chapterId ->
+            context.startActivity(
+                ReaderActivity.newCanonicalIntent(context, chapterId),
+            )
+        }
+        val openProviders: () -> Unit = { navigator.push(canonicalDetailsProvidersDestination()) }
 
         LaunchedEffect(canonicalTitleId, openSourceBindingFlow) {
             screenModel.start(canonicalTitleId)
@@ -81,28 +86,13 @@ data class CanonicalTitleScreen(
             onAtualizar = { screenModel.refresh() },
             onAddToLibrary = { screenModel.addToLibrary() },
             onRemoveFromLibrary = { screenModel.removeFromLibrary() },
-            onOpenAddonsSettings = {
-                context.startActivity(
-                    Intent(context, MainActivity::class.java)
-                        .setAction(Intent.ACTION_APPLICATION_PREFERENCES)
-                        .putExtra(
-                            SettingsScreen.EXTRA_DESTINATION,
-                            SettingsScreen.Destination.TsuzukiAddons.id,
-                        ),
-                )
-            },
+            onOpenProvidersSettings = openProviders,
+            onReadTitle = { screenModel.startReading(openReader) },
             onBaixarChapter = { canonicalChapterId ->
                 screenModel.requestDownload(canonicalChapterId)
             },
             onOpenChapter = { canonicalChapterId ->
-                screenModel.openChapter(canonicalChapterId) { actualChapterId ->
-                    context.startActivity(
-                        ReaderActivity.newCanonicalIntent(
-                            context = context,
-                            canonicalChapterId = actualChapterId,
-                        ),
-                    )
-                }
+                screenModel.openChapter(canonicalChapterId, openReader)
             },
         )
 
@@ -119,6 +109,7 @@ data class CanonicalTitleScreen(
         if (linkSheetOpen) {
             ContentBindingLinkSheet(
                 state = linkState,
+                providerLabels = canonicalDetailsProviderLabels(),
                 onSelectAddon = linkViewModel::selectAddon,
                 onConfirmCandidate = linkViewModel::confirm,
                 onSearchMore = linkViewModel::searchMore,
@@ -139,6 +130,7 @@ data class CanonicalTitleScreen(
             }
             ContentOptionSelectorSheet(
                 state = contentSelectorState,
+                providerLabels = canonicalDetailsProviderLabels(),
                 onSelect = { item ->
                     val selection = contentSelectorViewModel.select(item)
                     screenModel.downloadSelectedOption(selection.option)
@@ -150,16 +142,7 @@ data class CanonicalTitleScreen(
                     linkSheetOpen = true
                 },
                 onCancelDiscovery = contentSelectorViewModel::cancelDiscovery,
-                onOpenAddonsSettings = {
-                    context.startActivity(
-                        Intent(context, MainActivity::class.java)
-                            .setAction(Intent.ACTION_APPLICATION_PREFERENCES)
-                            .putExtra(
-                                SettingsScreen.EXTRA_DESTINATION,
-                                SettingsScreen.Destination.TsuzukiAddons.id,
-                            ),
-                    )
-                },
+                onOpenAddonsSettings = openProviders,
                 onDismissRequest = {
                     contentSelectorViewModel.cancelDiscovery()
                     screenModel.dismissDownloadSelector()
@@ -168,6 +151,8 @@ data class CanonicalTitleScreen(
         }
     }
 }
+
+internal fun canonicalDetailsProvidersDestination(): Screen = SettingsTsuzukiProvidersDefaultSkinScreen()
 
 internal fun shouldAutoOpenSourceBindingFlow(
     canonicalTitleId: String,

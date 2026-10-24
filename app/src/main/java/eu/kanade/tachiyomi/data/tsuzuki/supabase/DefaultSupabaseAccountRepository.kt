@@ -43,6 +43,8 @@ class DefaultSupabaseAccountRepository(
     override suspend fun sendPasswordRecovery(email: String) =
         delegate.sendPasswordRecovery(email)
 
+    override suspend fun updatePassword(password: String) = delegate.updatePassword(password)
+
     override suspend fun refreshSession() = delegate.refreshSession()
 
     override suspend fun getAccessToken() = delegate.getAccessToken()

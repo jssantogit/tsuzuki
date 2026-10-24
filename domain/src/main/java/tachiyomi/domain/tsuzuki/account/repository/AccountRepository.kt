@@ -14,6 +14,8 @@ interface AccountRepository {
 
     suspend fun sendPasswordRecovery(email: String): Result<Unit>
 
+    suspend fun updatePassword(password: String): Result<Unit>
+
     suspend fun refreshSession(): Result<AccountState>
 
     suspend fun getAccessToken(): Result<String?>

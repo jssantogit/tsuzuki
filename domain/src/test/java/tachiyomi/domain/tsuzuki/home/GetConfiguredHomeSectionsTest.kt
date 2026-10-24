@@ -100,6 +100,25 @@ class GetConfiguredHomeSectionsTest {
         store.getListsCalls shouldBe 0
     }
 
+    @Test
+    fun `collection navigation excludes nested folders and does not load lists`() = runTest {
+        val store = FakeCollectionStore().apply { addGraph(CollectionOrigin.USER) }
+        store.upsertFolder(
+            requireNotNull(store.getFolder("folder-1")).copy(
+                id = "nested-folder",
+                title = "Nested",
+                parentFolderId = "folder-1",
+            ),
+        )
+        val interactor = GetConfiguredHomeSections(store)
+
+        interactor.subscribeCollection("collection-1").first()?.folders?.map { it.folderId } shouldBe
+            listOf("folder-1")
+        store.getListsCalls shouldBe 0
+        interactor.subscribeFolder("collection-1", "folder-1").first()?.childFolders?.map { it.folderId } shouldBe
+            listOf("nested-folder")
+    }
+
     private class FakeCollectionStore : CollectionStore {
         private val collections = mutableListOf<TsuzukiCollection>()
         private val collectionFlow = MutableStateFlow<List<TsuzukiCollection>>(emptyList())

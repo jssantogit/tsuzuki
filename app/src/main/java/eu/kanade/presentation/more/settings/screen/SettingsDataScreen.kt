@@ -8,20 +8,10 @@ import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MultiChoiceSegmentedButtonRow
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.core.net.toUri
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -58,8 +47,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import logcat.LogPriority
 import mihon.app.di.appGraph
-import mihon.icons.materialsymbols.MaterialSymbols
-import mihon.icons.materialsymbols.automirroredrounded.Help
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.storage.displayablePath
 import tachiyomi.core.common.util.lang.launchNonCancellable
@@ -76,37 +63,102 @@ import tachiyomi.presentation.core.util.collectAsState
 object SettingsDataScreen : SearchableSettings {
 
     val restorePreferenceKeyString = MR.strings.label_backup
-    const val HELP_URL = "https://mihon.app/docs/faq/storage"
 
     @ReadOnlyComposable
     @Composable
     override fun getTitleRes() = MR.strings.label_data_storage
 
     @Composable
-    override fun RowScope.AppBarAction() {
-        val uriHandler = LocalUriHandler.current
-        IconButton(onClick = { uriHandler.openUri(HELP_URL) }) {
-            Icon(
-                imageVector = MaterialSymbols.AutoMirroredRounded.Help,
-                contentDescription = stringResource(MR.strings.tracking_guide),
+    override fun getPreferences(): List<Preference> {
+        val context = LocalContext.current
+        val navigator = LocalNavigator.currentOrThrow
+        val storagePreferences = remember { context.appGraph.storagePreferences }
+
+        return listOf(
+            Preference.PreferenceGroup(
+                title = "",
+                preferenceItems = listOf(
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(MR.strings.pref_storage_location),
+                        subtitle = storageLocationText(storagePreferences.baseStorageDirectory),
+                        onClick = { navigator.push(StorageLocationScreen) },
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(MR.strings.pref_storage_usage),
+                        subtitle = stringResource(MR.strings.tsuzuki_storage_usage_summary),
+                        onClick = { navigator.push(StorageUsageScreen) },
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(MR.strings.label_backup),
+                        subtitle = stringResource(MR.strings.tsuzuki_backup_settings_summary),
+                        onClick = { navigator.push(BackupAndRestoreScreen) },
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(MR.strings.tsuzuki_export_library_title),
+                        subtitle = stringResource(MR.strings.tsuzuki_export_library_summary),
+                        onClick = { navigator.push(ExportLibraryScreen) },
+                    ),
+                ),
+            ),
+        )
+    }
+
+    private object StorageLocationScreen : SearchableSettings {
+        @ReadOnlyComposable
+        @Composable
+        override fun getTitleRes() = MR.strings.pref_storage_location
+
+        @Composable
+        override fun getPreferences(): List<Preference> {
+            val context = LocalContext.current
+            val storagePreferences = remember { context.appGraph.storagePreferences }
+            return listOf(
+                Preference.PreferenceGroup(
+                    title = "",
+                    preferenceItems = listOf(
+                        SettingsDataScreen.getStorageLocationPref(storagePreferences),
+                        Preference.PreferenceItem.InfoPreference(
+                            stringResource(MR.strings.pref_storage_location_info),
+                        ),
+                    ),
+                ),
             )
         }
     }
 
-    @Composable
-    override fun getPreferences(): List<Preference> {
-        val context = LocalContext.current
-        val backupPreferences = remember { context.appGraph.backupPreferences }
-        val storagePreferences = remember { context.appGraph.storagePreferences }
+    private object StorageUsageScreen : SearchableSettings {
+        @ReadOnlyComposable
+        @Composable
+        override fun getTitleRes() = MR.strings.pref_storage_usage
 
-        return listOf(
-            getStorageLocationPref(storagePreferences = storagePreferences),
-            Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.pref_storage_location_info)),
+        @Composable
+        override fun getPreferences(): List<Preference> {
+            return listOf(SettingsDataScreen.getStorageUsageGroup())
+        }
+    }
 
-            getBackupAndRestoreGroup(backupPreferences = backupPreferences),
-            getDataGroup(),
-            getExportGroup(),
-        )
+    private object BackupAndRestoreScreen : SearchableSettings {
+        @ReadOnlyComposable
+        @Composable
+        override fun getTitleRes() = MR.strings.label_backup
+
+        @Composable
+        override fun getPreferences(): List<Preference> {
+            val context = LocalContext.current
+            val backupPreferences = remember { context.appGraph.backupPreferences }
+            return listOf(SettingsDataScreen.getBackupAndRestoreGroup(backupPreferences))
+        }
+    }
+
+    private object ExportLibraryScreen : SearchableSettings {
+        @ReadOnlyComposable
+        @Composable
+        override fun getTitleRes() = MR.strings.export
+
+        @Composable
+        override fun getPreferences(): List<Preference> {
+            return listOf(SettingsDataScreen.getExportPreference())
+        }
     }
 
     @Composable
@@ -122,11 +174,6 @@ object SettingsDataScreen : SearchableSettings {
                 val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
                     Intent.FLAG_GRANT_WRITE_URI_PERMISSION
 
-                // For some reason InkBook devices do not implement the SAF properly. Persistable URI grants do not
-                // work. However, simply retrieving the URI and using it works fine for these devices. Access is not
-                // revoked after the app is closed or the device is restarted.
-                // This also holds for some Samsung devices. Thus, we simply execute inside of a try-catch block and
-                // ignore the exception if it is thrown.
                 try {
                     context.contentResolver.takePersistableUriPermission(uri, flags)
                 } catch (e: SecurityException) {
@@ -171,7 +218,7 @@ object SettingsDataScreen : SearchableSettings {
             onClick = {
                 try {
                     pickStorageLocation.launch(null)
-                } catch (e: ActivityNotFoundException) {
+                } catch (_: ActivityNotFoundException) {
                     context.toast(MR.strings.file_picker_error)
                 }
             },
@@ -182,7 +229,6 @@ object SettingsDataScreen : SearchableSettings {
     private fun getBackupAndRestoreGroup(backupPreferences: BackupPreferences): Preference.PreferenceGroup {
         val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
-
         val lastAutoBackup by backupPreferences.lastAutoBackupTimestamp.collectAsState()
 
         val chooseBackup = rememberLauncherForActivityResult(
@@ -202,53 +248,27 @@ object SettingsDataScreen : SearchableSettings {
         }
 
         return Preference.PreferenceGroup(
-            title = stringResource(MR.strings.label_backup),
+            title = "",
             preferenceItems = listOf(
-                // Manual actions
-                Preference.PreferenceItem.CustomPreference(
-                    title = stringResource(restorePreferenceKeyString),
-                ) {
-                    BasePreferenceWidget(
-                        subcomponent = {
-                            MultiChoiceSegmentedButtonRow(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(intrinsicSize = IntrinsicSize.Min)
-                                    .padding(horizontal = PrefsHorizontalPadding),
-                            ) {
-                                SegmentedButton(
-                                    modifier = Modifier.fillMaxHeight(),
-                                    checked = false,
-                                    onCheckedChange = { navigator.push(CreateBackupScreen()) },
-                                    shape = SegmentedButtonDefaults.itemShape(0, 2),
-                                ) {
-                                    Text(stringResource(MR.strings.pref_create_backup))
-                                }
-                                SegmentedButton(
-                                    modifier = Modifier.fillMaxHeight(),
-                                    checked = false,
-                                    onCheckedChange = {
-                                        if (!BackupRestoreJob.isRunning(context.workManager)) {
-                                            if (DeviceUtil.isMiui && DeviceUtil.isMiuiOptimizationDisabled()) {
-                                                context.toast(MR.strings.restore_miui_warning)
-                                            }
-
-                                            // no need to catch because it's wrapped with a chooser
-                                            chooseBackup.launch("*/*")
-                                        } else {
-                                            context.toast(MR.strings.restore_in_progress)
-                                        }
-                                    },
-                                    shape = SegmentedButtonDefaults.itemShape(1, 2),
-                                ) {
-                                    Text(stringResource(MR.strings.pref_restore_backup))
-                                }
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_create_backup),
+                    subtitle = stringResource(MR.strings.tsuzuki_backup_create_summary),
+                    onClick = { navigator.push(CreateBackupScreen()) },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_restore_backup),
+                    subtitle = stringResource(MR.strings.tsuzuki_backup_restore_summary),
+                    onClick = {
+                        if (!BackupRestoreJob.isRunning(context.workManager)) {
+                            if (DeviceUtil.isMiui && DeviceUtil.isMiuiOptimizationDisabled()) {
+                                context.toast(MR.strings.restore_miui_warning)
                             }
-                        },
-                    )
-                },
-
-                // Automatic backups
+                            chooseBackup.launch("*/*")
+                        } else {
+                            context.toast(MR.strings.restore_in_progress)
+                        }
+                    },
+                ),
                 Preference.PreferenceItem.ListPreference(
                     preference = backupPreferences.backupInterval,
                     entries = mapOf(
@@ -274,7 +294,7 @@ object SettingsDataScreen : SearchableSettings {
     }
 
     @Composable
-    private fun getDataGroup(): Preference.PreferenceGroup {
+    private fun getStorageUsageGroup(): Preference.PreferenceGroup {
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
         val libraryPreferences = remember { context.appGraph.libraryPreferences }
@@ -284,7 +304,7 @@ object SettingsDataScreen : SearchableSettings {
         val cacheReadableSize = remember(cacheReadableSizeSema) { chapterCache.readableSize }
 
         return Preference.PreferenceGroup(
-            title = stringResource(MR.strings.pref_storage_usage),
+            title = "",
             preferenceItems = listOf(
                 Preference.PreferenceItem.CustomPreference(
                     title = stringResource(MR.strings.pref_storage_usage),
@@ -297,7 +317,6 @@ object SettingsDataScreen : SearchableSettings {
                         },
                     )
                 },
-
                 Preference.PreferenceItem.TextPreference(
                     title = stringResource(MR.strings.pref_clear_chapter_cache),
                     subtitle = stringResource(MR.strings.used_cache, cacheReadableSize),
@@ -320,12 +339,15 @@ object SettingsDataScreen : SearchableSettings {
                     preference = libraryPreferences.autoClearChapterCache,
                     title = stringResource(MR.strings.pref_auto_clear_chapter_cache),
                 ),
+                Preference.PreferenceItem.InfoPreference(
+                    stringResource(MR.strings.tsuzuki_storage_temporary_info),
+                ),
             ),
         )
     }
 
     @Composable
-    private fun getExportGroup(): Preference.PreferenceGroup {
+    private fun getExportPreference(): Preference.PreferenceItem.TextPreference {
         var showDialog by remember { mutableStateOf(false) }
         var exportOptions by remember {
             mutableStateOf(
@@ -370,20 +392,16 @@ object SettingsDataScreen : SearchableSettings {
                 options = exportOptions,
                 onConfirm = { options ->
                     exportOptions = options
-                    saveFileLauncher.launch("mihon_library.csv")
+                    saveFileLauncher.launch("tsuzuki_library.csv")
                 },
                 onDismissRequest = { showDialog = false },
             )
         }
 
-        return Preference.PreferenceGroup(
-            title = stringResource(MR.strings.export),
-            preferenceItems = listOf(
-                Preference.PreferenceItem.TextPreference(
-                    title = stringResource(MR.strings.library_list),
-                    onClick = { showDialog = true },
-                ),
-            ),
+        return Preference.PreferenceItem.TextPreference(
+            title = stringResource(MR.strings.tsuzuki_export_csv_title),
+            subtitle = stringResource(MR.strings.tsuzuki_export_csv_summary),
+            onClick = { showDialog = true },
         )
     }
 
@@ -439,6 +457,7 @@ object SettingsDataScreen : SearchableSettings {
             },
             confirmButton = {
                 TextButton(
+                    enabled = titleSelected,
                     onClick = {
                         onConfirm(
                             ExportOptions(

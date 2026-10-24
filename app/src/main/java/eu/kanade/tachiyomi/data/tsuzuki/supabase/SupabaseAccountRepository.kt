@@ -55,6 +55,16 @@ class SupabaseAccountRepository(
             authService.sendPasswordRecovery(email)
         }
 
+    override suspend fun updatePassword(password: String): Result<Unit> = runCatching {
+        require(password.isNotBlank()) { "Password must not be blank" }
+        // The callback can accept a session while this repository is already alive.
+        val session = requireNotNull(sessionStore.load()) { "No authenticated session is available" }
+        mutableState.value = session.toAccountState()
+        val accessToken = requireNotNull(getAccessToken().getOrThrow()) { "No authenticated session is available" }
+        require(accessToken.isNotBlank()) { "No authenticated session is available" }
+        authService.updatePassword(accessToken, password)
+    }
+
     override suspend fun refreshSession(): Result<AccountState> =
         runCatching {
             val existing = sessionStore.load()

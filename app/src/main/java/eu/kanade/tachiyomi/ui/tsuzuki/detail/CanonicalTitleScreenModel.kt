@@ -34,7 +34,9 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.RefreshChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.interactor.MaterializeInferredChapter
+import tachiyomi.domain.tsuzuki.chapter.interactor.OpenCanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.interactor.buildCanonicalChapterOutline
+import tachiyomi.domain.tsuzuki.chapter.interactor.isVisibleCanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.content.ContentOption
@@ -51,8 +53,11 @@ import tachiyomi.domain.tsuzuki.metadata.repository.ReportedChapterCountReposito
 import tachiyomi.domain.tsuzuki.model.CanonicalLibraryEntry
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.LibraryStatus
+import tachiyomi.domain.tsuzuki.reader.interactor.GetCanonicalReadingStart
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterProgress
+import tachiyomi.domain.tsuzuki.reader.model.CanonicalReadingStart
 import tachiyomi.domain.tsuzuki.reader.repository.CanonicalReadingRepository
+import tachiyomi.domain.tsuzuki.reader.service.CanonicalReadingStartResolver
 import tachiyomi.domain.tsuzuki.repository.CanonicalLibraryRepository
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import tachiyomi.domain.tsuzuki.repository.SourceTitleMappingRepository
@@ -73,6 +78,7 @@ sealed interface CanonicalTitleScreenState {
         val coverUrl: String? = null,
         val sourceCover: MangaCover? = null,
         val author: String? = null,
+        val artists: List<String> = emptyList(),
         val description: String? = null,
         val genres: List<String> = emptyList(),
         val tags: List<String> = emptyList(),
@@ -97,7 +103,13 @@ sealed interface CanonicalTitleScreenState {
         val chapterActionError: Throwable? = null,
         val chapterDiagnosticsRecording: Boolean = false,
         val chapterDiagnosticReportAvailable: Boolean = false,
-    ) : CanonicalTitleScreenState
+        val hasReadingProgress: Boolean = false,
+        val activeChapterId: String? = null,
+        val readingStartInProgress: Boolean = false,
+    ) : CanonicalTitleScreenState {
+        val hasReadableChapters: Boolean
+            get() = chapters.any { !it.inferredFromCount }
+    }
 
     data class Error(
         val error: Throwable,
@@ -145,6 +157,7 @@ class CanonicalTitleScreenModel(
     private val resolveCanonicalMetadata: ResolveCanonicalMetadata,
     private val resolveCanonicalSourceManga: ResolveCanonicalSourceManga,
     private val resolveCanonicalArtwork: ResolveCanonicalArtwork,
+    private val resolveCanonicalReadingStart: CanonicalReadingStartResolver,
     private val diagnostics: ChapterInventoryDiagnostics = NoOpChapterInventoryDiagnostics,
 ) : ViewModel() {
 
@@ -155,9 +168,11 @@ class CanonicalTitleScreenModel(
     private var diagnosticTitleId: String? = null
     private var operation: Job? = null
     private var downloadOperation: Job? = null
+    private var readingStartOperation: Job? = null
 
     fun start(canonicalTitleId: String): Job {
         val previousTitleId = this.canonicalTitleId
+        if (previousTitleId != canonicalTitleId) readingStartOperation?.cancel()
         if (previousTitleId != null && previousTitleId != canonicalTitleId && diagnosticsRecording(previousTitleId)) {
             runCatching { diagnostics.stop() }
         }
@@ -214,6 +229,7 @@ class CanonicalTitleScreenModel(
                         downloadSelectionChapterId = current.downloadSelectionChapterId,
                         downloadError = current.downloadError,
                         chapterActionError = current.chapterActionError,
+                        readingStartInProgress = current.readingStartInProgress,
                     )
                 }
             } catch (error: CancellationException) {
@@ -341,9 +357,48 @@ class CanonicalTitleScreenModel(
         }
     }
 
+    fun startReading(onReady: (String) -> Unit): Job? {
+        val loaded = _state.value as? CanonicalTitleScreenState.Loaded ?: return null
+        val titleId = loaded.title.id
+        if (canonicalTitleId != titleId || loaded.readingStartInProgress) return null
+        _state.value = loaded.copy(readingStartInProgress = true, chapterActionError = null)
+        readingStartOperation = viewModelScope.launch {
+            try {
+                when (val start = resolveCanonicalReadingStart.execute(titleId)) {
+                    is CanonicalReadingStart.Ready -> {
+                        val chapter = canonicalChapterRepository.getById(start.canonicalChapterId)
+                            ?.takeIf { it.canonicalTitleId == titleId }
+                            ?: throw NoSuchElementException("Reading chapter is unavailable for this canonical title")
+                        if (canonicalTitleId != titleId) return@launch
+                        val row = (_state.value as? CanonicalTitleScreenState.Loaded)
+                            ?.chapters?.firstOrNull { it.chapter.id == chapter.id }
+                            ?: CanonicalChapterDetailItem(chapter, progress = null, downloaded = false)
+                        val resolved = materializeIfRequired(row)
+                        if (canonicalTitleId == titleId && resolved.canonicalTitleId == titleId) {
+                            onReady(resolved.id)
+                        }
+                    }
+                    is CanonicalReadingStart.Unavailable -> {
+                        throw start.reason ?: IllegalStateException("Canonical reading start is unavailable")
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                val current = (_state.value as? CanonicalTitleScreenState.Loaded)
+                    ?.takeIf { it.title.id == titleId }
+                if (current != null) _state.value = current.copy(chapterActionError = error)
+            } finally {
+                val current = (_state.value as? CanonicalTitleScreenState.Loaded)
+                    ?.takeIf { it.title.id == titleId }
+                if (current != null) _state.value = current.copy(readingStartInProgress = false)
+            }
+        }
+        return readingStartOperation
+    }
+
     private suspend fun materializeIfRequired(row: CanonicalChapterDetailItem): CanonicalChapter {
-        if (!row.inferredFromCount) return row.chapter
-        val resolved = materializeInferredChapter.execute(row.chapter)
+        val resolved = OpenCanonicalChapter(materializeInferredChapter).execute(row.chapter)
         if (resolved.id != row.chapter.id) {
             val state = _state.value as? CanonicalTitleScreenState.Loaded
             if (state != null) {
@@ -469,49 +524,49 @@ class CanonicalTitleScreenModel(
             _state.value = before.copy(isRefreshing = true, refreshError = null)
         }
 
-        val refreshResults = coroutineScope {
-            val chapterRefresh = async {
-                refreshChapterEvidence.executeProgressively(
-                    canonicalTitleId = canonicalTitleId,
-                    forceRefresh = forceChapterRefresh,
-                    onStageReconciled = {
-                        publishChapterRefreshStage(canonicalTitleId)
-                    },
-                ).exceptionOrNull()
-            }
-            val metadataRefresh = async {
-                resolveCanonicalMetadata.execute(
-                    canonicalTitleId = canonicalTitleId,
-                    forceRefresh = forceChapterRefresh,
-                )
-            }
-
-            val metadataResult = metadataRefresh.await()
-            val metadataElapsed = refreshStart.elapsedNow()
-            val current = _state.value as? CanonicalTitleScreenState.Loaded
-            if (current?.title?.id == canonicalTitleId) {
-                val refreshedCounts = reportedChapterCountRepository.getByTitle(canonicalTitleId)
-                _state.value = current.copy(
-                    reportedChapterCounts = refreshedCounts,
-                    chapters = withMetadataSlots(
-                        canonicalTitleId,
-                        current.chapters.filterNot(CanonicalChapterDetailItem::inferredFromCount),
-                        refreshedCounts,
-                    ),
-                    refreshError = metadataResult.exceptionOrNull(),
-                )
-            }
-
-            val chapterError = chapterRefresh.await()
-            logcat {
-                "TsuzukiPerf detail refresh metadataElapsed=$metadataElapsed " +
-                    "chapterElapsed=${refreshStart.elapsedNow()} " +
-                    "metadataError=${metadataResult.isFailure} chapterError=${chapterError != null}"
-            }
-            metadataResult to chapterError
-        }
-
         try {
+            val refreshResults = coroutineScope {
+                val chapterRefresh = async {
+                    refreshChapterEvidence.executeProgressively(
+                        canonicalTitleId = canonicalTitleId,
+                        forceRefresh = forceChapterRefresh,
+                        onStageReconciled = {
+                            publishChapterRefreshStage(canonicalTitleId)
+                        },
+                    ).exceptionOrNull()
+                }
+                val metadataRefresh = async {
+                    resolveCanonicalMetadata.execute(
+                        canonicalTitleId = canonicalTitleId,
+                        forceRefresh = forceChapterRefresh,
+                    )
+                }
+
+                val metadataResult = metadataRefresh.await()
+                val metadataElapsed = refreshStart.elapsedNow()
+                val current = _state.value as? CanonicalTitleScreenState.Loaded
+                if (current?.title?.id == canonicalTitleId) {
+                    val refreshedCounts = reportedChapterCountRepository.getByTitle(canonicalTitleId)
+                    _state.value = current.copy(
+                        reportedChapterCounts = refreshedCounts,
+                        chapters = withMetadataSlots(
+                            canonicalTitleId,
+                            current.chapters.filterNot(CanonicalChapterDetailItem::inferredFromCount),
+                            refreshedCounts,
+                        ),
+                        refreshError = metadataResult.exceptionOrNull(),
+                    )
+                }
+
+                val chapterError = chapterRefresh.await()
+                logcat {
+                    "TsuzukiPerf detail refresh metadataElapsed=$metadataElapsed " +
+                        "chapterElapsed=${refreshStart.elapsedNow()} " +
+                        "metadataError=${metadataResult.isFailure} chapterError=${chapterError != null}"
+                }
+                metadataResult to chapterError
+            }
+
             val refreshed = loadLocalState(
                 canonicalTitleId = canonicalTitleId,
                 includeIntegrationMetadata = true,
@@ -528,7 +583,8 @@ class CanonicalTitleScreenModel(
             _state.value = if (current == null || current.title.id != canonicalTitleId) {
                 refreshed
             } else {
-                refreshed.copy(
+                val usable = if (refreshed.refreshError == null) refreshed else refreshed.preserveUsableContent(current)
+                usable.copy(
                     libraryEntry = current.libraryEntry,
                     libraryMutationInProgress = current.libraryMutationInProgress,
                     libraryMutationError = current.libraryMutationError,
@@ -536,6 +592,7 @@ class CanonicalTitleScreenModel(
                     downloadSelectionChapterId = current.downloadSelectionChapterId,
                     downloadError = current.downloadError,
                     chapterActionError = current.chapterActionError,
+                    readingStartInProgress = current.readingStartInProgress,
                 )
             }
         } catch (error: CancellationException) {
@@ -562,8 +619,10 @@ class CanonicalTitleScreenModel(
         val latest = (_state.value as? CanonicalTitleScreenState.Loaded)
             ?.takeIf { it.title.id == canonicalTitleId }
             ?: return
+        val retainObservedChapters = staged.chapters.none { !it.inferredFromCount } &&
+            latest.chapters.any { !it.inferredFromCount }
         _state.value = latest.copy(
-            chapters = staged.chapters,
+            chapters = if (retainObservedChapters) latest.chapters else staged.chapters,
             addonCoverage = staged.addonCoverage,
             isRefreshing = true,
             refreshError = current.refreshError,
@@ -594,6 +653,19 @@ class CanonicalTitleScreenModel(
         val progressByChapter = canonicalReadingRepository
             .getProgressByCanonicalTitleId(canonicalTitleId)
             .associateBy(CanonicalChapterProgress::canonicalChapterId)
+        val hasReadingProgress = chapters.any { chapter ->
+            progressByChapter[chapter.id]?.let { progress ->
+                progress.read || progress.lastPageRead > 0 || !progress.lastVariantId.isNullOrBlank()
+            } == true
+        }
+        val activeChapterId = if (hasReadingProgress) {
+            (
+                GetCanonicalReadingStart(canonicalChapterRepository, canonicalReadingRepository)
+                    .execute(canonicalTitleId) as? CanonicalReadingStart.Ready
+                )?.canonicalChapterId
+        } else {
+            null
+        }
         val canonicalDownloadIds = canonicalDownloadRepository
             .getChapterIdsByCanonicalTitle(canonicalTitleId)
         val reportedCounts = reportedChapterCountRepository.getByTitle(canonicalTitleId)
@@ -659,12 +731,7 @@ class CanonicalTitleScreenModel(
         val details = chapters.mapNotNull { chapter ->
             val progress = progressByChapter[chapter.id]
             val downloaded = chapter.id in canonicalDownloadIds
-            if (
-                chapter.confirmation != CanonicalChapterConfirmation.CONFIRMED &&
-                chapter.id !in supportedChapterIds &&
-                progress == null &&
-                !downloaded
-            ) {
+            if (!isVisibleCanonicalChapter(chapter, progress != null, chapter.id in supportedChapterIds, downloaded)) {
                 null
             } else {
                 CanonicalChapterDetailItem(
@@ -694,6 +761,8 @@ class CanonicalTitleScreenModel(
             author = metadata?.author,
             description = metadata?.description,
             genres = metadata?.genre.orEmpty(),
+            hasReadingProgress = hasReadingProgress,
+            activeChapterId = activeChapterId,
             isRefreshing = isRefreshing,
             refreshError = refreshError,
         ).let { local ->
@@ -754,13 +823,11 @@ class CanonicalTitleScreenModel(
             coverUrl = metadata.artworkUrl?.value ?: coverUrl,
             author = metadata.authors
                 ?.value
-                ?.takeIf { it.isNotEmpty() }
+                ?.filter(String::isNotBlank)
+                ?.takeIf(List<String>::isNotEmpty)
                 ?.joinToString()
-                ?: metadata.artists
-                    ?.value
-                    ?.takeIf { it.isNotEmpty() }
-                    ?.joinToString()
                 ?: author,
+            artists = metadata.artists?.value?.filter(String::isNotBlank) ?: artists,
             description = metadata.synopsis?.value ?: description,
             genres = metadata.genres?.value ?: genres,
             tags = metadata.tags?.value ?: tags,
@@ -775,6 +842,36 @@ class CanonicalTitleScreenModel(
             endDate = metadata.endDate?.value ?: endDate,
             editorialVolumeCount = metadata.editorialVolumeCount?.value ?: editorialVolumeCount,
             metadataSources = sources.ifEmpty { metadataSources },
+        )
+    }
+
+    private fun CanonicalTitleScreenState.Loaded.preserveUsableContent(
+        previous: CanonicalTitleScreenState.Loaded,
+    ): CanonicalTitleScreenState.Loaded {
+        val retainObservedChapters = chapters.none { !it.inferredFromCount } &&
+            previous.chapters.any { !it.inferredFromCount }
+        return copy(
+            coverUrl = coverUrl ?: previous.coverUrl,
+            sourceCover = sourceCover ?: previous.sourceCover,
+            author = author ?: previous.author,
+            artists = artists.ifEmpty { previous.artists },
+            description = description ?: previous.description,
+            genres = genres.ifEmpty { previous.genres },
+            tags = tags.ifEmpty { previous.tags },
+            editorialStatus = editorialStatus ?: previous.editorialStatus,
+            editorialFormat = editorialFormat ?: previous.editorialFormat,
+            ratingValue = ratingValue ?: previous.ratingValue,
+            ratingMaxValue = ratingMaxValue ?: previous.ratingMaxValue,
+            ratingVoteCount = ratingVoteCount ?: previous.ratingVoteCount,
+            ratings = ratings.ifEmpty { previous.ratings },
+            tsuzukiRating = tsuzukiRating ?: previous.tsuzukiRating,
+            startDate = startDate ?: previous.startDate,
+            endDate = endDate ?: previous.endDate,
+            editorialVolumeCount = editorialVolumeCount ?: previous.editorialVolumeCount,
+            metadataSources = metadataSources.ifEmpty { previous.metadataSources },
+            chapters = if (retainObservedChapters) previous.chapters else chapters,
+            hasReadingProgress = if (retainObservedChapters) previous.hasReadingProgress else hasReadingProgress,
+            activeChapterId = if (retainObservedChapters) previous.activeChapterId else activeChapterId,
         )
     }
 
