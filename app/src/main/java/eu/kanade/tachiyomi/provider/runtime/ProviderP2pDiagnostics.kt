@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.provider.runtime
 
 import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
@@ -9,7 +10,6 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
-import tachiyomi.core.common.util.system.logcat
 import java.security.MessageDigest
 import java.security.SecureRandom
 
