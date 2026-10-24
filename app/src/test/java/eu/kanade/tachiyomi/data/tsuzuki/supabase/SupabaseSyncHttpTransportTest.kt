@@ -442,7 +442,7 @@ class SupabaseSyncHttpTransportTest {
                       "schemaVersion":1,"protocolEpoch":1,"activeDomain":"READING_PROGRESS",
                       "registeredDeviceCount":2,"unexpiredLegacyDeviceCount":1,
                       "legacyRecordCount":23,"legacyTombstoneCount":4,"legacyEventCursor":105,
-                      "legacyIncompleteRecordCount":2,"unresolvedProgressConflictCount":1,
+                      "legacyIncompleteRecordCount":2,"legacyInvalidValueRecordCount":0,"unresolvedProgressConflictCount":1,
                       "historicalDeviceCoverageProven":false,"pendingLocalWritesObservable":false,
                       "exactProgressEnabled":false,"migrationReady":false
                     }
@@ -460,6 +460,7 @@ class SupabaseSyncHttpTransportTest {
         preview.legacyTombstoneCount shouldBe 4L
         preview.legacyEventCursor shouldBe 105L
         preview.legacyIncompleteRecordCount shouldBe 2L
+        preview.legacyInvalidValueRecordCount shouldBe 0L
         preview.unresolvedProgressConflictCount shouldBe 1L
         val request = server.takeRequest()
         request.url.encodedPath shouldBe "/rest/v1/rpc/sync_preview_progress_rollout"
@@ -479,7 +480,7 @@ class SupabaseSyncHttpTransportTest {
                       "schemaVersion":1,"protocolEpoch":1,"activeDomain":"READING_PROGRESS",
                       "registeredDeviceCount":1,"unexpiredLegacyDeviceCount":1,
                       "legacyRecordCount":1,"legacyTombstoneCount":0,"legacyEventCursor":1,
-                      "legacyIncompleteRecordCount":0,"unresolvedProgressConflictCount":0,
+                      "legacyIncompleteRecordCount":0,"legacyInvalidValueRecordCount":0,"unresolvedProgressConflictCount":0,
                       "historicalDeviceCoverageProven":true,"pendingLocalWritesObservable":false,
                       "exactProgressEnabled":false,"migrationReady":false
                     }
@@ -505,7 +506,7 @@ class SupabaseSyncHttpTransportTest {
                       "schemaVersion":1,"protocolEpoch":1,"activeDomain":"READING_PROGRESS",
                       "registeredDeviceCount":1,"unexpiredLegacyDeviceCount":2,
                       "legacyRecordCount":1,"legacyTombstoneCount":2,"legacyEventCursor":-1,
-                      "legacyIncompleteRecordCount":2,"unresolvedProgressConflictCount":-1,
+                      "legacyIncompleteRecordCount":2,"legacyInvalidValueRecordCount":0,"unresolvedProgressConflictCount":-1,
                       "historicalDeviceCoverageProven":false,"pendingLocalWritesObservable":false,
                       "exactProgressEnabled":false,"migrationReady":false
                     }
@@ -531,7 +532,7 @@ class SupabaseSyncHttpTransportTest {
                       "schemaVersion":1,"protocolEpoch":1,"activeDomain":"READING_PROGRESS",
                       "registeredDeviceCount":1,"unexpiredLegacyDeviceCount":1,
                       "legacyRecordCount":1,"legacyTombstoneCount":0,"legacyEventCursor":10,
-                      "legacyIncompleteRecordCount":2,"unresolvedProgressConflictCount":0,
+                      "legacyIncompleteRecordCount":2,"legacyInvalidValueRecordCount":0,"unresolvedProgressConflictCount":0,
                       "historicalDeviceCoverageProven":false,"pendingLocalWritesObservable":false,
                       "exactProgressEnabled":false,"migrationReady":false
                     }
@@ -557,7 +558,85 @@ class SupabaseSyncHttpTransportTest {
                       "schemaVersion":1,"protocolEpoch":1,"activeDomain":"READING_PROGRESS",
                       "registeredDeviceCount":1,"unexpiredLegacyDeviceCount":1,
                       "legacyRecordCount":1,"legacyTombstoneCount":0,"legacyEventCursor":10,
-                      "legacyIncompleteRecordCount":0,"unresolvedProgressConflictCount":-1,
+                      "legacyIncompleteRecordCount":0,"legacyInvalidValueRecordCount":0,"unresolvedProgressConflictCount":-1,
+                      "historicalDeviceCoverageProven":false,"pendingLocalWritesObservable":false,
+                      "exactProgressEnabled":false,"migrationReady":false
+                    }
+                    """.trimIndent(),
+                )
+                .build(),
+        )
+
+        val result = transport().previewLegacyProgressRollout()
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+    }
+
+    @Test
+    fun `rollout preview refuses negative invalid-value count`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """
+                    {
+                      "schemaVersion":1,"protocolEpoch":1,"activeDomain":"READING_PROGRESS",
+                      "registeredDeviceCount":1,"unexpiredLegacyDeviceCount":1,
+                      "legacyRecordCount":1,"legacyTombstoneCount":0,"legacyEventCursor":10,
+                      "legacyIncompleteRecordCount":0,"legacyInvalidValueRecordCount":-1,"unresolvedProgressConflictCount":0,
+                      "historicalDeviceCoverageProven":false,"pendingLocalWritesObservable":false,
+                      "exactProgressEnabled":false,"migrationReady":false
+                    }
+                    """.trimIndent(),
+                )
+                .build(),
+        )
+
+        val result = transport().previewLegacyProgressRollout()
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+    }
+
+    @Test
+    fun `rollout preview refuses response missing invalid-value risk counter`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """
+                    {
+                      "schemaVersion":1,"protocolEpoch":1,"activeDomain":"READING_PROGRESS",
+                      "registeredDeviceCount":1,"unexpiredLegacyDeviceCount":1,
+                      "legacyRecordCount":1,"legacyTombstoneCount":0,"legacyEventCursor":10,
+                      "legacyIncompleteRecordCount":0,"unresolvedProgressConflictCount":0,
+                      "historicalDeviceCoverageProven":false,"pendingLocalWritesObservable":false,
+                      "exactProgressEnabled":false,"migrationReady":false
+                    }
+                    """.trimIndent(),
+                )
+                .build(),
+        )
+
+        val result = transport().previewLegacyProgressRollout()
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.MALFORMED_REMOTE_DOCUMENT
+    }
+
+    @Test
+    fun `rollout preview refuses invalid-value count greater than active records`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """
+                    {
+                      "schemaVersion":1,"protocolEpoch":1,"activeDomain":"READING_PROGRESS",
+                      "registeredDeviceCount":1,"unexpiredLegacyDeviceCount":1,
+                      "legacyRecordCount":1,"legacyTombstoneCount":0,"legacyEventCursor":10,
+                      "legacyIncompleteRecordCount":0,"legacyInvalidValueRecordCount":2,"unresolvedProgressConflictCount":0,
                       "historicalDeviceCoverageProven":false,"pendingLocalWritesObservable":false,
                       "exactProgressEnabled":false,"migrationReady":false
                     }
