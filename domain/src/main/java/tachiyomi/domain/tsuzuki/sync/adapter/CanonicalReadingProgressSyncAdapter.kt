@@ -114,7 +114,7 @@ class CanonicalReadingProgressSyncAdapter(
             "Reading progress protocol version mismatch; explicit cross-device negotiation is required"
         }
 
-        // Validate and resolve every record before making ANY local write.
+        // Validate exact JSON types and resolve every record before any write.
         // A malformed later record must never leave earlier progress applied.
         val resolvedProgress = document.records.values
             .sortedBy(SyncRecordEnvelope::id)
