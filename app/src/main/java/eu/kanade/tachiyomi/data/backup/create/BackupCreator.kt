@@ -123,14 +123,22 @@ class BackupCreator(
                             AutomaticBackupRetentionPolicy.BackupFile(
                                 uri = candidate.uri.toString(),
                                 filename = name,
+                                verifiedRestorable = candidate.uri == fileUri,
                             )
                         }
                     }
                     if (files.any { it.uri == fileUri.toString() }) {
-                        val obsolete = AutomaticBackupRetentionPolicy.obsoleteAfterSuccess(
+                        val obsolete = AutomaticBackupRetentionPolicy.obsoleteAfterVerifying(
                             backups = files,
                             validatedUri = fileUri.toString(),
                             maximumCopies = MAX_AUTO_BACKUPS,
+                            maximumInspectionCount = MAX_AUTO_RETENTION_INSPECTION,
+                            verify = { candidate ->
+                                // Only a complete, decodable backup is eligible.
+                                // Files in progress and corrupt archives stay.
+                                backupFileValidator.validate(Uri.parse(candidate.uri))
+                                true
+                            },
                         )
                         candidates.filter { it.uri.toString() in obsolete }
                             .forEach { it.delete() }
@@ -187,6 +195,7 @@ class BackupCreator(
 
     companion object {
         private const val MAX_AUTO_BACKUPS: Int = 4
+        private const val MAX_AUTO_RETENTION_INSPECTION: Int = 16
         private val FILENAME_REGEX = AutomaticBackupFileNames.pattern(BuildConfig.APPLICATION_ID)
 
         fun getFilename(): String = AutomaticBackupFileNames.generate(BuildConfig.APPLICATION_ID)
