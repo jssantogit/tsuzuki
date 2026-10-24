@@ -436,19 +436,19 @@ private fun DetailsToolbar(
                 containerColor = colors.surface,
                 tonalElevation = 0.dp,
             ) {
-                DropdownMenuItem(text = { Text(stringResource(MR.strings.tsuzuki_details_refresh)) }, onClick = {
+                DropdownMenuItem(text = { Text(stringResource(MR.strings.tsuzuki_details_refresh), color = colors.foreground) }, onClick = {
                     expanded =
                         false
                     onRefresh()
                 })
-                DropdownMenuItem(text = { Text(stringResource(MR.strings.tsuzuki_details_providers)) }, onClick = {
+                DropdownMenuItem(text = { Text(stringResource(MR.strings.tsuzuki_details_providers), color = colors.foreground) }, onClick = {
                     expanded =
                         false
                     onProviders()
                 })
                 onSources?.let { action ->
                     DropdownMenuItem(text = {
-                        Text(stringResource(MR.strings.tsuzuki_details_metadata_sources))
+                        Text(stringResource(MR.strings.tsuzuki_details_metadata_sources), color = colors.foreground)
                     }, onClick = {
                         expanded =
                             false
