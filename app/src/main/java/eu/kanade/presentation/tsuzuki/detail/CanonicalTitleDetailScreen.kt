@@ -399,6 +399,7 @@ private fun DetailsToolbar(
     background: Color = Color.Transparent,
     onSources: (() -> Unit)? = null,
 ) {
+    val colors = defaultSkinColors()
     var expanded by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().background(
@@ -410,8 +411,8 @@ private fun DetailsToolbar(
         IconButton(
             onClick = onBack,
             modifier = Modifier.background(
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                MaterialTheme.shapes.large,
+                colors.surface.copy(alpha = 0.94f),
+                DefaultSkinShape.Control,
             ),
         ) {
             Icon(MaterialSymbols.AutoMirroredRounded.ArrowBack, stringResource(MR.strings.tsuzuki_details_back))
@@ -422,13 +423,19 @@ private fun DetailsToolbar(
                     expanded = true
                 },
                 modifier = Modifier.background(
-                    MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                    MaterialTheme.shapes.large,
+                    colors.surface.copy(alpha = 0.94f),
+                    DefaultSkinShape.Control,
                 ),
             ) {
                 Icon(MaterialSymbols.Rounded.MoreVert, stringResource(MR.strings.tsuzuki_details_actions))
             }
-            DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                shape = DefaultSkinShape.Card,
+                containerColor = colors.surface,
+                tonalElevation = 0.dp,
+            ) {
                 DropdownMenuItem(text = { Text(stringResource(MR.strings.tsuzuki_details_refresh)) }, onClick = {
                     expanded =
                         false
