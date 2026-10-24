@@ -3,6 +3,7 @@ package tachiyomi.domain.tsuzuki.chapter.interactor
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.metadata.ReportedChapterCount
@@ -106,6 +107,21 @@ class BuildCanonicalChapterOutlineTest {
         outline.map { it.chapter.baseNumber }.shouldContainExactly(1)
         outline.none(CanonicalChapterOutlineEntry::inferredFromReportedCount) shouldBe true
         buildCanonicalChapterOutline("title", emptyList(), listOf(count("title", 100_000))).isEmpty() shouldBe true
+    }
+
+    @Test
+    fun `historical count ID later corroborated is no longer marked inferred while retaining its key`() {
+        val corroborated = CanonicalChapter(
+            id = inferredChapterId("title", 37),
+            canonicalTitleId = "title",
+            displayNumber = "37",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 37,
+            confirmation = CanonicalChapterConfirmation.CONFIRMED,
+        )
+        val outline = buildCanonicalChapterOutline("title", listOf(corroborated), listOf(count("title", 108)))
+        outline.single().chapter.id shouldBe corroborated.id
+        outline.single().inferredFromReportedCount shouldBe false
     }
 
     private fun count(title: String, value: Int, provider: String = "kitsu") =
