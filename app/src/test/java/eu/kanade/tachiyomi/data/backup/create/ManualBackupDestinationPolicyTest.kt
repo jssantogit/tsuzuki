@@ -1,7 +1,7 @@
 package eu.kanade.tachiyomi.data.backup.create
 
-import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
