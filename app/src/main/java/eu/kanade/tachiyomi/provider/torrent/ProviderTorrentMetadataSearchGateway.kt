@@ -154,12 +154,17 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
             val identity = parseChapterLabel(chapterNumber).identity
             if (!identity.isSpecific || !identity.isNumbered) return@runCatching
 
+            // Use the same chapter context as ResolveProviderChapterTorrent. Omitting titles
+            // and display number here hides exact matches accepted by the title-aware mapper.
             val volumeRequest = TorrentChapterRequest(
                 identity = identity,
                 volume = request.volume,
+                preferredLanguages = request.preferredLanguages,
+                titles = request.titles,
+                chapterNumber = chapterNumber,
             )
             val identityRequest = if (request.volume != null) {
-                TorrentChapterRequest(identity = identity, volume = null)
+                volumeRequest.copy(volume = null)
             } else {
                 volumeRequest
             }
