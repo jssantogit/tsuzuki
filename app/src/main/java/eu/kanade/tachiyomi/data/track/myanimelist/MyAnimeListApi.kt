@@ -50,6 +50,8 @@ interface MalIntegrationApi {
     suspend fun getMangaDetails(id: Int): TrackSearch
 
     suspend fun getUserMangaList(): List<MalUserListEntry>
+
+    suspend fun getAuthenticatedOwner(): String = error("MAL owner identity unavailable")
 }
 
 class MyAnimeListApi(
@@ -89,6 +91,8 @@ class MyAnimeListApi(
             }
         }
     }
+
+    override suspend fun getAuthenticatedOwner(): String = getCurrentUser()
 
     suspend fun getCurrentUser(): String {
         return withIOContext {
