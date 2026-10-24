@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "markdownFiles": 28,
+  "localMarkdownLinks": 85,
+  "localAssetReferences": 66,
+  "htmlDocuments": 2,
+  "scriptsReferenced": 23,
+  "hashComparisons": 276,
+  "ignoredFiles": "",
+  "oldPathSearch": [],
+  "errors": [],
+  "scope": "Static migration integrity only; no rendering, preview or Android behavior checks"
+}

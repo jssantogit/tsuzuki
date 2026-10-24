@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tsuzuki_search_no_integration">Nenhuma integração de metadados com busca de catálogo está ativa</string>
+    <string name="tsuzuki_search_integration_prompt">Ative uma integração de metadados compatível para pesquisar títulos.</string>
+    <string name="tsuzuki_search_configure_integrations">Configurar integrações</string>
+</resources>

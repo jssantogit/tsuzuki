@@ -18,6 +18,7 @@ fun ReaderContentOverlay(
     @ColorInt color: Int?,
     colorBlendMode: BlendMode?,
     modifier: Modifier = Modifier,
+    protectionTint: Int? = null,
 ) {
     if (brightness < 0) {
         val brightnessAlpha = remember(brightness) {
@@ -44,6 +45,14 @@ fun ReaderContentOverlay(
                 color = Color(color),
                 blendMode = colorBlendMode ?: BlendMode.SrcOver,
             )
+        }
+    }
+
+    // Separate from the persistent color filter and from brightness. Drawing only:
+    // the existing viewer remains the touch/gesture owner.
+    if (protectionTint != null) {
+        Canvas(modifier = modifier.fillMaxSize()) {
+            drawRect(Color(protectionTint))
         }
     }
 }

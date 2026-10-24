@@ -1,21 +1,20 @@
 package eu.kanade.presentation.more.settings.screen
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.collectAsState
@@ -28,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -36,6 +36,15 @@ import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.track.components.TrackLogoIcon
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinCard
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPageTitle
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSecondaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSectionLabel
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSpacing
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextField
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.data.track.EnhancedTracker
 import eu.kanade.tachiyomi.data.track.Tracker
@@ -90,6 +99,7 @@ class SettingsTsuzukiTrackingServiceScreen(
         val navigator = LocalNavigator.currentOrThrow
         val tracker = remember(trackerId) { context.appGraph.trackerManager.get(trackerId) }
         val sourceManager = remember { context.appGraph.sourceManager }
+        val colors = defaultSkinColors()
         val acceptedSources by produceState(
             initialValue = emptyList<Source>(),
             key1 = tracker,
@@ -104,29 +114,40 @@ class SettingsTsuzukiTrackingServiceScreen(
             }
         }
 
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text(tracker?.name ?: stringResource(MR.strings.tsuzuki_tracking_account)) },
-                    navigationIcon = {
-                        TextButton(onClick = navigator::pop) {
-                            Text(stringResource(MR.strings.tsuzuki_navigation_back))
-                        }
-                    },
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(colors.canvas)
+                .statusBarsPadding(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = DefaultSkinSpacing.PageHorizontal, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_navigation_back),
+                    onClick = navigator::pop,
                 )
-            },
-        ) { contentPadding ->
+                DefaultSkinPageTitle(
+                    text = tracker?.name ?: stringResource(MR.strings.tsuzuki_tracking_account),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
             if (tracker == null) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(contentPadding),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text(stringResource(MR.strings.tsuzuki_tracking_service_unavailable))
+                    Text(
+                        text = stringResource(MR.strings.tsuzuki_tracking_service_unavailable),
+                        color = colors.secondary,
+                    )
                 }
-                return@Scaffold
+                return@Column
             }
 
             TrackingServiceContent(
@@ -135,10 +156,9 @@ class SettingsTsuzukiTrackingServiceScreen(
                 onConfigureSource = { source ->
                     navigator.push(SourcePreferencesScreen(source.id))
                 },
-                onOpenExtensions = {
-                    navigator.push(SettingsTsuzukiAddonsScreen)
+                onOpenProviders = {
+                    navigator.push(SettingsTsuzukiProvidersDefaultSkinScreen())
                 },
-                modifier = Modifier.padding(contentPadding),
             )
         }
     }
@@ -149,11 +169,11 @@ private fun TrackingServiceContent(
     tracker: Tracker,
     acceptedSources: List<Source>,
     onConfigureSource: (Source) -> Unit,
-    onOpenExtensions: () -> Unit,
-    modifier: Modifier = Modifier,
+    onOpenProviders: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val colors = defaultSkinColors()
     val isLoggedIn by tracker.isLoggedInFlow.collectAsState(initial = tracker.isLoggedIn)
     var loginDialog by remember { mutableStateOf(false) }
     var logoutDialog by remember { mutableStateOf(false) }
@@ -172,7 +192,8 @@ private fun TrackingServiceContent(
             title = { Text(stringResource(MR.strings.tsuzuki_tracking_disconnect_confirm, tracker.name)) },
             text = { Text(stringResource(MR.strings.tsuzuki_tracking_disconnect_summary)) },
             confirmButton = {
-                Button(
+                DefaultSkinPrimaryButton(
+                    text = stringResource(MR.strings.tsuzuki_tracking_disconnect),
                     onClick = {
                         tracker.logout()
                         scope.launch {
@@ -181,150 +202,202 @@ private fun TrackingServiceContent(
                         logoutDialog = false
                         context.toast(MR.strings.logout_success)
                     },
-                ) {
-                    Text(stringResource(MR.strings.tsuzuki_tracking_disconnect))
-                }
+                )
             },
             dismissButton = {
-                OutlinedButton(onClick = { logoutDialog = false }) {
-                    Text(stringResource(MR.strings.action_cancel))
-                }
+                DefaultSkinSecondaryButton(
+                    text = stringResource(MR.strings.action_cancel),
+                    onClick = { logoutDialog = false },
+                )
             },
+            containerColor = colors.surface,
+            titleContentColor = colors.foreground,
+            textContentColor = colors.secondary,
         )
     }
 
-    LazyColumn(modifier = modifier.fillMaxSize()) {
-        item {
-            ListItem(
-                headlineContent = { Text(stringResource(MR.strings.tsuzuki_tracking_account)) },
-                leadingContent = { TrackLogoIcon(tracker) },
-                supportingContent = {
-                    Text(
-                        if (isLoggedIn) {
-                            tracker.getDisplayUsername().ifBlank {
-                                stringResource(MR.strings.tsuzuki_tracking_connected)
-                            }
-                        } else {
-                            stringResource(MR.strings.tsuzuki_tracking_not_connected)
-                        },
-                    )
-                },
-            )
+    val canStartLogin = when (tracker) {
+        is MyAnimeList -> tracker.hasClientId()
+        is Shikimori -> tracker.hasApplicationCredentials()
+        is Hikka -> tracker.hasApplicationCredentials()
+        else -> tracker !is EnhancedTracker || acceptedSources.isNotEmpty()
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = DefaultSkinSpacing.PageHorizontal,
+            end = DefaultSkinSpacing.PageHorizontal,
+            bottom = 32.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(DefaultSkinSpacing.Row),
+    ) {
+        item(key = "account_label") {
+            DefaultSkinSectionLabel(stringResource(MR.strings.tsuzuki_tracking_account))
         }
-        item {
-            ListItem(
-                headlineContent = {
+        item(key = "account") {
+            DefaultSkinCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TrackLogoIcon(tracker)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = tracker.name,
+                            color = colors.foreground,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = if (isLoggedIn) {
+                                tracker.getDisplayUsername().ifBlank {
+                                    stringResource(MR.strings.tsuzuki_tracking_connected)
+                                }
+                            } else {
+                                stringResource(MR.strings.tsuzuki_tracking_not_connected)
+                            },
+                            color = colors.secondary,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        }
+        item(key = "connection") {
+            DefaultSkinCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     Text(
-                        stringResource(
+                        text = stringResource(loginDescriptionRes(tracker)),
+                        color = colors.secondary,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    DefaultSkinPrimaryButton(
+                        text = stringResource(
                             if (isLoggedIn) {
                                 MR.strings.tsuzuki_tracking_disconnect
                             } else {
                                 MR.strings.tsuzuki_tracking_connect
                             },
                         ),
-                    )
-                },
-                supportingContent = {
-                    Text(stringResource(loginDescriptionRes(tracker)))
-                },
-            )
-            val canStartLogin = when (tracker) {
-                is MyAnimeList -> tracker.hasClientId()
-                is Shikimori -> tracker.hasApplicationCredentials()
-                is Hikka -> tracker.hasApplicationCredentials()
-                else -> tracker !is EnhancedTracker || acceptedSources.isNotEmpty()
-            }
-            Button(
-                enabled = isLoggedIn || canStartLogin,
-                onClick = {
-                    if (isLoggedIn) {
-                        logoutDialog = true
-                    } else {
-                        when (tracker.id) {
-                            MAL_TRACKER_ID -> context.openInBrowser(
-                                (tracker as MyAnimeList).authUrl(),
-                                forceDefaultBrowser = true,
-                            )
-                            SHIKIMORI_TRACKER_ID -> context.openInBrowser(
-                                (tracker as Shikimori).authUrl(),
-                                forceDefaultBrowser = true,
-                            )
-                            BANGUMI_TRACKER_ID -> loginDialog = true
-                            HIKKA_TRACKER_ID -> context.openInBrowser(
-                                (tracker as Hikka).authUrl(),
-                                forceDefaultBrowser = true,
-                            )
-                            else -> {
-                                if (tracker is EnhancedTracker) {
-                                    tracker.loginNoop()
-                                } else {
-                                    loginDialog = true
+                        enabled = isLoggedIn || canStartLogin,
+                        onClick = {
+                            if (isLoggedIn) {
+                                logoutDialog = true
+                            } else {
+                                when (tracker.id) {
+                                    MAL_TRACKER_ID -> context.openInBrowser(
+                                        (tracker as MyAnimeList).authUrl(),
+                                        forceDefaultBrowser = true,
+                                    )
+                                    SHIKIMORI_TRACKER_ID -> context.openInBrowser(
+                                        (tracker as Shikimori).authUrl(),
+                                        forceDefaultBrowser = true,
+                                    )
+                                    BANGUMI_TRACKER_ID -> loginDialog = true
+                                    HIKKA_TRACKER_ID -> context.openInBrowser(
+                                        (tracker as Hikka).authUrl(),
+                                        forceDefaultBrowser = true,
+                                    )
+                                    else -> {
+                                        if (tracker is EnhancedTracker) {
+                                            tracker.loginNoop()
+                                        } else {
+                                            loginDialog = true
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-            ) {
-                Text(
-                    stringResource(
-                        if (isLoggedIn) {
-                            MR.strings.tsuzuki_tracking_disconnect
-                        } else {
-                            MR.strings.tsuzuki_tracking_connect
                         },
-                    ),
-                )
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
         if (tracker is EnhancedTracker) {
+            item(key = "server_label") {
+                DefaultSkinSectionLabel(
+                    stringResource(MR.strings.tsuzuki_tracking_server_configuration),
+                )
+            }
             if (acceptedSources.isEmpty()) {
                 item(key = "accepted_source_missing") {
-                    ListItem(
-                        headlineContent = {
-                            Text(stringResource(MR.strings.tsuzuki_tracking_source_missing))
-                        },
-                        supportingContent = {
+                    DefaultSkinCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
                             Text(
-                                stringResource(
+                                text = stringResource(MR.strings.tsuzuki_tracking_source_missing),
+                                color = colors.foreground,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = stringResource(
                                     MR.strings.tsuzuki_tracking_source_missing_summary,
                                     tracker.name,
                                 ),
+                                color = colors.secondary,
+                                style = MaterialTheme.typography.bodyMedium,
                             )
-                        },
-                        trailingContent = {
-                            TextButton(onClick = onOpenExtensions) {
-                                Text(stringResource(MR.strings.label_extensions))
-                            }
-                        },
-                    )
+                            DefaultSkinTextAction(
+                                text = stringResource(MR.strings.tsuzuki_providers_title),
+                                onClick = onOpenProviders,
+                            )
+                        }
+                    }
                 }
             } else {
-                item {
-                    ListItem(
-                        headlineContent = {
-                            Text(stringResource(MR.strings.tsuzuki_tracking_server_configuration))
-                        },
-                        supportingContent = {
-                            Text(stringResource(MR.strings.tsuzuki_tracking_server_configuration_summary))
-                        },
+                item(key = "server_summary") {
+                    Text(
+                        text = stringResource(MR.strings.tsuzuki_tracking_server_configuration_summary),
+                        color = colors.secondary,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
                 acceptedSources.forEach { source ->
                     item(key = "accepted_source_${source.id}") {
-                        ListItem(
-                            headlineContent = { Text(source.name) },
-                            supportingContent = {
-                                Text(stringResource(MR.strings.tsuzuki_tracking_source_configuration_summary))
-                            },
-                            trailingContent = {
-                                TextButton(onClick = { onConfigureSource(source) }) {
-                                    Text(stringResource(MR.strings.tsuzuki_tracking_configure_source))
+                        DefaultSkinCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { onConfigureSource(source) },
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                                ) {
+                                    Text(
+                                        text = source.name,
+                                        color = colors.foreground,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                    Text(
+                                        text = stringResource(
+                                            MR.strings.tsuzuki_tracking_source_configuration_summary,
+                                        ),
+                                        color = colors.secondary,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
                                 }
-                            },
-                        )
+                                Text(
+                                    text = stringResource(MR.strings.tsuzuki_tracking_configure_source),
+                                    color = colors.foreground,
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -341,6 +414,7 @@ private fun TrackerCredentialLoginDialog(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val colors = defaultSkinColors()
     val loginFailedMessage = stringResource(MR.strings.tsuzuki_tracking_login_failed)
     var username by remember { mutableStateOf(if (tokenOnly) "" else tracker.getUsername()) }
     var password by remember { mutableStateOf(if (tokenOnly) "" else tracker.getPassword()) }
@@ -353,40 +427,43 @@ private fun TrackerCredentialLoginDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (!tokenOnly) {
-                    OutlinedTextField(
+                    DefaultSkinTextField(
                         value = username,
                         onValueChange = { username = it },
-                        label = { Text(stringResource(usernameLabel)) },
+                        label = stringResource(usernameLabel),
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
                     )
                 }
-                OutlinedTextField(
+                DefaultSkinTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = {
-                        Text(
-                            stringResource(
-                                if (tokenOnly) {
-                                    MR.strings.tsuzuki_bangumi_access_token
-                                } else {
-                                    MR.strings.password
-                                },
-                            ),
-                        )
-                    },
+                    label = stringResource(
+                        if (tokenOnly) {
+                            MR.strings.tsuzuki_bangumi_access_token
+                        } else {
+                            MR.strings.password
+                        },
+                    ),
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                 )
-                errorMessage?.let { Text(it) }
+                errorMessage?.let {
+                    Text(
+                        text = it,
+                        color = colors.secondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 if (processing) {
-                    CircularProgressIndicator()
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = colors.foreground)
+                    }
                 }
             }
         },
         confirmButton = {
-            Button(
+            DefaultSkinPrimaryButton(
+                text = stringResource(MR.strings.tsuzuki_tracking_connect),
                 enabled = !processing &&
                     password.isNotBlank() &&
                     (tokenOnly || username.isNotBlank()),
@@ -416,18 +493,17 @@ private fun TrackerCredentialLoginDialog(
                         }
                     }
                 },
-            ) {
-                Text(stringResource(MR.strings.tsuzuki_tracking_connect))
-            }
+            )
         },
         dismissButton = {
-            OutlinedButton(
-                enabled = !processing,
+            DefaultSkinSecondaryButton(
+                text = stringResource(MR.strings.action_cancel),
                 onClick = onDismiss,
-            ) {
-                Text(stringResource(MR.strings.action_cancel))
-            }
+            )
         },
+        containerColor = colors.surface,
+        titleContentColor = colors.foreground,
+        textContentColor = colors.foreground,
     )
 }
 

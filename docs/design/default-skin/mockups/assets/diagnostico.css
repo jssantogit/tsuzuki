@@ -1,0 +1,36 @@
+/* Diagnóstico continues the approved Default Skin. Local dimensions remain Provisional. */
+body.diagnostic-comparison{display:block;padding:32px;background:#e9ebee;color:#17181a}
+body.diagnostic-comparison> :not(.diagnostic-board):not(script):not(style){display:none!important}
+.diagnostic-board{display:grid;grid-template-columns:repeat(4,432px);gap:32px;justify-content:center;margin:0 auto;--dl-pad:16px;--dl-gap:24px;--dl-radius:16px;--dl-motion:180ms;--dg-danger:#96352f;--dg-status:#e9edef;--dg-mono:ui-monospace,Consolas,monospace}
+.diagnostic-board figure{margin:0;min-width:0}.diagnostic-board .phone-frame{zoom:1}.diagnostic-board .phone-content{padding:0;overflow:hidden}
+.dg-app{height:auto;grid-template-rows:auto minmax(0,1fr)}
+.dg-app .dl-header h1{font-size:36px;line-height:1.2;letter-spacing:-.5px;text-wrap:balance}
+.dg-app .dl-help,.dg-app .dl-value{font-size:16px;line-height:1.5}
+.dg-app .dl-label{font-weight:500}.dg-app .dl-row{gap:16px;padding:16px}
+.dg-status{display:grid;gap:8px;padding:16px;border-radius:16px;background:var(--dg-status);margin-bottom:24px}
+.dg-status strong{display:flex;gap:8px;align-items:center;font-size:20px;line-height:1.4;font-weight:600}
+.dg-status p{margin:0;color:var(--secondary);font-size:16px;line-height:1.5}
+.dg-capture .dl-label{font-weight:700}.dg-destructive .dl-label{color:var(--dg-danger)}
+.dg-app .dl-note{font-size:16px;line-height:1.5;margin:16px 0 0}
+.dg-title-row{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}.dg-title-row h1{flex:1;min-width:0}
+.dg-copy{display:block;flex:none;min-height:44px;padding:8px;border:0;background:transparent;color:var(--text);font-weight:600;margin-top:8px}
+.dg-small{display:grid;place-items:center;flex:none;width:44px;height:44px;border:0;background:transparent;color:var(--secondary);border-radius:12px}
+.dg-id{align-items:flex-start}.dg-id .dl-value{overflow-wrap:anywhere}.dg-small .dl-icon{width:20px;height:20px}
+.dg-id-copy{display:block;flex:1;min-width:0;min-height:44px;border:0;padding:0;background:transparent;color:var(--text);text-align:left}.dg-id-copy .dl-field{width:100%}
+.dg-record{padding:16px}.dg-record+.dg-record{border-top:1px solid var(--divider)}
+.dg-record dl{display:grid;gap:12px;margin:0}.dg-record dl>div{display:grid;gap:4px}.dg-record dt{font:16px/1.5 var(--font-ui);color:var(--secondary)}
+.dg-record dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:16px/1.5 var(--dg-mono)}
+.dg-record ul{margin:0;padding-left:20px;display:grid;gap:4px}.dg-empty{margin:0;padding:16px;color:var(--secondary);font-size:16px;line-height:1.5}
+.dg-schema{margin:0;padding:16px;background:var(--surface);border-radius:16px;white-space:pre-wrap;overflow-wrap:anywhere;font:16px/1.6 var(--dg-mono);tab-size:2}
+.diagnostic-board .dl-sheet-heading{align-items:flex-start}.diagnostic-board .dl-sheet h2{text-wrap:balance}
+.diagnostic-board .dl-sheet-footer .dg-clear{background:var(--dg-danger);color:#fff}
+.diagnostic-board .dl-sheet-footer .dl-action{min-width:0}.diagnostic-board .dl-live{bottom:calc(var(--phone-safe-bottom) + 16px);font:16px/1.5 var(--font-ui)}
+.dg-manual-copy{display:block;width:100%;min-height:160px;padding:12px;border:1px solid var(--divider);border-radius:8px;background:var(--surface);color:var(--text);font:16px/1.5 var(--dg-mono);resize:vertical}
+.diagnostic-board :focus-visible{outline:2px solid var(--text);outline-offset:3px}
+@media(hover:hover){.dg-copy:hover,.dg-small:hover{background:var(--icon-surface)}.dg-app button.dl-row:hover{background:var(--icon-surface)}}
+@media(max-width:1919px){.diagnostic-board{grid-template-columns:repeat(3,432px)}}
+@media(max-width:1439px){.diagnostic-board{grid-template-columns:repeat(2,432px)}}
+@media(max-width:959px){.diagnostic-board{grid-template-columns:minmax(0,432px)}}
+@media(max-width:479px){body.diagnostic-comparison{padding:0}.diagnostic-board{grid-template-columns:minmax(0,1fr);gap:24px}}
+@media(prefers-reduced-motion:reduce){.diagnostic-board *{scroll-behavior:auto}}
+.dg-id-value{display:flex!important;align-items:center;gap:8px}.dg-id-value>span{min-width:0;overflow-wrap:anywhere}.dg-id-value .dl-icon{width:16px;height:16px;flex:none}

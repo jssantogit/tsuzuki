@@ -1,0 +1,6198 @@
+{
+  "source": "https://shikimori.io/api/publishers",
+  "capturedAt": "2026-10-04T22:57:52.447046+00:00",
+  "options": [
+    {
+      "id": "1510",
+      "label": "Web Action"
+    },
+    {
+      "id": "1491",
+      "label": "equal"
+    },
+    {
+      "id": "1511",
+      "label": "Natsuyoshi"
+    },
+    {
+      "id": "1494",
+      "label": "Manga DX"
+    },
+    {
+      "id": "1512",
+      "label": "Paru"
+    },
+    {
+      "id": "1515",
+      "label": "Comica"
+    },
+    {
+      "id": "1513",
+      "label": "&Flower"
+    },
+    {
+      "id": "1518",
+      "label": "Group"
+    },
+    {
+      "id": "298",
+      "label": "BonBon"
+    },
+    {
+      "id": "1",
+      "label": "Big Comic Original"
+    },
+    {
+      "id": "2",
+      "label": "Young Animal"
+    },
+    {
+      "id": "4",
+      "label": "Afternoon"
+    },
+    {
+      "id": "6",
+      "label": "Young Magazine (Monthly)"
+    },
+    {
+      "id": "8",
+      "label": "Shounen Magazine (Weekly)"
+    },
+    {
+      "id": "9",
+      "label": "Ribon Magazine"
+    },
+    {
+      "id": "10",
+      "label": "Young Magazine (Weekly)"
+    },
+    {
+      "id": "11",
+      "label": "LaLa"
+    },
+    {
+      "id": "12",
+      "label": "Weekly Shounen Sunday"
+    },
+    {
+      "id": "13",
+      "label": "Shounen Gangan"
+    },
+    {
+      "id": "1698",
+      "label": "Web BULL"
+    },
+    {
+      "id": "15",
+      "label": "Cookie"
+    },
+    {
+      "id": "16",
+      "label": "Zipper"
+    },
+    {
+      "id": "17",
+      "label": "Margaret"
+    },
+    {
+      "id": "19",
+      "label": "From Gamers"
+    },
+    {
+      "id": "20",
+      "label": "Nakayoshi"
+    },
+    {
+      "id": "21",
+      "label": "Hana to Yume"
+    },
+    {
+      "id": "24",
+      "label": "Young Gangan"
+    },
+    {
+      "id": "25",
+      "label": "Ultra Jump"
+    },
+    {
+      "id": "26",
+      "label": "Eyes"
+    },
+    {
+      "id": "28",
+      "label": "Comic Blade"
+    },
+    {
+      "id": "30",
+      "label": "Comic Blade Masamune"
+    },
+    {
+      "id": "31",
+      "label": "Newtype"
+    },
+    {
+      "id": "33",
+      "label": "Comic Gum"
+    },
+    {
+      "id": "1579",
+      "label": "Comic ELMO"
+    },
+    {
+      "id": "36",
+      "label": "Asuka Comics DX"
+    },
+    {
+      "id": "38",
+      "label": "Comptiq"
+    },
+    {
+      "id": "39",
+      "label": "Amie Magazine"
+    },
+    {
+      "id": "41",
+      "label": "Gekkan Dragon Magazine"
+    },
+    {
+      "id": "42",
+      "label": "Stencil"
+    },
+    {
+      "id": "45",
+      "label": "Wings"
+    },
+    {
+      "id": "48",
+      "label": "Shounen Magazine (Monthly)"
+    },
+    {
+      "id": "49",
+      "label": "Animerica Extra"
+    },
+    {
+      "id": "53",
+      "label": "Bessatsu Margaret"
+    },
+    {
+      "id": "54",
+      "label": "Betsucomi"
+    },
+    {
+      "id": "55",
+      "label": "Big Comic"
+    },
+    {
+      "id": "57",
+      "label": "Business Jump"
+    },
+    {
+      "id": "58",
+      "label": "Chorus"
+    },
+    {
+      "id": "59",
+      "label": "Ciao"
+    },
+    {
+      "id": "62",
+      "label": "Comic Dengeki Moeoh"
+    },
+    {
+      "id": "63",
+      "label": "Comic Dengeki Teioh"
+    },
+    {
+      "id": "64",
+      "label": "Dragon Junior"
+    },
+    {
+      "id": "66",
+      "label": "GanGan Comics"
+    },
+    {
+      "id": "67",
+      "label": "GanGan Wing"
+    },
+    {
+      "id": "68",
+      "label": "Gundam Ace"
+    },
+    {
+      "id": "70",
+      "label": "Magazine-Z"
+    },
+    {
+      "id": "71",
+      "label": "Melody"
+    },
+    {
+      "id": "72",
+      "label": "Morning"
+    },
+    {
+      "id": "73",
+      "label": "Petit Comic"
+    },
+    {
+      "id": "74",
+      "label": "Princess"
+    },
+    {
+      "id": "75",
+      "label": "Pulp"
+    },
+    {
+      "id": "79",
+      "label": "Shojo Beat"
+    },
+    {
+      "id": "81",
+      "label": "Weekly Shounen Champion"
+    },
+    {
+      "id": "83",
+      "label": "Shounen Jump (Weekly)"
+    },
+    {
+      "id": "85",
+      "label": "Super Jump"
+    },
+    {
+      "id": "86",
+      "label": "Super Manga Blast"
+    },
+    {
+      "id": "87",
+      "label": "Young Jump"
+    },
+    {
+      "id": "89",
+      "label": "Young Sunday (Weekly)"
+    },
+    {
+      "id": "90",
+      "label": "Young You"
+    },
+    {
+      "id": "91",
+      "label": "Comic Birz"
+    },
+    {
+      "id": "92",
+      "label": "Comic Bunch"
+    },
+    {
+      "id": "94",
+      "label": "JuniorChamp"
+    },
+    {
+      "id": "95",
+      "label": "Dessert"
+    },
+    {
+      "id": "97",
+      "label": "Asuka Fantasy DX"
+    },
+    {
+      "id": "98",
+      "label": "Dragon Age"
+    },
+    {
+      "id": "99",
+      "label": "Dear+"
+    },
+    {
+      "id": "100",
+      "label": "Shounen Sirius"
+    },
+    {
+      "id": "103",
+      "label": "Feel Young"
+    },
+    {
+      "id": "104",
+      "label": "Comique Hug"
+    },
+    {
+      "id": "105",
+      "label": "Ace Next"
+    },
+    {
+      "id": "106",
+      "label": "Horror Comics Special"
+    },
+    {
+      "id": "107",
+      "label": "Genzo"
+    },
+    {
+      "id": "110",
+      "label": "Comic ZERO-SUM"
+    },
+    {
+      "id": "109",
+      "label": "Comic Bombom"
+    },
+    {
+      "id": "40",
+      "label": "Sunday Gene-X"
+    },
+    {
+      "id": "3",
+      "label": "Big Comic Spirits"
+    },
+    {
+      "id": "18",
+      "label": "Dengeki Comic Gao!"
+    },
+    {
+      "id": "93",
+      "label": "Comic REX"
+    },
+    {
+      "id": "22",
+      "label": "Sho-Comi"
+    },
+    {
+      "id": "88",
+      "label": "Young King OURs"
+    },
+    {
+      "id": "27",
+      "label": "Shounen Ace"
+    },
+    {
+      "id": "96",
+      "label": "Fig"
+    },
+    {
+      "id": "23",
+      "label": "Dengeki Daioh"
+    },
+    {
+      "id": "111",
+      "label": "Bessatsu Friend"
+    },
+    {
+      "id": "112",
+      "label": "Comp Ace"
+    },
+    {
+      "id": "282",
+      "label": "Shounen Champion (Monthly)"
+    },
+    {
+      "id": "76",
+      "label": "Go Go Bunch"
+    },
+    {
+      "id": "102",
+      "label": "Comic Crimson"
+    },
+    {
+      "id": "113",
+      "label": "Kiss"
+    },
+    {
+      "id": "114",
+      "label": "Comic Beam"
+    },
+    {
+      "id": "115",
+      "label": "Famitsu"
+    },
+    {
+      "id": "116",
+      "label": "Magazine E-no"
+    },
+    {
+      "id": "118",
+      "label": "Young Animal Arashi"
+    },
+    {
+      "id": "119",
+      "label": "Comic Blade Zebel"
+    },
+    {
+      "id": "120",
+      "label": "Young Magazine Uppers"
+    },
+    {
+      "id": "121",
+      "label": "Flowers (Monthly)"
+    },
+    {
+      "id": "122",
+      "label": "Comic High!"
+    },
+    {
+      "id": "123",
+      "label": "Kimi to Boku"
+    },
+    {
+      "id": "124",
+      "label": "Cheese!"
+    },
+    {
+      "id": "125",
+      "label": "Aqua Comics"
+    },
+    {
+      "id": "126",
+      "label": "Magazine Be x Boy"
+    },
+    {
+      "id": "127",
+      "label": "Beans Ace"
+    },
+    {
+      "id": "128",
+      "label": "Magazine Special"
+    },
+    {
+      "id": "129",
+      "label": "Shounen Jump (Monthly)"
+    },
+    {
+      "id": "130",
+      "label": "June Comics"
+    },
+    {
+      "id": "133",
+      "label": "Chara"
+    },
+    {
+      "id": "134",
+      "label": "Wink"
+    },
+    {
+      "id": "135",
+      "label": "LaLa DX"
+    },
+    {
+      "id": "136",
+      "label": "Ikki"
+    },
+    {
+      "id": "137",
+      "label": "Comic Alive"
+    },
+    {
+      "id": "138",
+      "label": "Hanaoto"
+    },
+    {
+      "id": "139",
+      "label": "Flower Comics Special"
+    },
+    {
+      "id": "141",
+      "label": "Shousetsu June"
+    },
+    {
+      "id": "143",
+      "label": "Shogakukan Books"
+    },
+    {
+      "id": "145",
+      "label": "June Comics Piace Series"
+    },
+    {
+      "id": "146",
+      "label": "Be x Boy Novels"
+    },
+    {
+      "id": "147",
+      "label": "Super Beboy Comics"
+    },
+    {
+      "id": "149",
+      "label": "Asuka Ciel"
+    },
+    {
+      "id": "1580",
+      "label": "echoz"
+    },
+    {
+      "id": "151",
+      "label": "Asuka Mystery DX"
+    },
+    {
+      "id": "153",
+      "label": "Piace"
+    },
+    {
+      "id": "156",
+      "label": "drap"
+    },
+    {
+      "id": "157",
+      "label": "Shy"
+    },
+    {
+      "id": "158",
+      "label": "Shounen Captain"
+    },
+    {
+      "id": "163",
+      "label": "Dengeki Maoh"
+    },
+    {
+      "id": "165",
+      "label": "Ribon Original"
+    },
+    {
+      "id": "166",
+      "label": "Princess Gold"
+    },
+    {
+      "id": "167",
+      "label": "Mystery Bonita"
+    },
+    {
+      "id": "168",
+      "label": "V-Jump"
+    },
+    {
+      "id": "169",
+      "label": "Manga Time Lovely"
+    },
+    {
+      "id": "170",
+      "label": "ChuChu"
+    },
+    {
+      "id": "171",
+      "label": "Evening"
+    },
+    {
+      "id": "173",
+      "label": "Weekly Playboy"
+    },
+    {
+      "id": "174",
+      "label": "Comic Flapper"
+    },
+    {
+      "id": "175",
+      "label": "Comic Rush"
+    },
+    {
+      "id": "176",
+      "label": "Bessatsu Hana to Yume"
+    },
+    {
+      "id": "177",
+      "label": "Zero-Sum WARD"
+    },
+    {
+      "id": "179",
+      "label": "Biblos"
+    },
+    {
+      "id": "180",
+      "label": "Daiwon"
+    },
+    {
+      "id": "182",
+      "label": "Manga Time Kirara"
+    },
+    {
+      "id": "184",
+      "label": "Reijin"
+    },
+    {
+      "id": "186",
+      "label": "Champion RED"
+    },
+    {
+      "id": "187",
+      "label": "Nemuki"
+    },
+    {
+      "id": "188",
+      "label": "Craft"
+    },
+    {
+      "id": "189",
+      "label": "Aqua Deep"
+    },
+    {
+      "id": "190",
+      "label": "Friend"
+    },
+    {
+      "id": "191",
+      "label": "Boys L"
+    },
+    {
+      "id": "192",
+      "label": "Daria"
+    },
+    {
+      "id": "193",
+      "label": "Comic Cue"
+    },
+    {
+      "id": "195",
+      "label": "Bamboo Comics"
+    },
+    {
+      "id": "196",
+      "label": "Comic Burger"
+    },
+    {
+      "id": "203",
+      "label": "Daito Comics Boys Love"
+    },
+    {
+      "id": "209",
+      "label": "Prism Bunko"
+    },
+    {
+      "id": "212",
+      "label": "Judy"
+    },
+    {
+      "id": "215",
+      "label": "Comi Digi"
+    },
+    {
+      "id": "216",
+      "label": "Young Champion Retsu"
+    },
+    {
+      "id": "217",
+      "label": "Alice"
+    },
+    {
+      "id": "218",
+      "label": "Marukatsu Famicom"
+    },
+    {
+      "id": "221",
+      "label": "Shy Novels"
+    },
+    {
+      "id": "222",
+      "label": "Chara Bunko"
+    },
+    {
+      "id": "223",
+      "label": "B-Boy Slash Novels"
+    },
+    {
+      "id": "225",
+      "label": "Silky"
+    },
+    {
+      "id": "213",
+      "label": "CoroCoro Comic"
+    },
+    {
+      "id": "219",
+      "label": "HertZ"
+    },
+    {
+      "id": "162",
+      "label": "Comic B's-LOG"
+    },
+    {
+      "id": "178",
+      "label": "Gust"
+    },
+    {
+      "id": "159",
+      "label": "RuTile"
+    },
+    {
+      "id": "132",
+      "label": "Shousetsu Chocolat"
+    },
+    {
+      "id": "152",
+      "label": "CIEL TrèsTrès"
+    },
+    {
+      "id": "198",
+      "label": "Dengeki G's magazine"
+    },
+    {
+      "id": "199",
+      "label": "Ribon Bikkuri"
+    },
+    {
+      "id": "148",
+      "label": "Rakuen Web Zoukan"
+    },
+    {
+      "id": "117",
+      "label": "Monthly Action"
+    },
+    {
+      "id": "227",
+      "label": "Love Mission"
+    },
+    {
+      "id": "230",
+      "label": "Junk! Boy"
+    },
+    {
+      "id": "211",
+      "label": "Sho-Comi Zoukan"
+    },
+    {
+      "id": "210",
+      "label": "@vitamin"
+    },
+    {
+      "id": "202",
+      "label": "Denshi Birz"
+    },
+    {
+      "id": "140",
+      "label": "Dengeki Bunko Magazine"
+    },
+    {
+      "id": "201",
+      "label": "Kero-kero Ace"
+    },
+    {
+      "id": "154",
+      "label": "Candy Time"
+    },
+    {
+      "id": "214",
+      "label": "E★Everystar"
+    },
+    {
+      "id": "205",
+      "label": "Star☆Girls"
+    },
+    {
+      "id": "131",
+      "label": "GUSH"
+    },
+    {
+      "id": "197",
+      "label": "Cotton Comic"
+    },
+    {
+      "id": "172",
+      "label": "Samurai Ace"
+    },
+    {
+      "id": "231",
+      "label": "Bonita"
+    },
+    {
+      "id": "232",
+      "label": "Deluxe Betsucomi"
+    },
+    {
+      "id": "233",
+      "label": "Kibou no Tomo"
+    },
+    {
+      "id": "234",
+      "label": "Comic Valkyrie"
+    },
+    {
+      "id": "237",
+      "label": "Gothic & Lolita Bible"
+    },
+    {
+      "id": "240",
+      "label": "Bessatsu Young Magazine"
+    },
+    {
+      "id": "244",
+      "label": "Shounen Rival"
+    },
+    {
+      "id": "246",
+      "label": "Novel Japan"
+    },
+    {
+      "id": "247",
+      "label": "Yuri Shimai"
+    },
+    {
+      "id": "248",
+      "label": "Harlequin"
+    },
+    {
+      "id": "249",
+      "label": "Akamaru Jump"
+    },
+    {
+      "id": "250",
+      "label": "Garo"
+    },
+    {
+      "id": "252",
+      "label": "Comic Chara"
+    },
+    {
+      "id": "254",
+      "label": "Ribon Mascot"
+    },
+    {
+      "id": "255",
+      "label": "Deluxe Margaret"
+    },
+    {
+      "id": "256",
+      "label": "SF Adventure"
+    },
+    {
+      "id": "258",
+      "label": "Comic Hotmilk"
+    },
+    {
+      "id": "260",
+      "label": "Dragon Age Pure"
+    },
+    {
+      "id": "263",
+      "label": "Mandala"
+    },
+    {
+      "id": "264",
+      "label": "Big Comic Superior"
+    },
+    {
+      "id": "266",
+      "label": "Cheese! Zoukan"
+    },
+    {
+      "id": "267",
+      "label": "Comic Dragon"
+    },
+    {
+      "id": "268",
+      "label": "Comic Seed!"
+    },
+    {
+      "id": "269",
+      "label": "Comic Avarus"
+    },
+    {
+      "id": "270",
+      "label": "Comic Sai"
+    },
+    {
+      "id": "272",
+      "label": "Ergo"
+    },
+    {
+      "id": "277",
+      "label": "Wonderland"
+    },
+    {
+      "id": "280",
+      "label": "Ace Tokunou"
+    },
+    {
+      "id": "283",
+      "label": "AX"
+    },
+    {
+      "id": "285",
+      "label": "Ohzora Shuppan"
+    },
+    {
+      "id": "286",
+      "label": "Ichiraci"
+    },
+    {
+      "id": "287",
+      "label": "Special Edition Girls' Comic"
+    },
+    {
+      "id": "288",
+      "label": "Seventeen (Monthly)"
+    },
+    {
+      "id": "289",
+      "label": "Petit Flower"
+    },
+    {
+      "id": "291",
+      "label": "SF Magazine"
+    },
+    {
+      "id": "292",
+      "label": "Manga Time Natural"
+    },
+    {
+      "id": "294",
+      "label": "Big Comic for Ladies"
+    },
+    {
+      "id": "295",
+      "label": "Karen"
+    },
+    {
+      "id": "297",
+      "label": "Mist Magazine"
+    },
+    {
+      "id": "299",
+      "label": "Big Gold"
+    },
+    {
+      "id": "1548",
+      "label": "GUSH pit"
+    },
+    {
+      "id": "301",
+      "label": "Manga Shounen"
+    },
+    {
+      "id": "302",
+      "label": "Bouquet"
+    },
+    {
+      "id": "304",
+      "label": "Cutie Comic"
+    },
+    {
+      "id": "308",
+      "label": "Me"
+    },
+    {
+      "id": "309",
+      "label": "Shoujo Friend"
+    },
+    {
+      "id": "310",
+      "label": "Meng Meng Guan"
+    },
+    {
+      "id": "311",
+      "label": "Tales of Magazine"
+    },
+    {
+      "id": "312",
+      "label": "Dragon Magazine"
+    },
+    {
+      "id": "313",
+      "label": "The Margaret"
+    },
+    {
+      "id": "314",
+      "label": "Cookie BOX"
+    },
+    {
+      "id": "315",
+      "label": "Comic Aqua"
+    },
+    {
+      "id": "316",
+      "label": "good! Afternoon"
+    },
+    {
+      "id": "318",
+      "label": "Dengeki Kuro Maoh"
+    },
+    {
+      "id": "319",
+      "label": "Shoujo Teikoku"
+    },
+    {
+      "id": "320",
+      "label": "Pre-Comic Bunbun"
+    },
+    {
+      "id": "321",
+      "label": "Mellow Mellow"
+    },
+    {
+      "id": "322",
+      "label": "Issue"
+    },
+    {
+      "id": "324",
+      "label": "Fellows!"
+    },
+    {
+      "id": "325",
+      "label": "Quick Japan"
+    },
+    {
+      "id": "326",
+      "label": "Kindai Mahjong Original"
+    },
+    {
+      "id": "327",
+      "label": "Infernal Boys"
+    },
+    {
+      "id": "328",
+      "label": "Comic Tenma"
+    },
+    {
+      "id": "329",
+      "label": "The Sneaker"
+    },
+    {
+      "id": "330",
+      "label": "Cobalt"
+    },
+    {
+      "id": "332",
+      "label": "Racish"
+    },
+    {
+      "id": "333",
+      "label": "Chara Selection"
+    },
+    {
+      "id": "336",
+      "label": "Fairbell Comics"
+    },
+    {
+      "id": "337",
+      "label": "Cita Cita"
+    },
+    {
+      "id": "339",
+      "label": "Men's Young"
+    },
+    {
+      "id": "341",
+      "label": "Serie Mystery"
+    },
+    {
+      "id": "343",
+      "label": "Televi Magazine"
+    },
+    {
+      "id": "344",
+      "label": "Televi Magazine Zoukan Tele Manga Heros"
+    },
+    {
+      "id": "1581",
+      "label": "Comic Berry's"
+    },
+    {
+      "id": "346",
+      "label": "KG"
+    },
+    {
+      "id": "348",
+      "label": "Comic LO"
+    },
+    {
+      "id": "307",
+      "label": "YOU"
+    },
+    {
+      "id": "290",
+      "label": "Tonari no Young Jump"
+    },
+    {
+      "id": "229",
+      "label": "Shounen Sunday"
+    },
+    {
+      "id": "279",
+      "label": "Gekkan! Spirits"
+    },
+    {
+      "id": "350",
+      "label": "Comic Marble"
+    },
+    {
+      "id": "351",
+      "label": "Doki~!"
+    },
+    {
+      "id": "1654",
+      "label": "Comic Vamp"
+    },
+    {
+      "id": "355",
+      "label": "Manga Time"
+    },
+    {
+      "id": "271",
+      "label": "Comic@loid"
+    },
+    {
+      "id": "305",
+      "label": "Web Comic Action"
+    },
+    {
+      "id": "276",
+      "label": "FlexComix Blood"
+    },
+    {
+      "id": "281",
+      "label": "Comic Gamest"
+    },
+    {
+      "id": "335",
+      "label": "Yuri☆Koi"
+    },
+    {
+      "id": "331",
+      "label": "Phryné"
+    },
+    {
+      "id": "265",
+      "label": "Young King OURs+"
+    },
+    {
+      "id": "257",
+      "label": "IQ Jump"
+    },
+    {
+      "id": "261",
+      "label": "Ichiban Suki"
+    },
+    {
+      "id": "245",
+      "label": "Gangan Powered"
+    },
+    {
+      "id": "342",
+      "label": "Dengeki D-manga Online"
+    },
+    {
+      "id": "273",
+      "label": "Dengeki Daioh Web Comic"
+    },
+    {
+      "id": "274",
+      "label": "b-Boy Zips"
+    },
+    {
+      "id": "239",
+      "label": "Mugenkan"
+    },
+    {
+      "id": "356",
+      "label": "Manga Time Original"
+    },
+    {
+      "id": "358",
+      "label": "Manga Time Family"
+    },
+    {
+      "id": "359",
+      "label": "Manga Time Jumbo"
+    },
+    {
+      "id": "360",
+      "label": "Manga Time Special"
+    },
+    {
+      "id": "361",
+      "label": "Manga Time Kirara Carat"
+    },
+    {
+      "id": "284",
+      "label": "Shougaku Sannensei"
+    },
+    {
+      "id": "365",
+      "label": "Manga Time Kirara Forward"
+    },
+    {
+      "id": "366",
+      "label": "Suspiria"
+    },
+    {
+      "id": "367",
+      "label": "Kindai Mahjong"
+    },
+    {
+      "id": "369",
+      "label": "Vitaman"
+    },
+    {
+      "id": "370",
+      "label": "Renai Paradise"
+    },
+    {
+      "id": "371",
+      "label": "Manga Allman"
+    },
+    {
+      "id": "375",
+      "label": "Manga Club"
+    },
+    {
+      "id": "376",
+      "label": "Manga Club Original"
+    },
+    {
+      "id": "377",
+      "label": "Manga Home"
+    },
+    {
+      "id": "378",
+      "label": "Pachinko 777"
+    },
+    {
+      "id": "379",
+      "label": "Manga Life"
+    },
+    {
+      "id": "380",
+      "label": "Manga Life Original"
+    },
+    {
+      "id": "381",
+      "label": "Neko Para"
+    },
+    {
+      "id": "384",
+      "label": "Namaiki!"
+    },
+    {
+      "id": "385",
+      "label": "Melon Comic"
+    },
+    {
+      "id": "388",
+      "label": "Charade"
+    },
+    {
+      "id": "389",
+      "label": "Egoist"
+    },
+    {
+      "id": "390",
+      "label": "Office YOU"
+    },
+    {
+      "id": "391",
+      "label": "Kindai Mahjong Gold"
+    },
+    {
+      "id": "392",
+      "label": "Chara Mel"
+    },
+    {
+      "id": "394",
+      "label": "Opera"
+    },
+    {
+      "id": "395",
+      "label": "The Hana to Yume"
+    },
+    {
+      "id": "396",
+      "label": "Comic Magazine LYNX"
+    },
+    {
+      "id": "1583",
+      "label": "Shousetsu Wings"
+    },
+    {
+      "id": "401",
+      "label": "Web Comic High!"
+    },
+    {
+      "id": "402",
+      "label": "Dengeki PlayStation"
+    },
+    {
+      "id": "403",
+      "label": "Young Ace"
+    },
+    {
+      "id": "404",
+      "label": "Comic Megastore"
+    },
+    {
+      "id": "408",
+      "label": "Manga Erotics F"
+    },
+    {
+      "id": "409",
+      "label": "Rinka"
+    },
+    {
+      "id": "410",
+      "label": "Comic Ryu"
+    },
+    {
+      "id": "411",
+      "label": "Shounen Sunday Super"
+    },
+    {
+      "id": "412",
+      "label": "Gangan Joker"
+    },
+    {
+      "id": "413",
+      "label": "Petit Princess"
+    },
+    {
+      "id": "414",
+      "label": "Bushiroad TCG Magazine"
+    },
+    {
+      "id": "415",
+      "label": "Morning KC"
+    },
+    {
+      "id": "416",
+      "label": "Party"
+    },
+    {
+      "id": "417",
+      "label": "Comic Yuri Hime S"
+    },
+    {
+      "id": "420",
+      "label": "Sugar"
+    },
+    {
+      "id": "421",
+      "label": "Sylph"
+    },
+    {
+      "id": "423",
+      "label": "Comic Yuri Hime"
+    },
+    {
+      "id": "424",
+      "label": "Ichibansuki"
+    },
+    {
+      "id": "1795",
+      "label": "MeltyBullet"
+    },
+    {
+      "id": "426",
+      "label": "Chance"
+    },
+    {
+      "id": "428",
+      "label": "Comic Momohime"
+    },
+    {
+      "id": "429",
+      "label": "Mr. Magazine"
+    },
+    {
+      "id": "430",
+      "label": "Fujimi Fantasia Bunko"
+    },
+    {
+      "id": "431",
+      "label": "Studio Voice"
+    },
+    {
+      "id": "432",
+      "label": "Un Poco"
+    },
+    {
+      "id": "433",
+      "label": "Mobile Flower"
+    },
+    {
+      "id": "434",
+      "label": "Champion RED Ichigo"
+    },
+    {
+      "id": "435",
+      "label": "Generous Kiss"
+    },
+    {
+      "id": "436",
+      "label": "Hanamaru"
+    },
+    {
+      "id": "437",
+      "label": "Mon Mon"
+    },
+    {
+      "id": "439",
+      "label": "NyanType"
+    },
+    {
+      "id": "440",
+      "label": "FlexComix Next"
+    },
+    {
+      "id": "442",
+      "label": "Flex Comix"
+    },
+    {
+      "id": "443",
+      "label": "Comic Fans"
+    },
+    {
+      "id": "445",
+      "label": "Magi-Cu"
+    },
+    {
+      "id": "447",
+      "label": "Kurofune Zero"
+    },
+    {
+      "id": "448",
+      "label": "Shounen Takarajima (Weekly)"
+    },
+    {
+      "id": "449",
+      "label": "Anise Magazine"
+    },
+    {
+      "id": "450",
+      "label": "Bessatsu Shounen Magazine"
+    },
+    {
+      "id": "451",
+      "label": "Young Comic"
+    },
+    {
+      "id": "452",
+      "label": "Comic Masyo"
+    },
+    {
+      "id": "453",
+      "label": "Dengeki Teioh"
+    },
+    {
+      "id": "454",
+      "label": "KERA"
+    },
+    {
+      "id": "455",
+      "label": "Young Manga"
+    },
+    {
+      "id": "456",
+      "label": "Uppers (Kodansha)"
+    },
+    {
+      "id": "457",
+      "label": "Enjuru"
+    },
+    {
+      "id": "458",
+      "label": "Nikutaiha"
+    },
+    {
+      "id": "459",
+      "label": "Yomban"
+    },
+    {
+      "id": "460",
+      "label": "Cab"
+    },
+    {
+      "id": "461",
+      "label": "Super Dash Bunko"
+    },
+    {
+      "id": "462",
+      "label": "Kinniku Otoko"
+    },
+    {
+      "id": "463",
+      "label": "Shounen Big Comic"
+    },
+    {
+      "id": "464",
+      "label": "Comic Penguin Club"
+    },
+    {
+      "id": "465",
+      "label": "Dragon Youth"
+    },
+    {
+      "id": "466",
+      "label": "Citron"
+    },
+    {
+      "id": "467",
+      "label": "BGM"
+    },
+    {
+      "id": "468",
+      "label": "Bokura"
+    },
+    {
+      "id": "469",
+      "label": "Pureri"
+    },
+    {
+      "id": "419",
+      "label": "Gangan Online"
+    },
+    {
+      "id": "363",
+      "label": "Manga Time Kirara MAX"
+    },
+    {
+      "id": "470",
+      "label": "Tsubomi"
+    },
+    {
+      "id": "471",
+      "label": "Ichijinsha Mobile"
+    },
+    {
+      "id": "472",
+      "label": "Catalogue Series"
+    },
+    {
+      "id": "473",
+      "label": "MARBLE"
+    },
+    {
+      "id": "475",
+      "label": "Comic BunBun"
+    },
+    {
+      "id": "399",
+      "label": "Comic Spica"
+    },
+    {
+      "id": "446",
+      "label": "Comic Flamingo R"
+    },
+    {
+      "id": "398",
+      "label": "Comic Mahou no iLand"
+    },
+    {
+      "id": "406",
+      "label": "Comic Master"
+    },
+    {
+      "id": "438",
+      "label": "Ribon Deluxe"
+    },
+    {
+      "id": "476",
+      "label": "Dengeki Nintendo DS"
+    },
+    {
+      "id": "477",
+      "label": "Vanilla"
+    },
+    {
+      "id": "478",
+      "label": "Swan Magazine"
+    },
+    {
+      "id": "479",
+      "label": "TYPE-MOON Ace"
+    },
+    {
+      "id": "480",
+      "label": "Hanaoto DX"
+    },
+    {
+      "id": "482",
+      "label": "CIEL"
+    },
+    {
+      "id": "483",
+      "label": "Shounen King"
+    },
+    {
+      "id": "484",
+      "label": "Jump SQ.19"
+    },
+    {
+      "id": "485",
+      "label": "Oh Super Jump"
+    },
+    {
+      "id": "487",
+      "label": "Comic Potpourri Club"
+    },
+    {
+      "id": "488",
+      "label": "Jidaigeki Manga JIN"
+    },
+    {
+      "id": "489",
+      "label": "Web Magazine Wings"
+    },
+    {
+      "id": "490",
+      "label": "ZERO"
+    },
+    {
+      "id": "491",
+      "label": "AniSen"
+    },
+    {
+      "id": "492",
+      "label": "Comic Gaia"
+    },
+    {
+      "id": "493",
+      "label": "Kirara 16"
+    },
+    {
+      "id": "494",
+      "label": "Dengeki Daioh Genesis"
+    },
+    {
+      "id": "495",
+      "label": "Comic Shingeki"
+    },
+    {
+      "id": "498",
+      "label": "Mephisto"
+    },
+    {
+      "id": "499",
+      "label": "ARIA"
+    },
+    {
+      "id": "502",
+      "label": "Comic Comp"
+    },
+    {
+      "id": "503",
+      "label": "Ace Assault"
+    },
+    {
+      "id": "504",
+      "label": "Booking"
+    },
+    {
+      "id": "505",
+      "label": "Nemesis"
+    },
+    {
+      "id": "506",
+      "label": "Ultra Jump Egg"
+    },
+    {
+      "id": "507",
+      "label": "Hitomi"
+    },
+    {
+      "id": "508",
+      "label": "Comic NORA"
+    },
+    {
+      "id": "509",
+      "label": "Comic Candoll"
+    },
+    {
+      "id": "510",
+      "label": "Muteki Renai S*girl"
+    },
+    {
+      "id": "512",
+      "label": "super Robot Magazine"
+    },
+    {
+      "id": "513",
+      "label": "E★2"
+    },
+    {
+      "id": "514",
+      "label": "Action Pizazz"
+    },
+    {
+      "id": "515",
+      "label": "Shounen Jets (Monthly)"
+    },
+    {
+      "id": "517",
+      "label": "Comic Charge"
+    },
+    {
+      "id": "518",
+      "label": "Comic YA!"
+    },
+    {
+      "id": "519",
+      "label": "Ace Momogumi"
+    },
+    {
+      "id": "520",
+      "label": "Comic Tom (Monthly)"
+    },
+    {
+      "id": "521",
+      "label": "Comic Tom Plus"
+    },
+    {
+      "id": "523",
+      "label": "Comic Kwai"
+    },
+    {
+      "id": "525",
+      "label": "Comic Sangokushi"
+    },
+    {
+      "id": "526",
+      "label": "Shonen Shojo Bokeno"
+    },
+    {
+      "id": "527",
+      "label": "Shounen Club"
+    },
+    {
+      "id": "530",
+      "label": "Mobile Man"
+    },
+    {
+      "id": "531",
+      "label": "MiChao"
+    },
+    {
+      "id": "532",
+      "label": "Famitsu Comic Clear"
+    },
+    {
+      "id": "533",
+      "label": "Comic Kairaku-ten"
+    },
+    {
+      "id": "534",
+      "label": "Horror M"
+    },
+    {
+      "id": "535",
+      "label": "Young Jump (Monthly)"
+    },
+    {
+      "id": "536",
+      "label": "Megami Magazine"
+    },
+    {
+      "id": "537",
+      "label": "Action Pizazz DX"
+    },
+    {
+      "id": "538",
+      "label": "WAaI!"
+    },
+    {
+      "id": "539",
+      "label": "Yomiuri Shimbun"
+    },
+    {
+      "id": "541",
+      "label": "Aqua PiPi"
+    },
+    {
+      "id": "542",
+      "label": "Super Strong Jump"
+    },
+    {
+      "id": "543",
+      "label": "Comic Sumomo"
+    },
+    {
+      "id": "545",
+      "label": "Rakuen Le Paradis"
+    },
+    {
+      "id": "546",
+      "label": "Play Comic"
+    },
+    {
+      "id": "547",
+      "label": "Nakayoshi Lovely"
+    },
+    {
+      "id": "548",
+      "label": "Shounen Jump NEXT!"
+    },
+    {
+      "id": "550",
+      "label": "Canna"
+    },
+    {
+      "id": "551",
+      "label": "Apple Collection"
+    },
+    {
+      "id": "552",
+      "label": "Comic Manga Ou"
+    },
+    {
+      "id": "553",
+      "label": "BLink"
+    },
+    {
+      "id": "555",
+      "label": "Comic Mujin"
+    },
+    {
+      "id": "1585",
+      "label": "Kindan Lovers"
+    },
+    {
+      "id": "557",
+      "label": "pocopoco"
+    },
+    {
+      "id": "558",
+      "label": "Comic Hanaman"
+    },
+    {
+      "id": "559",
+      "label": "Comic B's-LOG Air Raid"
+    },
+    {
+      "id": "560",
+      "label": "Young Animal Island"
+    },
+    {
+      "id": "562",
+      "label": "Comic Champ"
+    },
+    {
+      "id": "564",
+      "label": "ITAN"
+    },
+    {
+      "id": "565",
+      "label": "Web Comic Beat's"
+    },
+    {
+      "id": "567",
+      "label": "Jump X"
+    },
+    {
+      "id": "569",
+      "label": "Comic Unreal"
+    },
+    {
+      "id": "571",
+      "label": "Comic Aun"
+    },
+    {
+      "id": "573",
+      "label": "Comic Gene"
+    },
+    {
+      "id": "575",
+      "label": "Young King"
+    },
+    {
+      "id": "577",
+      "label": "Buster Comic"
+    },
+    {
+      "id": "579",
+      "label": "Comic RiN"
+    },
+    {
+      "id": "474",
+      "label": "RuTiLe Sweet"
+    },
+    {
+      "id": "529",
+      "label": "b-Boy Honey"
+    },
+    {
+      "id": "500",
+      "label": "Manga Sunday"
+    },
+    {
+      "id": "581",
+      "label": "Comic Kairaku-ten Beast"
+    },
+    {
+      "id": "582",
+      "label": "Comic Megastore H"
+    },
+    {
+      "id": "584",
+      "label": "Comic Yell!"
+    },
+    {
+      "id": "585",
+      "label": "Comic MegaMilk"
+    },
+    {
+      "id": "589",
+      "label": "Comic Shitsuraku-ten"
+    },
+    {
+      "id": "561",
+      "label": "Bessatsu Young Champion"
+    },
+    {
+      "id": "486",
+      "label": "Ane-kei Petit Comic"
+    },
+    {
+      "id": "522",
+      "label": "Dengeki Hobby Magazine"
+    },
+    {
+      "id": "540",
+      "label": "Kiss PLUS"
+    },
+    {
+      "id": "549",
+      "label": "Niconico Yuri Hime"
+    },
+    {
+      "id": "524",
+      "label": "JC.COM"
+    },
+    {
+      "id": "496",
+      "label": "Febri"
+    },
+    {
+      "id": "501",
+      "label": "Asahi Shougakusei Shinbun"
+    },
+    {
+      "id": "554",
+      "label": "Comic Bee"
+    },
+    {
+      "id": "544",
+      "label": "Oto☆Nyan"
+    },
+    {
+      "id": "528",
+      "label": "Comic B's-LOG Kyun!"
+    },
+    {
+      "id": "591",
+      "label": "Gessan"
+    },
+    {
+      "id": "593",
+      "label": "Club Sunday"
+    },
+    {
+      "id": "595",
+      "label": "Comic Penguin Club Sanzokuban"
+    },
+    {
+      "id": "597",
+      "label": "New Youth"
+    },
+    {
+      "id": "601",
+      "label": "Comic Purumelo"
+    },
+    {
+      "id": "605",
+      "label": "Comic@Bunch"
+    },
+    {
+      "id": "607",
+      "label": "Manga Goraku"
+    },
+    {
+      "id": "609",
+      "label": "Comic XO"
+    },
+    {
+      "id": "611",
+      "label": "Ciao DX"
+    },
+    {
+      "id": "615",
+      "label": "Web Comic Gekkin"
+    },
+    {
+      "id": "617",
+      "label": "Comic MILF"
+    },
+    {
+      "id": "621",
+      "label": "For Mrs."
+    },
+    {
+      "id": "623",
+      "label": "Comic Plum"
+    },
+    {
+      "id": "625",
+      "label": "Koi June"
+    },
+    {
+      "id": "1655",
+      "label": "Manga Life Joshi-bu"
+    },
+    {
+      "id": "629",
+      "label": "BOY'S Pierce"
+    },
+    {
+      "id": "631",
+      "label": "Comic June"
+    },
+    {
+      "id": "633",
+      "label": "Comic P Flirt"
+    },
+    {
+      "id": "635",
+      "label": "Nekopanchi"
+    },
+    {
+      "id": "637",
+      "label": "Web Spica"
+    },
+    {
+      "id": "639",
+      "label": "Comic MegaCube"
+    },
+    {
+      "id": "641",
+      "label": "Angel Club"
+    },
+    {
+      "id": "643",
+      "label": "Comic Himedorobow"
+    },
+    {
+      "id": "645",
+      "label": "Jun-ai Kajitsu"
+    },
+    {
+      "id": "647",
+      "label": "Comic Bazooka"
+    },
+    {
+      "id": "649",
+      "label": "Comic Pot"
+    },
+    {
+      "id": "651",
+      "label": "Karyou Gakuen Shotoubu"
+    },
+    {
+      "id": "653",
+      "label": "Newtype Ace"
+    },
+    {
+      "id": "655",
+      "label": "Manga Bangaichi"
+    },
+    {
+      "id": "659",
+      "label": "Comic Sigma"
+    },
+    {
+      "id": "661",
+      "label": "Comic Papipo"
+    },
+    {
+      "id": "663",
+      "label": "Shoujo Club"
+    },
+    {
+      "id": "665",
+      "label": "Boys Capi!"
+    },
+    {
+      "id": "667",
+      "label": "Kuro LaLa"
+    },
+    {
+      "id": "669",
+      "label": "Shiro LaLa"
+    },
+    {
+      "id": "671",
+      "label": "Comic Karyou Gakuen"
+    },
+    {
+      "id": "679",
+      "label": "Action Pizazz Special"
+    },
+    {
+      "id": "681",
+      "label": "Comic Hime-Sakura"
+    },
+    {
+      "id": "683",
+      "label": "Bishoujo Kakumei KIWAME"
+    },
+    {
+      "id": "685",
+      "label": "Comic Dolphin"
+    },
+    {
+      "id": "687",
+      "label": "Canopri Comic"
+    },
+    {
+      "id": "689",
+      "label": "Manga Goraku dokuhon"
+    },
+    {
+      "id": "691",
+      "label": "Miracle Jump"
+    },
+    {
+      "id": "693",
+      "label": "Super Dash & Go!"
+    },
+    {
+      "id": "695",
+      "label": "JUNE"
+    },
+    {
+      "id": "697",
+      "label": "Saikyou Jump"
+    },
+    {
+      "id": "1584",
+      "label": "Berry's Fantasy"
+    },
+    {
+      "id": "701",
+      "label": "Zero-Sum Online"
+    },
+    {
+      "id": "703",
+      "label": "Ribon Special"
+    },
+    {
+      "id": "705",
+      "label": "Big Gangan"
+    },
+    {
+      "id": "711",
+      "label": "Sakura Hearts"
+    },
+    {
+      "id": "713",
+      "label": "Gagaga Bunko"
+    },
+    {
+      "id": "715",
+      "label": "FlexComix Flare"
+    },
+    {
+      "id": "717",
+      "label": "Comic Penguin Celeb"
+    },
+    {
+      "id": "719",
+      "label": "Comic Zenon"
+    },
+    {
+      "id": "721",
+      "label": "Boys Jam!"
+    },
+    {
+      "id": "723",
+      "label": "Next Comic First"
+    },
+    {
+      "id": "725",
+      "label": "Edith"
+    },
+    {
+      "id": "727",
+      "label": "Tech Gian"
+    },
+    {
+      "id": "731",
+      "label": "Comic Are!"
+    },
+    {
+      "id": "733",
+      "label": "Tokage"
+    },
+    {
+      "id": "735",
+      "label": "Mink"
+    },
+    {
+      "id": "737",
+      "label": "Dengeki Moeoh"
+    },
+    {
+      "id": "739",
+      "label": "Age Premium"
+    },
+    {
+      "id": "741",
+      "label": "Altima Ace"
+    },
+    {
+      "id": "743",
+      "label": "Comic Fantasy"
+    },
+    {
+      "id": "745",
+      "label": "Pianissimo"
+    },
+    {
+      "id": "747",
+      "label": "Ubu Mode"
+    },
+    {
+      "id": "749",
+      "label": "Elegance Eve"
+    },
+    {
+      "id": "751",
+      "label": "Comic Noizy"
+    },
+    {
+      "id": "755",
+      "label": "moca"
+    },
+    {
+      "id": "757",
+      "label": "Cheri"
+    },
+    {
+      "id": "759",
+      "label": "Comic Situation Play"
+    },
+    {
+      "id": "761",
+      "label": "Comic Comomo"
+    },
+    {
+      "id": "763",
+      "label": "Men's Gold"
+    },
+    {
+      "id": "765",
+      "label": "Comic MESSI"
+    },
+    {
+      "id": "767",
+      "label": "Comic Mate"
+    },
+    {
+      "id": "769",
+      "label": "Comic GEKI-YABA"
+    },
+    {
+      "id": "771",
+      "label": "Comic ino."
+    },
+    {
+      "id": "773",
+      "label": "2D Dream Magazine"
+    },
+    {
+      "id": "775",
+      "label": "Comic Prism"
+    },
+    {
+      "id": "777",
+      "label": "Video Boy"
+    },
+    {
+      "id": "779",
+      "label": "Giga 69"
+    },
+    {
+      "id": "707",
+      "label": "Comic Earth☆Star"
+    },
+    {
+      "id": "673",
+      "label": "Naver Webtoon"
+    },
+    {
+      "id": "619",
+      "label": "Comic Megaplus"
+    },
+    {
+      "id": "603",
+      "label": "Comic 0EX"
+    },
+    {
+      "id": "781",
+      "label": "Koushoku Shounen"
+    },
+    {
+      "id": "783",
+      "label": "Otome High!"
+    },
+    {
+      "id": "785",
+      "label": "Comic Zero-Shiki"
+    },
+    {
+      "id": "787",
+      "label": "World Soccer King"
+    },
+    {
+      "id": "789",
+      "label": "Romance Tiara"
+    },
+    {
+      "id": "791",
+      "label": "Girls forM"
+    },
+    {
+      "id": "599",
+      "label": "Jour Suteki na Shufu-tachi"
+    },
+    {
+      "id": "677",
+      "label": "Comic Be"
+    },
+    {
+      "id": "729",
+      "label": "Hana to Yume Online"
+    },
+    {
+      "id": "657",
+      "label": "Bishoujo-teki Kaikatsuryoku"
+    },
+    {
+      "id": "793",
+      "label": "Bessatsu Friend Zoukan BetsuFure"
+    },
+    {
+      "id": "795",
+      "label": "Dengeki Hime"
+    },
+    {
+      "id": "675",
+      "label": "Jump SQ.LaB"
+    },
+    {
+      "id": "797",
+      "label": "Comic Historia"
+    },
+    {
+      "id": "799",
+      "label": "Dengeki Comic Japan"
+    },
+    {
+      "id": "801",
+      "label": "Comic Dangan"
+    },
+    {
+      "id": "1587",
+      "label": "Manga Gaugau"
+    },
+    {
+      "id": "805",
+      "label": "Ao Lala"
+    },
+    {
+      "id": "813",
+      "label": "Bessatsu Shounen Champion"
+    },
+    {
+      "id": "815",
+      "label": "Betsuma Sister"
+    },
+    {
+      "id": "817",
+      "label": "Cocohana"
+    },
+    {
+      "id": "821",
+      "label": "onBLUE"
+    },
+    {
+      "id": "823",
+      "label": "Manga Life Win"
+    },
+    {
+      "id": "1057",
+      "label": "Kissui"
+    },
+    {
+      "id": "827",
+      "label": "Comic Meteor"
+    },
+    {
+      "id": "829",
+      "label": "Renai Love MAX"
+    },
+    {
+      "id": "833",
+      "label": "Gelatin"
+    },
+    {
+      "id": "835",
+      "label": "Renai Cherry Pink"
+    },
+    {
+      "id": "837",
+      "label": "Young Jump (Weekly)"
+    },
+    {
+      "id": "839",
+      "label": "Famitsu Bros"
+    },
+    {
+      "id": "841",
+      "label": "Famitsu PS2"
+    },
+    {
+      "id": "843",
+      "label": "Famitsu PS"
+    },
+    {
+      "id": "847",
+      "label": "Manga Action"
+    },
+    {
+      "id": "849",
+      "label": "Dengeki Nintendo for KIDS"
+    },
+    {
+      "id": "851",
+      "label": "Comic Break"
+    },
+    {
+      "id": "853",
+      "label": "Comic Ran"
+    },
+    {
+      "id": "855",
+      "label": "Shougaku Yonensei"
+    },
+    {
+      "id": "857",
+      "label": "Blade Online"
+    },
+    {
+      "id": "859",
+      "label": "Shounen Magazine+ (Monthly)"
+    },
+    {
+      "id": "863",
+      "label": "Aka Lala"
+    },
+    {
+      "id": "865",
+      "label": "Baby"
+    },
+    {
+      "id": "867",
+      "label": "Comic BugBug"
+    },
+    {
+      "id": "869",
+      "label": "Comic Milk Purin"
+    },
+    {
+      "id": "871",
+      "label": "Comic Mega Gold"
+    },
+    {
+      "id": "873",
+      "label": "Comic Jumbo"
+    },
+    {
+      "id": "875",
+      "label": "Comic Kairaku-ten XTC"
+    },
+    {
+      "id": "879",
+      "label": "WAaI! Mahalo"
+    },
+    {
+      "id": "885",
+      "label": "MF Bunko J"
+    },
+    {
+      "id": "889",
+      "label": "Grand Jump Premium"
+    },
+    {
+      "id": "891",
+      "label": "MAG Garden Comic Online"
+    },
+    {
+      "id": "893",
+      "label": "Manga Town"
+    },
+    {
+      "id": "897",
+      "label": "Tonari no Young Jump"
+    },
+    {
+      "id": "899",
+      "label": "Oyajism"
+    },
+    {
+      "id": "901",
+      "label": "Hontou ni Atta Kowai Hanashi"
+    },
+    {
+      "id": "903",
+      "label": "Comic Cyutt"
+    },
+    {
+      "id": "905",
+      "label": "B'S Anima"
+    },
+    {
+      "id": "907",
+      "label": "Cita-NIUM"
+    },
+    {
+      "id": "910",
+      "label": "Bessatsu Manga Goraku"
+    },
+    {
+      "id": "912",
+      "label": "Manga Palette Lite"
+    },
+    {
+      "id": "914",
+      "label": "Leed Comic"
+    },
+    {
+      "id": "916",
+      "label": "Blade Online"
+    },
+    {
+      "id": "918",
+      "label": "Shougaku Ninensei"
+    },
+    {
+      "id": "920",
+      "label": "Manga Goccha"
+    },
+    {
+      "id": "922",
+      "label": "The Dessert"
+    },
+    {
+      "id": "924",
+      "label": "GUSH pêche"
+    },
+    {
+      "id": "926",
+      "label": "Young Champ"
+    },
+    {
+      "id": "928",
+      "label": "Hobby Japan"
+    },
+    {
+      "id": "932",
+      "label": "GA Bunko Magazine"
+    },
+    {
+      "id": "933",
+      "label": "u17"
+    },
+    {
+      "id": "935",
+      "label": "Manga Time Kirara Miracle!"
+    },
+    {
+      "id": "937",
+      "label": "Shounen"
+    },
+    {
+      "id": "939",
+      "label": "Gangan Wing"
+    },
+    {
+      "id": "941",
+      "label": "Comic Heaven"
+    },
+    {
+      "id": "943",
+      "label": "Comic Polaris"
+    },
+    {
+      "id": "945",
+      "label": "Weekly ASCII"
+    },
+    {
+      "id": "947",
+      "label": "Grand Jump"
+    },
+    {
+      "id": "949",
+      "label": "Persona Magazine"
+    },
+    {
+      "id": "951",
+      "label": "Reijin Bravo!"
+    },
+    {
+      "id": "953",
+      "label": "Harta"
+    },
+    {
+      "id": "955",
+      "label": "Comic X-Eros"
+    },
+    {
+      "id": "957",
+      "label": "Comic Milk Purin"
+    },
+    {
+      "id": "959",
+      "label": "Comic Prism"
+    },
+    {
+      "id": "961",
+      "label": "Comic Situation Play"
+    },
+    {
+      "id": "963",
+      "label": "Comic ino."
+    },
+    {
+      "id": "965",
+      "label": "Comic Orecano!"
+    },
+    {
+      "id": "967",
+      "label": "Jump VS"
+    },
+    {
+      "id": "969",
+      "label": "Comic Comomo"
+    },
+    {
+      "id": "971",
+      "label": "Men's GOLD"
+    },
+    {
+      "id": "973",
+      "label": "Comic Mate"
+    },
+    {
+      "id": "975",
+      "label": "Renai Revolution"
+    },
+    {
+      "id": "977",
+      "label": "Comic Moe Max"
+    },
+    {
+      "id": "979",
+      "label": "Bishoujo Kakumei KIWAME Road"
+    },
+    {
+      "id": "981",
+      "label": "Comic Maihime Musou"
+    },
+    {
+      "id": "983",
+      "label": "Comic Anthurium"
+    },
+    {
+      "id": "985",
+      "label": "Shousetsu B-Boy"
+    },
+    {
+      "id": "987",
+      "label": "Comic Rats"
+    },
+    {
+      "id": "989",
+      "label": "Magazine WOoooo!"
+    },
+    {
+      "id": "991",
+      "label": "Colorful Drops"
+    },
+    {
+      "id": "993",
+      "label": "Comic Magnum"
+    },
+    {
+      "id": "995",
+      "label": "Comic Jumbo"
+    },
+    {
+      "id": "845",
+      "label": "Daum Webtoon"
+    },
+    {
+      "id": "811",
+      "label": "Hirari,"
+    },
+    {
+      "id": "1586",
+      "label": "Manga Bang"
+    },
+    {
+      "id": "999",
+      "label": "Saizensen"
+    },
+    {
+      "id": "1001",
+      "label": "Cheri+"
+    },
+    {
+      "id": "1003",
+      "label": "Comic Shoujo Shiki"
+    },
+    {
+      "id": "1005",
+      "label": "Ura Sunday"
+    },
+    {
+      "id": "1007",
+      "label": "Kadokawa Niconico Ace"
+    },
+    {
+      "id": "1009",
+      "label": "bianca"
+    },
+    {
+      "id": "1011",
+      "label": "Comic Himekuri"
+    },
+    {
+      "id": "1013",
+      "label": "Jump LIVE"
+    },
+    {
+      "id": "1015",
+      "label": "Champion Tap!"
+    },
+    {
+      "id": "1017",
+      "label": "Comic Revolution"
+    },
+    {
+      "id": "1019",
+      "label": "Action Pizazz HB"
+    },
+    {
+      "id": "1021",
+      "label": "Comic Megastore Alpha"
+    },
+    {
+      "id": "1023",
+      "label": "haruca"
+    },
+    {
+      "id": "1025",
+      "label": "B's-LOVEY recottia"
+    },
+    {
+      "id": "1027",
+      "label": "Comic Shoujo Tengoku"
+    },
+    {
+      "id": "1029",
+      "label": "Comic Moog"
+    },
+    {
+      "id": "1033",
+      "label": "Manga 4-koma Palette"
+    },
+    {
+      "id": "1035",
+      "label": "Men's Young Special Ikazuchi"
+    },
+    {
+      "id": "1037",
+      "label": "Action Young"
+    },
+    {
+      "id": "1039",
+      "label": "ihr hertZ"
+    },
+    {
+      "id": "1041",
+      "label": "Hinakan Hi!"
+    },
+    {
+      "id": "1045",
+      "label": "Futabasha Web Magazine"
+    },
+    {
+      "id": "1047",
+      "label": "Manga Aiki"
+    },
+    {
+      "id": "1049",
+      "label": "Cabaret-Club Comic"
+    },
+    {
+      "id": "1051",
+      "label": "Comic Muga"
+    },
+    {
+      "id": "1053",
+      "label": "Comic Mugen Tensei"
+    },
+    {
+      "id": "1055",
+      "label": "Comic Lemon Club"
+    },
+    {
+      "id": "1059",
+      "label": "LaLa Melody Online"
+    },
+    {
+      "id": "1061",
+      "label": "Manga Box"
+    },
+    {
+      "id": "1063",
+      "label": "Kurage Bunch"
+    },
+    {
+      "id": "1065",
+      "label": "BOX-AiR"
+    },
+    {
+      "id": "1067",
+      "label": "Young Hip"
+    },
+    {
+      "id": "1069",
+      "label": "Magazine WOoooo! B-gumi"
+    },
+    {
+      "id": "1071",
+      "label": "Hana to Yume Plus"
+    },
+    {
+      "id": "1073",
+      "label": "ChobeComi!"
+    },
+    {
+      "id": "1075",
+      "label": "Hontou ni Kowai Douwa"
+    },
+    {
+      "id": "1077",
+      "label": "Nate Manhwa"
+    },
+    {
+      "id": "1079",
+      "label": "Web Ikipara Comic"
+    },
+    {
+      "id": "1081",
+      "label": "Comic Minimon"
+    },
+    {
+      "id": "1083",
+      "label": "Comic KOH"
+    },
+    {
+      "id": "1085",
+      "label": "Comic Gekiman"
+    },
+    {
+      "id": "1087",
+      "label": "KiSSCA"
+    },
+    {
+      "id": "1089",
+      "label": "Manga Time Kirara☆Magica"
+    },
+    {
+      "id": "1091",
+      "label": "Prince (Quarterly)"
+    },
+    {
+      "id": "1093",
+      "label": "Model Graphix"
+    },
+    {
+      "id": "1095",
+      "label": "Harmony Romance Zoukangou"
+    },
+    {
+      "id": "1097",
+      "label": "Yawaraka Spirits"
+    },
+    {
+      "id": "1099",
+      "label": "Comic Gamma"
+    },
+    {
+      "id": "1101",
+      "label": "Manga Hot Milk"
+    },
+    {
+      "id": "1103",
+      "label": "Web Comic Gamma"
+    },
+    {
+      "id": "1105",
+      "label": "Gensou Fantasy"
+    },
+    {
+      "id": "1107",
+      "label": "Magazine Cyberia"
+    },
+    {
+      "id": "1109",
+      "label": "B's-LOVEY Katsubou"
+    },
+    {
+      "id": "1111",
+      "label": "Comic Dolphin Jr."
+    },
+    {
+      "id": "1113",
+      "label": "Comic Grape"
+    },
+    {
+      "id": "1115",
+      "label": "Doki~! Special"
+    },
+    {
+      "id": "1117",
+      "label": "Comic Pururun Max"
+    },
+    {
+      "id": "1119",
+      "label": "G'sister"
+    },
+    {
+      "id": "1121",
+      "label": "Young Animal Densi"
+    },
+    {
+      "id": "1123",
+      "label": "Comic Ran Twins"
+    },
+    {
+      "id": "1125",
+      "label": "motto!"
+    },
+    {
+      "id": "1127",
+      "label": "Mei"
+    },
+    {
+      "id": "1129",
+      "label": "Fresh Jump"
+    },
+    {
+      "id": "1131",
+      "label": "Manga Bon"
+    },
+    {
+      "id": "1133",
+      "label": "Manga Ai! Hime"
+    },
+    {
+      "id": "1135",
+      "label": "Suiyoubi no Sirius"
+    },
+    {
+      "id": "1137",
+      "label": "Comic Break"
+    },
+    {
+      "id": "1139",
+      "label": "Web Comic Zenyon"
+    },
+    {
+      "id": "1141",
+      "label": "Hatsu Kiss"
+    },
+    {
+      "id": "1143",
+      "label": "AYLA"
+    },
+    {
+      "id": "1145",
+      "label": "Run Run"
+    },
+    {
+      "id": "1147",
+      "label": "Comic Holic"
+    },
+    {
+      "id": "1149",
+      "label": "Comic Tokumori"
+    },
+    {
+      "id": "1151",
+      "label": "Graman Geki!"
+    },
+    {
+      "id": "1153",
+      "label": "Ane LaLa"
+    },
+    {
+      "id": "1155",
+      "label": "Big Comic Zoukan"
+    },
+    {
+      "id": "1157",
+      "label": "Dengeki G's Comic"
+    },
+    {
+      "id": "1165",
+      "label": "Tokusatsu Ace"
+    },
+    {
+      "id": "1167",
+      "label": "Dengeki Girl's Style"
+    },
+    {
+      "id": "1171",
+      "label": "Comic Europa"
+    },
+    {
+      "id": "1177",
+      "label": "Comic Ero-tama"
+    },
+    {
+      "id": "1175",
+      "label": "Aoharu"
+    },
+    {
+      "id": "1179",
+      "label": "Manga Zettai Manzoku"
+    },
+    {
+      "id": "1181",
+      "label": "Ponimaga"
+    },
+    {
+      "id": "1183",
+      "label": "Magalabo"
+    },
+    {
+      "id": "1185",
+      "label": "Cyberia ManiaEX"
+    },
+    {
+      "id": "1189",
+      "label": "Handy Comic"
+    },
+    {
+      "id": "1656",
+      "label": "bamB!"
+    },
+    {
+      "id": "1195",
+      "label": "Young Magazine the 3rd"
+    },
+    {
+      "id": "1199",
+      "label": "drap Milk"
+    },
+    {
+      "id": "1207",
+      "label": "Manga Grimm Douwa"
+    },
+    {
+      "id": "1197",
+      "label": "Aqua BL Kingdom"
+    },
+    {
+      "id": "1191",
+      "label": "Hana to Yume Planet"
+    },
+    {
+      "id": "1213",
+      "label": "Comic Dengeki Daioh \"g\""
+    },
+    {
+      "id": "1043",
+      "label": "Comic ChoiS!"
+    },
+    {
+      "id": "1211",
+      "label": "Comic Man-Ten"
+    },
+    {
+      "id": "1205",
+      "label": "Animage"
+    },
+    {
+      "id": "1163",
+      "label": "Asahi Shinbun"
+    },
+    {
+      "id": "1203",
+      "label": "Comic Ran-Oh!"
+    },
+    {
+      "id": "1173",
+      "label": "Shounen Fang"
+    },
+    {
+      "id": "1169",
+      "label": "Big Comic Original Zoukan"
+    },
+    {
+      "id": "1588",
+      "label": "Charles Mag Omegaverse"
+    },
+    {
+      "id": "1209",
+      "label": "Shounen Jump+"
+    },
+    {
+      "id": "1215",
+      "label": "Megastore"
+    },
+    {
+      "id": "1217",
+      "label": "Comic Garden"
+    },
+    {
+      "id": "1219",
+      "label": "Manga Life MOMO"
+    },
+    {
+      "id": "1223",
+      "label": "GUSH Pochi."
+    },
+    {
+      "id": "1225",
+      "label": "Juicy"
+    },
+    {
+      "id": "1221",
+      "label": "Kurofune Momo"
+    },
+    {
+      "id": "1229",
+      "label": "Mebae"
+    },
+    {
+      "id": "1231",
+      "label": "Manga Kisoutengai"
+    },
+    {
+      "id": "1233",
+      "label": "Comic Gang"
+    },
+    {
+      "id": "1235",
+      "label": "Manga Life STORIA"
+    },
+    {
+      "id": "1237",
+      "label": "Josei Seven"
+    },
+    {
+      "id": "1239",
+      "label": "Nakayoshi Deluxe"
+    },
+    {
+      "id": "1241",
+      "label": "Zettai Renai Sweet"
+    },
+    {
+      "id": "1243",
+      "label": "Monthly QooPA!"
+    },
+    {
+      "id": "1245",
+      "label": "DVD Majiyaba"
+    },
+    {
+      "id": "1249",
+      "label": "Comic Magnum X"
+    },
+    {
+      "id": "1247",
+      "label": "Hanamaru Manga"
+    },
+    {
+      "id": "1253",
+      "label": "Mink"
+    },
+    {
+      "id": "1251",
+      "label": "Animal House"
+    },
+    {
+      "id": "1227",
+      "label": "Bessatsu Kindai Mahjong"
+    },
+    {
+      "id": "1257",
+      "label": "Cyber Comics"
+    },
+    {
+      "id": "1263",
+      "label": "Bstreet"
+    },
+    {
+      "id": "1267",
+      "label": "Bushiroad (Monthly)"
+    },
+    {
+      "id": "1261",
+      "label": "iHertZ"
+    },
+    {
+      "id": "1265",
+      "label": "Manga Erotopia"
+    },
+    {
+      "id": "1270",
+      "label": "Monthly Shounen Magazine+"
+    },
+    {
+      "id": "1271",
+      "label": "Comic Genra"
+    },
+    {
+      "id": "1273",
+      "label": "Lezhin Comics Webtoon"
+    },
+    {
+      "id": "1274",
+      "label": "Comic Toutetsu"
+    },
+    {
+      "id": "1276",
+      "label": "Apple Mystery"
+    },
+    {
+      "id": "1275",
+      "label": "Bokkinia"
+    },
+    {
+      "id": "1272",
+      "label": "Magazine Fresh!"
+    },
+    {
+      "id": "1277",
+      "label": "Comic fleur"
+    },
+    {
+      "id": "1278",
+      "label": "comico"
+    },
+    {
+      "id": "1280",
+      "label": "Comicomi"
+    },
+    {
+      "id": "1281",
+      "label": "Zoukan flowers"
+    },
+    {
+      "id": "1589",
+      "label": "Digital Punipedo!"
+    },
+    {
+      "id": "1283",
+      "label": "Comic Orca"
+    },
+    {
+      "id": "1284",
+      "label": "Shincho 45"
+    },
+    {
+      "id": "1285",
+      "label": "Kono Manga ga Sugoi! Web"
+    },
+    {
+      "id": "1286",
+      "label": "Manga Goraku Nexter"
+    },
+    {
+      "id": "1288",
+      "label": "Comic Bavel"
+    },
+    {
+      "id": "1287",
+      "label": "SPA!"
+    },
+    {
+      "id": "1279",
+      "label": "Comic it"
+    },
+    {
+      "id": "1161",
+      "label": "Zoukan Young Gangan"
+    },
+    {
+      "id": "1293",
+      "label": "Manga Animec"
+    },
+    {
+      "id": "1296",
+      "label": "Bouquet DX"
+    },
+    {
+      "id": "1590",
+      "label": "Hero's"
+    },
+    {
+      "id": "1298",
+      "label": "Champion Cross"
+    },
+    {
+      "id": "1986",
+      "label": "Houseki (Weekly)"
+    },
+    {
+      "id": "1300",
+      "label": "Comic Ran"
+    },
+    {
+      "id": "1301",
+      "label": "Gene pixiv"
+    },
+    {
+      "id": "1289",
+      "label": "Shuukan Bunshun"
+    },
+    {
+      "id": "1303",
+      "label": "Capbon!"
+    },
+    {
+      "id": "1306",
+      "label": "Bessatsu Harmony Romance"
+    },
+    {
+      "id": "1305",
+      "label": "Chance+"
+    },
+    {
+      "id": "1308",
+      "label": "Shounen Magazine R"
+    },
+    {
+      "id": "1307",
+      "label": "Qpa"
+    },
+    {
+      "id": "1302",
+      "label": "Manga Goraku Special"
+    },
+    {
+      "id": "1304",
+      "label": "Dengeki hp"
+    },
+    {
+      "id": "1310",
+      "label": "Karyou Sakuragumi Etsu"
+    },
+    {
+      "id": "1297",
+      "label": "Comic Ruelle"
+    },
+    {
+      "id": "1312",
+      "label": "Shounen Magazine Edge"
+    },
+    {
+      "id": "1313",
+      "label": "Gougai onBLUE"
+    },
+    {
+      "id": "1314",
+      "label": "Harmony Romance"
+    },
+    {
+      "id": "1315",
+      "label": "Emerald"
+    },
+    {
+      "id": "1317",
+      "label": "BOY'S Pierce Kindan"
+    },
+    {
+      "id": "1316",
+      "label": "Jump SQ.Crown"
+    },
+    {
+      "id": "1318",
+      "label": "Comic Mate Legend"
+    },
+    {
+      "id": "1319",
+      "label": "Comic Mega GOLD"
+    },
+    {
+      "id": "1320",
+      "label": "Comic Saija"
+    },
+    {
+      "id": "1321",
+      "label": "Comic Mana"
+    },
+    {
+      "id": "1323",
+      "label": "Hana LaLa online"
+    },
+    {
+      "id": "1325",
+      "label": "Dengeki Bazooka!!"
+    },
+    {
+      "id": "1324",
+      "label": "Garaku no Mori"
+    },
+    {
+      "id": "1292",
+      "label": "Shousetsu Chara"
+    },
+    {
+      "id": "1322",
+      "label": "Comic GENKi"
+    },
+    {
+      "id": "1291",
+      "label": "Action Deluxe"
+    },
+    {
+      "id": "1311",
+      "label": "Morning Party Zoukan"
+    },
+    {
+      "id": "1294",
+      "label": "Lemon People"
+    },
+    {
+      "id": "1290",
+      "label": "MC☆Axis"
+    },
+    {
+      "id": "1326",
+      "label": "Keetai ShuuPlay"
+    },
+    {
+      "id": "1327",
+      "label": "Shousetsu Dear+"
+    },
+    {
+      "id": "1329",
+      "label": "Goraku Egg"
+    },
+    {
+      "id": "1328",
+      "label": "Renai Hakusho Pastel"
+    },
+    {
+      "id": "1332",
+      "label": "WEBLink"
+    },
+    {
+      "id": "1333",
+      "label": "Qpano"
+    },
+    {
+      "id": "1331",
+      "label": "Comic JSCK"
+    },
+    {
+      "id": "1309",
+      "label": "Comic Cune"
+    },
+    {
+      "id": "29",
+      "label": "twi4"
+    },
+    {
+      "id": "5",
+      "label": "Web Comic Gum"
+    },
+    {
+      "id": "1334",
+      "label": "Shuukan Gendai"
+    },
+    {
+      "id": "1335",
+      "label": "Magazine pocket"
+    },
+    {
+      "id": "1336",
+      "label": "Shokuman"
+    },
+    {
+      "id": "1337",
+      "label": "Comic HJ Bunko"
+    },
+    {
+      "id": "1339",
+      "label": "Ganma!"
+    },
+    {
+      "id": "1340",
+      "label": "Young Ace UP"
+    },
+    {
+      "id": "1338",
+      "label": "Nintendo Dream"
+    },
+    {
+      "id": "1330",
+      "label": "Comic Zeroshiki"
+    },
+    {
+      "id": "1341",
+      "label": "Falcom Magazine"
+    },
+    {
+      "id": "1345",
+      "label": "Petit Comic Zoukan"
+    },
+    {
+      "id": "1349",
+      "label": "MAGCOMI"
+    },
+    {
+      "id": "1346",
+      "label": "The Sneaker Web"
+    },
+    {
+      "id": "1352",
+      "label": "mimi"
+    },
+    {
+      "id": "1344",
+      "label": "Omegaverse Project"
+    },
+    {
+      "id": "1342",
+      "label": "MIKU-Pack"
+    },
+    {
+      "id": "1591",
+      "label": "Comic Bridge"
+    },
+    {
+      "id": "1350",
+      "label": "Comic Jidai Katsugeki"
+    },
+    {
+      "id": "1351",
+      "label": "Jump Original"
+    },
+    {
+      "id": "1347",
+      "label": "Shounen Gaho"
+    },
+    {
+      "id": "1348",
+      "label": "Morning Horizon in the Centre of Somewhere"
+    },
+    {
+      "id": "1353",
+      "label": "Magazine Bang"
+    },
+    {
+      "id": "1354",
+      "label": "Zoukan Taishuu"
+    },
+    {
+      "id": "1357",
+      "label": "Comic KURiBERON"
+    },
+    {
+      "id": "1360",
+      "label": "Comic GT"
+    },
+    {
+      "id": "1362",
+      "label": "eBigComic4"
+    },
+    {
+      "id": "1366",
+      "label": "Jump GIGA"
+    },
+    {
+      "id": "1361",
+      "label": "MangaONE"
+    },
+    {
+      "id": "1370",
+      "label": "South"
+    },
+    {
+      "id": "1359",
+      "label": "Badi"
+    },
+    {
+      "id": "1372",
+      "label": "CoroCoro Aniki"
+    },
+    {
+      "id": "1374",
+      "label": "Comic ExE"
+    },
+    {
+      "id": "1373",
+      "label": "Comic Ride"
+    },
+    {
+      "id": "1371",
+      "label": "Comic Newtype"
+    },
+    {
+      "id": "1376",
+      "label": "Comic BEAT"
+    },
+    {
+      "id": "1379",
+      "label": "Comic saseco"
+    },
+    {
+      "id": "1355",
+      "label": "Comic Rise"
+    },
+    {
+      "id": "1377",
+      "label": "Char@"
+    },
+    {
+      "id": "1378",
+      "label": "Comic Fire"
+    },
+    {
+      "id": "1358",
+      "label": "Comic Bingo"
+    },
+    {
+      "id": "1375",
+      "label": "Pasocom Magazine"
+    },
+    {
+      "id": "1363",
+      "label": "Love Jossie"
+    },
+    {
+      "id": "1367",
+      "label": "Shounen Edgestar"
+    },
+    {
+      "id": "1368",
+      "label": "aQtto!"
+    },
+    {
+      "id": "1369",
+      "label": "Web Magazine f3"
+    },
+    {
+      "id": "1895",
+      "label": "Touch+"
+    },
+    {
+      "id": "1364",
+      "label": "Comic Flamingo"
+    },
+    {
+      "id": "1380",
+      "label": "Shuukan Taishuu"
+    },
+    {
+      "id": "1815",
+      "label": "Fairy Tail Magazine (Monthly)"
+    },
+    {
+      "id": "1388",
+      "label": "Shousetsu Shinchou"
+    },
+    {
+      "id": "1386",
+      "label": "pixiv Comic"
+    },
+    {
+      "id": "1390",
+      "label": "Dra-Dra-Dragon Age"
+    },
+    {
+      "id": "1389",
+      "label": "Comicloud"
+    },
+    {
+      "id": "1391",
+      "label": "Comic Ryu Web"
+    },
+    {
+      "id": "1393",
+      "label": "Jump Cross"
+    },
+    {
+      "id": "1392",
+      "label": "Matogrosso"
+    },
+    {
+      "id": "1396",
+      "label": "ShuuPlay News"
+    },
+    {
+      "id": "1397",
+      "label": "Web Bazooka"
+    },
+    {
+      "id": "1398",
+      "label": "Galette"
+    },
+    {
+      "id": "1401",
+      "label": "Doku Ringo Comic"
+    },
+    {
+      "id": "1403",
+      "label": "Alterna pixiv"
+    },
+    {
+      "id": "1404",
+      "label": "Big Gangan Okawari"
+    },
+    {
+      "id": "1410",
+      "label": "Sunday Webry"
+    },
+    {
+      "id": "1411",
+      "label": "Da Vinci"
+    },
+    {
+      "id": "1402",
+      "label": "Reijin Uno!"
+    },
+    {
+      "id": "1412",
+      "label": "One More Kiss"
+    },
+    {
+      "id": "1413",
+      "label": "Manga Life STORIA Dash"
+    },
+    {
+      "id": "1415",
+      "label": "Boys Fan"
+    },
+    {
+      "id": "1416",
+      "label": "b-boy Omegaverse"
+    },
+    {
+      "id": "1417",
+      "label": "Cycomics"
+    },
+    {
+      "id": "1399",
+      "label": "Manga UP!"
+    },
+    {
+      "id": "1405",
+      "label": "Boukenou"
+    },
+    {
+      "id": "1385",
+      "label": "uvu"
+    },
+    {
+      "id": "1394",
+      "label": "Comic Orange Club"
+    },
+    {
+      "id": "1400",
+      "label": "Abumix"
+    },
+    {
+      "id": "1395",
+      "label": "Spinel"
+    },
+    {
+      "id": "1414",
+      "label": "Honey Milk"
+    },
+    {
+      "id": "1381",
+      "label": "WEBgateau"
+    },
+    {
+      "id": "1406",
+      "label": "enigma"
+    },
+    {
+      "id": "1383",
+      "label": "Comic POOL"
+    },
+    {
+      "id": "1387",
+      "label": "OK!COMIC"
+    },
+    {
+      "id": "1384",
+      "label": "Chuuou Kouron"
+    },
+    {
+      "id": "1409",
+      "label": "Cigarillo"
+    },
+    {
+      "id": "1418",
+      "label": "Barazoku"
+    },
+    {
+      "id": "1419",
+      "label": "Gangan pixiv"
+    },
+    {
+      "id": "1423",
+      "label": "Hug pixiv"
+    },
+    {
+      "id": "1420",
+      "label": "Ktoon"
+    },
+    {
+      "id": "1421",
+      "label": "Kindai Manga"
+    },
+    {
+      "id": "1424",
+      "label": "Monster Comics"
+    },
+    {
+      "id": "1425",
+      "label": "pixiv Sylph"
+    },
+    {
+      "id": "1426",
+      "label": "Dragon Age Extra"
+    },
+    {
+      "id": "1429",
+      "label": "Manga Kocchi"
+    },
+    {
+      "id": "1430",
+      "label": "Gachicomi"
+    },
+    {
+      "id": "1431",
+      "label": "LiQulle"
+    },
+    {
+      "id": "1427",
+      "label": "Young Magazine Zoukan Aka Buta"
+    },
+    {
+      "id": "1433",
+      "label": "B's-LOG Cheek"
+    },
+    {
+      "id": "1440",
+      "label": "Love Coffre"
+    },
+    {
+      "id": "1432",
+      "label": "cakes"
+    },
+    {
+      "id": "1439",
+      "label": "KakaoPage"
+    },
+    {
+      "id": "1438",
+      "label": "Pianissimo"
+    },
+    {
+      "id": "1435",
+      "label": "Pucchigumi"
+    },
+    {
+      "id": "1436",
+      "label": "Genbun Magazine"
+    },
+    {
+      "id": "1442",
+      "label": "pixiv Essay"
+    },
+    {
+      "id": "1444",
+      "label": "Suiyoubi wa Mattari Dash X Comic"
+    },
+    {
+      "id": "1445",
+      "label": "Comicawa"
+    },
+    {
+      "id": "1441",
+      "label": "Love Silky"
+    },
+    {
+      "id": "1443",
+      "label": "Kuaikan Manhua"
+    },
+    {
+      "id": "1447",
+      "label": "Sports Today Webtoon"
+    },
+    {
+      "id": "1428",
+      "label": "pixiv Hero's"
+    },
+    {
+      "id": "1448",
+      "label": "Yuruyon"
+    },
+    {
+      "id": "1446",
+      "label": "Comic Gotta"
+    },
+    {
+      "id": "1449",
+      "label": "Comic Alpha"
+    },
+    {
+      "id": "1450",
+      "label": "Princess (Gong Zhu Zhi)"
+    },
+    {
+      "id": "1451",
+      "label": "Manga Park"
+    },
+    {
+      "id": "1453",
+      "label": "Comic PASH!"
+    },
+    {
+      "id": "1454",
+      "label": "Yuri Hime@pixiv"
+    },
+    {
+      "id": "1456",
+      "label": "Manga Cross"
+    },
+    {
+      "id": "1458",
+      "label": "Ohta Web Comic"
+    },
+    {
+      "id": "1457",
+      "label": "b-boy Cube"
+    },
+    {
+      "id": "1459",
+      "label": "Comic Days"
+    },
+    {
+      "id": "1460",
+      "label": "Comic Boost"
+    },
+    {
+      "id": "1461",
+      "label": "D Morning"
+    },
+    {
+      "id": "1462",
+      "label": "Comic MeDu"
+    },
+    {
+      "id": "1464",
+      "label": "Ane Friend"
+    },
+    {
+      "id": "1465",
+      "label": "Palcy"
+    },
+    {
+      "id": "1466",
+      "label": "Minna no Comic"
+    },
+    {
+      "id": "1467",
+      "label": "Comic Corona"
+    },
+    {
+      "id": "1468",
+      "label": "Dra-Dra Sharp#"
+    },
+    {
+      "id": "1470",
+      "label": "Comic Chocolat"
+    },
+    {
+      "id": "1469",
+      "label": "Splush"
+    },
+    {
+      "id": "1472",
+      "label": "Kachicomi"
+    },
+    {
+      "id": "1473",
+      "label": "B's-LOG Comic"
+    },
+    {
+      "id": "1474",
+      "label": "Comic Trail"
+    },
+    {
+      "id": "1475",
+      "label": "Comic Beam 100"
+    },
+    {
+      "id": "1476",
+      "label": "Young Animal Zero"
+    },
+    {
+      "id": "1477",
+      "label": "Jump SQ.Rise"
+    },
+    {
+      "id": "1471",
+      "label": ".Bloom"
+    },
+    {
+      "id": "1478",
+      "label": "Yoru Sunday"
+    },
+    {
+      "id": "1487",
+      "label": "Charles Mag"
+    },
+    {
+      "id": "1486",
+      "label": "Funwari Jump"
+    },
+    {
+      "id": "1483",
+      "label": "Cia♥"
+    },
+    {
+      "id": "1484",
+      "label": "Comic Taiga"
+    },
+    {
+      "id": "1485",
+      "label": "Comic Marginal"
+    },
+    {
+      "id": "1490",
+      "label": "Lupin Sansei Official Magazine"
+    },
+    {
+      "id": "1489",
+      "label": "Young King Bessatsu Kingdom"
+    },
+    {
+      "id": "340",
+      "label": "Comic Gardo"
+    },
+    {
+      "id": "1492",
+      "label": "TYPE-MOON Comic Ace"
+    },
+    {
+      "id": "1488",
+      "label": "Comic Tatan"
+    },
+    {
+      "id": "1493",
+      "label": "Torch"
+    },
+    {
+      "id": "1495",
+      "label": "MAGKAN"
+    },
+    {
+      "id": "1496",
+      "label": "kyapi!"
+    },
+    {
+      "id": "1497",
+      "label": "Comic Border"
+    },
+    {
+      "id": "1498",
+      "label": "G-Lish"
+    },
+    {
+      "id": "1501",
+      "label": "Nikkan Gecchan"
+    },
+    {
+      "id": "1502",
+      "label": "Comic Essay Room"
+    },
+    {
+      "id": "1503",
+      "label": "Zoukan Harlequin"
+    },
+    {
+      "id": "1504",
+      "label": "Harlequin Original"
+    },
+    {
+      "id": "1505",
+      "label": "Bessatsu Harlequin"
+    },
+    {
+      "id": "1500",
+      "label": "B.Pilz"
+    },
+    {
+      "id": "1506",
+      "label": "Harlequin darling!"
+    },
+    {
+      "id": "1507",
+      "label": "Dokodemo Young Champion"
+    },
+    {
+      "id": "1499",
+      "label": "Mellow Kiss"
+    },
+    {
+      "id": "1508",
+      "label": "ArkLight Comic"
+    },
+    {
+      "id": "306",
+      "label": "Be-Love"
+    },
+    {
+      "id": "46",
+      "label": "Young King OURs GH"
+    },
+    {
+      "id": "1159",
+      "label": "ComicWalker"
+    },
+    {
+      "id": "613",
+      "label": "G-men"
+    },
+    {
+      "id": "161",
+      "label": "Jump SQ."
+    },
+    {
+      "id": "831",
+      "label": "Bessatsu CoroCoro Comic"
+    },
+    {
+      "id": "1268",
+      "label": "e Young Magazine"
+    },
+    {
+      "id": "1422",
+      "label": "B-BOY P!"
+    },
+    {
+      "id": "516",
+      "label": "gateau"
+    },
+    {
+      "id": "400",
+      "label": "b-Boy Phoenix"
+    },
+    {
+      "id": "1343",
+      "label": "Men's Action"
+    },
+    {
+      "id": "1521",
+      "label": "Comic KURiBERON Duma"
+    },
+    {
+      "id": "881",
+      "label": "Monthly Hero's"
+    },
+    {
+      "id": "35",
+      "label": "GFantasy"
+    },
+    {
+      "id": "345",
+      "label": "Morning Two"
+    },
+    {
+      "id": "1452",
+      "label": "Web Comic Gamma Plus"
+    },
+    {
+      "id": "1517",
+      "label": "Moae"
+    },
+    {
+      "id": "1434",
+      "label": "Tencent Animation"
+    },
+    {
+      "id": "587",
+      "label": "Web Comic EDEN"
+    },
+    {
+      "id": "803",
+      "label": "Niconico Seiga"
+    },
+    {
+      "id": "699",
+      "label": "Viva☆Tales of Magazine"
+    },
+    {
+      "id": "1514",
+      "label": "Sword Art Online Magazine"
+    },
+    {
+      "id": "397",
+      "label": "Shougaku Gonensei"
+    },
+    {
+      "id": "1295",
+      "label": "HiBaNa"
+    },
+    {
+      "id": "1509",
+      "label": "Manga Bøys"
+    },
+    {
+      "id": "556",
+      "label": "4-koma Nano Ace"
+    },
+    {
+      "id": "300",
+      "label": "Dengeki G's Festival! Comic"
+    },
+    {
+      "id": "1520",
+      "label": "Bessatsu Shuuman Special"
+    },
+    {
+      "id": "362",
+      "label": "Hontou ni Atta Yukai na Hanashi"
+    },
+    {
+      "id": "1896",
+      "label": "Digital Margaret"
+    },
+    {
+      "id": "1522",
+      "label": "marié"
+    },
+    {
+      "id": "1523",
+      "label": "Manga Jam"
+    },
+    {
+      "id": "1201",
+      "label": "Margaret BOOK Store!"
+    },
+    {
+      "id": "1524",
+      "label": "BOY'S Pierce Kaihatsushitsu"
+    },
+    {
+      "id": "1525",
+      "label": "Young King BULL"
+    },
+    {
+      "id": "1527",
+      "label": "Web DenPlay Comic"
+    },
+    {
+      "id": "1528",
+      "label": "Comic Hu"
+    },
+    {
+      "id": "1530",
+      "label": "Young Jump GOLD"
+    },
+    {
+      "id": "1526",
+      "label": "Nemuki+"
+    },
+    {
+      "id": "1529",
+      "label": "PriaL"
+    },
+    {
+      "id": "1531",
+      "label": "Comic Qurie"
+    },
+    {
+      "id": "1533",
+      "label": "ASCII Comic (Monthly)"
+    },
+    {
+      "id": "1532",
+      "label": "Sonorama+"
+    },
+    {
+      "id": "1535",
+      "label": "Kirara Base"
+    },
+    {
+      "id": "1538",
+      "label": "Gaugau Monster"
+    },
+    {
+      "id": "1539",
+      "label": "Comic BE!"
+    },
+    {
+      "id": "1540",
+      "label": "LINE Manga"
+    },
+    {
+      "id": "1541",
+      "label": "Lynx"
+    },
+    {
+      "id": "1536",
+      "label": "Harem"
+    },
+    {
+      "id": "1543",
+      "label": "Manga Doa"
+    },
+    {
+      "id": "1545",
+      "label": "Comic tint"
+    },
+    {
+      "id": "1544",
+      "label": "Flat Hero's"
+    },
+    {
+      "id": "1534",
+      "label": "Towako"
+    },
+    {
+      "id": "1546",
+      "label": "Flos Comic"
+    },
+    {
+      "id": "1547",
+      "label": "Comic Jardin"
+    },
+    {
+      "id": "1552",
+      "label": "G's Comic Anothers"
+    },
+    {
+      "id": "1551",
+      "label": "Gene LINE"
+    },
+    {
+      "id": "1542",
+      "label": "Pinkcherie"
+    },
+    {
+      "id": "1554",
+      "label": "Hana Yume Ai"
+    },
+    {
+      "id": "1553",
+      "label": "B Bunch"
+    },
+    {
+      "id": "1555",
+      "label": "Shounen Jump Zoukan"
+    },
+    {
+      "id": "1556",
+      "label": "PFantapy"
+    },
+    {
+      "id": "1561",
+      "label": "Hontou ni Atta Waraeru Hanashi Pinky"
+    },
+    {
+      "id": "1557",
+      "label": "Comic Polca"
+    },
+    {
+      "id": "1559",
+      "label": "Kimikoi"
+    },
+    {
+      "id": "1558",
+      "label": "MAGxiv"
+    },
+    {
+      "id": "1563",
+      "label": "Comic Fuz"
+    },
+    {
+      "id": "1560",
+      "label": "Ananga Ranga"
+    },
+    {
+      "id": "1564",
+      "label": "One Piece Magazine"
+    },
+    {
+      "id": "1565",
+      "label": "Wild Hero's"
+    },
+    {
+      "id": "1566",
+      "label": "Web .Bloom"
+    },
+    {
+      "id": "1549",
+      "label": "GUSH maniaEX"
+    },
+    {
+      "id": "1568",
+      "label": "Tulle"
+    },
+    {
+      "id": "1567",
+      "label": "Web Baby"
+    },
+    {
+      "id": "1570",
+      "label": "Tokyo Omegaverse"
+    },
+    {
+      "id": "1573",
+      "label": "Kurofune x LINE Manga"
+    },
+    {
+      "id": "1572",
+      "label": "Kurofune pixiv"
+    },
+    {
+      "id": "1574",
+      "label": "Manga Mee"
+    },
+    {
+      "id": "1575",
+      "label": "Young Dragon Age"
+    },
+    {
+      "id": "1576",
+      "label": "Premium Cheese!"
+    },
+    {
+      "id": "1569",
+      "label": "mimosa"
+    },
+    {
+      "id": "1571",
+      "label": "Kurofune"
+    },
+    {
+      "id": "1592",
+      "label": "Young Magazine Web"
+    },
+    {
+      "id": "1593",
+      "label": "Manga Yomonga"
+    },
+    {
+      "id": "1594",
+      "label": "Comic Hotmilk Koime♥"
+    },
+    {
+      "id": "1537",
+      "label": "Shounen Ace Plus"
+    },
+    {
+      "id": "1577",
+      "label": "Grand Jump Mecha"
+    },
+    {
+      "id": "1578",
+      "label": "Koisuru Soiree"
+    },
+    {
+      "id": "108",
+      "label": "FBonline"
+    },
+    {
+      "id": "37",
+      "label": ".hack//G.U. The World"
+    },
+    {
+      "id": "251",
+      "label": "Millefeui"
+    },
+    {
+      "id": "226",
+      "label": "b-Boy Luv"
+    },
+    {
+      "id": "393",
+      "label": "LaLa Special"
+    },
+    {
+      "id": "753",
+      "label": "Mugen Anthology Series"
+    },
+    {
+      "id": "1187",
+      "label": "Young King OURs Lite"
+    },
+    {
+      "id": "1516",
+      "label": "Morning Shin Magnum Zoukan"
+    },
+    {
+      "id": "1562",
+      "label": "Big Comic Spirits Casual"
+    },
+    {
+      "id": "1519",
+      "label": "COM"
+    },
+    {
+      "id": "1595",
+      "label": "Comic Gucho"
+    },
+    {
+      "id": "930",
+      "label": "Comic Zip"
+    },
+    {
+      "id": "1550",
+      "label": "Afternoon Season Zoukan"
+    },
+    {
+      "id": "511",
+      "label": "Famitsu Playstation+"
+    },
+    {
+      "id": "418",
+      "label": "b-Rash"
+    },
+    {
+      "id": "1596",
+      "label": "Comic AOHA"
+    },
+    {
+      "id": "1597",
+      "label": "Comic Moog Online"
+    },
+    {
+      "id": "1598",
+      "label": "Weekly Kairaku-ten"
+    },
+    {
+      "id": "1599",
+      "label": "Comic Reboot"
+    },
+    {
+      "id": "1600",
+      "label": "Comic Aun Kai"
+    },
+    {
+      "id": "1601",
+      "label": "Tasogare Shokudou"
+    },
+    {
+      "id": "1602",
+      "label": "Bunshun Online"
+    },
+    {
+      "id": "1604",
+      "label": "Comic Ride Advance"
+    },
+    {
+      "id": "1605",
+      "label": "Yurutto Cafe"
+    },
+    {
+      "id": "1608",
+      "label": "Byou de Wakaru BL"
+    },
+    {
+      "id": "1606",
+      "label": "Love xxx Boys pixiv"
+    },
+    {
+      "id": "1610",
+      "label": "Towako Oboro Emaki"
+    },
+    {
+      "id": "1611",
+      "label": "Comic Miu"
+    },
+    {
+      "id": "1612",
+      "label": "Comic Megastore Deep"
+    },
+    {
+      "id": "1609",
+      "label": "Comic Bull"
+    },
+    {
+      "id": "1582",
+      "label": "Dra-Dra Flat♭"
+    },
+    {
+      "id": "1613",
+      "label": "Comic Orga"
+    },
+    {
+      "id": "1614",
+      "label": "Haiboku Otome Ecstasy"
+    },
+    {
+      "id": "1616",
+      "label": "Web Opera"
+    },
+    {
+      "id": "1615",
+      "label": "Comic Marginal&h"
+    },
+    {
+      "id": "1618",
+      "label": "Charles Mag Kemono"
+    },
+    {
+      "id": "1619",
+      "label": "Web Manga Bangaichi"
+    },
+    {
+      "id": "1617",
+      "label": "Grand Jump Mucha"
+    },
+    {
+      "id": "1620",
+      "label": "Web Haishin Gekkan"
+    },
+    {
+      "id": "1622",
+      "label": "Pur Comics"
+    },
+    {
+      "id": "1623",
+      "label": "Aokishi"
+    },
+    {
+      "id": "1628",
+      "label": "Love Chula"
+    },
+    {
+      "id": "1621",
+      "label": "miere"
+    },
+    {
+      "id": "1624",
+      "label": "fRag"
+    },
+    {
+      "id": "1626",
+      "label": "Shounen Action (Weekly)"
+    },
+    {
+      "id": "1627",
+      "label": "Leed Cafe"
+    },
+    {
+      "id": "1607",
+      "label": "Muteki Renai S*girl Anette"
+    },
+    {
+      "id": "1625",
+      "label": "Colorful!"
+    },
+    {
+      "id": "1603",
+      "label": "Love Passion"
+    },
+    {
+      "id": "1630",
+      "label": "Web Canna"
+    },
+    {
+      "id": "1631",
+      "label": "Comic Nettai"
+    },
+    {
+      "id": "206",
+      "label": "Shounen Champion (Weekly)"
+    },
+    {
+      "id": "354",
+      "label": "Manga Times (Weekly)"
+    },
+    {
+      "id": "1633",
+      "label": "Strada+"
+    },
+    {
+      "id": "1632",
+      "label": "Comic RiSky"
+    },
+    {
+      "id": "1634",
+      "label": "from RED"
+    },
+    {
+      "id": "1636",
+      "label": "Dengeki Comic Regulus"
+    },
+    {
+      "id": "1635",
+      "label": "Web Comic Apanta"
+    },
+    {
+      "id": "1437",
+      "label": "One Pack Comic"
+    },
+    {
+      "id": "627",
+      "label": "Boy's LOVE"
+    },
+    {
+      "id": "1637",
+      "label": "Manga Leaf"
+    },
+    {
+      "id": "1638",
+      "label": "Comic Bushiroad Web"
+    },
+    {
+      "id": "1639",
+      "label": "Hontou ni Atta Yukai na Hanashi Geinou Zukyun"
+    },
+    {
+      "id": "1641",
+      "label": "Love Kiss! More"
+    },
+    {
+      "id": "1640",
+      "label": "Nanairo Comics"
+    },
+    {
+      "id": "1642",
+      "label": "Comic Brise"
+    },
+    {
+      "id": "1646",
+      "label": "Young Jump Battle"
+    },
+    {
+      "id": "1653",
+      "label": "Canna Comics"
+    },
+    {
+      "id": "1643",
+      "label": "Comic Marche"
+    },
+    {
+      "id": "1644",
+      "label": "Betsufura"
+    },
+    {
+      "id": "1648",
+      "label": "Comic Picn"
+    },
+    {
+      "id": "1647",
+      "label": "Harta Alternative"
+    },
+    {
+      "id": "1645",
+      "label": "Young Jump Sports"
+    },
+    {
+      "id": "1193",
+      "label": "Comic Ran Twins Sengoku Bushou Retsuden"
+    },
+    {
+      "id": "1650",
+      "label": "BiBit!"
+    },
+    {
+      "id": "1652",
+      "label": "Spicy Whip"
+    },
+    {
+      "id": "1657",
+      "label": "Super Action (Monthly)"
+    },
+    {
+      "id": "1658",
+      "label": "&.Emo"
+    },
+    {
+      "id": "1660",
+      "label": "Touhou Gairai Ihen (Web)"
+    },
+    {
+      "id": "1662",
+      "label": "Young Jump Heroine"
+    },
+    {
+      "id": "1664",
+      "label": "Otokonoko Heaven"
+    },
+    {
+      "id": "1665",
+      "label": "Kindan Lovers Mania"
+    },
+    {
+      "id": "1661",
+      "label": "NUUDE"
+    },
+    {
+      "id": "1663",
+      "label": "Baby α"
+    },
+    {
+      "id": "1659",
+      "label": "Touhou Gairai Ihen"
+    },
+    {
+      "id": "1666",
+      "label": "Chouchou"
+    },
+    {
+      "id": "1667",
+      "label": "Comic Grast"
+    },
+    {
+      "id": "1668",
+      "label": "Harmony Prince"
+    },
+    {
+      "id": "1669",
+      "label": "Zanki"
+    },
+    {
+      "id": "1670",
+      "label": "Cyberia Maniacs"
+    },
+    {
+      "id": "1672",
+      "label": "Sho-Comi X"
+    },
+    {
+      "id": "1673",
+      "label": "Corona EX"
+    },
+    {
+      "id": "1674",
+      "label": "CoroCoro Ichiban!"
+    },
+    {
+      "id": "1675",
+      "label": "Mitsukoi Tiara"
+    },
+    {
+      "id": "1676",
+      "label": "Nekoneko Yokochou"
+    },
+    {
+      "id": "1677",
+      "label": "Love Coffre Magic"
+    },
+    {
+      "id": "1678",
+      "label": "Comic Lake"
+    },
+    {
+      "id": "1679",
+      "label": "Zhiyin Manke"
+    },
+    {
+      "id": "1680",
+      "label": "Hero Cross Line"
+    },
+    {
+      "id": "1681",
+      "label": "Bomtoon"
+    },
+    {
+      "id": "14",
+      "label": "Asuka"
+    },
+    {
+      "id": "1683",
+      "label": "B's-LOG Comic (Web Label)"
+    },
+    {
+      "id": "1684",
+      "label": "Halloween"
+    },
+    {
+      "id": "1686",
+      "label": "Toomics"
+    },
+    {
+      "id": "1689",
+      "label": "Alive+"
+    },
+    {
+      "id": "1688",
+      "label": "Jour Sister"
+    },
+    {
+      "id": "1690",
+      "label": "Ura Sunday Joshi-bu"
+    },
+    {
+      "id": "1692",
+      "label": "Shounen Hana to Yume"
+    },
+    {
+      "id": "1693",
+      "label": "Ri Geng Comics"
+    },
+    {
+      "id": "1694",
+      "label": "Ryona King"
+    },
+    {
+      "id": "1695",
+      "label": "Leed Comic Baku"
+    },
+    {
+      "id": "1696",
+      "label": "Comic Nicola"
+    },
+    {
+      "id": "1697",
+      "label": "noicomi"
+    },
+    {
+      "id": "1699",
+      "label": "Shounen Book"
+    },
+    {
+      "id": "1700",
+      "label": "Shousetsu Hanamaru"
+    },
+    {
+      "id": "1701",
+      "label": "Rekishi Gunzou"
+    },
+    {
+      "id": "1702",
+      "label": "Chocolove"
+    },
+    {
+      "id": "1703",
+      "label": "Purizm"
+    },
+    {
+      "id": "1704",
+      "label": "Hao Manhua"
+    },
+    {
+      "id": "1707",
+      "label": "Mitsukoi Tiara Mania"
+    },
+    {
+      "id": "1706",
+      "label": "Isekai Yanjan"
+    },
+    {
+      "id": "1708",
+      "label": "What (Monthly)"
+    },
+    {
+      "id": "1671",
+      "label": "Young Magazine Kaizokuban"
+    },
+    {
+      "id": "1031",
+      "label": "Otokonoko Jidai"
+    },
+    {
+      "id": "1709",
+      "label": "Toptoon"
+    },
+    {
+      "id": "1711",
+      "label": "Trifle by Hana to Yume"
+    },
+    {
+      "id": "1712",
+      "label": "Manga Gang"
+    },
+    {
+      "id": "1713",
+      "label": "Ima, Grand Jump tte!!"
+    },
+    {
+      "id": "1714",
+      "label": "Comic Nova"
+    },
+    {
+      "id": "1716",
+      "label": "Strada"
+    },
+    {
+      "id": "1715",
+      "label": "Shenman"
+    },
+    {
+      "id": "1717",
+      "label": "Shougaku Rokunensei"
+    },
+    {
+      "id": "1718",
+      "label": "Young Love Comic aya"
+    },
+    {
+      "id": "1719",
+      "label": "Tezucomi"
+    },
+    {
+      "id": "1720",
+      "label": "Peanutoon"
+    },
+    {
+      "id": "1685",
+      "label": "Girigiri Edge"
+    },
+    {
+      "id": "1651",
+      "label": "ARIA@pixiv"
+    },
+    {
+      "id": "1722",
+      "label": "Comic Piatto"
+    },
+    {
+      "id": "1723",
+      "label": "Dengeki Hime"
+    },
+    {
+      "id": "1724",
+      "label": "Comic Alunna"
+    },
+    {
+      "id": "1726",
+      "label": "Young Rosé"
+    },
+    {
+      "id": "1728",
+      "label": "Omajinai Comic"
+    },
+    {
+      "id": "1687",
+      "label": "Yoo"
+    },
+    {
+      "id": "1727",
+      "label": "Web Karen"
+    },
+    {
+      "id": "1725",
+      "label": "Comikuri!"
+    },
+    {
+      "id": "1730",
+      "label": "Ayla Deluxe"
+    },
+    {
+      "id": "1705",
+      "label": "Ane Cheese!"
+    },
+    {
+      "id": "1682",
+      "label": "Rakuen Le Paradis Zoukan"
+    },
+    {
+      "id": "1691",
+      "label": "Grand Jump Web"
+    },
+    {
+      "id": "1721",
+      "label": "Renai Hakusho Sherry Kiss"
+    },
+    {
+      "id": "1729",
+      "label": "&Sofa"
+    },
+    {
+      "id": "1732",
+      "label": "Young King Lambda"
+    },
+    {
+      "id": "1733",
+      "label": "mini Berry"
+    },
+    {
+      "id": "1736",
+      "label": "Comic Howl"
+    },
+    {
+      "id": "1735",
+      "label": "gateau near"
+    },
+    {
+      "id": "1731",
+      "label": "CoroCoro Comic (Weekly)"
+    },
+    {
+      "id": "1741",
+      "label": "Baby (Digital)"
+    },
+    {
+      "id": "1742",
+      "label": "Comic Ragchew"
+    },
+    {
+      "id": "1743",
+      "label": "Mystery Magazine"
+    },
+    {
+      "id": "1744",
+      "label": "Omoshiro Book"
+    },
+    {
+      "id": "1747",
+      "label": "Comic Trigger"
+    },
+    {
+      "id": "1746",
+      "label": "Ruvill"
+    },
+    {
+      "id": "1734",
+      "label": "petit Rose"
+    },
+    {
+      "id": "1738",
+      "label": "Love Live! Days"
+    },
+    {
+      "id": "1737",
+      "label": "Love Parfait"
+    },
+    {
+      "id": "1739",
+      "label": "Daioh \"g\" pixiv"
+    },
+    {
+      "id": "1740",
+      "label": "Manga Top"
+    },
+    {
+      "id": "1745",
+      "label": "Yanchan Web"
+    },
+    {
+      "id": "1749",
+      "label": "Comic Rakuu"
+    },
+    {
+      "id": "1750",
+      "label": "Shougaku Ichinensei"
+    },
+    {
+      "id": "1751",
+      "label": "Ecomix"
+    },
+    {
+      "id": "1753",
+      "label": "Young Jump Daiichiwa"
+    },
+    {
+      "id": "1748",
+      "label": "HanaYume EPO"
+    },
+    {
+      "id": "1754",
+      "label": "Ichijin Plus"
+    },
+    {
+      "id": "1755",
+      "label": "Comic Essay Gekijou"
+    },
+    {
+      "id": "1752",
+      "label": "Souffle"
+    },
+    {
+      "id": "1756",
+      "label": "Comic tant"
+    },
+    {
+      "id": "425",
+      "label": "LC Mystery"
+    },
+    {
+      "id": "1757",
+      "label": "Manga Gaudi"
+    },
+    {
+      "id": "1759",
+      "label": "Bekkan Getsumaga"
+    },
+    {
+      "id": "1760",
+      "label": "Renai Chocolat"
+    },
+    {
+      "id": "1762",
+      "label": "Pie Comics"
+    },
+    {
+      "id": "1763",
+      "label": "Dengeki Moeoh (Web)"
+    },
+    {
+      "id": "1761",
+      "label": "Dragon HG"
+    },
+    {
+      "id": "1765",
+      "label": "Cococomi"
+    },
+    {
+      "id": "1766",
+      "label": "JusToon"
+    },
+    {
+      "id": "1629",
+      "label": "Comic Shigekiteki Squirt!!"
+    },
+    {
+      "id": "1767",
+      "label": "Comic Flapper (Web)"
+    },
+    {
+      "id": "1768",
+      "label": "BL Renai Senka"
+    },
+    {
+      "id": "1770",
+      "label": "Z"
+    },
+    {
+      "id": "1771",
+      "label": "Le Noël"
+    },
+    {
+      "id": "1772",
+      "label": "Comic Flavors"
+    },
+    {
+      "id": "1773",
+      "label": "Comic Kisshug"
+    },
+    {
+      "id": "1774",
+      "label": "Chillche"
+    },
+    {
+      "id": "1775",
+      "label": "G's Channel"
+    },
+    {
+      "id": "1778",
+      "label": "Young King (Monthly)"
+    },
+    {
+      "id": "1777",
+      "label": "Mangapolo Zero"
+    },
+    {
+      "id": "1779",
+      "label": "Mitaina!"
+    },
+    {
+      "id": "1776",
+      "label": "Ane Petit Digital"
+    },
+    {
+      "id": "1780",
+      "label": "Comic & Comic"
+    },
+    {
+      "id": "1764",
+      "label": "Comic Bound"
+    },
+    {
+      "id": "1781",
+      "label": "KITORA"
+    },
+    {
+      "id": "1817",
+      "label": "Malika"
+    },
+    {
+      "id": "1783",
+      "label": "Tokyo 2020 Paralympic Jump"
+    },
+    {
+      "id": "1784",
+      "label": "Opa x Comi"
+    },
+    {
+      "id": "1785",
+      "label": "Zipper Comic"
+    },
+    {
+      "id": "1786",
+      "label": "e-manga"
+    },
+    {
+      "id": "1787",
+      "label": "Adam"
+    },
+    {
+      "id": "1790",
+      "label": "Manga Taishuu"
+    },
+    {
+      "id": "1791",
+      "label": "Young Magazine GT"
+    },
+    {
+      "id": "1792",
+      "label": "DRE Comics"
+    },
+    {
+      "id": "1789",
+      "label": "Asuka (Web)"
+    },
+    {
+      "id": "1788",
+      "label": "Kuro Mitsu"
+    },
+    {
+      "id": "1794",
+      "label": "Getsumaga Kichi"
+    },
+    {
+      "id": "1793",
+      "label": "Shoujo Friend Zoukan"
+    },
+    {
+      "id": "1769",
+      "label": "Comic Baku"
+    },
+    {
+      "id": "1796",
+      "label": "Manga Town Original"
+    },
+    {
+      "id": "1797",
+      "label": "Chuugaku Ichinen Course"
+    },
+    {
+      "id": "1798",
+      "label": "Comic Ogyaaa!!"
+    },
+    {
+      "id": "1799",
+      "label": "Ciao Comi"
+    },
+    {
+      "id": "1801",
+      "label": "Be x Boy Rookies VS"
+    },
+    {
+      "id": "1802",
+      "label": "Empas Manhwa"
+    },
+    {
+      "id": "1803",
+      "label": "Paran Manhwa"
+    },
+    {
+      "id": "1804",
+      "label": "Manga Tengoku"
+    },
+    {
+      "id": "1805",
+      "label": "Bebe"
+    },
+    {
+      "id": "1807",
+      "label": "Verse by LiQulle"
+    },
+    {
+      "id": "1808",
+      "label": "Friday Digital"
+    },
+    {
+      "id": "1382",
+      "label": "Comic Kairaku-ten Hoshi-gumi"
+    },
+    {
+      "id": "1800",
+      "label": "Isekai Raku-ten"
+    },
+    {
+      "id": "1812",
+      "label": "Ciao Plus"
+    },
+    {
+      "id": "1813",
+      "label": "JoJo Magazine"
+    },
+    {
+      "id": "1811",
+      "label": "Televi-kun Super Hero Comics"
+    },
+    {
+      "id": "1810",
+      "label": "Comptiq (Web)"
+    },
+    {
+      "id": "1814",
+      "label": "Creative Comic Collection"
+    },
+    {
+      "id": "1818",
+      "label": "Tokusen Mahjong"
+    },
+    {
+      "id": "1816",
+      "label": "DigiKiss"
+    },
+    {
+      "id": "1819",
+      "label": "Vanilove"
+    },
+    {
+      "id": "1821",
+      "label": "Comic Yamitsuki"
+    },
+    {
+      "id": "1822",
+      "label": "Michikusa"
+    },
+    {
+      "id": "1823",
+      "label": "Galette meets"
+    },
+    {
+      "id": "1820",
+      "label": "Deluxe Bonita"
+    },
+    {
+      "id": "1824",
+      "label": "Biccomi"
+    },
+    {
+      "id": "1825",
+      "label": "Hontou ni Atta Waraeru Hanashi"
+    },
+    {
+      "id": "1827",
+      "label": "pixlib"
+    },
+    {
+      "id": "1826",
+      "label": "AmarE"
+    },
+    {
+      "id": "1828",
+      "label": "Champion Buzz"
+    },
+    {
+      "id": "1830",
+      "label": "Comic Shiny"
+    },
+    {
+      "id": "1831",
+      "label": "Comic Gaira"
+    },
+    {
+      "id": "1829",
+      "label": "The Forward"
+    },
+    {
+      "id": "1832",
+      "label": "Dengeki Maoh (Web)"
+    },
+    {
+      "id": "1833",
+      "label": "All Kaidan"
+    },
+    {
+      "id": "1834",
+      "label": "Yonimo Kimyou na Nekopanchi"
+    },
+    {
+      "id": "1835",
+      "label": "Comic Growl"
+    },
+    {
+      "id": "1836",
+      "label": "Gohan Biyori"
+    },
+    {
+      "id": "1649",
+      "label": "Da Vinci Web"
+    },
+    {
+      "id": "1837",
+      "label": "Niμ"
+    },
+    {
+      "id": "1838",
+      "label": "HykeComic"
+    },
+    {
+      "id": "47",
+      "label": "Young Champion"
+    },
+    {
+      "id": "1840",
+      "label": "Love Kiss!"
+    },
+    {
+      "id": "1839",
+      "label": "Primo"
+    },
+    {
+      "id": "150",
+      "label": "AlphaPolis"
+    },
+    {
+      "id": "1845",
+      "label": "Noche"
+    },
+    {
+      "id": "1842",
+      "label": "Eternity"
+    },
+    {
+      "id": "1843",
+      "label": "Regina"
+    },
+    {
+      "id": "997",
+      "label": "Ciao DX Horror"
+    },
+    {
+      "id": "1841",
+      "label": "&arche"
+    },
+    {
+      "id": "1846",
+      "label": "Comic NOAN"
+    },
+    {
+      "id": "1844",
+      "label": "α norn"
+    },
+    {
+      "id": "1847",
+      "label": "Kyoufu no Yakata DX"
+    },
+    {
+      "id": "1848",
+      "label": "Magazine Great"
+    },
+    {
+      "id": "1849",
+      "label": "Televi-kun"
+    },
+    {
+      "id": "1850",
+      "label": "Magazine WOoooo! Wolf"
+    },
+    {
+      "id": "1851",
+      "label": "Chuuichi Jidai"
+    },
+    {
+      "id": "1852",
+      "label": "Comp Ace Comic Connect"
+    },
+    {
+      "id": "1853",
+      "label": "Young Magazine Kakehiki"
+    },
+    {
+      "id": "1854",
+      "label": "Jack Pot"
+    },
+    {
+      "id": "1856",
+      "label": "Comic Dengeki Daioh \"g\" (Web)"
+    },
+    {
+      "id": "1855",
+      "label": "Comic Killa"
+    },
+    {
+      "id": "1857",
+      "label": "Isekai Tensei LaLa"
+    },
+    {
+      "id": "1858",
+      "label": "Comic G-Es"
+    },
+    {
+      "id": "1859",
+      "label": "VComi"
+    },
+    {
+      "id": "1860",
+      "label": "Yanjan Pixiv"
+    },
+    {
+      "id": "1861",
+      "label": "Shounen Gag Oh"
+    },
+    {
+      "id": "1864",
+      "label": "Comic GAGA"
+    },
+    {
+      "id": "1862",
+      "label": "Story na Onna-tachi"
+    },
+    {
+      "id": "1865",
+      "label": "Cybele Comic"
+    },
+    {
+      "id": "1866",
+      "label": "Shounen Jump Season Special"
+    },
+    {
+      "id": "1868",
+      "label": "Comic Isekai Harem"
+    },
+    {
+      "id": "1867",
+      "label": "Season Jam"
+    },
+    {
+      "id": "1869",
+      "label": "Xingqi Manhua"
+    },
+    {
+      "id": "1870",
+      "label": "Our Feel"
+    },
+    {
+      "id": "1863",
+      "label": "Mitsukoi Tiara Kemono"
+    },
+    {
+      "id": "1871",
+      "label": "Bessatsu Manga Action"
+    },
+    {
+      "id": "1873",
+      "label": "Sa Man Le Hua"
+    },
+    {
+      "id": "1874",
+      "label": "Jumptoon"
+    },
+    {
+      "id": "1875",
+      "label": "Hana to Yume Web"
+    },
+    {
+      "id": "1876",
+      "label": "Captain Tsubasa Magazine"
+    },
+    {
+      "id": "1878",
+      "label": "Lyrica"
+    },
+    {
+      "id": "1879",
+      "label": "Comic Bunch Kai"
+    },
+    {
+      "id": "1880",
+      "label": "Sunday Manga"
+    },
+    {
+      "id": "1877",
+      "label": "Twi Sirius"
+    },
+    {
+      "id": "1883",
+      "label": "Manga-gai"
+    },
+    {
+      "id": "1881",
+      "label": "Comic Ride ivy"
+    },
+    {
+      "id": "1882",
+      "label": "Comic Porta"
+    },
+    {
+      "id": "1872",
+      "label": "Samanhua"
+    },
+    {
+      "id": "1782",
+      "label": "Web Comic Toutetsu"
+    },
+    {
+      "id": "1885",
+      "label": "Custom Comic"
+    },
+    {
+      "id": "1884",
+      "label": "Hayacomi"
+    },
+    {
+      "id": "1886",
+      "label": "Heibon Punch"
+    },
+    {
+      "id": "1356",
+      "label": "Mikosurihan Gekijou Kyonyuu-chan"
+    },
+    {
+      "id": "1282",
+      "label": "Mikosurihan Gekijou Bekkan"
+    },
+    {
+      "id": "1887",
+      "label": "mimi DX"
+    },
+    {
+      "id": "1888",
+      "label": "Papillon"
+    },
+    {
+      "id": "1889",
+      "label": "Bilibili Manhua"
+    },
+    {
+      "id": "1890",
+      "label": "2D Comic Magazine"
+    },
+    {
+      "id": "1891",
+      "label": "Story na Onna-tachi Black"
+    },
+    {
+      "id": "1893",
+      "label": "Comic Cune (Web)"
+    },
+    {
+      "id": "1894",
+      "label": "Comic Alunna (Web)"
+    },
+    {
+      "id": "1892",
+      "label": "Comic Beam (Web)"
+    },
+    {
+      "id": "1901",
+      "label": "Comic Kaien"
+    },
+    {
+      "id": "1899",
+      "label": "Shiori"
+    },
+    {
+      "id": "1900",
+      "label": "Bessatsu Katei Suspense"
+    },
+    {
+      "id": "1898",
+      "label": "CandleA"
+    },
+    {
+      "id": "1897",
+      "label": "Comic Unicorn"
+    },
+    {
+      "id": "1902",
+      "label": "Goro"
+    },
+    {
+      "id": "1904",
+      "label": "Novecomi+"
+    },
+    {
+      "id": "1905",
+      "label": "H&F Club"
+    },
+    {
+      "id": "1903",
+      "label": "Web Comic Heaven"
+    },
+    {
+      "id": "1906",
+      "label": "Shuro"
+    },
+    {
+      "id": "1907",
+      "label": "Koi wa Omakase Special"
+    },
+    {
+      "id": "1909",
+      "label": "Loli Babaa Senmon"
+    },
+    {
+      "id": "1910",
+      "label": "Shinkan"
+    },
+    {
+      "id": "1809",
+      "label": "Comic LOE"
+    },
+    {
+      "id": "1912",
+      "label": "Young Unreal Jingai"
+    },
+    {
+      "id": "1911",
+      "label": "ITAN Web Comic"
+    },
+    {
+      "id": "1913",
+      "label": "Yuruyuru Nekopanchi"
+    },
+    {
+      "id": "1914",
+      "label": "Seasons"
+    },
+    {
+      "id": "1915",
+      "label": "Momopan"
+    },
+    {
+      "id": "1916",
+      "label": "Digicomi Shinchou Com²"
+    },
+    {
+      "id": "1917",
+      "label": "LiQulle pathos"
+    },
+    {
+      "id": "1919",
+      "label": "Gaea Original"
+    },
+    {
+      "id": "1920",
+      "label": "B's-LOVEY Comics"
+    },
+    {
+      "id": "1918",
+      "label": "Chara Collection"
+    },
+    {
+      "id": "1921",
+      "label": "Duo"
+    },
+    {
+      "id": "1922",
+      "label": "Shoujo Friend Suspense & Horror Zoukan"
+    },
+    {
+      "id": "1923",
+      "label": "Macross Ace"
+    },
+    {
+      "id": "1908",
+      "label": "Tian Man"
+    },
+    {
+      "id": "1924",
+      "label": "Hobby Japan Web"
+    },
+    {
+      "id": "1925",
+      "label": "Dascomi"
+    },
+    {
+      "id": "1926",
+      "label": "Omoide Shokudou Bekkan"
+    },
+    {
+      "id": "1927",
+      "label": "Young Animal Web"
+    },
+    {
+      "id": "1928",
+      "label": "Dungeon Kouryaku wa Sex de!!"
+    },
+    {
+      "id": "1929",
+      "label": "iHZ"
+    },
+    {
+      "id": "1957",
+      "label": "Lolita Comic Sakura"
+    },
+    {
+      "id": "1930",
+      "label": "Comic Goranshin"
+    },
+    {
+      "id": "1931",
+      "label": "Comic Momohime Deepest"
+    },
+    {
+      "id": "1932",
+      "label": "Kyoufu Taiken"
+    },
+    {
+      "id": "1933",
+      "label": "Nekotomo"
+    },
+    {
+      "id": "1934",
+      "label": "Darkness na Onna-tachi"
+    },
+    {
+      "id": "1935",
+      "label": "Jukujo Monogatari"
+    },
+    {
+      "id": "1936",
+      "label": "Comic GEE"
+    },
+    {
+      "id": "1937",
+      "label": "Biblio Sirius"
+    },
+    {
+      "id": "1939",
+      "label": "Palcy NEXT"
+    },
+    {
+      "id": "1938",
+      "label": "Web Otoko no Ko-llection! S (Monthly)"
+    },
+    {
+      "id": "1940",
+      "label": "bibi"
+    },
+    {
+      "id": "1942",
+      "label": "Hitori Gohan"
+    },
+    {
+      "id": "1941",
+      "label": "Coi-halu"
+    },
+    {
+      "id": "1943",
+      "label": "Comic Nyan2 Club GOLD"
+    },
+    {
+      "id": "1944",
+      "label": "Ridi Webtoon"
+    },
+    {
+      "id": "1945",
+      "label": "Naver Series"
+    },
+    {
+      "id": "1946",
+      "label": "Kakao Webtoon"
+    },
+    {
+      "id": "1947",
+      "label": "Little Girl Strike"
+    },
+    {
+      "id": "1948",
+      "label": "Comic Happining"
+    },
+    {
+      "id": "1949",
+      "label": "Fantasia Battle Royal"
+    },
+    {
+      "id": "1951",
+      "label": "Famitsu DS+Wii"
+    },
+    {
+      "id": "1950",
+      "label": "Marukatsu Super Famicom"
+    },
+    {
+      "id": "1952",
+      "label": "Goraku Web!"
+    },
+    {
+      "id": "1953",
+      "label": "Comic Oz"
+    },
+    {
+      "id": "1954",
+      "label": "Comic Ambre"
+    },
+    {
+      "id": "1956",
+      "label": "Estro"
+    },
+    {
+      "id": "1955",
+      "label": "Manga Hot"
+    },
+    {
+      "id": "1958",
+      "label": "Men's Dolphin"
+    },
+    {
+      "id": "1959",
+      "label": "TakeComi!"
+    },
+    {
+      "id": "1960",
+      "label": "Petit Apple Pie"
+    },
+    {
+      "id": "1962",
+      "label": "Ultra Jump Niconico-ban"
+    },
+    {
+      "id": "1963",
+      "label": "Comic Zerise"
+    },
+    {
+      "id": "1981",
+      "label": "Carmilla"
+    },
+    {
+      "id": "1982",
+      "label": "Oreryuu! Zeppin Meshi"
+    },
+    {
+      "id": "1965",
+      "label": "Comic G.G."
+    },
+    {
+      "id": "1966",
+      "label": "G-Edge"
+    },
+    {
+      "id": "1961",
+      "label": "Tsuma Petit"
+    },
+    {
+      "id": "1968",
+      "label": "CoroCiao"
+    },
+    {
+      "id": "1969",
+      "label": "GA Comic"
+    },
+    {
+      "id": "51",
+      "label": "Be-Boy Gold"
+    },
+    {
+      "id": "1970",
+      "label": "Manman Manhua"
+    },
+    {
+      "id": "1967",
+      "label": "Mystery Sara"
+    },
+    {
+      "id": "1971",
+      "label": "Comic Y-OURS"
+    },
+    {
+      "id": "1972",
+      "label": "Comic Aily"
+    },
+    {
+      "id": "1973",
+      "label": "Omoide Shokudou"
+    },
+    {
+      "id": "1974",
+      "label": "Tokumori Comic Hitozuma Jukujozakari"
+    },
+    {
+      "id": "1976",
+      "label": "ARTEMIS by sirius"
+    },
+    {
+      "id": "1975",
+      "label": "Jitsuwa Bunka Taboo"
+    },
+    {
+      "id": "1977",
+      "label": "Kirapichi"
+    },
+    {
+      "id": "1978",
+      "label": "The Gazelle"
+    },
+    {
+      "id": "1979",
+      "label": "Canelé"
+    },
+    {
+      "id": "1980",
+      "label": "peep"
+    },
+    {
+      "id": "1984",
+      "label": "Action Hero"
+    },
+    {
+      "id": "1985",
+      "label": "Comic NORA (Web)"
+    },
+    {
+      "id": "2001",
+      "label": "Auto Comic GT"
+    },
+    {
+      "id": "10000016",
+      "label": "TappyToon"
+    },
+    {
+      "id": "10000003",
+      "label": "Kakao"
+    },
+    {
+      "id": "10008893",
+      "label": "JOYBOY"
+    },
+    {
+      "id": "10000046",
+      "label": "Ridibooks"
+    },
+    {
+      "id": "10008734",
+      "label": "Hemak"
+    },
+    {
+      "id": "1987",
+      "label": "Comic Spira f"
+    },
+    {
+      "id": "1989",
+      "label": "FuraComi like!"
+    },
+    {
+      "id": "1299",
+      "label": "Shunin ga Yuku! Special"
+    },
+    {
+      "id": "1991",
+      "label": "Kwai to Yoo"
+    },
+    {
+      "id": "1990",
+      "label": "yoi comic"
+    },
+    {
+      "id": "1995",
+      "label": "Tokimeki Gohan"
+    },
+    {
+      "id": "1710",
+      "label": "Comic Bombom Zoukan"
+    },
+    {
+      "id": "1997",
+      "label": "grape fruit"
+    },
+    {
+      "id": "1998",
+      "label": "Minna no Shokutaku"
+    }
+  ]
+}

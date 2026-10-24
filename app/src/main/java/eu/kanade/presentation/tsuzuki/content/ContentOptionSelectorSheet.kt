@@ -60,16 +60,25 @@ internal fun additionalSourcesAction(
     return { action(ready.canonicalTitleId) }
 }
 
-internal fun emptySelectorMessage(state: ContentSelectorScreenState.Empty): String? = when {
+internal fun emptySelectorMessage(
+    state: ContentSelectorScreenState.Empty,
+    providerLabels: ContentProviderLabels? = null,
+): String? = when {
     state.noEnabledAddon ->
-        "No selectable reading sources are available here. Enable or install a reading Add-on, " +
-            "or add a compatible Provider."
+        providerLabels?.noEnabled
+            ?: (
+                "No selectable reading sources are available here. Enable or install a reading Add-on, " +
+                    "or add a compatible Provider."
+                )
     state.confirmationRequired ->
-        "Possible editions were found, but you must confirm the correct one. Choose an Add-on."
+        providerLabels?.confirmationRequired
+            ?: "Possible editions were found, but you must confirm the correct one. Choose an Add-on."
     state.timedOut ->
-        "The initial search has finished its time budget. Choose an Add-on to search further or retry."
+        providerLabels?.timedOut
+            ?: "The initial search has finished its time budget. Choose an Add-on to search further or retry."
     state.discoveryAttempted ->
-        "No verified chapter was found in the initial sources. Choose another Add-on to search more."
+        providerLabels?.notFound
+            ?: "No verified chapter was found in the initial sources. Choose another Add-on to search more."
     else -> null
 }
 
@@ -84,6 +93,7 @@ fun ContentOptionSelectorSheet(
     onFindOrAddSource: ((canonicalTitleId: String) -> Unit)? = null,
     onCancelDiscovery: (() -> Unit)? = null,
     onDismissRequest: () -> Unit,
+    providerLabels: ContentProviderLabels? = null,
 ) {
     AdaptiveSheet(onDismissRequest = onDismissRequest) {
         Column(
@@ -125,7 +135,10 @@ fun ContentOptionSelectorSheet(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             CircularProgressIndicator()
-                            Text("Finding available chapters in up to ${state.addonCount} reading Add-ons…")
+                            Text(
+                                providerLabels?.searching?.invoke(state.addonCount)
+                                    ?: "Finding available chapters in up to ${state.addonCount} reading Add-ons…",
+                            )
                         }
                         if (state.failedAttempts > 0) {
                             Text(
@@ -148,7 +161,7 @@ fun ContentOptionSelectorSheet(
                         }
                         sourceDiscoveryAction(state, onFindOrAddSource)?.let { onClick ->
                             Button(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
-                                Text("Choose a reading Add-on")
+                                Text(providerLabels?.choose ?: "Choose a reading Add-on")
                             }
                         }
                     }
@@ -161,12 +174,16 @@ fun ContentOptionSelectorSheet(
                             onRetry = onRetry,
                             onOpenAddonsSettings = onOpenAddonsSettings,
                             onFindOrAddSource = sourceDiscoveryAction(state, onFindOrAddSource),
+                            providerLabels = providerLabels,
                         )
                     } else {
                         if (state.failedProviderCount > 0) {
                             Text(
-                                text = "${state.failedProviderCount} reading Add-on(s) could not be queried. " +
-                                    "Available alternatives are shown below.",
+                                text = providerLabels?.failed?.invoke(state.failedProviderCount)
+                                    ?: (
+                                        "${state.failedProviderCount} reading Add-on(s) could not be queried. " +
+                                            "Available alternatives are shown below."
+                                        ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
                             )
@@ -201,21 +218,23 @@ fun ContentOptionSelectorSheet(
 
                 is ContentSelectorScreenState.Empty -> {
                     SelectorUnavailableContent(
-                        message = emptySelectorMessage(state)
+                        message = emptySelectorMessage(state, providerLabels)
                             ?: stringResource(MR.strings.tsuzuki_content_no_options),
                         onRetry = onRetry,
                         onOpenAddonsSettings = onOpenAddonsSettings,
                         onFindOrAddSource = sourceDiscoveryAction(state, onFindOrAddSource),
+                        providerLabels = providerLabels,
                     )
                 }
 
                 is ContentSelectorScreenState.Error -> {
                     SelectorUnavailableContent(
-                        message = state.error.message
+                        message = providerLabels?.error ?: state.error.message
                             ?: stringResource(MR.strings.tsuzuki_content_selector_error),
                         onRetry = onRetry,
                         onOpenAddonsSettings = onOpenAddonsSettings,
                         onFindOrAddSource = sourceDiscoveryAction(state, onFindOrAddSource),
+                        providerLabels = providerLabels,
                     )
                 }
             }
@@ -275,6 +294,7 @@ private fun SelectorUnavailableContent(
     onRetry: () -> Unit,
     onOpenAddonsSettings: () -> Unit,
     onFindOrAddSource: (() -> Unit)?,
+    providerLabels: ContentProviderLabels? = null,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -293,7 +313,7 @@ private fun SelectorUnavailableContent(
                 Text(stringResource(MR.strings.action_retry))
             }
             OutlinedButton(onClick = onOpenAddonsSettings) {
-                Text(stringResource(MR.strings.tsuzuki_content_open_addons))
+                Text(providerLabels?.settings ?: stringResource(MR.strings.tsuzuki_content_open_addons))
             }
         }
         onFindOrAddSource?.let { onClick ->

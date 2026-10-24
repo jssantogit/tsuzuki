@@ -18,6 +18,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.zacsweers.metrox.viewmodel.metroViewModel
 import eu.kanade.presentation.tsuzuki.collections.CollectionsScreen
 import eu.kanade.presentation.util.Screen
+import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionBrowseScreen
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionsScreenModel
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionsScreenState
 import eu.kanade.tachiyomi.ui.tsuzuki.collections.CollectionsTransferState
@@ -42,6 +43,7 @@ object SettingsTsuzukiHomeScreen : Screen() {
             },
             onExportRequest = screenModel::prepareExport,
             onDismissTransferState = screenModel::clearTransferState,
+            onOpenCollection = { navigator.push(CollectionBrowseScreen(it)) },
         )
 
         if (importing) {

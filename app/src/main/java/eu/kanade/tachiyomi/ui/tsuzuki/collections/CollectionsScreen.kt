@@ -16,6 +16,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tachiyomi.domain.tsuzuki.collections.model.CollectionOrigin
+import tachiyomi.domain.tsuzuki.collections.model.TsuzukiCollection
 import eu.kanade.presentation.tsuzuki.collections.CollectionsScreen as CollectionsScreenContent
 
 class CollectionsScreen(
@@ -26,6 +28,14 @@ class CollectionsScreen(
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        LaunchedEffect(initialCollectionId, initialFolderId) {
+            initialCollectionId?.let { collectionId ->
+                navigator.replace(
+                    initialFolderId?.let { FolderCatalogScreen(collectionId, it) }
+                        ?: CollectionBrowseScreen(collectionId),
+                )
+            }
+        }
         val screenModel = metroViewModel<CollectionsScreenModel>()
         val state by screenModel.state.collectAsStateWithLifecycle()
         val context = LocalContext.current
@@ -110,8 +120,7 @@ class CollectionsScreen(
             },
             onExportRequest = screenModel::prepareExport,
             onDismissTransferState = screenModel::clearTransferState,
-            initialCollectionId = initialCollectionId,
-            initialFolderId = initialFolderId,
+            onOpenCollection = { navigator.push(CollectionBrowseScreen(it)) },
         )
     }
 
@@ -122,5 +131,19 @@ class CollectionsScreen(
             "text/json",
             "text/plain",
         )
+    }
+}
+
+internal enum class CollectionCardAction { OPEN, EDIT }
+
+internal fun handleCollectionCardAction(
+    collection: TsuzukiCollection,
+    action: CollectionCardAction,
+    onOpen: (String) -> Unit,
+    onEdit: (TsuzukiCollection) -> Unit,
+) {
+    when (action) {
+        CollectionCardAction.OPEN -> onOpen(collection.id)
+        CollectionCardAction.EDIT -> if (collection.origin == CollectionOrigin.USER) onEdit(collection)
     }
 }

@@ -18,14 +18,12 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.history.repository.HistoryRepository
-import tachiyomi.domain.manga.model.asMangaCover
 import tachiyomi.domain.tsuzuki.artwork.repository.TitleArtworkRepository
-import tachiyomi.domain.tsuzuki.artwork.resolveCanonicalArtwork
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.home.interactor.GetConfiguredHomeSections
 import tachiyomi.domain.tsuzuki.home.interactor.GetHomeHero
+import tachiyomi.domain.tsuzuki.home.interactor.ObserveContinueReadingArtwork
 import tachiyomi.domain.tsuzuki.home.interactor.ObserveHomeContinueReading
 import tachiyomi.domain.tsuzuki.home.model.HomeContinueReadingItem
 import tachiyomi.domain.tsuzuki.home.model.HomeSection
@@ -71,38 +69,16 @@ class TsuzukiHomeScreenModel(
 
     val state: StateFlow<TsuzukiHomeScreenState> = combine(
         heroes,
-        observeHomeContinueReading.subscribe(),
+        ObserveContinueReadingArtwork(
+            observeHomeContinueReading,
+            titleArtworkRepository,
+            resolveCanonicalSourceManga,
+        ).subscribe(),
         getConfiguredHomeSections.subscribe(),
-        titleArtworkRepository.observeAll(),
-    ) { heroItems, continueReading, sections, artworkObservations ->
-        val artworkByTitle = artworkObservations.groupBy { it.canonicalTitleId }
-        val enriched = continueReading.map { item ->
-            val canonicalArtwork = resolveCanonicalArtwork(
-                artworkByTitle[item.canonicalTitleId].orEmpty(),
-            )
-            val sourceManga = try {
-                resolveCanonicalSourceManga.execute(
-                    canonicalTitleId = item.canonicalTitleId,
-                    allowNetwork = false,
-                )
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Throwable) {
-                null
-            }
-            logcat {
-                "TsuzukiCover home title=${item.canonicalTitleId.take(8)} " +
-                    "provider=${!canonicalArtwork?.coverUrl.isNullOrBlank()} " +
-                    "sourceManga=${sourceManga != null} sourceThumbnail=${!sourceManga?.thumbnailUrl.isNullOrBlank()}"
-            }
-            item.copy(
-                coverUrl = canonicalArtwork?.coverUrl,
-                sourceCover = sourceManga?.asMangaCover(),
-            )
-        }
+    ) { heroItems, continueReading, sections ->
         TsuzukiHomeScreenState(
             heroes = heroItems,
-            continueReading = enriched,
+            continueReading = continueReading,
             sections = sections,
         )
     }.stateIn(

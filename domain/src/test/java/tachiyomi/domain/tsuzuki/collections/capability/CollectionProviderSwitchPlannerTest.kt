@@ -104,6 +104,7 @@ class CollectionProviderSwitchPlannerTest {
             predicate(QueryField.STATUS, "ONGOING"),
             predicate(QueryField.WORK_TYPE, "MANGA"),
         )
+        val originalCanonicalQuery = query.toCanonicalString()
 
         val result = CollectionProviderSwitchPlanner.plan(
             sourceProviderId = "kitsu",
@@ -113,6 +114,7 @@ class CollectionProviderSwitchPlannerTest {
         ).shouldBeInstanceOf<CollectionProviderSwitchPlan.Blocked>()
 
         result.reason shouldBe CollectionProviderSwitchBlockReason.COMPLEX_QUERY
+        query.toCanonicalString() shouldBe originalCanonicalQuery
     }
 
     @Test

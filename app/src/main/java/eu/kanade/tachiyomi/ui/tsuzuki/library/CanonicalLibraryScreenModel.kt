@@ -11,17 +11,22 @@ import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import eu.kanade.domain.tsuzuki.library.interactor.RemoveUnifiedLibraryTitle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -32,6 +37,9 @@ import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.domain.tsuzuki.artwork.repository.TitleArtworkRepository
 import tachiyomi.domain.tsuzuki.artwork.resolveCanonicalArtwork
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
+import tachiyomi.domain.tsuzuki.integration.interactor.ResolveCanonicalMetadata
+import tachiyomi.domain.tsuzuki.integration.model.ResolvedMetadata
+import tachiyomi.domain.tsuzuki.integration.model.metadataStartYear
 import tachiyomi.domain.tsuzuki.library.interactor.ObserveCanonicalLibrary
 import tachiyomi.domain.tsuzuki.library.interactor.ObserveUnifiedLibrary
 import tachiyomi.domain.tsuzuki.library.interactor.RefreshUserLibraries
@@ -51,6 +59,7 @@ sealed interface CanonicalLibraryScreenState {
 
     data class Success(
         val items: List<CanonicalLibraryCardModel>,
+        val totalItemCount: Int = items.size,
         val searchQuery: String? = null,
         val selectedCategoryId: Long? = null,
         val filters: CanonicalLibraryFilterState = CanonicalLibraryFilterState(),
@@ -65,6 +74,11 @@ sealed interface CanonicalLibraryEvent {
     data class OpenCanonicalTitle(val canonicalTitleId: String) : CanonicalLibraryEvent
 }
 
+private data class LibraryInventory(
+    val items: List<UnifiedLibraryTitle>,
+    val startYears: Map<String, String>,
+)
+
 @ViewModelKey
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 class CanonicalLibraryScreenModel private constructor(
@@ -78,6 +92,7 @@ class CanonicalLibraryScreenModel private constructor(
     private val mangaRepository: MangaRepository? = null,
     private val resolveCanonicalSourceManga: ResolveCanonicalSourceManga? = null,
     private val titleArtworkRepository: TitleArtworkRepository? = null,
+    private val resolveCanonicalMetadata: ResolveCanonicalMetadata? = null,
 ) : ViewModel() {
 
     @Inject
@@ -92,6 +107,7 @@ class CanonicalLibraryScreenModel private constructor(
         mangaRepository: MangaRepository,
         resolveCanonicalSourceManga: ResolveCanonicalSourceManga,
         titleArtworkRepository: TitleArtworkRepository,
+        resolveCanonicalMetadata: ResolveCanonicalMetadata,
     ) : this(
         observeLibrary = observeUnifiedLibrary::subscribe,
         setCanonicalLibraryStatus = setCanonicalLibraryStatus,
@@ -103,6 +119,7 @@ class CanonicalLibraryScreenModel private constructor(
         mangaRepository = mangaRepository,
         resolveCanonicalSourceManga = resolveCanonicalSourceManga,
         titleArtworkRepository = titleArtworkRepository,
+        resolveCanonicalMetadata = resolveCanonicalMetadata,
     )
 
     internal constructor(
@@ -112,6 +129,8 @@ class CanonicalLibraryScreenModel private constructor(
         migrateMihonLibraryToCanonical: MigrateMihonLibraryToCanonical,
         resolveCanonicalReadingStart: CanonicalReadingStartResolver,
         canonicalReadingRepository: CanonicalReadingRepository,
+        resolveCanonicalMetadata: ResolveCanonicalMetadata? = null,
+        titleArtworkRepository: TitleArtworkRepository? = null,
     ) : this(
         observeLibrary = {
             observeCanonicalLibrary.subscribe().map { items ->
@@ -125,7 +144,13 @@ class CanonicalLibraryScreenModel private constructor(
         canonicalReadingRepository = canonicalReadingRepository,
         refreshUserLibrariesAction = null,
         mangaRepository = null,
+        titleArtworkRepository = titleArtworkRepository,
+        resolveCanonicalMetadata = resolveCanonicalMetadata,
     )
+
+    // A single paced worker enriches absent years outside card composition and avoids provider bursts.
+    private val pendingYearEnrichment = Channel<String>(Channel.UNLIMITED)
+    private val attemptedYearEnrichment = mutableSetOf<String>()
 
     private val eventChannel = Channel<CanonicalLibraryEvent>()
     val events = eventChannel.receiveAsFlow()
@@ -134,6 +159,22 @@ class CanonicalLibraryScreenModel private constructor(
     private val filters = MutableStateFlow(CanonicalLibraryFilterState())
 
     init {
+        resolveCanonicalMetadata?.let { resolver ->
+            viewModelScope.launch {
+                for (titleId in pendingYearEnrichment) {
+                    try {
+                        resolver.execute(titleId)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Throwable) {
+                        logcat(LogPriority.WARN, error) {
+                            "Background library metadata enrichment failed"
+                        }
+                    }
+                    delay(400L)
+                }
+            }
+        }
         refreshUserLibrariesAction?.let { refresh ->
             viewModelScope.launch {
                 try {
@@ -169,8 +210,36 @@ class CanonicalLibraryScreenModel private constructor(
             ?.observeAll()
             ?: flowOf(emptyList())
 
+        val librarySnapshots = observeLibrary().flatMapLatest { libraryItems ->
+            val ids = libraryItems.map { it.id }.distinct()
+            val metadata = if (ids.isEmpty()) {
+                flowOf(emptyMap())
+            } else {
+                resolveCanonicalMetadata?.observeCached(ids) ?: flowOf(emptyMap())
+            }
+            metadata.catch { error ->
+                if (error is CancellationException) throw error
+                logcat(LogPriority.WARN, error) { "Failed to observe cached canonical start years for the library" }
+                emit(emptyMap())
+            }.map { snapshots ->
+                LibraryInventory(
+                    libraryItems,
+                    snapshots.mapNotNull { (id, metadata) -> metadata.libraryStartYear()?.let { id to it } }.toMap(),
+                )
+            }.onEach { inventory ->
+                if (resolveCanonicalMetadata != null) {
+                    inventory.items.forEach { item ->
+                        if (item.id !in inventory.startYears && attemptedYearEnrichment.add(item.id)) {
+                            pendingYearEnrichment.trySend(item.id)
+                        }
+                    }
+                }
+            }
+        }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
+
+        // Year changes should update labels only, not restart each title's cover/progress pipeline.
         val cards = combine(
-            observeLibrary(),
+            librarySnapshots.map { it.items }.distinctUntilChanged(),
             localCoverUrls,
             artworkObservations,
         ) { libraryItems, covers, artwork ->
@@ -216,9 +285,13 @@ class CanonicalLibraryScreenModel private constructor(
             }
         }
 
+        val cardsWithYears = combine(cards, librarySnapshots) { items, inventory ->
+            items.map { item -> item.copy(startYear = inventory.startYears[item.canonicalTitleId]) }
+        }
+
         emitAll(
             combine(
-                cards,
+                cardsWithYears,
                 searchQuery,
                 filters,
             ) { items, query, filterState ->
@@ -234,6 +307,7 @@ class CanonicalLibraryScreenModel private constructor(
 
                 CanonicalLibraryScreenState.Success(
                     items = visibleItems,
+                    totalItemCount = items.size,
                     searchQuery = query,
                     selectedCategoryId = filterState.categoryId,
                     filters = filterState,
@@ -361,6 +435,12 @@ private fun LibraryTitle.toLocalUnifiedTitle() = UnifiedLibraryTitle(
     categories = categories,
     format = CatalogItemFormat.UNKNOWN,
 )
+
+private fun ResolvedMetadata.libraryStartYear(): String? {
+    val evidence = startDate ?: return null
+    if (evidence.providerId.value.isBlank() || evidence.externalId.isNullOrBlank()) return null
+    return metadataStartYear(evidence.value)
+}
 
 private fun UnifiedLibraryTitle.localCoverUrl(
     covers: Map<Long, String?>,

@@ -1,0 +1,1563 @@
+{
+  "schemaVersion": 1,
+  "sourceProjectId": "be4c235f-35dc-40b3-9faf-0952dc3e5868",
+  "baseCommit": "834ea8ecdcfb7349c6b21b6265dede46ce04a297",
+  "externalFiles": [
+    {
+      "path": "%SystemDrive%/ProgramData/Microsoft/Windows/Caches/cversions.2.db",
+      "bytes": 16384,
+      "sha256": "de800ec458c404e412158787a7bc6660fe54a2bc3b6903b31d07a661325056f0",
+      "action": "excluded",
+      "reason": "Windows cache accidentally present in workspace; not design content"
+    },
+    {
+      "path": "%SystemDrive%/ProgramData/Microsoft/Windows/Caches/{6AF0698E-D558-4F6E-9B3C-3716689AF493}.2.ver0x0000000000000001.db",
+      "bytes": 308840,
+      "sha256": "6e6ff3502b16097c8c9f50f08d91bf2f3f0ec0b2fed494fc1b8ed1f26dbc3ce6",
+      "action": "excluded",
+      "reason": "Windows cache accidentally present in workspace; not design content"
+    },
+    {
+      "path": "%SystemDrive%/ProgramData/Microsoft/Windows/Caches/{DDF571F2-BE98-426D-8288-1A9A39C3FDA2}.2.ver0x0000000000000001.db",
+      "bytes": 662488,
+      "sha256": "d9fc5df33cdf541611c35530775e822d2618c0408baa425d04e546cda04f6103",
+      "action": "excluded",
+      "reason": "Windows cache accidentally present in workspace; not design content"
+    },
+    {
+      "path": ".account_html_update.py",
+      "bytes": 25500,
+      "sha256": "23a0cd1cbd663265c9d400e3f5bb0ed277c69e4d93c513b7432cbd8fefcf76e3",
+      "action": "excluded",
+      "reason": "One-off editing script for earlier iterations; frozen editable HTML is the maintained source, not these scripts"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0001-497a8691-8f3b-4176-a129-69e9a714ba21.html",
+      "bytes": 33081,
+      "sha256": "e2960dea112dd029e7f689a40847df7cac992e26ae151727a5a6d5795166c547",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0002-c453d81e-6ee2-4bba-bb63-47ebc4b7da91.html",
+      "bytes": 22284,
+      "sha256": "3474782aa9bfdc2c2abc59d8b44ad83de2f444d5734dfafad185c65cf53c89ca",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0003-c0652b2e-8ccd-411a-9dfb-5543d04fecba.html",
+      "bytes": 29260,
+      "sha256": "85e34c9546b2f0e31b0152e931c824e5e4eb2c7a583ca1200e00789215f10d9a",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0004-51461f9e-06ff-48f7-b11f-10ca75c00d60.html",
+      "bytes": 44155,
+      "sha256": "66147acf9699e758e5bef709969a01d531e6c1237f52b6a2058068b98f239c15",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0005-29662015-8e2b-4d56-847a-5540815466d1.html",
+      "bytes": 49519,
+      "sha256": "6319a5984860dd30b603d67f575166d2a54fc1504d04cc3c1d0fae354633f861",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0006-588ce720-eb5a-47d2-a804-ef7e1a04c52b.html",
+      "bytes": 89781,
+      "sha256": "effcee62d3ea52246aea958d88c9a495a7e5453cbb0e1157dda576813f988c7e",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0007-377c6fcb-cf93-4fc5-9572-5abb2f265eb2.html",
+      "bytes": 78636,
+      "sha256": "9927fddfdccdc595796eff4c89e91127758229729748eb8113edf3e013d8d226",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0008-e211a9e9-47a6-44ed-81ba-a74aed818c55.html",
+      "bytes": 149958,
+      "sha256": "790edcb129412b099a01cb044ea169ae3ba15a4f7ab4b2f9e9cc5ce184dee977",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0009-8ccdb9ed-cb35-4bad-a091-953274b47f59.html",
+      "bytes": 77739,
+      "sha256": "e31fb489deb98c8f5062560ab67cee113b015612f33902b7b4de214cd6add6f4",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0010-924d46b8-b4e4-431a-bc3d-ad8690adfb5e.html",
+      "bytes": 84680,
+      "sha256": "d44e7ae6f4ed38cb618936efe360c5b0b54c46ef37c8525a7f23743ee3f27c52",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0011-91f4f520-9a51-44f4-b059-a19aa32e29fb.html",
+      "bytes": 94546,
+      "sha256": "a0578b6ae89aa735dd72f6a1910cc84f099a4d8d7a76f5f04b4b9b2ab76f7933",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0012-eef25109-deff-4db4-8a37-6e9cc691ea42.html",
+      "bytes": 94228,
+      "sha256": "eec2011b80b7f7a1f10c6f8fd0c8202c85ca9facf12a199e2c0b6713ae1a20fa",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0013-f989c0aa-749c-4d84-8059-9fe189582b7a.html",
+      "bytes": 97341,
+      "sha256": "7bc9bdc5c225010d231b767cf0b15435f9a56bd3e1b13acd3fd0829161092fb6",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0014-96887361-1c35-472d-a412-06f13ecff83a.html",
+      "bytes": 104343,
+      "sha256": "e276bfad2b93bf3ec886a4702a8e5defea9b8e31c3803a589b062240cd219070",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0015-2577f17e-f06c-412e-854c-47dc294a63ac.html",
+      "bytes": 116674,
+      "sha256": "cf2ec2435795c3365f5c9b4f6a440b645f29f3c7dba9eb564235358d086af743",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0016-c6f14a20-67ae-45fc-9075-f98fb777cfd8.html",
+      "bytes": 116648,
+      "sha256": "71a5f24dc93b00df7a01dda267bfa63e8995ed90c0479ac1ced3a6c491480921",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0017-49d03802-0f7d-4ba9-b301-63ec5e308ea1.html",
+      "bytes": 132210,
+      "sha256": "103f512c83639e318fad7f199ee721d6e1752b0178a99bc2c8d2258055b3a7f1",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0018-e963f22a-ce4c-4f24-960e-6e58d5669695.html",
+      "bytes": 134858,
+      "sha256": "596b7e2e814af4ad557f8afbaa674448387a56ef0c5a20c7f547d6937dc2295d",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0019-1ea752f1-246c-4971-9aeb-bf5431e54cda.html",
+      "bytes": 135016,
+      "sha256": "d9dd45cac0329a07795a47b774b4c10572951adf0629e69cba5d134c392105eb",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0020-d0a82b12-b8a9-45c2-a08e-677be2647d6e.html",
+      "bytes": 135070,
+      "sha256": "11bee8bc3ec332d31b2ee2ea260e242d0bc846af7668a210c5070db0210bceeb",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0021-2ac32fbb-54e3-4ff7-a6a6-3e514d5027d8.html",
+      "bytes": 135018,
+      "sha256": "c370e9b1215fd4463d391337f252619aa265e2a55cab51a67075c6f92759c944",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0022-6bbe7d07-f394-4dc4-9b97-3c3d61b1f13b.html",
+      "bytes": 134592,
+      "sha256": "7b32f2f1ed0ebc8355a3892e24b9733654d2ddbe2492879fa00713f1241d0d86",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0023-f89a3db5-52cc-4ae3-b556-fc5ca00d3a18.html",
+      "bytes": 155370,
+      "sha256": "5dec978c96d4fdf8dd47a348bbf206a5a5d939ed860eba70a534139ca3fbe775",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0024-04ddee5a-7e63-493b-9bc9-d8ead2514748.html",
+      "bytes": 154906,
+      "sha256": "f1546b7a9df531b9dca1815d4da243ae12c11de8a049c1671f7f7b1bb785253b",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0025-541cc1c5-73dd-4b1f-9678-bfbbb559f626.html",
+      "bytes": 154502,
+      "sha256": "2ad0dd0632ed75cf6c833255a82431269756bf46fbfde03ef1b570588eeb3b4a",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0026-ad62239f-9f2c-4e31-9a55-d4cd515ce1ad.html",
+      "bytes": 154400,
+      "sha256": "38f9bc974ff6933b5df0869e194d9188cdf846299c48ab5f9c5bd58fb5625ceb",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0027-db473f0f-a065-4f64-a589-3918084c5d21.html",
+      "bytes": 160256,
+      "sha256": "72853091d89ea4f188d1a2bc76353905d8e5e94b49353c171cac2cf37977a2c3",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0028-4e08269f-6479-499f-8cd7-7addfaaacf25.html",
+      "bytes": 174127,
+      "sha256": "13ffe70e7773ede9ea86ff0dd95d79549bec023343de1101d1a0c3c04144e244",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0029-b87be1d4-b240-4c37-8f26-defa435accd3.html",
+      "bytes": 190139,
+      "sha256": "da4e10955209dfeed59406cafef9ffcdeff5a35f7ae5d89e389101067cc88879",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0030-9df2ab4f-605b-4078-94a6-893dd40e007a.html",
+      "bytes": 190448,
+      "sha256": "1d02a5493878a8b6bcf669e20ae2822ce64a4254ae4b9f40cc1a1b1e128e3c99",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0031-6df45f58-ba30-4b25-8f39-1edb4a537094.html",
+      "bytes": 190837,
+      "sha256": "b480a88bca8a1b6dbb2bfb58ecf51d6c57e7796bbdbaf99b766f461adabd1a21",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0032-6cb13d2e-8413-446f-a824-5ff9cd094688.html",
+      "bytes": 191266,
+      "sha256": "c97205c8831660e0a489f46086ef0f83bd90283d2e3b72c84b04afcd7d4d9ee3",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0033-906eb41c-6619-4abd-b58c-4ca02bf57150.html",
+      "bytes": 206431,
+      "sha256": "a57c8984af11d1a5c68c209c97c5f6cfeeba9619e1b3a15512c0d707837e56e7",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0034-fa31891b-9d82-4d75-9ded-67afc456d103.html",
+      "bytes": 219374,
+      "sha256": "e679fe7f7581b7361976a6fe9815dc7e2706560aa9b1ef69d7e61099a20ef5fe",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0035-3cd0f525-c87e-4e5c-bc7f-9218f3ecd9d5.html",
+      "bytes": 229764,
+      "sha256": "705180e774bd3216e55c4c127da952d2bf8473edd83db22c9820aeb34a2cc207",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0036-393aa749-157a-4914-b607-3f8b4059b146.html",
+      "bytes": 243809,
+      "sha256": "93d5eb19352d07a1bcea76d80e416293d331cbba74fd9846c38f951778632c6c",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0037-77e75c1f-a3d4-4465-8f80-b590a94c8bdb.html",
+      "bytes": 248275,
+      "sha256": "2282090136e831e791ce926800a7cb2378167d50dbfe6e0cebb676ae215521c6",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0038-40416b9a-4dba-4069-b983-ddc10fc4bc44.html",
+      "bytes": 253134,
+      "sha256": "9968f7e06c214f504adedec285bdbbe44ad933a923a96a68015b1f600e9e48c4",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0039-e5f5b671-e31f-4777-80f3-565271a3e4c4.html",
+      "bytes": 255885,
+      "sha256": "c7c0b3e27309db4a8dfb81f09590a825e7d350e03f0cc1ff74bf6b575dcf190c",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0040-ad140cf0-5673-434a-9aad-1196df16fcb1.html",
+      "bytes": 272307,
+      "sha256": "2b71d936227180f1689164858f1f2052004d0e38b70042d0a9af27710addabbf",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0041-f37e631e-f3e8-44bc-a765-55eabc349ed3.html",
+      "bytes": 350493,
+      "sha256": "cb00db4364cbb8ffd93755343f914477b7003d40dbf9957437281d01b5973ac4",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0042-40de0c80-e9f6-4275-b989-d4e66da1e3a4.html",
+      "bytes": 364654,
+      "sha256": "72fc6fe09ec25edcaa2c694055a5e3bab4975fbb20b206ed3260bdf247f7f150",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0043-853a3487-a6c9-4d44-9ea3-6cc5bd236a52.html",
+      "bytes": 377450,
+      "sha256": "698b8159dce317cbc1b80889885d463d8fe66e56e68710da4faa40f41ab4f39c",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0044-f7f00488-19d4-4c88-998a-48a66a1c1a66.html",
+      "bytes": 394192,
+      "sha256": "85108305e904a0e70f563431a2322489bf18ee896bb628cad3deca7d81b6cf51",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0045-06febdf3-78d1-43eb-aa58-afe8ad140818.html",
+      "bytes": 394260,
+      "sha256": "6ad3e92b12946b8159a0eaa7c4d0f5b233043edca2b2f1318eb57574d099eb8a",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0046-8638b26b-2cb8-476a-a286-c36e4eb82d1c.html",
+      "bytes": 402500,
+      "sha256": "aa7366ecc687d42720629f0ec4acadc6c8b1850e72bf7e75e48f9fcf7c07f1a9",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0047-176d5d3b-e9e9-41d1-96ef-021b9f224435.html",
+      "bytes": 402499,
+      "sha256": "54e6f4c07b7a1d477766b6899bc3097c12c5d1369a318a817e8ae265dee6b46d",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0048-616c2904-61ce-423c-9c1d-ce0f5241a0e9.html",
+      "bytes": 405544,
+      "sha256": "ab431faa2e6e5f6fc2f715ce86dda0d37fadf78e63194f566f40baa7cf218eda",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0049-30b5f1d4-a335-49b7-9501-16e911d47089.html",
+      "bytes": 410398,
+      "sha256": "8bea1105dd03506d1e171d5704145b535d7b2874ef79c3e8a8e25782a299cf52",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0050-7ba2d6d5-9c90-49e8-9c84-8bd7a7dc7c75.html",
+      "bytes": 423382,
+      "sha256": "7acb63bd41ffe0f1eb228f4a86c06dcc7914618f5cbf8db680bbf343ea0bffae",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0051-d04561d1-a232-4a28-acfb-f614180829b5.html",
+      "bytes": 436745,
+      "sha256": "489fd701d007817c12177826e7121393b3c53541d5957daf1485c88162131825",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0052-27ba5fbe-ca0d-4cb1-aa5e-4f428d21e831.html",
+      "bytes": 443188,
+      "sha256": "2485adaece86ca5d81e26580e4b356fe658ddf94b3f369223f2caa546e8e2d5b",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0053-6e5e4cbc-cb57-49d5-bc56-792e3959f59f.html",
+      "bytes": 446814,
+      "sha256": "9c4e7838df11206804cf812fa3d7df4452ae42e4213673ee98ffc34eccc9abeb",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0054-27dd5757-29ab-47b9-88c8-e485b42f0532.html",
+      "bytes": 447156,
+      "sha256": "4284ed1e9af5533c81cf67698dbb9b9e7f586b2c949593ef40aa1291694129fc",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0055-da0aa64f-ebbc-40df-9d49-6f243739fe80.html",
+      "bytes": 447347,
+      "sha256": "04c30a45a1605c634d95dbeb1e015d9f3fefd26fbe77c95938edc3110561203b",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0056-82fa5c9c-8b8f-444b-b783-764a0591ddf6.html",
+      "bytes": 447554,
+      "sha256": "f3983ecc4af1fbd362a971e4ac19add6dfd705b69acc009ebbea73c550fdef36",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0057-d77ade13-0a93-4dc8-a540-4862be5e4447.html",
+      "bytes": 447590,
+      "sha256": "6a89934a962c45e674c0386d146b1dd8963e3308bb39594c8ba49cc722575b68",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0058-92c0750a-365a-4bca-a113-e513aad11b2d.html",
+      "bytes": 447791,
+      "sha256": "f806afa2069682e45ae1bf9995ffa775d6c328c57b34f26a89c6dcc5b12ca85f",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0059-d97f08df-068e-4492-b7bc-3b36975386ec.html",
+      "bytes": 448005,
+      "sha256": "b4d7f3acd3be68251337a8a933c192e3366c18be6eb8114f8b65659ed81016d3",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0060-abdd0364-fcd4-4058-8e21-9fd02ecf2f51.html",
+      "bytes": 448194,
+      "sha256": "123aacd9027b82ed58b9a29c6fc5a1203e94c3f4b07893e374ea20731c818507",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/0061-6b48130d-a176-42a6-a11a-a5c1db9b8a6c.html",
+      "bytes": 448341,
+      "sha256": "194bb9e28ef6fa8b833e876aa0dd5ebaa5c758008cc34847f6fd87949ef76318",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".file-versions/0eb547304658805aad788d32/manifest.json",
+      "bytes": 226396,
+      "sha256": "fbc933cba4849328467e366988568553a6714c8e839d31c94ab0671e2dc5bc6c",
+      "action": "excluded",
+      "reason": "OpenDesign undo archive; previous useful baseline and source evidence preserved separately"
+    },
+    {
+      "path": ".od-frames/.od-next-device-frames.json",
+      "bytes": 421,
+      "sha256": "a6565c0c7dfa623f78d1ca758e0b0102e0b8c20b442670d15c80963daf6148c0",
+      "action": "excluded",
+      "reason": "Staged presentation templates; the prototype already embeds the required shell and layout primitives"
+    },
+    {
+      "path": ".od-frames/android.html",
+      "bytes": 8790,
+      "sha256": "1694ece3359332ffa788b091c6f98e806929e02f7a5c59083a83bac07b3dd06f",
+      "action": "excluded",
+      "reason": "Staged presentation templates; the prototype already embeds the required shell and layout primitives"
+    },
+    {
+      "path": ".od-frames/iphone.html",
+      "bytes": 8634,
+      "sha256": "289d568b049847527494356fae90553f2728247517774cdbc57fab648a52210b",
+      "action": "excluded",
+      "reason": "Staged presentation templates; the prototype already embeds the required shell and layout primitives"
+    },
+    {
+      "path": ".od-frames/layout.css",
+      "bytes": 3508,
+      "sha256": "4a8e22855b5bb331ffe117c500d2bf84a2d19ecc4e7ebd8d1d094c68953048f2",
+      "action": "excluded",
+      "reason": "Staged presentation templates; the prototype already embeds the required shell and layout primitives"
+    },
+    {
+      "path": ".od-frames/neutral.html",
+      "bytes": 8779,
+      "sha256": "314b29f0d4a63fa2a6e5ceb35bb9ad0ada86699933a066813404db4687173c54",
+      "action": "excluded",
+      "reason": "Staged presentation templates; the prototype already embeds the required shell and layout primitives"
+    },
+    {
+      "path": "assets/avancado.css",
+      "bytes": 4059,
+      "sha256": "1dd09223d65f32082ca1a8b5186d0068fcd0dbbac72c0ae029adb855fbbe3c0d",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/avancado.css",
+      "destinationSha256": "1dd09223d65f32082ca1a8b5186d0068fcd0dbbac72c0ae029adb855fbbe3c0d",
+      "transformed": false,
+      "gitContentSha256": "1dd09223d65f32082ca1a8b5186d0068fcd0dbbac72c0ae029adb855fbbe3c0d"
+    },
+    {
+      "path": "assets/avancado.js",
+      "bytes": 15351,
+      "sha256": "766e494ae825263703c47eda558dc6ad9903757f04117987a4129d0e6d8a41fc",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/avancado.js",
+      "destinationSha256": "766e494ae825263703c47eda558dc6ad9903757f04117987a4129d0e6d8a41fc",
+      "transformed": false,
+      "gitContentSha256": "766e494ae825263703c47eda558dc6ad9903757f04117987a4129d0e6d8a41fc"
+    },
+    {
+      "path": "assets/data-storage.css",
+      "bytes": 4984,
+      "sha256": "61e0d44f60a4b2f1721f008523954bd38b24403e669a0d9a27424432600d1afe",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/data-storage.css",
+      "destinationSha256": "61e0d44f60a4b2f1721f008523954bd38b24403e669a0d9a27424432600d1afe",
+      "transformed": false,
+      "gitContentSha256": "cca78067e450a4b38d6cfe680e8a8a03675ffd9aee7ca545d160d1b311883c32"
+    },
+    {
+      "path": "assets/data-storage.js",
+      "bytes": 15777,
+      "sha256": "40f4a03352a96028f3f7d736bb8175a35d01e1acaa57660cea92ee34444e55f5",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/data-storage.js",
+      "destinationSha256": "40f4a03352a96028f3f7d736bb8175a35d01e1acaa57660cea92ee34444e55f5",
+      "transformed": false,
+      "gitContentSha256": "40f4a03352a96028f3f7d736bb8175a35d01e1acaa57660cea92ee34444e55f5"
+    },
+    {
+      "path": "assets/diagnostico.css",
+      "bytes": 4189,
+      "sha256": "5ac13b0e22f78809bc4bec7fc980d946851d30b18bc9d7f879386cc4d496db25",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/diagnostico.css",
+      "destinationSha256": "5ac13b0e22f78809bc4bec7fc980d946851d30b18bc9d7f879386cc4d496db25",
+      "transformed": false,
+      "gitContentSha256": "5adc729554e3518be363bde4da6adb3078da88ecbc706ed35ad74677eaf4e40c"
+    },
+    {
+      "path": "assets/diagnostico.js",
+      "bytes": 14452,
+      "sha256": "399fd6f8dcc64219f6ff2d9a2d2a75f075ff8a5d6e7a631ca56901e67a1bea50",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/diagnostico.js",
+      "destinationSha256": "399fd6f8dcc64219f6ff2d9a2d2a75f075ff8a5d6e7a631ca56901e67a1bea50",
+      "transformed": false,
+      "gitContentSha256": "399fd6f8dcc64219f6ff2d9a2d2a75f075ff8a5d6e7a631ca56901e67a1bea50"
+    },
+    {
+      "path": "assets/downloads.css",
+      "bytes": 5753,
+      "sha256": "2ccb513f5b17b5982cbe63583137ff3fb8d84b1f3a1772b2bd4ed3fa52a9b1be",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/downloads.css",
+      "destinationSha256": "2ccb513f5b17b5982cbe63583137ff3fb8d84b1f3a1772b2bd4ed3fa52a9b1be",
+      "transformed": false,
+      "gitContentSha256": "2ccb513f5b17b5982cbe63583137ff3fb8d84b1f3a1772b2bd4ed3fa52a9b1be"
+    },
+    {
+      "path": "assets/downloads.js",
+      "bytes": 12136,
+      "sha256": "d923cb74f7b0a75c6b17b8f189a9e49cb44234b37f58f341ab2f1702e52261a1",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/downloads.js",
+      "destinationSha256": "d923cb74f7b0a75c6b17b8f189a9e49cb44234b37f58f341ab2f1702e52261a1",
+      "transformed": false,
+      "gitContentSha256": "d923cb74f7b0a75c6b17b8f189a9e49cb44234b37f58f341ab2f1702e52261a1"
+    },
+    {
+      "path": "assets/fonts/bahnschrift.ttf",
+      "bytes": 361564,
+      "sha256": "eaad201da94cb323401fdb8cc760650803ddf8fd704cb9fa56317e6c69bc6fd6",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/fonts/bahnschrift.ttf",
+      "destinationSha256": "eaad201da94cb323401fdb8cc760650803ddf8fd704cb9fa56317e6c69bc6fd6",
+      "transformed": false,
+      "gitContentSha256": "eaad201da94cb323401fdb8cc760650803ddf8fd704cb9fa56317e6c69bc6fd6"
+    },
+    {
+      "path": "assets/fonts/segoeui.ttf",
+      "bytes": 960076,
+      "sha256": "704eada12961a27fd271f7d3b09e2066520e758390c1776744eff430fee30f6e",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/fonts/segoeui.ttf",
+      "destinationSha256": "704eada12961a27fd271f7d3b09e2066520e758390c1776744eff430fee30f6e",
+      "transformed": false,
+      "gitContentSha256": "704eada12961a27fd271f7d3b09e2066520e758390c1776744eff430fee30f6e"
+    },
+    {
+      "path": "assets/fonts/segoeuib.ttf",
+      "bytes": 947364,
+      "sha256": "b169e636719880976a97e94e3b1cb3dbe5f4a38eabc037bf9f2a9165154c3ad2",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/fonts/segoeuib.ttf",
+      "destinationSha256": "b169e636719880976a97e94e3b1cb3dbe5f4a38eabc037bf9f2a9165154c3ad2",
+      "transformed": false,
+      "gitContentSha256": "b169e636719880976a97e94e3b1cb3dbe5f4a38eabc037bf9f2a9165154c3ad2"
+    },
+    {
+      "path": "assets/lookups/mangaupdates-genres.json",
+      "bytes": 2502,
+      "sha256": "6f363231bbccdab99b63d5fcf31da88fa042196f5a31d550050c8a7dcf4bcb8a",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/lookups/mangaupdates-genres.json",
+      "destinationSha256": "6f363231bbccdab99b63d5fcf31da88fa042196f5a31d550050c8a7dcf4bcb8a",
+      "transformed": false,
+      "gitContentSha256": "23f611b58d3a1fe6b5729de329fec9dc894de4010d44a599a202b4d928a09ce6"
+    },
+    {
+      "path": "assets/lookups/shikimori-publishers.json",
+      "bytes": 104382,
+      "sha256": "fdc5f25938eac74f130b8c3ca7d690aa15022a59dc308a2ac4e19e9d20537688",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/lookups/shikimori-publishers.json",
+      "destinationSha256": "fdc5f25938eac74f130b8c3ca7d690aa15022a59dc308a2ac4e19e9d20537688",
+      "transformed": false,
+      "gitContentSha256": "14cd9ce5c84efd374d0793726ee0233ce8a598f7f1266f9e2549bb73a45ce329"
+    },
+    {
+      "path": "assets/perfil/attack-on-titan-v01.jpg",
+      "bytes": 65627,
+      "sha256": "a5a40cab26c028ef852418587fb49f043b8e3a6c428371fa337061df21483e09",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/perfil/attack-on-titan-v01.jpg",
+      "destinationSha256": "a5a40cab26c028ef852418587fb49f043b8e3a6c428371fa337061df21483e09",
+      "transformed": false,
+      "gitContentSha256": "a5a40cab26c028ef852418587fb49f043b8e3a6c428371fa337061df21483e09"
+    },
+    {
+      "path": "assets/perfil/death-note-v01.jpg",
+      "bytes": 43770,
+      "sha256": "70a6d009dbc76dc37b3fa170207ce56ad625c415f4b2be4675e87fe8543e10f4",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/perfil/death-note-v01.jpg",
+      "destinationSha256": "70a6d009dbc76dc37b3fa170207ce56ad625c415f4b2be4675e87fe8543e10f4",
+      "transformed": false,
+      "gitContentSha256": "70a6d009dbc76dc37b3fa170207ce56ad625c415f4b2be4675e87fe8543e10f4"
+    },
+    {
+      "path": "assets/perfil/fullmetal-alchemist-v01.jpg",
+      "bytes": 68049,
+      "sha256": "2f78b16f22be2349f440f5ba9432e93834ee3506fb2f5378a995abfdf8bc69e3",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/perfil/fullmetal-alchemist-v01.jpg",
+      "destinationSha256": "2f78b16f22be2349f440f5ba9432e93834ee3506fb2f5378a995abfdf8bc69e3",
+      "transformed": false,
+      "gitContentSha256": "2f78b16f22be2349f440f5ba9432e93834ee3506fb2f5378a995abfdf8bc69e3"
+    },
+    {
+      "path": "assets/perfil/one-piece-v01.jpg",
+      "bytes": 49788,
+      "sha256": "c30ca133354a466f8270a515f4c169ae474fa2983d925a1a1bad9bedeb0d221d",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/perfil/one-piece-v01.jpg",
+      "destinationSha256": "c30ca133354a466f8270a515f4c169ae474fa2983d925a1a1bad9bedeb0d221d",
+      "transformed": false,
+      "gitContentSha256": "c30ca133354a466f8270a515f4c169ae474fa2983d925a1a1bad9bedeb0d221d"
+    },
+    {
+      "path": "assets/perfil/one-piece-v02.jpg",
+      "bytes": 62298,
+      "sha256": "1b70bc89982bee3a4ec27dee4810b71344d419fd4cd5876a8755efaf52d24b51",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/perfil/one-piece-v02.jpg",
+      "destinationSha256": "1b70bc89982bee3a4ec27dee4810b71344d419fd4cd5876a8755efaf52d24b51",
+      "transformed": false,
+      "gitContentSha256": "1b70bc89982bee3a4ec27dee4810b71344d419fd4cd5876a8755efaf52d24b51"
+    },
+    {
+      "path": "assets/perfil/one-piece-v03.jpg",
+      "bytes": 68872,
+      "sha256": "fad01135fe5cd2ecf4a6b0c7f144d42bc82f618b01f9ce834332ec6e8e21168a",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/perfil/one-piece-v03.jpg",
+      "destinationSha256": "fad01135fe5cd2ecf4a6b0c7f144d42bc82f618b01f9ce834332ec6e8e21168a",
+      "transformed": false,
+      "gitContentSha256": "fad01135fe5cd2ecf4a6b0c7f144d42bc82f618b01f9ce834332ec6e8e21168a"
+    },
+    {
+      "path": "assets/perfil/witch-hat-atelier-v01.jpg",
+      "bytes": 90459,
+      "sha256": "e8860fd89c292a52e3078dc4de71112b6b25f5909747437a40a17aaf4e31b1fa",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/perfil/witch-hat-atelier-v01.jpg",
+      "destinationSha256": "e8860fd89c292a52e3078dc4de71112b6b25f5909747437a40a17aaf4e31b1fa",
+      "transformed": false,
+      "gitContentSha256": "e8860fd89c292a52e3078dc4de71112b6b25f5909747437a40a17aaf4e31b1fa"
+    },
+    {
+      "path": "assets/privacy-security.css",
+      "bytes": 1990,
+      "sha256": "425817384d32ad45e2fb73548e59739914fd409b9fd999af9d863c8e8a87cad7",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/privacy-security.css",
+      "destinationSha256": "425817384d32ad45e2fb73548e59739914fd409b9fd999af9d863c8e8a87cad7",
+      "transformed": false,
+      "gitContentSha256": "425817384d32ad45e2fb73548e59739914fd409b9fd999af9d863c8e8a87cad7"
+    },
+    {
+      "path": "assets/privacy-security.js",
+      "bytes": 9290,
+      "sha256": "03d5176336b18dcb2fe3fbabf018d281f4144539d55331436f72952653b16ff6",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/privacy-security.js",
+      "destinationSha256": "03d5176336b18dcb2fe3fbabf018d281f4144539d55331436f72952653b16ff6",
+      "transformed": false,
+      "gitContentSha256": "03d5176336b18dcb2fe3fbabf018d281f4144539d55331436f72952653b16ff6"
+    },
+    {
+      "path": "assets/sobre/tsuzuki-lockup.svg",
+      "bytes": 12194,
+      "sha256": "4817370a9e83c6b7fa04dff27483283488cd93c487b6d4261dc2107e74462f9a",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/sobre/tsuzuki-lockup.svg",
+      "destinationSha256": "4817370a9e83c6b7fa04dff27483283488cd93c487b6d4261dc2107e74462f9a",
+      "transformed": false,
+      "gitContentSha256": "4817370a9e83c6b7fa04dff27483283488cd93c487b6d4261dc2107e74462f9a"
+    },
+    {
+      "path": "assets/sobre.css",
+      "bytes": 2394,
+      "sha256": "bc7512bc4befaaec11a726a7602bf6e8cf97e7751db50cf56ebf9e0a66409259",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/sobre.css",
+      "destinationSha256": "bc7512bc4befaaec11a726a7602bf6e8cf97e7751db50cf56ebf9e0a66409259",
+      "transformed": false,
+      "gitContentSha256": "bc7512bc4befaaec11a726a7602bf6e8cf97e7751db50cf56ebf9e0a66409259"
+    },
+    {
+      "path": "assets/sobre.js",
+      "bytes": 7097,
+      "sha256": "7e2b7d181321132b302710cca83284098244abdb5408ee374fff5cc0836545b4",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/sobre.js",
+      "destinationSha256": "7e2b7d181321132b302710cca83284098244abdb5408ee374fff5cc0836545b4",
+      "transformed": false,
+      "gitContentSha256": "7e2b7d181321132b302710cca83284098244abdb5408ee374fff5cc0836545b4"
+    },
+    {
+      "path": "assets/tracking/bangumi.svg",
+      "bytes": 2318,
+      "sha256": "cf15ac43b97bd37ede6972d4613d3efd7063109ad35be71379e07bcefd0b6123",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/tracking/bangumi.svg",
+      "destinationSha256": "cf15ac43b97bd37ede6972d4613d3efd7063109ad35be71379e07bcefd0b6123",
+      "transformed": false,
+      "gitContentSha256": "cf15ac43b97bd37ede6972d4613d3efd7063109ad35be71379e07bcefd0b6123"
+    },
+    {
+      "path": "assets/tracking/hikka.svg",
+      "bytes": 977,
+      "sha256": "e69b8b1a8e84125074247ec9f984639b921c9fd80c5d2d5b5b878f24bbaa8313",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/tracking/hikka.svg",
+      "destinationSha256": "e69b8b1a8e84125074247ec9f984639b921c9fd80c5d2d5b5b878f24bbaa8313",
+      "transformed": false,
+      "gitContentSha256": "e69b8b1a8e84125074247ec9f984639b921c9fd80c5d2d5b5b878f24bbaa8313"
+    },
+    {
+      "path": "assets/tracking/kitsu.svg",
+      "bytes": 2351,
+      "sha256": "02f0e1241519a0e52a5fe4368c8c81c13d06a522a53c4b9ed534bce9bce9b872",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/tracking/kitsu.svg",
+      "destinationSha256": "02f0e1241519a0e52a5fe4368c8c81c13d06a522a53c4b9ed534bce9bce9b872",
+      "transformed": false,
+      "gitContentSha256": "02f0e1241519a0e52a5fe4368c8c81c13d06a522a53c4b9ed534bce9bce9b872"
+    },
+    {
+      "path": "assets/tracking/mangaupdates.svg",
+      "bytes": 1489,
+      "sha256": "6d30dcbba1c3933e5fea90b3cb574815173307690b569eabad42cd104ba028d3",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/tracking/mangaupdates.svg",
+      "destinationSha256": "6d30dcbba1c3933e5fea90b3cb574815173307690b569eabad42cd104ba028d3",
+      "transformed": false,
+      "gitContentSha256": "6d30dcbba1c3933e5fea90b3cb574815173307690b569eabad42cd104ba028d3"
+    },
+    {
+      "path": "assets/tracking/myanimelist.svg",
+      "bytes": 506,
+      "sha256": "50bfacb700b5d23e01e0aad5ff29a23cd8247d1c636da7ab935dac303bc67b95",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/tracking/myanimelist.svg",
+      "destinationSha256": "50bfacb700b5d23e01e0aad5ff29a23cd8247d1c636da7ab935dac303bc67b95",
+      "transformed": false,
+      "gitContentSha256": "50bfacb700b5d23e01e0aad5ff29a23cd8247d1c636da7ab935dac303bc67b95"
+    },
+    {
+      "path": "assets/tracking/shikimori.svg",
+      "bytes": 6092,
+      "sha256": "d4f41c482ea204be47d769db6e9a26937efba0a361e5e92d5c242615b1feac10",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/assets/tracking/shikimori.svg",
+      "destinationSha256": "d4f41c482ea204be47d769db6e9a26937efba0a361e5e92d5c242615b1feac10",
+      "transformed": false,
+      "gitContentSha256": "d4f41c482ea204be47d769db6e9a26937efba0a361e5e92d5c242615b1feac10"
+    },
+    {
+      "path": "build_advanced_filters.py",
+      "bytes": 21850,
+      "sha256": "a6891b66f77796420fbb232bf4586f62b27abdc3394c98c634d06e8f06ef23bb",
+      "action": "excluded",
+      "reason": "One-off editing script for earlier iterations; frozen editable HTML is the maintained source, not these scripts"
+    },
+    {
+      "path": "build_preserved_query.py",
+      "bytes": 17764,
+      "sha256": "b05a98e390cd51c40e7f81ced9d6819912b67d374ed5969527341936b32941af",
+      "action": "excluded",
+      "reason": "One-off editing script for earlier iterations; frozen editable HTML is the maintained source, not these scripts"
+    },
+    {
+      "path": "build_providers.py",
+      "bytes": 17827,
+      "sha256": "9c5c30fb30c67060ea5cc9d3b358aa81ad3ed49e8d99ea5b00727a0f0d808fbf",
+      "action": "excluded",
+      "reason": "One-off editing script for earlier iterations; frozen editable HTML is the maintained source, not these scripts"
+    },
+    {
+      "path": "build_quick_builder.py",
+      "bytes": 18619,
+      "sha256": "600998cb5a9c0b3002c67172f34264b5a4ac536c2a50405a059a94021e6e3cc6",
+      "action": "excluded",
+      "reason": "One-off editing script for earlier iterations; frozen editable HTML is the maintained source, not these scripts"
+    },
+    {
+      "path": "build_remote_lookup.py",
+      "bytes": 17789,
+      "sha256": "7504cf2259a5bd5254f92a11a761eeda3c197e5bd92ebd1df804a90dc8ef6c79",
+      "action": "excluded",
+      "reason": "One-off editing script for earlier iterations; frozen editable HTML is the maintained source, not these scripts"
+    },
+    {
+      "path": "build_source_switch.py",
+      "bytes": 18433,
+      "sha256": "293d1dcaeef145b9d48f6887cb32741dde26ea4ca55d11d6e81feef44bc38f9b",
+      "action": "excluded",
+      "reason": "One-off editing script for earlier iterations; frozen editable HTML is the maintained source, not these scripts"
+    },
+    {
+      "path": "correct_quick_builder.py",
+      "bytes": 14688,
+      "sha256": "2aca731ae95b5bac124e604bc087092617b2e17abc0d6c663fbf2e84a226a8c7",
+      "action": "excluded",
+      "reason": "One-off editing script for earlier iterations; frozen editable HTML is the maintained source, not these scripts"
+    },
+    {
+      "path": "correct_quick_builder_scroll.py",
+      "bytes": 8909,
+      "sha256": "585cec0f0051af2b12d7be0ed43a5f093632a95c687fe9cbd1281e99c912fe85",
+      "action": "excluded",
+      "reason": "One-off editing script for earlier iterations; frozen editable HTML is the maintained source, not these scripts"
+    },
+    {
+      "path": "design.md",
+      "bytes": 34873,
+      "sha256": "97af30dd64bed561df7fac98b83faab6124df9fab555e35b6497149d82a11151",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/history/default-skin-before-settings-closure.md",
+      "destinationSha256": "f01b134f28ee77da0d36fb514c0114b51b13b035e58e4757e574fd0a00b64bf3",
+      "transformed": true,
+      "gitContentSha256": "f01b134f28ee77da0d36fb514c0114b51b13b035e58e4757e574fd0a00b64bf3"
+    },
+    {
+      "path": "docs/design/aparencia-tensions.md",
+      "bytes": 7202,
+      "sha256": "0bb4bd05c41265c8693c7bd05d4c4affeafe280e9a38d3af70215c2fc638ab6c",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/aparencia-tensions.md",
+      "destinationSha256": "0e8e238cb97f23d19caab60a9922cec4d2761c12406ecac0cb55715f001c443a",
+      "transformed": true,
+      "gitContentSha256": "0e8e238cb97f23d19caab60a9922cec4d2761c12406ecac0cb55715f001c443a"
+    },
+    {
+      "path": "docs/design/avancado-tensions.md",
+      "bytes": 2268,
+      "sha256": "8f61ecf0a54d3802bb2f112fd3e7dd99ff2adac70e899a145dca2d4b6067cc35",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/avancado-tensions.md",
+      "destinationSha256": "1bc280d0f2d014a7682699c1b4ecf629595d85febcd52d0939d9bfad82fc3b58",
+      "transformed": true,
+      "gitContentSha256": "1bc280d0f2d014a7682699c1b4ecf629595d85febcd52d0939d9bfad82fc3b58"
+    },
+    {
+      "path": "docs/design/biblioteca-tensions.md",
+      "bytes": 6696,
+      "sha256": "2f3ff38198a6d52703a00754d652f18a4aa40b409c1e83f22cf568d1da8f1ca4",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/biblioteca-tensions.md",
+      "destinationSha256": "2b645763808581703b177d72075ea2b9afc910e64170e4b1279aeba01d6a7ff1",
+      "transformed": true,
+      "gitContentSha256": "2b645763808581703b177d72075ea2b9afc910e64170e4b1279aeba01d6a7ff1"
+    },
+    {
+      "path": "docs/design/collections-tensions.md",
+      "bytes": 13889,
+      "sha256": "20f7b924a53dd31f796570aa4e4b20402b53e40681c635efe4e2dd462a2d1fde",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/collections-tensions.md",
+      "destinationSha256": "998b7fa6a3c0efc07b92a577e3ab9d0adea749f9cdb46c992804d97d6ec580d5",
+      "transformed": true,
+      "gitContentSha256": "998b7fa6a3c0efc07b92a577e3ab9d0adea749f9cdb46c992804d97d6ec580d5"
+    },
+    {
+      "path": "docs/design/conta-tensions.md",
+      "bytes": 3602,
+      "sha256": "8891eec0b39580ce33b88ab2b17d1af7bf74cb9512dc7a92cb10964e9c924d1d",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/conta-tensions.md",
+      "destinationSha256": "fc48440586ba00afb2d25c11d61fb17e8a53a57b2615289b81aeab9d042009d1",
+      "transformed": true,
+      "gitContentSha256": "fc48440586ba00afb2d25c11d61fb17e8a53a57b2615289b81aeab9d042009d1"
+    },
+    {
+      "path": "docs/design/dados-armazenamento-tensions.md",
+      "bytes": 7812,
+      "sha256": "67497b94031fb24486d181c0d84c0208a86ec2a1b3b7eb8239a9cc0e8c724c0d",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/dados-armazenamento-tensions.md",
+      "destinationSha256": "0f22ae29f45d51a23bdeeaf808c9992e16232d7647aa5a73bc41cf6bbb5c74d4",
+      "transformed": true,
+      "gitContentSha256": "0f22ae29f45d51a23bdeeaf808c9992e16232d7647aa5a73bc41cf6bbb5c74d4"
+    },
+    {
+      "path": "docs/design/diagnostico-tensions.md",
+      "bytes": 3623,
+      "sha256": "05b97d6fa4e56d36decac34bc4608d2799ccae5397a10e9a2349c7ee216461b1",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/diagnostico-tensions.md",
+      "destinationSha256": "2e54f2f4b1d8b0ff9805c32d21d86e986c1919e84d31be1a02f9ec426e724348",
+      "transformed": true,
+      "gitContentSha256": "2e54f2f4b1d8b0ff9805c32d21d86e986c1919e84d31be1a02f9ec426e724348"
+    },
+    {
+      "path": "docs/design/downloads-tensions.md",
+      "bytes": 3806,
+      "sha256": "4e44139c04b24998233c5171573d8189546a09890fdd7c0fb4b8942ec211c7a3",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/downloads-tensions.md",
+      "destinationSha256": "2632653b87f452f2b955b5f05c6abd8429c7049c32368fee05d979ab70f8b014",
+      "transformed": true,
+      "gitContentSha256": "2632653b87f452f2b955b5f05c6abd8429c7049c32368fee05d979ab70f8b014"
+    },
+    {
+      "path": "docs/design/folder-catalog-tensions.md",
+      "bytes": 1169,
+      "sha256": "e417b4f449a27bdbb1fe2ea248ee5a31da56de291bcec5b68cd967e72522af90",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/folder-catalog-tensions.md",
+      "destinationSha256": "21f67f60ba13d0b9ac3aacbf399e080c7319cf78fa9969844cdacc6284ffd186",
+      "transformed": true,
+      "gitContentSha256": "21f67f60ba13d0b9ac3aacbf399e080c7319cf78fa9969844cdacc6284ffd186"
+    },
+    {
+      "path": "docs/design/integracoes-tensions.md",
+      "bytes": 12399,
+      "sha256": "45d3e5104d68dbbefed71c023984e3547f16ddac2e89fa67a41939fb6306b701",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/integracoes-tensions.md",
+      "destinationSha256": "f5462c58c52691835bfede8076f3eb4f1ad5d2296e4348295ecb4023a7f235fa",
+      "transformed": true,
+      "gitContentSha256": "f5462c58c52691835bfede8076f3eb4f1ad5d2296e4348295ecb4023a7f235fa"
+    },
+    {
+      "path": "docs/design/leitura-tensions.md",
+      "bytes": 8353,
+      "sha256": "8acfda01ce0190b88cb23cfb9269fbec333f70973f9a8da84f05fcd9d764dd16",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/leitura-tensions.md",
+      "destinationSha256": "bbb9e8c89a6633f6d42218808251d4f85db06fc846c985b8c7dcdef546695d42",
+      "transformed": true,
+      "gitContentSha256": "bbb9e8c89a6633f6d42218808251d4f85db06fc846c985b8c7dcdef546695d42"
+    },
+    {
+      "path": "docs/design/perfil-tensions.md",
+      "bytes": 13550,
+      "sha256": "4c6f1beb022b3d927c5fab1c77103862efd0c6cad025bc1607873213f6f2b14d",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/perfil-tensions.md",
+      "destinationSha256": "6ab68779a7024b281639d134091d8a8938cef9c2d636154e0edcc20d387ac0a8",
+      "transformed": true,
+      "gitContentSha256": "6ab68779a7024b281639d134091d8a8938cef9c2d636154e0edcc20d387ac0a8"
+    },
+    {
+      "path": "docs/design/personalizacao-tensions.md",
+      "bytes": 5686,
+      "sha256": "9e3a3b94dab11a38cf93a97f2aafe306f33784d0cf0d932d115b4c4055338071",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/personalizacao-tensions.md",
+      "destinationSha256": "4c77f1e2444cfeb9257507ba525978017ed40da971d662501a2edaa1b94dbe79",
+      "transformed": true,
+      "gitContentSha256": "4c77f1e2444cfeb9257507ba525978017ed40da971d662501a2edaa1b94dbe79"
+    },
+    {
+      "path": "docs/design/preset-visual-tensions.md",
+      "bytes": 6199,
+      "sha256": "6392d82f1df811a67ecf790f8f2f2c79ac02c89cd0787b20cc88a3ac3f8fd73e",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/preset-visual-tensions.md",
+      "destinationSha256": "7847a78972b0fe56f38b83c94efcacabe2605a6e57de92d750a224678d1c5ede",
+      "transformed": true,
+      "gitContentSha256": "7847a78972b0fe56f38b83c94efcacabe2605a6e57de92d750a224678d1c5ede"
+    },
+    {
+      "path": "docs/design/privacidade-seguranca-tensions.md",
+      "bytes": 3735,
+      "sha256": "d089024a7b010e1a3bf17dffe670a24f3c41dba6fc8434466ad370d203b7a9f9",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/privacidade-seguranca-tensions.md",
+      "destinationSha256": "de38a6a4a0d190843bef04842d98e7fedee58de27879841bcd923630699b9404",
+      "transformed": true,
+      "gitContentSha256": "de38a6a4a0d190843bef04842d98e7fedee58de27879841bcd923630699b9404"
+    },
+    {
+      "path": "docs/design/providers-tensions.md",
+      "bytes": 24934,
+      "sha256": "a6c5f8522a7e2f3e0683c93f045c00c8988cce360ffd706b3e6bc9c3fc74a8f4",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/providers-tensions.md",
+      "destinationSha256": "e31c654a683ceacb8cc24e02f3cbfab33379bff62105c9819fbfdd4b67f7601d",
+      "transformed": true,
+      "gitContentSha256": "e31c654a683ceacb8cc24e02f3cbfab33379bff62105c9819fbfdd4b67f7601d"
+    },
+    {
+      "path": "docs/design/sobre-tensions.md",
+      "bytes": 2690,
+      "sha256": "41d31dbfc1f2feab01f2cb055b2d224b504a45a1521dbb070e10da7c0c4092b6",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/sobre-tensions.md",
+      "destinationSha256": "4f9b836dd160ef186f469b35b00e9b5f1726328f70066593647f5ac339c874ff",
+      "transformed": true,
+      "gitContentSha256": "4f9b836dd160ef186f469b35b00e9b5f1726328f70066593647f5ac339c874ff"
+    },
+    {
+      "path": "docs/design/tracking-tensions.md",
+      "bytes": 6871,
+      "sha256": "6416d0838cfbea4699c00454933e4f8521710a2b6eca8a948a871398da102204",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/tensions/tracking-tensions.md",
+      "destinationSha256": "edf2e74029fa84e63b71842a48d54c5f2f8c9c28bed2df8484f06bda37c7f36b",
+      "transformed": true,
+      "gitContentSha256": "edf2e74029fa84e63b71842a48d54c5f2f8c9c28bed2df8484f06bda37c7f36b"
+    },
+    {
+      "path": "drawing-2026-10-04T20-39-41-967Z.png",
+      "bytes": 95758,
+      "sha256": "b7a1d580b7abb3bbba6b4d59e785fbabde271470f675149b3d8831bffb1c763c",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/drawing-2026-10-04T20-39-41-967Z.png",
+      "destinationSha256": "b7a1d580b7abb3bbba6b4d59e785fbabde271470f675149b3d8831bffb1c763c",
+      "transformed": false,
+      "gitContentSha256": "b7a1d580b7abb3bbba6b4d59e785fbabde271470f675149b3d8831bffb1c763c"
+    },
+    {
+      "path": "Imagem-do-ChatGPT-3-de-out.-de-2026_-14_57_14.png",
+      "bytes": 59656,
+      "sha256": "b3ed47948fa8d380115d1642501dc4c8b03baefc027c8b49a587d211502e5ca9",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/Imagem-do-ChatGPT-3-de-out.-de-2026_-14_57_14.png",
+      "destinationSha256": "b3ed47948fa8d380115d1642501dc4c8b03baefc027c8b49a587d211502e5ca9",
+      "transformed": false,
+      "gitContentSha256": "b3ed47948fa8d380115d1642501dc4c8b03baefc027c8b49a587d211502e5ca9"
+    },
+    {
+      "path": "Imagem-do-ChatGPT-3-de-out.-de-2026_-14_57_17.jpg",
+      "bytes": 76727,
+      "sha256": "ecc9995403f6c6454cfd53f50d3825bec5d70457cd5626586c9e3fa26bb474e1",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/Imagem-do-ChatGPT-3-de-out.-de-2026_-14_57_17.jpg",
+      "destinationSha256": "ecc9995403f6c6454cfd53f50d3825bec5d70457cd5626586c9e3fa26bb474e1",
+      "transformed": false,
+      "gitContentSha256": "ecc9995403f6c6454cfd53f50d3825bec5d70457cd5626586c9e3fa26bb474e1"
+    },
+    {
+      "path": "Imagem-do-ChatGPT-3-de-out.-de-2026_-14_57_24.png",
+      "bytes": 44632,
+      "sha256": "9ef491db00205ab1210a1a9856d1ba9cc6001c292d98dd80813e83e1757bd3b5",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/Imagem-do-ChatGPT-3-de-out.-de-2026_-14_57_24.png",
+      "destinationSha256": "9ef491db00205ab1210a1a9856d1ba9cc6001c292d98dd80813e83e1757bd3b5",
+      "transformed": false,
+      "gitContentSha256": "9ef491db00205ab1210a1a9856d1ba9cc6001c292d98dd80813e83e1757bd3b5"
+    },
+    {
+      "path": "index.html",
+      "bytes": 448341,
+      "sha256": "194bb9e28ef6fa8b833e876aa0dd5ebaa5c758008cc34847f6fd87949ef76318",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/mockups/index.html",
+      "destinationSha256": "194bb9e28ef6fa8b833e876aa0dd5ebaa5c758008cc34847f6fd87949ef76318",
+      "transformed": false,
+      "gitContentSha256": "9b00a403c0c027b097ee68d24246f99264beaaed4af640e5ba841c244f2ff91f"
+    },
+    {
+      "path": "index.html.artifact.json",
+      "bytes": 337,
+      "sha256": "68a7cbd02535b513ffed35a2238edf3acf12409e94ea05c775a69b09d30ab370",
+      "action": "excluded",
+      "reason": "OpenDesign host metadata; not needed to open the prototype"
+    },
+    {
+      "path": "Interface-escura-de-configurações-móveis.png",
+      "bytes": 1207697,
+      "sha256": "de6ba5a5835f377ef5f30f9b9c1ccbfa31eb2963cdcd92b982cb01f28ed9d46c",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/Interface-escura-de-configurações-móveis.png",
+      "destinationSha256": "de6ba5a5835f377ef5f30f9b9c1ccbfa31eb2963cdcd92b982cb01f28ed9d46c",
+      "transformed": false,
+      "gitContentSha256": "de6ba5a5835f377ef5f30f9b9c1ccbfa31eb2963cdcd92b982cb01f28ed9d46c"
+    },
+    {
+      "path": "refine_providers_discover.py",
+      "bytes": 12052,
+      "sha256": "14770224a5b25ebcd3bc848dfe91d5b574841ae19afa781810b3bef78db99ca5",
+      "action": "excluded",
+      "reason": "One-off editing script for earlier iterations; frozen editable HTML is the maintained source, not these scripts"
+    },
+    {
+      "path": "refine_quick_builder_light.py",
+      "bytes": 15340,
+      "sha256": "291f68c63f234e785d0c0fa608437dd080732146fc5aeec0145d0b6e6bba3b3d",
+      "action": "excluded",
+      "reason": "One-off editing script for earlier iterations; frozen editable HTML is the maintained source, not these scripts"
+    },
+    {
+      "path": "screenshot-2026-10-03T18-19-16-598Z.png",
+      "bytes": 210319,
+      "sha256": "8eb00379a1c9a4a4f839a1ea4e067ae65b6e928235639dab1d720878f3c1c8bf",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-03T18-19-16-598Z.png",
+      "destinationSha256": "8eb00379a1c9a4a4f839a1ea4e067ae65b6e928235639dab1d720878f3c1c8bf",
+      "transformed": false,
+      "gitContentSha256": "8eb00379a1c9a4a4f839a1ea4e067ae65b6e928235639dab1d720878f3c1c8bf"
+    },
+    {
+      "path": "screenshot-2026-10-03T21-20-00-055Z.png",
+      "bytes": 63295,
+      "sha256": "dfc639596539dea28f76d2f9ef904ea9d46b558705b791d8577b932f430c6c17",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-03T21-20-00-055Z.png",
+      "destinationSha256": "dfc639596539dea28f76d2f9ef904ea9d46b558705b791d8577b932f430c6c17",
+      "transformed": false,
+      "gitContentSha256": "dfc639596539dea28f76d2f9ef904ea9d46b558705b791d8577b932f430c6c17"
+    },
+    {
+      "path": "screenshot-2026-10-03T22-58-32-691Z.png",
+      "bytes": 99717,
+      "sha256": "b27d267f3ff94ddf418956af9153c1b6e30c840b93435f9539dfe78e46c13e94",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-03T22-58-32-691Z.png",
+      "destinationSha256": "b27d267f3ff94ddf418956af9153c1b6e30c840b93435f9539dfe78e46c13e94",
+      "transformed": false,
+      "gitContentSha256": "b27d267f3ff94ddf418956af9153c1b6e30c840b93435f9539dfe78e46c13e94"
+    },
+    {
+      "path": "screenshot-2026-10-04T01-01-03-908Z.png",
+      "bytes": 48417,
+      "sha256": "f48103b7da87f330d3c254fdb7d0bdb9794676c8bf2464f8703522e751c126f1",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T01-01-03-908Z.png",
+      "destinationSha256": "f48103b7da87f330d3c254fdb7d0bdb9794676c8bf2464f8703522e751c126f1",
+      "transformed": false,
+      "gitContentSha256": "f48103b7da87f330d3c254fdb7d0bdb9794676c8bf2464f8703522e751c126f1"
+    },
+    {
+      "path": "screenshot-2026-10-04T01-01-08-035Z.png",
+      "bytes": 46528,
+      "sha256": "6e1f156dec9328f4a1cd99222958d5d09d1a8f43bcd51b256ca3a19a3ab6693c",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T01-01-08-035Z.png",
+      "destinationSha256": "6e1f156dec9328f4a1cd99222958d5d09d1a8f43bcd51b256ca3a19a3ab6693c",
+      "transformed": false,
+      "gitContentSha256": "6e1f156dec9328f4a1cd99222958d5d09d1a8f43bcd51b256ca3a19a3ab6693c"
+    },
+    {
+      "path": "screenshot-2026-10-04T01-22-10-714Z.png",
+      "bytes": 69033,
+      "sha256": "8af73dbd5c271b4b28e1fdf7f6419f73e44390abf240acca4dbcb4c928c42b13",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T01-22-10-714Z.png",
+      "destinationSha256": "8af73dbd5c271b4b28e1fdf7f6419f73e44390abf240acca4dbcb4c928c42b13",
+      "transformed": false,
+      "gitContentSha256": "8af73dbd5c271b4b28e1fdf7f6419f73e44390abf240acca4dbcb4c928c42b13"
+    },
+    {
+      "path": "screenshot-2026-10-04T18-09-27-234Z.png",
+      "bytes": 355421,
+      "sha256": "20625d29895cd746bd29d15aa15e58c4f25cf0480738fb08305761337a2398f8",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T18-09-27-234Z.png",
+      "destinationSha256": "20625d29895cd746bd29d15aa15e58c4f25cf0480738fb08305761337a2398f8",
+      "transformed": false,
+      "gitContentSha256": "20625d29895cd746bd29d15aa15e58c4f25cf0480738fb08305761337a2398f8"
+    },
+    {
+      "path": "screenshot-2026-10-04T18-10-19-685Z.png",
+      "bytes": 405951,
+      "sha256": "3cd25960becb781332c9626c9405945d057be4cb522827313e5b1457a4583005",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T18-10-19-685Z.png",
+      "destinationSha256": "3cd25960becb781332c9626c9405945d057be4cb522827313e5b1457a4583005",
+      "transformed": false,
+      "gitContentSha256": "3cd25960becb781332c9626c9405945d057be4cb522827313e5b1457a4583005"
+    },
+    {
+      "path": "screenshot-2026-10-04T18-18-16-799Z.png",
+      "bytes": 83863,
+      "sha256": "f2a8254ebe988a1c46227c9af21ffac66a1a1f3f3248cbb3b5205d1f528c50dc",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T18-18-16-799Z.png",
+      "destinationSha256": "f2a8254ebe988a1c46227c9af21ffac66a1a1f3f3248cbb3b5205d1f528c50dc",
+      "transformed": false,
+      "gitContentSha256": "f2a8254ebe988a1c46227c9af21ffac66a1a1f3f3248cbb3b5205d1f528c50dc"
+    },
+    {
+      "path": "screenshot-2026-10-04T18-18-30-015Z.png",
+      "bytes": 174780,
+      "sha256": "84ea3608bc0372c74732a0300e777b472e56b18ab106573fb8afabe85d33453e",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T18-18-30-015Z.png",
+      "destinationSha256": "84ea3608bc0372c74732a0300e777b472e56b18ab106573fb8afabe85d33453e",
+      "transformed": false,
+      "gitContentSha256": "84ea3608bc0372c74732a0300e777b472e56b18ab106573fb8afabe85d33453e"
+    },
+    {
+      "path": "screenshot-2026-10-04T18-28-30-862Z.png",
+      "bytes": 169065,
+      "sha256": "9e91da6f2bee9440386ffdb75d2a96d305d96433498b45eafc747b9bd21199e1",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T18-28-30-862Z.png",
+      "destinationSha256": "9e91da6f2bee9440386ffdb75d2a96d305d96433498b45eafc747b9bd21199e1",
+      "transformed": false,
+      "gitContentSha256": "9e91da6f2bee9440386ffdb75d2a96d305d96433498b45eafc747b9bd21199e1"
+    },
+    {
+      "path": "screenshot-2026-10-04T18-39-47-928Z.png",
+      "bytes": 107521,
+      "sha256": "119566bf13d98f9b6430187506e882fc9b0a58c55af0d553b4d65dd9b2f716bf",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T18-39-47-928Z.png",
+      "destinationSha256": "119566bf13d98f9b6430187506e882fc9b0a58c55af0d553b4d65dd9b2f716bf",
+      "transformed": false,
+      "gitContentSha256": "119566bf13d98f9b6430187506e882fc9b0a58c55af0d553b4d65dd9b2f716bf"
+    },
+    {
+      "path": "screenshot-2026-10-04T18-40-07-814Z.png",
+      "bytes": 369922,
+      "sha256": "82ec83b515ff29545afa1062ef9fefe0e8479651b99104932d14f1107d937bcd",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T18-40-07-814Z.png",
+      "destinationSha256": "82ec83b515ff29545afa1062ef9fefe0e8479651b99104932d14f1107d937bcd",
+      "transformed": false,
+      "gitContentSha256": "82ec83b515ff29545afa1062ef9fefe0e8479651b99104932d14f1107d937bcd"
+    },
+    {
+      "path": "screenshot-2026-10-04T20-29-19-015Z.png",
+      "bytes": 50621,
+      "sha256": "2f9ced0c638d74fca39a3b4c99a14c43e4dedb1d3d662611b74faecfe34123ce",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T20-29-19-015Z.png",
+      "destinationSha256": "2f9ced0c638d74fca39a3b4c99a14c43e4dedb1d3d662611b74faecfe34123ce",
+      "transformed": false,
+      "gitContentSha256": "2f9ced0c638d74fca39a3b4c99a14c43e4dedb1d3d662611b74faecfe34123ce"
+    },
+    {
+      "path": "screenshot-2026-10-04T20-32-23-969Z.png",
+      "bytes": 49171,
+      "sha256": "2d80418ba97436bb343e3e09afdd6ef62411944f21cd9db7007b9c9bbd34ab80",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T20-32-23-969Z.png",
+      "destinationSha256": "2d80418ba97436bb343e3e09afdd6ef62411944f21cd9db7007b9c9bbd34ab80",
+      "transformed": false,
+      "gitContentSha256": "2d80418ba97436bb343e3e09afdd6ef62411944f21cd9db7007b9c9bbd34ab80"
+    },
+    {
+      "path": "screenshot-2026-10-04T20-36-35-023Z.png",
+      "bytes": 47604,
+      "sha256": "f3745e83eaf0e7ef9c2b71d4d1b5af74c3ecaa3b30cc206ed7fc1e9c46ea1621",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T20-36-35-023Z.png",
+      "destinationSha256": "f3745e83eaf0e7ef9c2b71d4d1b5af74c3ecaa3b30cc206ed7fc1e9c46ea1621",
+      "transformed": false,
+      "gitContentSha256": "f3745e83eaf0e7ef9c2b71d4d1b5af74c3ecaa3b30cc206ed7fc1e9c46ea1621"
+    },
+    {
+      "path": "screenshot-2026-10-04T20-39-51-108Z.png",
+      "bytes": 69607,
+      "sha256": "1cb0035b979466f51f862d26ffe38af4bc8103b375845fdd3195115464fed875",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T20-39-51-108Z.png",
+      "destinationSha256": "1cb0035b979466f51f862d26ffe38af4bc8103b375845fdd3195115464fed875",
+      "transformed": false,
+      "gitContentSha256": "1cb0035b979466f51f862d26ffe38af4bc8103b375845fdd3195115464fed875"
+    },
+    {
+      "path": "screenshot-2026-10-04T21-13-32-649Z.png",
+      "bytes": 226225,
+      "sha256": "5c61aa91958970d3d692f41bf73ceefe510c013492000bce455234f8562962f9",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-04T21-13-32-649Z.png",
+      "destinationSha256": "5c61aa91958970d3d692f41bf73ceefe510c013492000bce455234f8562962f9",
+      "transformed": false,
+      "gitContentSha256": "5c61aa91958970d3d692f41bf73ceefe510c013492000bce455234f8562962f9"
+    },
+    {
+      "path": "screenshot-2026-10-07T20-38-23-964Z.png",
+      "bytes": 92390,
+      "sha256": "3fa47e3a3b9b59a3e6ec253efc467fa3c18ef10a8a5973a0caa551250d9bba75",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-07T20-38-23-964Z.png",
+      "destinationSha256": "3fa47e3a3b9b59a3e6ec253efc467fa3c18ef10a8a5973a0caa551250d9bba75",
+      "transformed": false,
+      "gitContentSha256": "3fa47e3a3b9b59a3e6ec253efc467fa3c18ef10a8a5973a0caa551250d9bba75"
+    },
+    {
+      "path": "screenshot-2026-10-07T20-38-49-095Z.png",
+      "bytes": 93184,
+      "sha256": "6391de5cf3b3194541933f65853789f7e2007be999fc2a3a2b9e311242350b4a",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-07T20-38-49-095Z.png",
+      "destinationSha256": "6391de5cf3b3194541933f65853789f7e2007be999fc2a3a2b9e311242350b4a",
+      "transformed": false,
+      "gitContentSha256": "6391de5cf3b3194541933f65853789f7e2007be999fc2a3a2b9e311242350b4a"
+    },
+    {
+      "path": "screenshot-2026-10-07T20-46-13-578Z.png",
+      "bytes": 85226,
+      "sha256": "1d17edfc172d097218aa104bcfa61903036fcae2dea48395c8584c06946f74ae",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-07T20-46-13-578Z.png",
+      "destinationSha256": "1d17edfc172d097218aa104bcfa61903036fcae2dea48395c8584c06946f74ae",
+      "transformed": false,
+      "gitContentSha256": "1d17edfc172d097218aa104bcfa61903036fcae2dea48395c8584c06946f74ae"
+    },
+    {
+      "path": "screenshot-2026-10-07T21-20-57-377Z.png",
+      "bytes": 64257,
+      "sha256": "d2b9ad0d46eecb87233d23c0d4f0c26f762cab5c55d9ded9b923b3c2ea61c6d0",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-07T21-20-57-377Z.png",
+      "destinationSha256": "d2b9ad0d46eecb87233d23c0d4f0c26f762cab5c55d9ded9b923b3c2ea61c6d0",
+      "transformed": false,
+      "gitContentSha256": "d2b9ad0d46eecb87233d23c0d4f0c26f762cab5c55d9ded9b923b3c2ea61c6d0"
+    },
+    {
+      "path": "screenshot-2026-10-07T21-23-09-327Z.png",
+      "bytes": 79425,
+      "sha256": "518eae82786e78a4a2f5b9049d4ec97a453c8687e441b6fd748453cdbf2363cb",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-07T21-23-09-327Z.png",
+      "destinationSha256": "518eae82786e78a4a2f5b9049d4ec97a453c8687e441b6fd748453cdbf2363cb",
+      "transformed": false,
+      "gitContentSha256": "518eae82786e78a4a2f5b9049d4ec97a453c8687e441b6fd748453cdbf2363cb"
+    },
+    {
+      "path": "screenshot-2026-10-07T21-24-41-950Z.png",
+      "bytes": 81266,
+      "sha256": "34e69d09c10630186c639538018b86c063e42094d5a06878422b717480adb69d",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-07T21-24-41-950Z.png",
+      "destinationSha256": "34e69d09c10630186c639538018b86c063e42094d5a06878422b717480adb69d",
+      "transformed": false,
+      "gitContentSha256": "34e69d09c10630186c639538018b86c063e42094d5a06878422b717480adb69d"
+    },
+    {
+      "path": "screenshot-2026-10-07T21-46-44-190Z.png",
+      "bytes": 180252,
+      "sha256": "f5ddef03a91e90351ee1dfe963abf789dc251a16e1d536f4e65e4e16f77ed0ea",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-07T21-46-44-190Z.png",
+      "destinationSha256": "f5ddef03a91e90351ee1dfe963abf789dc251a16e1d536f4e65e4e16f77ed0ea",
+      "transformed": false,
+      "gitContentSha256": "f5ddef03a91e90351ee1dfe963abf789dc251a16e1d536f4e65e4e16f77ed0ea"
+    },
+    {
+      "path": "screenshot-2026-10-09T18-19-44-099Z.png",
+      "bytes": 160526,
+      "sha256": "489b76bc8179a1a1023c79fb14d8f3d871cf6621951acb614598f87fa69dce37",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-09T18-19-44-099Z.png",
+      "destinationSha256": "489b76bc8179a1a1023c79fb14d8f3d871cf6621951acb614598f87fa69dce37",
+      "transformed": false,
+      "gitContentSha256": "489b76bc8179a1a1023c79fb14d8f3d871cf6621951acb614598f87fa69dce37"
+    },
+    {
+      "path": "screenshot-2026-10-09T18-34-46-791Z.png",
+      "bytes": 182726,
+      "sha256": "810e5a6bcf11a5464b3246edb9943c06756bf91345cb55b0917fc5dc421b5032",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-09T18-34-46-791Z.png",
+      "destinationSha256": "810e5a6bcf11a5464b3246edb9943c06756bf91345cb55b0917fc5dc421b5032",
+      "transformed": false,
+      "gitContentSha256": "810e5a6bcf11a5464b3246edb9943c06756bf91345cb55b0917fc5dc421b5032"
+    },
+    {
+      "path": "screenshot-2026-10-09T18-35-03-950Z.png",
+      "bytes": 166740,
+      "sha256": "d48457b97cf0e4f7832976955380c8ba3fe2a4b1a4e93f0189621b7190c67c27",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-09T18-35-03-950Z.png",
+      "destinationSha256": "d48457b97cf0e4f7832976955380c8ba3fe2a4b1a4e93f0189621b7190c67c27",
+      "transformed": false,
+      "gitContentSha256": "d48457b97cf0e4f7832976955380c8ba3fe2a4b1a4e93f0189621b7190c67c27"
+    },
+    {
+      "path": "screenshot-2026-10-09T19-27-44-512Z.png",
+      "bytes": 101705,
+      "sha256": "5f9c609213990a952020d934a70b15fc9ff63cd82bc7ffbe712458398e4f1e40",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-09T19-27-44-512Z.png",
+      "destinationSha256": "5f9c609213990a952020d934a70b15fc9ff63cd82bc7ffbe712458398e4f1e40",
+      "transformed": false,
+      "gitContentSha256": "5f9c609213990a952020d934a70b15fc9ff63cd82bc7ffbe712458398e4f1e40"
+    },
+    {
+      "path": "screenshot-2026-10-09T19-27-51-035Z.png",
+      "bytes": 94192,
+      "sha256": "d8e84fd6220d524bc11a1ab9629506dc8f378e59e910095fe861df35372e9279",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-09T19-27-51-035Z.png",
+      "destinationSha256": "d8e84fd6220d524bc11a1ab9629506dc8f378e59e910095fe861df35372e9279",
+      "transformed": false,
+      "gitContentSha256": "d8e84fd6220d524bc11a1ab9629506dc8f378e59e910095fe861df35372e9279"
+    },
+    {
+      "path": "screenshot-2026-10-09T19-29-45-380Z.png",
+      "bytes": 99123,
+      "sha256": "3fe051243da6f756a1c2e43b12e5aa4bbd6789efdd1e84c4669cc98c5cf16dca",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-09T19-29-45-380Z.png",
+      "destinationSha256": "3fe051243da6f756a1c2e43b12e5aa4bbd6789efdd1e84c4669cc98c5cf16dca",
+      "transformed": false,
+      "gitContentSha256": "3fe051243da6f756a1c2e43b12e5aa4bbd6789efdd1e84c4669cc98c5cf16dca"
+    },
+    {
+      "path": "screenshot-2026-10-09T19-53-29-415Z.png",
+      "bytes": 295066,
+      "sha256": "ae538441c94c0f3726f90e66528d3ab2d3ba3781576c0ac2c2fc739641a6599d",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-09T19-53-29-415Z.png",
+      "destinationSha256": "ae538441c94c0f3726f90e66528d3ab2d3ba3781576c0ac2c2fc739641a6599d",
+      "transformed": false,
+      "gitContentSha256": "ae538441c94c0f3726f90e66528d3ab2d3ba3781576c0ac2c2fc739641a6599d"
+    },
+    {
+      "path": "screenshot-2026-10-09T19-55-57-924Z.png",
+      "bytes": 76119,
+      "sha256": "76f94987cc054a0e74120c0f5ab6e423ca8cd9bda1b756f878b63b400c5eeddd",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-09T19-55-57-924Z.png",
+      "destinationSha256": "76f94987cc054a0e74120c0f5ab6e423ca8cd9bda1b756f878b63b400c5eeddd",
+      "transformed": false,
+      "gitContentSha256": "76f94987cc054a0e74120c0f5ab6e423ca8cd9bda1b756f878b63b400c5eeddd"
+    },
+    {
+      "path": "screenshot-2026-10-09T19-56-09-702Z.png",
+      "bytes": 82362,
+      "sha256": "61ce3d27ce987b2100977b4b7ef912e7ba3b08783fc78a7ec18c28de1d98695b",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-09T19-56-09-702Z.png",
+      "destinationSha256": "61ce3d27ce987b2100977b4b7ef912e7ba3b08783fc78a7ec18c28de1d98695b",
+      "transformed": false,
+      "gitContentSha256": "61ce3d27ce987b2100977b4b7ef912e7ba3b08783fc78a7ec18c28de1d98695b"
+    },
+    {
+      "path": "screenshot-2026-10-09T20-15-13-307Z.png",
+      "bytes": 108010,
+      "sha256": "43e4b5582f6ed50a734cbeeeda8d0d18eaff52194dd983e7e1f9255526047d8b",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-09T20-15-13-307Z.png",
+      "destinationSha256": "43e4b5582f6ed50a734cbeeeda8d0d18eaff52194dd983e7e1f9255526047d8b",
+      "transformed": false,
+      "gitContentSha256": "43e4b5582f6ed50a734cbeeeda8d0d18eaff52194dd983e7e1f9255526047d8b"
+    },
+    {
+      "path": "screenshot-2026-10-09T20-17-13-008Z.png",
+      "bytes": 112227,
+      "sha256": "92a4675ff8afd03e6f5b1e29e96dcb5f56a76eed8b9f3f3ae6f588b410959119",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-09T20-17-13-008Z.png",
+      "destinationSha256": "92a4675ff8afd03e6f5b1e29e96dcb5f56a76eed8b9f3f3ae6f588b410959119",
+      "transformed": false,
+      "gitContentSha256": "92a4675ff8afd03e6f5b1e29e96dcb5f56a76eed8b9f3f3ae6f588b410959119"
+    },
+    {
+      "path": "screenshot-2026-10-09T20-17-43-433Z.png",
+      "bytes": 111096,
+      "sha256": "87a4fddb4be82136a887b5072c8fad55b033a4cd193872bb5b92ece9f16a9d43",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/screenshot-2026-10-09T20-17-43-433Z.png",
+      "destinationSha256": "87a4fddb4be82136a887b5072c8fad55b033a4cd193872bb5b92ece9f16a9d43",
+      "transformed": false,
+      "gitContentSha256": "87a4fddb4be82136a887b5072c8fad55b033a4cd193872bb5b92ece9f16a9d43"
+    },
+    {
+      "path": "Wireframe-de-Perfil-em-Modo-Escuro-1.png",
+      "bytes": 1240449,
+      "sha256": "7a98afaf56430a35938643141b41a3a5dc1c0cd0d0ad9f0a1ebd7a3892bfc1b0",
+      "action": "migrated",
+      "destination": "docs/design/default-skin/references/visual-history/Wireframe-de-Perfil-em-Modo-Escuro-1.png",
+      "destinationSha256": "7a98afaf56430a35938643141b41a3a5dc1c0cd0d0ad9f0a1ebd7a3892bfc1b0",
+      "transformed": false,
+      "gitContentSha256": "7a98afaf56430a35938643141b41a3a5dc1c0cd0d0ad9f0a1ebd7a3892bfc1b0"
+    },
+    {
+      "path": "Wireframe-de-Perfil-em-Modo-Escuro.png",
+      "bytes": 1240449,
+      "sha256": "7a98afaf56430a35938643141b41a3a5dc1c0cd0d0ad9f0a1ebd7a3892bfc1b0",
+      "action": "deduplicated",
+      "destination": "docs/design/default-skin/references/visual-history/Wireframe-de-Perfil-em-Modo-Escuro-1.png",
+      "reason": "Identical visual evidence (SHA-256)",
+      "gitContentSha256": "7a98afaf56430a35938643141b41a3a5dc1c0cd0d0ad9f0a1ebd7a3892bfc1b0"
+    }
+  ],
+  "existingRepositoryFiles": [
+    {
+      "source": "index.html",
+      "destination": "docs/design/default-skin/mockups/history/personalizacao/index.html",
+      "sha256": "85e34c9546b2f0e31b0152e931c824e5e4eb2c7a583ca1200e00789215f10d9a",
+      "destinationSha256": "484e972ba1218f669c76b1818e74fe33d76bd03930a199ee500da50a09ee9364",
+      "gitContentSha256": "484e972ba1218f669c76b1818e74fe33d76bd03930a199ee500da50a09ee9364"
+    },
+    {
+      "source": "docs/design/personalizacao-tensions.md",
+      "destination": "docs/design/default-skin/references/history/personalizacao-tensions-before-migration.md",
+      "sha256": "0b91bf048577cb18f1f5b8bfc7ca95ea2e935ecce4eefa198fda7b322bfe656d",
+      "destinationSha256": "0b91bf048577cb18f1f5b8bfc7ca95ea2e935ecce4eefa198fda7b322bfe656d",
+      "gitContentSha256": "cdaacbf342fadff0303962dc7b8cab40b488dd51c4f91e6ac677c1a2a8fe664f"
+    },
+    {
+      "source": "assets/fonts/segoeui.ttf",
+      "destination": "docs/design/default-skin/mockups/assets/fonts/segoeui.ttf",
+      "sha256": "704eada12961a27fd271f7d3b09e2066520e758390c1776744eff430fee30f6e",
+      "destinationSha256": "704eada12961a27fd271f7d3b09e2066520e758390c1776744eff430fee30f6e",
+      "gitContentSha256": "704eada12961a27fd271f7d3b09e2066520e758390c1776744eff430fee30f6e"
+    },
+    {
+      "source": "assets/fonts/segoeuib.ttf",
+      "destination": "docs/design/default-skin/mockups/assets/fonts/segoeuib.ttf",
+      "sha256": "b169e636719880976a97e94e3b1cb3dbe5f4a38eabc037bf9f2a9165154c3ad2",
+      "destinationSha256": "b169e636719880976a97e94e3b1cb3dbe5f4a38eabc037bf9f2a9165154c3ad2",
+      "gitContentSha256": "b169e636719880976a97e94e3b1cb3dbe5f4a38eabc037bf9f2a9165154c3ad2"
+    }
+  ],
+  "excludedDirectories": [
+    ".od-skills (empty materialized runtime root)"
+  ]
+}

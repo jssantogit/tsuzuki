@@ -31,7 +31,6 @@ import eu.kanade.tachiyomi.data.tsuzuki.diagnostics.DiagnosticCaptureSession
 import eu.kanade.tachiyomi.data.tsuzuki.integration.BuiltinIntegrationProviderRegistry
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseSyncJob
 import eu.kanade.tachiyomi.data.tsuzuki.supabase.SupabaseSyncRuntime
-import eu.kanade.tachiyomi.data.updater.AppUpdateChecker
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.util.ExtensionInstallActivity
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -122,8 +121,6 @@ interface AppGraph : ViewModelGraph {
     val diagnosticCaptureSession: DiagnosticCaptureSession
 
     val downloadManager: DownloadManager
-
-    val updateChecker: AppUpdateChecker
 
     val trustExtension: TrustExtension
 
