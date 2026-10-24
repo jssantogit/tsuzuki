@@ -46,7 +46,7 @@ class StructuredDiagnosticEventTest {
     }
 
     @Test
-    fun \`P2P Host traces are bounded and reject unrecognized content identity fields\`() {
+    fun `P2P Host traces are bounded and reject unrecognized content identity fields`() {
         val safeLine = "provider_p2p event=METADATA_FAILED opRef=0123456789abcdef " +
             "source=MAGNET failure=METADATA_UNAVAILABLE elapsedMs=30001"
 
