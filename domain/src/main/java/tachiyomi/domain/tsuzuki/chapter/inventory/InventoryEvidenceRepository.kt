@@ -40,6 +40,7 @@ fun summarizeInventory(claims: List<InventoryStoredClaim>): InventoryKnowledgeSu
             it.scope.producerId,
             it.scope.externalWorkId,
             it.scope.editionKey.orEmpty(),
+            it.scope.language.orEmpty(),
             it.claim.sourceRecordId,
         )
     }

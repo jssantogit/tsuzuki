@@ -22,12 +22,6 @@ import tachiyomi.data.UpdateStrategyColumnAdapter
 import tachiyomi.data.tsuzuki.CanonicalChapterRepositoryImpl
 import tachiyomi.data.tsuzuki.chapter.ChapterEvidenceRepositoryImpl
 import tachiyomi.data.tsuzuki.chapter.IndependentInventoryRepositoryImpl
-import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaim
-import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaimKind
-import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryDerivation
-import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
-import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
-import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
@@ -36,6 +30,12 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaim
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaimKind
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryDerivation
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import java.lang.reflect.InvocationTargetException
@@ -107,7 +107,7 @@ class ChapterEvidenceRepositoryImplTest {
                 producerId = "mangadex",
                 externalWorkId = "verified-manga",
                 editionKey = null,
-                language = null,
+                language = "pt-br",
                 workIdentityVerified = true,
                 editionIdentityVerified = false,
             )
@@ -150,6 +150,7 @@ class ChapterEvidenceRepositoryImplTest {
             retained.claim.label shouldBe "12.05"
             retained.claim.observedAt shouldBe 10L
             retained.scope.editionIdentityVerified shouldBe false
+            retained.scope.language shouldBe "pt-br"
             ledger.batchesByTitle("title-1").single().outcome shouldBe InventoryFetchOutcome.FAILED
             chapterRepository.getByCanonicalTitleId("title-1").size shouldBe 0
         }

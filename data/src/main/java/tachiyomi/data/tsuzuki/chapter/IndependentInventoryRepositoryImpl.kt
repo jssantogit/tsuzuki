@@ -34,6 +34,7 @@ class IndependentInventoryRepositoryImpl(
                     producerId,
                     externalWorkId,
                     editionKey,
+                    scopeLanguage,
                     sourceRecordId,
                     rawLabel,
                     rawVolume,
@@ -51,7 +52,7 @@ class IndependentInventoryRepositoryImpl(
                         producerId = producerId,
                         externalWorkId = externalWorkId,
                         editionKey = editionKey.ifBlank { null },
-                        language = null,
+                        language = scopeLanguage.ifBlank { null },
                         workIdentityVerified = workVerified != 0L,
                         editionIdentityVerified = editionVerified != 0L,
                     ),
@@ -70,7 +71,7 @@ class IndependentInventoryRepositoryImpl(
             .awaitAsList()
 
     override suspend fun batchesByTitle(canonicalTitleId: String): List<InventoryStoredBatch> =
-        database.tsuzuki_independent_inventory_pagesQueries
+        database.tsuzuki_independent_inventory_claimsQueries
             .getTsuzukiIndependentInventoryPagesByTitle(canonicalTitleId) {
                     titleId,
                     producerId,
@@ -115,6 +116,7 @@ class IndependentInventoryRepositoryImpl(
                     producerId = scope.producerId,
                     externalWorkId = scope.externalWorkId,
                     editionKey = scope.editionKey.orEmpty(),
+                    scopeLanguage = scope.language.orEmpty(),
                     sourceRecordId = claim.sourceRecordId,
                     rawLabel = claim.label,
                     rawVolume = claim.volumeLabel,
@@ -127,7 +129,7 @@ class IndependentInventoryRepositoryImpl(
                     observedAt = claim.observedAt,
                 )
             }
-            database.tsuzuki_independent_inventory_pagesQueries.upsertTsuzukiIndependentInventoryPage(
+            database.tsuzuki_independent_inventory_claimsQueries.upsertTsuzukiIndependentInventoryPage(
                 canonicalTitleId = scope.canonicalTitleId,
                 producerId = scope.producerId,
                 externalWorkId = scope.externalWorkId,

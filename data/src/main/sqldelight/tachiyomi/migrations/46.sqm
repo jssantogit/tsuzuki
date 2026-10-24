@@ -4,6 +4,7 @@ CREATE TABLE tsuzuki_independent_inventory_claims(
     producer_id TEXT NOT NULL,
     external_work_id TEXT NOT NULL,
     edition_key TEXT NOT NULL,
+    scope_language TEXT NOT NULL,
     source_record_id TEXT NOT NULL,
     raw_label TEXT,
     raw_volume TEXT,
@@ -14,7 +15,7 @@ CREATE TABLE tsuzuki_independent_inventory_claims(
     work_verified INTEGER NOT NULL,
     edition_verified INTEGER NOT NULL,
     observed_at INTEGER NOT NULL,
-    PRIMARY KEY(canonical_title_id, producer_id, external_work_id, edition_key, source_record_id),
+    PRIMARY KEY(canonical_title_id, producer_id, external_work_id, edition_key, scope_language, source_record_id),
     FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
 );
 
