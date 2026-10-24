@@ -110,4 +110,10 @@
     <string name="tsuzuki_list_builder_yes">Yes</string>
     <string name="tsuzuki_list_builder_no">No</string>
     <string name="tsuzuki_list_builder_relative_date">Relative date</string>
+    <string name="tsuzuki_list_builder_option_preview">Examples from this catalog: %1$s</string>
+    <string name="tsuzuki_list_builder_search_options">Search available options</string>
+    <string name="tsuzuki_list_builder_text_hint">Enter a value to match using this catalog's text filter; no suggestions are provided.</string>
+    <string name="tsuzuki_list_builder_range_hint">Set a minimum, a maximum, or both. Leave either empty if you don't need it.</string>
+    <string name="tsuzuki_list_builder_date_hint">Use dates in YYYY-MM-DD format (e.g. 2020-01-01).</string>
+    <string name="tsuzuki_list_builder_lookup_hint">Search this catalog for real values, then choose include or exclude.</string>
 </resources>
