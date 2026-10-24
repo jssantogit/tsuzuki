@@ -167,6 +167,43 @@ class RefreshUserLibrariesTest {
     }
 
     @Test
+    fun `A changing to B while the remote fetch runs aborts without replacing either owner`() = runTest {
+        val repository = FakeExternalLibraryRepository()
+        val provider = FakeUserListProvider(
+            Result.success(
+                UserLibrarySnapshot(
+                    lists = emptyList(),
+                    entries = listOf(
+                        UserLibraryEntry(
+                            item = CatalogItem(provider = "mal", providerId = "123", title = "Private title"),
+                            listKeys = setOf("mal:reading"),
+                            status = LibraryStatus.READING,
+                            remoteStatus = "reading",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        provider.activeOwner = "owner-A"
+        provider.afterFetch = { provider.activeOwner = "owner-B" }
+        val interactor = RefreshUserLibraries(
+            registry = FakeRegistry(provider),
+            materializeCanonicalTitleFromCatalog = MaterializeCanonicalTitleFromCatalog(
+                MaterializeCanonicalTitle(
+                    repository = FakeTitleRepository(),
+                    idFactory = { "should-not-materialize" },
+                    clock = { 100L },
+                ),
+            ),
+            externalLibraryRepository = repository,
+            clock = { 200L },
+        )
+        interactor.refreshProvider(IntegrationId("mal")).isFailure shouldBe true
+        repository.memberships.value shouldBe emptyList()
+        repository.ownedSnapshots shouldBe emptyMap()
+    }
+
+    @Test
     fun `disconnected ownerless provider cannot delete legacy private snapshot`() = runTest {
         val legacy = ExternalLibraryMembership(
             canonicalTitleId = "A-canonical",
@@ -255,8 +292,10 @@ class RefreshUserLibrariesTest {
         var activeOwner = "account-1"
         override suspend fun authenticatedOwnerSubject(): Result<String> = Result.success(activeOwner)
         var fetchCount = 0
+        var afterFetch: () -> Unit = {}
         override suspend fun fetchLibrary(): Result<UserLibrarySnapshot> {
             fetchCount++
+            afterFetch()
             return result
         }
     }
@@ -292,6 +331,7 @@ class RefreshUserLibrariesTest {
     ) : ExternalLibraryRepository {
         override val hasVerifiedOwnerScope: Boolean get() = ownerScoped
         val memberships = MutableStateFlow(initial)
+        val ownedSnapshots = mutableMapOf<String, List<ExternalLibraryMembership>>()
 
         override fun observeAll(): Flow<List<ExternalLibraryMembership>> =
             memberships
@@ -300,6 +340,7 @@ class RefreshUserLibrariesTest {
             owner: tachiyomi.domain.tsuzuki.library.model.VerifiedExternalLibraryOwner,
             memberships: List<ExternalLibraryMembership>,
         ) {
+            ownedSnapshots[owner.ownerKey] = memberships
             replaceProvider(owner.provider, memberships)
         }
 
