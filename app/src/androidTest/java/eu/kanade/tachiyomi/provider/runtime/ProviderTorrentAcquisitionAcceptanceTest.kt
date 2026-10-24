@@ -104,6 +104,10 @@ class ProviderTorrentAcquisitionAcceptanceTest {
             assertTrue(
                 cache.find(PROVIDER_ID.value, request)?.contentEquals(fixture.metadataBytes) == true,
             )
+            assertTrue(
+                "a different archive cannot borrow Host-verified chapter metadata",
+                cache.find(PROVIDER_ID.value, request.copy(selectedFilePath = "Other.cbz")) == null,
+            )
             val service = jobs.service(PROVIDER_ID.value)
             assertTrue(service.acquire(request) is ProviderP2pAcquireResponse.Pending)
 
