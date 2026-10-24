@@ -96,7 +96,7 @@ class ExternalLibraryOwnershipGateTest {
 
     @Test
     fun `unowned legacy memberships are invisible and remain unchanged after account switch`() = runBlocking {
-        repository.hasVerifiedOwnerScope shouldBe false
+        repository.hasVerifiedOwnerScope shouldBe true
         repository.observeAll().first() shouldBe emptyList()
         repository.getProviderIds() shouldBe emptySet()
         repository.clearProvider("mal")

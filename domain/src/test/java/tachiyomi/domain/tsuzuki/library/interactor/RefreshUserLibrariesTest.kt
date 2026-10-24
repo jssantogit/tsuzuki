@@ -252,6 +252,8 @@ class RefreshUserLibrariesTest {
     ) : UserListProvider {
         override val integrationId = IntegrationId("mal")
         override val connection: Flow<Boolean> = flowOf(connected)
+        var activeOwner = "account-1"
+        override suspend fun authenticatedOwnerSubject(): Result<String> = Result.success(activeOwner)
         var fetchCount = 0
         override suspend fun fetchLibrary(): Result<UserLibrarySnapshot> {
             fetchCount++
@@ -293,6 +295,13 @@ class RefreshUserLibrariesTest {
 
         override fun observeAll(): Flow<List<ExternalLibraryMembership>> =
             memberships
+
+        override suspend fun replaceOwned(
+            owner: tachiyomi.domain.tsuzuki.library.model.VerifiedExternalLibraryOwner,
+            memberships: List<ExternalLibraryMembership>,
+        ) {
+            replaceProvider(owner.provider, memberships)
+        }
 
         override suspend fun replaceProvider(
             provider: String,

@@ -21,6 +21,7 @@ import tachiyomi.domain.tsuzuki.integration.UserListProvider
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.interactor.MaterializeCanonicalTitleFromCatalog
 import tachiyomi.domain.tsuzuki.library.model.ExternalLibraryMembership
+import tachiyomi.domain.tsuzuki.library.model.VerifiedExternalLibraryOwner
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.repository.ExternalLibraryRepository
 import kotlin.time.Clock
@@ -160,6 +161,16 @@ class RefreshUserLibraries internal constructor(
             attributes = providerAttributes,
         )
 
+        val initialOwner = provider.authenticatedOwnerSubject().getOrElse { error ->
+            if (error is CancellationException) throw error
+            return Result.failure(error)
+        }
+        val verifiedOwner = try {
+            VerifiedExternalLibraryOwner.fromAuthenticatedIdentity(provider.integrationId.value, initialOwner)
+        } catch (error: IllegalArgumentException) {
+            return Result.failure(error)
+        }
+
         val snapshot = provider.fetchLibrary()
         val error = snapshot.exceptionOrNull()
         if (error != null) {
@@ -177,6 +188,9 @@ class RefreshUserLibraries internal constructor(
         }
 
         return try {
+            check(provider.authenticatedOwnerSubject().getOrThrow() == initialOwner) {
+                "Authenticated external library owner changed during fetch"
+            }
             val syncedAt = clock()
             val librarySnapshot = snapshot.getOrThrow()
             val entries = librarySnapshot.entries
@@ -215,8 +229,13 @@ class RefreshUserLibraries internal constructor(
                 }
             }
 
-            externalLibraryRepository.replaceProvider(
-                provider = provider.integrationId.value,
+            // Never attribute a fetch made for A to B, including an account
+            // switch while canonical titles were being reconciled.
+            check(provider.authenticatedOwnerSubject().getOrThrow() == initialOwner) {
+                "Authenticated external library owner changed before commit"
+            }
+            externalLibraryRepository.replaceOwned(
+                owner = verifiedOwner,
                 memberships = memberships,
             )
             trace.event(
