@@ -39,11 +39,148 @@ class SupabaseSyncHttpTransport(
     },
 ) : SupabaseSyncTransport, CanonicalIdentityClaimTransport {
 
+    /**
+     * Read-only protocol discovery. It never enables v2 transport or changes
+     * an account epoch. A future / contradictory server response fails closed.
+     */
+    suspend fun getProgressProtocol(): SyncTransportResult<LegacyProgressProtocol> {
+        val response = executeAuthenticated(
+            request = rpcRequest("sync_get_progress_protocol", buildJsonObject {}),
+        ) { raw ->
+            json.decodeFromString(ProgressProtocolResponse.serializer(), raw)
+        }
+        return when (response) {
+            is SyncTransportResult.Failure -> response
+            is SyncTransportResult.Success -> {
+                val protocol = response.value
+                if (
+                    protocol.schemaVersion != 1 ||
+                    protocol.protocolEpoch != 1L ||
+                    protocol.activeDomain != SyncDocumentKind.READING_PROGRESS.name ||
+                    protocol.exactProgressEnabled ||
+                    protocol.migrationReady
+                ) {
+                    SyncTransportResult.Failure(
+                        SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA),
+                    )
+                } else {
+                    SyncTransportResult.Success(
+                        LegacyProgressProtocol(protocolEpoch = protocol.protocolEpoch),
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Authenticated presence for an existing v1 client. It is deliberately
+     * separate from normal sync and cannot authorize a v2 migration.
+     * Do not call from production sync until the backend migration is deployed.
+     */
+    suspend fun registerLegacyProgressDevice(clientId: String): SyncTransportResult<LegacyProgressDeviceLease> {
+        require(clientId.isNotBlank()) { "Sync client identity must not be blank" }
+        val response = executeAuthenticated(
+            request = rpcRequest(
+                "sync_register_progress_device",
+                buildJsonObject { put("p_client_id", JsonPrimitive(clientId)) },
+            ),
+        ) { raw ->
+            json.decodeFromString(ProgressDeviceRegistrationResponse.serializer(), raw)
+        }
+        return when (response) {
+            is SyncTransportResult.Failure -> response
+            is SyncTransportResult.Success -> {
+                val lease = response.value
+                if (
+                    lease.schemaVersion != 1 ||
+                    lease.protocolEpoch != 1L ||
+                    lease.leaseExpiresAt.isBlank() ||
+                    lease.exactProgressEnabled ||
+                    lease.migrationReady
+                ) {
+                    SyncTransportResult.Failure(SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA))
+                } else {
+                    SyncTransportResult.Success(
+                        LegacyProgressDeviceLease(leaseExpiresAt = lease.leaseExpiresAt),
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Server-observed v1 inventory for manual migration review only.
+     * No amount of positive-looking counters can authorize v2 sync.
+     */
+    suspend fun previewLegacyProgressRollout(): SyncTransportResult<LegacyProgressRolloutPreview> {
+        val response = executeAuthenticated(
+            request = rpcRequest("sync_preview_progress_rollout", buildJsonObject {}),
+        ) { raw ->
+            json.decodeFromString(ProgressRolloutPreviewResponse.serializer(), raw)
+        }
+        return when (response) {
+            is SyncTransportResult.Failure -> response
+            is SyncTransportResult.Success -> {
+                val preview = response.value
+                if (
+                    preview.schemaVersion != 1 ||
+                    preview.protocolEpoch != 1L ||
+                    preview.activeDomain != SyncDocumentKind.READING_PROGRESS.name ||
+                    preview.registeredDeviceCount < 0 ||
+                    preview.unexpiredLegacyDeviceCount < 0 ||
+                    preview.unexpiredLegacyDeviceCount > preview.registeredDeviceCount ||
+                    preview.legacyRecordCount < 0 ||
+                    preview.legacyTombstoneCount < 0 ||
+                    preview.legacyTombstoneCount > preview.legacyRecordCount ||
+                    preview.legacyEventCursor < 0 ||
+                    preview.legacyIncompleteRecordCount < 0 ||
+                    preview.legacyIncompleteRecordCount > preview.legacyRecordCount - preview.legacyTombstoneCount ||
+                    preview.legacyInvalidValueRecordCount < 0 ||
+                    preview.legacyInvalidValueRecordCount > preview.legacyRecordCount - preview.legacyTombstoneCount ||
+                    preview.unresolvedProgressConflictCount < 0 ||
+                    preview.historicalDeviceCoverageProven ||
+                    preview.pendingLocalWritesObservable ||
+                    preview.exactProgressEnabled ||
+                    preview.migrationReady
+                ) {
+                    SyncTransportResult.Failure(
+                        SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA),
+                    )
+                } else {
+                    SyncTransportResult.Success(
+                        LegacyProgressRolloutPreview(
+                            registeredDeviceCount = preview.registeredDeviceCount,
+                            unexpiredLegacyDeviceCount = preview.unexpiredLegacyDeviceCount,
+                            legacyRecordCount = preview.legacyRecordCount,
+                            legacyTombstoneCount = preview.legacyTombstoneCount,
+                            legacyIncompleteRecordCount = preview.legacyIncompleteRecordCount,
+                            legacyInvalidValueRecordCount = preview.legacyInvalidValueRecordCount,
+                            unresolvedProgressConflictCount = preview.unresolvedProgressConflictCount,
+                            legacyEventCursor = preview.legacyEventCursor,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun <T> unsupportedExactProgress(): SyncTransportResult<T> {
+        val reason = if (accountRepository.state.value is AccountState.Authenticated) {
+            SyncFailureReason.UNSUPPORTED_SCHEMA
+        } else {
+            SyncFailureReason.AUTHORIZATION_REQUIRED
+        }
+        return SyncTransportResult.Failure(SyncFailure(reason))
+    }
+
     override suspend fun pullDelta(
         documentKind: SyncDocumentKind,
         sinceEventId: Long,
         limit: Int,
     ): SyncTransportResult<List<SupabaseSyncEvent>> {
+        if (documentKind == SyncDocumentKind.READING_PROGRESS_V2) {
+            return unsupportedExactProgress()
+        }
         require(sinceEventId >= 0) { "Supabase delta cursor must not be negative" }
         require(limit in 1..1000) { "Supabase delta limit must be between 1 and 1000" }
 
@@ -67,6 +204,9 @@ class SupabaseSyncHttpTransport(
     override suspend fun snapshot(
         documentKind: SyncDocumentKind,
     ): SyncTransportResult<SupabaseSyncSnapshot> {
+        if (documentKind == SyncDocumentKind.READING_PROGRESS_V2) {
+            return unsupportedExactProgress()
+        }
         val body = buildJsonObject {
             put("p_domain", JsonPrimitive(documentKind.name))
         }
@@ -94,6 +234,9 @@ class SupabaseSyncHttpTransport(
     override suspend fun push(
         batch: SupabaseMutationBatch,
     ): SyncTransportResult<SupabasePushResult> {
+        if (batch.domain.trim() == SyncDocumentKind.READING_PROGRESS_V2.name) {
+            return unsupportedExactProgress()
+        }
         val payload = buildJsonObject {
             put("mutationId", JsonPrimitive(batch.mutationId))
             put("originClientId", JsonPrimitive(batch.originClientId))
@@ -248,6 +391,7 @@ class SupabaseSyncHttpTransport(
                     return SyncTransportResult.Failure(
                         response.code.toSyncFailure(
                             retryAfterHeader = response.header("Retry-After"),
+                            responseBody = raw,
                         ),
                     )
                 }
@@ -305,7 +449,22 @@ class SupabaseSyncHttpTransport(
 
     private fun Int.toSyncFailure(
         retryAfterHeader: String?,
+        responseBody: String,
     ): SyncFailure {
+        // PostgREST reports server-side epoch fences with SQLSTATE 0A000
+        // and HTTP 400. Do not misclassify a forbidden progress protocol as
+        // corrupted local data, or bypass other ordinary 400 validation.
+        if (this == 400 || this == 422) {
+            val postgresCode = runCatching {
+                (json.parseToJsonElement(responseBody) as? JsonObject)
+                    ?.get("code")
+                    ?.let { it as? JsonPrimitive }
+                    ?.content
+            }.getOrNull()
+            if (postgresCode == "0A000") {
+                return SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA)
+            }
+        }
         val reason = when (this) {
             400, 422 -> SyncFailureReason.MALFORMED_DOCUMENT
             401 -> SyncFailureReason.AUTHORIZATION_REQUIRED
@@ -341,6 +500,68 @@ class SupabaseSyncHttpTransport(
         val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
 }
+
+/**
+ * The only protocol a client may acknowledge while remote migration, client
+ * capabilities and downgrade fencing are unavailable.
+ */
+data class LegacyProgressProtocol(
+    val protocolEpoch: Long,
+)
+
+@Serializable
+private data class ProgressProtocolResponse(
+    val schemaVersion: Int,
+    val protocolEpoch: Long,
+    val activeDomain: String,
+    val exactProgressEnabled: Boolean,
+    val migrationReady: Boolean,
+)
+
+/** Device-presence receipt only; never a protocol activation credential. */
+data class LegacyProgressDeviceLease(
+    val leaseExpiresAt: String,
+)
+
+@Serializable
+private data class ProgressDeviceRegistrationResponse(
+    val schemaVersion: Int,
+    val protocolEpoch: Long,
+    val leaseExpiresAt: String,
+    val exactProgressEnabled: Boolean,
+    val migrationReady: Boolean,
+)
+
+/** Non-authorizing account v1 inventory; local pending writes remain unknown. */
+data class LegacyProgressRolloutPreview(
+    val registeredDeviceCount: Long,
+    val unexpiredLegacyDeviceCount: Long,
+    val legacyRecordCount: Long,
+    val legacyTombstoneCount: Long,
+    val legacyIncompleteRecordCount: Long,
+    val legacyInvalidValueRecordCount: Long,
+    val unresolvedProgressConflictCount: Long,
+    val legacyEventCursor: Long,
+)
+
+@Serializable
+private data class ProgressRolloutPreviewResponse(
+    val schemaVersion: Int,
+    val protocolEpoch: Long,
+    val activeDomain: String,
+    val registeredDeviceCount: Long,
+    val unexpiredLegacyDeviceCount: Long,
+    val legacyRecordCount: Long,
+    val legacyTombstoneCount: Long,
+    val legacyIncompleteRecordCount: Long,
+    val legacyInvalidValueRecordCount: Long,
+    val unresolvedProgressConflictCount: Long,
+    val legacyEventCursor: Long,
+    val historicalDeviceCoverageProven: Boolean,
+    val pendingLocalWritesObservable: Boolean,
+    val exactProgressEnabled: Boolean,
+    val migrationReady: Boolean,
+)
 
 @Serializable
 private data class MutationConflictResponse(

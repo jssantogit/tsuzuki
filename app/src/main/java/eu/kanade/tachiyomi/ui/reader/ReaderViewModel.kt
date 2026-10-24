@@ -1203,21 +1203,23 @@ class ReaderViewModel(
     /**
      * Called when the user is going to load the prev/next chapter through the toolbar buttons.
      */
-    private suspend fun loadAdjacent(chapter: ReaderChapter) {
-        val loader = loader ?: return
+    private suspend fun loadAdjacent(chapter: ReaderChapter): Boolean {
+        val loader = loader ?: return false
 
         logcat { "Loading adjacent ${chapter.chapter.url}" }
 
         mutableState.update { it.copy(isLoadingAdjacentChapter = true) }
-        try {
+        return try {
             withIOContext {
                 loadChapter(loader, chapter)
             }
+            true
         } catch (e: Throwable) {
             if (e is CancellationException) {
                 throw e
             }
             logcat(LogPriority.ERROR, e)
+            false
         } finally {
             mutableState.update { it.copy(isLoadingAdjacentChapter = false) }
         }
@@ -1407,18 +1409,30 @@ class ReaderViewModel(
         if (!incognitoMode && page.status !is Page.State.Error && !suppressCanonicalProgress) {
             readerChapter.chapter.last_page_read = pageIndex
 
-            if (readerChapter.pages?.lastIndex == pageIndex) {
+            val canonicalSession = canonicalSessionFor(readerChapter)
+            val lastPageSelected = readerChapter.pages?.lastIndex == pageIndex
+            val canonicalLocalPage = canonicalSession != null &&
+                canonicalSession.mihonChapterId == null &&
+                readerChapter.pageLoader?.isLocal == true
+            val chapterCompleted = when {
+                !lastPageSelected -> false
+                canonicalLocalPage -> page is ReaderPage && isCanonicalLocalPageReadable(page)
+                else -> true
+            }
+            // A local page list can expose a corrupt image as Ready before it
+            // decodes. Keep the user's last-page checkpoint, but do not mark
+            // the canonical chapter read until the last image header is valid.
+            if (chapterCompleted) {
                 updateChapterProgressOnComplete(readerChapter)
             }
 
-            val canonicalSession = canonicalSessionFor(readerChapter)
             if (canonicalSession != null) {
                 try {
                     if (canonicalSession.variantId.isNullOrBlank()) {
                         recordCanonicalReaderProgress.recordPage(
                             canonicalChapterId = canonicalSession.canonicalChapterId,
                             pageIndex = pageIndex,
-                            completed = readerChapter.pages?.lastIndex == pageIndex,
+                            completed = chapterCompleted,
                             mihonChapterId = canonicalSession.mihonChapterId,
                         )
                     } else {
@@ -1426,7 +1440,7 @@ class ReaderViewModel(
                             canonicalChapterId = canonicalSession.canonicalChapterId,
                             variantId = canonicalSession.variantId,
                             pageIndex = pageIndex,
-                            completed = readerChapter.pages?.lastIndex == pageIndex,
+                            completed = chapterCompleted,
                             mihonChapterId = canonicalSession.mihonChapterId,
                         )
                     }
@@ -1513,47 +1527,50 @@ class ReaderViewModel(
     /**
      * Called from the activity to load and set the next chapter as active.
      */
-    suspend fun loadNextChapter() {
+    suspend fun loadNextChapter(): Boolean {
         if (canonicalSession != null) {
-            loadAdjacentCanonical(CanonicalChapterDirection.NEXT)
-            return
+            return loadAdjacentCanonical(CanonicalChapterDirection.NEXT)
         }
-        val nextChapter = state.value.viewerChapters?.nextChapter ?: return
-        loadAdjacent(nextChapter)
+        val nextChapter = state.value.viewerChapters?.nextChapter ?: return false
+        return loadAdjacent(nextChapter)
     }
 
     /**
      * Called from the activity to load and set the previous chapter as active.
      */
-    suspend fun loadPreviousChapter() {
+    suspend fun loadPreviousChapter(): Boolean {
         if (canonicalSession != null) {
-            loadAdjacentCanonical(CanonicalChapterDirection.PREVIOUS)
-            return
+            return loadAdjacentCanonical(CanonicalChapterDirection.PREVIOUS)
         }
-        val prevChapter = state.value.viewerChapters?.prevChapter ?: return
-        loadAdjacent(prevChapter)
+        val prevChapter = state.value.viewerChapters?.prevChapter ?: return false
+        return loadAdjacent(prevChapter)
     }
 
-    private suspend fun loadAdjacentCanonical(direction: CanonicalChapterDirection) {
-        val session = canonicalSession ?: return
+    private suspend fun loadAdjacentCanonical(direction: CanonicalChapterDirection): Boolean {
+        val session = canonicalSession ?: return false
         val adjacent = getAdjacentCanonicalChapter.execute(
             canonicalChapterId = session.canonicalChapterId,
             direction = direction,
-        ) ?: return
+        ) ?: return false
 
-        openCanonicalChapter(adjacent.id)
+        return openCanonicalChapterInternal(adjacent.id)
     }
 
     private var failedCanonicalChapterId: String? = null
 
-    /** Same preparation/publication gateway for adjacency and a real chapter-card selection. */
+    /** Keep the public chapter-card command while sharing preparation with adjacency navigation. */
     suspend fun openCanonicalChapter(chapterId: String) {
-        if (state.value.isLoadingAdjacentChapter || chapterId == canonicalSession?.canonicalChapterId) return
-        val adjacent = canonicalChapterRepository.getById(chapterId) ?: return
-        if (adjacent.canonicalTitleId != state.value.canonicalTitleId) return
+        openCanonicalChapterInternal(chapterId)
+    }
+
+    /** Returns true only when a new canonical chapter was actually opened. */
+    private suspend fun openCanonicalChapterInternal(chapterId: String): Boolean {
+        if (state.value.isLoadingAdjacentChapter || chapterId == canonicalSession?.canonicalChapterId) return false
+        val adjacent = canonicalChapterRepository.getById(chapterId) ?: return false
+        if (adjacent.canonicalTitleId != state.value.canonicalTitleId) return false
 
         mutableState.update { it.copy(isLoadingAdjacentChapter = true) }
-        try {
+        return try {
             when (
                 val preparation = prepareCanonicalChapterForReader.execute(
                     canonicalChapterId = adjacent.id,
@@ -1567,6 +1584,7 @@ class ReaderViewModel(
                         selectedOption = preparation.selectedOption,
                         recordPreviousHistory = true,
                     )
+                    true
                 }
                 is CanonicalReaderPreparation.SelectionRequired -> {
                     showContentSelector(
@@ -1574,6 +1592,7 @@ class ReaderViewModel(
                         canonicalChapterId = preparation.canonicalChapterId,
                         closeReaderOnDismiss = false,
                     )
+                    false
                 }
                 is CanonicalReaderPreparation.Unavailable -> {
                     val chapter = canonicalChapterRepository.getById(adjacent.id)
@@ -1588,6 +1607,7 @@ class ReaderViewModel(
                             "Canonical adjacent chapter ${adjacent.id} has no readable content"
                         }
                     }
+                    false
                 }
                 is CanonicalReaderPreparation.Failed -> throw preparation.error
             }
@@ -1598,6 +1618,7 @@ class ReaderViewModel(
             mutableState.update {
                 it.copy(recovery = classifyReaderRecovery(error) ?: ReaderRecovery.SOURCE_UNAVAILABLE)
             }
+            false
         } finally {
             mutableState.update { it.copy(isLoadingAdjacentChapter = false) }
         }

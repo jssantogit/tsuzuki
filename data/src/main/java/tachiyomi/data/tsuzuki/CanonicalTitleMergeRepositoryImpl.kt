@@ -7,7 +7,9 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import tachiyomi.data.Database
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.model.CanonicalLibraryEntry
 import tachiyomi.domain.tsuzuki.model.LibraryStatus
@@ -143,6 +145,9 @@ class CanonicalTitleMergeRepositoryImpl(
                     createdAt = chapter.createdAt,
                     updatedAt = chapter.updatedAt,
                     confirmationState = chapter.confirmationState,
+                    numberingKind = chapter.numberingKind,
+                    decimalNumerator = chapter.decimalNumerator,
+                    decimalScale = chapter.decimalScale,
                 )
             }
 
@@ -429,6 +434,9 @@ class CanonicalTitleMergeRepositoryImpl(
                     createdAt,
                     updatedAt,
                     confirmationState,
+                    numberingKind,
+                    decimalNumerator,
+                    decimalScale,
                 ->
                 ChapterRow(
                     id = chapterId,
@@ -444,6 +452,9 @@ class CanonicalTitleMergeRepositoryImpl(
                     createdAt = createdAt,
                     updatedAt = updatedAt,
                     confirmationState = confirmationState,
+                    numberingKind = numberingKind,
+                    decimalNumerator = decimalNumerator,
+                    decimalScale = decimalScale,
                 )
             }
             .awaitAsList()
@@ -640,6 +651,9 @@ class CanonicalTitleMergeRepositoryImpl(
         val createdAt: Long,
         val updatedAt: Long,
         val confirmationState: String,
+        val numberingKind: String?,
+        val decimalNumerator: Long?,
+        val decimalScale: Long?,
     ) {
         val identity: CanonicalChapterIdentity
             get() = CanonicalChapterIdentity(
@@ -647,6 +661,12 @@ class CanonicalTitleMergeRepositoryImpl(
                 baseNumber = baseNumber?.toInt(),
                 part = part?.toInt(),
                 alphaSuffix = alphaSuffix,
+                numberingKind = numberingKind?.let(CanonicalChapterNumberingKind::valueOf),
+                decimalFraction = if (decimalNumerator != null && decimalScale != null) {
+                    CanonicalChapterDecimalFraction(decimalNumerator.toInt(), decimalScale.toInt())
+                } else {
+                    null
+                },
             )
     }
 

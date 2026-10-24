@@ -9,7 +9,9 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 
@@ -47,6 +49,128 @@ class ParseCanonicalChapterLabelTest {
             part = 5,
             alphaSuffix = null,
         )
+    }
+
+    @Test
+    fun `leading-zero fractional labels cannot alias an existing numbered chapter identity`() {
+        val known = parse.execute("Chapter 12.5")
+        val ambiguous = parse.execute("Chapter 12.05")
+        val ambiguousExtended = parse.execute("12.005")
+
+        known.type shouldBe CanonicalChapterType.REGULAR
+        known.part shouldBe 5
+        ambiguous.type shouldBe CanonicalChapterType.UNKNOWN
+        ambiguous.confidence shouldBe 0.0
+        ambiguous.rawLabel shouldBe "Chapter 12.05"
+        ambiguousExtended.type shouldBe CanonicalChapterType.UNKNOWN
+        parse.execute("Vol. 12 Ch. 12.05", numericHint = 12.05).type shouldBe CanonicalChapterType.UNKNOWN
+        parse.execute("Chapter 12.05", numericHint = 5.0).type shouldBe CanonicalChapterType.UNKNOWN
+        (known.identity == ambiguous.identity) shouldBe false
+    }
+
+    @Test
+    fun `out-of-range fractional components fail closed instead of throwing`() {
+        val overInt = parse.execute("Chapter 12.2147483648")
+        val manyDigits = parse.execute("Chapter 12.99999999999999999999999999")
+
+        overInt.type shouldBe CanonicalChapterType.UNKNOWN
+        manyDigits.type shouldBe CanonicalChapterType.UNKNOWN
+        manyDigits.rawLabel shouldBe "Chapter 12.99999999999999999999999999"
+    }
+
+    @Test
+    fun `opt-in exact decimals distinguish scale without changing legacy chapter identity keys`() {
+        val old = CanonicalChapter(
+            id = "existing",
+            canonicalTitleId = "title",
+            displayNumber = "12.5",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 12,
+            part = 5,
+        )
+        val existingKey = old.identity.sortKey
+        val fiveTenths = old.copy(
+            id = "exact-five-tenths",
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+        )
+        val fiveHundredths = fiveTenths.copy(
+            id = "exact-five-hundredths",
+            displayNumber = "12.05",
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+        )
+
+        old.identity.sortKey shouldBe existingKey
+        (fiveTenths.identity == old.identity) shouldBe false
+        (fiveHundredths.identity == fiveTenths.identity) shouldBe false
+        (fiveHundredths.identity < fiveTenths.identity) shouldBe true
+        (fiveHundredths.sortKey < fiveTenths.sortKey) shouldBe true
+        old.sortKey shouldBe "01|0000000012|10000000005|00|"
+    }
+
+    @Test
+    fun `exact decimal order uses fractional scale instead of integer numerator`() {
+        val chapters = listOf(
+            CanonicalChapterIdentity(
+                type = CanonicalChapterType.REGULAR,
+                baseNumber = 12,
+                part = 5,
+                numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+                decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+            ),
+            CanonicalChapterIdentity(
+                type = CanonicalChapterType.REGULAR,
+                baseNumber = 12,
+                part = 25,
+                numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+                decimalFraction = CanonicalChapterDecimalFraction(25, 2),
+            ),
+            CanonicalChapterIdentity(
+                type = CanonicalChapterType.REGULAR,
+                baseNumber = 12,
+                part = 5,
+                numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+                decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+            ),
+        )
+
+        chapters.sorted().map { it.decimalFraction!!.asNormalizedDigits() } shouldBe
+            listOf("05", "25", "5")
+        chapters.sortedBy(CanonicalChapterIdentity::sortKey) shouldBe chapters.sorted()
+    }
+
+    @Test
+    fun `exact ordinal part stays distinct from both decimal and legacy part`() {
+        val legacy = CanonicalChapterIdentity(
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 12,
+            part = 5,
+        )
+        val ordinal = CanonicalChapterIdentity(
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 12,
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.ORDINAL_PART,
+        )
+        val decimal = CanonicalChapterIdentity(
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 12,
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 1),
+        )
+
+        (legacy == ordinal) shouldBe false
+        (ordinal == decimal) shouldBe false
+        (legacy == decimal) shouldBe false
+    }
+
+    @Test
+    fun `legacy canonical identities keep their previous signed-number ordering`() {
+        val smaller = CanonicalChapterIdentity(type = CanonicalChapterType.REGULAR, baseNumber = -12)
+        val larger = CanonicalChapterIdentity(type = CanonicalChapterType.REGULAR, baseNumber = -2)
+
+        (smaller < larger) shouldBe true
     }
 
     @Test

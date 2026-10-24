@@ -1,4 +1,5 @@
 name: CI v2.1
+# Resolver PR #140 integration with main: verify the combined tree before merge.
 
 on:
   workflow_dispatch:
@@ -40,6 +41,7 @@ on:
     branches:
       - main
       - 'tsuzuki/**'
+      - 'fix/canonical-chapter-resolver-hardening'
     paths:
       - '**'
       - '!**.md'
@@ -89,7 +91,21 @@ jobs:
           python3 .github/scripts/test_identity_contract.py
           python3 .github/scripts/test_inherited_application_updater_removal.py
           python3 -B .github/scripts/test_default_skin_rendered_evidence.py
+          python3 .github/scripts/test_chapter_migration_43.py
+          # Uses synthetic local fixtures only; private historical backups never reach CI.
+          python3 .github/scripts/test_verify_chapter_migration_43_backup.py
           python3 .github/scripts/identity_contract.py
+          bash -n .github/scripts/run_canonical_v2_android.sh
+
+      - name: Ensure experimental exact sync v2 remains disabled in production
+        shell: bash
+        run: |
+          # Removing this guard requires an independently reviewed cloud
+          # protocol rollout and legacy-account migration, not a feature toggle.
+          if git grep -n -E 'exactVersion2Enabled[[:space:]]*=[[:space:]]*true' -- app/src/main data/src/main domain/src/main; then
+            echo "::error::Exact progress v2 cannot be wired to production before protocol migration acceptance"
+            exit 1
+          fi
 
       - name: Resolve verification scope
         id: scope
@@ -321,6 +337,9 @@ jobs:
     if: needs.plan.outputs.run_supabase == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -342,9 +361,39 @@ jobs:
         with:
           version: 2.117.0
 
-      - name: Start local Supabase
+      - name: Authenticate Supabase image pulls from GHCR
         if: steps.project.outputs.present == 'true'
-        run: supabase start
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Hosted runners share anonymous registry quotas. Use only this
+          # job's ephemeral read-only package token, never a personal token.
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Start database-only Supabase for pgTAP
+        if: steps.project.outputs.present == 'true'
+        shell: bash
+        run: |
+          # pgTAP and db reset need PostgreSQL, not the full 13-service
+          # development stack. Full-stack pulls exhaust GHCR shared-runner
+          # rate limits; excluding non-database services reduces both risk
+          # and CI resource use without skipping a single backend assertion.
+          excluded="gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor"
+          # Retry infrastructure pulls only; database migrations/tests still
+          # fail immediately on any assertion or schema error.
+          for attempt in 1 2 3 4 5; do
+            if supabase start -x "$excluded"; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "::error::Supabase database startup failed after five attempts"
+              exit 1
+            fi
+            supabase stop --no-backup || true
+            sleep "$((attempt * 30))"
+          done
 
       - name: Reset database
         if: steps.project.outputs.present == 'true'

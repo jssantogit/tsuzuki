@@ -40,6 +40,7 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterVolume
+import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.content.cache.ContentOptionCache
 import tachiyomi.domain.tsuzuki.content.cache.InFlightContentResolution
@@ -50,6 +51,7 @@ import tachiyomi.domain.tsuzuki.content.interactor.ResolveContentBinding
 import tachiyomi.domain.tsuzuki.content.repository.ContentBindingRepository
 import tachiyomi.domain.tsuzuki.content.repository.ContentPreferenceRepository
 import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
+import tachiyomi.domain.tsuzuki.download.service.CanonicalDownloadGateway
 import tachiyomi.domain.tsuzuki.reader.interactor.PrepareCanonicalChapterForReader
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalReaderPreferences
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
@@ -238,6 +240,10 @@ internal class ProductionMihonJourneyComposition(
         canonicalChapterRepository = canonicalChapterRepository,
         canonicalReadingRepository = CanonicalReadingRepositoryImpl(database),
         canonicalDownloadRepository = CanonicalDownloadRepositoryImpl(database),
+        // This navigation fixture has no real offline artifacts; refuse phantom cache reuse.
+        canonicalDownloadGateway = object : CanonicalDownloadGateway {
+            override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+        },
         chapterContentPreparer = MihonChapterContentPreparer(
             canonicalReaderGateway = MihonCanonicalReaderGateway(chapterRepository),
             canonicalDownloadRepository = CanonicalDownloadRepositoryImpl(database),

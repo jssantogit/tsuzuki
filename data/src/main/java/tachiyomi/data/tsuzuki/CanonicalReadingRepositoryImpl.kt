@@ -64,6 +64,18 @@ class CanonicalReadingRepositoryImpl(
         upsertProgressInternal(progress)
     }
 
+    override suspend fun upsertProgressBatch(progress: List<CanonicalChapterProgress>) {
+        require(progress.map(CanonicalChapterProgress::canonicalChapterId).distinct().size == progress.size) {
+            "A remote progress batch cannot update the same canonical chapter twice"
+        }
+        require(progress.all { it.lastPageRead >= 0L }) {
+            "Remote chapter page numbers must not be negative"
+        }
+        database.transaction {
+            progress.forEach { upsertProgressInternal(it) }
+        }
+    }
+
     override suspend fun recordProgressWithProjection(
         progress: CanonicalChapterProgress,
         mihonChapterId: Long,

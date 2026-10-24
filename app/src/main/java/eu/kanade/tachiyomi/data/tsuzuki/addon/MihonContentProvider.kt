@@ -233,7 +233,10 @@ class MihonContentProvider internal constructor(
             // mapping yet. Its verified/high-confidence title binding is sufficient
             // to try an exact, high-confidence chapter identity match on demand.
             // Never infer a title binding from matching chapter numbers alone.
-            val allowIdentityFallback = canonicalChapter.identity.isSpecific &&
+            // An unnumbered semantic type is not enough to identify a release
+            // in a newly linked Add-on. Only persisted evidence may map it.
+            val allowIdentityFallback = canonicalChapter.identity.isNumbered &&
+                canonicalChapter.identity.isSpecific &&
                 canonicalChapter.confirmation != CanonicalChapterConfirmation.CONFLICTED &&
                 (
                     canonicalChapter.confidence >= MIN_TRUSTED_CHAPTER_CONFIDENCE ||

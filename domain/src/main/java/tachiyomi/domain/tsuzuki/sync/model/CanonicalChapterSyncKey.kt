@@ -20,9 +20,14 @@ data class CanonicalChapterSyncKey(
             chapter: CanonicalChapter,
             stableEvidenceKey: String? = null,
         ): CanonicalChapterSyncKey? {
+            // v1 sync cannot interpret exact fractional scales or ordinal kinds.
+            // Keep new v2 rows local until both export and import are versioned.
+            if (chapter.numberingKind != null) return null
             val identity = chapter.identity
             val chapterKey = when {
-                identity.isNumbered || identity.isSpecific -> {
+                // A semantic type without a chapter number (Extra, One-shot,
+                // etc.) does not identify a unique release across providers.
+                identity.isNumbered -> {
                     "identity:${identity.sortKey}"
                 }
                 !stableEvidenceKey.isNullOrBlank() -> {
@@ -31,6 +36,43 @@ data class CanonicalChapterSyncKey(
                 else -> return null
             }
 
+            return CanonicalChapterSyncKey(
+                canonicalTitleId = chapter.canonicalTitleId,
+                chapterKey = chapterKey,
+            )
+        }
+
+        /**
+         * Opt-in portable v2 key encoder. This is NOT yet used by the live sync
+         * adapter: mixed v1/v2 clients require a negotiated document rollout.
+         * Every field is length-delimited and no local chapter UUID is encoded.
+         */
+        fun fromVersion2(
+            chapter: CanonicalChapter,
+            stableEvidenceKey: String? = null,
+        ): CanonicalChapterSyncKey? {
+            val identity = chapter.identity
+            fun nullableSegment(value: String?): String = value?.let { "+$it" } ?: "-"
+
+            val chapterKey = when {
+                identity.isNumbered -> {
+                    val pieces = listOf(
+                        identity.type.name,
+                        nullableSegment(identity.baseNumber?.toString()),
+                        nullableSegment(identity.part?.toString()),
+                        nullableSegment(identity.alphaSuffix),
+                        nullableSegment(identity.numberingKind?.name),
+                        nullableSegment(identity.decimalFraction?.numerator?.toString()),
+                        nullableSegment(identity.decimalFraction?.scale?.toString()),
+                        nullableSegment(chapter.volume?.toString()),
+                    )
+                    "identity-v2:" + pieces.joinToString(separator = "") { lengthPrefixed(it) }
+                }
+                !stableEvidenceKey.isNullOrBlank() -> {
+                    "evidence-v2:" + lengthPrefixed(stableEvidenceKey.trim())
+                }
+                else -> return null
+            }
             return CanonicalChapterSyncKey(
                 canonicalTitleId = chapter.canonicalTitleId,
                 chapterKey = chapterKey,

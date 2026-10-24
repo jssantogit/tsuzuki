@@ -16,12 +16,198 @@ import tachiyomi.domain.tsuzuki.chapter.diagnostics.NoOpChapterInventoryDiagnost
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterVolume
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.model.SourceChapterInventory
 import tachiyomi.domain.tsuzuki.chapter.model.SourceChapterSnapshot
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 
 class ReconcileChapterEvidenceTest {
+
+    @Test
+    fun `stale legacy label cannot fork a previously mapped exact decimal chapter`() = runTest {
+        val fixture = fixture()
+        val exact = existingChapter("exact-v2").copy(
+            displayNumber = "12.05",
+            baseNumber = 12,
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+            confirmation = CanonicalChapterConfirmation.CONFIRMED,
+        )
+        fixture.chapterRepository.upsert(exact)
+        val prior = fixture.addonEvidence(
+            id = "exact-original",
+            rawLabel = "Chapter 12.05",
+            externalKey = "stable-exact-key",
+        )
+        fixture.evidenceRepository.upsert(prior, mappedCanonicalChapterId = exact.id)
+
+        fixture.reconciler.execute(
+            "title",
+            listOf(prior.copy(id = "stale-legacy", rawLabel = "Chapter 12.5", observedAt = 20L)),
+        )
+
+        fixture.chapterRepository.getByCanonicalTitleId("title") shouldBe listOf(exact)
+        fixture.evidenceRepository.getByProducerExternalKey(
+            ProducerKind.ADDON,
+            "addon",
+            "stable-exact-key",
+        )?.mappedCanonicalChapterId shouldBe null
+    }
+
+    @Test
+    fun `stale legacy observation cannot steal exact decimal mapping for a sibling chapter`() = runTest {
+        val fixture = fixture()
+        val exact = existingChapter("exact-v2").copy(
+            displayNumber = "12.05",
+            baseNumber = 12,
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+            confirmation = CanonicalChapterConfirmation.CONFIRMED,
+        )
+        val legacy = exact.copy(
+            id = "legacy-v1",
+            displayNumber = "12.5",
+            numberingKind = null,
+            decimalFraction = null,
+        )
+        fixture.chapterRepository.upsert(exact)
+        fixture.chapterRepository.upsert(legacy)
+        val prior = fixture.addonEvidence(
+            id = "exact-original",
+            rawLabel = "Chapter 12.05",
+            externalKey = "stable-exact-key",
+        )
+        fixture.evidenceRepository.upsert(prior, mappedCanonicalChapterId = exact.id)
+
+        fixture.reconciler.execute(
+            "title",
+            listOf(prior.copy(id = "legacy-update", rawLabel = "Chapter 12.5", observedAt = 20L)),
+        )
+
+        fixture.chapterRepository.getByCanonicalTitleId("title") shouldBe listOf(exact, legacy)
+        fixture.evidenceRepository.getByProducerExternalKey(
+            ProducerKind.ADDON,
+            "addon",
+            "stable-exact-key",
+        )?.mappedCanonicalChapterId shouldBe null
+    }
+
+    @Test
+    fun `independent legacy chapter may still coexist with a different exact decimal release`() = runTest {
+        val fixture = fixture()
+        val exact = existingChapter("exact-v2").copy(
+            displayNumber = "12.05",
+            baseNumber = 12,
+            part = 5,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction(5, 2),
+            confirmation = CanonicalChapterConfirmation.CONFIRMED,
+        )
+        fixture.chapterRepository.upsert(exact)
+        val independent = fixture.addonEvidence(
+            id = "legacy-observation",
+            rawLabel = "Chapter 12.5",
+            externalKey = "independent-legacy-key",
+        )
+
+        fixture.reconciler.execute("title", listOf(independent))
+
+        val chapters = fixture.chapterRepository.getByCanonicalTitleId("title")
+        chapters shouldHaveSize 2
+        chapters.single { it.id == exact.id } shouldBe exact
+        val legacy = chapters.single { it.id != exact.id }
+        legacy.numberingKind shouldBe null
+        legacy.baseNumber shouldBe 12
+        legacy.part shouldBe 5
+        fixture.evidenceRepository.getByProducerExternalKey(
+            ProducerKind.ADDON,
+            "addon",
+            "independent-legacy-key",
+        )?.mappedCanonicalChapterId shouldBe legacy.id
+    }
+
+    @Test
+    fun `unnumbered extra releases with different source keys remain separate canonical chapters`() = runTest {
+        val fixture = fixture()
+        val first = fixture.addonEvidence(
+            id = "extra-a",
+            rawLabel = "Extra - Bonus A",
+            externalKey = "extra-a",
+        )
+        val second = fixture.addonEvidence(
+            id = "extra-b",
+            rawLabel = "Extra - Bonus B",
+            externalKey = "extra-b",
+        )
+
+        fixture.reconciler.execute("title", listOf(first, second))
+
+        fixture.chapterRepository.getByCanonicalTitleId("title") shouldHaveSize 2
+        val firstMapping = fixture.evidenceRepository.getByProducerExternalKey(
+            ProducerKind.ADDON,
+            "addon",
+            "extra-a",
+        )?.mappedCanonicalChapterId
+        val secondMapping = fixture.evidenceRepository.getByProducerExternalKey(
+            ProducerKind.ADDON,
+            "addon",
+            "extra-b",
+        )?.mappedCanonicalChapterId
+        firstMapping shouldNotBe null
+        secondMapping shouldNotBe null
+        firstMapping shouldNotBe secondMapping
+
+        fixture.reconciler.execute(
+            "title",
+            listOf(
+                first.copy(observedAt = 11L),
+                second.copy(observedAt = 11L),
+            ),
+        )
+        fixture.chapterRepository.getByCanonicalTitleId("title") shouldHaveSize 2
+        fixture.evidenceRepository.getByProducerExternalKey(
+            ProducerKind.ADDON,
+            "addon",
+            "extra-a",
+        )?.mappedCanonicalChapterId shouldBe firstMapping
+        fixture.evidenceRepository.getByProducerExternalKey(
+            ProducerKind.ADDON,
+            "addon",
+            "extra-b",
+        )?.mappedCanonicalChapterId shouldBe secondMapping
+    }
+
+    @Test
+    fun `numbered extra releases from independent sources still reconcile by identity`() = runTest {
+        val fixture = fixture()
+        fixture.reconciler.execute(
+            "title",
+            listOf(
+                fixture.addonEvidence(
+                    id = "first-extra-one",
+                    rawLabel = "Extra 1",
+                    externalKey = "extra-one-a",
+                    producerId = "source-a",
+                ),
+                fixture.addonEvidence(
+                    id = "second-extra-one",
+                    rawLabel = "Extra 1",
+                    externalKey = "extra-one-b",
+                    producerId = "source-b",
+                ),
+            ),
+        )
+
+        fixture.chapterRepository.getByCanonicalTitleId("title") shouldHaveSize 1
+        val mapped = fixture.evidenceRepository.getByCanonicalTitleId("title")
+            .mapNotNull(PersistedChapterEvidence::mappedCanonicalChapterId)
+        mapped.distinct() shouldHaveSize 1
+        mapped shouldHaveSize 2
+    }
 
     @Test
     fun `addon evidence creates provisional chapter`() = runTest {

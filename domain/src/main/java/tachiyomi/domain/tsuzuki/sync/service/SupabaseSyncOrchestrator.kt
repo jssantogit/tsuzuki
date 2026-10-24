@@ -60,6 +60,17 @@ class SupabaseSyncOrchestrator(
     private val mutex = Mutex()
     private val adapters = adapters.associateBy { it.documentKind }
 
+    private companion object {
+        const val LEGACY_SYNC_SCHEMA_VERSION = 1
+        const val EXACT_PROGRESS_SCHEMA_VERSION = 2
+    }
+
+    private fun unnegotiatedExactProgressFailure(): SyncDocumentResult.Failed =
+        SyncDocumentResult.Failed(
+            SyncDocumentKind.READING_PROGRESS_V2,
+            SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA),
+        )
+
     init {
         require(this.adapters.size == adapters.size) {
             "Supabase sync adapters must have unique document kinds"
@@ -72,6 +83,14 @@ class SupabaseSyncOrchestrator(
     suspend fun sync(documentKind: SyncDocumentKind): SyncDocumentResult = mutex.withLock {
         if (accountRepository.state.value !is AccountState.Authenticated) {
             return@withLock authorizationFailure(documentKind)
+        }
+
+        // A separate v2 namespace is necessary but NOT sufficient for a safe
+        // rollout: old clients still mutate v1 progress. Until the server has
+        // an authenticated migration/epoch handshake with downgrade fencing,
+        // even a manually injected experimental v2 adapter cannot publish.
+        if (documentKind == SyncDocumentKind.READING_PROGRESS_V2) {
+            return@withLock unnegotiatedExactProgressFailure()
         }
 
         reconcileCanonicalIdentities()?.let { failure ->
@@ -115,6 +134,11 @@ class SupabaseSyncOrchestrator(
         documentKind: SyncDocumentKind,
         respectBackoff: Boolean,
     ): SyncDocumentResult {
+        // runOnce() reaches this path directly; reject before consulting a
+        // remote cursor, replaying pending mutations or creating new ones.
+        if (documentKind == SyncDocumentKind.READING_PROGRESS_V2) {
+            return unnegotiatedExactProgressFailure()
+        }
         val adapter = adapters[documentKind]
             ?: return SyncDocumentResult.Failed(
                 documentKind,
@@ -137,6 +161,22 @@ class SupabaseSyncOrchestrator(
 
         return try {
             val localBeforePull = adapter.exportDocument()
+            // The existing Supabase event transport does not carry document
+            // schema versions. Never stamp a v1 remote snapshot as v2.
+            // A dedicated v2 domain name is a wire-level namespace: old
+            // clients only request READING_PROGRESS, so neither side reads
+            // or overwrites the other's records. v2 is still opt-in and is
+            // forbidden for any other unversioned remote domain.
+            val supportedSchema = when (documentKind) {
+                SyncDocumentKind.READING_PROGRESS_V2 -> EXACT_PROGRESS_SCHEMA_VERSION
+                else -> LEGACY_SYNC_SCHEMA_VERSION
+            }
+            if (localBeforePull.schemaVersion != supportedSchema) {
+                return SyncDocumentResult.Failed(
+                    documentKind,
+                    SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA),
+                )
+            }
             if (localBeforePull.kind != documentKind) {
                 return fail(
                     documentKind = documentKind,
@@ -154,7 +194,16 @@ class SupabaseSyncOrchestrator(
                 stateRepository.get(documentKind)
             }
             val acceptedBase = stored?.acceptedBase
-            val schemaVersion = acceptedBase?.schemaVersion ?: localBeforePull.schemaVersion
+            if (acceptedBase != null && acceptedBase.schemaVersion != localBeforePull.schemaVersion) {
+                // Stale accepted frontiers may not be reused after an upgrade
+                // or downgrade: applying records would risk silent progress
+                // corruption even when no network call is required.
+                return SyncDocumentResult.Failed(
+                    documentKind,
+                    SyncFailure(SyncFailureReason.UNSUPPORTED_SCHEMA),
+                )
+            }
+            val schemaVersion = localBeforePull.schemaVersion
 
             var pull = initialRemoteState(
                 documentKind = documentKind,

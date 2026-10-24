@@ -19,6 +19,8 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticTrace
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticWorkflow
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
+import tachiyomi.domain.tsuzuki.download.service.CanonicalDownloadGateway
+import tachiyomi.domain.tsuzuki.download.service.canReuseArtifact
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
@@ -37,6 +39,7 @@ class PrepareCanonicalChapterForReader(
     private val canonicalChapterRepository: CanonicalChapterRepository,
     private val canonicalReadingRepository: CanonicalReadingRepository,
     private val canonicalDownloadRepository: CanonicalDownloadRepository,
+    private val canonicalDownloadGateway: CanonicalDownloadGateway,
     private val chapterContentPreparer: ChapterContentPreparer,
     private val structuredDiagnostics: StructuredDiagnosticRecorder,
     private val resolveProviderChapterReading: ResolveProviderChapterReading? = null,
@@ -70,13 +73,14 @@ class PrepareCanonicalChapterForReader(
 
             if (selectedOption == null) {
                 val artifact = canonicalDownloadRepository.get(canonicalChapterId)
+                val cacheUsable = artifact != null && canonicalDownloadGateway.canReuseArtifact(artifact)
                 trace.event(
                     subsystem = DiagnosticSubsystem.READER,
                     name = DiagnosticEventName.CACHE_LOOKUP,
                     stage = DiagnosticStage.LOOKUP,
-                    outcome = if (artifact == null) DiagnosticOutcome.MISS else DiagnosticOutcome.HIT,
+                    outcome = if (cacheUsable) DiagnosticOutcome.HIT else DiagnosticOutcome.MISS,
                 )
-                if (artifact != null) {
+                if (cacheUsable && artifact != null) {
                     return complete(
                         trace,
                         started,

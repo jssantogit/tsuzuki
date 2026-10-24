@@ -23,6 +23,10 @@ enum class SyncDocumentKind(
     SETTINGS("settings.json"),
     SOURCE_MAPPINGS("source-mappings.json"),
     FALLBACK_PROGRESS("fallback-progress.json"),
+
+    // Append-only: preserve existing enum ordinals for older stored clients.
+    // Opt-in v2 namespace, intentionally outside supabaseDurableKinds.
+    READING_PROGRESS_V2("reading-progress-v2.json"),
     ;
 
     companion object {
