@@ -33,6 +33,7 @@ import tachiyomi.domain.manga.interactor.GetFavorites
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.i18n.MR
+import java.io.File
 import java.io.FileOutputStream
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
@@ -61,6 +62,7 @@ class BackupCreator(
         var file: UniFile? = null
         var createdByThisBackup = false
         var successfullyValidated = false
+        var stagedManualArchive: File? = null
         try {
             file = if (isAutoBackup) {
                 // Get dir of file and create
@@ -100,9 +102,19 @@ class BackupCreator(
             // would reject because its decoded size exceeds the safety cap.
             BackupArchiveByteLimit.requireRestorableSize(byteArray.size.toLong())
 
-            file.openOutputStream()
+            // For manual SAF documents, finish and validate the gzip archive
+            // privately BEFORE opening the caller-owned destination for output.
+            // A mid-write crash then cannot destroy a previously populated file:
+            // only a confirmed-empty, newly created document may be written.
+            val preparedArchive = if (isAutoBackup) {
+                null
+            } else {
+                File.createTempFile("tsuzuki-manual-backup-", ".tachibk", context.cacheDir)
+                    .also { stagedManualArchive = it }
+            }
+            (preparedArchive?.outputStream() ?: file.openOutputStream())
                 .also {
-                    // Force overwrite old file
+                    // File output streams may otherwise retain old trailing bytes.
                     (it as? FileOutputStream)?.channel?.truncate(0)
                 }
                 .sink().gzip().buffer().use {
@@ -110,7 +122,23 @@ class BackupCreator(
                 }
             val fileUri = file.uri
 
-            // Make sure it's a valid backup file
+            if (preparedArchive != null) {
+                // Check that the exact staged gzip can be decoded and validated.
+                backupFileValidator.validate(Uri.fromFile(preparedArchive))
+                // The SAF CreateDocument picker must not accidentally give us
+                // a populated URI. Refuse the write when it does (or when its
+                // existing content cannot be read).
+                ManualBackupDestinationPolicy.requireEmpty(context.contentResolver.openInputStream(fileUri))
+                preparedArchive.inputStream().use { prepared ->
+                    file.openOutputStream().use { output ->
+                        (output as? FileOutputStream)?.channel?.truncate(0)
+                        prepared.copyTo(output)
+                        output.flush()
+                    }
+                }
+            }
+
+            // Reopen the final SAF document, not just the staged local file.
             backupFileValidator.validate(fileUri)
             successfullyValidated = true
 
@@ -165,6 +193,10 @@ class BackupCreator(
                 successfullyValidated = successfullyValidated,
             )
             throw e
+        } finally {
+            // Includes cancellation, staging validation errors and failed SAF
+            // writes. Never retain backup bytes in private cache.
+            stagedManualArchive?.delete()
         }
     }
 
