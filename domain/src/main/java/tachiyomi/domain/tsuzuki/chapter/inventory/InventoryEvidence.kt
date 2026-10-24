@@ -36,6 +36,7 @@ enum class InventoryClaimKind {
 enum class InventoryDerivation {
     /** Source directly identifies the editorial unit, not merely its release. */
     PRIMARY_EDITORIAL,
+
     /** Distribution, translation, revision or upload of a unit; not editorial authority. */
     RELEASE_RECORD,
     COUNT_DERIVED,
@@ -46,6 +47,7 @@ enum class InventoryDerivation {
 enum class InventoryFetchOutcome {
     /** A bounded page was obtained; later pages may still be missing. */
     PARTIAL,
+
     /** Endpoint pagination ended, not editorial completeness. */
     EXHAUSTED,
     FAILED,

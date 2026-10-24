@@ -53,9 +53,11 @@ private fun releaseBatch(
         "Source page contains a release for a different work"
     }
     val stableReleases = releases.distinctBy(InventoryReleaseRecord::releaseId)
-    require(stableReleases.size == releases.size || releases.groupBy { it.releaseId }.values.all { group ->
-        group.distinct().size == 1
-    }) { "Conflicting releases reuse a source record ID" }
+    require(
+        stableReleases.size == releases.size || releases.groupBy { it.releaseId }.values.all { group ->
+            group.distinct().size == 1
+        },
+    ) { "Conflicting releases reuse a source record ID" }
 
     return InventoryEvidenceBatch(
         scope = scope,

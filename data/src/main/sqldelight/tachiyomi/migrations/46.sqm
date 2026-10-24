@@ -29,7 +29,7 @@ CREATE TABLE tsuzuki_independent_inventory_pages(
     external_work_id TEXT NOT NULL,
     edition_key TEXT NOT NULL,
     page_key TEXT NOT NULL,
-    language TEXT,
+    language TEXT NOT NULL,
     work_verified INTEGER NOT NULL,
     edition_verified INTEGER NOT NULL,
     observed_at INTEGER NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE tsuzuki_independent_inventory_pages(
     item_count INTEGER NOT NULL,
     declared_total INTEGER,
     next_cursor TEXT,
-    PRIMARY KEY(canonical_title_id, producer_id, external_work_id, edition_key, page_key),
+    PRIMARY KEY(canonical_title_id, producer_id, external_work_id, edition_key, language, page_key),
     FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
 );
 
