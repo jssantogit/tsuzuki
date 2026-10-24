@@ -35,6 +35,9 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.RefreshChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.interactor.MaterializeInferredChapter
 import tachiyomi.domain.tsuzuki.chapter.interactor.OpenCanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.inventory.GetIndependentInventorySnapshot
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryKnowledge
 import tachiyomi.domain.tsuzuki.chapter.interactor.buildCanonicalChapterOutline
 import tachiyomi.domain.tsuzuki.chapter.interactor.isVisibleCanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
@@ -74,6 +77,8 @@ sealed interface CanonicalTitleScreenState {
         val libraryEntry: CanonicalLibraryEntry?,
         val chapters: List<CanonicalChapterDetailItem>,
         val reportedChapterCounts: List<ReportedChapterCount> = emptyList(),
+        val independentInventory: IndependentInventorySnapshot =
+            IndependentInventorySnapshot(InventoryKnowledge.UNKNOWN, emptyList()),
         val addonCoverage: List<ObservedAddonCoverage> = emptyList(),
         val coverUrl: String? = null,
         val sourceCover: MangaCover? = null,
@@ -144,6 +149,7 @@ class CanonicalTitleScreenModel(
     private val canonicalChapterRepository: CanonicalChapterRepository,
     private val materializeInferredChapter: MaterializeInferredChapter,
     private val chapterEvidenceRepository: ChapterEvidenceRepository,
+    private val getIndependentInventorySnapshot: GetIndependentInventorySnapshot,
     private val canonicalReadingRepository: CanonicalReadingRepository,
     private val getCanonicalChapterDownloadState: GetCanonicalChapterDownloadState,
     private val downloadCanonicalChapter: DownloadCanonicalChapter,
@@ -624,6 +630,7 @@ class CanonicalTitleScreenModel(
         _state.value = latest.copy(
             chapters = if (retainObservedChapters) latest.chapters else staged.chapters,
             addonCoverage = staged.addonCoverage,
+            independentInventory = staged.independentInventory,
             isRefreshing = true,
             refreshError = current.refreshError,
         )
@@ -642,6 +649,14 @@ class CanonicalTitleScreenModel(
         val libraryEntry = canonicalLibraryRepository.get(canonicalTitleId)
         val chapters = canonicalChapterRepository.getByCanonicalTitleId(canonicalTitleId)
         val supportSnapshot = chapterEvidenceRepository.getSupportSnapshot(canonicalTitleId)
+        // Optional inventory metadata must never block an already readable title.
+        val independentInventory = try {
+            getIndependentInventorySnapshot.execute(canonicalTitleId)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            IndependentInventorySnapshot(InventoryKnowledge.UNKNOWN, emptyList())
+        }
         val supportedChapterIds = supportSnapshot.mappedCanonicalChapterIds
         val addonNames = try {
             addonRepository.snapshot().associate { it.id.value to it.displayName }
@@ -755,6 +770,7 @@ class CanonicalTitleScreenModel(
             libraryEntry = libraryEntry,
             chapters = withMetadataSlots(canonicalTitleId, details, reportedCounts),
             reportedChapterCounts = reportedCounts,
+            independentInventory = independentInventory,
             addonCoverage = observedAddonCoverage(chapters, supportSnapshot.addonMappedChapterIds, addonNames),
             coverUrl = canonicalArtwork?.coverUrl,
             sourceCover = metadata?.asMangaCover(),

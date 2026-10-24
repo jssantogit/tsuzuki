@@ -101,7 +101,9 @@ class CanonicalTitleScreenModelTest {
     }
 
     @Test
-    fun `cached detail exposes partial release evidence offline without fabricating readable chapters`() = runTest(dispatcher) {
+    fun `cached detail exposes partial release evidence offline without fabricating readable chapters`() = runTest(
+        dispatcher,
+    ) {
         val snapshot = IndependentInventorySnapshot(
             knowledge = InventoryKnowledge.PARTIAL,
             sources = listOf(
@@ -447,6 +449,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = inventorySnapshot,
             canonicalReadingRepository = reading,
             getCanonicalChapterDownloadState = mockk(relaxed = true),
             downloadCanonicalChapter = mockk(relaxed = true),
@@ -479,6 +482,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = evidence,
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -534,6 +538,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -595,6 +600,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -728,6 +734,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = FakeChapterRepository(emptyList()),
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -788,6 +795,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = FakeChapterRepository(emptyList()),
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -884,6 +892,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = evidenceRepository,
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -945,6 +954,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -1017,6 +1027,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -1089,6 +1100,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapterRepo,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -1151,6 +1163,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -1202,6 +1215,7 @@ class CanonicalTitleScreenModelTest {
                 canonicalChapterRepository = chapters,
                 materializeInferredChapter = materializer,
                 chapterEvidenceRepository = FakeEvidenceRepository(),
+                getIndependentInventorySnapshot = emptyInventorySnapshot(),
                 canonicalReadingRepository = FakeReadingRepository(),
                 resolveCanonicalReadingStart = mockk(relaxed = true),
                 getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
