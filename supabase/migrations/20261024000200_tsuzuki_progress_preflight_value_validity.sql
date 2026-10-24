@@ -99,6 +99,7 @@ begin
                            or nullif(btrim(f.value #>> '{}'), '') is null))
                      or (f.field_path = 'read'
                          and jsonb_typeof(f.value) is distinct from 'boolean')
+                     -- Android decodes this field as signed Long.
                      or (f.field_path = 'lastPageRead'
                          and case
                              when jsonb_typeof(f.value) = 'number'
