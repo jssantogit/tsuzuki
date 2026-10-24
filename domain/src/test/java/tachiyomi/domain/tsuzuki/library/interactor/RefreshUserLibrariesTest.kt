@@ -201,6 +201,11 @@ class RefreshUserLibrariesTest {
         connected[IntegrationId("mal")]?.isFailure shouldBe true
         provider.fetchCount shouldBe 0
         repository.memberships.value shouldBe listOf(legacy)
+
+        // Logout cannot authorize wiping a private A snapshot either.
+        interactor.clearForLegacyTracker(1L)
+        interactor.clearProvider(IntegrationId("mal"))
+        repository.memberships.value shouldBe listOf(legacy)
     }
 
     private class FakeUserListProvider(
