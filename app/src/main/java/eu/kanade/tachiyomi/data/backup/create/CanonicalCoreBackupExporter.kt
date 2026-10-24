@@ -28,6 +28,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleArtwork
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleFormat
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleName
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreVariant
+import eu.kanade.tachiyomi.data.backup.models.PortableMihonBindingCodec
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import tachiyomi.data.Database
@@ -141,14 +142,31 @@ class CanonicalCoreBackupExporter(
                 .getPreferencesForLanguage(language).awaitAsList()
         }
 
-        // Until runtime payloads have a portable, credential-safe codec, never
-        // claim a complete archive while they are present. These bindings may
-        // embed local Mihon row IDs or secrets from third-party addons.
-        for (title in titles) {
-            check(
-                database.tsuzuki_content_bindingsQueries
-                    .getTsuzukiContentBindingsByTitle(title.id).awaitAsList().isEmpty(),
-            ) { "Unexportable provider runtime binding requires a portable codec" }
+        // Only the recognized Mihon runtime V1 payload may be projected to a
+        // typed portable record. It excludes local manga IDs and rejects
+        // unsupported versions or credential-shaped source URLs. Future SCRIPT
+        // provider payloads require their own explicit codec: never copy BLOBs.
+        val contentBindings = titles.flatMap { title ->
+            database.tsuzuki_content_bindingsQueries
+                .getTsuzukiContentBindingsByTitle(title.id).awaitAsList()
+                .map { binding ->
+                    try {
+                        PortableMihonBindingCodec.export(
+                            id = binding.id,
+                            canonicalTitleId = binding.canonical_title_id,
+                            addonId = binding.addon_id,
+                            providerTitleKey = binding.provider_title_key,
+                            matchConfidence = binding.match_confidence,
+                            verifiedByUser = binding.verified_by_user,
+                            availability = binding.availability,
+                            runtimePayload = binding.runtime_payload,
+                            createdAt = binding.created_at,
+                            updatedAt = binding.updated_at,
+                        )
+                    } catch (error: Exception) {
+                        throw IllegalStateException("Unexportable provider runtime binding requires a portable codec", error)
+                    }
+                }
         }
         // External library memberships encode the linked remote account's
         // work/list status. They cannot be silently attributed to a new user.
@@ -278,6 +296,7 @@ class CanonicalCoreBackupExporter(
                     deletedAt = it.deleted_at,
                 )
             },
+            contentBindings = contentBindings,
             providerBindings = providerBindings.map {
                 BackupCoreProviderBinding(
                     id = it.id,
