@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.data.backup.create.CanonicalCoreBackupExporter
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreContentBinding
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterEvidence
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterOverride
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterUpdateState
@@ -30,6 +31,9 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleArtwork
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleFormat
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleName
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreVariant
+import eu.kanade.tachiyomi.data.backup.models.PortableMihonBindingCodec
+import eu.kanade.tachiyomi.data.tsuzuki.addon.MihonContentBindingPayload
+import eu.kanade.tachiyomi.data.tsuzuki.addon.MihonContentBindingPayloadCodec
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.flow.first
@@ -830,6 +834,79 @@ class CanonicalCoreBackupImporterTest {
             json = Json,
         )
         shouldThrow<IllegalStateException> { exporter.export() }
+    }
+
+    @Test
+    fun `Mihon binding portable archive strips row ID and reimports dormant`(): Unit = runBlocking {
+        val archive = PortableMihonBindingCodec.export(
+            id = "content-1",
+            canonicalTitleId = "title-1",
+            addonId = "eu.kanade.tachiyomi.extension.pt.example",
+            providerTitleKey = "42:/title/blue-lock",
+            matchConfidence = 0.91,
+            verifiedByUser = true,
+            availability = "AVAILABLE",
+            runtimePayload = MihonContentBindingPayloadCodec.encode(
+                MihonContentBindingPayload(42L, 987654321L, "/title/blue-lock", "pt-BR"),
+            ),
+            createdAt = 11L,
+            updatedAt = 12L,
+        )
+        val core = Json.decodeFromString(BackupCanonicalCore.serializer(), section().payloadJson)
+            .copy(contentBindings = listOf(archive))
+        importer.restoreCore(coreSection(core))
+
+        val row = database.tsuzuki_content_bindingsQueries
+            .getTsuzukiContentBindingsByTitle("title-1").awaitAsList().single()
+        row.id shouldBe "content-1"
+        row.availability shouldBe "UNAVAILABLE"
+        row.verified_by_user shouldBe true
+        val dormant = MihonContentBindingPayloadCodec.decode(row.runtime_payload)
+        dormant.mihonMangaId shouldBe -1L
+        dormant.sourceUrl shouldBe "/title/blue-lock"
+
+        val titleRepo = CanonicalTitleRepositoryImpl(database)
+        val exporter = CanonicalCoreBackupExporter(
+            titleSource = CanonicalTitleSyncSource { titleRepo.getAllAsFlow().first() },
+            titleRepository = titleRepo,
+            libraryRepository = CanonicalLibraryRepositoryImpl(database),
+            chapterRepository = CanonicalChapterRepositoryImpl(database),
+            sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+            readingRepository = CanonicalReadingRepositoryImpl(database),
+            database = database,
+            json = Json,
+        )
+        val exported = exporter.export()
+        exported.payloadJson.contains("987654321") shouldBe false
+        val roundtrip = Json.decodeFromString(BackupCanonicalCore.serializer(), exported.payloadJson)
+        roundtrip.contentBindings.single().sourceUrl shouldBe "/title/blue-lock"
+        roundtrip.contentBindings.single().sourceAvailability shouldBe "UNAVAILABLE"
+        roundtrip.validate()
+    }
+
+    @Test
+    fun `credential bearing portable content binding aborts before SQLite writes`(): Unit = runBlocking {
+        val core = Json.decodeFromString(BackupCanonicalCore.serializer(), section().payloadJson)
+        val unsafe = BackupCoreContentBinding(
+            id = "content-1",
+            canonicalTitleId = "title-1",
+            addonId = "addon",
+            providerTitleKey = "42:https://example.com/book?token=secret",
+            sourceId = 42L,
+            sourceUrl = "https://example.com/book?token=secret",
+            language = "pt-BR",
+            matchConfidence = 0.9,
+            verifiedByUser = true,
+            sourceAvailability = "AVAILABLE",
+            createdAt = 1L,
+            updatedAt = 2L,
+        )
+        shouldThrow<IllegalArgumentException> {
+            importer.restoreCore(coreSection(core.copy(contentBindings = listOf(unsafe))))
+        }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+        database.tsuzuki_backup_restore_receiptsQueries
+            .listTsuzukiBackupRestoreReceipts().awaitAsList() shouldBe emptyList()
     }
 
     @Test
