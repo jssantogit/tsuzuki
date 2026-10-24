@@ -106,6 +106,14 @@ class DefaultSkinVisualContractTest {
     }
 
     @Test
+    fun `advanced filters reuse the live provider result preview instead of showing a blind form`() {
+        val screen = readSource("collections/ListBuilderScreen.kt")
+        screen shouldContain "item(key = \"advanced_live_preview\")"
+        screen shouldContain "ListBuilderPreviewContent(editor, previewState)"
+        screen shouldContain "onPreviewDraft(draft)"
+    }
+
+    @Test
     fun `promoted root surfaces consume shared Default Skin primitives`() {
         readSource("entry/TsuzukiEntryScreen.kt") shouldContain "defaultSkinColors()"
         readSource("home/TsuzukiHomeScreen.kt") shouldContain "defaultSkinColors()"

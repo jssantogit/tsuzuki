@@ -1071,32 +1071,32 @@ private fun DescriptorStaticDropdown(
             current = current,
             options = listOf<String?>(null) + options.map { it.second },
             optionText = { value -> options.firstOrNull { it.second == value }?.first.orEmpty() },
-        display = { value ->
-            if (value == null) {
-                stringResource(MR.strings.tsuzuki_list_builder_any)
-            } else {
-                options.firstOrNull { it.second == value }?.first ?: value
-            }
-        },
-        onSelect = { selected ->
-            val predicateExpression = selected?.let { value ->
-                QueryExpression.Predicate(
-                    field = capability.field,
-                    operator = capability.preferredScalarOperator(),
-                    value = QueryValue.of(value),
+            display = { value ->
+                if (value == null) {
+                    stringResource(MR.strings.tsuzuki_list_builder_any)
+                } else {
+                    options.firstOrNull { it.second == value }?.first ?: value
+                }
+            },
+            onSelect = { selected ->
+                val predicateExpression = selected?.let { value ->
+                    QueryExpression.Predicate(
+                        field = capability.field,
+                        operator = capability.preferredScalarOperator(),
+                        value = QueryValue.of(value),
+                    )
+                }
+                onEditorChange(
+                    editor.replaceFieldTerm(
+                        field = capability.field,
+                        negated = negated,
+                        predicate = predicateExpression,
+                    ),
                 )
-            }
-            onEditorChange(
-                editor.replaceFieldTerm(
-                    field = capability.field,
-                    negated = negated,
-                    predicate = predicateExpression,
-                ),
-            )
-        },
-        modifier = Modifier.fillMaxWidth(),
-        enabled = editor.filtersEditable,
-    )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = editor.filtersEditable,
+        )
         if (current == null && !negated && options.isNotEmpty()) {
             Text(
                 text = stringResource(
