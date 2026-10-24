@@ -41,6 +41,7 @@ class ProviderP2pStructuredHistoryTest {
                 exported.contains("\"name\":\"provider_p2p_event\"") shouldBe true
                 exported.contains("METADATA_START") shouldBe true
                 exported.contains("METADATA_FAILED") shouldBe true
+                exported.contains("opRef=") shouldBe true
                 exported.contains("source=MAGNET") shouldBe true
                 exported.contains("elapsedMs=30001") shouldBe true
                 exported.contains("failure=METADATA_UNAVAILABLE") shouldBe true
