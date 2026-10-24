@@ -55,12 +55,20 @@ class PreviewCanonicalProgressV2Migration {
                 ?.takeIf { it.isString }?.content
             val chapterKey = (record.fields["chapterKey"] as? JsonPrimitive)
                 ?.takeIf { it.isString }?.content
-            val read = (record.fields["read"] as? JsonPrimitive)?.booleanOrNull
-            val lastPageRead = (record.fields["lastPageRead"] as? JsonPrimitive)?.longOrNull
+            // A JSON string containing "true" or "2" is not the same
+            // type as a boolean or number; never approve a coerced preview.
+            val read = (record.fields["read"] as? JsonPrimitive)
+                ?.takeUnless { it.isString }?.booleanOrNull
+            val lastPageRead = (record.fields["lastPageRead"] as? JsonPrimitive)
+                ?.takeUnless { it.isString }?.longOrNull
             val variantKey = record.fields["lastVariantEvidenceKey"]
             val malformedVariantKey = variantKey != null &&
                 variantKey != JsonNull &&
-                (variantKey !is JsonPrimitive || !variantKey.isString)
+                (
+                    variantKey !is JsonPrimitive ||
+                        !variantKey.isString ||
+                        variantKey.content.isBlank()
+                    )
 
             if (
                 record.isTombstone ||
