@@ -273,6 +273,8 @@ private fun BrowseScaffold(
     val colors = defaultSkinColors()
     Scaffold(
         modifier = modifier,
+        containerColor = colors.canvas,
+        contentColor = colors.foreground,
         topBar = {
             Row(
                 modifier = Modifier
@@ -331,6 +333,7 @@ private fun CatalogGridItem(item: CatalogItem, onClick: () -> Unit) {
                 item.title,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
+                color = colors.foreground,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
