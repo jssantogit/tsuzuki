@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.provider.torrent
 import eu.kanade.tachiyomi.provider.runtime.HostVerifiedTorrentMetadataCache
 import eu.kanade.tachiyomi.provider.runtime.VerifiedTorrentDescription
 import eu.kanade.tachiyomi.provider.runtime.VerifiedTorrentFile
-import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
@@ -11,6 +10,7 @@ import mockwebserver3.MockWebServer
 import okhttp3.Headers.Companion.headersOf
 import okhttp3.OkHttpClient
 import org.junit.jupiter.api.Test
+import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
 import tachiyomi.domain.tsuzuki.provider.ProviderId
