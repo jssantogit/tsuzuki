@@ -75,3 +75,8 @@ No tests may use private user snapshots in public CI. Keep PR #140 in **draft**,
 - Each protected reader calls account-scoped `sync_get_progress_protocol()` before its legacy query. It takes `FOR SHARE` on existing ledger rows; a future approved cutover must take `FOR UPDATE` inside the same transaction as cursor CAS and migration receipt.
 - Read operations for `LIBRARY` and other compatible domains retain previous behavior. Unknown/un-enrolled accounts still read v1 without creating ledger rows. pgTAP covers epoch2 refusal across all three readers, other-account isolation and anon denial.
 - The active epoch remains 1. Neither migration authorization, data copying nor v2 activation is introduced.
+
+## Old-client progress conflict fence (pre-activation)
+
+- Even without progress writes, historical conflict metadata/acknowledgment can mutate legacy sync bookkeeping. Account-epoch protection therefore covers `sync_get_mutation_conflicts` when its scoped mutation contains a `READING_PROGRESS` conflict, and `sync_ack_conflict` when the scoped conflict belongs to `READING_PROGRESS`.
+- These RPCs consult the same authenticated epoch reader and its ledger `FOR SHARE` lock before returning or changing v1 conflict state. `LIBRARY` conflict resolution and the other account's v1 progress remain available. Tests use synthetic conflicting account records and simulate epoch2; no real migration or data rewrite occurs.

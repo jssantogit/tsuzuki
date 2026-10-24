@@ -213,6 +213,25 @@ class SupabaseSyncHttpTransportTest {
     }
 
     @Test
+    fun `downgraded client cannot acknowledge legacy reading conflict after epoch transition`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(400)
+                .addHeader("Content-Type", "application/json")
+                .body(
+                    """{"code":"0A000","message":"progress protocol epoch is not supported by this client"}""",
+                )
+                .build(),
+        )
+
+        val result = transport().ackConflict(77)
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        server.requestCount shouldBe 1
+        server.takeRequest().url.encodedPath shouldBe "/rest/v1/rpc/sync_ack_conflict"
+    }
+
+    @Test
     fun `invalid mutation stays malformed document instead of protocol refusal`() = runTest {
         server.enqueue(
             MockResponse.Builder()
