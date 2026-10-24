@@ -39,12 +39,26 @@ last-backup timestamp fails; the catch block must not erase the only newly
 verified copy after older archives may already have been pruned. A caller-
 supplied manual destination is never deleted.
 This prevents loss of a preexisting manual backup on failures that occur
-before opening the destination. A failure **during** an in-place manual write
-can still leave a damaged file: fully atomic staging/replace for SAF destinations
-remains a separate pre-release requirement. Because
-protobuf parsing still requires resident memory below this ceiling, on-device
-large-file tests remain an acceptance requirement. This size bound is not a
-checksum or authentication mechanism.
+before opening the destination. Manual backups launched via `ACTION_CREATE_DOCUMENT` now stage the entire
+gzip archive in app-private cache, decode/validate that staged file, and check
+that the selected SAF document is readable and **empty** before ever opening
+its output stream. A populated or unreadable manual destination is refused,
+not truncated or deleted. After copying, the final SAF URI is independently
+decoded and validated. Private staging files are removed on ordinary success,
+failure and cancellation.
+
+This is **not** an atomic rename/replace and does not protect against a
+malicious/racy provider changing the document between the empty check and
+the write. A crash or storage failure during the final copy may leave the
+**newly created** document incomplete; no valid-backup success is reported.
+SAF cannot promise universally atomic replacement of an existing file, so
+existing nonempty manual files must never be accepted as overwrite targets.
+Android physical tests (including process death, constrained storage and
+cloud-backed SAF providers) remain a pre-release requirement. Cache files
+left by abrupt process termination may persist until cache cleanup.
+Because protobuf parsing still requires resident memory below this ceiling,
+on-device large-file tests remain an acceptance requirement. This size bound
+is not a checksum or authentication mechanism.
 
 ## Backward compatibility
 
