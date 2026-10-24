@@ -139,6 +139,32 @@ class InventoryClaimPolicyTest {
         }
     }
 
+    @Test
+    fun `release adapters carry bounded next cursors without claiming editorial completeness`() {
+        val scope = verifiedScope("mangadex")
+        val first = MangaDexReleaseEvidenceAdapter.adapt(
+            scope = scope,
+            pageKey = "start",
+            observedAt = 30L,
+            releases = listOf(InventoryReleaseRecord("release", "12", null, "en", "md", "work-id")),
+            hasNextPage = true,
+            nextCursor = "offset:100",
+        )
+        first.outcome shouldBe InventoryFetchOutcome.PARTIAL
+        first.nextCursor shouldBe "offset:100"
+
+        val last = MangaDexReleaseEvidenceAdapter.adapt(
+            scope = scope,
+            pageKey = "offset:100",
+            observedAt = 31L,
+            releases = emptyList(),
+            hasNextPage = false,
+            nextCursor = "invalid-stale-next",
+        )
+        last.outcome shouldBe InventoryFetchOutcome.EXHAUSTED
+        last.nextCursor shouldBe null
+    }
+
     private fun verifiedScope(producer: String = "editorial") = InventoryScope(
         canonicalTitleId = "canonical",
         producerId = producer,
