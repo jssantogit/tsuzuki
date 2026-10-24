@@ -60,6 +60,7 @@ class BackupCreator(
     suspend fun backup(uri: Uri, options: BackupOptions): String {
         var file: UniFile? = null
         var createdByThisBackup = false
+        var successfullyValidated = false
         try {
             file = if (isAutoBackup) {
                 // Get dir of file and create
@@ -111,6 +112,7 @@ class BackupCreator(
 
             // Make sure it's a valid backup file
             backupFileValidator.validate(fileUri)
+            successfullyValidated = true
 
             if (isAutoBackup) {
                 // Retire older backups only after the new archive is verified.
@@ -157,7 +159,11 @@ class BackupCreator(
             return fileUri.toString()
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
-            BackupOutputCleanupPolicy.onFailure(file, createdByThisBackup)
+            BackupOutputCleanupPolicy.onFailure(
+                file,
+                createdByThisBackup = createdByThisBackup,
+                successfullyValidated = successfullyValidated,
+            )
             throw e
         }
     }

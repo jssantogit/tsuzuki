@@ -7,7 +7,13 @@ import com.hippo.unifile.UniFile
  * disposable file is one freshly created for this automatic backup attempt.
  */
 internal object BackupOutputCleanupPolicy {
-    fun onFailure(file: UniFile?, createdByThisBackup: Boolean) {
-        if (createdByThisBackup) file?.delete()
+    fun onFailure(
+        file: UniFile?,
+        createdByThisBackup: Boolean,
+        successfullyValidated: Boolean = false,
+    ) {
+        // A validated backup is durable even if timestamp or retention work
+        // fails afterwards. Deleting it could leave fewer recovery copies.
+        if (createdByThisBackup && !successfullyValidated) file?.delete()
     }
 }
