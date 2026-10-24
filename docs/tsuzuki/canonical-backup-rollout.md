@@ -10,6 +10,21 @@ continues to recognize legacy minute-only filenames and newer unique filenames.
 This reduces accidental overwrite/deletion of previously validated automatic
 backups. It does not promise filesystem-level atomicity for every SAF provider.
 
+**Verified-only automatic retention:** Before pruning older copies, the writer
+now reopens and validates each sibling backup through the real bounded
+decoder/validator. Matching filenames alone cannot certify completed gzip
+writes, including archives currently being written by another attempt.
+Unreadable, corrupt, or still-in-progress archives are excluded from the
+retirable set AND from the count of verified copies, and are preserved.
+An older attempt also cannot retire an archive whose filename is newer than
+its own validated output. To bound repeated large-file decoding, retention
+skips all pruning when the matching directory listing has more than 16
+candidates; manual cleanup may be needed in that case. Unknown, duplicate
+or temporarily inaccessible file metadata also requires conservative
+handling; these guards do not supply cross-process SAF atomicity or make
+the retention listing a transactional snapshot. Cancellation is propagated,
+not mistaken for an archive validation failure.
+
 The legacy `.tachibk` decoder now reads both plain and gzip archives with a
 256 MiB **uncompressed** size ceiling before protobuf decoding. This avoids
 unbounded gzip expansion in the application process. Oversized files fail
