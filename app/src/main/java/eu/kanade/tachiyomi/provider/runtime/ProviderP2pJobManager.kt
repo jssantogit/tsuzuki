@@ -23,6 +23,12 @@ fun interface ProviderP2pDownloadEngine {
         request: ProviderP2pAcquireRequest,
         workingDirectory: File,
     ): ProviderP2pDownloadResult
+
+    suspend fun downloadWithHostMetadata(
+        request: ProviderP2pAcquireRequest,
+        workingDirectory: File,
+        verifiedBytes: ByteArray?,
+    ): ProviderP2pDownloadResult = download(request, workingDirectory)
 }
 
 sealed interface ProviderP2pDownloadResult {
@@ -43,6 +49,7 @@ class ProviderP2pJobManager internal constructor(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val clock: () -> Long = System::currentTimeMillis,
     private val completedTtlMs: Long = DEFAULT_COMPLETED_TTL_MS,
+    private val verifiedMetadata: HostVerifiedTorrentMetadataCache? = null,
 ) : AutoCloseable {
 
     init {
@@ -175,7 +182,17 @@ class ProviderP2pJobManager internal constructor(
 
         var terminalExceptionClass: String? = null
         val response = try {
-            when (val result = engine.download(entry.request, workingDirectory)) {
+            val verifiedBytes = runCatching {
+                verifiedMetadata?.find(key.providerId, entry.request)
+            }.getOrNull()
+            ProviderP2pDiagnostics.record(
+                event = ProviderP2pDiagnosticEvent.METADATA_CACHE_LOOKUP,
+                operationId = entry.request.operationId,
+                jobId = entry.jobId,
+                providerId = key.providerId,
+                codes = mapOf("status" to if (verifiedBytes == null) "MISS" else "HIT"),
+            )
+            when (val result = engine.downloadWithHostMetadata(entry.request, workingDirectory, verifiedBytes)) {
                 is ProviderP2pDownloadResult.Ready -> {
                     val file = result.file
                     val withinWorkingDirectory = file.canonicalFile.toPath()

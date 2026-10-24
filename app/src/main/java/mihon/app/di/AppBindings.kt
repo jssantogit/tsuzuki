@@ -22,6 +22,7 @@ import eu.kanade.tachiyomi.provider.repository.InstalledScriptProviderRegistry
 import eu.kanade.tachiyomi.provider.runtime.IsolatedProviderPackageContractValidator
 import eu.kanade.tachiyomi.provider.runtime.JlibtorrentNativeSupport
 import eu.kanade.tachiyomi.provider.runtime.JlibtorrentProviderP2pDownloadEngine
+import eu.kanade.tachiyomi.provider.runtime.HostVerifiedTorrentMetadataCache
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import eu.kanade.tachiyomi.provider.runtime.ProviderP2pJobManager
@@ -243,11 +244,13 @@ object AppBindings {
     fun providesProviderP2pJobManager(
         context: Context,
         managedFiles: ProviderManagedFileStore,
+        verifiedMetadata: HostVerifiedTorrentMetadataCache,
     ): ProviderP2pJobManager =
         ProviderP2pJobManager(
             root = File(context.cacheDir, "provider-platform/p2p-jobs"),
             managedFiles = managedFiles,
             engine = JlibtorrentProviderP2pDownloadEngine(),
+            verifiedMetadata = verifiedMetadata,
         )
 
     @Provides
@@ -334,10 +337,16 @@ object AppBindings {
 
     @Provides
     @SingleIn(AppScope::class)
+    fun providesHostVerifiedTorrentMetadataCache(): HostVerifiedTorrentMetadataCache =
+        HostVerifiedTorrentMetadataCache()
+
+    @Provides
+    @SingleIn(AppScope::class)
     fun providesProviderTorrentMetadataInspector(
         networkHelper: NetworkHelper,
+        verifiedMetadata: HostVerifiedTorrentMetadataCache,
     ): ProviderTorrentMetadataInspector =
-        HttpProviderTorrentMetadataInspector(networkHelper.client)
+        HttpProviderTorrentMetadataInspector(networkHelper.client, verifiedMetadata = verifiedMetadata)
 
     @Provides
     fun providesTorrentSearchGateway(

@@ -25,6 +25,7 @@ internal enum class ProviderP2pDiagnosticEvent {
     SESSION_READY,
     SESSION_FAILED,
     NATIVE_ALERT_SUMMARY,
+    METADATA_CACHE_LOOKUP,
     METADATA_START,
     METADATA_READY,
     METADATA_FAILED,

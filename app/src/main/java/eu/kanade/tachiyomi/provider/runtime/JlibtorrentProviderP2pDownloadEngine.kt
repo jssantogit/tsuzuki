@@ -60,6 +60,18 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
     override suspend fun download(
         request: ProviderP2pAcquireRequest,
         workingDirectory: File,
+    ): ProviderP2pDownloadResult = downloadInternal(request, workingDirectory, null)
+
+    override suspend fun downloadWithHostMetadata(
+        request: ProviderP2pAcquireRequest,
+        workingDirectory: File,
+        verifiedBytes: ByteArray?,
+    ): ProviderP2pDownloadResult = downloadInternal(request, workingDirectory, verifiedBytes)
+
+    private suspend fun downloadInternal(
+        request: ProviderP2pAcquireRequest,
+        workingDirectory: File,
+        hostVerifiedBytes: ByteArray?,
     ): ProviderP2pDownloadResult = withContext(Dispatchers.IO) {
         val nativeSupported = nativeSupport()
         ProviderP2pDiagnostics.record(
@@ -120,8 +132,8 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 event = ProviderP2pDiagnosticEvent.METADATA_START,
                 operationId = request.operationId,
                 codes = mapOf(
-                    "source" to metadataSource(request),
-                    "phase" to metadataResolutionMode(),
+                    "source" to metadataSource(request, hostVerifiedBytes),
+                    "phase" to metadataResolutionMode(hostVerifiedBytes),
                 ),
                 numbers = mapOf(
                     "timeoutMs" to metadataTimeoutSeconds.toLong() * 1_000L,
@@ -133,18 +145,18 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                     "hasTorrentUrl" to !request.torrentUrl.isNullOrBlank(),
                 ),
             )
-            val torrent = if (metadataResolver == null) {
-                fetchProductionMetadata(session, request, workingDirectory)
-            } else {
-                metadataResolver(session, request, workingDirectory)
+            val torrent = when {
+                metadataResolver != null -> metadataResolver(session, request, workingDirectory)
+                hostVerifiedBytes != null -> TorrentInfo(hostVerifiedBytes)
+                else -> fetchProductionMetadata(session, request, workingDirectory)
             }
             if (torrent == null) {
                 ProviderP2pDiagnostics.record(
                     event = ProviderP2pDiagnosticEvent.METADATA_FAILED,
                     operationId = request.operationId,
                     codes = mapOf(
-                        "source" to metadataSource(request),
-                        "phase" to metadataResolutionMode(),
+                        "source" to metadataSource(request, hostVerifiedBytes),
+                        "phase" to metadataResolutionMode(hostVerifiedBytes),
                         "reason" to when {
                             metadataResolver != null -> "RESOLVER_RETURNED_NULL"
                             request.magnetUri.isNullOrBlank() && request.infoHash?.length != 40 -> "NO_MAGNET_SOURCE"
@@ -168,8 +180,8 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 event = ProviderP2pDiagnosticEvent.METADATA_READY,
                 operationId = request.operationId,
                 codes = mapOf(
-                    "source" to metadataSource(request),
-                    "phase" to metadataResolutionMode(),
+                    "source" to metadataSource(request, hostVerifiedBytes),
+                    "phase" to metadataResolutionMode(hostVerifiedBytes),
                 ),
                 numbers = mapOf(
                     "elapsedMs" to elapsedMillis(metadataStartedAt),
@@ -661,8 +673,11 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
         }
     }
 
-    private fun metadataResolutionMode(): String =
-        if (metadataResolver == null) "FETCH_MAGNET" else "INJECTED"
+    private fun metadataResolutionMode(hostVerifiedBytes: ByteArray?): String = when {
+        metadataResolver != null -> "INJECTED"
+        hostVerifiedBytes != null -> "HOST_VERIFIED"
+        else -> "FETCH_MAGNET"
+    }
 
     private suspend fun fetchProductionMetadata(
         session: SessionManager,
@@ -683,7 +698,8 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
         )?.let(::TorrentInfo)
     }
 
-    private fun metadataSource(request: ProviderP2pAcquireRequest): String = when {
+    private fun metadataSource(request: ProviderP2pAcquireRequest, hostVerifiedBytes: ByteArray?): String = when {
+        hostVerifiedBytes != null && metadataResolver == null -> "HOST_VERIFIED"
         !request.magnetUri.isNullOrBlank() -> "MAGNET"
         request.infoHash?.length == 40 -> "INFO_HASH"
         !request.torrentUrl.isNullOrBlank() -> "TORRENT_URL_UNUSED"
