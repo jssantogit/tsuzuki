@@ -12,7 +12,7 @@ insert into tsuzuki_private.tsuzuki_sync_records (user_id, domain, record_id, is
 select '00000000-0000-0000-0000-000000000091'::uuid, 'READING_PROGRESS',
        record_id, record_id = 'deleted'
 from (values ('valid'), ('bad-read'), ('bad-negative'), ('bad-fraction'),
-             ('bad-title'), ('bad-variant'), ('missing'), ('deleted')) as r(record_id);
+             ('bad-title'), ('bad-variant'), ('bad-overflow'), ('missing'), ('deleted')) as r(record_id);
 insert into tsuzuki_private.tsuzuki_sync_records (user_id, domain, record_id, is_deleted)
 values ('00000000-0000-0000-0000-000000000092'::uuid,
         'READING_PROGRESS', 'foreign-bad', false);
@@ -23,7 +23,7 @@ insert into tsuzuki_private.tsuzuki_sync_fields (
 select '00000000-0000-0000-0000-000000000091'::uuid,
        'READING_PROGRESS', r.record_id, f.field_path, f.value, false
 from (values ('valid'), ('bad-read'), ('bad-negative'), ('bad-fraction'),
-             ('bad-title'), ('bad-variant'), ('missing'), ('deleted')) as r(record_id)
+             ('bad-title'), ('bad-variant'), ('bad-overflow'), ('missing'), ('deleted')) as r(record_id)
 cross join (values
     ('canonicalTitleId', '"title"'::jsonb),
     ('chapterKey', '"1"'::jsonb),
@@ -37,13 +37,15 @@ set value = case
     when record_id = 'bad-read' then '"true"'::jsonb
     when record_id = 'bad-negative' then '-1'::jsonb
     when record_id = 'bad-fraction' then '2.5'::jsonb
+    when record_id = 'bad-overflow' then '9223372036854775808'::jsonb
+    when record_id = 'deleted' then '"not boolean"'::jsonb
     when record_id = 'bad-title' then '"   "'::jsonb
     else value
 end
 where user_id = '00000000-0000-0000-0000-000000000091'::uuid
   and domain = 'READING_PROGRESS'
-  and ((record_id = 'bad-read' and field_path = 'read')
-    or (record_id in ('bad-negative', 'bad-fraction') and field_path = 'lastPageRead')
+  and ((record_id in ('bad-read', 'deleted') and field_path = 'read')
+    or (record_id in ('bad-negative', 'bad-fraction', 'bad-overflow') and field_path = 'lastPageRead')
     or (record_id = 'bad-title' and field_path = 'canonicalTitleId'));
 insert into tsuzuki_private.tsuzuki_sync_fields (
     user_id, domain, record_id, field_path, value, is_removed
@@ -58,7 +60,7 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000091
 select set_config('request.jwt.claims',
  '{"sub":"00000000-0000-0000-0000-000000000091","role":"authenticated"}', true);
 select is(public.sync_preview_progress_rollout() ->> 'legacyInvalidValueRecordCount',
- '5', 'wrong boolean, negative/fractional page, blank title and malformed variant are counted');
+ '6', 'bad boolean, negative/fractional/overflow page, blank title and variant counted');
 select is(public.sync_preview_progress_rollout() ->> 'legacyIncompleteRecordCount',
  '1', 'missing fields remain separate from malformed values');
 select is(public.sync_preview_progress_rollout() ->> 'legacyTombstoneCount',
@@ -77,7 +79,7 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000091
 select set_config('request.jwt.claims',
  '{"sub":"00000000-0000-0000-0000-000000000091","role":"authenticated"}', true);
 select is(public.sync_preview_progress_rollout() ->> 'legacyInvalidValueRecordCount',
- '4', 'repair decreases invalid-value count without migration');
+ '5', 'repair decreases invalid-value count without migration');
 reset role;
 
 set local role authenticated;
