@@ -33,7 +33,9 @@ class DefaultSkinF6HContractTest {
     @Test
     fun `discover providers have individual breathing-room cards and compact installation action`() {
         val discover = source("presentation/more/settings/screen/SettingsTsuzukiProvidersDefaultSkinScreen.kt")
-            .substringAfter("private fun DiscoverProviderCards(").substringBefore("private fun DefaultSkinRepositoriesDialog(")
+            .substringAfter(
+                "private fun DiscoverProviderCards(",
+            ).substringBefore("private fun DefaultSkinRepositoriesDialog(")
         discover shouldContain "DefaultSkinCard("
         discover shouldContain "verticalArrangement = Arrangement.spacedBy(12.dp)"
         discover shouldContain "minimumHeight = 40.dp"
