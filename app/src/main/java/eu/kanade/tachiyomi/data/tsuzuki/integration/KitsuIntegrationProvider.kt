@@ -201,6 +201,9 @@ class KitsuIntegrationProvider private constructor(
         }
     }
 
+    override suspend fun authenticatedOwnerSubject(): Result<String> =
+        captureResult { userLibraryApi.getAuthenticatedOwner() }
+
     override suspend fun fetchLibrary(): Result<UserLibrarySnapshot> = captureResult {
         UserLibrarySnapshot(
             lists = KITSU_USER_LISTS,
