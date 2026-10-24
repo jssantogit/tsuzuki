@@ -232,6 +232,68 @@ class SupabaseSyncHttpTransportTest {
     }
 
     @Test
+    fun `transport refuses direct unnegotiated v2 delta without contacting backend`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(400)
+                .addHeader("Content-Type", "application/json")
+                .body("""{"code":"0A000","message":"exact progress requires a negotiated protocol rollout"}""")
+                .build(),
+        )
+
+        val result = transport().pullDelta(SyncDocumentKind.READING_PROGRESS_V2, 0)
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        server.requestCount shouldBe 0
+    }
+
+    @Test
+    fun `transport refuses direct unnegotiated v2 snapshot without contacting backend`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(400)
+                .addHeader("Content-Type", "application/json")
+                .body("""{"code":"0A000","message":"exact progress requires a negotiated protocol rollout"}""")
+                .build(),
+        )
+
+        val result = transport().snapshot(SyncDocumentKind.READING_PROGRESS_V2)
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        server.requestCount shouldBe 0
+    }
+
+    @Test
+    fun `transport refuses direct unnegotiated v2 mutation without contacting backend`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(400)
+                .addHeader("Content-Type", "application/json")
+                .body("""{"code":"0A000","message":"exact progress requires a negotiated protocol rollout"}""")
+                .build(),
+        )
+        val mutation = SupabaseMutationBatch(
+            mutationId = "10000000-0000-0000-0000-000000000077",
+            originClientId = "v2-unnegotiated",
+            domain = SyncDocumentKind.READING_PROGRESS_V2.name,
+            baseCursor = 0,
+            operations = listOf(
+                SyncMutation.SetField(
+                    recordId = "v2-chapter",
+                    propertyPath = listOf("lastPageRead"),
+                    value = JsonPrimitive(2),
+                    recordUpdatedAtEpochMillis = 1,
+                ),
+            ),
+        )
+
+        val result = transport().push(mutation)
+
+        (result as SyncTransportResult.Failure).failure.reason shouldBe SyncFailureReason.UNSUPPORTED_SCHEMA
+        server.requestCount shouldBe 0
+    }
+
+    @Test
     fun `invalid mutation stays malformed document instead of protocol refusal`() = runTest {
         server.enqueue(
             MockResponse.Builder()
