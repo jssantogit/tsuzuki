@@ -177,24 +177,52 @@ class InspectLocalProgressCutoverTest {
                 if (failRead) error("corrupt local data")
                 return if (documentKind == kind) outbox else outboxV2
             }
-            override suspend fun markDirty(documentKind: SyncDocumentKind, enqueuedAtEpochMillis: Long) { writes++ }
+            override suspend fun markDirty(documentKind: SyncDocumentKind, enqueuedAtEpochMillis: Long) {
+                writes++
+            }
             override suspend fun getPending(nowEpochMillis: Long, limit: Int) = emptyList<SyncOutboxEntry>()
-            override suspend fun recordFailure(documentKind: SyncDocumentKind, nextAttemptAtEpochMillis: Long?) { writes++ }
-            override suspend fun clear(documentKind: SyncDocumentKind) { writes++ }
+            override suspend fun recordFailure(
+                documentKind: SyncDocumentKind,
+                nextAttemptAtEpochMillis: Long?,
+            ) {
+                writes++
+            }
+            override suspend fun clear(documentKind: SyncDocumentKind) {
+                writes++
+            }
         }
         val stateStore = object : SupabaseSyncStateStore {
             override suspend fun getCursor(documentKind: SyncDocumentKind) = cursor
-            override suspend fun putCursor(documentKind: SyncDocumentKind, eventCursor: Long, lastSuccessfulSyncAtEpochMillis: Long?) { writes++ }
+            override suspend fun putCursor(
+                documentKind: SyncDocumentKind,
+                eventCursor: Long,
+                lastSuccessfulSyncAtEpochMillis: Long?,
+            ) {
+                writes++
+            }
             override suspend fun getPending(documentKind: SyncDocumentKind): SupabasePendingMutation? =
                 if (documentKind == kind) pending else pendingV2
-            override suspend fun putPending(mutation: SupabasePendingMutation) { writes++ }
-            override suspend fun recordPendingFailure(mutation: SupabasePendingMutation, nextAttemptAtEpochMillis: Long?) { writes++ }
-            override suspend fun deletePending(mutationId: String) { writes++ }
+            override suspend fun putPending(mutation: SupabasePendingMutation) {
+                writes++
+            }
+            override suspend fun recordPendingFailure(
+                mutation: SupabasePendingMutation,
+                nextAttemptAtEpochMillis: Long?,
+            ) {
+                writes++
+            }
+            override suspend fun deletePending(mutationId: String) {
+                writes++
+            }
         }
         val stateRepository = object : SyncStateRepository {
             override suspend fun get(documentKind: SyncDocumentKind): SyncStoredState? = accepted
-            override suspend fun put(state: SyncStoredState) { writes++ }
-            override suspend fun clear(documentKind: SyncDocumentKind) { writes++ }
+            override suspend fun put(state: SyncStoredState) {
+                writes++
+            }
+            override suspend fun clear(documentKind: SyncDocumentKind) {
+                writes++
+            }
         }
         val conflictRepository = object : SyncConflictRepository {
             override suspend fun getForDocument(documentKind: SyncDocumentKind) = conflicts
@@ -202,13 +230,19 @@ class InspectLocalProgressCutoverTest {
                 documentKind: SyncDocumentKind,
                 conflicts: List<SyncConflict>,
                 createdAtEpochMillis: Long,
-            ) { writes++ }
-            override suspend fun clearForDocument(documentKind: SyncDocumentKind) { writes++ }
+            ) {
+                writes++
+            }
+            override suspend fun clearForDocument(documentKind: SyncDocumentKind) {
+                writes++
+            }
         }
         val adapter = object : SyncDocumentAdapter {
             override val documentKind = kind
             override suspend fun exportDocument() = document
-            override suspend fun applyDocument(document: SyncDocumentEnvelope) { writes++ }
+            override suspend fun applyDocument(document: SyncDocumentEnvelope) {
+                writes++
+            }
             override suspend fun hasUnportableLocalState() = unportable
         }
         suspend fun inspect() = InspectLocalProgressCutover(
