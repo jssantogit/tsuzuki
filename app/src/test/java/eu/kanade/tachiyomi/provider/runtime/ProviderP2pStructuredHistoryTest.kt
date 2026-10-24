@@ -55,7 +55,7 @@ class ProviderP2pStructuredHistoryTest {
     @Test
     fun `unsafe free text is excluded from export and recorder errors never affect acquisition`() {
         val seen = mutableListOf<StructuredDiagnosticEvent>()
-        ProviderP2pDiagnostics.installRecorder(HistoryRecorder(seen::add))
+        ProviderP2pDiagnostics.installRecorder(HistoryRecorder { seen.add(it) })
         try {
             ProviderP2pDiagnostics.record(
                 event = ProviderP2pDiagnosticEvent.HOST_RESPONSE,

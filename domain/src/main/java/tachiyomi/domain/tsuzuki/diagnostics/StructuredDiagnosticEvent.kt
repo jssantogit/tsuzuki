@@ -116,6 +116,7 @@ enum class DiagnosticEventName {
     TORRENT_METADATA_SUMMARY,
     TORRENT_MATCH_SUMMARY,
     TORRENT_RELEASE_EVIDENCE_SUMMARY,
+    PROVIDER_P2P_EVENT,
 
     CACHE_LOOKUP,
     DATABASE_OPERATION,
@@ -234,6 +235,7 @@ enum class DiagnosticAttribute {
     TORRENT_FILE_TITLE_TOKEN_COUNT,
     TORRENT_FILE_TITLE_TOKEN_SINGLE_COUNT,
     TORRENT_VOLUME_REQUESTED,
+    PROVIDER_P2P_LINE,
 
     COVER_PRESENT,
     SOURCE_ARTWORK_PRESENT,
@@ -349,6 +351,39 @@ object StructuredDiagnosticSanitizer {
     private val providerIdPattern = Regex("^[a-zA-Z0-9._-]{1,64}$")
     private val providerVersionPattern = Regex("^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$")
     private val providerErrorCodePattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
+    private val p2pEventPattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
+    private val p2pOperationPattern = Regex("^opRef=[0-9a-f]{16}$")
+    private val p2pClassPattern = Regex("^[A-Za-z_][A-Za-z0-9_.$]{0,127}$")
+    private val p2pCodePattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
+    private val p2pCodeFields = setOf(
+        "abi", "failure", "format", "phase", "preference", "providerError", "reason",
+        "route", "source", "stage", "state", "status",
+    )
+    private val p2pNumberFields = setOf(
+        "actualBytes", "doneBytes", "downloadRate", "elapsedMs", "expectedBytes",
+        "fileCount", "fileIndex", "firstByteMs", "firstPeerMs", "ignoredFileCount",
+        "initialPeerCount", "magnetTrackerCount", "metadataBytes", "nativeErrorCode",
+        "peakPeerCount", "peakSeedCount", "peerCount", "pendingPollCount", "pollCount",
+        "pollIntervalMs", "progressPercent", "seedCount", "selectedIndex", "stalledMs",
+        "timeoutMs", "wantedBytes", "workingUsableBytes",
+    )
+    private val p2pFlagFields = setOf(
+        "alertListenerAttached", "cleanupSucceeded", "dhtRunning", "directP2pAllowed",
+        "exists", "finished", "firstByteObserved", "firstPeerObserved", "hasInfoHash",
+        "hasInitialPeers", "hasMagnet", "hasMagnetTrackers", "hasTorrentUrl", "hasV1",
+        "hasV2", "indexMatched", "isFile", "lsdExplicitlyDisabled", "matched",
+        "nativeSupported", "pathMatched", "retryable", "sizeComplete", "sizeMatched",
+        "stopped", "withinJobRoot",
+    )
+    private val p2pAlertFields = setOf(
+        "alertMetadataReceived", "alertMetadataFailed", "alertTrackerReply",
+        "alertTrackerWarning", "alertTrackerError", "alertDhtBootstrap",
+        "alertDhtGetPeers", "alertDhtGetPeersReply", "alertDhtError",
+        "alertListenSucceeded", "alertListenFailed", "alertUdpError", "alertPortmap",
+        "alertPortmapError", "alertSessionError", "alertTorrentError", "alertPeerConnect",
+        "alertPeerDisconnected", "alertPeerError", "alertFileError", "alertHashFailed",
+        "alertFileCompleted", "alertTorrentFinished", "alertAlertsDropped",
+    )
 
     fun sanitize(event: StructuredDiagnosticEvent): SanitizedStructuredDiagnosticEvent? {
         if (event.schemaVersion != StructuredDiagnosticEvent.CURRENT_SCHEMA_VERSION) return null
@@ -383,6 +418,34 @@ object StructuredDiagnosticSanitizer {
             attributes = attributes,
             schemaVersion = event.schemaVersion,
         )
+    }
+
+
+    /** A strictly delimited rendition of Host-only, content-free P2P fields. */
+    private fun isSafeP2pLine(line: String): Boolean {
+        if (line.length !in 40..2048 || line.any { it.code !in 32..126 }) return false
+        val fields = line.split(' ')
+        if (fields.size < 3 || fields[0] != "provider_p2p") return false
+        if (!fields[1].startsWith("event=") || !p2pEventPattern.matches(fields[1].removePrefix("event="))) {
+            return false
+        }
+        if (!p2pOperationPattern.matches(fields[2])) return false
+        return fields.drop(3).all { field ->
+            val equal = field.indexOf('=')
+            if (equal <= 0 || equal == field.lastIndex) return@all false
+            val key = field.substring(0, equal)
+            val value = field.substring(equal + 1)
+            when {
+                key == "jobId" -> uuidPattern.matches(value)
+                key == "providerId" -> providerIdPattern.matches(value)
+                key == "exceptionClass" -> p2pClassPattern.matches(value)
+                key in p2pCodeFields -> p2pCodePattern.matches(value)
+                key in p2pNumberFields || key in p2pAlertFields ->
+                    value.toLongOrNull()?.let { it >= 0 } == true
+                key in p2pFlagFields -> value == "true" || value == "false"
+                else -> false
+            }
+        }
     }
 
     private fun sanitizeAttribute(
@@ -456,6 +519,9 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.PROVIDER_RETRYABLE,
         DiagnosticAttribute.TORRENT_VOLUME_REQUESTED,
         -> value as? DiagnosticAttributeValue.Flag
+
+        DiagnosticAttribute.PROVIDER_P2P_LINE -> (value as? DiagnosticAttributeValue.Text)
+            ?.takeIf { isSafeP2pLine(it.value) }
 
         DiagnosticAttribute.LANGUAGE -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { languageTagPattern.matches(it.value) }

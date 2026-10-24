@@ -56,6 +56,7 @@ import logcat.AndroidLogcatLogger
 import logcat.LogPriority
 import logcat.LogcatLogger
 import mihon.app.di.AppGraph
+import eu.kanade.tachiyomi.provider.runtime.ProviderP2pDiagnostics
 import mihon.app.di.injekt.MetroInteropModule
 import mihon.core.metro.GraphProvider
 import mihon.core.migration.Migration
@@ -140,6 +141,8 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         }
 
         graph.inject(this)
+        // Host-only P2P events must reach exportable structured history, not just logcat.
+        ProviderP2pDiagnostics.installRecorder(graph.structuredDiagnosticRecorder)
         setupInjekt()
 
         TelemetryConfig.init(applicationContext)
