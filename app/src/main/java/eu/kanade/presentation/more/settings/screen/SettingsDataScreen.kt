@@ -442,7 +442,12 @@ object SettingsDataScreen : SearchableSettings {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     @Composable
-                    fun ExportColumnChoice(label: String, selected: Boolean, enabled: Boolean, onSelect: (Boolean) -> Unit) {
+                    fun ExportColumnChoice(
+                        label: String,
+                        selected: Boolean,
+                        enabled: Boolean,
+                        onSelect: (Boolean) -> Unit,
+                    ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
