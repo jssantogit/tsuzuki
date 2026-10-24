@@ -1,0 +1,17 @@
+[
+  {"key":"death-note","label":"Death Note — manga principal","axes":["manga","completed","historical-outline-case"],"ids":{"kitsu":"57","mu":"3479935384","bgm":1674,"md":"75ee72ab-c6bf-4b87-badd-de839156934c"}},
+  {"key":"nanatsu","label":"Nanatsu no Taizai","axes":["manga","completed","historical-outline-case"],"ids":{"kitsu":"24208","mu":"62758791984","bgm":64051,"md":"e52d9403-3356-403b-b7bb-d7d6a420dd50"}},
+  {"key":"opm-remake","label":"One Punch-Man — remake","axes":["manga","ongoing","historical-inventory-case","adaptation-contrast"],"ids":{"kitsu":"24147","mu":"30535847369","bgm":74201,"md":"d8a959f7-648e-4c8d-8f23-f1f3f8e129f3"}},
+  {"key":"opm-original","label":"One Punch-Man — ONE webcomic","axes":["webcomic","ongoing","adaptation-contrast"],"ids":{"kitsu":"35883","mu":"37830832998","md":"b7d069cb-4ab9-4c21-a20b-38f7c269be4e"}},
+  {"key":"berserk","label":"Berserk","axes":["manga","ongoing","special-numbering","content-filter-confound"],"ids":{"kitsu":"8","mu":"51239621230","bgm":9640,"md":"801513ba-a712-498c-8f57-cae55b38cc92"}},
+  {"key":"one-piece","label":"One Piece","axes":["manga","ongoing","long-series"],"ids":{"kitsu":"38","mu":"55099564912","bgm":3510,"md":"a1c7c817-4e59-43b7-9365-09675a149a6f"}},
+  {"key":"look-back","label":"Look Back — Fujimoto Tatsuki","axes":["oneshot","completed","homonym-negative-control"],"ids":{"kitsu":"60475","mu":"62512335978","bgm":342254,"md":"ba7908db-5c9e-4f78-9fc1-3b3581f752e9"}},
+  {"key":"solo-leveling","label":"Solo Leveling — manhwa","axes":["manhwa","webtoon","completed","novel-vs-comic"],"ids":{"kitsu":"54114","mu":"15180124327","bgm":302561,"md":"32d76d19-8a05-4db0-9fc2-e0b0648fe9d0"}},
+  {"key":"mdzs","label":"Mo Dao Zu Shi — manhua","axes":["manhua","completed","native-alias"],"ids":{"kitsu":"40740","mu":"34366575338","bgm":266368,"md":"6e52262f-bcd5-49c4-b93a-f4652d189844"}},
+  {"key":"rezero-novel","label":"Re:Zero — light novel","axes":["novel","ongoing","novel-vs-comic"],"ids":{"kitsu":"26776","mu":"8162824044","bgm":121927}},
+  {"key":"rezero-manga-arc1","label":"Re:Zero — manga, primeiro arco","axes":["manga","completed","novel-vs-comic"],"ids":{"kitsu":"26985","mu":"11106634916","md":"5ef4e73e-6fbc-456b-b7e1-4642256f666d"}},
+  {"key":"solanin","label":"Solanin — série original","axes":["manga","completed","short-series","edition-contrast"],"ids":{"kitsu":"8287","mu":"21593352517","bgm":32818,"md":"a42db50d-20df-4f33-bddc-fe990df9c231"}},
+  {"key":"death-note-colored","label":"Death Note — edição colorida","axes":["edition-contrast"],"ids":{"md":"85b6f4e4-180b-43b0-a0ec-9a9de401aed0"}},
+  {"key":"solanin-new-edition","label":"Solanin — 新装版","axes":["edition-contrast"],"ids":{"bgm":449473}},
+  {"key":"rezero-novel-volume1","label":"Re:Zero — light novel, volume 1","axes":["volume-vs-series"],"ids":{"bgm":121928}}
+]

@@ -1,0 +1,47 @@
+{
+  "sqliteVersion": "3.49.1",
+  "database": ":memory:",
+  "sourceHashes": {
+    "tsuzuki_canonical_chapters.sq": "2cbeb75d79890067256c10a32bafdd0358020766b1c4d2a37f99e281d3029fd2",
+    "tsuzuki_chapter_variants.sq": "7418e30d393ff00436b7cf64ac7056d68e7203e2a16145dea33f70931ea65c58",
+    "tsuzuki_chapter_progress.sq": "30b8e181f70e12fed9a75ac51f44e8a1c771e8e1845ef099a7d4f80ded7fa2b5",
+    "tsuzuki_chapter_history.sq": "161f446d5275816675a8d4631db77bfed6ae57c1c62c1a598536f3fdadd4e4c5",
+    "tsuzuki_canonical_downloads.sq": "94406d5035b9e42aa4f5212878466c041a03c50eb84998d52009e315783bc31a",
+    "tsuzuki_chapter_update_state.sq": "7784a74525647772ea599a2d81dbf8e7cb272797f15b8e19ce66fadb84aaba12",
+    "tsuzuki_mihon_projection_queue.sq": "0ea4d4e8239170819decc739ae73b8fab550d6ae7507e6006d626587a334a18c",
+    "tsuzuki_chapter_evidence.sq": "c4d3a357dd6b3c55fea8ba2b13751f5fb88d4803af34c80bd50bfdeb165b2335",
+    "tsuzuki_chapter_overrides.sq": "b08444bcde18b8c3c9c7df3fde3b872a1db92342f6f63025b6b6790c4f370e9e"
+  },
+  "stubbedParents": [
+    "tsuzuki_titles",
+    "tsuzuki_source_mappings"
+  ],
+  "excluded": "SQLDelight adapters, triggers, indexes, Kotlin, Android, sync and actual backup runtime",
+  "protectedState": 5,
+  "before": {
+    "canonical_chapters": 1,
+    "chapter_variants": 1,
+    "chapter_progress": 1,
+    "chapter_history": 1,
+    "canonical_downloads": 1,
+    "chapter_update_state": 1,
+    "mihon_projection_queue": 1,
+    "chapter_evidence": 1,
+    "chapter_overrides": 1
+  },
+  "metadataPromotionPreservesReferences": true,
+  "afterHypotheticalDelete": {
+    "canonical_chapters": 0,
+    "chapter_variants": 0,
+    "chapter_progress": 0,
+    "chapter_history": 0,
+    "canonical_downloads": 0,
+    "chapter_update_state": 0,
+    "mihon_projection_queue": 0,
+    "chapter_evidence": 1,
+    "chapter_overrides": 1
+  },
+  "evidenceMappingAfterDelete": null,
+  "savepointRollbackPreservesAllRows": true,
+  "assertions": "PASS"
+}

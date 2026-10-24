@@ -1,0 +1,53 @@
+{
+  "classification": "EXCLUDED_TRANSCRIPTION_ERROR",
+  "correctedSeriesId": "11106634916",
+  "receipt": {
+    "source": "mu",
+    "method": "POST",
+    "url": "https://api.mangaupdates.com/v1/releases/search",
+    "body": {
+      "search": "11057030324",
+      "search_type": "series",
+      "page": 1,
+      "perpage": 25,
+      "include_metadata": true
+    },
+    "observedAt": "2026-10-24T18:36:50.254727+00:00",
+    "status": 200,
+    "elapsedMs": 1797,
+    "bytes": 22206,
+    "responseSha256": "79f2b0fa777eb0809ab6c888999a3748ad06c2aa8ef9c8af2adcf94783d89202",
+    "contentType": "application/json",
+    "validators": {}
+  },
+  "reportedTotal": 10000,
+  "returned": 25,
+  "returnedSeriesIds": [
+    48532075511,
+    37357170055,
+    2247315785,
+    23877047038,
+    67780662453,
+    39977607154,
+    27096474158,
+    26367975109,
+    41204870774,
+    56224430587,
+    7320816376,
+    16020319441,
+    39694746081,
+    1501349255,
+    52166467844,
+    61054116565,
+    56990926917,
+    77488760189,
+    9803421694,
+    21920652313,
+    13848346269,
+    46992269277,
+    19898698899,
+    12216050037,
+    68247587959
+  ],
+  "reason": "Requested ID was not the selected work; the endpoint returned unrelated series. Not a valid corpus observation."
+}

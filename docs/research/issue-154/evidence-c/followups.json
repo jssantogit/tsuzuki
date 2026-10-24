@@ -1,0 +1,3406 @@
+[
+  {
+    "work": "opm-remake",
+    "source": "kitsu",
+    "externalId": "24147",
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga/24147/chapters?page%5Blimit%5D=20&page%5Boffset%5D=4980",
+      "body": null,
+      "observedAt": "2026-10-24T18:40:16.462899+00:00",
+      "status": 200,
+      "elapsedMs": 688,
+      "bytes": 10574,
+      "responseSha256": "c7f8afa20828e41d0c5cb66aeaaa4565d26ef1ab292a80f621d665a30b4a54c7",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"c7f8afa20828e41d0c5cb66aeaaa4565\""
+      }
+    },
+    "totalReportedByEndpoint": 5000,
+    "returned": 20,
+    "hasNext": false,
+    "rows": [
+      {
+        "id": "2969983",
+        "number": 4981,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969984",
+        "number": 4982,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969985",
+        "number": 4983,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969986",
+        "number": 4984,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969987",
+        "number": 4985,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969988",
+        "number": 4986,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969989",
+        "number": 4987,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969990",
+        "number": 4988,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969991",
+        "number": 4989,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969992",
+        "number": 4990,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969993",
+        "number": 4991,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969994",
+        "number": 4992,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969995",
+        "number": 4993,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969996",
+        "number": 4994,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969997",
+        "number": 4995,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969998",
+        "number": 4996,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2969999",
+        "number": 4997,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2970000",
+        "number": 4998,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2970001",
+        "number": 4999,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "2970002",
+        "number": 5000,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      }
+    ]
+  },
+  {
+    "work": "one-piece",
+    "source": "kitsu",
+    "externalId": "38",
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga/38/chapters?page%5Blimit%5D=20&page%5Boffset%5D=4980",
+      "body": null,
+      "observedAt": "2026-10-24T18:40:18.253110+00:00",
+      "status": 200,
+      "elapsedMs": 672,
+      "bytes": 10405,
+      "responseSha256": "d2d4541dbc35a24b930a2fe8e4ae8ffbb5284f909c688d2f6887d8a77b1ba127",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"d2d4541dbc35a24b930a2fe8e4ae8ffb\""
+      }
+    },
+    "totalReportedByEndpoint": 5000,
+    "returned": 20,
+    "hasNext": false,
+    "rows": [
+      {
+        "id": "413250",
+        "number": 4981,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413251",
+        "number": 4982,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413252",
+        "number": 4983,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413253",
+        "number": 4984,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413254",
+        "number": 4985,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413255",
+        "number": 4986,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413256",
+        "number": 4987,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413257",
+        "number": 4988,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413258",
+        "number": 4989,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413259",
+        "number": 4990,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413260",
+        "number": 4991,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413261",
+        "number": 4992,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413262",
+        "number": 4993,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413263",
+        "number": 4994,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413264",
+        "number": 4995,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413265",
+        "number": 4996,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413266",
+        "number": 4997,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413267",
+        "number": 4998,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413268",
+        "number": 4999,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "413269",
+        "number": 5000,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      }
+    ]
+  },
+  {
+    "work": "solanin",
+    "source": "kitsu",
+    "externalId": "8287",
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga/8287/chapters?page%5Blimit%5D=20&page%5Boffset%5D=20",
+      "body": null,
+      "observedAt": "2026-10-24T18:40:20.034515+00:00",
+      "status": 200,
+      "elapsedMs": 453,
+      "bytes": 4845,
+      "responseSha256": "e2490b5bedbf4569cbcc5bab843ca0988323d83e593de025371b1f6bc3a9f9fb",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"e2490b5bedbf4569cbcc5bab843ca098\""
+      }
+    },
+    "totalReportedByEndpoint": 29,
+    "returned": 9,
+    "hasNext": false,
+    "rows": [
+      {
+        "id": "146412",
+        "number": 21,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "146413",
+        "number": 22,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "146414",
+        "number": 23,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "146415",
+        "number": 24,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "146416",
+        "number": 25,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "146417",
+        "number": 26,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "146418",
+        "number": 27,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "146419",
+        "number": 28,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      },
+      {
+        "id": "1233137",
+        "number": 29,
+        "volume": 1,
+        "title": null,
+        "titles": {},
+        "published": null,
+        "attributesPresent": [
+          "canonicalTitle",
+          "createdAt",
+          "description",
+          "length",
+          "number",
+          "published",
+          "synopsis",
+          "thumbnail",
+          "titles",
+          "updatedAt",
+          "volumeNumber"
+        ]
+      }
+    ]
+  },
+  {
+    "work": "solanin",
+    "source": "md",
+    "externalId": "a42db50d-20df-4f33-bddc-fe990df9c231",
+    "receipt": {
+      "source": "md",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga/a42db50d-20df-4f33-bddc-fe990df9c231/feed?limit=100&offset=100&order%5Bchapter%5D=asc&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive&contentRating%5B%5D=erotica&includeFutureUpdates=0",
+      "body": null,
+      "observedAt": "2026-10-24T18:40:20.490655+00:00",
+      "status": 200,
+      "elapsedMs": 1063,
+      "bytes": 48182,
+      "responseSha256": "cab7cf403dcc9bb9ad4ebd2a686eb2cad9d3f4870cf4bc77c1c95ef11ea07baf",
+      "contentType": "application/json",
+      "validators": {}
+    },
+    "totalReportedByEndpoint": 181,
+    "returned": 81,
+    "hasNext": false,
+    "rows": [
+      {
+        "id": "76293d57-4914-4c94-b821-72dadcbfb43f",
+        "chapter": "15",
+        "volume": "2",
+        "title": "",
+        "language": "es",
+        "publishAt": "2020-02-01T11:32:30+00:00",
+        "updatedAt": "2020-02-01T11:32:30+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 27
+      },
+      {
+        "id": "017a595e-a322-4b2c-83d5-89f8a6598549",
+        "chapter": "16",
+        "volume": "2",
+        "title": null,
+        "language": "vi",
+        "publishAt": "2024-10-14T11:22:39+00:00",
+        "updatedAt": "2024-10-14T11:27:43+00:00",
+        "version": 5,
+        "externalLink": false,
+        "pagesReported": 13
+      },
+      {
+        "id": "45f39462-3d63-4f04-9b11-adcf482a6fd1",
+        "chapter": "16",
+        "volume": "2",
+        "title": "Chapter 16",
+        "language": "bg",
+        "publishAt": "2021-07-14T19:31:17+00:00",
+        "updatedAt": "2021-07-14T19:31:31+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 16
+      },
+      {
+        "id": "6c368d63-7ed5-4bb2-804f-0fa9874f570f",
+        "chapter": "16",
+        "volume": "2",
+        "title": "",
+        "language": "es",
+        "publishAt": "2020-02-01T11:32:32+00:00",
+        "updatedAt": "2020-02-01T11:32:32+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "c87d310b-9c00-43fa-a37b-7ca9fa479e93",
+        "chapter": "16",
+        "volume": "2",
+        "title": "",
+        "language": "ru",
+        "publishAt": "2019-04-11T10:42:33+00:00",
+        "updatedAt": "2019-04-11T10:42:33+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "00df82e9-9eba-4fe7-8890-6267c7a2dd38",
+        "chapter": "16",
+        "volume": "2",
+        "title": "",
+        "language": "en",
+        "publishAt": "2018-02-11T20:01:43+00:00",
+        "updatedAt": "2018-02-11T20:01:43+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 17
+      },
+      {
+        "id": "cd627cde-fd81-4f93-b2ca-bdcbad8f79c7",
+        "chapter": "16",
+        "volume": "2",
+        "title": null,
+        "language": "pt-br",
+        "publishAt": "2021-10-02T11:32:28+00:00",
+        "updatedAt": "2021-10-02T11:32:30+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "1a3d7522-e629-4f52-919d-f244490f9f8d",
+        "chapter": "17",
+        "volume": "2",
+        "title": "Chapter 17",
+        "language": "bg",
+        "publishAt": "2021-07-14T19:32:39+00:00",
+        "updatedAt": "2021-07-14T19:32:52+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 16
+      },
+      {
+        "id": "9704c686-c97a-4719-977a-21c27f239c7d",
+        "chapter": "17",
+        "volume": "2",
+        "title": null,
+        "language": "vi",
+        "publishAt": "2024-10-14T11:22:50+00:00",
+        "updatedAt": "2024-10-14T11:27:45+00:00",
+        "version": 5,
+        "externalLink": false,
+        "pagesReported": 13
+      },
+      {
+        "id": "0c090463-d3ea-4b9b-9cc9-b9b3e308fca2",
+        "chapter": "17",
+        "volume": "2",
+        "title": "",
+        "language": "ru",
+        "publishAt": "2019-04-11T10:42:34+00:00",
+        "updatedAt": "2019-04-11T10:42:34+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 14
+      },
+      {
+        "id": "515ae1de-9a00-4ff6-b78f-64a00e64a4c8",
+        "chapter": "17",
+        "volume": "2",
+        "title": null,
+        "language": "pt-br",
+        "publishAt": "2021-10-02T11:33:16+00:00",
+        "updatedAt": "2021-10-02T11:33:18+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 14
+      },
+      {
+        "id": "e1ad2ed2-636f-4b6d-b54e-d0e0e5658eee",
+        "chapter": "17",
+        "volume": "2",
+        "title": "",
+        "language": "es",
+        "publishAt": "2020-02-01T11:32:34+00:00",
+        "updatedAt": "2020-02-01T11:32:34+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 13
+      },
+      {
+        "id": "decffa02-67a0-4600-9a7b-1f7f96854be4",
+        "chapter": "17",
+        "volume": "2",
+        "title": "",
+        "language": "en",
+        "publishAt": "2018-02-11T20:02:16+00:00",
+        "updatedAt": "2018-02-11T20:02:16+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 16
+      },
+      {
+        "id": "7081f572-8643-4035-986e-af532634942b",
+        "chapter": "18",
+        "volume": "2",
+        "title": "",
+        "language": "es",
+        "publishAt": "2020-02-01T11:32:36+00:00",
+        "updatedAt": "2020-02-01T11:32:36+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "ef123c60-3a7d-4ffb-88b1-e2891ca2d2d5",
+        "chapter": "18",
+        "volume": "2",
+        "title": "Chapter 18",
+        "language": "bg",
+        "publishAt": "2021-07-14T19:33:47+00:00",
+        "updatedAt": "2021-07-14T19:34:06+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 16
+      },
+      {
+        "id": "6190d0ae-54f6-44c1-b678-3de1f5cc51eb",
+        "chapter": "18",
+        "volume": "2",
+        "title": "",
+        "language": "ru",
+        "publishAt": "2019-04-11T10:42:35+00:00",
+        "updatedAt": "2019-04-11T10:42:35+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "4b2dc25d-281f-419f-974b-e534cb235cc1",
+        "chapter": "18",
+        "volume": "2",
+        "title": "",
+        "language": "en",
+        "publishAt": "2018-02-11T20:02:51+00:00",
+        "updatedAt": "2018-02-11T20:02:51+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "37b29cc0-3eac-41a7-a4e4-62b541c3d9e3",
+        "chapter": "18",
+        "volume": "2",
+        "title": null,
+        "language": "vi",
+        "publishAt": "2024-10-14T11:23:00+00:00",
+        "updatedAt": "2024-10-14T11:27:47+00:00",
+        "version": 5,
+        "externalLink": false,
+        "pagesReported": 13
+      },
+      {
+        "id": "df85acf2-cb83-4f45-ad2f-ecdea5dee843",
+        "chapter": "18",
+        "volume": "2",
+        "title": null,
+        "language": "pt-br",
+        "publishAt": "2021-10-02T11:33:42+00:00",
+        "updatedAt": "2021-10-02T11:33:45+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 16
+      },
+      {
+        "id": "66391694-4552-43db-8330-5a78cfdca2d9",
+        "chapter": "19",
+        "volume": "2",
+        "title": null,
+        "language": "vi",
+        "publishAt": "2024-10-14T11:23:14+00:00",
+        "updatedAt": "2024-10-14T11:27:49+00:00",
+        "version": 5,
+        "externalLink": false,
+        "pagesReported": 13
+      },
+      {
+        "id": "d97d3dfa-9eb7-4f08-b8e1-14f9baaf0a7d",
+        "chapter": "19",
+        "volume": "2",
+        "title": "Chapter 19",
+        "language": "bg",
+        "publishAt": "2021-07-14T19:35:30+00:00",
+        "updatedAt": "2021-07-14T19:35:57+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 16
+      },
+      {
+        "id": "bf2b8887-6078-4beb-b926-7e4c14aace0d",
+        "chapter": "19",
+        "volume": "2",
+        "title": "",
+        "language": "ru",
+        "publishAt": "2019-04-11T10:42:35+00:00",
+        "updatedAt": "2019-04-11T10:42:35+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 16
+      },
+      {
+        "id": "2e6df586-0ec8-4fb9-ace5-8d392fe31d8c",
+        "chapter": "19",
+        "volume": "2",
+        "title": null,
+        "language": "pt-br",
+        "publishAt": "2021-10-02T11:34:46+00:00",
+        "updatedAt": "2021-10-02T11:34:48+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "2a4ce1c9-a80a-4e82-8f48-5075430332b2",
+        "chapter": "19",
+        "volume": "2",
+        "title": "",
+        "language": "en",
+        "publishAt": "2018-02-11T20:03:26+00:00",
+        "updatedAt": "2018-02-11T20:03:26+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 14
+      },
+      {
+        "id": "8d0d6a7d-13db-40c8-aadf-1122355c0fa1",
+        "chapter": "19",
+        "volume": "2",
+        "title": "",
+        "language": "es",
+        "publishAt": "2020-02-01T11:32:37+00:00",
+        "updatedAt": "2020-02-01T11:32:37+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 13
+      },
+      {
+        "id": "d739ee99-8333-47e0-824e-40eb9a6a1339",
+        "chapter": "20",
+        "volume": "2",
+        "title": "",
+        "language": "ru",
+        "publishAt": "2019-04-11T10:42:36+00:00",
+        "updatedAt": "2019-04-11T10:42:36+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 14
+      },
+      {
+        "id": "cf599868-236b-4f6a-8596-4b84f303611b",
+        "chapter": "20",
+        "volume": "2",
+        "title": "Chapter 20",
+        "language": "bg",
+        "publishAt": "2021-07-14T19:37:06+00:00",
+        "updatedAt": "2021-07-14T19:37:19+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 16
+      },
+      {
+        "id": "2cb97713-a7ba-474c-b977-10a0eda81d5e",
+        "chapter": "20",
+        "volume": "2",
+        "title": null,
+        "language": "vi",
+        "publishAt": "2024-10-14T11:23:26+00:00",
+        "updatedAt": "2024-10-14T11:27:52+00:00",
+        "version": 5,
+        "externalLink": false,
+        "pagesReported": 14
+      },
+      {
+        "id": "cc1f9f75-5ec3-4bdb-8b2b-d2103af7262e",
+        "chapter": "20",
+        "volume": "2",
+        "title": "",
+        "language": "es",
+        "publishAt": "2020-02-01T11:32:39+00:00",
+        "updatedAt": "2020-02-01T11:32:39+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "02c06965-3c19-44d4-bb02-897bc6bfa5f3",
+        "chapter": "20",
+        "volume": "2",
+        "title": "",
+        "language": "en",
+        "publishAt": "2018-02-11T20:04:19+00:00",
+        "updatedAt": "2018-02-11T20:04:19+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "a1c65151-bf39-4f84-9384-07cadd104b24",
+        "chapter": "20",
+        "volume": "2",
+        "title": null,
+        "language": "pt-br",
+        "publishAt": "2021-10-02T11:46:52+00:00",
+        "updatedAt": "2021-10-02T11:46:55+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 16
+      },
+      {
+        "id": "8c10f58f-ab9e-411d-a0f0-4d2174b00f1c",
+        "chapter": "21",
+        "volume": "2",
+        "title": "",
+        "language": "es",
+        "publishAt": "2020-02-01T11:32:41+00:00",
+        "updatedAt": "2020-02-01T11:32:41+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 13
+      },
+      {
+        "id": "208bf5c3-e799-475e-914d-c6c773789415",
+        "chapter": "21",
+        "volume": "2",
+        "title": "",
+        "language": "ru",
+        "publishAt": "2019-04-11T10:42:36+00:00",
+        "updatedAt": "2019-04-11T10:42:36+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "36519b8c-af3e-495f-9a2a-dd331a236052",
+        "chapter": "21",
+        "volume": "2",
+        "title": "",
+        "language": "en",
+        "publishAt": "2018-02-11T20:05:00+00:00",
+        "updatedAt": "2018-02-11T20:05:00+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "ef26c450-08ea-49be-b2fa-84d3af218f2f",
+        "chapter": "21",
+        "volume": "2",
+        "title": null,
+        "language": "vi",
+        "publishAt": "2024-10-14T11:23:38+00:00",
+        "updatedAt": "2024-10-14T11:27:54+00:00",
+        "version": 5,
+        "externalLink": false,
+        "pagesReported": 14
+      },
+      {
+        "id": "f964c641-420d-4fa8-ae78-c1cd07d5298f",
+        "chapter": "21",
+        "volume": "2",
+        "title": "Chapter 21",
+        "language": "bg",
+        "publishAt": "2021-07-14T19:37:41+00:00",
+        "updatedAt": "2021-07-14T19:38:04+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 16
+      },
+      {
+        "id": "7430bbc2-cc97-4fe2-8e5c-aead34498efb",
+        "chapter": "22",
+        "volume": "2",
+        "title": null,
+        "language": "pt-br",
+        "publishAt": "2021-10-02T11:47:47+00:00",
+        "updatedAt": "2021-10-02T11:47:49+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "c5dfb3a4-e0ca-410a-9fbd-41066b163bb4",
+        "chapter": "22",
+        "volume": "2",
+        "title": "",
+        "language": "ru",
+        "publishAt": "2019-04-11T10:42:37+00:00",
+        "updatedAt": "2019-04-11T10:42:37+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "08d73cbc-b270-4fc8-b095-f2530ba7d8b9",
+        "chapter": "22",
+        "volume": "2",
+        "title": "Chapter 22",
+        "language": "bg",
+        "publishAt": "2021-07-14T19:38:12+00:00",
+        "updatedAt": "2021-07-14T19:38:36+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 16
+      },
+      {
+        "id": "617464da-92d0-4b87-9348-53209a43e0e5",
+        "chapter": "22",
+        "volume": "2",
+        "title": "",
+        "language": "es",
+        "publishAt": "2020-02-01T11:32:43+00:00",
+        "updatedAt": "2020-02-01T11:32:43+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "7e2b7d0d-c495-4330-bf3a-422fb542a190",
+        "chapter": "22",
+        "volume": "2",
+        "title": null,
+        "language": "vi",
+        "publishAt": "2024-10-14T11:23:50+00:00",
+        "updatedAt": "2024-10-14T11:27:56+00:00",
+        "version": 5,
+        "externalLink": false,
+        "pagesReported": 14
+      },
+      {
+        "id": "c6a57f43-1f21-4803-b3b3-eb1b79875c6e",
+        "chapter": "22",
+        "volume": "2",
+        "title": "",
+        "language": "en",
+        "publishAt": "2018-02-11T20:05:41+00:00",
+        "updatedAt": "2018-02-11T20:05:41+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "483c1437-f182-4cc5-9149-5d14148d49df",
+        "chapter": "23",
+        "volume": "2",
+        "title": null,
+        "language": "vi",
+        "publishAt": "2024-10-14T11:24:01+00:00",
+        "updatedAt": "2024-10-14T11:27:58+00:00",
+        "version": 5,
+        "externalLink": false,
+        "pagesReported": 14
+      },
+      {
+        "id": "7b71ee88-07a1-440d-8b5e-815d8607096f",
+        "chapter": "23",
+        "volume": "2",
+        "title": "",
+        "language": "en",
+        "publishAt": "2018-02-11T20:06:20+00:00",
+        "updatedAt": "2018-02-11T20:06:20+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "713602f1-5c5d-4f78-b25a-5b777568fa54",
+        "chapter": "23",
+        "volume": "2",
+        "title": null,
+        "language": "pt-br",
+        "publishAt": "2021-10-02T11:48:46+00:00",
+        "updatedAt": "2021-10-02T11:48:48+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "76401448-b0e8-4cbd-9f51-9f3ff62160cf",
+        "chapter": "23",
+        "volume": "2",
+        "title": "",
+        "language": "ru",
+        "publishAt": "2019-04-11T10:42:37+00:00",
+        "updatedAt": "2019-04-11T10:42:37+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "a3eb484b-90c6-4f39-b9dd-0f00f8478cd2",
+        "chapter": "23",
+        "volume": "2",
+        "title": "Chapter 23",
+        "language": "bg",
+        "publishAt": "2021-07-14T19:38:46+00:00",
+        "updatedAt": "2021-07-14T19:39:01+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 16
+      },
+      {
+        "id": "d5ae9983-004f-48f7-b338-1ff8058610a9",
+        "chapter": "23",
+        "volume": "2",
+        "title": "",
+        "language": "es",
+        "publishAt": "2020-02-01T11:32:45+00:00",
+        "updatedAt": "2020-02-01T11:32:45+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "1d027482-0ae5-4ff7-ad8d-e1ca524e0a2d",
+        "chapter": "24",
+        "volume": "2",
+        "title": "Chapter 24",
+        "language": "bg",
+        "publishAt": "2021-07-14T19:39:16+00:00",
+        "updatedAt": "2021-07-14T19:39:26+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 16
+      },
+      {
+        "id": "4e3f887d-9ec4-4317-98f0-2ce6d4fa3159",
+        "chapter": "24",
+        "volume": "2",
+        "title": null,
+        "language": "vi",
+        "publishAt": "2024-10-14T11:24:11+00:00",
+        "updatedAt": "2024-10-14T11:28:00+00:00",
+        "version": 5,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "1414d071-b47a-416f-b824-b135eba82b22",
+        "chapter": "24",
+        "volume": "2",
+        "title": "",
+        "language": "es",
+        "publishAt": "2020-02-01T11:32:47+00:00",
+        "updatedAt": "2020-02-01T11:32:47+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "3eb5cb70-773c-41a4-a062-f4e95fd08d1e",
+        "chapter": "24",
+        "volume": "2",
+        "title": "",
+        "language": "en",
+        "publishAt": "2018-02-11T20:06:58+00:00",
+        "updatedAt": "2018-02-11T20:06:58+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "1b1d1b22-f8e3-49e7-ac4c-27e5bec6425e",
+        "chapter": "24",
+        "volume": "2",
+        "title": "",
+        "language": "ru",
+        "publishAt": "2019-04-11T10:42:38+00:00",
+        "updatedAt": "2019-04-11T10:42:38+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "b63557a1-2135-4f11-8d44-6f958daf3e91",
+        "chapter": "24",
+        "volume": "2",
+        "title": null,
+        "language": "pt-br",
+        "publishAt": "2021-10-02T11:49:14+00:00",
+        "updatedAt": "2021-10-02T11:49:16+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "1c317cad-f76e-4a33-9120-a4510c3657c0",
+        "chapter": "25",
+        "volume": "2",
+        "title": "",
+        "language": "ru",
+        "publishAt": "2019-04-11T10:42:38+00:00",
+        "updatedAt": "2019-04-11T10:42:38+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "28e4c07f-7a92-4cf0-8d41-b7be647e901a",
+        "chapter": "25",
+        "volume": "2",
+        "title": null,
+        "language": "vi",
+        "publishAt": "2024-10-14T11:24:22+00:00",
+        "updatedAt": "2024-10-14T11:30:04+00:00",
+        "version": 4,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "16fd623b-6a4b-43c1-bbfe-fbfb569a7d79",
+        "chapter": "25",
+        "volume": "2",
+        "title": "",
+        "language": "en",
+        "publishAt": "2018-02-11T20:08:09+00:00",
+        "updatedAt": "2018-02-11T20:08:09+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "5716ba8b-cefc-4f47-9c0f-7bcd544e1d21",
+        "chapter": "25",
+        "volume": "2",
+        "title": "Chapter 25",
+        "language": "bg",
+        "publishAt": "2021-07-14T19:39:52+00:00",
+        "updatedAt": "2021-07-14T19:40:01+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 16
+      },
+      {
+        "id": "ebae240b-50ac-4f85-9f96-4ef06e53d320",
+        "chapter": "25",
+        "volume": "2",
+        "title": null,
+        "language": "pt-br",
+        "publishAt": "2021-10-02T11:49:38+00:00",
+        "updatedAt": "2021-10-02T11:49:40+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "d3cc835b-7ad0-4a68-8121-1e8d662391f8",
+        "chapter": "25",
+        "volume": "2",
+        "title": "",
+        "language": "es",
+        "publishAt": "2020-02-01T11:32:48+00:00",
+        "updatedAt": "2020-02-01T11:32:48+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 15
+      },
+      {
+        "id": "8b6fb333-3b7e-4fba-9ede-4f8ac9cc9138",
+        "chapter": "26",
+        "volume": "2",
+        "title": "Chapter 26",
+        "language": "bg",
+        "publishAt": "2021-07-14T19:40:35+00:00",
+        "updatedAt": "2021-07-14T19:40:56+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 21
+      },
+      {
+        "id": "c13a3c3e-c384-467c-b275-586d614a7667",
+        "chapter": "26",
+        "volume": "2",
+        "title": null,
+        "language": "vi",
+        "publishAt": "2024-10-14T11:24:35+00:00",
+        "updatedAt": "2024-10-14T11:30:07+00:00",
+        "version": 4,
+        "externalLink": false,
+        "pagesReported": 20
+      },
+      {
+        "id": "26475cb2-e578-4de1-9eb6-e1bf47072f3c",
+        "chapter": "26",
+        "volume": "2",
+        "title": "",
+        "language": "es",
+        "publishAt": "2020-02-01T11:32:51+00:00",
+        "updatedAt": "2020-02-01T11:32:51+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 20
+      },
+      {
+        "id": "75842b83-19db-4f1f-8064-d5c0e43fe4d1",
+        "chapter": "26",
+        "volume": "2",
+        "title": null,
+        "language": "pt-br",
+        "publishAt": "2021-10-02T11:52:32+00:00",
+        "updatedAt": "2021-10-02T11:52:34+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 20
+      },
+      {
+        "id": "a7bd6680-f27d-4fbe-a011-d34cd8ee1137",
+        "chapter": "26",
+        "volume": "2",
+        "title": "",
+        "language": "en",
+        "publishAt": "2018-02-11T20:08:55+00:00",
+        "updatedAt": "2018-02-11T20:08:55+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 20
+      },
+      {
+        "id": "4ac85f1c-1ae1-4d42-8ead-0c2a19ae0be8",
+        "chapter": "27",
+        "volume": "2",
+        "title": "",
+        "language": "ru",
+        "publishAt": "2019-04-11T10:42:40+00:00",
+        "updatedAt": "2019-04-11T10:42:40+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 19
+      },
+      {
+        "id": "755a9b5f-fdd6-4f1f-bb77-3ce2b426df30",
+        "chapter": "27",
+        "volume": "2",
+        "title": "Chapter 27",
+        "language": "bg",
+        "publishAt": "2021-07-14T19:41:14+00:00",
+        "updatedAt": "2021-07-14T19:41:38+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 20
+      },
+      {
+        "id": "846774d9-dbb4-438f-929f-54704a827e18",
+        "chapter": "27",
+        "volume": "2",
+        "title": "",
+        "language": "en",
+        "publishAt": "2018-02-11T20:09:45+00:00",
+        "updatedAt": "2018-02-11T20:09:45+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 19
+      },
+      {
+        "id": "aab574a6-0f64-48df-8e16-b94be278e1e8",
+        "chapter": "27",
+        "volume": "2",
+        "title": null,
+        "language": "vi",
+        "publishAt": "2024-10-14T11:24:46+00:00",
+        "updatedAt": "2024-10-14T11:30:09+00:00",
+        "version": 4,
+        "externalLink": false,
+        "pagesReported": 19
+      },
+      {
+        "id": "92626636-2911-4fe3-bb23-ce21a223d525",
+        "chapter": "27",
+        "volume": "2",
+        "title": null,
+        "language": "pt-br",
+        "publishAt": "2021-10-02T11:55:46+00:00",
+        "updatedAt": "2021-10-02T11:55:49+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 19
+      },
+      {
+        "id": "9ad5af78-a498-40d0-8d0a-ccdedd74b8cb",
+        "chapter": "27",
+        "volume": "2",
+        "title": "",
+        "language": "es",
+        "publishAt": "2020-02-01T11:32:53+00:00",
+        "updatedAt": "2020-02-01T11:32:53+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 19
+      },
+      {
+        "id": "cff62bd4-6dad-4bf1-988a-760363df6714",
+        "chapter": "28",
+        "volume": "2",
+        "title": null,
+        "language": "vi",
+        "publishAt": "2024-10-14T11:25:00+00:00",
+        "updatedAt": "2024-10-14T11:30:12+00:00",
+        "version": 4,
+        "externalLink": false,
+        "pagesReported": 18
+      },
+      {
+        "id": "cb92af7e-860b-4580-80d6-cb0012748d37",
+        "chapter": "28",
+        "volume": "2",
+        "title": "",
+        "language": "ru",
+        "publishAt": "2019-04-11T10:42:41+00:00",
+        "updatedAt": "2019-04-11T10:42:41+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 18
+      },
+      {
+        "id": "0a123daa-0797-4592-9496-de5be926acba",
+        "chapter": "28",
+        "volume": "2",
+        "title": "",
+        "language": "en",
+        "publishAt": "2018-02-11T20:10:37+00:00",
+        "updatedAt": "2018-02-11T20:10:37+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 18
+      },
+      {
+        "id": "539163c1-60c4-4f4a-88cd-cca2254120d8",
+        "chapter": "28",
+        "volume": "2",
+        "title": "Chapter 28",
+        "language": "bg",
+        "publishAt": "2021-07-14T19:41:51+00:00",
+        "updatedAt": "2021-07-14T19:42:07+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 18
+      },
+      {
+        "id": "b716e699-725f-4f62-8c73-8303c474a74f",
+        "chapter": "28",
+        "volume": "2",
+        "title": null,
+        "language": "pt-br",
+        "publishAt": "2021-10-02T12:00:19+00:00",
+        "updatedAt": "2021-10-02T12:00:21+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 19
+      },
+      {
+        "id": "3799ceea-0e05-4782-9fec-e47ca250a583",
+        "chapter": "28",
+        "volume": "2",
+        "title": "",
+        "language": "es",
+        "publishAt": "2020-02-01T11:32:56+00:00",
+        "updatedAt": "2020-02-01T11:32:56+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 20
+      },
+      {
+        "id": "2d1aaecc-cf77-4cea-8113-c3988c962079",
+        "chapter": "29",
+        "volume": null,
+        "title": "",
+        "language": "it",
+        "publishAt": "2018-08-22T16:45:25+00:00",
+        "updatedAt": "2018-08-22T16:45:25+00:00",
+        "version": 1,
+        "externalLink": false,
+        "pagesReported": 26
+      },
+      {
+        "id": "4e2418ae-59c3-4968-b16c-6f277207518b",
+        "chapter": "29",
+        "volume": null,
+        "title": "Epílogo",
+        "language": "pt-br",
+        "publishAt": "2018-11-22T23:17:39+00:00",
+        "updatedAt": "2021-05-17T02:39:47+00:00",
+        "version": 2,
+        "externalLink": false,
+        "pagesReported": 28
+      },
+      {
+        "id": "2910604f-bfa2-4405-87e1-c9fe95ea2ab2",
+        "chapter": "29",
+        "volume": "2",
+        "title": "Epílogo",
+        "language": "es-la",
+        "publishAt": "2018-11-08T22:31:01+00:00",
+        "updatedAt": "2021-05-17T02:39:19+00:00",
+        "version": 2,
+        "externalLink": false,
+        "pagesReported": 29
+      },
+      {
+        "id": "aaa343ef-6fc8-4f66-a165-adc1f5076495",
+        "chapter": "29",
+        "volume": "2",
+        "title": "Chapter 29-END",
+        "language": "bg",
+        "publishAt": "2021-07-14T19:42:50+00:00",
+        "updatedAt": "2021-07-14T19:43:07+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 28
+      }
+    ]
+  },
+  {
+    "work": "death-note-colored",
+    "source": "md",
+    "externalId": "85b6f4e4-180b-43b0-a0ec-9a9de401aed0",
+    "receipt": {
+      "source": "md",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga/85b6f4e4-180b-43b0-a0ec-9a9de401aed0/feed?limit=100&offset=100&order%5Bchapter%5D=asc&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive&contentRating%5B%5D=erotica&includeFutureUpdates=0",
+      "body": null,
+      "observedAt": "2026-10-24T18:40:22.659965+00:00",
+      "status": 200,
+      "elapsedMs": 750,
+      "bytes": 1269,
+      "responseSha256": "9efec08978ae1c8923a5cc9ae311d0fa29628b2d87c63b251b6af8f8efa7d21e",
+      "contentType": "application/json",
+      "validators": {}
+    },
+    "totalReportedByEndpoint": 102,
+    "returned": 2,
+    "hasNext": false,
+    "rows": [
+      {
+        "id": "1cc8caf2-dc0a-48d8-b74b-ad678e487d6c",
+        "chapter": "107",
+        "volume": "12",
+        "title": "Telón",
+        "language": "es-la",
+        "publishAt": "2023-08-18T00:02:09+00:00",
+        "updatedAt": "2023-08-18T00:02:15+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 21
+      },
+      {
+        "id": "1450db3c-dd3a-4f2c-8b14-0f6893c3eef8",
+        "chapter": "108",
+        "volume": "12",
+        "title": "Final ",
+        "language": "es-la",
+        "publishAt": "2023-08-18T00:02:48+00:00",
+        "updatedAt": "2023-08-18T00:02:56+00:00",
+        "version": 3,
+        "externalLink": false,
+        "pagesReported": 23
+      }
+    ]
+  },
+  {
+    "work": "death-note",
+    "source": "bgm",
+    "receipt": {
+      "source": "bgm",
+      "method": "GET",
+      "url": "https://api.bgm.tv/v0/subjects/1674",
+      "body": null,
+      "observedAt": "2026-10-24T18:40:23.415751+00:00",
+      "status": 200,
+      "elapsedMs": 360,
+      "bytes": 3831,
+      "responseSha256": "0d05193ca6c4b52d9b60b2aa6e58fa4b887238e900abb4a8869d8a58edf5f04b",
+      "contentType": "application/json",
+      "validators": {
+        "Last-Modified": "Sat, 24 Oct 2026 18:40:24 GMT"
+      }
+    },
+    "subject": {
+      "id": 1674,
+      "name": "DEATH NOTE",
+      "type": 1,
+      "eps": 108,
+      "volumes": 12,
+      "series": true,
+      "platform": "漫画",
+      "date": "2004-04-02"
+    }
+  },
+  {
+    "work": "rezero-novel-volume1",
+    "source": "bgm",
+    "receipt": {
+      "source": "bgm",
+      "method": "GET",
+      "url": "https://api.bgm.tv/v0/subjects/121928",
+      "body": null,
+      "observedAt": "2026-10-24T18:40:24.873068+00:00",
+      "status": 200,
+      "elapsedMs": 406,
+      "bytes": 3185,
+      "responseSha256": "7c96d379d1dd13e6de5f607f0a86b160a82573be967b439b8b54e718f47954bd",
+      "contentType": "application/json",
+      "validators": {
+        "Last-Modified": "Sat, 24 Oct 2026 18:40:25 GMT"
+      }
+    },
+    "subject": {
+      "id": 121928,
+      "name": "Re:ゼロから始める異世界生活 (1)",
+      "type": 1,
+      "eps": 5,
+      "volumes": 0,
+      "series": false,
+      "platform": "小说",
+      "date": "2014-01-23"
+    }
+  },
+  {
+    "work": "nanatsu",
+    "source": "mu",
+    "externalId": "62758791984",
+    "receipt": {
+      "source": "mu",
+      "method": "POST",
+      "url": "https://api.mangaupdates.com/v1/releases/search",
+      "body": {
+        "search": "62758791984",
+        "search_type": "series",
+        "page": 2,
+        "perpage": 25,
+        "include_metadata": true
+      },
+      "observedAt": "2026-10-24T18:41:56.949972+00:00",
+      "status": 200,
+      "elapsedMs": 1204,
+      "bytes": 21113,
+      "responseSha256": "8b17b12a35efc2b002648dfe76d58093bdf510215f7854ff0c3bc356afdfe270",
+      "contentType": "application/json",
+      "validators": {}
+    },
+    "totalReportedByEndpoint": 581,
+    "returned": 25,
+    "hasNext": true,
+    "rows": [
+      {
+        "id": 560729,
+        "chapter": "324",
+        "volume": "",
+        "date": "2019-08-26",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 559945,
+        "chapter": "323",
+        "volume": "",
+        "date": "2019-08-22",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 559654,
+        "chapter": "323",
+        "volume": "",
+        "date": "2019-08-19",
+        "seriesId": 62758791984,
+        "groupIds": [
+          45834180786
+        ]
+      },
+      {
+        "id": 558294,
+        "chapter": "322",
+        "volume": "",
+        "date": "2019-08-11",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 557424,
+        "chapter": "322",
+        "volume": "",
+        "date": "2019-08-05",
+        "seriesId": 62758791984,
+        "groupIds": [
+          16667058591
+        ]
+      },
+      {
+        "id": 556476,
+        "chapter": "321",
+        "volume": "",
+        "date": "2019-07-30",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 556303,
+        "chapter": "321",
+        "volume": "",
+        "date": "2019-07-29",
+        "seriesId": 62758791984,
+        "groupIds": [
+          45834180786
+        ]
+      },
+      {
+        "id": 556302,
+        "chapter": "320",
+        "volume": "",
+        "date": "2019-07-23",
+        "seriesId": 62758791984,
+        "groupIds": [
+          45834180786
+        ]
+      },
+      {
+        "id": 555232,
+        "chapter": "320",
+        "volume": "",
+        "date": "2019-07-23",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 554173,
+        "chapter": "319",
+        "volume": "",
+        "date": "2019-07-16",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 553052,
+        "chapter": "318",
+        "volume": "",
+        "date": "2019-07-09",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 552030,
+        "chapter": "317",
+        "volume": "",
+        "date": "2019-07-02",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 550893,
+        "chapter": "316",
+        "volume": "",
+        "date": "2019-06-25",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 549868,
+        "chapter": "315",
+        "volume": "",
+        "date": "2019-06-18",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 548884,
+        "chapter": "314",
+        "volume": "",
+        "date": "2019-06-12",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 547781,
+        "chapter": "313",
+        "volume": "",
+        "date": "2019-06-04",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 546793,
+        "chapter": "312",
+        "volume": "",
+        "date": "2019-05-29",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 545379,
+        "chapter": "311",
+        "volume": "",
+        "date": "2019-05-20",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 544465,
+        "chapter": "310",
+        "volume": "",
+        "date": "2019-05-14",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 543592,
+        "chapter": "309",
+        "volume": "",
+        "date": "2019-05-08",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 541337,
+        "chapter": "308",
+        "volume": "",
+        "date": "2019-04-22",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 539052,
+        "chapter": "307",
+        "volume": "",
+        "date": "2019-04-08",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 537610,
+        "chapter": "306",
+        "volume": "",
+        "date": "2019-04-01",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 536476,
+        "chapter": "305",
+        "volume": "",
+        "date": "2019-03-25",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      },
+      {
+        "id": 535288,
+        "chapter": "304",
+        "volume": "",
+        "date": "2019-03-18",
+        "seriesId": 62758791984,
+        "groupIds": [
+          1599707055
+        ]
+      }
+    ]
+  },
+  {
+    "work": "mdzs",
+    "source": "mu",
+    "externalId": "34366575338",
+    "receipt": {
+      "source": "mu",
+      "method": "POST",
+      "url": "https://api.mangaupdates.com/v1/releases/search",
+      "body": {
+        "search": "34366575338",
+        "search_type": "series",
+        "page": 2,
+        "perpage": 25,
+        "include_metadata": true
+      },
+      "observedAt": "2026-10-24T18:41:59.249888+00:00",
+      "status": 200,
+      "elapsedMs": 1672,
+      "bytes": 23491,
+      "responseSha256": "51edef47f504c155a036e78ab131cee96ffc74fac425921f2098c3f3b8a0d2f6",
+      "contentType": "application/json",
+      "validators": {}
+    },
+    "totalReportedByEndpoint": 179,
+    "returned": 25,
+    "hasNext": true,
+    "rows": [
+      {
+        "id": 773451,
+        "chapter": "184",
+        "volume": "",
+        "date": "2021-12-08",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 768482,
+        "chapter": "183",
+        "volume": "",
+        "date": "2021-11-19",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 765736,
+        "chapter": "182",
+        "volume": "",
+        "date": "2021-11-08",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 760167,
+        "chapter": "181",
+        "volume": "",
+        "date": "2021-10-19",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 757130,
+        "chapter": "180",
+        "volume": "",
+        "date": "2021-10-08",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 753355,
+        "chapter": "179",
+        "volume": "",
+        "date": "2021-09-23",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 753354,
+        "chapter": "178",
+        "volume": "",
+        "date": "2021-09-02",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 753353,
+        "chapter": "177",
+        "volume": "",
+        "date": "2021-08-31",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 753352,
+        "chapter": "176",
+        "volume": "",
+        "date": "2021-08-21",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 753351,
+        "chapter": "175",
+        "volume": "",
+        "date": "2021-08-15",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 753350,
+        "chapter": "174",
+        "volume": "",
+        "date": "2021-08-10",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 753349,
+        "chapter": "172-173",
+        "volume": "",
+        "date": "2021-08-07",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 753348,
+        "chapter": "171",
+        "volume": "",
+        "date": "2021-08-04",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 753347,
+        "chapter": "170",
+        "volume": "",
+        "date": "2021-07-29",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 753346,
+        "chapter": "168-169",
+        "volume": "",
+        "date": "2021-07-26",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 753345,
+        "chapter": "167",
+        "volume": "",
+        "date": "2021-07-21",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 753344,
+        "chapter": "166",
+        "volume": "",
+        "date": "2021-07-18",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 753343,
+        "chapter": "165",
+        "volume": "",
+        "date": "2021-07-17",
+        "seriesId": 34366575338,
+        "groupIds": [
+          62894305123
+        ]
+      },
+      {
+        "id": 730738,
+        "chapter": "173",
+        "volume": "",
+        "date": "2021-07-06",
+        "seriesId": 34366575338,
+        "groupIds": [
+          53197564171
+        ]
+      },
+      {
+        "id": 725133,
+        "chapter": "172",
+        "volume": "",
+        "date": "2021-06-15",
+        "seriesId": 34366575338,
+        "groupIds": [
+          53197564171
+        ]
+      },
+      {
+        "id": 720785,
+        "chapter": "171",
+        "volume": "",
+        "date": "2021-05-31",
+        "seriesId": 34366575338,
+        "groupIds": [
+          53197564171
+        ]
+      },
+      {
+        "id": 719337,
+        "chapter": "165-170",
+        "volume": "",
+        "date": "2021-05-25",
+        "seriesId": 34366575338,
+        "groupIds": [
+          53197564171
+        ]
+      },
+      {
+        "id": 725190,
+        "chapter": "184",
+        "volume": "",
+        "date": "2021-05-23",
+        "seriesId": 34366575338,
+        "groupIds": [
+          50757124001
+        ]
+      },
+      {
+        "id": 725189,
+        "chapter": "183",
+        "volume": "",
+        "date": "2021-05-14",
+        "seriesId": 34366575338,
+        "groupIds": [
+          50757124001
+        ]
+      },
+      {
+        "id": 725188,
+        "chapter": "182",
+        "volume": "",
+        "date": "2021-05-06",
+        "seriesId": 34366575338,
+        "groupIds": [
+          50757124001
+        ]
+      }
+    ]
+  },
+  {
+    "work": "rezero-novel",
+    "source": "bgm",
+    "receipt": {
+      "source": "bgm",
+      "method": "GET",
+      "url": "https://api.bgm.tv/v0/subjects/121927/subjects",
+      "body": null,
+      "observedAt": "2026-10-24T18:42:00.925279+00:00",
+      "status": 200,
+      "elapsedMs": 375,
+      "bytes": 39459,
+      "responseSha256": "072ffe3614019b8221a641c7f635447d5d93b688a19f6f007f280ee95e873616",
+      "contentType": "application/json",
+      "validators": {
+        "Last-Modified": "Sat, 24 Oct 2026 18:42:01 GMT"
+      }
+    },
+    "relations": [
+      {
+        "id": 177472,
+        "name": "Re:ゼロから始める異世界生活Ex",
+        "relation": "番外篇",
+        "type": 1
+      },
+      {
+        "id": 242674,
+        "name": "Re:ゼロから始める異世界生活 大塚真一郎 Art Works Re:BOX",
+        "relation": "画集",
+        "type": 1
+      },
+      {
+        "id": 265154,
+        "name": "剣鬼恋歌～Re:ゼロから始める異世界生活†真銘譚～",
+        "relation": "番外篇",
+        "type": 1
+      },
+      {
+        "id": 219588,
+        "name": "プリンセスコネクト！Re:Dive",
+        "relation": "联动",
+        "type": 4
+      },
+      {
+        "id": 282617,
+        "name": "Re:ゼロから始める異世界生活 Animation Illust Works -Re:START-",
+        "relation": "画集",
+        "type": 1
+      },
+      {
+        "id": 282707,
+        "name": "Re:ゼロから始める異世界生活  公式アンソロジーコミック",
+        "relation": "其他",
+        "type": 1
+      },
+      {
+        "id": 209563,
+        "name": "SINoALICE －シノアリス－",
+        "relation": "联动",
+        "type": 4
+      },
+      {
+        "id": 299146,
+        "name": "Re:ゼロから始める異世界生活 第四章 聖域と強欲の魔女",
+        "relation": "书籍",
+        "type": 1
+      },
+      {
+        "id": 197461,
+        "name": "Re:ゼロから始めるこのすば生活",
+        "relation": "角色出演",
+        "type": 1
+      },
+      {
+        "id": 190981,
+        "name": "Re:ゼロから始める異世界生活 -DEATH OR KISS-",
+        "relation": "游戏",
+        "type": 4
+      },
+      {
+        "id": 302580,
+        "name": "Re:ゼロから始める異世界生活 ヴィジュアルコメンタリー",
+        "relation": "其他",
+        "type": 1
+      },
+      {
+        "id": 183002,
+        "name": "Re:ゼロから始める異世界生活 短編集",
+        "relation": "番外篇",
+        "type": 1
+      },
+      {
+        "id": 309190,
+        "name": "Re:ゼロから始める異世界生活 偽りの王選候補",
+        "relation": "游戏",
+        "type": 4
+      },
+      {
+        "id": 309318,
+        "name": "Re:ゼロから始める異世界生活 リゼロパズルコレクション",
+        "relation": "游戏",
+        "type": 4
+      },
+      {
+        "id": 329586,
+        "name": "Re:ゼロから始める異世界生活 禁書と謎の精霊",
+        "relation": "游戏",
+        "type": 4
+      },
+      {
+        "id": 482452,
+        "name": "Re:ゼロから始める異世界生活 第五章 水の都と英雄の詩",
+        "relation": "书籍",
+        "type": 1
+      },
+      {
+        "id": 426001,
+        "name": "Re:ゼロから始める異世界生活 Witch's Re:surrection",
+        "relation": "游戏",
+        "type": 4
+      },
+      {
+        "id": 343054,
+        "name": "승리의 여신：니케",
+        "relation": "联动",
+        "type": 4
+      },
+      {
+        "id": 349528,
+        "name": "Re:ゼロから始める異世界生活 氷結の絆",
+        "relation": "番外篇",
+        "type": 1
+      },
+      {
+        "id": 354175,
+        "name": "Re:ゼロから始める異世界生活 大塚真一郎 Art Works Re:BOX 2nd",
+        "relation": "画集",
+        "type": 1
+      },
+      {
+        "id": 419647,
+        "name": "Re:ゼロから始める異世界生活 Re:zeropedia",
+        "relation": "番外篇",
+        "type": 1
+      },
+      {
+        "id": 121928,
+        "name": "Re:ゼロから始める異世界生活 (1)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 140001,
+        "name": "Re:ゼロから始める異世界生活",
+        "relation": "动画",
+        "type": 2
+      },
+      {
+        "id": 121938,
+        "name": "Re:ゼロから始める異世界生活 第一章 王都の一日編",
+        "relation": "书籍",
+        "type": 1
+      },
+      {
+        "id": 121929,
+        "name": "Re:ゼロから始める異世界生活 (2)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 144370,
+        "name": "Re:ゼロから始める異世界生活 第二章 屋敷の一週間編",
+        "relation": "书籍",
+        "type": 1
+      },
+      {
+        "id": 225462,
+        "name": "Re:ゼロから始める異世界生活 Memory Snow",
+        "relation": "动画",
+        "type": 2
+      },
+      {
+        "id": 177468,
+        "name": "Re:ゼロから始める異世界生活 第三章 Truth of Zero",
+        "relation": "书籍",
+        "type": 1
+      },
+      {
+        "id": 261805,
+        "name": "Re:ゼロから始める異世界生活 氷結の絆",
+        "relation": "动画",
+        "type": 2
+      },
+      {
+        "id": 121930,
+        "name": "Re:ゼロから始める異世界生活 (3)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 296195,
+        "name": "Re:ゼロから始める異世界生活 新編集版",
+        "relation": "动画",
+        "type": 2
+      },
+      {
+        "id": 121931,
+        "name": "Re:ゼロから始める異世界生活 (4)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 278826,
+        "name": "Re:ゼロから始める異世界生活 2nd season",
+        "relation": "动画",
+        "type": 2
+      },
+      {
+        "id": 121932,
+        "name": "Re:ゼロから始める異世界生活 (5)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 121935,
+        "name": "Re:ゼロから始める異世界生活 (6)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 316247,
+        "name": "Re:ゼロから始める異世界生活 2nd season 後半クール",
+        "relation": "动画",
+        "type": 2
+      },
+      {
+        "id": 425998,
+        "name": "Re:ゼロから始める異世界生活 3rd season 襲擊編",
+        "relation": "动画",
+        "type": 2
+      },
+      {
+        "id": 177255,
+        "name": "Re:ゼロから始める異世界生活 (7)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 510728,
+        "name": "Re:ゼロから始める異世界生活 3rd season 反擊編",
+        "relation": "动画",
+        "type": 2
+      },
+      {
+        "id": 177256,
+        "name": "Re:ゼロから始める異世界生活 (8)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 190544,
+        "name": "Re:ゼロから始める異世界生活 (9)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 547888,
+        "name": "Re:ゼロから始める異世界生活 4th season 喪失編",
+        "relation": "动画",
+        "type": 2
+      },
+      {
+        "id": 192593,
+        "name": "Re:ゼロから始める異世界生活 (10)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 633836,
+        "name": "Re:ゼロから始める異世界生活 4th season 奪還編",
+        "relation": "动画",
+        "type": 2
+      },
+      {
+        "id": 203668,
+        "name": "Re:ゼロから始める異世界生活 (11)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 210298,
+        "name": "Re:ゼロから始める異世界生活 (12)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 215840,
+        "name": "Re:ゼロから始める異世界生活 (13)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 224018,
+        "name": "Re:ゼロから始める異世界生活 (14)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 230496,
+        "name": "Re:ゼロから始める異世界生活 (15)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 238607,
+        "name": "Re:ゼロから始める異世界生活 (16)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 258436,
+        "name": "Re:ゼロから始める異世界生活 (17)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 267367,
+        "name": "Re:ゼロから始める異世界生活 (18)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 282615,
+        "name": "Re:ゼロから始める異世界生活 (19)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 283119,
+        "name": "Re:ゼロから始める異世界生活 (20)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 302571,
+        "name": "Re:ゼロから始める異世界生活 (21)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 302573,
+        "name": "Re:ゼロから始める異世界生活 (22)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 311348,
+        "name": "Re:ゼロから始める異世界生活 (23)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 338211,
+        "name": "Re:ゼロから始める異世界生活 (24)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 338212,
+        "name": "Re:ゼロから始める異世界生活 (25)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 338213,
+        "name": "Re:ゼロから始める異世界生活 (26)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 338214,
+        "name": "Re:ゼロから始める異世界生活 (27)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 357438,
+        "name": "Re:ゼロから始める異世界生活 (28)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 368701,
+        "name": "Re:ゼロから始める異世界生活 (29)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 383601,
+        "name": "Re:ゼロから始める異世界生活 (30)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 395108,
+        "name": "Re:ゼロから始める異世界生活 (31)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 407922,
+        "name": "Re:ゼロから始める異世界生活 (32)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 419646,
+        "name": "Re:ゼロから始める異世界生活 (33)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 432786,
+        "name": "Re:ゼロから始める異世界生活 (34)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 448888,
+        "name": "Re:ゼロから始める異世界生活 (35)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 462138,
+        "name": "Re:ゼロから始める異世界生活 (36)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 477294,
+        "name": "Re:ゼロから始める異世界生活 (37)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 492083,
+        "name": "Re:ゼロから始める異世界生活 (38)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 505415,
+        "name": "Re:ゼロから始める異世界生活 (39)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 535682,
+        "name": "Re:ゼロから始める異世界生活 (40)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 554699,
+        "name": "Re:ゼロから始める異世界生活 (41)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 575500,
+        "name": "Re:ゼロから始める異世界生活 (42)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 602930,
+        "name": "Re:ゼロから始める異世界生活 (43)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 624524,
+        "name": "Re:ゼロから始める異世界生活 (44)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 643722,
+        "name": "Re:ゼロから始める異世界生活 (45)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 687573,
+        "name": "Re:ゼロから始める異世界生活 (46)",
+        "relation": "单行本",
+        "type": 1
+      }
+    ]
+  },
+  {
+    "work": "solanin",
+    "source": "bgm",
+    "receipt": {
+      "source": "bgm",
+      "method": "GET",
+      "url": "https://api.bgm.tv/v0/subjects/32818/subjects",
+      "body": null,
+      "observedAt": "2026-10-24T18:42:02.410307+00:00",
+      "status": 200,
+      "elapsedMs": 391,
+      "bytes": 1795,
+      "responseSha256": "6ff83de667cfee765656a684747d3698887205f3d56508304fcccf1644ad8260",
+      "contentType": "application/json",
+      "validators": {
+        "Last-Modified": "Sat, 24 Oct 2026 18:42:03 GMT"
+      }
+    },
+    "relations": [
+      {
+        "id": 158284,
+        "name": "ソラニン",
+        "relation": "三次元",
+        "type": 6
+      },
+      {
+        "id": 449473,
+        "name": "ソラニン 新装版",
+        "relation": "不同版本",
+        "type": 1
+      },
+      {
+        "id": 9035,
+        "name": "ソラニン (1)",
+        "relation": "单行本",
+        "type": 1
+      },
+      {
+        "id": 9039,
+        "name": "ソラニン (2)",
+        "relation": "单行本",
+        "type": 1
+      }
+    ]
+  },
+  {
+    "work": "rezero-manga-arc1",
+    "source": "mu",
+    "receipt": {
+      "source": "mu",
+      "method": "GET",
+      "url": "https://api.mangaupdates.com/v1/series/11106634916",
+      "body": null,
+      "observedAt": "2026-10-24T18:44:54.914270+00:00",
+      "status": 200,
+      "elapsedMs": 906,
+      "bytes": 9348,
+      "responseSha256": "e16b40f26a85284a462eecb81256c5b6accc096c98ba9feace39bff47053664d",
+      "contentType": "application/json",
+      "validators": {}
+    },
+    "series": {
+      "series_id": 11106634916,
+      "title": "Re:Zero kara Hajimeru Isekai Seikatsu - Daiisshou - Outo no Ichinichi Hen",
+      "type": "Manga",
+      "year": "2014",
+      "status": "2 Volumes (Complete)",
+      "completed": true,
+      "last_updated": {
+        "timestamp": 1767828185,
+        "as_rfc3339": "2026-01-07T15:23:05-08:00",
+        "as_string": "January 7th, 2026 3:23pm PST"
+      },
+      "licensed": true,
+      "latest_chapter": 11
+    }
+  },
+  {
+    "work": "rezero-novel",
+    "source": "mu",
+    "receipt": {
+      "source": "mu",
+      "method": "GET",
+      "url": "https://api.mangaupdates.com/v1/series/8162824044",
+      "body": null,
+      "observedAt": "2026-10-24T18:44:56.923331+00:00",
+      "status": 200,
+      "elapsedMs": 750,
+      "bytes": 16158,
+      "responseSha256": "88898396c44503e54ee257844c3308586c3e422174b1a1a9fd2a3d58ac6b8e32",
+      "contentType": "application/json",
+      "validators": {}
+    },
+    "series": {
+      "series_id": 8162824044,
+      "title": "Re:Zero Kara Hajimeru Isekai Seikatsu (Novel)",
+      "type": "Novel",
+      "year": "2012",
+      "status": "45 Volumes + 13  Short Story Volumes (Ongoing)",
+      "completed": false,
+      "last_updated": {
+        "timestamp": 1791073224,
+        "as_rfc3339": "2026-10-03T17:20:24-07:00",
+        "as_string": "October 3rd, 2026 5:20pm PDT"
+      },
+      "licensed": true,
+      "latest_chapter": 71
+    }
+  },
+  {
+    "work": "solanin",
+    "source": "mu",
+    "receipt": {
+      "source": "mu",
+      "method": "GET",
+      "url": "https://api.mangaupdates.com/v1/series/21593352517",
+      "body": null,
+      "observedAt": "2026-10-24T18:44:58.775666+00:00",
+      "status": 200,
+      "elapsedMs": 703,
+      "bytes": 10210,
+      "responseSha256": "48f1bc8912e9ada1f6a2762fc9b00a323356249f62fc93ff21f37af9d35a3b2f",
+      "contentType": "application/json",
+      "validators": {}
+    },
+    "series": {
+      "series_id": 21593352517,
+      "title": "Solanin",
+      "type": "Manga",
+      "year": "2005",
+      "status": "2 Volumes (Complete)  \n1 Volume (Shinsouban, Complete)",
+      "completed": true,
+      "last_updated": {
+        "timestamp": 1763825362,
+        "as_rfc3339": "2025-11-22T07:29:22-08:00",
+        "as_string": "November 22nd, 2025 7:29am PST"
+      },
+      "licensed": true,
+      "latest_chapter": 29
+    }
+  }
+]

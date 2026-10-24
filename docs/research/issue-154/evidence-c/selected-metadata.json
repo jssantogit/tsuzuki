@@ -1,0 +1,1557 @@
+[
+  {
+    "source": "md",
+    "externalId": "d8a959f7-648e-4c8d-8f23-f1f3f8e129f3",
+    "metadata": {
+      "title": {
+        "ja-ro": "One Punch-Man"
+      },
+      "originalLanguage": "ja",
+      "status": "ongoing",
+      "year": 2012,
+      "links": {
+        "al": "74347",
+        "ap": "one-punch-man",
+        "bl": "377003",
+        "bw": "series/70257/list",
+        "kt": "24147",
+        "mu": "e1096mh",
+        "mal": "44347",
+        "raw": "https://tonarinoyj.jp/episode/13932016480028985383",
+        "engtl": "https://www.viz.com/shonenjump/chapters/one-punch-man"
+      }
+    },
+    "receipt": {
+      "source": "md",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga?title=One+Punch+Man&limit=8&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive",
+      "body": null,
+      "observedAt": "2026-10-24T18:32:57.285047+00:00",
+      "status": 200,
+      "elapsedMs": 1078,
+      "bytes": 33346,
+      "responseSha256": "eadaf53723c0adde2d3d8622107037d04cfddddfc8d27b83044e83b23a8a089f",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "md",
+    "externalId": "b7d069cb-4ab9-4c21-a20b-38f7c269be4e",
+    "metadata": {
+      "title": {
+        "ja-ro": "One Punch-Man (Webcomic)"
+      },
+      "originalLanguage": "ja",
+      "status": "ongoing",
+      "year": 2009,
+      "links": {
+        "al": "85364",
+        "ap": "one-punch-man-webcomic",
+        "kt": "35883",
+        "mu": "hdni1k6",
+        "raw": "http://galaxyheavyblow.web.fc2.com/"
+      }
+    },
+    "receipt": {
+      "source": "md",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga?title=One+Punch+Man&limit=8&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive",
+      "body": null,
+      "observedAt": "2026-10-24T18:32:57.285047+00:00",
+      "status": 200,
+      "elapsedMs": 1078,
+      "bytes": 33346,
+      "responseSha256": "eadaf53723c0adde2d3d8622107037d04cfddddfc8d27b83044e83b23a8a089f",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "kitsu",
+    "externalId": "60475",
+    "metadata": {
+      "canonicalTitle": "Look Back",
+      "subtype": "oneshot",
+      "status": "finished",
+      "chapterCount": 1,
+      "volumeCount": 1,
+      "startDate": "2021-07-19",
+      "endDate": "2021-07-19"
+    },
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga?filter%5Btext%5D=Look+Back&page%5Blimit%5D=8",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:43.332091+00:00",
+      "status": 200,
+      "elapsedMs": 422,
+      "bytes": 41835,
+      "responseSha256": "6cdacd133789643297d2650cc734b56123a034875f0b01bffb0672251610dcf5",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"6cdacd133789643297d2650cc734b561\""
+      }
+    }
+  },
+  {
+    "source": "bgm",
+    "externalId": "121928",
+    "metadata": {
+      "id": 121928,
+      "name": "Re:ゼロから始める異世界生活 (1)",
+      "name_cn": "",
+      "type": 1,
+      "date": "2014-01-23",
+      "platform": "小说",
+      "eps": 5,
+      "volumes": 0,
+      "series": false
+    },
+    "receipt": {
+      "source": "bgm",
+      "method": "POST",
+      "url": "https://api.bgm.tv/v0/search/subjects?limit=5&offset=0",
+      "body": {
+        "keyword": "Re:ゼロから始める異世界生活",
+        "filter": {
+          "type": [
+            1
+          ],
+          "nsfw": false
+        }
+      },
+      "observedAt": "2026-10-24T18:34:52.475390+00:00",
+      "status": 200,
+      "elapsedMs": 422,
+      "bytes": 16339,
+      "responseSha256": "9be668abe8f7438ef04b2c1f156dc0910f46a5f6da7315b9bcdcefccfbd7aeef",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "kitsu",
+    "externalId": "24208",
+    "metadata": {
+      "canonicalTitle": "Nanatsu no Taizai",
+      "subtype": "manga",
+      "status": "finished",
+      "chapterCount": 346,
+      "volumeCount": 41,
+      "startDate": "2012-10-10",
+      "endDate": "2020-03-25"
+    },
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga?filter%5Btext%5D=Nanatsu+no+Taizai&page%5Blimit%5D=8",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:32.034402+00:00",
+      "status": 200,
+      "elapsedMs": 594,
+      "bytes": 37878,
+      "responseSha256": "ac24ad4d2f78caefb71f4083058b83c3098f2351f4124aefe4135597510ccd77",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"ac24ad4d2f78caefb71f4083058b83c3\""
+      }
+    }
+  },
+  {
+    "source": "bgm",
+    "externalId": "266368",
+    "metadata": {
+      "id": 266368,
+      "name": "魔道祖师",
+      "name_cn": "魔道祖师",
+      "type": 1,
+      "date": "2020-08-02",
+      "platform": "漫画",
+      "eps": 259,
+      "volumes": 5,
+      "series": true
+    },
+    "receipt": {
+      "source": "bgm",
+      "method": "POST",
+      "url": "https://api.bgm.tv/v0/search/subjects?limit=5&offset=0",
+      "body": {
+        "keyword": "魔道祖师",
+        "filter": {
+          "type": [
+            1
+          ],
+          "nsfw": false
+        }
+      },
+      "observedAt": "2026-10-24T18:34:50.969595+00:00",
+      "status": 200,
+      "elapsedMs": 406,
+      "bytes": 20267,
+      "responseSha256": "f202a0044d0ab874b239f700299e644fec477bdbdf60798c18d28a7d21f038b0",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "kitsu",
+    "externalId": "8",
+    "metadata": {
+      "canonicalTitle": "Berserk",
+      "subtype": "manga",
+      "status": "current",
+      "chapterCount": null,
+      "volumeCount": 0,
+      "startDate": "1989-08-25",
+      "endDate": null
+    },
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga?filter%5Btext%5D=Berserk&page%5Blimit%5D=8",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:38.026067+00:00",
+      "status": 200,
+      "elapsedMs": 562,
+      "bytes": 39913,
+      "responseSha256": "121c2680af4f1cd62c163eb9717a260cd6770dd3fbcc477b2eaa0ebd46f6d347",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"121c2680af4f1cd62c163eb9717a260c\""
+      }
+    }
+  },
+  {
+    "source": "md",
+    "externalId": "32d76d19-8a05-4db0-9fc2-e0b0648fe9d0",
+    "metadata": {
+      "title": {
+        "ko-ro": "Na Honjaman Level-Up"
+      },
+      "originalLanguage": "ko",
+      "status": "completed",
+      "year": 2018,
+      "links": {
+        "al": "105398",
+        "ap": "solo-leveling",
+        "kt": "54114",
+        "mu": "6z1uqw7",
+        "mal": "121496",
+        "raw": "https://page.kakao.com/content/50866481"
+      }
+    },
+    "receipt": {
+      "source": "md",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga?title=Solo+Leveling&limit=8&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:09.153426+00:00",
+      "status": 200,
+      "elapsedMs": 1140,
+      "bytes": 74789,
+      "responseSha256": "60eac181dde8fa03233fd961202ed4e02fb7fbc0f5b76c97611c47b87e069c07",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "bgm",
+    "externalId": "302561",
+    "metadata": {
+      "id": 302561,
+      "name": "나 혼자만 레벨업",
+      "name_cn": "我独自升级",
+      "type": 1,
+      "date": "2021-01-15",
+      "platform": "漫画",
+      "eps": 179,
+      "volumes": 0,
+      "series": true
+    },
+    "receipt": {
+      "source": "bgm",
+      "method": "POST",
+      "url": "https://api.bgm.tv/v0/search/subjects?limit=8&offset=0",
+      "body": {
+        "keyword": "Solo Leveling",
+        "filter": {
+          "type": [
+            1
+          ],
+          "nsfw": false
+        }
+      },
+      "observedAt": "2026-10-24T18:33:08.742567+00:00",
+      "status": 200,
+      "elapsedMs": 407,
+      "bytes": 21920,
+      "responseSha256": "88f669a829dceb608f62e5395cb0813033d3e0651039522421f3dd5d0eef696d",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "bgm",
+    "externalId": "1674",
+    "metadata": {
+      "id": 1674,
+      "name": "DEATH NOTE",
+      "name_cn": "死亡笔记",
+      "type": 1,
+      "date": "2004-04-02",
+      "platform": "漫画",
+      "eps": 108,
+      "volumes": 12,
+      "series": true
+    },
+    "receipt": {
+      "source": "bgm",
+      "method": "GET",
+      "url": "https://api.bgm.tv/v0/subjects/1674",
+      "body": null,
+      "observedAt": "2026-10-24T18:40:23.415751+00:00",
+      "status": 200,
+      "elapsedMs": 360,
+      "bytes": 3831,
+      "responseSha256": "0d05193ca6c4b52d9b60b2aa6e58fa4b887238e900abb4a8869d8a58edf5f04b",
+      "contentType": "application/json",
+      "validators": {
+        "Last-Modified": "Sat, 24 Oct 2026 18:40:24 GMT"
+      }
+    }
+  },
+  {
+    "source": "md",
+    "externalId": "6e52262f-bcd5-49c4-b93a-f4652d189844",
+    "metadata": {
+      "title": {
+        "zh-ro": "Módào Zǔshī"
+      },
+      "originalLanguage": "zh",
+      "status": "completed",
+      "year": 2017,
+      "links": {
+        "al": "101563",
+        "ap": "the-master-of-diabolism",
+        "kt": "40740",
+        "mu": "fscyz8q",
+        "mal": "137200",
+        "raw": "https://www.kuaikanmanhua.com/web/topic/1749/",
+        "engtl": "https://sevenseasentertainment.com/series/grandmaster-of-demonic-cultivation-mo-dao-zu-shi-the-comic-manhua"
+      }
+    },
+    "receipt": {
+      "source": "md",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga?title=Mo+Dao+Zu+Shi&limit=8&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:51.188584+00:00",
+      "status": 200,
+      "elapsedMs": 657,
+      "bytes": 42867,
+      "responseSha256": "2c10bec39cf91992aa13c6d4862fc774b8fbbe8adf756bb68162a722128f238a",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "bgm",
+    "externalId": "32818",
+    "metadata": {
+      "id": 32818,
+      "name": "ソラニン",
+      "name_cn": "乐与路",
+      "type": 1,
+      "date": "2005-12-05",
+      "platform": "漫画",
+      "eps": 28,
+      "volumes": 2,
+      "series": true
+    },
+    "receipt": {
+      "source": "bgm",
+      "method": "POST",
+      "url": "https://api.bgm.tv/v0/search/subjects?limit=8&offset=0",
+      "body": {
+        "keyword": "Solanin",
+        "filter": {
+          "type": [
+            1
+          ],
+          "nsfw": false
+        }
+      },
+      "observedAt": "2026-10-24T18:33:18.551918+00:00",
+      "status": 200,
+      "elapsedMs": 406,
+      "bytes": 11000,
+      "responseSha256": "93ec651268db829890f1015314a332248e109645d6efa69a3074d36b5bdb435a",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "bgm",
+    "externalId": "449473",
+    "metadata": {
+      "id": 449473,
+      "name": "ソラニン 新装版",
+      "name_cn": "乐与路 新装版",
+      "type": 1,
+      "date": "2017-10-30",
+      "platform": "漫画",
+      "eps": 29,
+      "volumes": 1,
+      "series": false
+    },
+    "receipt": {
+      "source": "bgm",
+      "method": "POST",
+      "url": "https://api.bgm.tv/v0/search/subjects?limit=8&offset=0",
+      "body": {
+        "keyword": "Solanin",
+        "filter": {
+          "type": [
+            1
+          ],
+          "nsfw": false
+        }
+      },
+      "observedAt": "2026-10-24T18:33:18.551918+00:00",
+      "status": 200,
+      "elapsedMs": 406,
+      "bytes": 11000,
+      "responseSha256": "93ec651268db829890f1015314a332248e109645d6efa69a3074d36b5bdb435a",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "mu",
+    "externalId": "55099564912",
+    "metadata": {
+      "series_id": 55099564912,
+      "title": "One Piece",
+      "type": "Manga",
+      "year": "1997",
+      "last_updated": {
+        "timestamp": 1791075156,
+        "as_rfc3339": "2026-10-03T17:52:36-07:00",
+        "as_string": "October 3rd, 2026 5:52pm PDT"
+      }
+    },
+    "receipt": {
+      "source": "mu",
+      "method": "POST",
+      "url": "https://api.mangaupdates.com/v1/series/search",
+      "body": {
+        "search": "One Piece",
+        "perpage": 8,
+        "page": 1
+      },
+      "observedAt": "2026-10-24T18:33:41.212915+00:00",
+      "status": 200,
+      "elapsedMs": 1094,
+      "bytes": 25805,
+      "responseSha256": "5b185b14774caf0eae0d06a03686d6177f94c5d04902daddf7d52cc3d6a13748",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "md",
+    "externalId": "a1c7c817-4e59-43b7-9365-09675a149a6f",
+    "metadata": {
+      "title": {
+        "ja-ro": "One Piece"
+      },
+      "originalLanguage": "ja",
+      "status": "ongoing",
+      "year": 1997,
+      "links": {
+        "al": "30013",
+        "ap": "one-piece",
+        "bl": "185407",
+        "bw": "series/13002/list",
+        "kt": "one-piece",
+        "mu": "pb8uwds",
+        "amz": "https://www.amazon.co.jp/dp/B07CKFRZGW",
+        "cdj": "https://www.cdjapan.co.jp/product/NEOBK-2439974",
+        "ebj": "https://ebookjapan.yahoo.co.jp/books/145222/",
+        "mal": "13",
+        "raw": "https://shonenjumpplus.com/episode/10833519556325021794",
+        "engtl": "https://mangaplus.shueisha.co.jp/titles/100020"
+      }
+    },
+    "receipt": {
+      "source": "md",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga?title=One+Piece&limit=8&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:03.335320+00:00",
+      "status": 200,
+      "elapsedMs": 1047,
+      "bytes": 50807,
+      "responseSha256": "8d99e52e492323a5b6b80a3b3c974a7912993eff98d036883156b71c651984da",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "md",
+    "externalId": "5ef4e73e-6fbc-456b-b7e1-4642256f666d",
+    "metadata": {
+      "title": {
+        "ja-ro": "Re:Zero kara Hajimeru Isekai Seikatsu: Dai 1-shou—Outo no Ichinichi-hen"
+      },
+      "originalLanguage": "ja",
+      "status": "completed",
+      "year": 2014,
+      "links": {
+        "al": "85736",
+        "ap": "rezero-starting-life-in-another-world-chapter-1-a-day-in-the-capital",
+        "bl": "288814",
+        "kt": "26985",
+        "mu": "53olqck",
+        "mal": "74695",
+        "engtl": "https://yenpress.com/series/re-starting-life-in-another-world-chapter-1-a-day-in-the-capital-manga"
+      }
+    },
+    "receipt": {
+      "source": "md",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga?title=Re%3AZero+kara+Hajimeru+Isekai+Seikatsu&limit=8&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:54.580104+00:00",
+      "status": 200,
+      "elapsedMs": 703,
+      "bytes": 60814,
+      "responseSha256": "3af45993e4c930886fb201b84af81301576c98ee16c3337b820a247ce0083e56",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "mu",
+    "externalId": "62758791984",
+    "metadata": {
+      "series_id": 62758791984,
+      "title": "Nanatsu no Taizai",
+      "type": "Manga",
+      "year": "2012",
+      "last_updated": {
+        "timestamp": 1788975718,
+        "as_rfc3339": "2026-09-09T10:41:58-07:00",
+        "as_string": "September 9th, 2026 10:41am PDT"
+      }
+    },
+    "receipt": {
+      "source": "mu",
+      "method": "POST",
+      "url": "https://api.mangaupdates.com/v1/series/search",
+      "body": {
+        "search": "Nanatsu no Taizai",
+        "perpage": 8,
+        "page": 1
+      },
+      "observedAt": "2026-10-24T18:32:52.988386+00:00",
+      "status": 200,
+      "elapsedMs": 1172,
+      "bytes": 26938,
+      "responseSha256": "101ac5323aae12798a0c1132616ec261154dc3bc8cbce6a74e600b2b3416c178",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "kitsu",
+    "externalId": "8287",
+    "metadata": {
+      "canonicalTitle": "Solanin",
+      "subtype": "manga",
+      "status": "finished",
+      "chapterCount": 29,
+      "volumeCount": 2,
+      "startDate": "2005-06-30",
+      "endDate": "2006-04-06"
+    },
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga?filter%5Btext%5D=Solanin&page%5Blimit%5D=8",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:55.294356+00:00",
+      "status": 200,
+      "elapsedMs": 406,
+      "bytes": 9287,
+      "responseSha256": "0a0c58bf972f25d4b5ed99efb37399be00b1733f9d0448dde3b43b05736dcffb",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"0a0c58bf972f25d4b5ed99efb37399be\""
+      }
+    }
+  },
+  {
+    "source": "mu",
+    "externalId": "62512335978",
+    "metadata": {
+      "series_id": 62512335978,
+      "title": "Look Back (FUJIMOTO Tatsuki)",
+      "type": "Manga",
+      "year": "2021",
+      "last_updated": {
+        "timestamp": 1790047923,
+        "as_rfc3339": "2026-09-21T20:32:03-07:00",
+        "as_string": "September 21st, 2026 8:32pm PDT"
+      }
+    },
+    "receipt": {
+      "source": "mu",
+      "method": "POST",
+      "url": "https://api.mangaupdates.com/v1/series/search",
+      "body": {
+        "search": "Look Back",
+        "perpage": 8,
+        "page": 1
+      },
+      "observedAt": "2026-10-24T18:33:43.760808+00:00",
+      "status": 200,
+      "elapsedMs": 1125,
+      "bytes": 35824,
+      "responseSha256": "3e8f0b6b926c39cc49a2f8ce94b5fc98878d37cb9f79b77d9d0e0db206b821a9",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "bgm",
+    "externalId": "342254",
+    "metadata": {
+      "id": 342254,
+      "name": "ルックバック",
+      "name_cn": "蓦然回首",
+      "type": 1,
+      "date": "2021-09-03",
+      "platform": "漫画",
+      "eps": 1,
+      "volumes": 0,
+      "series": false
+    },
+    "receipt": {
+      "source": "bgm",
+      "method": "POST",
+      "url": "https://api.bgm.tv/v0/search/subjects?limit=8&offset=0",
+      "body": {
+        "keyword": "Look Back",
+        "filter": {
+          "type": [
+            1
+          ],
+          "nsfw": false
+        }
+      },
+      "observedAt": "2026-10-24T18:33:05.943976+00:00",
+      "status": 200,
+      "elapsedMs": 360,
+      "bytes": 21616,
+      "responseSha256": "69b014b5580ec2e49fc3ce12f9ab4535f747dd510cba0e16df7890cc3690733f",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "kitsu",
+    "externalId": "26776",
+    "metadata": {
+      "canonicalTitle": "Re:Zero kara Hajimeru Isekai Seikatsu",
+      "subtype": "novel",
+      "status": "current",
+      "chapterCount": null,
+      "volumeCount": 0,
+      "startDate": "2014-01-23",
+      "endDate": null
+    },
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga?filter%5Btext%5D=Re%3AZero+kara+Hajimeru+Isekai+Seikatsu&page%5Blimit%5D=8",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:51.852373+00:00",
+      "status": 200,
+      "elapsedMs": 515,
+      "bytes": 42058,
+      "responseSha256": "7d3584e1bd35a4978a95a7ceade66e893a53ddab620d44492585e926cf9cc9ab",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"7d3584e1bd35a4978a95a7ceade66e89\""
+      }
+    }
+  },
+  {
+    "source": "kitsu",
+    "externalId": "26985",
+    "metadata": {
+      "canonicalTitle": "Re:Zero kara Hajimeru Isekai Seikatsu: Dai-1 Shou - Outo no Ichinichi-hen",
+      "subtype": "manga",
+      "status": "finished",
+      "chapterCount": 11,
+      "volumeCount": 2,
+      "startDate": "2014-06-27",
+      "endDate": "2015-02-27"
+    },
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga?filter%5Btext%5D=Re%3AZero+kara+Hajimeru+Isekai+Seikatsu&page%5Blimit%5D=8",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:51.852373+00:00",
+      "status": 200,
+      "elapsedMs": 515,
+      "bytes": 42058,
+      "responseSha256": "7d3584e1bd35a4978a95a7ceade66e893a53ddab620d44492585e926cf9cc9ab",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"7d3584e1bd35a4978a95a7ceade66e89\""
+      }
+    }
+  },
+  {
+    "source": "bgm",
+    "externalId": "3510",
+    "metadata": {
+      "id": 3510,
+      "name": "ONE PIECE",
+      "name_cn": "航海王",
+      "type": 1,
+      "date": "1997-12-24",
+      "platform": "漫画",
+      "eps": 0,
+      "volumes": 0,
+      "series": true
+    },
+    "receipt": {
+      "source": "bgm",
+      "method": "POST",
+      "url": "https://api.bgm.tv/v0/search/subjects?limit=8&offset=0",
+      "body": {
+        "keyword": "One Punch Man",
+        "filter": {
+          "type": [
+            1
+          ],
+          "nsfw": false
+        }
+      },
+      "observedAt": "2026-10-24T18:32:56.921011+00:00",
+      "status": 200,
+      "elapsedMs": 359,
+      "bytes": 20536,
+      "responseSha256": "2891125281f7e29318de52f6db66959148243d64a765737fd03d971f6332d81c",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "bgm",
+    "externalId": "121927",
+    "metadata": {
+      "id": 121927,
+      "name": "Re:ゼロから始める異世界生活",
+      "name_cn": "Re：从零开始的异世界生活",
+      "type": 1,
+      "date": "2014-01-23",
+      "platform": "小说",
+      "eps": 0,
+      "volumes": 44,
+      "series": true
+    },
+    "receipt": {
+      "source": "bgm",
+      "method": "POST",
+      "url": "https://api.bgm.tv/v0/search/subjects?limit=5&offset=0",
+      "body": {
+        "keyword": "Re:ゼロから始める異世界生活",
+        "filter": {
+          "type": [
+            1
+          ],
+          "nsfw": false
+        }
+      },
+      "observedAt": "2026-10-24T18:34:52.475390+00:00",
+      "status": 200,
+      "elapsedMs": 422,
+      "bytes": 16339,
+      "responseSha256": "9be668abe8f7438ef04b2c1f156dc0910f46a5f6da7315b9bcdcefccfbd7aeef",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "md",
+    "externalId": "801513ba-a712-498c-8f57-cae55b38cc92",
+    "metadata": {
+      "title": {
+        "ja-ro": "Berserk"
+      },
+      "originalLanguage": "ja",
+      "status": "ongoing",
+      "year": 1989,
+      "links": {
+        "al": "30002",
+        "ap": "berserk",
+        "bl": "181526",
+        "bw": "series/16664/list",
+        "kt": "8",
+        "mu": "njeqwry",
+        "amz": "https://www.amazon.co.jp/-/en/dp/B074C597F1",
+        "cdj": "https://www.cdjapan.co.jp/product/NEOBK-3115032",
+        "ebj": "https://ebookjapan.yahoo.co.jp/books/127562/",
+        "mal": "2",
+        "raw": "https://younganimal.com/series/f68f676b354d4/",
+        "engtl": "https://www.darkhorsedirect.com/products/berserk-multi-volume-books"
+      }
+    },
+    "receipt": {
+      "source": "md",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga?title=Berserk&limit=5&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive&contentRating%5B%5D=erotica",
+      "body": null,
+      "observedAt": "2026-10-24T18:34:53.645354+00:00",
+      "status": 200,
+      "elapsedMs": 1046,
+      "bytes": 48452,
+      "responseSha256": "d1723508e7a2bb9039c7bdeb99a68c16aec064eb66d58b65d40bc13e6002d99d",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "mu",
+    "externalId": "34366575338",
+    "metadata": {
+      "series_id": 34366575338,
+      "title": "Grandmaster of Demonic Cultivation: Mo Dao Zu Shi",
+      "type": "Manhua",
+      "year": "2017",
+      "last_updated": {
+        "timestamp": 1792617575,
+        "as_rfc3339": "2026-10-21T14:19:35-07:00",
+        "as_string": "October 21st, 2026 2:19pm PDT"
+      }
+    },
+    "receipt": {
+      "source": "mu",
+      "method": "POST",
+      "url": "https://api.mangaupdates.com/v1/series/search",
+      "body": {
+        "search": "Mo Dao Zu Shi",
+        "perpage": 8,
+        "page": 1
+      },
+      "observedAt": "2026-10-24T18:33:49.222328+00:00",
+      "status": 200,
+      "elapsedMs": 1547,
+      "bytes": 38350,
+      "responseSha256": "e0318e07118c617dfcef75a9207c368eff807dc47829e54ab42298d6af3a29b3",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "kitsu",
+    "externalId": "40740",
+    "metadata": {
+      "canonicalTitle": "Mo Dao Zu Shi",
+      "subtype": "manhua",
+      "status": "finished",
+      "chapterCount": 259,
+      "volumeCount": null,
+      "startDate": "2017-12-09",
+      "endDate": "2022-10-26"
+    },
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga?filter%5Btext%5D=Mo+Dao+Zu+Shi&page%5Blimit%5D=8",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:48.653442+00:00",
+      "status": 200,
+      "elapsedMs": 578,
+      "bytes": 22282,
+      "responseSha256": "ee3848625664f87719a33a43f7a9af0cc11958e99186bbc7be237905386e030b",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"ee3848625664f87719a33a43f7a9af0c\""
+      }
+    }
+  },
+  {
+    "source": "bgm",
+    "externalId": "74201",
+    "metadata": {
+      "id": 74201,
+      "name": "ワンパンマン",
+      "name_cn": "一拳超人 原作版",
+      "type": 1,
+      "date": null,
+      "platform": "漫画",
+      "eps": 0,
+      "volumes": 0,
+      "series": true
+    },
+    "receipt": {
+      "source": "bgm",
+      "method": "POST",
+      "url": "https://api.bgm.tv/v0/search/subjects?limit=8&offset=0",
+      "body": {
+        "keyword": "One Punch Man",
+        "filter": {
+          "type": [
+            1
+          ],
+          "nsfw": false
+        }
+      },
+      "observedAt": "2026-10-24T18:32:56.921011+00:00",
+      "status": 200,
+      "elapsedMs": 359,
+      "bytes": 20536,
+      "responseSha256": "2891125281f7e29318de52f6db66959148243d64a765737fd03d971f6332d81c",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "mu",
+    "externalId": "51239621230",
+    "metadata": {
+      "series_id": 51239621230,
+      "title": "Berserk",
+      "type": "Manga",
+      "year": "1989",
+      "last_updated": {
+        "timestamp": 1792428515,
+        "as_rfc3339": "2026-10-19T09:48:35-07:00",
+        "as_string": "October 19th, 2026 9:48am PDT"
+      }
+    },
+    "receipt": {
+      "source": "mu",
+      "method": "POST",
+      "url": "https://api.mangaupdates.com/v1/series/search",
+      "body": {
+        "search": "Berserk",
+        "perpage": 8,
+        "page": 1
+      },
+      "observedAt": "2026-10-24T18:32:58.755330+00:00",
+      "status": 200,
+      "elapsedMs": 937,
+      "bytes": 27120,
+      "responseSha256": "f8679065122d7d76ec9c864c75fea71a0ee677b65c5f7e173dfef0044ff7b87a",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "kitsu",
+    "externalId": "38",
+    "metadata": {
+      "canonicalTitle": "One Piece",
+      "subtype": "manga",
+      "status": "current",
+      "chapterCount": null,
+      "volumeCount": null,
+      "startDate": "1997-07-22",
+      "endDate": null
+    },
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga?filter%5Btext%5D=One+Piece&page%5Blimit%5D=8",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:40.632130+00:00",
+      "status": 200,
+      "elapsedMs": 578,
+      "bytes": 41365,
+      "responseSha256": "1268a5398be880fbc712ca772e084359272439dbbcb34f2a65e35f49b085f4ec",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"1268a5398be880fbc712ca772e084359\""
+      }
+    }
+  },
+  {
+    "source": "md",
+    "externalId": "e52d9403-3356-403b-b7bb-d7d6a420dd50",
+    "metadata": {
+      "title": {
+        "ja-ro": "Nanatsu no Taizai"
+      },
+      "originalLanguage": "ja",
+      "status": "completed",
+      "year": 2012,
+      "links": {
+        "al": "74485",
+        "ap": "the-seven-deadly-sins",
+        "kt": "24208",
+        "mu": "stwyptc",
+        "mal": "44485",
+        "engtl": "https://kodansha.us/series/the-seven-deadly-sins/"
+      }
+    },
+    "receipt": {
+      "source": "md",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga?title=Nanatsu+no+Taizai&limit=8&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:34.580290+00:00",
+      "status": 200,
+      "elapsedMs": 594,
+      "bytes": 33750,
+      "responseSha256": "fb8c4e897648f37272a568ac30861607c657b3b58f29e9b21b80232e6963064c",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "kitsu",
+    "externalId": "24147",
+    "metadata": {
+      "canonicalTitle": "One Punch-Man",
+      "subtype": "manga",
+      "status": "current",
+      "chapterCount": null,
+      "volumeCount": 0,
+      "startDate": "2012-06-14",
+      "endDate": null
+    },
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga?filter%5Btext%5D=One+Punch+Man&page%5Blimit%5D=8",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:35.188901+00:00",
+      "status": 200,
+      "elapsedMs": 500,
+      "bytes": 39536,
+      "responseSha256": "2c1fdd43236ca570074cd05eb27c122d192c1b35e201377b74dcc57dd2e0a3be",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"2c1fdd43236ca570074cd05eb27c122d\""
+      }
+    }
+  },
+  {
+    "source": "kitsu",
+    "externalId": "35883",
+    "metadata": {
+      "canonicalTitle": "One-Punch Man ONE",
+      "subtype": "manga",
+      "status": "current",
+      "chapterCount": null,
+      "volumeCount": null,
+      "startDate": "2009-07-03",
+      "endDate": null
+    },
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga?filter%5Btext%5D=One+Punch+Man&page%5Blimit%5D=8",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:35.188901+00:00",
+      "status": 200,
+      "elapsedMs": 500,
+      "bytes": 39536,
+      "responseSha256": "2c1fdd43236ca570074cd05eb27c122d192c1b35e201377b74dcc57dd2e0a3be",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"2c1fdd43236ca570074cd05eb27c122d\""
+      }
+    }
+  },
+  {
+    "source": "bgm",
+    "externalId": "64051",
+    "metadata": {
+      "id": 64051,
+      "name": "七つの大罪",
+      "name_cn": "七大罪",
+      "type": 1,
+      "date": "2013-02-15",
+      "platform": "漫画",
+      "eps": 346,
+      "volumes": 41,
+      "series": true
+    },
+    "receipt": {
+      "source": "bgm",
+      "method": "POST",
+      "url": "https://api.bgm.tv/v0/search/subjects?limit=5&offset=0",
+      "body": {
+        "keyword": "七つの大罪",
+        "filter": {
+          "type": [
+            1
+          ],
+          "nsfw": false
+        }
+      },
+      "observedAt": "2026-10-24T18:34:49.518285+00:00",
+      "status": 200,
+      "elapsedMs": 343,
+      "bytes": 13156,
+      "responseSha256": "af700062815e0c040bdae451ddc8f2ab13ffdce5c5693e8c195623a3d242513f",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "mu",
+    "externalId": "3479935384",
+    "metadata": {
+      "series_id": 3479935384,
+      "title": "Death Note",
+      "type": "Manga",
+      "year": "2003",
+      "last_updated": {
+        "timestamp": 1792182701,
+        "as_rfc3339": "2026-10-16T13:31:41-07:00",
+        "as_string": "October 16th, 2026 1:31pm PDT"
+      }
+    },
+    "receipt": {
+      "source": "mu",
+      "method": "POST",
+      "url": "https://api.mangaupdates.com/v1/series/search",
+      "body": {
+        "search": "Death Note",
+        "perpage": 8,
+        "page": 1
+      },
+      "observedAt": "2026-10-24T18:32:49.861697+00:00",
+      "status": 200,
+      "elapsedMs": 1328,
+      "bytes": 21945,
+      "responseSha256": "9b943634c6e6bd9ab30dfa7bb9818228de0f2c84aea72e1fbb6847f517ade54c",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "bgm",
+    "externalId": "9640",
+    "metadata": {
+      "id": 9640,
+      "name": "ベルセルク",
+      "name_cn": "剑风传奇",
+      "type": 1,
+      "date": "1990-11-26",
+      "platform": "漫画",
+      "eps": 0,
+      "volumes": 0,
+      "series": true
+    },
+    "receipt": {
+      "source": "bgm",
+      "method": "POST",
+      "url": "https://api.bgm.tv/v0/search/subjects?limit=8&offset=0",
+      "body": {
+        "keyword": "Berserk",
+        "filter": {
+          "type": [
+            1
+          ],
+          "nsfw": false
+        }
+      },
+      "observedAt": "2026-10-24T18:32:59.688560+00:00",
+      "status": 200,
+      "elapsedMs": 391,
+      "bytes": 15927,
+      "responseSha256": "9997f1cb87731920af6499d017188526faa5c667f85ba5eb124d9466224fd7a0",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "kitsu",
+    "externalId": "57",
+    "metadata": {
+      "canonicalTitle": "Death Note",
+      "subtype": "manga",
+      "status": "finished",
+      "chapterCount": 108,
+      "volumeCount": 12,
+      "startDate": "2003-12-01",
+      "endDate": "2006-05-15"
+    },
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga?filter%5Btext%5D=Death+Note&page%5Blimit%5D=8",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:28.321578+00:00",
+      "status": 200,
+      "elapsedMs": 1016,
+      "bytes": 39707,
+      "responseSha256": "76f47e7edc4cfc86021b61252521d1ab5e70fa7dd4d393ecc5b88431e3a4eca8",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"76f47e7edc4cfc86021b61252521d1ab\""
+      }
+    }
+  },
+  {
+    "source": "mu",
+    "externalId": "15180124327",
+    "metadata": {
+      "series_id": 15180124327,
+      "title": "Solo Leveling",
+      "type": "Manhwa",
+      "year": "2018",
+      "last_updated": {
+        "timestamp": 1792773658,
+        "as_rfc3339": "2026-10-23T09:40:58-07:00",
+        "as_string": "October 23rd, 2026 9:40am PDT"
+      }
+    },
+    "receipt": {
+      "source": "mu",
+      "method": "POST",
+      "url": "https://api.mangaupdates.com/v1/series/search",
+      "body": {
+        "search": "Solo Leveling",
+        "perpage": 8,
+        "page": 1
+      },
+      "observedAt": "2026-10-24T18:33:46.464569+00:00",
+      "status": 200,
+      "elapsedMs": 1094,
+      "bytes": 47718,
+      "responseSha256": "cd49190527d97cbad19c5726919f16a6ab60602591cdf1b7d98f79601feb8d2e",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "md",
+    "externalId": "a42db50d-20df-4f33-bddc-fe990df9c231",
+    "metadata": {
+      "title": {
+        "en": "Solanin"
+      },
+      "originalLanguage": "ja",
+      "status": "completed",
+      "year": 2005,
+      "links": {
+        "al": "33731",
+        "ap": "solanin",
+        "kt": "8287",
+        "mu": "9x44hfp",
+        "mal": "3731",
+        "engtl": "https://www.viz.com/solanin"
+      }
+    },
+    "receipt": {
+      "source": "md",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga?title=Solanin&limit=8&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:18.959470+00:00",
+      "status": 200,
+      "elapsedMs": 766,
+      "bytes": 6678,
+      "responseSha256": "b6896346bb9d431382398404eecb9979dc46c517f8dad3c83fccb80e09f3ef73",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "md",
+    "externalId": "ba7908db-5c9e-4f78-9fc1-3b3581f752e9",
+    "metadata": {
+      "title": {
+        "en": "Look Back"
+      },
+      "originalLanguage": "ja",
+      "status": "completed",
+      "year": 2021,
+      "links": {
+        "al": "136807",
+        "ap": "look-back",
+        "kt": "60475",
+        "mu": "spu8b56",
+        "mal": "138673",
+        "raw": "https://shonenjumpplus.com/episode/3269754496401369355"
+      }
+    },
+    "receipt": {
+      "source": "md",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga?title=Look+Back&limit=8&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:45.256988+00:00",
+      "status": 200,
+      "elapsedMs": 641,
+      "bytes": 40830,
+      "responseSha256": "f918d850237fc4b19d28dde0f226e9ca9b352e0529bb50f14e6931797ed24804",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "mu",
+    "externalId": "30535847369",
+    "metadata": {
+      "series_id": 30535847369,
+      "title": "One Punch-Man",
+      "type": "Manga",
+      "year": "2012",
+      "last_updated": {
+        "timestamp": 1790075658,
+        "as_rfc3339": "2026-09-22T04:14:18-07:00",
+        "as_string": "September 22nd, 2026 4:14am PDT"
+      }
+    },
+    "receipt": {
+      "source": "mu",
+      "method": "POST",
+      "url": "https://api.mangaupdates.com/v1/series/search",
+      "body": {
+        "search": "One Punch Man",
+        "perpage": 8,
+        "page": 1
+      },
+      "observedAt": "2026-10-24T18:32:55.857146+00:00",
+      "status": 200,
+      "elapsedMs": 1063,
+      "bytes": 24377,
+      "responseSha256": "7bbf434580590f742d6952bce1b6e765f0257cd1273b066acb21a73c2c864da2",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "mu",
+    "externalId": "37830832998",
+    "metadata": {
+      "series_id": 37830832998,
+      "title": "One Punch-Man (ONE)",
+      "type": "Manga",
+      "year": "2009",
+      "last_updated": {
+        "timestamp": 1785658119,
+        "as_rfc3339": "2026-08-02T01:08:39-07:00",
+        "as_string": "August 2nd, 2026 1:08am PDT"
+      }
+    },
+    "receipt": {
+      "source": "mu",
+      "method": "POST",
+      "url": "https://api.mangaupdates.com/v1/series/search",
+      "body": {
+        "search": "One Punch Man",
+        "perpage": 8,
+        "page": 1
+      },
+      "observedAt": "2026-10-24T18:32:55.857146+00:00",
+      "status": 200,
+      "elapsedMs": 1063,
+      "bytes": 24377,
+      "responseSha256": "7bbf434580590f742d6952bce1b6e765f0257cd1273b066acb21a73c2c864da2",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "md",
+    "externalId": "75ee72ab-c6bf-4b87-badd-de839156934c",
+    "metadata": {
+      "title": {
+        "en": "Death Note"
+      },
+      "originalLanguage": "ja",
+      "status": "completed",
+      "year": 2003,
+      "links": {
+        "al": "30021",
+        "bl": "187101",
+        "bw": "series/13024/list",
+        "mu": "1ljv3bs",
+        "amz": "https://www.amazon.co.jp/dp/B07572CPGF",
+        "ebj": "https://ebookjapan.yahoo.co.jp/books/134328/",
+        "mal": "21",
+        "engtl": "https://mangaplus.shueisha.co.jp/titles/100008"
+      }
+    },
+    "receipt": {
+      "source": "md",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga?title=Death+Note&limit=8&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:31.416624+00:00",
+      "status": 200,
+      "elapsedMs": 625,
+      "bytes": 32917,
+      "responseSha256": "beca82cea16c853734636e217171f506e04c7e7ae1e1e923cfef225ba2aa56dd",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "md",
+    "externalId": "85b6f4e4-180b-43b0-a0ec-9a9de401aed0",
+    "metadata": {
+      "title": {
+        "en": "Death Note (Official Colored)"
+      },
+      "originalLanguage": "ja",
+      "status": "completed",
+      "year": 2012,
+      "links": {
+        "mu": "1ljv3bs"
+      }
+    },
+    "receipt": {
+      "source": "md",
+      "method": "GET",
+      "url": "https://api.mangadex.org/manga?title=Death+Note&limit=8&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:31.416624+00:00",
+      "status": 200,
+      "elapsedMs": 625,
+      "bytes": 32917,
+      "responseSha256": "beca82cea16c853734636e217171f506e04c7e7ae1e1e923cfef225ba2aa56dd",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "kitsu",
+    "externalId": "54114",
+    "metadata": {
+      "canonicalTitle": "Solo Leveling",
+      "subtype": "manhwa",
+      "status": "finished",
+      "chapterCount": 201,
+      "volumeCount": null,
+      "startDate": "2018-03-04",
+      "endDate": "2023-05-31"
+    },
+    "receipt": {
+      "source": "kitsu",
+      "method": "GET",
+      "url": "https://kitsu.app/api/edge/manga?filter%5Btext%5D=Solo+Leveling&page%5Blimit%5D=8",
+      "body": null,
+      "observedAt": "2026-10-24T18:33:45.902760+00:00",
+      "status": 200,
+      "elapsedMs": 562,
+      "bytes": 41268,
+      "responseSha256": "94e116bb196bf43267f9dfb4bc89108bc8a640dfd1d8f7d2bbe7042fadc4c556",
+      "contentType": "application/vnd.api+json",
+      "validators": {
+        "ETag": "W/\"94e116bb196bf43267f9dfb4bc89108b\""
+      }
+    }
+  },
+  {
+    "source": "mu",
+    "externalId": "11106634916",
+    "metadata": {
+      "series_id": 11106634916,
+      "title": "Re:Zero kara Hajimeru Isekai Seikatsu - Daiisshou - Outo no Ichinichi Hen",
+      "type": "Manga",
+      "year": "2014",
+      "status": "2 Volumes (Complete)",
+      "completed": true,
+      "last_updated": {
+        "timestamp": 1767828185,
+        "as_rfc3339": "2026-01-07T15:23:05-08:00",
+        "as_string": "January 7th, 2026 3:23pm PST"
+      },
+      "licensed": true,
+      "latest_chapter": 11
+    },
+    "receipt": {
+      "source": "mu",
+      "method": "GET",
+      "url": "https://api.mangaupdates.com/v1/series/11106634916",
+      "body": null,
+      "observedAt": "2026-10-24T18:44:54.914270+00:00",
+      "status": 200,
+      "elapsedMs": 906,
+      "bytes": 9348,
+      "responseSha256": "e16b40f26a85284a462eecb81256c5b6accc096c98ba9feace39bff47053664d",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "mu",
+    "externalId": "8162824044",
+    "metadata": {
+      "series_id": 8162824044,
+      "title": "Re:Zero Kara Hajimeru Isekai Seikatsu (Novel)",
+      "type": "Novel",
+      "year": "2012",
+      "status": "45 Volumes + 13  Short Story Volumes (Ongoing)",
+      "completed": false,
+      "last_updated": {
+        "timestamp": 1791073224,
+        "as_rfc3339": "2026-10-03T17:20:24-07:00",
+        "as_string": "October 3rd, 2026 5:20pm PDT"
+      },
+      "licensed": true,
+      "latest_chapter": 71
+    },
+    "receipt": {
+      "source": "mu",
+      "method": "GET",
+      "url": "https://api.mangaupdates.com/v1/series/8162824044",
+      "body": null,
+      "observedAt": "2026-10-24T18:44:56.923331+00:00",
+      "status": 200,
+      "elapsedMs": 750,
+      "bytes": 16158,
+      "responseSha256": "88898396c44503e54ee257844c3308586c3e422174b1a1a9fd2a3d58ac6b8e32",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  },
+  {
+    "source": "mu",
+    "externalId": "21593352517",
+    "metadata": {
+      "series_id": 21593352517,
+      "title": "Solanin",
+      "type": "Manga",
+      "year": "2005",
+      "status": "2 Volumes (Complete)  \n1 Volume (Shinsouban, Complete)",
+      "completed": true,
+      "last_updated": {
+        "timestamp": 1763825362,
+        "as_rfc3339": "2025-11-22T07:29:22-08:00",
+        "as_string": "November 22nd, 2025 7:29am PST"
+      },
+      "licensed": true,
+      "latest_chapter": 29
+    },
+    "receipt": {
+      "source": "mu",
+      "method": "GET",
+      "url": "https://api.mangaupdates.com/v1/series/21593352517",
+      "body": null,
+      "observedAt": "2026-10-24T18:44:58.775666+00:00",
+      "status": 200,
+      "elapsedMs": 703,
+      "bytes": 10210,
+      "responseSha256": "48f1bc8912e9ada1f6a2762fc9b00a323356249f62fc93ff21f37af9d35a3b2f",
+      "contentType": "application/json",
+      "validators": {}
+    }
+  }
+]

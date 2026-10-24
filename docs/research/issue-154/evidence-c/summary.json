@@ -1,0 +1,60 @@
+{
+  "requests": 149,
+  "firstObservation": "2026-10-24T18:32:49.332798+00:00",
+  "lastObservation": "2026-10-24T18:44:58.775666+00:00",
+  "sources": {
+    "kitsu": {
+      "requests": 35,
+      "statuses": {
+        "406": 10,
+        "200": 25
+      },
+      "responseBytes": 494779,
+      "medianHttpMsSuccessful": 562,
+      "sampledScopes": 12,
+      "nonemptyScopes": 12,
+      "firstPageRows": 212,
+      "endpointTotalSumNotChapterCount": 21283
+    },
+    "mu": {
+      "requests": 40,
+      "statuses": {
+        "200": 40
+      },
+      "responseBytes": 942722,
+      "medianHttpMsSuccessful": 1140.5,
+      "sampledScopes": 12,
+      "nonemptyScopes": 12,
+      "firstPageRows": 250,
+      "endpointTotalSumNotChapterCount": 4491
+    },
+    "bgm": {
+      "requests": 39,
+      "statuses": {
+        "200": 39
+      },
+      "responseBytes": 438524,
+      "medianHttpMsSuccessful": 360,
+      "sampledScopes": 12,
+      "nonemptyScopes": 0,
+      "firstPageRows": 0,
+      "endpointTotalSumNotChapterCount": 0
+    },
+    "md": {
+      "requests": 35,
+      "statuses": {
+        "200": 35
+      },
+      "responseBytes": 1411741,
+      "medianHttpMsSuccessful": 984,
+      "sampledScopes": 12,
+      "nonemptyScopes": 12,
+      "firstPageRows": 792,
+      "endpointTotalSumNotChapterCount": 8984
+    }
+  },
+  "inventorySamples": 48,
+  "followupSamples": 14,
+  "checks": "PASS",
+  "warning": "Nonrandom corpus; HTTP and endpoint coverage are not editorial completeness or uptime."
+}
