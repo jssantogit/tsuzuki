@@ -164,7 +164,10 @@ class CanonicalCoreBackupExporter(
                             updatedAt = binding.updated_at,
                         )
                     } catch (error: Exception) {
-                        throw IllegalStateException("Unexportable provider runtime binding requires a portable codec", error)
+                        throw IllegalStateException(
+                            "Unexportable provider runtime binding requires a portable codec",
+                            error,
+                        )
                     }
                 }
         }
