@@ -114,10 +114,12 @@ class ProviderTorrentNativeMetadataResolutionTest {
                 ProviderP2pFailureCode.NETWORK_ERROR,
                 (result as ProviderP2pDownloadResult.Failure).reason,
             )
-            assertTrue(recorder.lines.any {
-                "event=METADATA_FAILED" in it && "stage=METADATA" in it &&
-                    "failure=NETWORK_ERROR" in it && "exceptionClass=java.lang.IllegalStateException" in it
-            })
+            assertTrue(
+                recorder.lines.any {
+                    "event=METADATA_FAILED" in it && "stage=METADATA" in it &&
+                        "failure=NETWORK_ERROR" in it && "exceptionClass=java.lang.IllegalStateException" in it
+                },
+            )
             assertFalse(recorder.lines.any { "event=TRANSFER_FAILED" in it })
             assertFalse(
                 recorder.lines.any {

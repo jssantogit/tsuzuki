@@ -24,11 +24,13 @@ import java.io.File
 import kotlin.coroutines.coroutineContext
 
 class JlibtorrentProviderP2pDownloadEngine internal constructor(
-    private val metadataResolver: (suspend (
-        session: SessionManager,
-        request: ProviderP2pAcquireRequest,
-        workingDirectory: File,
-    ) -> TorrentInfo?)? = null,
+    private val metadataResolver: (
+        suspend (
+            session: SessionManager,
+            request: ProviderP2pAcquireRequest,
+            workingDirectory: File,
+        ) -> TorrentInfo?
+    )? = null,
     private val initialPeers: (ProviderP2pAcquireRequest) -> List<TcpEndpoint> = { emptyList() },
     private val sessionParamsFactory: () -> SessionParams = DEFAULT_SESSION_PARAMS_FACTORY,
     private val downloadTimeoutMs: Long = DEFAULT_DOWNLOAD_TIMEOUT_MS,
