@@ -64,7 +64,7 @@ class Bangumi(id: Long) : BaseTracker(id, "Bangumi") {
             api.getCurrentUser().id?.takeIf { it > 0L }?.toString()
                 ?: error("Bangumi /v0/me did not provide a verified account ID")
         override suspend fun getUserLibrary(): List<BangumiUserListEntry> =
-            api.getUserBookCollections(getUsername())
+            api.getUserBookCollections(api.getCurrentUser().username)
     }
 
     internal val integrationApi: BangumiIntegrationApi = object : BangumiIntegrationApi {
