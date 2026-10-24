@@ -9,6 +9,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.io.OutputStream
 
 class ManualBackupDestinationPolicyTest {
 
@@ -72,6 +73,30 @@ class ManualBackupDestinationPolicyTest {
             }
 
             org.junit.jupiter.api.Assertions.assertFalse(openedForOutput)
+        } finally {
+            staged.delete()
+        }
+    }
+
+    @Test
+    fun `provider write failure propagates rather than marking a partial document successful`() {
+        val staged = File.createTempFile("manual-backup-test-", ".tachibk")
+        try {
+            staged.writeBytes(byteArrayOf(1, 2, 3))
+            var bytesWritten = 0
+            val failingOutput = object : OutputStream() {
+                override fun write(value: Int) {
+                    if (++bytesWritten > 1) throw IOException("simulated provider failure")
+                }
+            }
+
+            assertThrows(IOException::class.java) {
+                ManualBackupDestinationPolicy.copyVerifiedArchive(
+                    verifiedArchive = staged,
+                    openExistingDocument = { ByteArrayInputStream(byteArrayOf()) },
+                    openDocumentOutput = { failingOutput },
+                )
+            }
         } finally {
             staged.delete()
         }
