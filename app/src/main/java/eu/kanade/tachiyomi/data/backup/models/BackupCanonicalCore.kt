@@ -28,6 +28,7 @@ data class BackupCanonicalCore(
     val folders: List<BackupCoreFolder> = emptyList(),
     val lists: List<BackupCoreList> = emptyList(),
     val providerBindings: List<BackupCoreProviderBinding> = emptyList(),
+    val contentBindings: List<BackupCoreContentBinding> = emptyList(),
     val readerPreferences: List<BackupCoreReaderPreference> = emptyList(),
     val chapterOverrides: List<BackupCoreChapterOverride> = emptyList(),
     val contentPreferences: List<BackupCoreContentPreference> = emptyList(),
@@ -47,6 +48,10 @@ data class BackupCanonicalCore(
         require(folders.isUniqueBy { it.id }) { "Duplicate folder ID" }
         require(lists.isUniqueBy { it.id }) { "Duplicate collection list ID" }
         require(providerBindings.isUniqueBy { it.id }) { "Duplicate provider binding ID" }
+        require(contentBindings.isUniqueBy { it.id }) { "Duplicate content binding ID" }
+        require(contentBindings.isUniqueBy { it.addonId to it.providerTitleKey }) {
+            "Duplicate portable content binding identity"
+        }
         require(readerPreferences.isUniqueBy { it.canonicalTitleId }) { "Duplicate reader preference" }
         require(chapterOverrides.isUniqueBy { it.id }) { "Duplicate chapter override" }
         require(providerBindings.isUniqueBy { Triple(it.providerId, it.facetId, it.externalWorkId) }) {
@@ -159,6 +164,10 @@ data class BackupCanonicalCore(
                     it.providerId.isNotBlank() && it.facetId.isNotBlank() && it.externalWorkId.isNotBlank()
             },
         ) { "Invalid provider binding or missing canonical title" }
+        require(contentBindings.all { it.canonicalTitleId in titleIds }) {
+            "Content binding references a missing title"
+        }
+        contentBindings.forEach(PortableMihonBindingCodec::validate)
         require(readerPreferences.all { it.canonicalTitleId in titleIds }) {
             "Reader preference references a missing title"
         }
