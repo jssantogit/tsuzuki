@@ -101,6 +101,19 @@ class DefaultSkinF6HContractTest {
         catalog shouldNotContain "Text(\"Collections\")"
     }
 
+    @Test
+    fun `library filters sheet renders a Default Skin surface and drag handle`() {
+        val library = source("presentation/tsuzuki/library/CanonicalLibraryScreen.kt")
+        val sheet = library.substringAfter("private fun CanonicalLibraryFilterSheet(")
+            .substringBefore("private fun FilterSection(")
+        sheet shouldContain "shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)"
+        sheet shouldContain "containerColor = colors.surface"
+        sheet shouldContain "scrimColor = colors.canvas.copy(alpha = 0.55f)"
+        sheet shouldContain "tonalElevation = 0.dp"
+        sheet shouldContain "dragHandle = {"
+        sheet shouldContain "DefaultSkinShape.Pill"
+    }
+
     private fun source(relative: String): String = Files.readString(
         listOf(
             Path.of("src/main/java/eu/kanade/$relative"),
