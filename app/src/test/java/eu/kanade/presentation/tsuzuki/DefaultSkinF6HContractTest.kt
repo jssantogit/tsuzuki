@@ -163,6 +163,18 @@ class DefaultSkinF6HContractTest {
         add shouldContain "CheckboxDefaults.colors("
     }
 
+    @Test
+    fun `collection browse scaffold never falls back to Material background or foreground`() {
+        val browse = source("presentation/tsuzuki/collections/CollectionBrowseScreens.kt")
+        val scaffold = browse.substringAfter("private fun BrowseScaffold(")
+            .substringBefore("private fun CatalogGridItem(")
+        scaffold shouldContain "containerColor = colors.canvas"
+        scaffold shouldContain "contentColor = colors.foreground"
+        val gridCard = browse.substringAfter("private fun CatalogGridItem(")
+            .substringBefore("private fun BrowseLoading(")
+        gridCard shouldContain "color = colors.foreground"
+    }
+
     private fun source(relative: String): String = Files.readString(
         listOf(
             Path.of("src/main/java/eu/kanade/$relative"),
