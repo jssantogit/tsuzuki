@@ -88,6 +88,9 @@ class ProviderTorrentStructuredDiagnosticTest {
             directory.deleteRecursively()
         }
 
+        // The canonical title-aware matcher also drives this export-durable exact summary.
+        exported.contains("\"torrent_exact_match_count\":{\"type\":\"number\",\"value\":1}") shouldBe true
+        exported.contains("\"torrent_identity_match_count\":{\"type\":\"number\",\"value\":1}") shouldBe true
         exported.contains("\"name\":\"torrent_release_evidence_summary\"") shouldBe true
         exported.contains("\"torrent_release_exact_count\":{\"type\":\"number\",\"value\":1}") shouldBe true
         exported.contains("\"torrent_single_readable_count\":{\"type\":\"number\",\"value\":1}") shouldBe true
