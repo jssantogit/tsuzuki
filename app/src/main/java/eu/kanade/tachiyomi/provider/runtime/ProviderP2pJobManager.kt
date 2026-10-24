@@ -60,12 +60,19 @@ class ProviderP2pJobManager internal constructor(
     private val lock = Any()
     private val jobs = mutableMapOf<JobKey, JobEntry>()
 
-    fun service(providerId: String): ProviderP2pHostService {
+    fun service(providerId: String): ProviderP2pHostService = service(providerId, null)
+
+    /** The selection approval is Host-only, scoped by the active Provider invocation. */
+    fun service(
+        providerId: String,
+        approvedSelection: ProviderP2pAcquireRequest?,
+    ): ProviderP2pHostService {
         ProviderId(providerId)
         return ProviderP2pHostService { request ->
             acquire(
                 providerId = providerId,
                 request = request,
+                approvedSelection = approvedSelection,
             )
         }
     }
@@ -73,6 +80,7 @@ class ProviderP2pJobManager internal constructor(
     private suspend fun acquire(
         providerId: String,
         request: ProviderP2pAcquireRequest,
+        approvedSelection: ProviderP2pAcquireRequest?,
     ): ProviderP2pAcquireResponse {
         val key = JobKey(
             providerId = providerId,
@@ -116,6 +124,7 @@ class ProviderP2pJobManager internal constructor(
                 request = request,
                 jobId = jobId,
                 response = ProviderP2pAcquireResponse.Pending(jobId),
+                hostApproved = approvedSelection == request,
             )
             jobs[key] = entry
             ProviderP2pDiagnostics.record(
@@ -182,9 +191,11 @@ class ProviderP2pJobManager internal constructor(
 
         var terminalExceptionClass: String? = null
         val response = try {
-            val verifiedBytes = runCatching {
-                verifiedMetadata?.find(key.providerId, entry.request)
-            }.getOrNull()
+            val verifiedBytes = if (entry.hostApproved) {
+                runCatching { verifiedMetadata?.find(key.providerId, entry.request) }.getOrNull()
+            } else {
+                null
+            }
             ProviderP2pDiagnostics.record(
                 event = ProviderP2pDiagnosticEvent.METADATA_CACHE_LOOKUP,
                 operationId = entry.request.operationId,
@@ -413,6 +424,7 @@ class ProviderP2pJobManager internal constructor(
         var completedAtMillis: Long? = null,
         var worker: Job? = null,
         var pollCount: Long = 0L,
+        val hostApproved: Boolean = false,
     )
 
     private companion object {

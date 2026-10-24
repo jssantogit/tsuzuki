@@ -275,6 +275,7 @@ object AppBindings {
         ProviderHostInvocationFactory(
             context = context,
             p2pServiceFactory = p2pJobs::service,
+            approvedP2pServiceFactory = p2pJobs::service,
             logSink = logSink::info,
             managedFiles = managedFiles,
         )

@@ -17,6 +17,7 @@ import tachiyomi.core.provider.runtime.ProviderHttpProtocol
 import tachiyomi.core.provider.runtime.ProviderHttpSessionStore
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
+import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireResponse
 import tachiyomi.core.provider.runtime.ProviderP2pHostService
 import tachiyomi.core.provider.runtime.ProviderP2pProtocol
@@ -38,6 +39,8 @@ data class ProviderHostInvocationPolicy(
     val storageEnabled: Boolean = false,
     val allowedSecrets: Set<String> = emptySet(),
     val directP2pEnabled: Boolean = false,
+    /** Host-created invocation selection; never serialized to Provider/Binder. */
+    val approvedP2pSelection: ProviderP2pAcquireRequest? = null,
     val maxHostOperations: Int = 256,
 ) {
     init {
@@ -89,6 +92,8 @@ class ProviderHostInvocationFactory(
     private val logSink: (providerId: String, message: String) -> Unit = { _, _ -> },
     private val httpSessions: ProviderHttpSessionStore = ProviderHttpSessionStore(),
     private val p2pServiceFactory: (String) -> ProviderP2pHostService? = { null },
+    private val approvedP2pServiceFactory:
+        ((String, ProviderP2pAcquireRequest?) -> ProviderP2pHostService?)? = null,
     val managedFiles: ProviderManagedFileStore = ProviderManagedFileStore(context.applicationContext),
 ) {
 
@@ -138,7 +143,10 @@ class ProviderHostInvocationFactory(
         val services = ProviderHostServices(
             http = http,
             p2p = if (policy.directP2pEnabled) {
-                p2pServiceFactory(policy.providerId)
+                approvedP2pServiceFactory?.invoke(
+                    policy.providerId,
+                    policy.approvedP2pSelection,
+                ) ?: p2pServiceFactory(policy.providerId)
             } else {
                 null
             },

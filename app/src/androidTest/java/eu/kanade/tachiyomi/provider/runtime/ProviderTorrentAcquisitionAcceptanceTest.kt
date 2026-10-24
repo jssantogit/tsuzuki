@@ -108,7 +108,7 @@ class ProviderTorrentAcquisitionAcceptanceTest {
                 "a different archive cannot borrow Host-verified chapter metadata",
                 cache.find(PROVIDER_ID.value, request.copy(selectedFilePath = "Other.cbz")) == null,
             )
-            val service = jobs.service(PROVIDER_ID.value)
+            val service = jobs.service(PROVIDER_ID.value, request)
             assertTrue(service.acquire(request) is ProviderP2pAcquireResponse.Pending)
 
             val ready = withTimeout(35_000L) {
