@@ -64,6 +64,7 @@ import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.util.relativeTimeSpanString
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalChapterDetailItem
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreenState
+import eu.kanade.tachiyomi.ui.tsuzuki.detail.NativeInventoryRefreshState
 import kotlinx.coroutines.launch
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.automirroredrounded.ArrowBack
@@ -72,6 +73,7 @@ import mihon.icons.materialsymbols.rounded.MoreVert
 import mihon.icons.materialsymbols.rounded.Search
 import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -89,6 +91,8 @@ fun CanonicalTitleDetailScreen(
     onOpenChapter: (String) -> Unit,
     onBaixarChapter: (String) -> Unit,
     onOpenProvidersSettings: () -> Unit,
+    onFetchInventory: (String) -> Unit,
+    inventoryRefresh: NativeInventoryRefreshState,
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
@@ -123,6 +127,7 @@ fun CanonicalTitleDetailScreen(
             is CanonicalTitleScreenState.Loaded -> LoadedDetails(
                 state, background, navigateUp, onAtualizar, onAddToLibrary, onRemoveFromLibrary,
                 onReadTitle, onOpenChapter, onBaixarChapter, onOpenProvidersSettings,
+                onFetchInventory, inventoryRefresh,
             )
         }
     }
@@ -140,6 +145,8 @@ private fun LoadedDetails(
     onOpenChapter: (String) -> Unit,
     onDownload: (String) -> Unit,
     onProviders: () -> Unit,
+    onFetchInventory: (String) -> Unit,
+    inventoryRefresh: NativeInventoryRefreshState,
 ) {
     var mode by rememberSaveable(state.title.id) { mutableStateOf(CanonicalDetailsLowerMode.COMPACT) }
     var sort by rememberSaveable(state.title.id) { mutableStateOf(CanonicalChapterSort.ORIGINAL) }
@@ -197,7 +204,7 @@ private fun LoadedDetails(
                     }
                     if (chapters.isEmpty() || state.independentInventory.sources.isNotEmpty()) {
                         item(key = "independent-inventory") {
-                            IndependentInventoryInfo(state.independentInventory)
+                            IndependentInventoryInfo(state.independentInventory, inventoryRefresh, onFetchInventory)
                         }
                     }
                 }
@@ -225,7 +232,7 @@ private fun LoadedDetails(
                             }
                         }
                         if (chapters.isEmpty() || state.independentInventory.sources.isNotEmpty()) {
-                            IndependentInventoryInfo(state.independentInventory)
+                            IndependentInventoryInfo(state.independentInventory, inventoryRefresh, onFetchInventory)
                         }
                     }
                     if (chapters.isEmpty()) {
@@ -364,7 +371,11 @@ private fun LoadedDetails(
 }
 
 @Composable
-private fun IndependentInventoryInfo(snapshot: IndependentInventorySnapshot) {
+private fun IndependentInventoryInfo(
+    snapshot: IndependentInventorySnapshot,
+    refresh: NativeInventoryRefreshState,
+    onFetchInventory: (String) -> Unit,
+) {
     val colors = defaultSkinColors()
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -380,6 +391,39 @@ private fun IndependentInventoryInfo(snapshot: IndependentInventorySnapshot) {
             style = MaterialTheme.typography.bodySmall,
             color = colors.secondary,
         )
+        if (refresh.refreshing) {
+            Text(
+                stringResource(MR.strings.tsuzuki_inventory_fetching),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_inventory_fetch_mangaupdates),
+                    onClick = { onFetchInventory("mangaupdates") },
+                )
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_inventory_fetch_mangadex),
+                    onClick = { onFetchInventory("mangadex") },
+                )
+            }
+        }
+        refresh.lastStop?.let { stop ->
+            Text(
+                stringResource(
+                    when (stop) {
+                        InventoryRefreshStop.EXHAUSTED -> MR.strings.tsuzuki_inventory_refresh_exhausted
+                        InventoryRefreshStop.PARTIAL -> MR.strings.tsuzuki_inventory_refresh_partial
+                        InventoryRefreshStop.FAILED -> MR.strings.tsuzuki_inventory_refresh_failed
+                        InventoryRefreshStop.NO_VERIFIED_WORK -> MR.strings.tsuzuki_inventory_refresh_unlinked
+                        InventoryRefreshStop.DISABLED -> MR.strings.tsuzuki_inventory_refresh_disabled
+                    },
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+        }
         if (snapshot.sources.isEmpty()) {
             Text(
                 stringResource(MR.strings.tsuzuki_inventory_unknown),

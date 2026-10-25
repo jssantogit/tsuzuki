@@ -2,7 +2,11 @@ package eu.kanade.tachiyomi.ui.tsuzuki.detail
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,6 +24,8 @@ import eu.kanade.presentation.tsuzuki.detail.CanonicalTitleDetailScreen
 import eu.kanade.presentation.tsuzuki.detail.canonicalDetailsProviderLabels
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkScreenModel
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkState
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentSelectorScreenModel
@@ -48,6 +54,9 @@ data class CanonicalTitleScreen(
         )
 
         val screenModel = metroViewModel<CanonicalTitleScreenModel>()
+        val inventoryModel = metroViewModel<NativeInventoryRefreshScreenModel>()
+        val inventoryState by inventoryModel.state.collectAsStateWithLifecycle()
+        var requestedInventorySource by rememberSaveable(canonicalTitleId) { mutableStateOf<String?>(null) }
         val contentSelectorViewModel = metroViewModel<ContentSelectorScreenModel>()
         val linkViewModel = metroViewModel<ContentBindingLinkScreenModel>()
         val linkState by linkViewModel.state.collectAsStateWithLifecycle()
@@ -67,6 +76,7 @@ data class CanonicalTitleScreen(
 
         LaunchedEffect(canonicalTitleId, openSourceBindingFlow) {
             screenModel.start(canonicalTitleId)
+            inventoryModel.start(canonicalTitleId)
             if (
                 shouldAutoOpenSourceBindingFlow(
                     canonicalTitleId,
@@ -80,6 +90,13 @@ data class CanonicalTitleScreen(
             }
         }
 
+        DisposableEffect(canonicalTitleId) {
+            onDispose { inventoryModel.cancel() }
+        }
+        LaunchedEffect(canonicalTitleId, inventoryState.revision) {
+            if (inventoryState.revision > 0) screenModel.reloadReconciledChapters()?.join()
+        }
+
         CanonicalTitleDetailScreen(
             state = state,
             navigateUp = navigateUp,
@@ -87,6 +104,8 @@ data class CanonicalTitleScreen(
             onAddToLibrary = { screenModel.addToLibrary() },
             onRemoveFromLibrary = { screenModel.removeFromLibrary() },
             onOpenProvidersSettings = openProviders,
+            onFetchInventory = { source -> requestedInventorySource = source },
+            inventoryRefresh = inventoryState,
             onReadTitle = { screenModel.startReading(openReader) },
             onBaixarChapter = { canonicalChapterId ->
                 screenModel.requestDownload(canonicalChapterId)
@@ -95,6 +114,27 @@ data class CanonicalTitleScreen(
                 screenModel.openChapter(canonicalChapterId, openReader)
             },
         )
+
+        requestedInventorySource?.let { source ->
+            AlertDialog(
+                onDismissRequest = { requestedInventorySource = null },
+                title = { Text(stringResource(MR.strings.tsuzuki_inventory_confirm_title)) },
+                text = { Text(stringResource(MR.strings.tsuzuki_inventory_confirm_description)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            requestedInventorySource = null
+                            inventoryModel.refresh(canonicalTitleId, source)
+                        },
+                    ) { Text(stringResource(MR.strings.tsuzuki_inventory_confirm_collect)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { requestedInventorySource = null }) {
+                        Text(stringResource(MR.strings.tsuzuki_inventory_confirm_cancel))
+                    }
+                },
+            )
+        }
 
         LaunchedEffect(linkViewModel, canonicalTitleId) {
             linkViewModel.bindingUpdates.collect { request ->
