@@ -23,8 +23,7 @@ class MangaDexWorkLinkInventoryIntegrationTest {
     private val mangaDexId = "12345678-1234-1234-1234-123456789abc"
 
     @Test
-    fun `manual verified work link permits release inventory without reading providers or chapter promotion`() =
-        runTest {
+    fun `verified MangaDex link enables shadow refresh without reading providers`() = runTest {
         val identities = mutableListOf(ExternalIdentity("title", "mangaupdates", "8675309", true, 1L))
         val titles = mockk<CanonicalTitleRepository>()
         coEvery { titles.getExternalIdentities("title") } coAnswers { identities.toList() }
