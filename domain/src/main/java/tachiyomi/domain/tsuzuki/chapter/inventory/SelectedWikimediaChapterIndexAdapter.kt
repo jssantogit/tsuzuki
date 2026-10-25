@@ -35,7 +35,7 @@ object SelectedWikimediaChapterIndexAdapter {
     private val chapterNumber = Regex("^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$")
     private val chapterRange = Regex("^[0-9]+(?:\\.[0-9]+)?\\s*[-–—]\\s*[0-9]+(?:\\.[0-9]+)?$")
     private val specialChapter = Regex("(?i)^(?:special chapter|bonus chapter)(?:\\b|[:#-])")
-    private val internalTarget = Regex("^[\\p{L}\\p{N}_ .,:;()'!+\\-]+$")
+    private val internalTarget = Regex("^[\\p{L}\\p{N}_ .,:;()'!+–—\\-]+$")
 
     fun adapt(selected: SelectedWikimediaRevision): Result<InventoryEvidenceBatch> = try {
         Result.success(adaptSelected(selected))
@@ -82,7 +82,7 @@ object SelectedWikimediaChapterIndexAdapter {
             claims = units.map { unit ->
                 InventoryClaim(
                     sourceRecordId =
-                        "wikimedia:${selected.selectedPageId}:${selected.selectedRevisionId}:${unit.target}",
+                    "wikimedia:${selected.selectedPageId}:${selected.selectedRevisionId}:${unit.target}",
                     label = unit.label,
                     volumeLabel = null,
                     language = selected.scope.language,
