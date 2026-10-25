@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
+import eu.kanade.presentation.util.relativeTimeSpanString
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalChapterDetailItem
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreenState
 import kotlinx.coroutines.launch
@@ -69,6 +70,7 @@ import mihon.icons.materialsymbols.automirroredrounded.ArrowBack
 import mihon.icons.materialsymbols.automirroredrounded.Sort
 import mihon.icons.materialsymbols.rounded.MoreVert
 import mihon.icons.materialsymbols.rounded.Search
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
 import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -373,6 +375,11 @@ private fun IndependentInventoryInfo(snapshot: IndependentInventorySnapshot) {
             style = MaterialTheme.typography.labelLarge,
             color = colors.foreground,
         )
+        Text(
+            stringResource(MR.strings.tsuzuki_inventory_offline_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.secondary,
+        )
         if (snapshot.sources.isEmpty()) {
             Text(
                 stringResource(MR.strings.tsuzuki_inventory_unknown),
@@ -393,13 +400,76 @@ private fun IndependentInventoryInfo(snapshot: IndependentInventorySnapshot) {
                 else -> source.scope.producerId
             }
             Text(providerName, style = MaterialTheme.typography.labelMedium, color = colors.foreground)
-            if (!source.scope.editionIdentityVerified) {
+            val editionKey = source.scope.editionKey?.takeIf(String::isNotBlank)
+            Text(
+                stringResource(
+                    MR.strings.tsuzuki_inventory_scope,
+                    source.scope.externalWorkId,
+                    editionKey?.let {
+                        stringResource(
+                            MR.strings.tsuzuki_inventory_edition_scope_value,
+                            it,
+                            stringResource(
+                                if (source.scope.editionIdentityVerified) {
+                                    MR.strings.tsuzuki_inventory_edition_verified
+                                } else {
+                                    MR.strings.tsuzuki_inventory_edition_unverified
+                                },
+                            ),
+                        )
+                    } ?: stringResource(MR.strings.tsuzuki_inventory_edition_unrecorded),
+                    source.scope.language?.takeIf(String::isNotBlank)
+                        ?: stringResource(MR.strings.tsuzuki_inventory_language_unrecorded),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+            val latestAttempt = source.latestAttemptOutcomes
+                .sortedBy { it.name }
+                .map { outcome ->
+                    stringResource(
+                        when (outcome) {
+                            InventoryFetchOutcome.PARTIAL -> MR.strings.tsuzuki_inventory_outcome_partial
+                            InventoryFetchOutcome.EXHAUSTED -> MR.strings.tsuzuki_inventory_outcome_exhausted
+                            InventoryFetchOutcome.FAILED -> MR.strings.tsuzuki_inventory_outcome_failed
+                            InventoryFetchOutcome.NOT_ATTEMPTED -> MR.strings.tsuzuki_inventory_outcome_not_attempted
+                        },
+                    )
+                }
+                .ifEmpty {
+                    listOf(
+                        stringResource(
+                            if (source.latestAttemptAt == null) {
+                                MR.strings.tsuzuki_inventory_no_attempt
+                            } else {
+                                MR.strings.tsuzuki_inventory_outcome_unrecorded
+                            },
+                        ),
+                    )
+                }
+                .joinToString("; ")
+            if (source.latestAttemptAt == null && source.latestAttemptOutcomes.isEmpty()) {
+                Text(latestAttempt, style = MaterialTheme.typography.bodySmall, color = colors.secondary)
+            } else {
+                val attemptTime = source.latestAttemptAt?.let { relativeTimeSpanString(it) }
+                    ?: stringResource(MR.strings.tsuzuki_inventory_time_unrecorded)
                 Text(
-                    stringResource(MR.strings.tsuzuki_inventory_edition_unknown),
+                    stringResource(MR.strings.tsuzuki_inventory_latest_attempt, latestAttempt, attemptTime),
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.secondary,
                 )
             }
+            val successfulFetchTime = source.latestSuccessfulFetchAt?.let { relativeTimeSpanString(it) }
+            val claimObservationTime = source.latestClaimObservedAt?.let { relativeTimeSpanString(it) }
+            Text(
+                stringResource(
+                    MR.strings.tsuzuki_inventory_success_and_claim_times,
+                    successfulFetchTime ?: stringResource(MR.strings.tsuzuki_inventory_no_successful_fetch),
+                    claimObservationTime ?: stringResource(MR.strings.tsuzuki_inventory_no_claim_observation),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
             if (source.knownIndividualClaims > 0) {
                 Text(
                     "${source.knownIndividualClaims} " + stringResource(MR.strings.tsuzuki_inventory_individual),
