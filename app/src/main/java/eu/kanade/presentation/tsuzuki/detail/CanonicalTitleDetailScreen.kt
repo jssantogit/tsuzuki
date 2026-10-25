@@ -239,11 +239,11 @@ private fun LoadedDetails(
                             }
                         }
                         IndependentInventoryInfo(
-                                state.independentInventory,
-                                inventoryRefresh,
-                                onFetchInventory,
-                                onLinkMangaDex,
-                            )
+                            state.independentInventory,
+                            inventoryRefresh,
+                            onFetchInventory,
+                            onLinkMangaDex,
+                        )
                     }
                     if (chapters.isEmpty()) {
                         item(key = "empty-chapters") {
