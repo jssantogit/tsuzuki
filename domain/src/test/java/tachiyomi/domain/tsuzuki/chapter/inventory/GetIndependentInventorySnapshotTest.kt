@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 
 class GetIndependentInventorySnapshotTest {
     @Test
-    fun `community and local table of contents remain individually observed candidates not editorial chapters`() = runTest {
+    fun `community and local index candidates never count as editorial chapters`() = runTest {
         val ledger = FakeLedger()
         val wikipedia = scope("wikimedia", "japanese-original")
         val local = scope("local-toc", "translated-edition")
