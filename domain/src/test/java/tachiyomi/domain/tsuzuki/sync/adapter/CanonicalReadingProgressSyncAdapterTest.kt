@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.chapter.interactor.inferredChapterId
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
@@ -66,6 +67,42 @@ class CanonicalReadingProgressSyncAdapterTest {
             updatedAt = 100,
         )
         readingB.getProgress(chapterA.id) shouldBe null
+    }
+
+    @Test
+    fun `v1 export retains old count ID progress after canonical-title convergence`() = runTest {
+        val legacy = chapter(inferredChapterId("historic-title", 37)).copy(
+            baseNumber = 37,
+            displayNumber = "37",
+        )
+        val source = FakeReadingRepository().apply {
+            upsertProgress(
+                CanonicalChapterProgress(
+                    canonicalChapterId = legacy.id,
+                    read = false,
+                    lastPageRead = 8,
+                    updatedAt = 40,
+                ),
+            )
+        }
+        val export = adapter(
+            FakeChapterRepository(listOf(legacy), emptyList()),
+            source,
+        ).exportDocument()
+
+        export.schemaVersion shouldBe 1
+        export.records.size shouldBe 1
+        export.records.values.single().fields["canonicalTitleId"] shouldBe JsonPrimitive("title-1")
+
+        val anotherDeviceChapter = legacy.copy(id = "device-b-chapter-37")
+        val restored = FakeReadingRepository()
+        adapter(
+            FakeChapterRepository(listOf(anotherDeviceChapter), emptyList()),
+            restored,
+        ).applyDocument(export)
+
+        restored.getProgress(anotherDeviceChapter.id)?.lastPageRead shouldBe 8
+        restored.getProgress(legacy.id) shouldBe null
     }
 
     @Test
