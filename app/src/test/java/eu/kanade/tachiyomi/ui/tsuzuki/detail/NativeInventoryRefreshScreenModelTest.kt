@@ -45,8 +45,8 @@ class NativeInventoryRefreshScreenModelTest {
     fun `a preview alone does not save an identity and explicit confirmation advances the read revision`() =
         runTest(dispatcher) {
             val linker = mockk<MangaDexVerifiedWorkLinker>()
-            coEvery { linker.preview("title", uuid) } returns Result.success(candidate)
-            coEvery { linker.confirm("title", candidate) } returns Result.success(Unit)
+            coEvery { linker.preview("title", uuid, any()) } returns Result.success(candidate)
+            coEvery { linker.confirm("title", candidate, any()) } returns Result.success(Unit)
             val model = model(linker)
             model.start("title")
 
@@ -54,14 +54,14 @@ class NativeInventoryRefreshScreenModelTest {
             advanceUntilIdle()
             model.state.value.linkCandidate shouldBe candidate
             model.state.value.revision shouldBe 0
-            coVerify(exactly = 0) { linker.confirm(any(), any()) }
+            coVerify(exactly = 0) { linker.confirm(any(), any(), any()) }
 
             model.confirmMangaDexLink("title")
             advanceUntilIdle()
             model.state.value.linkCompleted shouldBe true
             model.state.value.linkCandidate shouldBe null
             model.state.value.revision shouldBe 1
-            coVerify(exactly = 1) { linker.confirm("title", candidate) }
+            coVerify(exactly = 1) { linker.confirm("title", candidate, any()) }
         }
 
     @Test
@@ -69,7 +69,7 @@ class NativeInventoryRefreshScreenModelTest {
         runTest(dispatcher) {
             val linker = mockk<MangaDexVerifiedWorkLinker>()
             val response = CompletableDeferred<Result<MangaDexVerifiedCandidate>>()
-            coEvery { linker.preview("title", uuid) } coAnswers { response.await() }
+            coEvery { linker.preview("title", uuid, any()) } coAnswers { response.await() }
             val model = model(linker)
             model.start("title")
             model.previewMangaDexLink("title", uuid)
@@ -81,15 +81,15 @@ class NativeInventoryRefreshScreenModelTest {
 
             model.state.value.linkCandidate shouldBe null
             model.confirmMangaDexLink("title") shouldBe null
-            coVerify(exactly = 0) { linker.confirm(any(), any()) }
+            coVerify(exactly = 0) { linker.confirm(any(), any(), any()) }
         }
 
     @Test
     fun `failed identity confirmation preserves the candidate but does not fake a successful link`() =
         runTest(dispatcher) {
             val linker = mockk<MangaDexVerifiedWorkLinker>()
-            coEvery { linker.preview("title", uuid) } returns Result.success(candidate)
-            coEvery { linker.confirm("title", candidate) } returns
+            coEvery { linker.preview("title", uuid, any()) } returns Result.success(candidate)
+            coEvery { linker.confirm("title", candidate, any()) } returns
                 Result.failure(IllegalStateException("crosswalk revoked"))
             val model = model(linker)
             model.start("title")
@@ -159,13 +159,13 @@ class NativeInventoryRefreshScreenModelTest {
 
         model.previewMangaDexLink("title", uuid) shouldBe null
         model.state.value.linkFailed shouldBe true
-        coVerify(exactly = 0) { linker.preview(any(), any()) }
+        coVerify(exactly = 0) { linker.preview(any(), any(), any()) }
     }
 
     @Test
     fun `revoking the inventory integration blocks MangaDex work confirmation`() = runTest(dispatcher) {
         val linker = mockk<MangaDexVerifiedWorkLinker>()
-        coEvery { linker.preview("title", uuid) } returns Result.success(candidate)
+        coEvery { linker.preview("title", uuid, any()) } returns Result.success(candidate)
         val registry = activeInventoryRegistry()
         val producer = allowedMangaDexProducer()
         var enabled = true
@@ -181,14 +181,16 @@ class NativeInventoryRefreshScreenModelTest {
 
         enabled = false
         model.confirmMangaDexLink("title") shouldBe null
-        coVerify(exactly = 0) { linker.confirm(any(), any()) }
+        coVerify(exactly = 0) { linker.confirm(any(), any(), any()) }
     }
 
     @Test
-    fun `revoking the inventory integration while MangaDex preview is in flight discards the response`() = runTest(dispatcher) {
+    fun `revoking the inventory integration while MangaDex preview is in flight discards the response`() = runTest(
+        dispatcher,
+    ) {
         val linker = mockk<MangaDexVerifiedWorkLinker>()
         val response = CompletableDeferred<Result<MangaDexVerifiedCandidate>>()
-        coEvery { linker.preview("title", uuid) } coAnswers { response.await() }
+        coEvery { linker.preview("title", uuid, any()) } coAnswers { response.await() }
         val registry = activeInventoryRegistry()
         val producer = allowedMangaDexProducer()
         var enabled = true
@@ -210,10 +212,12 @@ class NativeInventoryRefreshScreenModelTest {
     }
 
     @Test
-    fun `changing inventory fingerprint while MangaDex preview is in flight discards the response`() = runTest(dispatcher) {
+    fun `changing inventory fingerprint while MangaDex preview is in flight discards the response`() = runTest(
+        dispatcher,
+    ) {
         val linker = mockk<MangaDexVerifiedWorkLinker>()
         val response = CompletableDeferred<Result<MangaDexVerifiedCandidate>>()
-        coEvery { linker.preview("title", uuid) } coAnswers { response.await() }
+        coEvery { linker.preview("title", uuid, any()) } coAnswers { response.await() }
         val registry = activeInventoryRegistry()
         var fingerprint = "original"
         every { registry.configurationFingerprint() } answers { fingerprint }
@@ -231,11 +235,13 @@ class NativeInventoryRefreshScreenModelTest {
     }
 
     @Test
-    fun `revoking the inventory integration while MangaDex confirmation is in flight discards the success`() = runTest(dispatcher) {
+    fun `revoking the inventory integration while MangaDex confirmation is in flight discards the success`() = runTest(
+        dispatcher,
+    ) {
         val linker = mockk<MangaDexVerifiedWorkLinker>()
-        coEvery { linker.preview("title", uuid) } returns Result.success(candidate)
+        coEvery { linker.preview("title", uuid, any()) } returns Result.success(candidate)
         val response = CompletableDeferred<Result<Unit>>()
-        coEvery { linker.confirm("title", candidate) } coAnswers { response.await() }
+        coEvery { linker.confirm("title", candidate, any()) } coAnswers { response.await() }
         val registry = activeInventoryRegistry()
         val producer = allowedMangaDexProducer()
         var enabled = true
@@ -259,9 +265,11 @@ class NativeInventoryRefreshScreenModelTest {
     }
 
     @Test
-    fun `changing inventory fingerprint after preview prevents MangaDex confirmation`() = runTest(dispatcher) {
+    fun `changing inventory fingerprint after preview prevents MangaDex confirmation`() = runTest(
+        dispatcher,
+    ) {
         val linker = mockk<MangaDexVerifiedWorkLinker>()
-        coEvery { linker.preview("title", uuid) } returns Result.success(candidate)
+        coEvery { linker.preview("title", uuid, any()) } returns Result.success(candidate)
         val registry = activeInventoryRegistry()
         var fingerprint = "original"
         every { registry.configurationFingerprint() } answers { fingerprint }
@@ -275,14 +283,16 @@ class NativeInventoryRefreshScreenModelTest {
 
         model.state.value.linkCandidate shouldBe null
         model.state.value.linkFailed shouldBe true
-        coVerify(exactly = 0) { linker.confirm(any(), any()) }
+        coVerify(exactly = 0) { linker.confirm(any(), any(), any()) }
     }
 
     @Test
-    fun `cancelling an in flight MangaDex preview discards its late response`() = runTest(dispatcher) {
+    fun `cancelling an in flight MangaDex preview discards its late response`() = runTest(
+        dispatcher,
+    ) {
         val linker = mockk<MangaDexVerifiedWorkLinker>()
         val response = CompletableDeferred<Result<MangaDexVerifiedCandidate>>()
-        coEvery { linker.preview("title", uuid) } coAnswers { response.await() }
+        coEvery { linker.preview("title", uuid, any()) } coAnswers { response.await() }
         val model = model(linker)
         model.start("title")
 
@@ -295,6 +305,80 @@ class NativeInventoryRefreshScreenModelTest {
         model.state.value.linkCandidate shouldBe null
         model.state.value.linkCompleted shouldBe false
         model.state.value.linking shouldBe false
+    }
+
+    @Test
+    fun `cancelling after a completed MangaDex preview blocks confirmation`() = runTest(dispatcher) {
+        val linker = mockk<MangaDexVerifiedWorkLinker>()
+        coEvery { linker.preview("title", uuid, any()) } returns Result.success(candidate)
+        coEvery { linker.confirm("title", candidate, any()) } returns Result.success(Unit)
+        val model = model(linker)
+        model.start("title")
+        model.previewMangaDexLink("title", uuid)
+        advanceUntilIdle()
+
+        model.cancel()
+
+        model.state.value.linkCandidate shouldBe null
+        model.confirmMangaDexLink("title") shouldBe null
+        coVerify(exactly = 0) { linker.confirm(any(), any(), any()) }
+    }
+
+    @Test
+    fun `cancellation invalidates an in flight MangaDex confirmation permission`() = runTest(
+        dispatcher,
+    ) {
+        val linker = mockk<MangaDexVerifiedWorkLinker>()
+        coEvery { linker.preview("title", uuid, any()) } returns Result.success(candidate)
+        val response = CompletableDeferred<Result<Unit>>()
+        var isEnabled: (() -> Boolean)? = null
+        coEvery { linker.confirm("title", candidate, any()) } coAnswers {
+            isEnabled = thirdArg()
+            response.await()
+        }
+        val model = model(linker)
+        model.start("title")
+        model.previewMangaDexLink("title", uuid)
+        advanceUntilIdle()
+
+        model.confirmMangaDexLink("title")
+        runCurrent()
+        isEnabled?.invoke() shouldBe true
+
+        model.cancel()
+        isEnabled?.invoke() shouldBe false
+        response.complete(Result.success(Unit))
+        advanceUntilIdle()
+
+        model.state.value.linkCandidate shouldBe null
+        model.state.value.linkCompleted shouldBe false
+        model.state.value.revision shouldBe 0
+    }
+
+    @Test
+    fun `switching away and back invalidates an older MangaDex permission callback`() = runTest(
+        dispatcher,
+    ) {
+        val linker = mockk<MangaDexVerifiedWorkLinker>()
+        val response = CompletableDeferred<Result<MangaDexVerifiedCandidate>>()
+        var isEnabled: (() -> Boolean)? = null
+        coEvery { linker.preview("title", uuid, any()) } coAnswers {
+            isEnabled = thirdArg()
+            response.await()
+        }
+        val model = model(linker)
+        model.start("title")
+        model.previewMangaDexLink("title", uuid)
+        runCurrent()
+        isEnabled?.invoke() shouldBe true
+
+        model.start("different-title")
+        model.start("title")
+
+        isEnabled?.invoke() shouldBe false
+        response.complete(Result.success(candidate))
+        advanceUntilIdle()
+        model.state.value.linkCandidate shouldBe null
     }
 
     private fun allowedMangaDexProducer(): IndependentInventoryProducer =

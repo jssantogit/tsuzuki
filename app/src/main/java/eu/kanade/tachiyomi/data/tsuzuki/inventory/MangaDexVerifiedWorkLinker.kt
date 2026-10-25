@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.data.tsuzuki.inventory
 
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -29,19 +31,36 @@ class MangaDexVerifiedWorkLinker(
     private val titles: CanonicalTitleRepository,
     private val transport: InventoryReleaseTransport,
 ) {
-    suspend fun preview(canonicalTitleId: String, mangaDexId: String): Result<MangaDexVerifiedCandidate> =
-        previewWithCachePolicy(canonicalTitleId, mangaDexId, forceNetwork = false)
+    suspend fun preview(
+        canonicalTitleId: String,
+        mangaDexId: String,
+        isEnabled: () -> Boolean,
+    ): Result<MangaDexVerifiedCandidate> = previewWithCachePolicy(
+        canonicalTitleId = canonicalTitleId,
+        mangaDexId = mangaDexId,
+        forceNetwork = false,
+        isEnabled = isEnabled,
+    )
 
     private suspend fun previewWithCachePolicy(
         canonicalTitleId: String,
         mangaDexId: String,
         forceNetwork: Boolean,
+        isEnabled: () -> Boolean,
     ): Result<MangaDexVerifiedCandidate> =
         capture {
+            currentCoroutineContext().ensureActive()
+            check(isEnabled()) { "Inventory integration is disabled" }
             require(canonicalTitleId.isNotBlank())
             require(mangaDexId.matches(MANGADEX_WORK_UUID_REGEX)) { "Invalid MangaDex manga UUID" }
             val url = "https://api.mangadex.org/manga/$mangaDexId"
-            val payload = if (forceNetwork) transport.fetchFresh(url, null) else transport.fetch(url, null)
+            val payload = if (forceNetwork) {
+                transport.fetchFreshAuthorized(url, null, isEnabled)
+            } else {
+                transport.fetchAuthorized(url, null, isEnabled)
+            }
+            currentCoroutineContext().ensureActive()
+            check(isEnabled()) { "Inventory integration was disabled during the request" }
             val response = Json.parseToJsonElement(payload.content) as? JsonObject
                 ?: error("MangaDex work response is not an object")
             require(response.string("result") == "ok")
@@ -56,8 +75,10 @@ class MangaDexVerifiedWorkLinker(
                     (it as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
                 } ?: error("MangaDex work has no display title")
             val links = attributes.objectField("links")
-            val verified = titles.getExternalIdentities(canonicalTitleId)
-                .filter { it.verified && it.canonicalTitleId == canonicalTitleId }
+            val identities = titles.getExternalIdentities(canonicalTitleId)
+            currentCoroutineContext().ensureActive()
+            check(isEnabled()) { "Inventory integration was disabled during verification" }
+            val verified = identities.filter { it.verified && it.canonicalTitleId == canonicalTitleId }
             val matching = CROSSWALK_KEYS.mapNotNull { (mangaDexKey, tsuzukiProducer) ->
                 val claimedExternal = links.string(mangaDexKey) ?: return@mapNotNull null
                 val existing = verified.filter { it.provider == tsuzukiProducer }
@@ -69,6 +90,7 @@ class MangaDexVerifiedWorkLinker(
             require(matching.isNotEmpty()) {
                 "No independently verified MangaDex external-work cross-reference"
             }
+            check(isEnabled()) { "Inventory integration was disabled during verification" }
             val selected = matching.first()
             MangaDexVerifiedCandidate(
                 mangaDexId = mangaDexId,
@@ -82,18 +104,27 @@ class MangaDexVerifiedWorkLinker(
      * Preview is not a bearer token. Revalidate the exact remote work, verified
      * crosswalk and local ownership after the user explicitly confirms linking.
      */
-    suspend fun confirm(canonicalTitleId: String, candidate: MangaDexVerifiedCandidate): Result<Unit> =
+    suspend fun confirm(
+        canonicalTitleId: String,
+        candidate: MangaDexVerifiedCandidate,
+        isEnabled: () -> Boolean,
+    ): Result<Unit> =
         capture {
+            currentCoroutineContext().ensureActive()
+            check(isEnabled()) { "Inventory integration is disabled" }
             require(canonicalTitleId.isNotBlank())
             require(
                 previewWithCachePolicy(
-                    canonicalTitleId,
-                    candidate.mangaDexId,
+                    canonicalTitleId = canonicalTitleId,
+                    mangaDexId = candidate.mangaDexId,
                     forceNetwork = true,
+                    isEnabled = isEnabled,
                 ).getOrThrow() == candidate,
             ) { "MangaDex work crosswalk changed before confirmation" }
-            val linked = titles.getExternalIdentities(canonicalTitleId)
-                .filter { it.provider == "mangadex" }
+            val identities = titles.getExternalIdentities(canonicalTitleId)
+            currentCoroutineContext().ensureActive()
+            check(isEnabled()) { "Inventory integration was disabled during confirmation" }
+            val linked = identities.filter { it.provider == "mangadex" }
             require(
                 linked.isEmpty() || linked.all {
                     it.externalId == candidate.mangaDexId && it.verified
@@ -101,10 +132,25 @@ class MangaDexVerifiedWorkLinker(
             ) { "An incompatible MangaDex work is already linked to this canonical title" }
 
             val owner = titles.getByExternalIdentity("mangadex", candidate.mangaDexId)
+            currentCoroutineContext().ensureActive()
+            check(isEnabled()) { "Inventory integration was disabled during confirmation" }
             require(owner == null || owner.id == canonicalTitleId) {
                 "MangaDex work already belongs to another canonical title"
             }
+            val verifiedCrosswalks = titles.getExternalIdentities(canonicalTitleId)
+            currentCoroutineContext().ensureActive()
+            check(isEnabled()) { "Inventory integration was disabled before confirmation" }
+            require(
+                verifiedCrosswalks.any {
+                    it.canonicalTitleId == canonicalTitleId &&
+                        it.provider == candidate.matchedProvider &&
+                        it.externalId == candidate.matchedExternalId &&
+                        it.verified
+                },
+            ) { "MangaDex crosswalk changed before confirmation" }
             if (linked.isEmpty() && owner == null) {
+                currentCoroutineContext().ensureActive()
+                check(isEnabled()) { "Inventory integration was disabled before confirmation" }
                 titles.addExternalIdentity(
                     ExternalIdentity(
                         canonicalTitleId = canonicalTitleId,

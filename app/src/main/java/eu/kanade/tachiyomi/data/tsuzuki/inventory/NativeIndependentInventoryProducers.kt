@@ -11,7 +11,9 @@ import eu.kanade.tachiyomi.network.await
 import eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -61,6 +63,30 @@ interface InventoryReleaseTransport {
 
     /** Confirmed identity writes require an actual network revalidation, never cached evidence. */
     suspend fun fetchFresh(url: String, postBody: String?): InventoryHttpPayload
+
+    /** Guard an explicitly authorized read before and after transport access. */
+    suspend fun fetchAuthorized(
+        url: String,
+        postBody: String?,
+        isEnabled: () -> Boolean,
+    ): InventoryHttpPayload {
+        check(isEnabled()) { "Inventory integration is disabled" }
+        return fetch(url, postBody).also {
+            check(isEnabled()) { "Inventory integration was disabled during the request" }
+        }
+    }
+
+    /** Guard a fresh read before and after transport access. */
+    suspend fun fetchFreshAuthorized(
+        url: String,
+        postBody: String?,
+        isEnabled: () -> Boolean,
+    ): InventoryHttpPayload {
+        check(isEnabled()) { "Inventory integration is disabled" }
+        return fetchFresh(url, postBody).also {
+            check(isEnabled()) { "Inventory integration was disabled during the request" }
+        }
+    }
 }
 
 @Inject
@@ -91,11 +117,40 @@ class NativeInventoryReleaseTransport(
     override suspend fun fetchFresh(url: String, postBody: String?): InventoryHttpPayload =
         fetchWithCachePolicy(url, postBody, forceNetwork = true)
 
+    override suspend fun fetchAuthorized(
+        url: String,
+        postBody: String?,
+        isEnabled: () -> Boolean,
+    ): InventoryHttpPayload = fetchWithCachePolicy(
+        url,
+        postBody,
+        forceNetwork = false,
+        isEnabled = isEnabled,
+    )
+
+    override suspend fun fetchFreshAuthorized(
+        url: String,
+        postBody: String?,
+        isEnabled: () -> Boolean,
+    ): InventoryHttpPayload = fetchWithCachePolicy(
+        url,
+        postBody,
+        forceNetwork = true,
+        isEnabled = isEnabled,
+    )
+
     private suspend fun fetchWithCachePolicy(
         url: String,
         postBody: String?,
         forceNetwork: Boolean,
+        isEnabled: (() -> Boolean)? = null,
     ): InventoryHttpPayload = mutex.withLock {
+        fun checkEnabled() {
+            check(isEnabled?.invoke() != false) { "Inventory integration is disabled" }
+        }
+
+        currentCoroutineContext().ensureActive()
+        checkEnabled()
         val parsed = url.toHttpUrlOrFail()
         val allowMu = parsed.host == "api.mangaupdates.com" &&
             parsed.encodedPath == "/v1/releases/search" && postBody != null
@@ -123,13 +178,18 @@ class NativeInventoryReleaseTransport(
         }
         val key = url + "\n" + postBody.orEmpty()
         if (!forceNetwork) {
-            cache[key]?.takeIf { now - it.first in 0 until CACHE_TTL_NANOS }?.let { return@withLock it.second }
+            cache[key]?.takeIf { now - it.first in 0 until CACHE_TTL_NANOS }?.let {
+                checkEnabled()
+                return@withLock it.second
+            }
         }
 
         if (lastRequestAtNanos != 0L) {
             val elapsed = (now - lastRequestAtNanos) / 1_000_000L
             if (elapsed < MIN_REQUEST_SPACING_MS) delay(MIN_REQUEST_SPACING_MS - elapsed)
         }
+        currentCoroutineContext().ensureActive()
+        checkEnabled()
         lastRequestAtNanos = System.nanoTime()
 
         val request = Request.Builder()
@@ -146,6 +206,8 @@ class NativeInventoryReleaseTransport(
             .build()
         val response = metadataClient.newCall(request).await()
         response.use {
+            currentCoroutineContext().ensureActive()
+            checkEnabled()
             when (it.code) {
                 403 -> blockedUntilByHost[parsed.host] = Long.MAX_VALUE
                 429 -> {
@@ -179,6 +241,8 @@ class NativeInventoryReleaseTransport(
                 content = bytes,
                 observedAt = Clock.System.now().toEpochMilliseconds(),
             )
+            currentCoroutineContext().ensureActive()
+            checkEnabled()
             if (cache.size >= MAX_CACHE_ENTRIES) cache.remove(cache.keys.first())
             cache[key] = System.nanoTime() to payload
             payload

@@ -11,6 +11,8 @@ import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaDexVerifiedCandidate
 import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaDexVerifiedWorkLinker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,18 +44,27 @@ class NativeInventoryRefreshScreenModel(
     private val mangaDexWorkLinker: MangaDexVerifiedWorkLinker,
     private val integrationRegistry: IntegrationRegistry,
 ) : ViewModel() {
+    private data class MangaDexPermissionSnapshot(
+        val titleId: String,
+        val configurationFingerprint: String,
+    )
+
     private val mutableState = MutableStateFlow(NativeInventoryRefreshState())
     val state: StateFlow<NativeInventoryRefreshState> = mutableState.asStateFlow()
 
     private var activeTitleId: String? = null
     private var operation: Job? = null
     private var linkOperation: Job? = null
+    private var linkOperationGeneration = 0L
+    private var linkPermissionSnapshot: MangaDexPermissionSnapshot? = null
 
     fun start(titleId: String) {
         if (activeTitleId == titleId) return
+        invalidateLinkOperation()
         operation?.cancel()
         linkOperation?.cancel()
         activeTitleId = titleId
+        linkPermissionSnapshot = null
         mutableState.value = NativeInventoryRefreshState()
     }
 
@@ -114,6 +125,12 @@ class NativeInventoryRefreshScreenModel(
     /** Preview is an explicit remote read and never persists an unverified title. */
     fun previewMangaDexLink(titleId: String, mangaDexId: String): Job? {
         if (titleId != activeTitleId || linkOperation?.isActive == true || mutableState.value.refreshing) return null
+        val permission = captureMangaDexPermission(titleId)
+        if (permission == null) {
+            rejectMangaDexLink()
+            return null
+        }
+        val operationGeneration = nextLinkOperationGeneration()
         linkOperation = viewModelScope.launch {
             mutableState.value = mutableState.value.copy(
                 linking = true,
@@ -122,17 +139,27 @@ class NativeInventoryRefreshScreenModel(
                 linkCompleted = false,
             )
             val result = try {
-                mangaDexWorkLinker.preview(titleId, mangaDexId.trim())
+                mangaDexWorkLinker.preview(titleId, mangaDexId.trim()) {
+                    isMangaDexPermissionCurrent(permission, operationGeneration)
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 Result.failure(IllegalStateException("MangaDex work verification failed"))
             }
+            currentCoroutineContext().ensureActive()
+            val authorized = isMangaDexPermissionCurrent(permission, operationGeneration)
+            val acceptedResult = if (authorized) {
+                result
+            } else {
+                Result.failure(IllegalStateException("Inventory integration is no longer enabled"))
+            }
             if (activeTitleId == titleId) {
+                linkPermissionSnapshot = permission.takeIf { authorized && acceptedResult.isSuccess }
                 mutableState.value = mutableState.value.copy(
                     linking = false,
-                    linkCandidate = result.getOrNull(),
-                    linkFailed = result.isFailure,
+                    linkCandidate = acceptedResult.getOrNull(),
+                    linkFailed = acceptedResult.isFailure,
                 )
             }
         }
@@ -143,22 +170,38 @@ class NativeInventoryRefreshScreenModel(
     fun confirmMangaDexLink(titleId: String): Job? {
         if (titleId != activeTitleId || linkOperation?.isActive == true || mutableState.value.refreshing) return null
         val candidate = mutableState.value.linkCandidate ?: return null
+        val permission = linkPermissionSnapshot
+        if (permission == null || !isMangaDexPermissionCurrent(permission)) {
+            rejectMangaDexLink()
+            return null
+        }
+        val operationGeneration = nextLinkOperationGeneration()
         linkOperation = viewModelScope.launch {
             mutableState.value = mutableState.value.copy(linking = true, linkFailed = false)
             val result = try {
-                mangaDexWorkLinker.confirm(titleId, candidate)
+                mangaDexWorkLinker.confirm(titleId, candidate) {
+                    isMangaDexPermissionCurrent(permission, operationGeneration)
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 Result.failure(IllegalStateException("MangaDex work confirmation failed"))
             }
+            currentCoroutineContext().ensureActive()
+            val authorized = isMangaDexPermissionCurrent(permission, operationGeneration)
+            val acceptedResult = if (authorized) {
+                result
+            } else {
+                Result.failure(IllegalStateException("Inventory integration is no longer enabled"))
+            }
             if (activeTitleId == titleId) {
+                linkPermissionSnapshot = permission.takeIf { authorized && acceptedResult.isFailure }
                 mutableState.value = mutableState.value.copy(
                     linking = false,
-                    linkCandidate = if (result.isSuccess) null else candidate,
-                    linkFailed = result.isFailure,
-                    linkCompleted = result.isSuccess,
-                    revision = mutableState.value.revision + if (result.isSuccess) 1 else 0,
+                    linkCandidate = if (acceptedResult.isSuccess) null else candidate,
+                    linkFailed = acceptedResult.isFailure,
+                    linkCompleted = acceptedResult.isSuccess,
+                    revision = mutableState.value.revision + if (acceptedResult.isSuccess) 1 else 0,
                 )
             }
         }
@@ -166,7 +209,9 @@ class NativeInventoryRefreshScreenModel(
     }
 
     fun clearMangaDexLink() {
+        invalidateLinkOperation()
         linkOperation?.cancel()
+        linkPermissionSnapshot = null
         mutableState.value = mutableState.value.copy(
             linking = false,
             linkCandidate = null,
@@ -176,8 +221,53 @@ class NativeInventoryRefreshScreenModel(
     }
 
     fun cancel() {
+        invalidateLinkOperation()
         operation?.cancel()
         linkOperation?.cancel()
-        mutableState.value = mutableState.value.copy(refreshing = false, linking = false)
+        linkPermissionSnapshot = null
+        mutableState.value = mutableState.value.copy(
+            refreshing = false,
+            linking = false,
+            linkCandidate = null,
+            linkCompleted = false,
+        )
+    }
+
+    private fun captureMangaDexPermission(titleId: String): MangaDexPermissionSnapshot? {
+        val permission = MangaDexPermissionSnapshot(
+            titleId = titleId,
+            configurationFingerprint = integrationRegistry.configurationFingerprint(),
+        )
+        return permission.takeIf(::isMangaDexPermissionCurrent)
+    }
+
+    private fun isMangaDexPermissionCurrent(
+        permission: MangaDexPermissionSnapshot,
+        operationGeneration: Long? = null,
+    ): Boolean =
+        (operationGeneration == null || linkOperationGeneration == operationGeneration) &&
+            activeTitleId == permission.titleId &&
+            integrationRegistry.configurationFingerprint() == permission.configurationFingerprint &&
+            integrationRegistry.inventoryProducers().singleOrNull { it.producerId == MANGADEX_PRODUCER_ID } != null
+
+    private fun rejectMangaDexLink() {
+        invalidateLinkOperation()
+        linkPermissionSnapshot = null
+        mutableState.value = mutableState.value.copy(
+            linking = false,
+            linkCandidate = null,
+            linkFailed = true,
+            linkCompleted = false,
+        )
+    }
+
+    private fun nextLinkOperationGeneration(): Long = ++linkOperationGeneration
+
+    private fun invalidateLinkOperation() {
+        linkOperationGeneration++
+    }
+
+    private companion object {
+        const val MANGADEX_PRODUCER_ID = "mangadex"
     }
 }

@@ -5,7 +5,11 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
@@ -86,6 +90,50 @@ class NativeInventoryReleaseTransportTest {
         requests shouldBe 1
         cached shouldBe first
         cached.content shouldBe """{"results":[]}"""
+    }
+
+    @Test
+    fun `revoked authorization during request spacing prevents the HTTP access`() = runTest {
+        var requests = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200)
+                .message("OK").body("{}".toResponseBody()).build()
+        }.build()
+        val transport = transport(client)
+        transport.fetch(url, "first")
+
+        var enabled = true
+        val pending = async {
+            runCatching {
+                transport.fetchAuthorized(url, "second") { enabled }
+            }
+        }
+        delay(100)
+        enabled = false
+
+        pending.await().isFailure shouldBe true
+        requests shouldBe 1
+    }
+
+    @Test
+    fun `cancellation during request spacing prevents the HTTP access`() = runTest {
+        var requests = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200)
+                .message("OK").body("{}".toResponseBody()).build()
+        }.build()
+        val transport = transport(client)
+        transport.fetch(url, "first")
+
+        val pending = async {
+            transport.fetchAuthorized(url, "second") { true }
+        }
+        delay(100)
+        pending.cancelAndJoin()
+
+        requests shouldBe 1
     }
 
     @Test

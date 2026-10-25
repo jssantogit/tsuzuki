@@ -41,10 +41,10 @@ class MangaDexWorkLinkInventoryIntegrationTest {
             override suspend fun fetchFresh(url: String, postBody: String?) = InventoryHttpPayload(json, 11L)
         }
         val linker = MangaDexVerifiedWorkLinker(titles, transport)
-        val preview = linker.preview("title", mangaDexId).getOrThrow()
+        val preview = linker.preview("title", mangaDexId) { true }.getOrThrow()
 
         identities.map { it.provider } shouldBe listOf("mangaupdates")
-        linker.confirm("title", preview).isSuccess shouldBe true
+        linker.confirm("title", preview) { true }.isSuccess shouldBe true
         identities.map { it.provider } shouldBe listOf("mangaupdates", "mangadex")
 
         val saved = mutableListOf<InventoryEvidenceBatch>()
