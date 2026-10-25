@@ -33,6 +33,42 @@ import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsReposi
 @OptIn(ExperimentalCoroutinesApi::class)
 class TsuzukiIntegrationsSettingsScreenModelTest {
 
+    @Test
+    fun `inventory capability starts disabled for enabled integrations and requires a separate switch`() =
+        runTest(dispatcher) {
+            val repository = FakeIntegrationSettingsRepository()
+            val model = TsuzukiIntegrationsSettingsScreenModel(repository, registry)
+            model.setEnabled(IntegrationId("mangaupdates"), true)
+            advanceUntilIdle()
+
+            val item = model.state.value
+                .shouldBeInstanceOf<TsuzukiIntegrationsSettingsState.Loaded>()
+                .items
+                .single { it.id.value == "mangaupdates" }
+            (IntegrationCapability.CHAPTER_INVENTORY in item.configurableCapabilities) shouldBe true
+            item.capabilityEnabled[IntegrationCapability.CHAPTER_INVENTORY] shouldBe false
+
+            model.setCapabilityEnabled(
+                IntegrationId("mangaupdates"),
+                IntegrationCapability.CHAPTER_INVENTORY,
+                true,
+            )
+            advanceUntilIdle()
+
+            val updated = model.state.value
+                .shouldBeInstanceOf<TsuzukiIntegrationsSettingsState.Loaded>()
+                .items
+                .single { it.id.value == "mangaupdates" }
+            updated.capabilityEnabled[IntegrationCapability.CHAPTER_INVENTORY] shouldBe true
+
+            val mangaDex = model.state.value
+                .shouldBeInstanceOf<TsuzukiIntegrationsSettingsState.Loaded>()
+                .items
+                .single { it.id.value == "mangadex" }
+            mangaDex.enabled shouldBe false
+            mangaDex.capabilityEnabled[IntegrationCapability.CHAPTER_INVENTORY] shouldBe false
+        }
+
     private val dispatcher = StandardTestDispatcher()
     private val registry = FakeIntegrationRegistry(DefaultIntegrationManifests.all)
 
@@ -60,6 +96,7 @@ class TsuzukiIntegrationsSettingsScreenModelTest {
             "kitsu",
             "mal",
             "mangaupdates",
+            "mangadex",
             "bangumi",
             "shikimori",
             "hikka",
