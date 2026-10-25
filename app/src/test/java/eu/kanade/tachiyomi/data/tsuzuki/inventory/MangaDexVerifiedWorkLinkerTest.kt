@@ -129,6 +129,26 @@ class MangaDexVerifiedWorkLinkerTest {
     }
 
     @Test
+    fun `confirmation refuses an independently verified work link revoked after preview`() = runTest {
+        val repo = mockk<CanonicalTitleRepository>()
+        var identityReads = 0
+        coEvery { repo.getExternalIdentities("title") } coAnswers {
+            if (identityReads++ == 0) {
+                listOf(ExternalIdentity("title", "mangaupdates", "8675309", true, 1L))
+            } else {
+                emptyList()
+            }
+        }
+        val transport = FakeTransport(details(mu = "8675309"))
+        val linker = MangaDexVerifiedWorkLinker(repo, transport)
+        val candidate = linker.preview("title", work).getOrThrow()
+
+        linker.confirm("title", candidate).isFailure shouldBe true
+        transport.freshCalls shouldBe 1
+        coVerify(exactly = 0) { repo.addExternalIdentity(any()) }
+    }
+
+    @Test
     fun `invalid UUID cannot cause a network request`() = runTest {
         val repo = mockk<CanonicalTitleRepository>()
         val network = FakeTransport(details(mu = "8675309"))
