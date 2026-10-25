@@ -52,6 +52,9 @@ data class InventoryHttpPayload(
 interface InventoryReleaseTransport {
     /** A cache hit must retain the timestamp of the original HTTP fetch. */
     suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload
+
+    /** Confirmed identity writes require an actual network revalidation, never cached evidence. */
+    suspend fun fetchFresh(url: String, postBody: String?): InventoryHttpPayload
 }
 
 @Inject
@@ -76,7 +79,17 @@ class NativeInventoryReleaseTransport(
     }
     private var lastRequestAtNanos: Long = 0L
 
-    override suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload = mutex.withLock {
+    override suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload =
+        fetchWithCachePolicy(url, postBody, forceNetwork = false)
+
+    override suspend fun fetchFresh(url: String, postBody: String?): InventoryHttpPayload =
+        fetchWithCachePolicy(url, postBody, forceNetwork = true)
+
+    private suspend fun fetchWithCachePolicy(
+        url: String,
+        postBody: String?,
+        forceNetwork: Boolean,
+    ): InventoryHttpPayload = mutex.withLock {
         val parsed = url.toHttpUrlOrFail()
         val allowMu = parsed.host == "api.mangaupdates.com" &&
             parsed.encodedPath == "/v1/releases/search" && postBody != null
@@ -97,7 +110,9 @@ class NativeInventoryReleaseTransport(
             blockedUntilByHost.remove(parsed.host)
         }
         val key = url + "\n" + postBody.orEmpty()
-        cache[key]?.takeIf { now - it.first in 0 until CACHE_TTL_NANOS }?.let { return@withLock it.second }
+        if (!forceNetwork) {
+            cache[key]?.takeIf { now - it.first in 0 until CACHE_TTL_NANOS }?.let { return@withLock it.second }
+        }
 
         if (lastRequestAtNanos != 0L) {
             val elapsed = (now - lastRequestAtNanos) / 1_000_000L
