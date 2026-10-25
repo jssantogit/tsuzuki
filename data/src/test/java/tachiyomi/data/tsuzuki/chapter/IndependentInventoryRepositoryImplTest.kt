@@ -48,7 +48,6 @@ class IndependentInventoryRepositoryImplTest {
         repository.batchesByTitle(TITLE_ID).single().itemCount shouldBe 2
     }
 
-
     private lateinit var driver: SqlDriver
     private lateinit var database: Database
     private lateinit var repository: IndependentInventoryRepositoryImpl

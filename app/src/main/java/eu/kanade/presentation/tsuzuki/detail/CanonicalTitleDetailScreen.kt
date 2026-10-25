@@ -536,6 +536,13 @@ private fun IndependentInventoryInfo(
                     color = colors.secondary,
                 )
             }
+            if (source.candidateObservations > 0) {
+                Text(
+                    "${source.candidateObservations} " + stringResource(MR.strings.tsuzuki_inventory_candidates),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
             if (source.releaseObservations > 0) {
                 Text(
                     "${source.releaseObservations} " + stringResource(MR.strings.tsuzuki_inventory_releases),
@@ -547,6 +554,14 @@ private fun IndependentInventoryInfo(
                 Text(
                     stringResource(MR.strings.tsuzuki_inventory_editorial_examples) + ": " +
                         source.knownEditorialLabels.joinToString(", "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.candidateExampleLabels.isNotEmpty()) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_candidate_examples) + ": " +
+                        source.candidateExampleLabels.joinToString(", "),
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.secondary,
                 )

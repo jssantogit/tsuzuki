@@ -1484,6 +1484,7 @@
     <string name="tsuzuki_details_all_chapters">All chapters</string>
     <string name="tsuzuki_inventory_title">Independent chapter evidence</string>
     <string name="tsuzuki_inventory_editorial_examples">Verified editorial examples</string>
+    <string name="tsuzuki_inventory_candidate_examples">Candidate examples (not editorially verified)</string>
     <string name="tsuzuki_inventory_release_examples">Release labels (not canonical chapters)</string>
     <string name="tsuzuki_inventory_fetch_mangaupdates">Check MangaUpdates</string>
     <string name="tsuzuki_inventory_fetch_mangadex">Check MangaDex</string>
@@ -1502,7 +1503,7 @@
     <string name="tsuzuki_inventory_refresh_partial">Partial release observations saved</string>
     <string name="tsuzuki_inventory_refresh_failed">Inventory fetch failed; previous evidence was preserved</string>
     <string name="tsuzuki_inventory_refresh_unlinked">No verified external work ID for this source</string>
-    <string name="tsuzuki_inventory_refresh_disabled">Enable MangaUpdates integration before checking its releases</string>
+    <string name="tsuzuki_inventory_refresh_disabled">Enable chapter inventory in the selected integration before refreshing</string>
     <string name="tsuzuki_inventory_confirm_title">Check independent release metadata?</string>
     <string name="tsuzuki_inventory_confirm_description">Makes up to three requests to the selected service. This does not download chapters or make releases canonical.</string>
     <string name="tsuzuki_inventory_confirm_collect">Check releases</string>
@@ -1511,6 +1512,7 @@
     <string name="tsuzuki_inventory_partial">Editorial completeness and reading availability are not confirmed</string>
     <string name="tsuzuki_inventory_edition_unknown">Edition not verified</string>
     <string name="tsuzuki_inventory_individual">individually admissible observations (not necessarily readable)</string>
+    <string name="tsuzuki_inventory_candidates">individual candidates awaiting review (not editorially verified)</string>
     <string name="tsuzuki_inventory_releases">release observations, not canonical chapter records</string>
     <string name="tsuzuki_inventory_totals">Reported totals (unverified)</string>
     <string name="tsuzuki_inventory_offline_note">Offline view of stored source evidence only; this does not confirm editorial completeness or reading access</string>

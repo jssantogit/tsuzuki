@@ -1189,6 +1189,7 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_details_all_chapters">Todos os capítulos</string>
     <string name="tsuzuki_inventory_title">Evidências independentes de capítulos</string>
     <string name="tsuzuki_inventory_editorial_examples">Exemplos editoriais verificados</string>
+    <string name="tsuzuki_inventory_candidate_examples">Exemplos candidatos (sem verificação editorial)</string>
     <string name="tsuzuki_inventory_release_examples">Números de releases (não são capítulos canônicos)</string>
     <string name="tsuzuki_inventory_fetch_mangaupdates">Consultar MangaUpdates</string>
     <string name="tsuzuki_inventory_fetch_mangadex">Consultar MangaDex</string>
@@ -1207,7 +1208,7 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_inventory_refresh_partial">Observações parciais de releases salvas</string>
     <string name="tsuzuki_inventory_refresh_failed">Consulta do inventário falhou; evidências anteriores preservadas</string>
     <string name="tsuzuki_inventory_refresh_unlinked">Não há vínculo externo verificado para esta fonte</string>
-    <string name="tsuzuki_inventory_refresh_disabled">Ative a integração MangaUpdates antes de consultar seus releases</string>
+    <string name="tsuzuki_inventory_refresh_disabled">Ative o inventário de capítulos na integração selecionada antes de atualizar</string>
     <string name="tsuzuki_inventory_confirm_title">Consultar metadados independentes de releases?</string>
     <string name="tsuzuki_inventory_confirm_description">Realiza até três requisições ao serviço escolhido. Não baixa capítulos nem transforma releases em capítulos canônicos.</string>
     <string name="tsuzuki_inventory_confirm_collect">Consultar releases</string>
@@ -1216,6 +1217,7 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_inventory_partial">Completude editorial e disponibilidade de leitura não confirmadas</string>
     <string name="tsuzuki_inventory_edition_unknown">Edição não verificada</string>
     <string name="tsuzuki_inventory_individual">observações individuais admissíveis (leitura não garantida)</string>
+    <string name="tsuzuki_inventory_candidates">capítulos candidatos aguardando revisão (sem confirmação editorial)</string>
     <string name="tsuzuki_inventory_releases">observações de releases, não registros de capítulos canônicos</string>
     <string name="tsuzuki_inventory_totals">Totais informados (não verificados)</string>
     <string name="tsuzuki_inventory_offline_note">Visão offline apenas das evidências de origem armazenadas; isso não confirma a completude editorial nem a disponibilidade para leitura</string>

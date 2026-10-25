@@ -31,6 +31,9 @@ data class IndependentInventorySourceSnapshot(
     val knownEditorialLabels: List<String> = emptyList(),
     /** Bounded raw release labels, never automatically promoted to chapters. */
     val releaseExampleLabels: List<String> = emptyList(),
+    /** Explicit source-indexed units that still require user review, never verified editorial chapters. */
+    val candidateObservations: Int = 0,
+    val candidateExampleLabels: List<String> = emptyList(),
 )
 
 data class IndependentInventorySnapshot(
@@ -79,6 +82,7 @@ class GetIndependentInventorySnapshot(
                 scope = scope,
                 knownIndividualClaims = summary.individuallyAdmissibleClaims,
                 releaseObservations = summary.releaseObservations,
+                candidateObservations = summary.candidateObservations,
                 declaredTotals = sourcePages.mapNotNull { it.declaredTotal }.toSet(),
                 outcomes = sourcePages.map { it.outcome }.toSet(),
                 latestObservedAt = (
@@ -101,6 +105,11 @@ class GetIndependentInventorySnapshot(
                     .mapNotNull { it.claim.label?.trim()?.takeIf(String::isNotBlank) }
                     .distinct()
                     .take(EXAMPLE_LIMIT),
+                candidateExampleLabels = sourceClaims
+                    .filter { InventoryClaimPolicy.isNonEditorialCandidate(it.claim) }
+                    .mapNotNull { it.claim.label?.trim()?.takeIf(String::isNotBlank) }
+                    .distinct()
+                    .take(EXAMPLE_LIMIT),
                 releaseExampleLabels = sourceClaims
                     .filter { it.claim.derivation == InventoryDerivation.RELEASE_RECORD }
                     .mapNotNull { it.claim.label?.trim()?.takeIf(String::isNotBlank) }
@@ -113,6 +122,7 @@ class GetIndependentInventorySnapshot(
         // particular EXHAUSTED applies only to its technical page request.
         val hasKnowledge = sources.any { source ->
             source.knownIndividualClaims > 0 ||
+                source.candidateObservations > 0 ||
                 source.releaseObservations > 0 ||
                 source.declaredTotals.isNotEmpty() ||
                 source.outcomes.any {

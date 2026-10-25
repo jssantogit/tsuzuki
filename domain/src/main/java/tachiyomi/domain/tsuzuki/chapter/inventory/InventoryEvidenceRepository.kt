@@ -30,6 +30,7 @@ data class InventoryKnowledgeSummary(
     val releaseObservations: Int,
     val ambiguousOrAggregateClaims: Int,
     val editorialCompletenessConfirmed: Boolean = false,
+    val candidateObservations: Int = 0,
 )
 
 /** Same upstream release may be observed by several pages, but not a new chapter each time. */
@@ -49,6 +50,7 @@ fun summarizeInventory(claims: List<InventoryStoredClaim>): InventoryKnowledgeSu
             InventoryClaimPolicy.mayPromote(it.scope, it.claim)
         },
         releaseObservations = distinct.count { it.claim.derivation == InventoryDerivation.RELEASE_RECORD },
+        candidateObservations = distinct.count { InventoryClaimPolicy.isNonEditorialCandidate(it.claim) },
         ambiguousOrAggregateClaims = distinct.count {
             it.claim.kind != InventoryClaimKind.INDIVIDUAL
         },

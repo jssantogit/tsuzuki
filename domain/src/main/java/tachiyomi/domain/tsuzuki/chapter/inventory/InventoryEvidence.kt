@@ -37,6 +37,12 @@ enum class InventoryDerivation {
     /** Source directly identifies the editorial unit, not merely its release. */
     PRIMARY_EDITORIAL,
 
+    /** Explicitly indexed by a community source, not direct publisher authority. */
+    COMMUNITY_CURATED,
+
+    /** Navigation from a user-selected local edition, not a verified editorial chapter. */
+    USER_SUPPLIED_EDITION_TOC,
+
     /** Distribution, translation, revision or upload of a unit; not editorial authority. */
     RELEASE_RECORD,
     COUNT_DERIVED,
@@ -111,6 +117,13 @@ object InventoryClaimPolicy {
      * Strict *necessary*, not sufficient, conditions before the existing
      * exact-numbering reconciler may even consider a new canonical row.
      */
+    fun isNonEditorialCandidate(claim: InventoryClaim): Boolean =
+        claim.kind == InventoryClaimKind.INDIVIDUAL &&
+            (
+                claim.derivation == InventoryDerivation.COMMUNITY_CURATED ||
+                    claim.derivation == InventoryDerivation.USER_SUPPLIED_EDITION_TOC
+                )
+
     fun mayPromote(scope: InventoryScope, claim: InventoryClaim): Boolean =
         scope.workIdentityVerified &&
             scope.editionIdentityVerified &&
