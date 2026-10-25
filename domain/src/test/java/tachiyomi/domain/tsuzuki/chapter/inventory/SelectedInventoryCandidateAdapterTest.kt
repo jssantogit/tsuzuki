@@ -170,6 +170,39 @@ class SelectedInventoryCandidateAdapterTest {
     }
 
     @Test
+    fun `selected EPUB toc recognizes individually labeled chapters without admitting ranges`() {
+        val selected = syntheticEpubNavigation()
+        val labels = listOf(
+            "Chapter 1",
+            "Ch. 0.01",
+            "Episode 308",
+            "Chapter 12.05: First Steps",
+            "Special Chapter: Bonus",
+            "Chapter 1-5",
+            "Special Chapter 1–5",
+            "Chapter 1v2",
+            "Preface",
+        )
+        val document = tocWithContent(
+            "<ol>" + labels.mapIndexed { index, label ->
+                "<li><a href=\"Text/$index.xhtml\">$label</a></li>"
+            }.joinToString("") + "</ol>",
+        )
+        val batch = SelectedEpub3TocAdapter.adapt(withSelectedDocument(selected, document)).getOrThrow()
+        val indexed = batch.claims.associateBy { it.label }
+
+        labels.take(5).forEach { label ->
+            indexed.getValue(label).kind shouldBe InventoryClaimKind.INDIVIDUAL
+            InventoryClaimPolicy.isNonEditorialCandidate(indexed.getValue(label)) shouldBe true
+        }
+        labels.drop(5).forEach { label ->
+            indexed.getValue(label).kind shouldBe InventoryClaimKind.AMBIGUOUS
+            InventoryClaimPolicy.isNonEditorialCandidate(indexed.getValue(label)) shouldBe false
+        }
+        batch.claims.none { InventoryClaimPolicy.mayPromote(batch.scope, it) } shouldBe true
+    }
+
+    @Test
     fun `EPUB toc rejects doctypes external absolute and traversing references`() {
         val selected = syntheticEpubNavigation()
         val unsafeDocuments = listOf(
