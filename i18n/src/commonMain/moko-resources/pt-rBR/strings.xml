@@ -1187,6 +1187,8 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_details_chapters">Capítulos</string>
     <string name="tsuzuki_details_all_chapters">Todos os capítulos</string>
     <string name="tsuzuki_inventory_title">Evidências independentes de capítulos</string>
+    <string name="tsuzuki_inventory_editorial_examples">Exemplos editoriais verificados</string>
+    <string name="tsuzuki_inventory_release_examples">Números de releases (não são capítulos canônicos)</string>
     <string name="tsuzuki_inventory_fetch_mangaupdates">Consultar MangaUpdates</string>
     <string name="tsuzuki_inventory_fetch_mangadex">Consultar MangaDex</string>
     <string name="tsuzuki_inventory_fetching">Consultando releases (somente metadados)…</string>

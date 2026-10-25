@@ -119,5 +119,5 @@ object InventoryClaimPolicy {
             claim.derivation == InventoryDerivation.PRIMARY_EDITORIAL &&
             !claim.upstreamSourceId.isNullOrBlank() &&
             !claim.label.isNullOrBlank() &&
-            (scope.language == null || scope.language == claim.language)
+            scope.language == claim.language
 }

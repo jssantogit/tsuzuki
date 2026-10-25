@@ -27,6 +27,10 @@ data class IndependentInventorySourceSnapshot(
     val latestSuccessfulFetchAt: Long? = null,
     /** Latest timestamp carried by a stored claim; it does not imply a successful page outcome. */
     val latestClaimObservedAt: Long? = null,
+    /** Bounded examples of verified primary editorial units, not Reader targets. */
+    val knownEditorialLabels: List<String> = emptyList(),
+    /** Bounded raw release labels, never automatically promoted to chapters. */
+    val releaseExampleLabels: List<String> = emptyList(),
 )
 
 data class IndependentInventorySnapshot(
@@ -39,6 +43,10 @@ data class IndependentInventorySnapshot(
 class GetIndependentInventorySnapshot(
     private val ledger: InventoryEvidenceRepository,
 ) {
+    private companion object {
+        const val EXAMPLE_LIMIT = 8
+    }
+
     suspend fun execute(canonicalTitleId: String): IndependentInventorySnapshot {
         require(canonicalTitleId.isNotBlank())
 
@@ -88,6 +96,16 @@ class GetIndependentInventorySnapshot(
                     }
                     .maxOfOrNull { it.observedAt },
                 latestClaimObservedAt = sourceClaims.maxOfOrNull { it.claim.observedAt },
+                knownEditorialLabels = sourceClaims
+                    .filter { InventoryClaimPolicy.mayPromote(scope, it.claim) }
+                    .mapNotNull { it.claim.label?.trim()?.takeIf(String::isNotBlank) }
+                    .distinct()
+                    .take(EXAMPLE_LIMIT),
+                releaseExampleLabels = sourceClaims
+                    .filter { it.claim.derivation == InventoryDerivation.RELEASE_RECORD }
+                    .mapNotNull { it.claim.label?.trim()?.takeIf(String::isNotBlank) }
+                    .distinct()
+                    .take(EXAMPLE_LIMIT),
             )
         }
 

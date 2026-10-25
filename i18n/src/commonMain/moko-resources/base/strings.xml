@@ -1482,6 +1482,8 @@
     <string name="tsuzuki_details_chapters">Chapters</string>
     <string name="tsuzuki_details_all_chapters">All chapters</string>
     <string name="tsuzuki_inventory_title">Independent chapter evidence</string>
+    <string name="tsuzuki_inventory_editorial_examples">Verified editorial examples</string>
+    <string name="tsuzuki_inventory_release_examples">Release labels (not canonical chapters)</string>
     <string name="tsuzuki_inventory_fetch_mangaupdates">Check MangaUpdates</string>
     <string name="tsuzuki_inventory_fetch_mangadex">Check MangaDex</string>
     <string name="tsuzuki_inventory_fetching">Checking releases (metadata only)…</string>

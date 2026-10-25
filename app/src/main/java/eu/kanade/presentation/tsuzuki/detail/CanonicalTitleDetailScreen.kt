@@ -231,9 +231,7 @@ private fun LoadedDetails(
                                 Icon(MaterialSymbols.Rounded.Search, stringResource(MR.strings.tsuzuki_details_jump))
                             }
                         }
-                        if (chapters.isEmpty() || state.independentInventory.sources.isNotEmpty()) {
-                            IndependentInventoryInfo(state.independentInventory, inventoryRefresh, onFetchInventory)
-                        }
+                        IndependentInventoryInfo(state.independentInventory, inventoryRefresh, onFetchInventory)
                     }
                     if (chapters.isEmpty()) {
                         item(key = "empty-chapters") {
@@ -524,6 +522,22 @@ private fun IndependentInventoryInfo(
             if (source.releaseObservations > 0) {
                 Text(
                     "${source.releaseObservations} " + stringResource(MR.strings.tsuzuki_inventory_releases),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.knownEditorialLabels.isNotEmpty()) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_editorial_examples) + ": " +
+                        source.knownEditorialLabels.joinToString(", "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.releaseExampleLabels.isNotEmpty()) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_release_examples) + ": " +
+                        source.releaseExampleLabels.joinToString(", "),
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.secondary,
                 )
