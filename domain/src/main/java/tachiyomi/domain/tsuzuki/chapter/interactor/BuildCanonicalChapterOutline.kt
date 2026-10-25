@@ -25,7 +25,16 @@ fun inferredChapterId(canonicalTitleId: String, number: Int): String =
 
 fun isInferredChapter(chapter: CanonicalChapter): Boolean =
     chapter.type == CanonicalChapterType.REGULAR &&
-        chapter.baseNumber?.let { it > 0 && chapter.id == inferredChapterId(chapter.canonicalTitleId, it) } == true &&
+        chapter.baseNumber?.let { number ->
+            // A title convergence rekeys the canonical owner but MUST keep the
+            // original count chapter ID because progress/sync use that key.
+            // Validate its historical owner and exact ordinal, not the new owner.
+            val historical = chapter.id.removePrefix("tsuzuki:count:")
+            number > 0 &&
+                historical != chapter.id &&
+                historical.substringBeforeLast(':', missingDelimiterValue = "").isNotBlank() &&
+                historical.substringAfterLast(':') == number.toString()
+        } == true &&
         chapter.part == null &&
         chapter.alphaSuffix == null
 
