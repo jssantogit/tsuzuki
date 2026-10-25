@@ -23,6 +23,8 @@ import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
 import tachiyomi.data.tsuzuki.chapter.IndependentInventoryRepositoryImpl
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
+import tachiyomi.domain.tsuzuki.chapter.interactor.buildCanonicalChapterOutline
+import tachiyomi.domain.tsuzuki.chapter.interactor.inferredChapterId
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaim
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaimKind
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryDerivation
@@ -238,6 +240,54 @@ class CanonicalTitleMergeRepositoryImplTest {
             .getTsuzukiContinueReadingState("winner") { _, hiddenAt -> hiddenAt ?: -1L }
             .awaitAsOneOrNull() shouldBe 60L
     }
+
+    @Test
+    fun `convergence retains historical count IDs with progress history download and inferred status`() =
+        runBlocking<Unit> {
+            seedTitle("winner", "Winner")
+            seedTitle("duplicate", "Duplicate")
+            val legacyId = inferredChapterId("duplicate", 37)
+            chapterRepository.upsert(
+                chapter(legacyId, "duplicate", 37).copy(
+                    confirmation = CanonicalChapterConfirmation.PROVISIONAL,
+                ),
+            )
+            readingRepository.recordCheckpoint(
+                progress = CanonicalChapterProgress(
+                    canonicalChapterId = legacyId,
+                    lastPageRead = 8L,
+                    updatedAt = 22L,
+                ),
+                history = CanonicalChapterHistoryUpdate(
+                    canonicalChapterId = legacyId,
+                    readAt = 22L,
+                    sessionReadDuration = 41L,
+                ),
+            )
+            database.tsuzuki_canonical_downloadsQueries.upsertTsuzukiCanonicalDownload(
+                canonicalChapterId = legacyId,
+                localUri = "file:///legacy-37.cbz",
+                format = "CBZ",
+                originatingAddonId = "source",
+                originatingOptionKey = "source:37",
+                completedAt = 23L,
+                checksum = "checksum",
+            )
+
+            repository.convergeTo("winner", "duplicate")
+
+            val migrated = chapterRepository.getById(legacyId)!!
+            migrated.id shouldBe legacyId
+            migrated.canonicalTitleId shouldBe "winner"
+            readingRepository.getProgress(legacyId)?.lastPageRead shouldBe 8L
+            readingRepository.getHistory(legacyId)?.totalReadDuration shouldBe 41L
+            database.tsuzuki_canonical_downloadsQueries
+                .getTsuzukiCanonicalDownload(legacyId) { _, uri, _, _, _, _, _ -> uri }
+                .awaitAsOneOrNull() shouldBe "file:///legacy-37.cbz"
+            val outline = buildCanonicalChapterOutline("winner", listOf(migrated), emptyList())
+            outline.single().chapter.id shouldBe legacyId
+            outline.single().inferredFromReportedCount shouldBe true
+        }
 
     @Test
     fun `missing target is created from local title before rekey`() = runBlocking<Unit> {
