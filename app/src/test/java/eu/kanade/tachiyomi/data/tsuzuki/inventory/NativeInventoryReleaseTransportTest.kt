@@ -23,7 +23,7 @@ class NativeInventoryReleaseTransportTest {
     }
 
     @Test
-    fun crossHostRedirectsAreRejectedBeforeFollowingThem() = runBlocking {
+    fun crossHostRedirectsAreRejectedBeforeFollowingThem() = runBlocking<Unit> {
         val requested = mutableListOf<String>()
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             requested += chain.request().url.host
@@ -43,7 +43,7 @@ class NativeInventoryReleaseTransportTest {
     }
 
     @Test
-    fun rateLimitRetryAfterBlocksAnotherRequestWithoutAutomaticRetry() = runBlocking {
+    fun rateLimitRetryAfterBlocksAnotherRequestWithoutAutomaticRetry() = runBlocking<Unit> {
         var requested = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             requested++
@@ -58,7 +58,7 @@ class NativeInventoryReleaseTransportTest {
     }
 
     @Test
-    fun forbiddenSourceIsLockedForThisApplicationSession() = runBlocking {
+    fun forbiddenSourceIsLockedForThisApplicationSession() = runBlocking<Unit> {
         var requested = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             requested++
@@ -72,7 +72,7 @@ class NativeInventoryReleaseTransportTest {
     }
 
     @Test
-    fun cachedResponseKeepsOriginalFetchTimeAndAvoidsDuplicateRequest() = runBlocking {
+    fun cachedResponseKeepsOriginalFetchTimeAndAvoidsDuplicateRequest() = runBlocking<Unit> {
         var requests = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             requests++
@@ -89,7 +89,7 @@ class NativeInventoryReleaseTransportTest {
     }
 
     @Test
-    fun explicitFreshFetchBypassesCachedMangaDexWorkMetadata() = runBlocking {
+    fun explicitFreshFetchBypassesCachedMangaDexWorkMetadata() = runBlocking<Unit> {
         var requests = 0
         val url = "https://api.mangadex.org/manga/12345678-1234-1234-1234-123456789abc"
         val client = OkHttpClient.Builder().addInterceptor { chain ->
@@ -106,7 +106,7 @@ class NativeInventoryReleaseTransportTest {
     }
 
     @Test
-    fun malformedMangaDexUUIDsAreRejectedAtTheNativeHttpBoundary() = runBlocking {
+    fun malformedMangaDexUUIDsAreRejectedAtTheNativeHttpBoundary() = runBlocking<Unit> {
         var requests = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             requests++
@@ -123,7 +123,7 @@ class NativeInventoryReleaseTransportTest {
     }
 
     @Test
-    fun mangaDexReadOnlyAllowlistRejectsUnknownMethodsAndTrailingRoutes() = runBlocking {
+    fun mangaDexReadOnlyAllowlistRejectsUnknownMethodsAndTrailingRoutes() = runBlocking<Unit> {
         var requests = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             requests++
@@ -147,7 +147,7 @@ class NativeInventoryReleaseTransportTest {
     }
 
     @Test
-    fun oversizedResponseIsNotCachedAndInvalidEndpointsNeverReachHttp() = runBlocking {
+    fun oversizedResponseIsNotCachedAndInvalidEndpointsNeverReachHttp() = runBlocking<Unit> {
         var requested = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             requested++
