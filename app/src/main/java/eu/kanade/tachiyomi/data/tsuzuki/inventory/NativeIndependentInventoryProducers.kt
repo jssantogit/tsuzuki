@@ -39,6 +39,10 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.time.Clock
 
+internal val MANGADEX_WORK_UUID_REGEX = Regex(
+    """^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$""",
+)
+
 /**
  * Read-only native metadata transport. Only these two API hosts/endpoints are allowed.
  * Requests are serialized, spaced at least 1.2 seconds apart, cached briefly, and
@@ -93,11 +97,12 @@ class NativeInventoryReleaseTransport(
         val parsed = url.toHttpUrlOrFail()
         val allowMu = parsed.host == "api.mangaupdates.com" &&
             parsed.encodedPath == "/v1/releases/search" && postBody != null
+        val mangaDexPath = parsed.encodedPath.split('/')
         val allowMd = parsed.host == "api.mangadex.org" &&
-            (
-                parsed.encodedPath.matches(Regex("""^/manga/[0-9a-fA-F-]{36}/feed$""")) ||
-                    parsed.encodedPath.matches(Regex("""^/manga/[0-9a-fA-F-]{36}$"""))
-                ) && postBody == null
+            (mangaDexPath.size == 3 || mangaDexPath.size == 4 && mangaDexPath[3] == "feed") &&
+            mangaDexPath[1] == "manga" &&
+            mangaDexPath[2].matches(MANGADEX_WORK_UUID_REGEX) &&
+            postBody == null
         require(
             parsed.scheme == "https" && parsed.port == 443 &&
                 parsed.username.isEmpty() && parsed.password.isEmpty() && (allowMu || allowMd),
@@ -264,7 +269,7 @@ class MangaDexInventoryProducer(
     override suspend fun fetchPage(scope: InventoryScope, pageKey: String): Result<InventoryEvidenceBatch> =
         catchingInventory {
             require(scope.producerId == producerId && scope.workIdentityVerified)
-            require(scope.externalWorkId.matches(Regex("""^[0-9a-fA-F-]{36}$""")))
+            require(scope.externalWorkId.matches(MANGADEX_WORK_UUID_REGEX))
             val offset = when {
                 pageKey == "start" -> 0
                 pageKey.matches(Regex("""offset:[1-9][0-9]{0,4}""")) ->
