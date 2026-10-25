@@ -127,7 +127,7 @@ class PreviewEditorialEditionInventoryTest {
         }
         // Another chapter number is not proof that the selected edition is complete.
         val distinct = planner.execute(batch(edition, claim("13")), listOf(historical))
-        distinct is EditorialEditionPreflight.Ready shouldBe true
+        (distinct is EditorialEditionPreflight.Ready) shouldBe true
     }
 
     @Test
@@ -137,8 +137,8 @@ class PreviewEditorialEditionInventoryTest {
         val originalPlan = preview(original).execute(batch(original, claim("1")), emptyList())
         val revisedPlan = preview(revised).execute(batch(revised, claim("1")), emptyList())
 
-        originalPlan is EditorialEditionPreflight.Ready shouldBe true
-        revisedPlan is EditorialEditionPreflight.Ready shouldBe true
+        (originalPlan is EditorialEditionPreflight.Ready) shouldBe true
+        (revisedPlan is EditorialEditionPreflight.Ready) shouldBe true
         (originalPlan as EditorialEditionPreflight.Ready).units.single().scope.editionKey shouldBe "original-ja"
         (revisedPlan as EditorialEditionPreflight.Ready).units.single().scope.editionKey shouldBe "revised-ja"
         originalPlan.units.single().identity shouldBe revisedPlan.units.single().identity
