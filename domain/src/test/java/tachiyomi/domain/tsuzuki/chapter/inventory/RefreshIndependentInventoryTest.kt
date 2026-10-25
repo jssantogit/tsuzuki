@@ -5,6 +5,9 @@ import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
@@ -152,8 +155,10 @@ class RefreshIndependentInventoryTest {
             { true },
         )
         result.stop shouldBe InventoryRefreshStop.FAILED
+        ledger.saved.map { it.pageKey } shouldBe listOf("start", "next")
         ledger.claims.map { it.sourceRecordId } shouldBe listOf("1")
         ledger.saved.last().outcome shouldBe InventoryFetchOutcome.FAILED
+        currentCoroutineContext()[Job]?.isActive shouldBe true
 
         shouldThrow<CancellationException> {
             RefreshIndependentInventory(titleRepository(), FakeLedger()).execute(
@@ -162,6 +167,41 @@ class RefreshIndependentInventoryTest {
                 { true },
             )
         }
+    }
+
+    @Test
+    fun `producer cancellation result propagates without saving a failed page`() = runTest {
+        val ledger = FakeLedger()
+
+        shouldThrow<CancellationException> {
+            RefreshIndependentInventory(titleRepository(), ledger).execute(
+                "canonical",
+                producer { _, _ -> Result.failure(CancellationException("cancelled")) },
+                { true },
+            )
+        }
+
+        ledger.saved.size shouldBe 0
+    }
+
+    @Test
+    fun `cancellation during noncooperative successful fetch prevents saving its batch`() = runTest {
+        val ledger = FakeLedger()
+        val child = launch {
+            RefreshIndependentInventory(titleRepository(), ledger).execute(
+                "canonical",
+                producer { scope, page ->
+                    currentCoroutineContext()[Job]!!.cancel(CancellationException("cancelled"))
+                    Result.success(batch(scope, page, "late", "1", InventoryFetchOutcome.EXHAUSTED))
+                },
+                { true },
+            )
+        }
+
+        child.join()
+
+        child.isCancelled shouldBe true
+        ledger.saved.size shouldBe 0
     }
 
     private fun titleRepository(
