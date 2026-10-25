@@ -75,6 +75,25 @@ class DefaultIntegrationRegistryTest {
     }
 
     @Test
+    fun `duplicate inventory producer registrations fail closed instead of choosing arbitrarily`() = runTest {
+        val first = FakeInventoryProducer("mangadex")
+        val second = FakeInventoryProducer("mangadex")
+        val registry = registry(
+            scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+            settings = MutableStateFlow(
+                listOf(IntegrationSettings(IntegrationId("mangadex"), true, """{"chapter_inventory":true}""")),
+            ),
+            inventoryProducers = setOf(first, second),
+        )
+
+        registry.inventoryProducers() shouldBe emptyList()
+        registry.isGlobalCapabilityActive(
+            IntegrationId("mangadex"),
+            IntegrationCapability.CHAPTER_INVENTORY,
+        ) shouldBe true
+    }
+
+    @Test
     fun `no unrelated integration may impersonate an inventory producer`() = runTest {
         val foreign = FakeInventoryProducer("unknown")
         val registry = registry(
