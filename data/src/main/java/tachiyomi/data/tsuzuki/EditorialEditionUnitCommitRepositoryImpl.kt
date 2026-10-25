@@ -50,8 +50,17 @@ class EditorialEditionUnitCommitRepositoryImpl(
                 val scope = batch.scope
                 val linked = database.tsuzuki_editorial_chapter_bindingsQueries
                     .getTsuzukiEditorialBindingsByTitle(scope.canonicalTitleId) {
-                            id, titleId, producerId, workId, editionKey, language, recordId,
-                            upstreamId, identityKey, volumeKey, observedAt,
+                            id,
+                            titleId,
+                            producerId,
+                            workId,
+                            editionKey,
+                            language,
+                            recordId,
+                            upstreamId,
+                            identityKey,
+                            volumeKey,
+                            observedAt,
                         ->
                         StoredEditorialBinding(
                             chapterId = id,
@@ -88,14 +97,11 @@ class EditorialEditionUnitCommitRepositoryImpl(
                 // The ledger can never re-home an already owned ID, revision or
                 // language. The old canonical row itself must still agree too.
                 val existingById = existing.associateBy { it.id }
-                val byRecordId = linked.associateBy { it.sourceRecordId }
                 val chapterIds = mutableListOf<String>()
                 val newlyCreated = mutableListOf<CanonicalChapter>()
                 val insertions = mutableListOf<Pair<CanonicalChapter, EditorialEditionPreviewUnit>>()
                 ready.units.forEach { unit ->
                     val previous = ownedById[unit.sourceRecordId]
-                    val foreign = byRecordId[unit.sourceRecordId]
-                    if (foreign != null && foreign != previous) throw EditorialCommitRefused()
                     if (previous != null) {
                         val canonical = existingById[previous.chapterId] ?: throw EditorialCommitRefused()
                         if (
