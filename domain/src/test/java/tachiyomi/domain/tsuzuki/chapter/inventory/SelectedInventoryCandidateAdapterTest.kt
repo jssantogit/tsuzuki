@@ -61,9 +61,15 @@ class SelectedInventoryCandidateAdapterTest {
         )
 
         invalidReferences.forEach { reference ->
-            SelectedWikimediaChapterIndexAdapter.adapt(selection.copy(pageReference = reference)).isFailure shouldBe true
+            SelectedWikimediaChapterIndexAdapter.adapt(selection.copy(pageReference = reference)).isFailure shouldBe
+                true
         }
         SelectedWikimediaChapterIndexAdapter.adapt(selection).isSuccess shouldBe true
+        SelectedWikimediaChapterIndexAdapter.adapt(
+            selection.copy(
+                pageReference = "https://en.wikipedia.org/w/index.php?title=Synthetic_index&oldid=77001",
+            ),
+        ).isSuccess shouldBe true
     }
 
     @Test
