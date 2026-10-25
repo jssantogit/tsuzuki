@@ -105,7 +105,6 @@ class NativeInventoryRefreshScreenModelTest {
             model.state.value.revision shouldBe 0
         }
 
-
     @Test
     fun `manual inventory refresh is rejected when the integration has not opted in`() = runTest(dispatcher) {
         val refresh = mockk<RefreshIndependentInventory>()
