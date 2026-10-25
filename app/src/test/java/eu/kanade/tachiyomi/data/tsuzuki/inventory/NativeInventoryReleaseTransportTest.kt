@@ -106,6 +106,23 @@ class NativeInventoryReleaseTransportTest {
     }
 
     @Test
+    fun malformedMangaDexUUIDsAreRejectedAtTheNativeHttpBoundary() = runBlocking {
+        var requests = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200)
+                .message("OK").body("{}".toResponseBody()).build()
+        }.build()
+        val transport = transport(client)
+        for (path in listOf("/manga/${"-".repeat(36)}", "/manga/${"a".repeat(36)}/feed")) {
+            shouldThrow<IllegalArgumentException> {
+                transport.fetch("https://api.mangadex.org$path", null)
+            }
+        }
+        requests shouldBe 0
+    }
+
+    @Test
     fun oversizedResponseIsNotCachedAndInvalidEndpointsNeverReachHttp() = runBlocking {
         var requested = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
