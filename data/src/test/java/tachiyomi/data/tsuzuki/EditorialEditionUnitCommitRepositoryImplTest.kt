@@ -1,6 +1,7 @@
 package tachiyomi.data.tsuzuki
 
 import app.cash.sqldelight.async.coroutines.await
+import app.cash.sqldelight.async.coroutines.awaitAsList
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
@@ -24,6 +25,7 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryDerivation
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
+import tachiyomi.domain.tsuzuki.chapter.interactor.ChapterMutationGate
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import java.nio.file.Files
@@ -62,14 +64,17 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         )
         database.tsuzuki_titlesQueries.insertTsuzukiTitle("title", "Synthetic", "SOURCE_ONLY", 1L, 1L)
         chapters = CanonicalChapterRepositoryImpl(database)
-        writer = EditorialEditionUnitCommitRepositoryImpl(database, chapters)
+        writer = EditorialEditionUnitCommitRepositoryImpl(database, chapters, ChapterMutationGate())
     }
 
     @AfterEach
     fun tearDown() {
         if (::driver.isInitialized) driver.close()
-        if (oldNativePath == null) System.clearProperty("org.sqlite.lib.path")
-        else System.setProperty("org.sqlite.lib.path", oldNativePath)
+        if (oldNativePath == null) {
+            System.clearProperty("org.sqlite.lib.path")
+        } else {
+            System.setProperty("org.sqlite.lib.path", oldNativePath)
+        }
         nativeDir?.toFile()?.deleteRecursively()
     }
 
@@ -89,7 +94,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
             replay shouldBe EditorialUnitCommitResult.Applied(written.chapterIds, 0)
             chapters.getByCanonicalTitleId("title") shouldBe chaptersAfter
             database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title")
-                .executeAsList().size shouldBe 2
+                .awaitAsList().size shouldBe 2
         }
 
     @Test
@@ -101,7 +106,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
             writer.commit(second, grant(second.scope)) shouldBe EditorialUnitCommitResult.Refused
             chapters.getByCanonicalTitleId("title").size shouldBe 1
             database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title")
-                .executeAsList().size shouldBe 1
+                .awaitAsList().size shouldBe 1
         }
 
     @Test
@@ -115,7 +120,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         revoked shouldBe EditorialUnitCommitResult.Refused
         chapters.getByCanonicalTitleId("title") shouldBe emptyList()
         database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title")
-            .executeAsList() shouldBe emptyList()
+            .awaitAsList() shouldBe emptyList()
     }
 
     @Test
@@ -141,8 +146,10 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         val selected = batch(claim("1"))
         writer.commit(selected) { _, _ -> null } shouldBe EditorialUnitCommitResult.Refused
         writer.commit(selected, grant(scope("other-edition"))) shouldBe EditorialUnitCommitResult.Refused
-        writer.commit(selected.copy(claims = listOf(claim("1").copy(derivation = InventoryDerivation.RELEASE_RECORD))),
-            grant(selected.scope)) shouldBe EditorialUnitCommitResult.Refused
+        writer.commit(
+            selected.copy(claims = listOf(claim("1").copy(derivation = InventoryDerivation.RELEASE_RECORD))),
+            grant(selected.scope),
+        ) shouldBe EditorialUnitCommitResult.Refused
         chapters.getByCanonicalTitleId("title") shouldBe emptyList()
     }
 
@@ -156,7 +163,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         merging.isFailure shouldBe true
         chapters.getByCanonicalTitleId("title").size shouldBe 1
         database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title")
-            .executeAsList().size shouldBe 1
+            .awaitAsList().size shouldBe 1
     }
 
     private fun grant(approved: InventoryScope) =

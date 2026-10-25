@@ -1,0 +1,41 @@
+-- Local-only editorial ownership binding, not a reading variant or v1 sync schema.
+-- RESTRICT prevents title/identity deletion from silently erasing editorial lineage.
+CREATE TABLE tsuzuki_editorial_chapter_bindings(
+    canonical_chapter_id TEXT NOT NULL PRIMARY KEY,
+    canonical_title_id TEXT NOT NULL,
+    producer_id TEXT NOT NULL,
+    external_work_id TEXT NOT NULL,
+    edition_key TEXT NOT NULL,
+    scope_language TEXT NOT NULL,
+    source_record_id TEXT NOT NULL,
+    upstream_source_id TEXT NOT NULL,
+    identity_key TEXT NOT NULL,
+    volume_key INTEGER NOT NULL,
+    observed_at INTEGER NOT NULL,
+    FOREIGN KEY(canonical_chapter_id) REFERENCES tsuzuki_canonical_chapters(id) ON DELETE RESTRICT,
+    FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE RESTRICT,
+    UNIQUE(producer_id, external_work_id, edition_key, scope_language, source_record_id),
+    UNIQUE(canonical_title_id, producer_id, external_work_id, edition_key, scope_language, identity_key, volume_key)
+);
+
+CREATE INDEX tsuzuki_editorial_bindings_title_index
+ON tsuzuki_editorial_chapter_bindings(canonical_title_id);
+
+getTsuzukiEditorialBindingsByTitle:
+SELECT canonical_chapter_id, canonical_title_id, producer_id, external_work_id,
+    edition_key, scope_language, source_record_id, upstream_source_id,
+    identity_key, volume_key, observed_at
+FROM tsuzuki_editorial_chapter_bindings
+WHERE canonical_title_id = :canonicalTitleId
+ORDER BY canonical_chapter_id ASC;
+
+insertTsuzukiEditorialChapterBinding:
+INSERT INTO tsuzuki_editorial_chapter_bindings(
+    canonical_chapter_id, canonical_title_id, producer_id, external_work_id,
+    edition_key, scope_language, source_record_id, upstream_source_id,
+    identity_key, volume_key, observed_at
+) VALUES (
+    :canonicalChapterId, :canonicalTitleId, :producerId, :externalWorkId,
+    :editionKey, :scopeLanguage, :sourceRecordId, :upstreamSourceId,
+    :identityKey, :volumeKey, :observedAt
+);

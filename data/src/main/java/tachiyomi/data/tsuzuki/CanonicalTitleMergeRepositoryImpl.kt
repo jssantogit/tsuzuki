@@ -65,6 +65,15 @@ class CanonicalTitleMergeRepositoryImpl(
             val targetMappings = getSourceMappings(targetId)
             validatePreferredSourceMappings(targetMappings, localMappings)
 
+            // This local-only edition ownership cannot yet be re-homed safely.
+            // A convergence must fail rather than cascade-delete the lineage.
+            check(
+                database.tsuzuki_editorial_chapter_bindingsQueries
+                    .getTsuzukiEditorialBindingsByTitle(localId).awaitAsList().isEmpty() &&
+                    database.tsuzuki_editorial_chapter_bindingsQueries
+                        .getTsuzukiEditorialBindingsByTitle(targetId).awaitAsList().isEmpty(),
+            ) { "Title convergence involving scoped editorial chapter bindings requires an audited migration" }
+
             val localChapters = getChapters(localId)
             val targetChapters = getChapters(targetId)
             validateChapterIdentities(targetChapters, localChapters)
