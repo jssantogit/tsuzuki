@@ -12,6 +12,7 @@ import tachiyomi.data.Database
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.interactor.ChapterMutationGate
 import tachiyomi.domain.tsuzuki.chapter.inventory.EditorialEditionPreflight
+import tachiyomi.domain.tsuzuki.chapter.inventory.EditorialEditionPreviewUnit
 import tachiyomi.domain.tsuzuki.chapter.inventory.EditorialUnitCommitRepository
 import tachiyomi.domain.tsuzuki.chapter.inventory.EditorialUnitCommitResult
 import tachiyomi.domain.tsuzuki.chapter.inventory.HostEditorialEditionAuthorization
@@ -90,7 +91,7 @@ class EditorialEditionUnitCommitRepositoryImpl(
                 val byRecordId = linked.associateBy { it.sourceRecordId }
                 val chapterIds = mutableListOf<String>()
                 val newlyCreated = mutableListOf<CanonicalChapter>()
-                val insertions = mutableListOf<Pair<CanonicalChapter, tachiyomi.domain.tsuzuki.chapter.inventory.EditorialEditionPreviewUnit>>()
+                val insertions = mutableListOf<Pair<CanonicalChapter, EditorialEditionPreviewUnit>>()
                 ready.units.forEach { unit ->
                     val previous = ownedById[unit.sourceRecordId]
                     val foreign = byRecordId[unit.sourceRecordId]

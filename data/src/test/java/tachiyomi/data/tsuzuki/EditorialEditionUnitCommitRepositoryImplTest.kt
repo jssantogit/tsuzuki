@@ -118,7 +118,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         (writer.commit(revised, grant(revised.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
         chapters.getByCanonicalTitleId("title").size shouldBe 2
         database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title")
-            .awaitAsList().map { it.editionKey }.toSet() shouldBe setOf("original", "revised")
+            .awaitAsList().map { it.edition_key }.toSet() shouldBe setOf("original", "revised")
     }
 
     @Test
