@@ -167,9 +167,10 @@ class NativeInventoryRefreshScreenModelTest {
         val linker = mockk<MangaDexVerifiedWorkLinker>()
         coEvery { linker.preview("title", uuid) } returns Result.success(candidate)
         val registry = activeInventoryRegistry()
+        val producer = allowedMangaDexProducer()
         var enabled = true
         every { registry.inventoryProducers() } answers {
-            if (enabled) listOf(allowedMangaDexProducer()) else emptyList()
+            if (enabled) listOf(producer) else emptyList()
         }
         val model = model(linker, registry = registry)
         model.start("title")
@@ -183,16 +184,131 @@ class NativeInventoryRefreshScreenModelTest {
         coVerify(exactly = 0) { linker.confirm(any(), any()) }
     }
 
+    @Test
+    fun `revoking the inventory integration while MangaDex preview is in flight discards the response`() = runTest(dispatcher) {
+        val linker = mockk<MangaDexVerifiedWorkLinker>()
+        val response = CompletableDeferred<Result<MangaDexVerifiedCandidate>>()
+        coEvery { linker.preview("title", uuid) } coAnswers { response.await() }
+        val registry = activeInventoryRegistry()
+        val producer = allowedMangaDexProducer()
+        var enabled = true
+        every { registry.inventoryProducers() } answers {
+            if (enabled) listOf(producer) else emptyList()
+        }
+        val model = model(linker, registry = registry)
+        model.start("title")
+
+        model.previewMangaDexLink("title", uuid)
+        runCurrent()
+        enabled = false
+        response.complete(Result.success(candidate))
+        advanceUntilIdle()
+
+        model.state.value.linkCandidate shouldBe null
+        model.state.value.linkFailed shouldBe true
+        model.state.value.linkCompleted shouldBe false
+    }
+
+    @Test
+    fun `changing inventory fingerprint while MangaDex preview is in flight discards the response`() = runTest(dispatcher) {
+        val linker = mockk<MangaDexVerifiedWorkLinker>()
+        val response = CompletableDeferred<Result<MangaDexVerifiedCandidate>>()
+        coEvery { linker.preview("title", uuid) } coAnswers { response.await() }
+        val registry = activeInventoryRegistry()
+        var fingerprint = "original"
+        every { registry.configurationFingerprint() } answers { fingerprint }
+        val model = model(linker, registry = registry)
+        model.start("title")
+
+        model.previewMangaDexLink("title", uuid)
+        runCurrent()
+        fingerprint = "changed"
+        response.complete(Result.success(candidate))
+        advanceUntilIdle()
+
+        model.state.value.linkCandidate shouldBe null
+        model.state.value.linkFailed shouldBe true
+    }
+
+    @Test
+    fun `revoking the inventory integration while MangaDex confirmation is in flight discards the success`() = runTest(dispatcher) {
+        val linker = mockk<MangaDexVerifiedWorkLinker>()
+        coEvery { linker.preview("title", uuid) } returns Result.success(candidate)
+        val response = CompletableDeferred<Result<Unit>>()
+        coEvery { linker.confirm("title", candidate) } coAnswers { response.await() }
+        val registry = activeInventoryRegistry()
+        val producer = allowedMangaDexProducer()
+        var enabled = true
+        every { registry.inventoryProducers() } answers {
+            if (enabled) listOf(producer) else emptyList()
+        }
+        val model = model(linker, registry = registry)
+        model.start("title")
+        model.previewMangaDexLink("title", uuid)
+        advanceUntilIdle()
+
+        model.confirmMangaDexLink("title")
+        runCurrent()
+        enabled = false
+        response.complete(Result.success(Unit))
+        advanceUntilIdle()
+
+        model.state.value.linkCandidate shouldBe candidate
+        model.state.value.linkCompleted shouldBe false
+        model.state.value.revision shouldBe 0
+    }
+
+    @Test
+    fun `changing inventory fingerprint after preview prevents MangaDex confirmation`() = runTest(dispatcher) {
+        val linker = mockk<MangaDexVerifiedWorkLinker>()
+        coEvery { linker.preview("title", uuid) } returns Result.success(candidate)
+        val registry = activeInventoryRegistry()
+        var fingerprint = "original"
+        every { registry.configurationFingerprint() } answers { fingerprint }
+        val model = model(linker, registry = registry)
+        model.start("title")
+        model.previewMangaDexLink("title", uuid)
+        advanceUntilIdle()
+
+        fingerprint = "changed"
+        model.confirmMangaDexLink("title") shouldBe null
+
+        model.state.value.linkCandidate shouldBe null
+        model.state.value.linkFailed shouldBe true
+        coVerify(exactly = 0) { linker.confirm(any(), any()) }
+    }
+
+    @Test
+    fun `cancelling an in flight MangaDex preview discards its late response`() = runTest(dispatcher) {
+        val linker = mockk<MangaDexVerifiedWorkLinker>()
+        val response = CompletableDeferred<Result<MangaDexVerifiedCandidate>>()
+        coEvery { linker.preview("title", uuid) } coAnswers { response.await() }
+        val model = model(linker)
+        model.start("title")
+
+        model.previewMangaDexLink("title", uuid)
+        runCurrent()
+        model.cancel()
+        response.complete(Result.success(candidate))
+        advanceUntilIdle()
+
+        model.state.value.linkCandidate shouldBe null
+        model.state.value.linkCompleted shouldBe false
+        model.state.value.linking shouldBe false
+    }
+
     private fun allowedMangaDexProducer(): IndependentInventoryProducer =
         mockk<IndependentInventoryProducer>().also { producer ->
             every { producer.producerId } returns "mangadex"
         }
 
-    private fun activeInventoryRegistry(): IntegrationRegistry =
-        mockk<IntegrationRegistry>().also { registry ->
-            every { registry.inventoryProducers() } answers { listOf(allowedMangaDexProducer()) }
+    private fun activeInventoryRegistry(): IntegrationRegistry {
+        val producer = allowedMangaDexProducer()
+        return mockk<IntegrationRegistry>().also { registry ->
+            every { registry.inventoryProducers() } answers { listOf(producer) }
             every { registry.configurationFingerprint() } returns "steady"
         }
+    }
 
     private fun model(
         linker: MangaDexVerifiedWorkLinker,
