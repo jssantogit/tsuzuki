@@ -30,10 +30,17 @@ class MangaDexVerifiedWorkLinker(
     private val transport: InventoryReleaseTransport,
 ) {
     suspend fun preview(canonicalTitleId: String, mangaDexId: String): Result<MangaDexVerifiedCandidate> =
-        capture {
+        previewWithCachePolicy(canonicalTitleId, mangaDexId, forceNetwork = false)
+
+    private suspend fun previewWithCachePolicy(
+        canonicalTitleId: String,
+        mangaDexId: String,
+        forceNetwork: Boolean,
+    ): Result<MangaDexVerifiedCandidate> = capture {
             require(canonicalTitleId.isNotBlank())
             require(mangaDexId.matches(MANGADEX_UUID)) { "Invalid MangaDex manga UUID" }
-            val payload = transport.fetch("https://api.mangadex.org/manga/$mangaDexId", null)
+            val url = "https://api.mangadex.org/manga/$mangaDexId"
+            val payload = if (forceNetwork) transport.fetchFresh(url, null) else transport.fetch(url, null)
             val response = Json.parseToJsonElement(payload.content) as? JsonObject
                 ?: error("MangaDex work response is not an object")
             require(response.string("result") == "ok")
@@ -78,7 +85,11 @@ class MangaDexVerifiedWorkLinker(
         capture {
             require(canonicalTitleId.isNotBlank())
             require(
-                preview(canonicalTitleId, candidate.mangaDexId).getOrThrow() == candidate,
+                previewWithCachePolicy(
+                    canonicalTitleId,
+                    candidate.mangaDexId,
+                    forceNetwork = true,
+                ).getOrThrow() == candidate,
             ) { "MangaDex work crosswalk changed before confirmation" }
             val linked = titles.getExternalIdentities(canonicalTitleId)
                 .filter { it.provider == "mangadex" }
