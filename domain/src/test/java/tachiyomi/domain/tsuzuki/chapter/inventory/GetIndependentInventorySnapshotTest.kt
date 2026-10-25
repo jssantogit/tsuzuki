@@ -106,6 +106,96 @@ class GetIndependentInventorySnapshotTest {
         result.sources.map { it.knownIndividualClaims } shouldBe listOf(1, 1)
     }
 
+    @Test
+    fun `failed attempt remains latest without advancing claim observation time`() = runTest {
+        val ledger = FakeLedger()
+        val source = scope("mangadex", "original")
+        ledger.saveBatch(
+            batch(
+                source,
+                "page-1",
+                10L,
+                InventoryFetchOutcome.PARTIAL,
+                listOf(claim("release", "12.05", InventoryDerivation.RELEASE_RECORD, 10L)),
+            ),
+        )
+        ledger.saveBatch(batch(source, "page-2", 20L, InventoryFetchOutcome.FAILED, emptyList()))
+
+        val result = GetIndependentInventorySnapshot(ledger).execute("title")
+        val snapshot = result.sources.single()
+
+        snapshot.latestObservedAt shouldBe 20L
+        snapshot.latestAttemptAt shouldBe 20L
+        snapshot.latestAttemptOutcomes shouldBe setOf(InventoryFetchOutcome.FAILED)
+        snapshot.latestSuccessfulFetchAt shouldBe 10L
+        snapshot.latestClaimObservedAt shouldBe 10L
+    }
+
+    @Test
+    fun `first failed attempt has no successful fetch or claim observation time`() = runTest {
+        val ledger = FakeLedger()
+        val source = scope("mangadex", "original")
+        ledger.saveBatch(batch(source, "page-1", 20L, InventoryFetchOutcome.FAILED, emptyList()))
+
+        val result = GetIndependentInventorySnapshot(ledger).execute("title")
+        val snapshot = result.sources.single()
+
+        result.knowledge shouldBe InventoryKnowledge.UNKNOWN
+        snapshot.latestAttemptAt shouldBe 20L
+        snapshot.latestAttemptOutcomes shouldBe setOf(InventoryFetchOutcome.FAILED)
+        snapshot.latestSuccessfulFetchAt shouldBe null
+        snapshot.latestClaimObservedAt shouldBe null
+    }
+
+    @Test
+    fun `empty partial fetch is visible without inventing a claim observation`() = runTest {
+        val ledger = FakeLedger()
+        val source = scope("mangadex", null, editionVerified = false)
+        ledger.saveBatch(batch(source, "page-1", 20L, InventoryFetchOutcome.PARTIAL, emptyList()))
+
+        val result = GetIndependentInventorySnapshot(ledger).execute("title")
+        val snapshot = result.sources.single()
+
+        result.knowledge shouldBe InventoryKnowledge.PARTIAL
+        result.editorialCompletenessConfirmed shouldBe false
+        snapshot.knownIndividualClaims shouldBe 0
+        snapshot.releaseObservations shouldBe 0
+        snapshot.latestAttemptAt shouldBe 20L
+        snapshot.latestAttemptOutcomes shouldBe setOf(InventoryFetchOutcome.PARTIAL)
+        snapshot.latestSuccessfulFetchAt shouldBe 20L
+        snapshot.latestClaimObservedAt shouldBe null
+    }
+
+    @Test
+    fun `attempt and success timestamps stay isolated in offline edition snapshots`() = runTest {
+        val ledger = FakeLedger()
+        val original = scope("mangadex", "original")
+        val colored = scope("mangadex", "colored")
+        ledger.saveBatch(
+            batch(
+                original,
+                "page-1",
+                10L,
+                InventoryFetchOutcome.PARTIAL,
+                listOf(claim("release", "12.05", InventoryDerivation.RELEASE_RECORD, 10L)),
+            ),
+        )
+        ledger.saveBatch(batch(colored, "page-1", 20L, InventoryFetchOutcome.FAILED, emptyList()))
+
+        val result = GetIndependentInventorySnapshot(ledger).execute("title")
+
+        result.sources.map { it.scope.editionKey }.toSet() shouldBe setOf("original", "colored")
+        val originalSnapshot = result.sources.single { it.scope.editionKey == "original" }
+        originalSnapshot.latestAttemptAt shouldBe 10L
+        originalSnapshot.latestSuccessfulFetchAt shouldBe 10L
+        originalSnapshot.latestClaimObservedAt shouldBe 10L
+        val coloredSnapshot = result.sources.single { it.scope.editionKey == "colored" }
+        coloredSnapshot.latestAttemptAt shouldBe 20L
+        coloredSnapshot.latestAttemptOutcomes shouldBe setOf(InventoryFetchOutcome.FAILED)
+        coloredSnapshot.latestSuccessfulFetchAt shouldBe null
+        coloredSnapshot.latestClaimObservedAt shouldBe null
+    }
+
     private fun scope(producer: String, edition: String?, editionVerified: Boolean = edition != null) = InventoryScope(
         canonicalTitleId = "title",
         producerId = producer,

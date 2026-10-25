@@ -17,7 +17,16 @@ data class IndependentInventorySourceSnapshot(
     val releaseObservations: Int,
     val declaredTotals: Set<Int>,
     val outcomes: Set<InventoryFetchOutcome>,
+    /** Legacy aggregate timestamp across stored claim and page observations. */
     val latestObservedAt: Long?,
+    /** Latest recorded fetch attempt; explicit NOT_ATTEMPTED rows are not attempts. */
+    val latestAttemptAt: Long? = null,
+    /** Outcomes tied at the latest attempt timestamp, retaining ambiguity across pages. */
+    val latestAttemptOutcomes: Set<InventoryFetchOutcome> = emptySet(),
+    /** Latest page observation from a successful PARTIAL or EXHAUSTED fetch. */
+    val latestSuccessfulFetchAt: Long? = null,
+    /** Latest timestamp carried by a stored claim; it does not imply a successful page outcome. */
+    val latestClaimObservedAt: Long? = null,
 )
 
 data class IndependentInventorySnapshot(
@@ -55,6 +64,8 @@ class GetIndependentInventorySnapshot(
                 .sortedByDescending { it.claim.observedAt }
                 .distinctBy { it.claim.sourceRecordId }
             val sourcePages = pages.filter { it.scope == scope }
+            val attemptPages = sourcePages.filter { it.outcome != InventoryFetchOutcome.NOT_ATTEMPTED }
+            val latestAttemptAt = attemptPages.maxOfOrNull { it.observedAt }
             val summary = summarizeInventory(sourceClaims)
             IndependentInventorySourceSnapshot(
                 scope = scope,
@@ -66,6 +77,17 @@ class GetIndependentInventorySnapshot(
                     sourceClaims.map { it.claim.observedAt } +
                         sourcePages.map { it.observedAt }
                     ).maxOrNull(),
+                latestAttemptAt = latestAttemptAt,
+                latestAttemptOutcomes = latestAttemptAt?.let { at ->
+                    attemptPages.filter { it.observedAt == at }.map { it.outcome }.toSet()
+                }.orEmpty(),
+                latestSuccessfulFetchAt = sourcePages
+                    .filter {
+                        it.outcome == InventoryFetchOutcome.PARTIAL ||
+                            it.outcome == InventoryFetchOutcome.EXHAUSTED
+                    }
+                    .maxOfOrNull { it.observedAt },
+                latestClaimObservedAt = sourceClaims.maxOfOrNull { it.claim.observedAt },
             )
         }
 
