@@ -21,9 +21,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
+import okhttp3.CookieJar
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.CookieJar
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -159,7 +159,7 @@ class NativeInventoryReleaseTransport(
         val numericSeconds = value?.trim()?.toLongOrNull()
         if (numericSeconds != null) return (numericSeconds.coerceIn(1L, 3600L) * 1000L)
         val httpDateDelay = runCatching {
-            ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() -
+            ZonedDateTime.parse(value.orEmpty(), DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() -
                 System.currentTimeMillis()
         }.getOrNull()
         return (httpDateDelay ?: DEFAULT_RETRY_AFTER_MS).coerceIn(DEFAULT_RETRY_AFTER_MS, MAX_RETRY_AFTER_MS)
