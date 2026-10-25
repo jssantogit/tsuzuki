@@ -123,6 +123,30 @@ class NativeInventoryReleaseTransportTest {
     }
 
     @Test
+    fun mangaDexReadOnlyAllowlistRejectsUnknownMethodsAndTrailingRoutes() = runBlocking {
+        var requests = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200)
+                .message("OK").body("{}".toResponseBody()).build()
+        }.build()
+        val transport = transport(client)
+        val uuid = "12345678-1234-1234-1234-123456789abc"
+        val rejected = listOf(
+            "https://api.mangadex.org/manga/$uuid/statistics",
+            "https://api.mangadex.org/manga/$uuid/feed/extra",
+            "https://api.mangadex.org/manga/$uuid/",
+        )
+        rejected.forEach { url ->
+            shouldThrow<IllegalArgumentException> { transport.fetch(url, null) }
+        }
+        shouldThrow<IllegalArgumentException> {
+            transport.fetch("https://api.mangadex.org/manga/$uuid/feed", """{"unexpected":"post"}""")
+        }
+        requests shouldBe 0
+    }
+
+    @Test
     fun oversizedResponseIsNotCachedAndInvalidEndpointsNeverReachHttp() = runBlocking {
         var requested = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
