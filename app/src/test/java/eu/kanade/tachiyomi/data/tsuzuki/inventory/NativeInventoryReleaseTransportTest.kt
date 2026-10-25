@@ -89,6 +89,23 @@ class NativeInventoryReleaseTransportTest {
     }
 
     @Test
+    fun explicitFreshFetchBypassesCachedMangaDexWorkMetadata() = runBlocking {
+        var requests = 0
+        val url = "https://api.mangadex.org/manga/12345678-1234-1234-1234-123456789abc"
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200)
+                .message("OK").body("""{"revision":$requests}""".toResponseBody()).build()
+        }.build()
+        val transport = transport(client)
+
+        transport.fetch(url, null).content shouldBe """{"revision":1}"""
+        transport.fetch(url, null).content shouldBe """{"revision":1}"""
+        transport.fetchFresh(url, null).content shouldBe """{"revision":2}"""
+        requests shouldBe 2
+    }
+
+    @Test
     fun oversizedResponseIsNotCachedAndInvalidEndpointsNeverReachHttp() = runBlocking {
         var requested = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
