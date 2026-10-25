@@ -136,7 +136,8 @@ class MangaDexVerifiedWorkLinkerTest {
 
     private fun details(mu: String, mal: String? = null): String {
         val malField = mal?.let { ",\"mal\":\"$it\"" } ?: ""
-        return """{"result":"ok","data":{"id":"$work","type":"manga","attributes":{"title":{"en":"Exact Manga"},"links":{"mu":"$mu"$malField}}}}"""
+        return """{"result":"ok","data":{"id":"$work","type":"manga","attributes":""" +
+            """{"title":{"en":"Exact Manga"},"links":{"mu":"$mu"$malField}}}}"""
     }
 
     private class FakeTransport(private val response: String) : InventoryReleaseTransport {
