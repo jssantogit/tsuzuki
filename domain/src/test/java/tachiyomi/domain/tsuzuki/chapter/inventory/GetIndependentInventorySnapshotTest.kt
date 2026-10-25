@@ -38,6 +38,8 @@ class GetIndependentInventorySnapshotTest {
         result.sources.single().knownIndividualClaims shouldBe 80
         result.sources.single().declaredTotals shouldBe setOf(120)
         result.sources.single().outcomes shouldBe setOf(InventoryFetchOutcome.EXHAUSTED)
+        result.sources.single().knownEditorialLabels shouldBe (1..8).map(Int::toString)
+        result.sources.single().releaseExampleLabels shouldBe emptyList()
     }
 
     @Test
@@ -73,6 +75,8 @@ class GetIndependentInventorySnapshotTest {
         result.sources.single().declaredTotals shouldBe setOf(1000)
         result.sources.single().outcomes shouldBe setOf(InventoryFetchOutcome.PARTIAL, InventoryFetchOutcome.FAILED)
         result.sources.single().latestObservedAt shouldBe 20L
+        result.sources.single().knownEditorialLabels shouldBe emptyList()
+        result.sources.single().releaseExampleLabels shouldBe listOf("246-251", "12.05")
     }
 
     @Test

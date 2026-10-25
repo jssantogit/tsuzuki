@@ -84,6 +84,15 @@ class InventoryClaimPolicyTest {
     }
 
     @Test
+    fun `unknown language is not a wildcard for a different observed language`() {
+        val editorial = claim("12", InventoryClaimKind.INDIVIDUAL, InventoryDerivation.PRIMARY_EDITORIAL)
+            .copy(language = "en")
+        InventoryClaimPolicy.mayPromote(verifiedScope(), editorial) shouldBe false
+        InventoryClaimPolicy.mayPromote(verifiedScope().copy(language = "en"), editorial) shouldBe true
+        InventoryClaimPolicy.mayPromote(verifiedScope().copy(language = "pt-br"), editorial) shouldBe false
+    }
+
+    @Test
     fun `kitsu placeholder and declared total can never act as canonical proof`() {
         val scope = verifiedScope("kitsu")
         val placeholder = claim("5000", InventoryClaimKind.DERIVED_PLACEHOLDER, InventoryDerivation.COUNT_DERIVED)
