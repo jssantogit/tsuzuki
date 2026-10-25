@@ -21,6 +21,38 @@ class BackupCanonicalCoreTest {
     }
 
     @Test
+    fun `legacy count ID retains progress history and variant across portable backup roundtrip`() {
+        val core = core()
+        // A canonical-title merge changes the chapter owner, never its historical ID.
+        val oldChapterId = "tsuzuki:count:previous-local-title:37"
+        val legacy = core.copy(
+            chapters = core.chapters.map {
+                it.copy(
+                    id = oldChapterId,
+                    displayNumber = "37",
+                    baseNumber = 37,
+                    confirmation = "PROVISIONAL",
+                )
+            },
+            variants = core.variants.map { it.copy(canonicalChapterId = oldChapterId) },
+            progress = core.progress.map { it.copy(canonicalChapterId = oldChapterId) },
+            history = core.history.map { it.copy(canonicalChapterId = oldChapterId) },
+        )
+
+        legacy.validate()
+        val encoded = Json.encodeToString(BackupCanonicalCore.serializer(), legacy)
+        val decoded = Json.decodeFromString(BackupCanonicalCore.serializer(), encoded)
+        decoded.validate()
+
+        decoded shouldBe legacy
+        decoded.chapters.single().canonicalTitleId shouldBe "title-1"
+        decoded.chapters.single().id shouldBe oldChapterId
+        decoded.progress.single().canonicalChapterId shouldBe oldChapterId
+        decoded.history.single().canonicalChapterId shouldBe oldChapterId
+        decoded.variants.single().canonicalChapterId shouldBe oldChapterId
+    }
+
+    @Test
     fun `orphaned progress or unrelated source variant are rejected before restore`() {
         runCatching {
             core().copy(progress = listOf(BackupCoreProgress("missing", true, 1, null, 10))).validate()
