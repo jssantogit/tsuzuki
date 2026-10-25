@@ -6,6 +6,47 @@ import org.junit.jupiter.api.Test
 
 class GetIndependentInventorySnapshotTest {
     @Test
+    fun `community and local table of contents remain individually observed candidates not editorial chapters`() = runTest {
+        val ledger = FakeLedger()
+        val wikipedia = scope("wikimedia", "japanese-original")
+        val local = scope("local-toc", "translated-edition")
+        ledger.saveBatch(
+            batch(
+                wikipedia,
+                "revision-verified",
+                20L,
+                InventoryFetchOutcome.EXHAUSTED,
+                listOf(
+                    claim("ch1", "1", InventoryDerivation.COMMUNITY_CURATED, 20L),
+                    claim("ch2", "2", InventoryDerivation.COMMUNITY_CURATED, 20L),
+                ),
+            ),
+        )
+        ledger.saveBatch(
+            batch(
+                local,
+                "file-selection",
+                21L,
+                InventoryFetchOutcome.EXHAUSTED,
+                listOf(claim("toc-1", "0.01", InventoryDerivation.USER_SUPPLIED_EDITION_TOC, 21L)),
+            ),
+        )
+
+        val snapshot = GetIndependentInventorySnapshot(ledger).execute("title")
+        val community = snapshot.sources.single { it.scope.producerId == "wikimedia" }
+        val imported = snapshot.sources.single { it.scope.producerId == "local-toc" }
+
+        snapshot.knowledge shouldBe InventoryKnowledge.PARTIAL
+        snapshot.editorialCompletenessConfirmed shouldBe false
+        community.knownIndividualClaims shouldBe 0
+        community.candidateObservations shouldBe 2
+        community.candidateExampleLabels shouldBe listOf("1", "2")
+        imported.knownIndividualClaims shouldBe 0
+        imported.candidateObservations shouldBe 1
+        imported.candidateExampleLabels shouldBe listOf("0.01")
+    }
+
+    @Test
     fun `no evidence stays unknown without inventing a count or complete inventory`() = runTest {
         val result = GetIndependentInventorySnapshot(FakeLedger()).execute("title")
 

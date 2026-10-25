@@ -30,6 +30,24 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 class IndependentInventoryRepositoryImplTest {
+    @Test
+    fun `SQLite stores community and user supplied chapter candidates without promoting them`() = runBlocking<Unit> {
+        val source = inventoryScope(editionKey = "japanese-original", language = "ja")
+        val community = claim(source, "wiki-rev-123-ch1", "1", 10L).copy(
+            derivation = InventoryDerivation.COMMUNITY_CURATED,
+        )
+        val local = claim(source, "epub-isbn-ch2", "2", 10L).copy(
+            derivation = InventoryDerivation.USER_SUPPLIED_EDITION_TOC,
+        )
+
+        repository.saveBatch(batch(scope = source, claims = listOf(community, local)))
+        repository.byTitle(TITLE_ID).map { it.claim.derivation }.toSet() shouldBe setOf(
+            InventoryDerivation.COMMUNITY_CURATED,
+            InventoryDerivation.USER_SUPPLIED_EDITION_TOC,
+        )
+        repository.batchesByTitle(TITLE_ID).single().itemCount shouldBe 2
+    }
+
 
     private lateinit var driver: SqlDriver
     private lateinit var database: Database

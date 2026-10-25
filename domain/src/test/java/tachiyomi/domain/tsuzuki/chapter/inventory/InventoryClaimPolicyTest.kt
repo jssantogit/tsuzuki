@@ -7,6 +7,21 @@ import org.junit.jupiter.api.Test
 
 class InventoryClaimPolicyTest {
     @Test
+    fun `community and local edition toc claims never acquire publisher authority by matching a number`() {
+        val scope = verifiedScope("wikimedia")
+        val number = claim("12.05", InventoryClaimKind.INDIVIDUAL, InventoryDerivation.PRIMARY_EDITORIAL)
+        val community = number.copy(derivation = InventoryDerivation.COMMUNITY_CURATED)
+        val localToc = number.copy(derivation = InventoryDerivation.USER_SUPPLIED_EDITION_TOC)
+
+        InventoryClaimPolicy.mayPromote(scope, number) shouldBe true
+        InventoryClaimPolicy.mayPromote(scope, community) shouldBe false
+        InventoryClaimPolicy.mayPromote(scope, localToc) shouldBe false
+        summarizeInventory(
+            listOf(InventoryStoredClaim(scope, community), InventoryStoredClaim(scope, localToc)),
+        ).individuallyAdmissibleClaims shouldBe 0
+    }
+
+    @Test
     fun `120 declared and 80 editorial identities remain 80 admissible with unknown completeness`() {
         val scope = verifiedScope()
         val records = (1..80).map { number ->
