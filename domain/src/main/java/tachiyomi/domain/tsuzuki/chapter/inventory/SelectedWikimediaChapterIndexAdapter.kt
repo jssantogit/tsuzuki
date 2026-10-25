@@ -29,6 +29,7 @@ data class SelectedWikimediaRevision(
  */
 object SelectedWikimediaChapterIndexAdapter {
     const val MAX_SOURCE_BYTES = 256 * 1024
+
     // A single selected article may enumerate long series; the response byte budget remains strict.
     const val MAX_ENTRIES = 2048
     private const val MAX_REFERENCE_LENGTH = 2048
