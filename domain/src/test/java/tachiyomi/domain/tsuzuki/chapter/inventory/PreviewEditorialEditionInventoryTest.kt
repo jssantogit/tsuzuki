@@ -81,7 +81,14 @@ class PreviewEditorialEditionInventoryTest {
     @Test
     fun `ranges vague chapter names and unrepresentable exact fractions never receive identities`() {
         val edition = scope()
-        listOf("1-5", "Special Chapter 1", "Chapter 1v2", "12.0", "12.0000000001", "Tower of God Ep. 235").forEach { label ->
+        listOf(
+            "1-5",
+            "Special Chapter 1",
+            "Chapter 1v2",
+            "12.0",
+            "12.0000000001",
+            "Tower of God Ep. 235",
+        ).forEach { label ->
             preview(edition).execute(batch(edition, claim(label)), emptyList()) shouldBe
                 EditorialEditionPreflight.Blocked(EditorialEditionBlockReason.UNSUPPORTED_STRUCTURE)
         }
