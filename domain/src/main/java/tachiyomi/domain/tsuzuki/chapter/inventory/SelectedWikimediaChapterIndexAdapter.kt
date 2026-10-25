@@ -39,6 +39,11 @@ object SelectedWikimediaChapterIndexAdapter {
     private val specialChapter = Regex(
         """(?i)^(?:special chapter|bonus chapter)(?:\s+(?:0|[1-9][0-9]*)(?:\.[0-9]+)?|\s*[:#–—-]\s*[\p{L}][^\r\n]*)?$""",
     )
+    // Even a descriptive special can mention multiple units or a reupload.
+    // Neither can be treated as one individually identified editorial unit.
+    private val ambiguousSpecialSequence = Regex(
+        """(?i)(?:\b\d+(?:\.\d+)?\s*[-–—]\s*\d+(?:\.\d+)?\b|\b\d+(?:\.\d+)?v\d+\b)""",
+    )
     private val plainTableCell = Regex("""^[\p{L}\p{N} .,;:()'!+–—-]{1,512}$""")
     private val otherHeading = Regex("^== [^=]+ ==$")
     private val internalTarget = Regex("^[\\p{L}\\p{N}_ .,:;()'!+–—\\-]+$")
@@ -193,16 +198,18 @@ object SelectedWikimediaChapterIndexAdapter {
                     !label.contains('[') && !label.contains(']'),
             ) { "Wikimedia chapter label is invalid" }
             require(units.size < MAX_ENTRIES) { "Wikimedia chapter list exceeds the entry limit" }
+            val individuallyLabeledSpecial =
+                specialChapter.matches(label) && !ambiguousSpecialSequence.containsMatchIn(label)
             val kind = when {
                 chapterNumber.matches(label) -> InventoryClaimKind.INDIVIDUAL
                 chapterRange.matches(label) -> InventoryClaimKind.RELEASE_RANGE
-                specialChapter.matches(label) -> InventoryClaimKind.INDIVIDUAL
+                individuallyLabeledSpecial -> InventoryClaimKind.INDIVIDUAL
                 else -> InventoryClaimKind.AMBIGUOUS
             }
             val category = when (kind) {
                 InventoryClaimKind.RELEASE_RANGE -> "chapter-range"
                 InventoryClaimKind.AMBIGUOUS -> "unclassified"
-                else -> if (specialChapter.matches(label)) "special-chapter" else "chapter"
+                else -> if (individuallyLabeledSpecial) "special-chapter" else "chapter"
             } + if (table) "-table-entry" else "-list-entry"
             units += ParsedUnit(target, label, kind, category)
         }
