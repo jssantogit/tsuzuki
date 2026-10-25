@@ -29,7 +29,8 @@ data class SelectedWikimediaRevision(
  */
 object SelectedWikimediaChapterIndexAdapter {
     const val MAX_SOURCE_BYTES = 256 * 1024
-    const val MAX_ENTRIES = 256
+    // A single selected article may enumerate long series; the response byte budget remains strict.
+    const val MAX_ENTRIES = 2048
     private const val MAX_REFERENCE_LENGTH = 2048
     private const val MAX_UNIT_LENGTH = 512
     private val chapterNumber = Regex("^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$")
