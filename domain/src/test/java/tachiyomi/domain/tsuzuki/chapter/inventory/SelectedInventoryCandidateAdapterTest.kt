@@ -179,6 +179,25 @@ class SelectedInventoryCandidateAdapterTest {
     }
 
     @Test
+    fun `Wikimedia descriptive special labels containing embedded ranges or reupload tags are not individual`() {
+        val selection = syntheticWikimediaRevision(
+            "== Chapters ==\n* [[Special_story|Special Chapter: Side Story]]" +
+                "\n* [[Special_set|Special Chapter: Bonus 1–5]]" +
+                "\n* [[Bonus_revision|Bonus Chapter: Story 12v2]]",
+        )
+
+        val batch = SelectedWikimediaChapterIndexAdapter.adapt(selection).getOrThrow()
+
+        batch.claims.map { it.kind }.shouldContainExactly(
+            InventoryClaimKind.INDIVIDUAL,
+            InventoryClaimKind.AMBIGUOUS,
+            InventoryClaimKind.AMBIGUOUS,
+        )
+        batch.claims.filter { InventoryClaimPolicy.isNonEditorialCandidate(it) }.map { it.label }
+            .shouldContainExactly("Special Chapter: Side Story")
+    }
+
+    @Test
     fun `selected Wikimedia revision can enumerate a large title without fabricating missing chapters`() {
         val explicitlyIndexed = (1..1200).joinToString("\n") { number ->
             "* [[Chapter_$number|$number]]"
