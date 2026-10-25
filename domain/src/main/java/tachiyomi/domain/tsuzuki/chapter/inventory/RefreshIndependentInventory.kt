@@ -66,7 +66,7 @@ class RefreshIndependentInventory(
             editionIdentityVerified = false,
         )
 
-        var pageKey = FIRST_PAGE
+        var pageKey = resumePageKey(ledger.batchesByTitle(canonicalTitleId), scope)
         var saved = 0
         var observations = 0
         val visited = hashSetOf<String>()
@@ -128,6 +128,33 @@ class RefreshIndependentInventory(
         return InventoryRefreshResult(InventoryRefreshStop.PARTIAL, saved, observations)
     }
 
+    /**
+     * Follow only previously persisted pages of this exact work/edition scope.
+     * A partial page with a cursor is a checkpoint, not an editorial completeness
+     * claim. Revisit failed pages, and restart only after an exhausted traversal
+     * or an invalid/stale cursor chain.
+     */
+    private fun resumePageKey(
+        pages: List<InventoryStoredBatch>,
+        scope: InventoryScope,
+    ): String {
+        val known = pages.filter { it.scope == scope }.associateBy { it.pageKey }
+        val visited = hashSetOf<String>()
+        var cursor = FIRST_PAGE
+        repeat(MAX_RESUME_DEPTH) {
+            if (!visited.add(cursor)) return FIRST_PAGE
+            val batch = known[cursor] ?: return cursor
+            when (batch.outcome) {
+                InventoryFetchOutcome.EXHAUSTED -> return FIRST_PAGE
+                InventoryFetchOutcome.FAILED, InventoryFetchOutcome.NOT_ATTEMPTED -> return cursor
+                InventoryFetchOutcome.PARTIAL -> {
+                    cursor = batch.nextCursor?.takeIf(String::isNotBlank) ?: return FIRST_PAGE
+                }
+            }
+        }
+        return FIRST_PAGE
+    }
+
     private suspend fun verifiedIdentity(
         canonicalTitleId: String,
         producerId: String,
@@ -137,5 +164,6 @@ class RefreshIndependentInventory(
 
     private companion object {
         const val FIRST_PAGE = "start"
+        const val MAX_RESUME_DEPTH = 100
     }
 }
