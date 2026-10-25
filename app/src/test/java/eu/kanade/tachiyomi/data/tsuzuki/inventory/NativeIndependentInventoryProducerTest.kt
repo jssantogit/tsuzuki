@@ -107,7 +107,7 @@ class NativeIndependentInventoryProducerTest {
 
     private class RecordingInventoryTransport(private val response: String) : InventoryReleaseTransport {
         val calls = mutableListOf<Pair<String, String?>>()
-        override suspend fun fetch(url: String, postBody: String?): String {
+        override suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload {
             calls += url to postBody
             return InventoryHttpPayload(response, observedAt = 42L)
         }
