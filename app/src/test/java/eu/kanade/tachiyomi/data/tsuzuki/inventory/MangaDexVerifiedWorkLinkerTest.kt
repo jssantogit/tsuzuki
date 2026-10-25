@@ -13,7 +13,7 @@ class MangaDexVerifiedWorkLinkerTest {
     private val work = "12345678-1234-1234-1234-123456789abc"
 
     @Test
-    fun \`MangaDex id can be linked only through a matching verified external work crosswalk\`() = runTest {
+    fun `MangaDex id can be linked only through a matching verified external work crosswalk`() = runTest {
         val repo = mockk<CanonicalTitleRepository>()
         val network = FakeTransport(details(mu = "8675309"))
         coEvery { repo.getExternalIdentities("title") } returns listOf(
@@ -36,7 +36,7 @@ class MangaDexVerifiedWorkLinkerTest {
     }
 
     @Test
-    fun \`title similarity without exact crosswalk cannot verify a MangaDex work\`() = runTest {
+    fun `title similarity without exact crosswalk cannot verify a MangaDex work`() = runTest {
         val repo = mockk<CanonicalTitleRepository>()
         coEvery { repo.getExternalIdentities("title") } returns listOf(
             ExternalIdentity("title", "mangaupdates", "123", true, 1L),
@@ -47,7 +47,7 @@ class MangaDexVerifiedWorkLinkerTest {
     }
 
     @Test
-    fun \`unverified crosswalk and conflicting verified ids both fail closed\`() = runTest {
+    fun `unverified crosswalk and conflicting verified ids both fail closed`() = runTest {
         val repo = mockk<CanonicalTitleRepository>()
         coEvery { repo.getExternalIdentities("title") } returns listOf(
             ExternalIdentity("title", "mangaupdates", "123", false, 1L),
@@ -59,7 +59,7 @@ class MangaDexVerifiedWorkLinkerTest {
     }
 
     @Test
-    fun \`MangaDex response with different work id is rejected\`() = runTest {
+    fun `MangaDex response with different work id is rejected`() = runTest {
         val repo = mockk<CanonicalTitleRepository>()
         val invalid = details(mu = "8675309")
             .replace(work, "ffffffff-ffff-ffff-ffff-ffffffffffff")
@@ -68,7 +68,7 @@ class MangaDexVerifiedWorkLinkerTest {
     }
 
     @Test
-    fun \`existing MangaDex ownership by another canonical title is not overwritten\`() = runTest {
+    fun `existing MangaDex ownership by another canonical title is not overwritten`() = runTest {
         val repo = mockk<CanonicalTitleRepository>()
         val other = mockk<tachiyomi.domain.tsuzuki.model.CanonicalTitle>()
         coEvery { other.id } returns "other"
@@ -84,7 +84,7 @@ class MangaDexVerifiedWorkLinkerTest {
     }
 
     @Test
-    fun \`invalid UUID cannot cause a network request\`() = runTest {
+    fun `invalid UUID cannot cause a network request`() = runTest {
         val repo = mockk<CanonicalTitleRepository>()
         val network = FakeTransport(details(mu = "8675309"))
         MangaDexVerifiedWorkLinker(repo, network).preview("title", "bad-id").isFailure shouldBe true
@@ -92,7 +92,7 @@ class MangaDexVerifiedWorkLinkerTest {
     }
 
     private fun details(mu: String, mal: String? = null): String {
-        val malField = mal?.let { ""","mal":"$it"""" } ?: ""
+        val malField = mal?.let { ",\\\"mal\\\":\\\"$it\\\"" } ?: ""
         return """{"result":"ok","data":{"id":"$work","type":"manga","attributes":{"title":{"en":"Exact Manga"},"links":{"mu":"$mu"$malField}}}}"""
     }
 
