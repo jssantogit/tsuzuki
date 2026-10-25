@@ -110,7 +110,7 @@ class SelectedInventoryCandidateAdapterTest {
     @Test
     fun `selected Wikimedia revision can enumerate a large title without fabricating missing chapters`() {
         val explicitlyIndexed = (1..1200).joinToString("\n") { number ->
-            "* [[Chapter_${number}|$number]]"
+            "* [[Chapter_$number|$number]]"
         }
         val selected = syntheticWikimediaRevision("== Chapters ==\n$explicitlyIndexed")
 
@@ -127,7 +127,7 @@ class SelectedInventoryCandidateAdapterTest {
     @Test
     fun `Wikimedia source rejects more entries than the bounded selected-index budget`() {
         val indexed = (1..2049).joinToString("\n") { number ->
-            "* [[Chapter_${number}|$number]]"
+            "* [[Chapter_$number|$number]]"
         }
         val selected = syntheticWikimediaRevision("== Chapters ==\n$indexed")
 
