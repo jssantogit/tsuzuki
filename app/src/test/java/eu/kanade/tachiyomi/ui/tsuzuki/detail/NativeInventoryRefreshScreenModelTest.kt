@@ -148,10 +148,56 @@ class NativeInventoryRefreshScreenModelTest {
         model.state.value.lastStop shouldBe InventoryRefreshStop.EXHAUSTED
     }
 
+    @Test
+    fun `MangaDex work preview requires the inventory integration to be enabled`() = runTest(dispatcher) {
+        val linker = mockk<MangaDexVerifiedWorkLinker>()
+        val registry = mockk<IntegrationRegistry>()
+        every { registry.inventoryProducers() } returns emptyList()
+        every { registry.configurationFingerprint() } returns "disabled"
+        val model = model(linker, registry = registry)
+        model.start("title")
+
+        model.previewMangaDexLink("title", uuid) shouldBe null
+        model.state.value.linkFailed shouldBe true
+        coVerify(exactly = 0) { linker.preview(any(), any()) }
+    }
+
+    @Test
+    fun `revoking the inventory integration blocks MangaDex work confirmation`() = runTest(dispatcher) {
+        val linker = mockk<MangaDexVerifiedWorkLinker>()
+        coEvery { linker.preview("title", uuid) } returns Result.success(candidate)
+        val registry = activeInventoryRegistry()
+        var enabled = true
+        every { registry.inventoryProducers() } answers {
+            if (enabled) listOf(allowedMangaDexProducer()) else emptyList()
+        }
+        val model = model(linker, registry = registry)
+        model.start("title")
+
+        model.previewMangaDexLink("title", uuid)
+        advanceUntilIdle()
+        model.state.value.linkCandidate shouldBe candidate
+
+        enabled = false
+        model.confirmMangaDexLink("title") shouldBe null
+        coVerify(exactly = 0) { linker.confirm(any(), any()) }
+    }
+
+    private fun allowedMangaDexProducer(): IndependentInventoryProducer =
+        mockk<IndependentInventoryProducer>().also { producer ->
+            every { producer.producerId } returns "mangadex"
+        }
+
+    private fun activeInventoryRegistry(): IntegrationRegistry =
+        mockk<IntegrationRegistry>().also { registry ->
+            every { registry.inventoryProducers() } answers { listOf(allowedMangaDexProducer()) }
+            every { registry.configurationFingerprint() } returns "steady"
+        }
+
     private fun model(
         linker: MangaDexVerifiedWorkLinker,
         refresh: RefreshIndependentInventory = mockk(),
-        registry: IntegrationRegistry = mockk(),
+        registry: IntegrationRegistry = activeInventoryRegistry(),
     ) = NativeInventoryRefreshScreenModel(
         refreshInventory = refresh,
         mangaDexWorkLinker = linker,
