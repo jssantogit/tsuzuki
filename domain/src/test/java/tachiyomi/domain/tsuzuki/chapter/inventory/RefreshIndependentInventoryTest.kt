@@ -44,6 +44,30 @@ class RefreshIndependentInventoryTest {
     }
 
     @Test
+    fun `manual subsequent refresh resumes after its last persisted partial cursor`() = runTest {
+        val ledger = FakeLedger()
+        val calls = mutableListOf<String>()
+        val producer = producer { scope, page ->
+            calls += page
+            when (page) {
+                "start" -> Result.success(
+                    batch(scope, page, "first", "1", InventoryFetchOutcome.PARTIAL, "page:2"),
+                )
+                "page:2" -> Result.success(
+                    batch(scope, page, "second", "2", InventoryFetchOutcome.EXHAUSTED),
+                )
+                else -> error("Unexpected cursor")
+            }
+        }
+        val refresh = RefreshIndependentInventory(titleRepository(), ledger)
+        refresh.execute("canonical", producer, { true }, maxPages = 1).stop shouldBe InventoryRefreshStop.PARTIAL
+        refresh.execute("canonical", producer, { true }, maxPages = 1).stop shouldBe InventoryRefreshStop.EXHAUSTED
+
+        calls shouldBe listOf("start", "page:2")
+        ledger.claims.map { it.sourceRecordId } shouldBe listOf("first", "second")
+    }
+
+    @Test
     fun `unverified crosswalk cannot cause source network access`() = runTest {
         val titles = titleRepository(verified = false)
         val ledger = FakeLedger()
