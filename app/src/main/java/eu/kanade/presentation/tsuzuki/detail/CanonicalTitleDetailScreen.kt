@@ -92,6 +92,7 @@ fun CanonicalTitleDetailScreen(
     onBaixarChapter: (String) -> Unit,
     onOpenProvidersSettings: () -> Unit,
     onFetchInventory: (String) -> Unit,
+    onLinkMangaDex: () -> Unit,
     inventoryRefresh: NativeInventoryRefreshState,
     modifier: Modifier = Modifier,
 ) {
@@ -127,7 +128,7 @@ fun CanonicalTitleDetailScreen(
             is CanonicalTitleScreenState.Loaded -> LoadedDetails(
                 state, background, navigateUp, onAtualizar, onAddToLibrary, onRemoveFromLibrary,
                 onReadTitle, onOpenChapter, onBaixarChapter, onOpenProvidersSettings,
-                onFetchInventory, inventoryRefresh,
+                onFetchInventory, onLinkMangaDex, inventoryRefresh,
             )
         }
     }
@@ -146,6 +147,7 @@ private fun LoadedDetails(
     onDownload: (String) -> Unit,
     onProviders: () -> Unit,
     onFetchInventory: (String) -> Unit,
+    onLinkMangaDex: () -> Unit,
     inventoryRefresh: NativeInventoryRefreshState,
 ) {
     var mode by rememberSaveable(state.title.id) { mutableStateOf(CanonicalDetailsLowerMode.COMPACT) }
@@ -204,7 +206,7 @@ private fun LoadedDetails(
                     }
                     if (chapters.isEmpty() || state.independentInventory.sources.isNotEmpty()) {
                         item(key = "independent-inventory") {
-                            IndependentInventoryInfo(state.independentInventory, inventoryRefresh, onFetchInventory)
+                            IndependentInventoryInfo(state.independentInventory, inventoryRefresh, onFetchInventory, onLinkMangaDex)
                         }
                     }
                 }
@@ -231,7 +233,7 @@ private fun LoadedDetails(
                                 Icon(MaterialSymbols.Rounded.Search, stringResource(MR.strings.tsuzuki_details_jump))
                             }
                         }
-                        IndependentInventoryInfo(state.independentInventory, inventoryRefresh, onFetchInventory)
+                        IndependentInventoryInfo(state.independentInventory, inventoryRefresh, onFetchInventory, onLinkMangaDex)
                     }
                     if (chapters.isEmpty()) {
                         item(key = "empty-chapters") {
@@ -373,6 +375,7 @@ private fun IndependentInventoryInfo(
     snapshot: IndependentInventorySnapshot,
     refresh: NativeInventoryRefreshState,
     onFetchInventory: (String) -> Unit,
+    onLinkMangaDex: () -> Unit,
 ) {
     val colors = defaultSkinColors()
     Column(
@@ -406,6 +409,10 @@ private fun IndependentInventoryInfo(
                     onClick = { onFetchInventory("mangadex") },
                 )
             }
+            DefaultSkinTextAction(
+                text = stringResource(MR.strings.tsuzuki_inventory_link_mangadex),
+                onClick = onLinkMangaDex,
+            )
         }
         refresh.lastStop?.let { stop ->
             Text(
