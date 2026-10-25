@@ -1191,6 +1191,16 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_inventory_release_examples">Números de releases (não são capítulos canônicos)</string>
     <string name="tsuzuki_inventory_fetch_mangaupdates">Consultar MangaUpdates</string>
     <string name="tsuzuki_inventory_fetch_mangadex">Consultar MangaDex</string>
+    <string name="tsuzuki_inventory_link_mangadex">Vincular obra MangaDex</string>
+    <string name="tsuzuki_inventory_link_title">Verificar ID de obra no MangaDex</string>
+    <string name="tsuzuki_inventory_link_description">Informe o UUID do mangá no MangaDex. Os metadados precisam referenciar uma obra externa já verificada para este título (MAL, MangaUpdates ou Kitsu). A verificação faz uma requisição; a confirmação faz outra, sem cache, antes de salvar. Isso não comprova a edição nem cria capítulos.</string>
+    <string name="tsuzuki_inventory_link_input">UUID da obra no MangaDex</string>
+    <string name="tsuzuki_inventory_link_verified_candidate">Correspondência: %1$s · verificada por %2$s (%3$s). Confirme apenas se for a obra correta.</string>
+    <string name="tsuzuki_inventory_link_failed">Não foi possível verificar a identidade exata, ou o vínculo mudou. Nenhuma identidade foi salva.</string>
+    <string name="tsuzuki_inventory_link_success">Vínculo de obra verificado e salvo. Releases continuam sendo apenas metadados.</string>
+    <string name="tsuzuki_inventory_link_done">Concluir</string>
+    <string name="tsuzuki_inventory_link_confirm">Confirmar vínculo</string>
+    <string name="tsuzuki_inventory_link_preview">Verificar identidade</string>
     <string name="tsuzuki_inventory_fetching">Consultando releases (somente metadados)…</string>
     <string name="tsuzuki_inventory_refresh_exhausted">Paginação consultada; completude editorial não comprovada</string>
     <string name="tsuzuki_inventory_refresh_partial">Observações parciais de releases salvas</string>
