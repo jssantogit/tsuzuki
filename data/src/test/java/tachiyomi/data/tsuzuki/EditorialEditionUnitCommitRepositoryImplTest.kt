@@ -154,6 +154,35 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         }
 
     @Test
+    fun `edition owned chapter is protected from legacy duplicate consolidation`(): Unit = runBlocking<Unit> {
+        val selected = batch(claim("8"))
+        val owner = writer.commit(selected, grant(selected.scope)) as EditorialUnitCommitResult.Applied
+        val editorialChapterId = owner.chapterIds.single()
+        val competing = CanonicalChapter(
+            id = "legacy-competing-eight",
+            canonicalTitleId = "title",
+            displayNumber = "8",
+            volume = 1,
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 8,
+            createdAt = 2L,
+            updatedAt = 2L,
+        )
+        chapters.upsert(competing)
+
+        chapters.consolidateExactDuplicateIfSafe(
+            canonicalTitleId = "title",
+            preferredChapterId = competing.id,
+            duplicateChapterId = editorialChapterId,
+        ) shouldBe false
+
+        chapters.getById(editorialChapterId)?.canonicalTitleId shouldBe "title"
+        chapters.getById(competing.id) shouldBe competing
+        database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title")
+            .awaitAsList().single().canonical_chapter_id shouldBe editorialChapterId
+    }
+
+    @Test
     fun `malformed or self-declared grant cannot persist chapters`(): Unit = runBlocking<Unit> {
         val selected = batch(claim("1"))
         writer.commit(selected) { _, _ -> null } shouldBe EditorialUnitCommitResult.Refused
