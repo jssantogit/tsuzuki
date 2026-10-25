@@ -51,8 +51,8 @@ class MangaDexVerifiedWorkLinker(
             }
             val attributes = data.objectField("attributes")
             val names = attributes.objectField("title")
-            val label = names.string("en") ?: names.string("ja-ro") ?:
-                names.values.firstNotNullOfOrNull {
+            val label = names.string("en") ?: names.string("ja-ro")
+                ?: names.values.firstNotNullOfOrNull {
                     (it as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
                 } ?: error("MangaDex work has no display title")
             val links = attributes.objectField("links")
@@ -94,9 +94,11 @@ class MangaDexVerifiedWorkLinker(
             ) { "MangaDex work crosswalk changed before confirmation" }
             val linked = titles.getExternalIdentities(canonicalTitleId)
                 .filter { it.provider == "mangadex" }
-            require(linked.isEmpty() || linked.all {
-                it.externalId == candidate.mangaDexId && it.verified
-            }) { "An incompatible MangaDex work is already linked to this canonical title" }
+            require(
+                linked.isEmpty() || linked.all {
+                    it.externalId == candidate.mangaDexId && it.verified
+                },
+            ) { "An incompatible MangaDex work is already linked to this canonical title" }
 
             val owner = titles.getByExternalIdentity("mangadex", candidate.mangaDexId)
             require(owner == null || owner.id == canonicalTitleId) {
