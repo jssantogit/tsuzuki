@@ -48,6 +48,25 @@ class SelectedInventoryCandidateAdapterTest {
     }
 
     @Test
+    fun `selected Wikimedia provenance refuses unrelated hosts and stale revision URLs`() {
+        val selection = syntheticWikimediaRevision()
+        val invalidReferences = listOf(
+            "https://evil.example/wiki/Synthetic_index?oldid=77001",
+            "https://en.wikipedia.org.evil.example/wiki/Synthetic_index?oldid=77001",
+            "https://en.wikipedia.org/wiki/Synthetic_index?oldid=77002",
+            "https://en.wikipedia.org/wiki/Synthetic_index",
+            "https://en.wikipedia.org/wiki/Synthetic_index?oldid=77001&oldid=77002",
+            "https://en.wikipedia.org/wiki/Synthetic_index?oldid=77001#chapter",
+            "https://username@en.wikipedia.org/wiki/Synthetic_index?oldid=77001",
+        )
+
+        invalidReferences.forEach { reference ->
+            SelectedWikimediaChapterIndexAdapter.adapt(selection.copy(pageReference = reference)).isFailure shouldBe true
+        }
+        SelectedWikimediaChapterIndexAdapter.adapt(selection).isSuccess shouldBe true
+    }
+
+    @Test
     fun `both adapters reject caller digest that differs from exact selected bytes`() {
         val wiki = syntheticWikimediaRevision().copy(snapshotDigest = "sha256:${"f".repeat(64)}")
         val epub = syntheticEpubNavigation().copy(snapshotDigest = "sha256:${"f".repeat(64)}")
@@ -199,7 +218,7 @@ class SelectedInventoryCandidateAdapterTest {
             ),
             selectedPageId = 123L,
             selectedRevisionId = 77001L,
-            pageReference = "https://example.invalid/wiki/Synthetic_index?oldid=77001",
+            pageReference = "https://en.wikipedia.org/wiki/Synthetic_index?oldid=77001",
             responseJson = response,
             observedAt = 42L,
             snapshotDigest = sha256(response),
