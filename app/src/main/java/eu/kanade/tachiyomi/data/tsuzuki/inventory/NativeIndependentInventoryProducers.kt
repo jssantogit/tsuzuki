@@ -21,6 +21,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -55,16 +56,13 @@ class NativeInventoryReleaseTransport(
 
     override suspend fun fetch(url: String, postBody: String?): String = mutex.withLock {
         val parsed = url.toHttpUrlOrFail()
-        require(
-            parsed.scheme == "https" &&
-                (
-                    (parsed.host == "api.mangaupdates.com" && parsed.encodedPath == "/v1/releases/search" &&
-                        postBody != null) ||
-                        (parsed.host == "api.mangadex.org" && parsed.encodedPath.matches(
-                            Regex("""^/manga/[0-9a-fA-F-]{36}/feed$"""),
-                        ) && postBody == null)
-                    ),
-        ) { "Only allowlisted read-only metadata endpoints are permitted" }
+        val allowMu = parsed.host == "api.mangaupdates.com" &&
+            parsed.encodedPath == "/v1/releases/search" && postBody != null
+        val allowMd = parsed.host == "api.mangadex.org" &&
+            parsed.encodedPath.matches(Regex("""^/manga/[0-9a-fA-F-]{36}/feed$""")) && postBody == null
+        require(parsed.scheme == "https" && (allowMu || allowMd)) {
+            "Only allowlisted read-only metadata endpoints are permitted"
+        }
         val now = System.nanoTime()
         val key = url + "\n" + postBody.orEmpty()
         cache[key]?.takeIf { now - it.first in 0 until CACHE_TTL_NANOS }?.let { return@withLock it.second }
@@ -117,8 +115,7 @@ class NativeInventoryReleaseTransport(
         }
     }
 
-    private fun String.toHttpUrlOrFail(): HttpUrl =
-        okhttp3.HttpUrl.Companion.run { this@toHttpUrlOrFail.toHttpUrl() }
+    private fun String.toHttpUrlOrFail(): HttpUrl = toHttpUrl()
 
     private companion object {
         const val MIN_REQUEST_SPACING_MS = 1200L
