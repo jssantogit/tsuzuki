@@ -18,7 +18,7 @@ internal data class IntegrationSettingsConfig(
         values[configKey]
             ?.jsonPrimitive
             ?.booleanOrNull
-            ?: true
+            ?: (configKey != IntegrationCapability.CHAPTER_INVENTORY.configKey)
 
     fun withCapability(
         capability: IntegrationCapability,

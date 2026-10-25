@@ -7,21 +7,17 @@ import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
-import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaDexInventoryProducer
 import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaDexVerifiedCandidate
 import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaDexVerifiedWorkLinker
-import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaUpdatesInventoryProducer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventoryProducer
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshIndependentInventory
-import tachiyomi.domain.tsuzuki.integration.IntegrationId
-import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
+import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 
 data class NativeInventoryRefreshState(
     val producerId: String? = null,
@@ -43,10 +39,8 @@ data class NativeInventoryRefreshState(
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 class NativeInventoryRefreshScreenModel(
     private val refreshInventory: RefreshIndependentInventory,
-    private val mangaUpdates: MangaUpdatesInventoryProducer,
-    private val mangaDex: MangaDexInventoryProducer,
     private val mangaDexWorkLinker: MangaDexVerifiedWorkLinker,
-    private val integrationSettings: IntegrationSettingsRepository,
+    private val integrationRegistry: IntegrationRegistry,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(NativeInventoryRefreshState())
     val state: StateFlow<NativeInventoryRefreshState> = mutableState.asStateFlow()
@@ -65,11 +59,17 @@ class NativeInventoryRefreshScreenModel(
 
     fun refresh(titleId: String, producerId: String): Job? {
         if (titleId != activeTitleId || operation?.isActive == true) return null
-        val producer: IndependentInventoryProducer = when (producerId) {
-            mangaUpdates.producerId -> mangaUpdates
-            mangaDex.producerId -> mangaDex
-            else -> return null
+        val producer = integrationRegistry.inventoryProducers().singleOrNull { it.producerId == producerId }
+        if (producer == null) {
+            mutableState.value = mutableState.value.copy(
+                producerId = producerId,
+                refreshing = false,
+                lastStop = InventoryRefreshStop.DISABLED,
+                revision = mutableState.value.revision + 1,
+            )
+            return null
         }
+        val configurationFingerprint = integrationRegistry.configurationFingerprint()
         operation = viewModelScope.launch {
             mutableState.value = mutableState.value.copy(
                 producerId = producerId,
@@ -83,10 +83,10 @@ class NativeInventoryRefreshScreenModel(
                     maxPages = 3,
                     isEnabled = {
                         activeTitleId == titleId &&
-                            (
-                                producerId != mangaUpdates.producerId ||
-                                    integrationSettings.get(IntegrationId("mangaupdates"))?.enabled == true
-                                )
+                            integrationRegistry.configurationFingerprint() == configurationFingerprint &&
+                            integrationRegistry.inventoryProducers().singleOrNull {
+                                it.producerId == producerId
+                            } === producer
                     },
                 )
                 if (activeTitleId == titleId) {

@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.data.tsuzuki.inventory
 
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.binding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -207,6 +209,7 @@ class NativeInventoryReleaseTransport(
 
 /** MangaUpdates produces release observations, never primary editorial claims. */
 @Inject
+@ContributesIntoSet(AppScope::class, binding = binding<IndependentInventoryProducer>())
 class MangaUpdatesInventoryProducer(
     private val transport: InventoryReleaseTransport,
 ) : IndependentInventoryProducer {
@@ -266,6 +269,7 @@ class MangaUpdatesInventoryProducer(
 
 /** MangaDex relationships must prove the exact requested work for every record. */
 @Inject
+@ContributesIntoSet(AppScope::class, binding = binding<IndependentInventoryProducer>())
 class MangaDexInventoryProducer(
     private val transport: InventoryReleaseTransport,
 ) : IndependentInventoryProducer {

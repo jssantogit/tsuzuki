@@ -6,6 +6,7 @@ enum class IntegrationCapability(val configKey: String) {
     METADATA_BASIC("metadata"),
     METADATA_ARTWORK("metadata_artwork"),
     METADATA_EDITORIAL("metadata_editorial"),
+    CHAPTER_INVENTORY("chapter_inventory"),
     METADATA_STAFF("metadata_staff"),
     RATINGS("ratings"),
     RELATIONS("relations"),

@@ -1070,6 +1070,7 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_integration_capability_metadata_artwork">Capas e imagens</string>
     <string name="tsuzuki_integration_capability_metadata_editorial">Dados editoriais</string>
     <string name="tsuzuki_integration_capability_metadata_staff">Autores e equipe</string>
+    <string name="tsuzuki_integration_capability_chapter_inventory">Inventário de capítulos (opcional)</string>
     <string name="tsuzuki_integration_capability_ratings">Avaliações</string>
     <string name="tsuzuki_integration_capability_relations">Relações</string>
     <string name="tsuzuki_integration_capability_crosswalk">Identidade entre catálogos</string>

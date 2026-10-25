@@ -2,6 +2,7 @@ package tachiyomi.domain.tsuzuki.integration
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventoryProducer
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationManifest
 
@@ -28,6 +29,9 @@ interface IntegrationRegistry {
     fun metadataProviders(capability: IntegrationCapability): List<MetadataProvider> = metadataProviders()
 
     fun chapterEvidenceProviders(): List<ChapterEvidenceProvider>
+
+    /** Optional, explicitly enabled inventory producers; never a source of readable pages. */
+    fun inventoryProducers(): List<IndependentInventoryProducer> = emptyList()
 
     fun ratingsProviders(): List<RatingsProvider>
 

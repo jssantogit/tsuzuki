@@ -1365,6 +1365,7 @@
     <string name="tsuzuki_integration_capability_metadata_artwork">Covers and artwork</string>
     <string name="tsuzuki_integration_capability_metadata_editorial">Editorial data</string>
     <string name="tsuzuki_integration_capability_metadata_staff">Authors and staff</string>
+    <string name="tsuzuki_integration_capability_chapter_inventory">Chapter inventory (optional)</string>
     <string name="tsuzuki_integration_capability_ratings">Ratings</string>
     <string name="tsuzuki_integration_capability_relations">Relations</string>
     <string name="tsuzuki_integration_capability_crosswalk">Cross-catalog identity</string>
