@@ -98,8 +98,13 @@ class NativeInventoryReleaseTransport(
         val allowMu = parsed.host == "api.mangaupdates.com" &&
             parsed.encodedPath == "/v1/releases/search" && postBody != null
         val mangaDexPath = parsed.encodedPath.split('/')
+        val validMangaDexShape = when (mangaDexPath.size) {
+            3 -> true
+            4 -> mangaDexPath[3] == "feed"
+            else -> false
+        }
         val allowMd = parsed.host == "api.mangadex.org" &&
-            (mangaDexPath.size == 3 || mangaDexPath.size == 4 && mangaDexPath[3] == "feed") &&
+            validMangaDexShape &&
             mangaDexPath[1] == "manga" &&
             mangaDexPath[2].matches(MANGADEX_WORK_UUID_REGEX) &&
             postBody == null
