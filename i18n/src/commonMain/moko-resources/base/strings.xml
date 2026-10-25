@@ -1486,6 +1486,16 @@
     <string name="tsuzuki_inventory_release_examples">Release labels (not canonical chapters)</string>
     <string name="tsuzuki_inventory_fetch_mangaupdates">Check MangaUpdates</string>
     <string name="tsuzuki_inventory_fetch_mangadex">Check MangaDex</string>
+    <string name="tsuzuki_inventory_link_mangadex">Link MangaDex work</string>
+    <string name="tsuzuki_inventory_link_title">Verify a MangaDex work ID</string>
+    <string name="tsuzuki_inventory_link_description">Enter a MangaDex manga UUID. Its metadata must cross-reference an external work already verified for this title (MAL, MangaUpdates or Kitsu). Verification makes one metadata request. Linking makes a fresh second request before saving. This does not prove the edition or create chapters.</string>
+    <string name="tsuzuki_inventory_link_input">MangaDex manga UUID</string>
+    <string name="tsuzuki_inventory_link_verified_candidate">Match: %1$s · verified through %2$s (%3$s). Confirm only if this is the correct work.</string>
+    <string name="tsuzuki_inventory_link_failed">Could not verify this work against an existing exact identity, or the link changed. No identity was saved.</string>
+    <string name="tsuzuki_inventory_link_success">Verified work link saved. Releases remain non-canonical metadata.</string>
+    <string name="tsuzuki_inventory_link_done">Done</string>
+    <string name="tsuzuki_inventory_link_confirm">Confirm work link</string>
+    <string name="tsuzuki_inventory_link_preview">Verify identity</string>
     <string name="tsuzuki_inventory_fetching">Checking releases (metadata only)…</string>
     <string name="tsuzuki_inventory_refresh_exhausted">All requested API pages fetched; editorial completeness is not proven</string>
     <string name="tsuzuki_inventory_refresh_partial">Partial release observations saved</string>
