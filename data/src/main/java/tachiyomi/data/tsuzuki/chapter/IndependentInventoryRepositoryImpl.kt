@@ -5,7 +5,16 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import tachiyomi.data.Database
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryCandidateProvenance
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryCandidateSourceKind
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaim
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaimKind
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryDerivation
@@ -45,6 +54,7 @@ class IndependentInventoryRepositoryImpl(
                     workVerified,
                     editionVerified,
                     observedAt,
+                    provenanceJson,
                 ->
                 InventoryStoredClaim(
                     scope = InventoryScope(
@@ -65,6 +75,7 @@ class IndependentInventoryRepositoryImpl(
                         derivation = InventoryDerivation.valueOf(derivation),
                         upstreamSourceId = upstreamSourceId,
                         observedAt = observedAt,
+                        provenance = CandidateProvenanceJsonCodec.decode(provenanceJson),
                     ),
                 )
             }
@@ -127,6 +138,7 @@ class IndependentInventoryRepositoryImpl(
                     workVerified = if (scope.workIdentityVerified) 1L else 0L,
                     editionVerified = if (scope.editionIdentityVerified) 1L else 0L,
                     observedAt = claim.observedAt,
+                    provenanceJson = CandidateProvenanceJsonCodec.encode(claim.provenance),
                 )
             }
             database.tsuzuki_independent_inventory_claimsQueries.upsertTsuzukiIndependentInventoryPage(
@@ -146,4 +158,56 @@ class IndependentInventoryRepositoryImpl(
             )
         }
     }
+}
+
+/** Stores bounded provenance pointers only; malformed or legacy values are not trusted. */
+private object CandidateProvenanceJsonCodec {
+    fun encode(provenance: InventoryCandidateProvenance?): String? = provenance?.let {
+        buildJsonObject {
+            put("sourceKind", JsonPrimitive(it.sourceKind.name))
+            put("originReference", JsonPrimitive(it.originReference))
+            put("exactRevision", JsonPrimitive(it.exactRevision))
+            put("attributionReference", it.attributionReference?.let { value -> JsonPrimitive(value) } ?: JsonNull)
+            put("licenseReference", it.licenseReference?.let { value -> JsonPrimitive(value) } ?: JsonNull)
+            put("snapshotDigest", JsonPrimitive(it.snapshotDigest))
+            put("sourceUnitId", JsonPrimitive(it.sourceUnitId))
+            put("structuralCategory", JsonPrimitive(it.structuralCategory))
+        }.toString()
+    }
+
+    fun decode(encoded: String?): InventoryCandidateProvenance? = encoded?.let { raw ->
+        if (raw.length > MAX_ENCODED_LENGTH) return@let null
+        runCatching {
+            val value = Json.parseToJsonElement(raw) as? JsonObject
+                ?: error("Candidate provenance is not an object")
+            InventoryCandidateProvenance(
+                sourceKind = InventoryCandidateSourceKind.valueOf(value.requiredString("sourceKind")),
+                originReference = value.requiredString("originReference"),
+                exactRevision = value.requiredString("exactRevision"),
+                attributionReference = value.optionalString("attributionReference"),
+                licenseReference = value.optionalString("licenseReference"),
+                snapshotDigest = value.requiredString("snapshotDigest"),
+                sourceUnitId = value.requiredString("sourceUnitId"),
+                structuralCategory = value.requiredString("structuralCategory"),
+            )
+        }.getOrNull()
+    }
+
+    private fun JsonObject.requiredString(key: String): String =
+        optionalString(key) ?: error("Candidate provenance field $key is missing")
+
+    private fun JsonObject.optionalString(key: String): String? =
+        this[key]?.let { value ->
+            if (value == JsonNull) {
+                null
+            } else {
+                value.jsonPrimitive.let { primitive ->
+                    require(primitive.isString) { "Candidate provenance field $key is not a string" }
+                    primitive.contentOrNull
+                }
+            }
+        }
+
+    // Covers the bounded model even when control characters expand to six JSON escape characters each.
+    private const val MAX_ENCODED_LENGTH = 65536
 }

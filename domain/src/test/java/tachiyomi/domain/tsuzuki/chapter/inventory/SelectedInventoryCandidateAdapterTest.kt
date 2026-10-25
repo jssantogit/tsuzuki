@@ -3,6 +3,7 @@ package tachiyomi.domain.tsuzuki.chapter.inventory
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import java.security.MessageDigest
 
 /** All embedded source documents are synthetic fixtures, not evidence of real content or permission. */
 class SelectedInventoryCandidateAdapterTest {
@@ -34,15 +35,25 @@ class SelectedInventoryCandidateAdapterTest {
     @Test
     fun `Wikimedia page and revision must match the host selected identifiers`() {
         val selection = syntheticWikimediaRevision()
-        val wrongPage = selection.copy(
-            responseJson = selection.responseJson.replace("\"pageid\":123", "\"pageid\":124"),
-        )
+        val wrongPageResponse = selection.responseJson.replace("\"pageid\":123", "\"pageid\":124")
+        val wrongPage = selection.copy(responseJson = wrongPageResponse, snapshotDigest = sha256(wrongPageResponse))
+        val wrongRevisionResponse = selection.responseJson.replace("\"revid\":77001", "\"revid\":77002")
         val wrongRevision = selection.copy(
-            responseJson = selection.responseJson.replace("\"revid\":77001", "\"revid\":77002"),
+            responseJson = wrongRevisionResponse,
+            snapshotDigest = sha256(wrongRevisionResponse),
         )
 
         SelectedWikimediaChapterIndexAdapter.adapt(wrongPage).isFailure shouldBe true
         SelectedWikimediaChapterIndexAdapter.adapt(wrongRevision).isFailure shouldBe true
+    }
+
+    @Test
+    fun `both adapters reject caller digest that differs from exact selected bytes`() {
+        val wiki = syntheticWikimediaRevision().copy(snapshotDigest = "sha256:${"f".repeat(64)}")
+        val epub = syntheticEpubNavigation().copy(snapshotDigest = "sha256:${"f".repeat(64)}")
+
+        SelectedWikimediaChapterIndexAdapter.adapt(wiki).isFailure shouldBe true
+        SelectedEpub3TocAdapter.adapt(epub).isFailure shouldBe true
     }
 
     @Test
@@ -53,11 +64,22 @@ class SelectedInventoryCandidateAdapterTest {
         val unsupported = SelectedWikimediaChapterIndexAdapter.adapt(
             syntheticWikimediaRevision("== Summary ==\n* [[Chapter 1|1]]"),
         )
+        val duplicateUnit = SelectedWikimediaChapterIndexAdapter.adapt(
+            syntheticWikimediaRevision(
+                "== Chapters ==\n* [[Chapter_1|1]]\n* [[Chapter_1|1.1]]",
+            ),
+        )
+        val nonChapterLabel = SelectedWikimediaChapterIndexAdapter.adapt(
+            syntheticWikimediaRevision("== Chapters ==\n* [[Special_thanks|Special thanks]]"),
+        ).getOrThrow().claims.single()
 
         range.claims.size shouldBe 1
         range.claims.single().kind shouldBe InventoryClaimKind.RELEASE_RANGE
         range.claims.none { InventoryClaimPolicy.isNonEditorialCandidate(it) } shouldBe true
         unsupported.isFailure shouldBe true
+        duplicateUnit.isFailure shouldBe true
+        nonChapterLabel.kind shouldBe InventoryClaimKind.AMBIGUOUS
+        InventoryClaimPolicy.isNonEditorialCandidate(nonChapterLabel) shouldBe false
     }
 
     @Test
@@ -87,6 +109,9 @@ class SelectedInventoryCandidateAdapterTest {
             "Text/special.xhtml#bonus",
         )
         batch.claims.none { it.label == "Preface" && InventoryClaimPolicy.isNonEditorialCandidate(it) } shouldBe true
+        listOf("Preface", "Postface", "Special thanks").forEach { label ->
+            batch.claims.single { it.label == label }.kind shouldBe InventoryClaimKind.AMBIGUOUS
+        }
         batch.claims.none { it.label == "Cover" && InventoryClaimPolicy.isNonEditorialCandidate(it) } shouldBe true
         batch.claims.all { it.derivation == InventoryDerivation.USER_SUPPLIED_EDITION_TOC } shouldBe true
         batch.claims.none { InventoryClaimPolicy.mayPromote(batch.scope, it) } shouldBe true
@@ -100,22 +125,46 @@ class SelectedInventoryCandidateAdapterTest {
             tocWithHref("https://external.invalid/chapter.xhtml"),
             tocWithHref("/Text/chapter.xhtml"),
             tocWithHref("../Text/chapter.xhtml"),
+            tocWithHref("Text/%5c..%5cprivate.xhtml"),
+            tocWithHref("Text/%00chapter.xhtml"),
+            tocWithHref("Text/%252e%252e/secret.xhtml"),
         )
 
         unsafeDocuments.forEach { document ->
-            SelectedEpub3TocAdapter.adapt(selected.copy(navXhtml = document)).isFailure shouldBe true
+            SelectedEpub3TocAdapter.adapt(withSelectedDocument(selected, document)).isFailure shouldBe true
         }
+    }
+
+    @Test
+    fun `EPUB toc only accepts XHTML list-item anchors in the selected toc`() {
+        val selected = syntheticEpubNavigation()
+        val anchorOutsideList = withSelectedDocument(
+            selected,
+            tocWithContent("<a href=\"Text/chapter.xhtml\">Chapter 1</a>"),
+        )
+        val namespaceSpoofedAnchor = withSelectedDocument(
+            selected,
+            tocWithContent(
+                "<ol><li><spoof:a xmlns:spoof=\"urn:spoof\" href=\"Text/chapter.xhtml\">" +
+                    "Chapter 1</spoof:a></li></ol>",
+            ),
+        )
+
+        SelectedEpub3TocAdapter.adapt(anchorOutsideList).isFailure shouldBe true
+        SelectedEpub3TocAdapter.adapt(namespaceSpoofedAnchor).isFailure shouldBe true
     }
 
     @Test
     fun `EPUB navigation rejects document entry and nesting limits`() {
         val selected = syntheticEpubNavigation()
-        val tooLarge = selected.copy(navXhtml = "x".repeat(SelectedEpub3TocAdapter.MAX_DOCUMENT_BYTES + 1))
-        val tooManyEntries = selected.copy(
-            navXhtml = tocWithItems(SelectedEpub3TocAdapter.MAX_ENTRIES + 1),
+        val tooLarge = withSelectedDocument(
+            selected,
+            "x".repeat(SelectedEpub3TocAdapter.MAX_DOCUMENT_BYTES + 1),
         )
-        val tooDeep = selected.copy(
-            navXhtml = "<html xmlns=\"http://www.w3.org/1999/xhtml\" " +
+        val tooManyEntries = withSelectedDocument(selected, tocWithItems(SelectedEpub3TocAdapter.MAX_ENTRIES + 1))
+        val tooDeep = withSelectedDocument(
+            selected,
+            "<html xmlns=\"http://www.w3.org/1999/xhtml\" " +
                 "xmlns:epub=\"http://www.idpf.org/2007/ops\"><body>" +
                 "<nav epub:type=\"toc\"><ol>" +
                 "<li><ol>".repeat(SelectedEpub3TocAdapter.MAX_DEPTH + 1) +
@@ -153,7 +202,7 @@ class SelectedInventoryCandidateAdapterTest {
             pageReference = "https://example.invalid/wiki/Synthetic_index?oldid=77001",
             responseJson = response,
             observedAt = 42L,
-            snapshotDigest = "sha256:${"0".repeat(64)}",
+            snapshotDigest = sha256(response),
             attributionReference = "Synthetic fixture attribution; not a Wikimedia claim",
             licenseReference = "Synthetic fixture license reference; not a permission claim",
         )
@@ -171,7 +220,7 @@ class SelectedInventoryCandidateAdapterTest {
         ),
         editionReference = "selected-edition:sha256:${"1".repeat(64)}",
         snapshotRevision = "local-snapshot-7",
-        snapshotDigest = "sha256:${"1".repeat(64)}",
+        snapshotDigest = sha256(TOC_DOCUMENT),
         navXhtml = TOC_DOCUMENT,
         observedAt = 43L,
     )
@@ -180,6 +229,14 @@ class SelectedInventoryCandidateAdapterTest {
         "<html xmlns=\"http://www.w3.org/1999/xhtml\" " +
             "xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol>" +
             "<li><a href=\"$href\">Chapter 1</a></li></ol></nav></body></html>"
+
+    private fun tocWithContent(content: String) =
+        "<html xmlns=\"http://www.w3.org/1999/xhtml\" " +
+            "xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\">" +
+            "$content</nav></body></html>"
+
+    private fun withSelectedDocument(selected: SelectedEpub3Navigation, document: String) =
+        selected.copy(navXhtml = document, snapshotDigest = sha256(document))
 
     private fun tocWithItems(count: Int): String =
         "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body>" +
@@ -193,6 +250,13 @@ class SelectedInventoryCandidateAdapterTest {
             .replace("\n", "\\n") +
         "\""
 
+    private fun sha256(content: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(content.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        return "sha256:$digest"
+    }
+
     private companion object {
         const val WIKITEXT = "== Chapters ==\n* [[Chapter_1|1]]\n* [[Chapter_1_1|1.1]]"
         val TOC_DOCUMENT = """
@@ -200,6 +264,8 @@ class SelectedInventoryCandidateAdapterTest {
               <body>
                 <nav epub:type="toc"><h1>Contents</h1><ol>
                   <li><a href="Text/preface.xhtml">Preface</a></li>
+                  <li><a href="Text/postface.xhtml">Postface</a></li>
+                  <li><a href="Text/thanks.xhtml">Special thanks</a></li>
                   <li><a href="Text/ch-1205.xhtml#chapter-1205">12.05</a></li>
                   <li><a href="Text/ch-125.xhtml#chapter-125">12.5</a></li>
                   <li><a href="Text/ch-001.xhtml#chapter-001">0.01</a></li>

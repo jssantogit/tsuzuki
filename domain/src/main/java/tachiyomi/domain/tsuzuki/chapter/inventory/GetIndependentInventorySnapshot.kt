@@ -36,6 +36,14 @@ data class IndependentInventorySourceSnapshot(
     val candidateExampleLabels: List<String> = emptyList(),
     /** Bounded provenance pointers for offline review; never sufficient for canonical promotion. */
     val candidateExamples: List<InventoryCandidateExample> = emptyList(),
+    /** Conflicting labels for one selected-source unit remain visible instead of being resolved. */
+    val candidateConflicts: List<InventoryCandidateConflict> = emptyList(),
+)
+
+data class InventoryCandidateConflict(
+    val sourceKind: InventoryCandidateSourceKind,
+    val sourceUnitId: String,
+    val candidates: List<InventoryCandidateExample>,
 )
 
 data class IndependentInventorySnapshot(
@@ -50,6 +58,8 @@ class GetIndependentInventorySnapshot(
 ) {
     private companion object {
         const val EXAMPLE_LIMIT = 8
+        const val MAX_EXAMPLE_LABEL_LENGTH = 512
+        const val MAX_EXAMPLE_SOURCE_RECORD_ID_LENGTH = 1024
     }
 
     suspend fun execute(canonicalTitleId: String): IndependentInventorySnapshot {
@@ -77,6 +87,21 @@ class GetIndependentInventorySnapshot(
                 .sortedByDescending { it.claim.observedAt }
                 .distinctBy { it.claim.sourceRecordId }
             val sourcePages = pages.filter { it.scope == scope }
+            val candidateExamples = sourceClaims.mapNotNull { stored ->
+                if (!InventoryClaimPolicy.isNonEditorialCandidate(stored.claim)) return@mapNotNull null
+                val label = stored.claim.label?.trim()?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                if (label.length > MAX_EXAMPLE_LABEL_LENGTH) return@mapNotNull null
+                if (stored.claim.sourceRecordId.length > MAX_EXAMPLE_SOURCE_RECORD_ID_LENGTH) {
+                    return@mapNotNull null
+                }
+                val provenance = stored.claim.provenance ?: return@mapNotNull null
+                InventoryCandidateExample(
+                    sourceRecordId = stored.claim.sourceRecordId,
+                    label = label,
+                    provenance = provenance,
+                    observedAt = stored.claim.observedAt,
+                )
+            }
             val attemptPages = sourcePages.filter { it.outcome != InventoryFetchOutcome.NOT_ATTEMPTED }
             val latestAttemptAt = attemptPages.maxOfOrNull { it.observedAt }
             val summary = summarizeInventory(sourceClaims)
@@ -109,8 +134,25 @@ class GetIndependentInventorySnapshot(
                     .take(EXAMPLE_LIMIT),
                 candidateExampleLabels = sourceClaims
                     .filter { InventoryClaimPolicy.isNonEditorialCandidate(it.claim) }
-                    .mapNotNull { it.claim.label?.trim()?.takeIf(String::isNotBlank) }
+                    .mapNotNull {
+                        it.claim.label?.trim()?.takeIf {
+                            it.isNotBlank() && it.length <= MAX_EXAMPLE_LABEL_LENGTH
+                        }
+                    }
                     .distinct()
+                    .take(EXAMPLE_LIMIT),
+                candidateExamples = candidateExamples.take(EXAMPLE_LIMIT),
+                candidateConflicts = candidateExamples
+                    .groupBy { it.provenance.sourceKind to it.provenance.sourceUnitId }
+                    .mapNotNull { (identity, observations) ->
+                        val variants = observations.distinctBy { it.label }
+                        if (variants.size < 2) return@mapNotNull null
+                        InventoryCandidateConflict(
+                            sourceKind = identity.first,
+                            sourceUnitId = identity.second,
+                            candidates = variants.take(2),
+                        )
+                    }
                     .take(EXAMPLE_LIMIT),
                 releaseExampleLabels = sourceClaims
                     .filter { it.claim.derivation == InventoryDerivation.RELEASE_RECORD }

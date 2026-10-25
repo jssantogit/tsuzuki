@@ -68,20 +68,24 @@ data class InventoryCandidateProvenance(
 ) {
     init {
         require(originReference.isNotBlank() && originReference.length <= MAX_REFERENCE_LENGTH)
-        require(exactRevision.isNotBlank() && exactRevision.length <= MAX_REVISION_LENGTH)
+        require(SAFE_REVISION.matches(exactRevision)) {
+            "Candidate revision must be an opaque bounded identifier"
+        }
         require(attributionReference == null || attributionReference.length <= MAX_REFERENCE_LENGTH)
         require(licenseReference == null || licenseReference.length <= MAX_REFERENCE_LENGTH)
-        require(snapshotDigest.isNotBlank() && snapshotDigest.length <= MAX_DIGEST_LENGTH)
+        require(SHA256_DIGEST.matches(snapshotDigest)) {
+            "Candidate snapshot digest must be a SHA-256 content digest"
+        }
         require(sourceUnitId.isNotBlank() && sourceUnitId.length <= MAX_UNIT_ID_LENGTH)
         require(structuralCategory.isNotBlank() && structuralCategory.length <= MAX_CATEGORY_LENGTH)
     }
 
     private companion object {
         const val MAX_REFERENCE_LENGTH = 2048
-        const val MAX_REVISION_LENGTH = 128
-        const val MAX_DIGEST_LENGTH = 128
         const val MAX_UNIT_ID_LENGTH = 1024
         const val MAX_CATEGORY_LENGTH = 80
+        val SAFE_REVISION = Regex("^[A-Za-z0-9._:-]{1,128}$")
+        val SHA256_DIGEST = Regex("^sha256:[0-9a-f]{64}$")
     }
 }
 
@@ -90,7 +94,18 @@ data class InventoryCandidateExample(
     val label: String,
     val provenance: InventoryCandidateProvenance,
     val observedAt: Long,
-)
+) {
+    init {
+        require(sourceRecordId.isNotBlank() && sourceRecordId.length <= MAX_SOURCE_RECORD_ID_LENGTH)
+        require(label.isNotBlank() && label.length <= MAX_LABEL_LENGTH)
+        require(observedAt >= 0L)
+    }
+
+    private companion object {
+        const val MAX_SOURCE_RECORD_ID_LENGTH = 1024
+        const val MAX_LABEL_LENGTH = 512
+    }
+}
 
 enum class InventoryFetchOutcome {
     /** A bounded page was obtained; later pages may still be missing. */
@@ -116,6 +131,14 @@ data class InventoryClaim(
     init {
         require(sourceRecordId.isNotBlank())
         require(observedAt >= 0L)
+        require(
+            provenance == null || when (provenance.sourceKind) {
+                InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION ->
+                    derivation == InventoryDerivation.COMMUNITY_CURATED
+                InventoryCandidateSourceKind.USER_SELECTED_EPUB3_TOC ->
+                    derivation == InventoryDerivation.USER_SUPPLIED_EDITION_TOC
+            },
+        ) { "Selected-source candidate provenance cannot assert editorial authority" }
     }
 }
 

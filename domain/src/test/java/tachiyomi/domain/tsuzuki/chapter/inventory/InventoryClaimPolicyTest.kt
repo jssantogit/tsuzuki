@@ -22,6 +22,23 @@ class InventoryClaimPolicyTest {
     }
 
     @Test
+    fun `selected candidate provenance cannot be relabeled as primary editorial`() {
+        val provenance = InventoryCandidateProvenance(
+            sourceKind = InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION,
+            originReference = "https://example.invalid/wiki/Selected_index",
+            exactRevision = "synthetic-revision-1",
+            snapshotDigest = "sha256:${"1".repeat(64)}",
+            sourceUnitId = "Chapter_1",
+            structuralCategory = "chapter-list-entry",
+        )
+
+        shouldThrow<IllegalArgumentException> {
+            claim("1", InventoryClaimKind.INDIVIDUAL, InventoryDerivation.PRIMARY_EDITORIAL)
+                .copy(provenance = provenance)
+        }
+    }
+
+    @Test
     fun `120 declared and 80 editorial identities remain 80 admissible with unknown completeness`() {
         val scope = verifiedScope()
         val records = (1..80).map { number ->

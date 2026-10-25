@@ -66,6 +66,7 @@ class IndependentInventoryRepositoryImplTest {
                     "7",
                     "Chapter_12_05",
                     "chapter-list-entry",
+                    "== Chapters ==\n* [[Chapter_12_05|12.05]]",
                 ),
             )
             val epub = claim(epubScope, "Text/ch-01.xhtml#chapter-01", "0.1", 11L).copy(
@@ -76,6 +77,7 @@ class IndependentInventoryRepositoryImplTest {
                     "synthetic-2",
                     "Text/ch-01.xhtml#chapter-01",
                     "toc-chapter",
+                    "<nav><a href=\"Text/ch-01.xhtml#chapter-01\">0.1</a></nav>",
                 ),
             )
             val titleIdsBefore = database.tsuzuki_titlesQueries
@@ -97,6 +99,7 @@ class IndependentInventoryRepositoryImplTest {
                 batch(
                     scope = epubScope,
                     pageKey = "selected-snapshot-2",
+                    observedAt = 11L,
                     claims = listOf(epub),
                 ),
             )
@@ -241,21 +244,11 @@ class IndependentInventoryRepositoryImplTest {
 
     @Test
     fun `failed and empty page refreshes retain claims from prior observations`() = runBlocking<Unit> {
-        val retainedClaim = claim(inventoryScope(), "release-1", "retained", 10L).copy(
-            derivation = InventoryDerivation.COMMUNITY_CURATED,
-            provenance = candidateProvenance(
-                InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION,
-                "https://example.invalid/wiki/Synthetic_index?oldid=9",
-                "9",
-                "Chapter_1",
-                "chapter-list-entry",
-            ),
-        )
         val original = batch(
             pageKey = "page-1",
             observedAt = 10L,
             outcome = InventoryFetchOutcome.PARTIAL,
-            claims = listOf(retainedClaim),
+            claims = listOf(claim(inventoryScope(), "release-1", "retained", 10L)),
             nextCursor = "page-2",
         )
         repository.saveBatch(original)
@@ -278,11 +271,35 @@ class IndependentInventoryRepositoryImplTest {
         )
 
         repository.byTitle(TITLE_ID).single().claim.label shouldBe "retained"
-        repository.byTitle(TITLE_ID).single().claim.provenance shouldBe retainedClaim.provenance
         val pages = repository.batchesByTitle(TITLE_ID)
         pages.size shouldBe 2
         pages.single { it.pageKey == "page-1" }.outcome shouldBe InventoryFetchOutcome.FAILED
         pages.single { it.pageKey == "page-2" }.itemCount shouldBe 0
+    }
+
+    @Test
+    fun `failed page refresh retains candidate provenance from prior observation`() = runBlocking<Unit> {
+        val scope = inventoryScope(editionKey = "selected-edition", language = "ja")
+            .copy(producerId = "wikimedia")
+        val candidate = claim(scope, "wiki-page-9-Chapter_1", "1", 10L).copy(
+            derivation = InventoryDerivation.COMMUNITY_CURATED,
+            provenance = candidateProvenance(
+                InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION,
+                "https://example.invalid/wiki/Synthetic_index?oldid=9",
+                "9",
+                "Chapter_1",
+                "chapter-list-entry",
+                "== Chapters ==\n* [[Chapter_1|1]]",
+            ),
+        )
+        repository.saveBatch(batch(scope, "selected-revision-9", 10L, claims = listOf(candidate)))
+        repository.saveBatch(batch(scope, "failed-revision-10", 20L, InventoryFetchOutcome.FAILED))
+
+        repository.byTitle(TITLE_ID).single().claim shouldBe candidate
+        repository.batchesByTitle(TITLE_ID).map { it.outcome }.toSet() shouldBe setOf(
+            InventoryFetchOutcome.PARTIAL,
+            InventoryFetchOutcome.FAILED,
+        )
     }
 
     @Test
@@ -331,23 +348,10 @@ class IndependentInventoryRepositoryImplTest {
             insertTitle(database, TITLE_ID)
             repository = IndependentInventoryRepositoryImpl(database)
 
-            val scope = inventoryScope(editionKey = "selected-edition", language = "ja")
-                .copy(producerId = "wikimedia")
-            val persistedClaim = claim(scope, "wiki-page-8-Chapter_1", "1", 42L).copy(
-                derivation = InventoryDerivation.COMMUNITY_CURATED,
-                provenance = candidateProvenance(
-                    InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION,
-                    "https://example.invalid/wiki/Synthetic_index?oldid=8",
-                    "8",
-                    "Chapter_1",
-                    "chapter-list-entry",
-                ),
-            )
             val persisted = batch(
-                scope = scope,
                 pageKey = "page-1",
                 observedAt = 42L,
-                claims = listOf(persistedClaim),
+                claims = listOf(claim(inventoryScope(), "release-1", "persisted", 42L)),
                 nextCursor = "page-2",
             )
             repository.saveBatch(persisted)
@@ -358,7 +362,7 @@ class IndependentInventoryRepositoryImplTest {
             repository = IndependentInventoryRepositoryImpl(database)
 
             repository.byTitle(TITLE_ID) shouldBe listOf(
-                InventoryStoredClaim(persisted.scope, persistedClaim),
+                InventoryStoredClaim(persisted.scope, persisted.claims.single()),
             )
             repository.batchesByTitle(TITLE_ID) shouldBe listOf(
                 InventoryStoredBatch(
@@ -372,6 +376,104 @@ class IndependentInventoryRepositoryImplTest {
                 ),
             )
         }
+
+    @Test
+    fun `candidate provenance persists after closing and reopening a file database`() = runBlocking<Unit> {
+        driver.close()
+        databaseDirectory = Files.createTempDirectory("tsuzuki-inventory-candidate-file-db")
+        val url = "jdbc:sqlite:${databaseDirectory!!.resolve("inventory-candidate.sqlite").toAbsolutePath()}"
+        driver = JdbcSqliteDriver(url)
+        database = createDatabase(driver, createSchema = true)
+        insertTitle(database, TITLE_ID)
+        repository = IndependentInventoryRepositoryImpl(database)
+
+        val scope = inventoryScope(editionKey = "selected-edition", language = "ja")
+            .copy(producerId = "wikimedia")
+        val candidate = claim(scope, "wiki-page-8-Chapter_1", "1", 42L).copy(
+            derivation = InventoryDerivation.COMMUNITY_CURATED,
+            provenance = candidateProvenance(
+                InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION,
+                "https://example.invalid/wiki/Synthetic_index?oldid=8",
+                "8",
+                "Chapter_1",
+                "chapter-list-entry",
+                "== Chapters ==\n* [[Chapter_1|1]]",
+            ),
+        )
+        val selectedBatch = batch(
+            scope = scope,
+            pageKey = "selected-revision-8",
+            observedAt = 42L,
+            claims = listOf(candidate),
+        )
+        repository.saveBatch(selectedBatch)
+
+        driver.close()
+        driver = JdbcSqliteDriver(url)
+        database = createDatabase(driver, createSchema = false)
+        repository = IndependentInventoryRepositoryImpl(database)
+
+        repository.byTitle(TITLE_ID) shouldBe listOf(InventoryStoredClaim(scope, candidate))
+    }
+
+    @Test
+    fun `maximum escaped candidate provenance roundtrips through SQLite`() = runBlocking<Unit> {
+        val scope = inventoryScope(editionKey = "selected-edition", language = "ja")
+            .copy(producerId = "wikimedia")
+        val escapedValue = "\u0001".repeat(2048)
+        val provenance = InventoryCandidateProvenance(
+            sourceKind = InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION,
+            originReference = escapedValue,
+            exactRevision = "r".repeat(128),
+            attributionReference = escapedValue,
+            licenseReference = escapedValue,
+            snapshotDigest = sha256("synthetic maximum-provenance fixture"),
+            sourceUnitId = "u".repeat(1024),
+            structuralCategory = "c".repeat(80),
+        )
+        val candidate = claim(scope, "max-provenance", "1", 10L).copy(
+            derivation = InventoryDerivation.COMMUNITY_CURATED,
+            provenance = provenance,
+        )
+
+        repository.saveBatch(batch(scope, "selected-revision-max", 10L, claims = listOf(candidate)))
+
+        repository.byTitle(TITLE_ID).single().claim.provenance shouldBe provenance
+    }
+
+    @Test
+    fun `malformed or oversized provenance fails closed without deleting its claim`() = runBlocking<Unit> {
+        val scope = inventoryScope(editionKey = "selected-edition", language = "ja")
+            .copy(producerId = "wikimedia")
+        val candidate = claim(scope, "retained-candidate", "1", 10L).copy(
+            derivation = InventoryDerivation.COMMUNITY_CURATED,
+            provenance = candidateProvenance(
+                InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION,
+                "https://example.invalid/wiki/Synthetic_index?oldid=1",
+                "1",
+                "Chapter_1",
+                "chapter-list-entry",
+                "== Chapters ==\n* [[Chapter_1|1]]",
+            ),
+        )
+        repository.saveBatch(batch(scope, "selected-revision-1", 10L, claims = listOf(candidate)))
+
+        listOf("not-json", "x".repeat(65_537)).forEach { invalidJson ->
+            driver.execute(
+                null,
+                "UPDATE tsuzuki_independent_inventory_claims SET provenance_json = ? WHERE source_record_id = ?",
+                2,
+            ) {
+                bindString(0, invalidJson)
+                bindString(1, candidate.sourceRecordId)
+            }.await()
+
+            val stored = repository.byTitle(TITLE_ID).single().claim
+            stored.sourceRecordId shouldBe candidate.sourceRecordId
+            stored.label shouldBe candidate.label
+            stored.provenance shouldBe null
+        }
+    }
 
     private suspend fun createDatabase(driver: SqlDriver, createSchema: Boolean): Database {
         driver.execute(null, "PRAGMA foreign_keys = ON", 0).await()
@@ -452,16 +554,22 @@ class IndependentInventoryRepositoryImplTest {
         exactRevision: String,
         sourceUnitId: String,
         structuralCategory: String,
+        snapshotContent: String,
     ) = InventoryCandidateProvenance(
         sourceKind = sourceKind,
         originReference = originReference,
         exactRevision = exactRevision,
         attributionReference = "Synthetic fixture attribution",
         licenseReference = "Synthetic fixture license reference",
-        snapshotDigest = "sha256:${"3".repeat(64)}",
+        snapshotDigest = sha256(snapshotContent),
         sourceUnitId = sourceUnitId,
         structuralCategory = structuralCategory,
     )
+
+    private fun sha256(content: String): String = "sha256:" +
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(content.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
     private fun nativeLibraryArchitecture(): String = when (System.getProperty("os.arch").orEmpty().lowercase()) {
         "aarch64", "arm64" -> "aarch64"

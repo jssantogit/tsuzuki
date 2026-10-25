@@ -15,6 +15,7 @@ CREATE TABLE tsuzuki_independent_inventory_claims(
     work_verified INTEGER NOT NULL,
     edition_verified INTEGER NOT NULL,
     observed_at INTEGER NOT NULL,
+    provenance_json TEXT,
     PRIMARY KEY(canonical_title_id, producer_id, external_work_id, edition_key, scope_language, source_record_id),
     FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
 );
@@ -60,7 +61,8 @@ SELECT
     upstream_source_id,
     work_verified,
     edition_verified,
-    observed_at
+    observed_at,
+    provenance_json
 FROM tsuzuki_independent_inventory_claims
 WHERE canonical_title_id = :canonicalTitleId
 ORDER BY producer_id, external_work_id, edition_key, source_record_id;
@@ -100,7 +102,8 @@ INSERT INTO tsuzuki_independent_inventory_claims(
     upstream_source_id,
     work_verified,
     edition_verified,
-    observed_at
+    observed_at,
+    provenance_json
 )
 VALUES (
     :canonicalTitleId,
@@ -117,7 +120,8 @@ VALUES (
     :upstreamSourceId,
     :workVerified,
     :editionVerified,
-    :observedAt
+    :observedAt,
+    :provenanceJson
 )
 ON CONFLICT(canonical_title_id, producer_id, external_work_id, edition_key, scope_language, source_record_id)
 DO UPDATE SET
@@ -129,7 +133,8 @@ DO UPDATE SET
     upstream_source_id = excluded.upstream_source_id,
     work_verified = excluded.work_verified,
     edition_verified = excluded.edition_verified,
-    observed_at = excluded.observed_at
+    observed_at = excluded.observed_at,
+    provenance_json = excluded.provenance_json
 WHERE excluded.observed_at > tsuzuki_independent_inventory_claims.observed_at;
 
 upsertTsuzukiIndependentInventoryPage:
@@ -193,7 +198,8 @@ INSERT INTO tsuzuki_independent_inventory_claims(
     upstream_source_id,
     work_verified,
     edition_verified,
-    observed_at
+    observed_at,
+    provenance_json
 )
 SELECT
     :targetId,
@@ -210,7 +216,8 @@ SELECT
     upstream_source_id,
     work_verified,
     edition_verified,
-    observed_at
+    observed_at,
+    provenance_json
 FROM tsuzuki_independent_inventory_claims
 WHERE canonical_title_id = :localId
 ON CONFLICT(canonical_title_id, producer_id, external_work_id, edition_key, scope_language, source_record_id)
@@ -223,7 +230,8 @@ DO UPDATE SET
     upstream_source_id = excluded.upstream_source_id,
     work_verified = excluded.work_verified,
     edition_verified = excluded.edition_verified,
-    observed_at = excluded.observed_at
+    observed_at = excluded.observed_at,
+    provenance_json = excluded.provenance_json
 WHERE excluded.observed_at > tsuzuki_independent_inventory_claims.observed_at;
 
 mergeTsuzukiIndependentInventoryPages:

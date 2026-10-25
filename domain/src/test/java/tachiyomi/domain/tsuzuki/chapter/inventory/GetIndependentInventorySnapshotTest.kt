@@ -3,6 +3,7 @@ package tachiyomi.domain.tsuzuki.chapter.inventory
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import java.security.MessageDigest
 
 class GetIndependentInventorySnapshotTest {
     @Test
@@ -56,7 +57,7 @@ class GetIndependentInventorySnapshotTest {
             exactRevision = "synthetic-revision-7",
             attributionReference = "Synthetic fixture attribution",
             licenseReference = "Synthetic fixture license reference",
-            snapshotDigest = "sha256:${"2".repeat(64)}",
+            snapshotDigest = sha256("synthetic revision 7: Chapter_12_05"),
             sourceUnitId = "Chapter_12_05",
             structuralCategory = "chapter-list-entry",
         )
@@ -85,6 +86,84 @@ class GetIndependentInventorySnapshotTest {
             ),
         )
         snapshot.editorialCompletenessConfirmed shouldBe false
+    }
+
+    @Test
+    fun `different labels for the same selected-source unit remain a visible conflict`() = runTest {
+        val ledger = FakeLedger()
+        val source = scope("wikimedia", "selected-edition")
+        fun candidate(id: String, label: String, revision: String, observedAt: Long) =
+            claim(id, label, InventoryDerivation.COMMUNITY_CURATED, observedAt).copy(
+                provenance = InventoryCandidateProvenance(
+                    sourceKind = InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION,
+                    originReference = "https://example.invalid/wiki/Selected_index",
+                    exactRevision = revision,
+                    snapshotDigest = sha256("synthetic revision $revision: Chapter_12_05 = $label"),
+                    sourceUnitId = "Chapter_12_05",
+                    structuralCategory = "chapter-list-entry",
+                ),
+            )
+        val first = candidate("revision-1-Chapter_12_05", "12.05", "1", 10L)
+        val second = candidate("revision-2-Chapter_12_05", "12.5", "2", 20L)
+        ledger.saveBatch(
+            batch(
+                source,
+                "revision-1",
+                10L,
+                InventoryFetchOutcome.PARTIAL,
+                listOf(first),
+            ),
+        )
+        ledger.saveBatch(
+            batch(
+                source,
+                "revision-2",
+                20L,
+                InventoryFetchOutcome.PARTIAL,
+                listOf(second),
+            ),
+        )
+
+        val sourceSnapshot = GetIndependentInventorySnapshot(ledger).execute("title").sources.single()
+
+        val conflict = sourceSnapshot.candidateConflicts.single()
+        conflict.sourceKind shouldBe InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION
+        conflict.sourceUnitId shouldBe "Chapter_12_05"
+        conflict.candidates shouldBe listOf(
+            InventoryCandidateExample(second.sourceRecordId, second.label!!, second.provenance!!, second.observedAt),
+            InventoryCandidateExample(first.sourceRecordId, first.label!!, first.provenance!!, first.observedAt),
+        )
+        sourceSnapshot.knownIndividualClaims shouldBe 0
+        sourceSnapshot.candidateObservations shouldBe 2
+    }
+
+    @Test
+    fun `offline candidate examples omit labels beyond the bounded text limit`() = runTest {
+        val ledger = FakeLedger()
+        val source = scope("wikimedia", "selected-edition")
+        val label = "x".repeat(513)
+        val candidate = claim(
+            "oversized-label",
+            label,
+            InventoryDerivation.COMMUNITY_CURATED,
+            20L,
+        ).copy(
+            provenance = InventoryCandidateProvenance(
+                sourceKind = InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION,
+                originReference = "https://example.invalid/wiki/Selected_index",
+                exactRevision = "1",
+                snapshotDigest = sha256("== Chapters ==\n* [[Chapter_1|$label]]"),
+                sourceUnitId = "Chapter_1",
+                structuralCategory = "chapter-list-entry",
+            ),
+        )
+        ledger.saveBatch(batch(source, "revision-1", 20L, InventoryFetchOutcome.PARTIAL, listOf(candidate)))
+
+        val sourceSnapshot = GetIndependentInventorySnapshot(ledger).execute("title").sources.single()
+
+        sourceSnapshot.candidateObservations shouldBe 1
+        sourceSnapshot.candidateExampleLabels shouldBe emptyList()
+        sourceSnapshot.candidateExamples shouldBe emptyList()
     }
 
     @Test
@@ -317,6 +396,11 @@ class GetIndependentInventorySnapshotTest {
         claims: List<InventoryClaim>,
         declaredTotal: Int? = null,
     ) = InventoryEvidenceBatch(scope, key, at, outcome, claims, declaredTotal)
+
+    private fun sha256(content: String): String = "sha256:" +
+        MessageDigest.getInstance("SHA-256")
+            .digest(content.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
     private class FakeLedger : InventoryEvidenceRepository {
         private val pages = mutableListOf<InventoryEvidenceBatch>()
