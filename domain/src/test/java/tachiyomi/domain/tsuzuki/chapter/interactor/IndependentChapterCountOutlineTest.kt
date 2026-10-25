@@ -45,6 +45,34 @@ class IndependentChapterCountOutlineTest {
     }
 
     @Test
+    fun `legacy count identity remains identifiable after a canonical title convergence`() {
+        val historical = CanonicalChapter(
+            id = inferredChapterId("old-local-title", 37),
+            canonicalTitleId = "merged-canonical-title",
+            displayNumber = "37",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 37,
+            confirmation = CanonicalChapterConfirmation.PROVISIONAL,
+        )
+        val outline = buildCanonicalChapterOutline(
+            canonicalTitleId = "merged-canonical-title",
+            observedChapters = listOf(historical),
+            reportedCounts = emptyList(),
+        )
+
+        outline.single().chapter.id shouldBe historical.id
+        outline.single().inferredFromReportedCount shouldBe true
+        isInferredChapter(historical) shouldBe true
+        buildCanonicalChapterOutline(
+            canonicalTitleId = "merged-canonical-title",
+            observedChapters = listOf(historical.copy(confirmation = CanonicalChapterConfirmation.CONFIRMED)),
+            reportedCounts = emptyList(),
+        ).single().inferredFromReportedCount shouldBe false
+        isInferredChapter(historical.copy(baseNumber = 38)) shouldBe false
+        isInferredChapter(historical.copy(id = "tsuzuki:count::37")) shouldBe false
+    }
+
+    @Test
     fun `historical materialized count ids stay visible without inventing adjacent slots`() {
         val legacy = CanonicalChapter(
             id = inferredChapterId("work", 2),
