@@ -59,7 +59,7 @@ class MangaDexVerifiedWorkLinkerTest {
     }
 
     @Test
-    fun `verified MangaList cross-reference is parsed and links to its exact identity`() = runTest {
+    fun `verified MAL cross-reference is parsed and links to its exact identity`() = runTest {
         val repo = mockk<CanonicalTitleRepository>()
         coEvery { repo.getExternalIdentities("title") } returns listOf(
             ExternalIdentity("title", "myanimelist", "500", true, 1L),
@@ -119,7 +119,7 @@ class MangaDexVerifiedWorkLinkerTest {
     }
 
     private fun details(mu: String, mal: String? = null): String {
-        val malField = mal?.let { ",\\\"mal\\\":\\\"$it\\\"" } ?: ""
+        val malField = mal?.let { ",\"mal\":\"$it\"" } ?: ""
         return """{"result":"ok","data":{"id":"$work","type":"manga","attributes":{"title":{"en":"Exact Manga"},"links":{"mu":"$mu"$malField}}}}"""
     }
 
