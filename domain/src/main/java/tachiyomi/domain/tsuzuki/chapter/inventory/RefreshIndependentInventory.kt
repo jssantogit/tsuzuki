@@ -2,6 +2,8 @@ package tachiyomi.domain.tsuzuki.chapter.inventory
 
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import kotlin.time.Clock
@@ -82,6 +84,10 @@ class RefreshIndependentInventory(
             } catch (error: Exception) {
                 Result.failure(error)
             }
+            page.exceptionOrNull()?.let { error ->
+                if (error is CancellationException) throw error
+            }
+            currentCoroutineContext().ensureActive()
             // Revocation, logout and remapping during fetch must discard the late
             // response, even if the HTTP request has already succeeded.
             if (!isEnabled()) return InventoryRefreshResult(InventoryRefreshStop.DISABLED, saved, observations)
