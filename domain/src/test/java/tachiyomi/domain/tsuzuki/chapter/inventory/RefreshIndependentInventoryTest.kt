@@ -68,6 +68,58 @@ class RefreshIndependentInventoryTest {
     }
 
     @Test
+    fun `a stored cursor from another external work is never reused`() = runTest {
+        val ledger = FakeLedger()
+        val unrelated = InventoryScope("canonical", "mangadex", "different-work", null, null, true, false)
+        ledger.saveBatch(
+            batch(unrelated, "start", "old", "1", InventoryFetchOutcome.PARTIAL, "page:2"),
+        )
+        val calls = mutableListOf<String>()
+        RefreshIndependentInventory(titleRepository(), ledger).execute(
+            "canonical",
+            producer { scope, page ->
+                calls += page
+                Result.success(batch(scope, page, "correct", "1", InventoryFetchOutcome.EXHAUSTED))
+            },
+            { true },
+            maxPages = 1,
+        ).stop shouldBe InventoryRefreshStop.EXHAUSTED
+
+        calls shouldBe listOf("start")
+        ledger.claims.map { it.sourceRecordId } shouldBe listOf("old", "correct")
+    }
+
+    @Test
+    fun `failed continuation is retried on the next manual action without deleting earlier claims`() = runTest {
+        val ledger = FakeLedger()
+        val calls = mutableListOf<String>()
+        var failedOnce = false
+        val producer = producer { scope, page ->
+            calls += page
+            when (page) {
+                "start" -> Result.success(
+                    batch(scope, page, "first", "1", InventoryFetchOutcome.PARTIAL, "page:2"),
+                )
+                "page:2" -> {
+                    if (!failedOnce) {
+                        failedOnce = true
+                        Result.failure(IllegalStateException("temporary outage"))
+                    } else {
+                        Result.success(batch(scope, page, "second", "2", InventoryFetchOutcome.EXHAUSTED))
+                    }
+                }
+                else -> error("Unexpected cursor")
+            }
+        }
+        val refresh = RefreshIndependentInventory(titleRepository(), ledger)
+        refresh.execute("canonical", producer, { true }, maxPages = 2).stop shouldBe InventoryRefreshStop.FAILED
+        refresh.execute("canonical", producer, { true }, maxPages = 1).stop shouldBe InventoryRefreshStop.EXHAUSTED
+
+        calls shouldBe listOf("start", "page:2", "page:2")
+        ledger.claims.map { it.sourceRecordId } shouldBe listOf("first", "second")
+    }
+
+    @Test
     fun `unverified crosswalk cannot cause source network access`() = runTest {
         val titles = titleRepository(verified = false)
         val ledger = FakeLedger()
