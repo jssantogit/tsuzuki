@@ -1,12 +1,11 @@
 package eu.kanade.tachiyomi.ui.tsuzuki.detail
 
-import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaDexInventoryProducer
 import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaDexVerifiedCandidate
 import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaDexVerifiedWorkLinker
-import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaUpdatesInventoryProducer
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -20,8 +19,11 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventoryProducer
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshResult
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshIndependentInventory
-import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
+import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class NativeInventoryRefreshScreenModelTest {
@@ -103,11 +105,57 @@ class NativeInventoryRefreshScreenModelTest {
             model.state.value.revision shouldBe 0
         }
 
-    private fun model(linker: MangaDexVerifiedWorkLinker) = NativeInventoryRefreshScreenModel(
-        refreshInventory = mockk<RefreshIndependentInventory>(),
-        mangaUpdates = mockk<MangaUpdatesInventoryProducer>(),
-        mangaDex = mockk<MangaDexInventoryProducer>(),
+
+    @Test
+    fun `manual inventory refresh is rejected when the integration has not opted in`() = runTest(dispatcher) {
+        val refresh = mockk<RefreshIndependentInventory>()
+        val registry = mockk<IntegrationRegistry>()
+        every { registry.inventoryProducers() } returns emptyList()
+        val model = model(mockk(), refresh, registry)
+        model.start("title")
+
+        model.refresh("title", "mangadex") shouldBe null
+        model.state.value.lastStop shouldBe InventoryRefreshStop.DISABLED
+        model.state.value.refreshing shouldBe false
+        coVerify(exactly = 0) { refresh.execute(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `registry revocation invalidates an in flight inventory permission check`() = runTest(dispatcher) {
+        val producer = mockk<IndependentInventoryProducer>()
+        every { producer.producerId } returns "mangadex"
+        val registry = mockk<IntegrationRegistry>()
+        var enabled = true
+        var fingerprint = "original"
+        every { registry.inventoryProducers() } answers { if (enabled) listOf(producer) else emptyList() }
+        every { registry.configurationFingerprint() } answers { fingerprint }
+        val refresh = mockk<RefreshIndependentInventory>()
+        var revalidate: (suspend () -> Boolean)? = null
+        coEvery { refresh.execute(any(), any(), any(), any(), any()) } coAnswers {
+            revalidate = thirdArg()
+            InventoryRefreshResult(InventoryRefreshStop.EXHAUSTED, 1, 0)
+        }
+        val model = model(mockk(), refresh, registry)
+        model.start("title")
+        model.refresh("title", "mangadex")
+        advanceUntilIdle()
+
+        revalidate?.invoke() shouldBe true
+        enabled = false
+        revalidate?.invoke() shouldBe false
+        enabled = true
+        fingerprint = "changed"
+        revalidate?.invoke() shouldBe false
+        model.state.value.lastStop shouldBe InventoryRefreshStop.EXHAUSTED
+    }
+
+    private fun model(
+        linker: MangaDexVerifiedWorkLinker,
+        refresh: RefreshIndependentInventory = mockk(),
+        registry: IntegrationRegistry = mockk(),
+    ) = NativeInventoryRefreshScreenModel(
+        refreshInventory = refresh,
         mangaDexWorkLinker = linker,
-        integrationSettings = mockk<IntegrationSettingsRepository>(),
+        integrationRegistry = registry,
     )
 }
