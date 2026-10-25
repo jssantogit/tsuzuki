@@ -111,6 +111,22 @@ class MangaDexVerifiedWorkLinkerTest {
     }
 
     @Test
+    fun `confirmation refuses a crosswalk withdrawn after a cached preview`() = runTest {
+        val repo = mockk<CanonicalTitleRepository>()
+        val network = FakeTransport(details(mu = "8675309"))
+        coEvery { repo.getExternalIdentities("title") } returns listOf(
+            ExternalIdentity("title", "mangaupdates", "8675309", true, 1L),
+        )
+        val linker = MangaDexVerifiedWorkLinker(repo, network)
+        val preview = linker.preview("title", work).getOrThrow()
+        network.freshResponse = details(mu = "999999")
+
+        linker.confirm("title", preview).isFailure shouldBe true
+        network.freshCalls shouldBe 1
+        coVerify(exactly = 0) { repo.addExternalIdentity(any()) }
+    }
+
+    @Test
     fun `invalid UUID cannot cause a network request`() = runTest {
         val repo = mockk<CanonicalTitleRepository>()
         val network = FakeTransport(details(mu = "8675309"))
@@ -125,9 +141,15 @@ class MangaDexVerifiedWorkLinkerTest {
 
     private class FakeTransport(private val response: String) : InventoryReleaseTransport {
         var calls = 0
+        var freshCalls = 0
+        var freshResponse = response
         override suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload {
             calls++
             return InventoryHttpPayload(response, observedAt = 10L)
+        }
+        override suspend fun fetchFresh(url: String, postBody: String?): InventoryHttpPayload {
+            freshCalls++
+            return InventoryHttpPayload(freshResponse, observedAt = 11L)
         }
     }
 }
