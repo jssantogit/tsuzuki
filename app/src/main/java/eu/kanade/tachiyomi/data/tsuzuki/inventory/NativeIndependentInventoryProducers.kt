@@ -81,7 +81,10 @@ class NativeInventoryReleaseTransport(
         val allowMu = parsed.host == "api.mangaupdates.com" &&
             parsed.encodedPath == "/v1/releases/search" && postBody != null
         val allowMd = parsed.host == "api.mangadex.org" &&
-            parsed.encodedPath.matches(Regex("""^/manga/[0-9a-fA-F-]{36}/feed$""")) && postBody == null
+            (
+                parsed.encodedPath.matches(Regex("""^/manga/[0-9a-fA-F-]{36}/feed$""")) ||
+                    parsed.encodedPath.matches(Regex("""^/manga/[0-9a-fA-F-]{36}$"""))
+                ) && postBody == null
         require(
             parsed.scheme == "https" && parsed.port == 443 &&
                 parsed.username.isEmpty() && parsed.password.isEmpty() && (allowMu || allowMd),
