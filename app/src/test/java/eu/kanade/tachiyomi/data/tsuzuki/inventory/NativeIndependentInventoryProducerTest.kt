@@ -48,6 +48,7 @@ class NativeIndependentInventoryProducerTest {
         val cached = InventoryHttpPayload(body, observedAt = 42L)
         val transport = object : InventoryReleaseTransport {
             override suspend fun fetch(url: String, postBody: String?) = cached
+            override suspend fun fetchFresh(url: String, postBody: String?) = cached
         }
         val batch = MangaUpdatesInventoryProducer(transport)
             .fetchPage(scope("mangaupdates", "123"), "start").getOrThrow()
@@ -111,5 +112,8 @@ class NativeIndependentInventoryProducerTest {
             calls += url to postBody
             return InventoryHttpPayload(response, observedAt = 42L)
         }
+
+        override suspend fun fetchFresh(url: String, postBody: String?): InventoryHttpPayload =
+            fetch(url, postBody)
     }
 }
