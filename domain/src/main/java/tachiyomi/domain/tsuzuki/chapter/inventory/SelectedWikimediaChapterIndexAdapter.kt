@@ -118,13 +118,46 @@ object SelectedWikimediaChapterIndexAdapter {
         require(selected.pageReference.length <= MAX_REFERENCE_LENGTH)
         val pageUri = URI(selected.pageReference)
         require(
-            pageUri.scheme.equals("https", ignoreCase = true) &&
-                !pageUri.host.isNullOrBlank() && pageUri.userInfo == null,
-        ) { "Wikimedia source reference must be an HTTPS page URL" }
+            pageUri.scheme == "https" &&
+                pageUri.userInfo == null &&
+                pageUri.port == -1 &&
+                pageUri.rawFragment == null &&
+                isSelectedWikimediaRevisionUrl(pageUri, selected.selectedRevisionId),
+        ) { "Wikimedia source reference must identify the selected Wikimedia revision" }
         val attribution = selected.attributionReference ?: error("Attribution reference is required")
         val license = selected.licenseReference ?: error("License reference is required")
         require(attribution.isNotBlank() && attribution.length <= MAX_REFERENCE_LENGTH)
         require(license.isNotBlank() && license.length <= MAX_REFERENCE_LENGTH)
+    }
+
+    private fun isSelectedWikimediaRevisionUrl(uri: URI, selectedRevisionId: Long): Boolean {
+        val host = uri.host?.lowercase() ?: return false
+        val officialProjects = listOf(
+            "wikipedia.org",
+            "wikimedia.org",
+            "wikidata.org",
+            "wikibooks.org",
+            "wikinews.org",
+            "wikiquote.org",
+            "wikisource.org",
+            "wikiversity.org",
+            "wikivoyage.org",
+            "wiktionary.org",
+        )
+        if (officialProjects.none { domain -> host == domain || host.endsWith(".$domain") }) return false
+        val path = uri.rawPath.orEmpty()
+        val query = uri.rawQuery.orEmpty()
+        val expectedRevision = "oldid=$selectedRevisionId"
+        return when {
+            path.startsWith("/wiki/") && path.length > "/wiki/".length -> query == expectedRevision
+            path == "/w/index.php" -> {
+                val parameters = query.split('&')
+                parameters.size == 2 &&
+                    expectedRevision in parameters &&
+                    parameters.any { it.startsWith("title=") && it.length > "title=".length }
+            }
+            else -> false
+        }
     }
 
     private fun parseChapterList(wikitext: String): List<ParsedUnit> {
