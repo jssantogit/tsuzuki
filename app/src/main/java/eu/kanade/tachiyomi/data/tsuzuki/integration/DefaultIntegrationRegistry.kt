@@ -235,10 +235,13 @@ class BuiltinIntegrationProviderRegistry(
             .groupBy { it.integrationId }
             .mapValues { (_, rows) -> rows.maxByOrNull(IntegrationSettings::updatedAt) }
 
-        return integrationRegistry.manifests().map { manifest ->
+        return integrationRegistry.manifests().mapNotNull { manifest ->
             val persisted = latest[manifest.integrationId]
             val declared = manifest.capabilities.keys
                 .flatMapTo(linkedSetOf()) { it.toProviderCapabilities() }
+            // Integration-only inventory adapters are not executable Provider capabilities.
+            // Do not publish a zero-capability fake Provider just because it has a manifest.
+            if (declared.isEmpty()) return@mapNotNull null
             val config = IntegrationSettingsConfig.decode(persisted?.configJson)
             val enabledCapabilities = if (persisted?.enabled == true) {
                 manifest.capabilities
