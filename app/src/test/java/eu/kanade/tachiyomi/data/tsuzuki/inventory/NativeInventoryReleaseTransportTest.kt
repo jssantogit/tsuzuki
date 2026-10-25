@@ -72,6 +72,23 @@ class NativeInventoryReleaseTransportTest {
     }
 
     @Test
+    fun cachedResponseKeepsOriginalFetchTimeAndAvoidsDuplicateRequest() = runBlocking {
+        var requests = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200)
+                .message("OK").body("""{"results":[]}""".toResponseBody()).build()
+        }.build()
+        val transport = transport(client)
+        val first = transport.fetch(url, """{"search":"123"}""")
+        val cached = transport.fetch(url, """{"search":"123"}""")
+
+        requests shouldBe 1
+        cached shouldBe first
+        cached.content shouldBe """{"results":[]}"""
+    }
+
+    @Test
     fun oversizedResponseIsNotCachedAndInvalidEndpointsNeverReachHttp() = runBlocking {
         var requested = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
