@@ -108,6 +108,77 @@ class SelectedInventoryCandidateAdapterTest {
     }
 
     @Test
+    fun `selected Wikimedia table indexes only explicitly linked chapter rows`() {
+        val wikitext = """
+            A selected article may contain a lead and other headings.
+            == Chapters ==
+            {| class="wikitable"
+            ! Chapter !! Volume notes
+            |-
+            | [[Chapter_1|1]] || Volume 1
+            |-
+            | [[Chapter_12.05|12.05]] || Volume 3
+            |-
+            | [[Chapters_20_to_24|20–24]] || A range is only a claim
+            |}
+            == References ==
+            * Unrelated references are not chapter evidence.
+        """.trimIndent()
+        val selected = syntheticWikimediaRevision(wikitext)
+
+        val batch = SelectedWikimediaChapterIndexAdapter.adapt(selected).getOrThrow()
+
+        batch.claims.map { it.label }.shouldContainExactly("1", "12.05", "20–24")
+        batch.claims.map { it.kind }.shouldContainExactly(
+            InventoryClaimKind.INDIVIDUAL,
+            InventoryClaimKind.INDIVIDUAL,
+            InventoryClaimKind.RELEASE_RANGE,
+        )
+        batch.claims.mapNotNull { it.provenance?.structuralCategory }.shouldContainExactly(
+            "chapter-table-entry",
+            "chapter-table-entry",
+            "chapter-range-table-entry",
+        )
+        batch.claims.all { it.derivation == InventoryDerivation.COMMUNITY_CURATED } shouldBe true
+        batch.claims.none { InventoryClaimPolicy.mayPromote(batch.scope, it) } shouldBe true
+        batch.outcome shouldBe InventoryFetchOutcome.PARTIAL
+    }
+
+    @Test
+    fun `Wikimedia table rejects unlabeled inferred rows and ambiguous wiki markup`() {
+        val invalidTables = listOf(
+            "== Chapters ==\n{| class=\"wikitable\"\n! Volumes !! Chapters\n|-\n| [[Volume_1|1]] || 1–5\n|}",
+            "== Chapters ==\n{| class=\"wikitable\"\n! Chapter !! Name\n|-\n| 1 || No chapter link\n|}",
+            "== Chapters ==\n{| class=\"wikitable\"\n! Chapter !! Name\n|-\n| [[Chapter_1|1]] || {{Unknown|1}}\n|}",
+            "== Chapters ==\n{| class=\"wikitable\"\n! Chapter !! Name\n|-\n| colspan=\"2\" | [[Chapter_1|1]]\n|}",
+            "== Chapters ==\n{| class=\"wikitable\"\n! Chapter !! Name\n|-\n| [[Chapter_1|1]] || A\n|-\n| [[Chapter_1|1]] || B\n|}",
+        )
+
+        invalidTables.forEach { raw ->
+            SelectedWikimediaChapterIndexAdapter.adapt(syntheticWikimediaRevision(raw)).isFailure shouldBe true
+        }
+    }
+
+    @Test
+    fun `Wikimedia special chapter ranges never become individual candidates`() {
+        val selection = syntheticWikimediaRevision(
+            "== Chapters ==\n* [[Special_1|Special Chapter: Bonus]]" +
+                "\n* [[Special_range|Special Chapter 1–5]]" +
+                "\n* [[Special_reupload|Bonus Chapter 1v2]]",
+        )
+
+        val batch = SelectedWikimediaChapterIndexAdapter.adapt(selection).getOrThrow()
+
+        batch.claims.map { it.kind }.shouldContainExactly(
+            InventoryClaimKind.INDIVIDUAL,
+            InventoryClaimKind.AMBIGUOUS,
+            InventoryClaimKind.AMBIGUOUS,
+        )
+        batch.claims.filter { InventoryClaimPolicy.isNonEditorialCandidate(it) }.map { it.label }
+            .shouldContainExactly("Special Chapter: Bonus")
+    }
+
+    @Test
     fun `selected Wikimedia revision can enumerate a large title without fabricating missing chapters`() {
         val explicitlyIndexed = (1..1200).joinToString("\n") { number ->
             "* [[Chapter_$number|$number]]"
