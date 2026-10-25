@@ -24,12 +24,12 @@ import eu.kanade.presentation.tsuzuki.detail.CanonicalTitleDetailScreen
 import eu.kanade.presentation.tsuzuki.detail.canonicalDetailsProviderLabels
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
-import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.i18n.stringResource
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkScreenModel
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkState
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentSelectorScreenModel
 import kotlinx.coroutines.flow.collect
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 data class CanonicalTitleScreen(
     val canonicalTitleId: String,
