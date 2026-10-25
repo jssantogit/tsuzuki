@@ -18,6 +18,7 @@ import tachiyomi.data.Mangas
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
+import tachiyomi.domain.tsuzuki.chapter.interactor.ChapterMutationGate
 import tachiyomi.domain.tsuzuki.chapter.inventory.EditorialUnitCommitResult
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaim
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaimKind
@@ -25,7 +26,6 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryDerivation
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
-import tachiyomi.domain.tsuzuki.chapter.interactor.ChapterMutationGate
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import java.nio.file.Files
