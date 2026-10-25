@@ -5,6 +5,7 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor
 import eu.kanade.tachiyomi.network.await
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +23,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.CookieJar
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -33,6 +35,8 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.MangaDexReleaseEvidenceAdapter
 import tachiyomi.domain.tsuzuki.chapter.inventory.MangaUpdatesReleaseEvidenceAdapter
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import kotlin.time.Clock
 
 /**
@@ -52,6 +56,18 @@ class NativeInventoryReleaseTransport(
 ) : InventoryReleaseTransport {
     private val mutex = Mutex()
     private val cache = LinkedHashMap<String, Pair<Long, String>>()
+    private val blockedUntilByHost = mutableMapOf<String, Long>()
+    private val metadataClient by lazy {
+        // The public metadata client must never inherit tracker session cookies,
+        // Cloudflare WebView challenge bypasses or automatic off-host redirects.
+        networkHelper.client.newBuilder()
+            .cookieJar(CookieJar.NO_COOKIES)
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .retryOnConnectionFailure(false)
+            .apply { interceptors().removeAll { it is CloudflareInterceptor } }
+            .build()
+    }
     private var lastRequestAtNanos: Long = 0L
 
     override suspend fun fetch(url: String, postBody: String?): String = mutex.withLock {
@@ -60,10 +76,15 @@ class NativeInventoryReleaseTransport(
             parsed.encodedPath == "/v1/releases/search" && postBody != null
         val allowMd = parsed.host == "api.mangadex.org" &&
             parsed.encodedPath.matches(Regex("""^/manga/[0-9a-fA-F-]{36}/feed$""")) && postBody == null
-        require(parsed.scheme == "https" && (allowMu || allowMd)) {
+        require(parsed.scheme == "https" && parsed.port == 443 &&
+            parsed.username.isEmpty() && parsed.password.isEmpty() && (allowMu || allowMd)) {
             "Only allowlisted read-only metadata endpoints are permitted"
         }
         val now = System.nanoTime()
+        blockedUntilByHost[parsed.host]?.let { blockedUntil ->
+            if (now < blockedUntil) throw IOException("Inventory source is temporarily blocked")
+            blockedUntilByHost.remove(parsed.host)
+        }
         val key = url + "\n" + postBody.orEmpty()
         cache[key]?.takeIf { now - it.first in 0 until CACHE_TTL_NANOS }?.let { return@withLock it.second }
 
@@ -85,8 +106,15 @@ class NativeInventoryReleaseTransport(
                 }
             }
             .build()
-        val response = networkHelper.client.newCall(request).await()
+        val response = metadataClient.newCall(request).await()
         response.use {
+            when (it.code) {
+                403 -> blockedUntilByHost[parsed.host] = Long.MAX_VALUE
+                429 -> {
+                    val durationMs = retryAfterMilliseconds(it.header("Retry-After"))
+                    blockedUntilByHost[parsed.host] = System.nanoTime() + durationMs * 1_000_000L
+                }
+            }
             if (!it.isSuccessful) {
                 throw IOException("Independent inventory endpoint returned HTTP " + it.code)
             }
@@ -117,11 +145,23 @@ class NativeInventoryReleaseTransport(
 
     private fun String.toHttpUrlOrFail(): HttpUrl = toHttpUrl()
 
+    private fun retryAfterMilliseconds(value: String?): Long {
+        val numericSeconds = value?.trim()?.toLongOrNull()
+        if (numericSeconds != null) return (numericSeconds.coerceIn(1L, 3600L) * 1000L)
+        val httpDateDelay = runCatching {
+            ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() -
+                System.currentTimeMillis()
+        }.getOrNull()
+        return (httpDateDelay ?: DEFAULT_RETRY_AFTER_MS).coerceIn(DEFAULT_RETRY_AFTER_MS, MAX_RETRY_AFTER_MS)
+    }
+
     private companion object {
         const val MIN_REQUEST_SPACING_MS = 1200L
         const val CACHE_TTL_NANOS = 300_000_000_000L
         const val MAX_CACHE_ENTRIES = 32
         const val MAX_RESPONSE_BYTES = 512_000L
+        const val DEFAULT_RETRY_AFTER_MS = 60_000L
+        const val MAX_RETRY_AFTER_MS = 3_600_000L
     }
 }
 
