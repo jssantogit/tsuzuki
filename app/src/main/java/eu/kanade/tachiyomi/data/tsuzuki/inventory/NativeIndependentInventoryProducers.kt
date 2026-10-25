@@ -44,8 +44,14 @@ import kotlin.time.Clock
  * Requests are serialized, spaced at least 1.2 seconds apart, cached briefly, and
  * never retried automatically after 403/429. This is not a content/Reader client.
  */
+data class InventoryHttpPayload(
+    val content: String,
+    val observedAt: Long,
+)
+
 interface InventoryReleaseTransport {
-    suspend fun fetch(url: String, postBody: String?): String
+    /** A cache hit must retain the timestamp of the original HTTP fetch. */
+    suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload
 }
 
 @Inject
@@ -55,7 +61,7 @@ class NativeInventoryReleaseTransport(
     private val networkHelper: NetworkHelper,
 ) : InventoryReleaseTransport {
     private val mutex = Mutex()
-    private val cache = LinkedHashMap<String, Pair<Long, String>>()
+    private val cache = LinkedHashMap<String, Pair<Long, InventoryHttpPayload>>()
     private val blockedUntilByHost = mutableMapOf<String, Long>()
     private val metadataClient by lazy {
         // The public metadata client must never inherit tracker session cookies,
@@ -137,9 +143,13 @@ class NativeInventoryReleaseTransport(
                     result.toString(Charsets.UTF_8.name())
                 }
             }
+            val payload = InventoryHttpPayload(
+                content = bytes,
+                observedAt = Clock.System.now().toEpochMilliseconds(),
+            )
             if (cache.size >= MAX_CACHE_ENTRIES) cache.remove(cache.keys.first())
-            cache[key] = System.nanoTime() to bytes
-            bytes
+            cache[key] = System.nanoTime() to payload
+            payload
         }
     }
 
@@ -190,7 +200,8 @@ class MangaUpdatesInventoryProducer(
                 put("perpage", 25)
                 put("include_metadata", true)
             }.toString()
-            val root = parseObject(transport.fetch("https://api.mangaupdates.com/v1/releases/search", payload))
+            val response = transport.fetch("https://api.mangaupdates.com/v1/releases/search", payload)
+            val root = parseObject(response.content)
             val reportedPage = root.requiredInt("page")
             val perPage = root.requiredInt("per_page")
             val totalReleases = root.requiredInt("total_hits")
@@ -215,7 +226,7 @@ class MangaUpdatesInventoryProducer(
             MangaUpdatesReleaseEvidenceAdapter.adapt(
                 scope = scope,
                 pageKey = pageKey,
-                observedAt = Clock.System.now().toEpochMilliseconds(),
+                observedAt = response.observedAt,
                 releases = records,
                 hasNextPage = hasNextPage,
                 nextCursor = if (hasNextPage && page < 100) "page:" + (page + 1) else null,
@@ -252,7 +263,8 @@ class MangaDexInventoryProducer(
                 .addQueryParameter("contentRating[]", "suggestive")
                 .addQueryParameter("includeFutureUpdates", "0")
                 .build().toString()
-            val root = parseObject(transport.fetch(url, null))
+            val response = transport.fetch(url, null)
+            val root = parseObject(response.content)
             require(root.requiredString("result") == "ok")
             val totalReleases = root.requiredInt("total")
             val returnedOffset = root.requiredInt("offset")
@@ -284,7 +296,7 @@ class MangaDexInventoryProducer(
             MangaDexReleaseEvidenceAdapter.adapt(
                 scope = scope,
                 pageKey = pageKey,
-                observedAt = Clock.System.now().toEpochMilliseconds(),
+                observedAt = response.observedAt,
                 releases = releases,
                 hasNextPage = hasNext,
                 nextCursor = if (hasNext && offset + limit <= 9900) {

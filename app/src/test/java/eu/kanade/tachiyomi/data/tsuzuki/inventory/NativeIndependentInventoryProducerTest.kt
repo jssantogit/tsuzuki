@@ -109,7 +109,7 @@ class NativeIndependentInventoryProducerTest {
         val calls = mutableListOf<Pair<String, String?>>()
         override suspend fun fetch(url: String, postBody: String?): String {
             calls += url to postBody
-            return response
+            return InventoryHttpPayload(response, observedAt = 42L)
         }
     }
 }
