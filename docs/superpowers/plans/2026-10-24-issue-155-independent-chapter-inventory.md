@@ -42,3 +42,17 @@ A batch includes canonical work ID, producer, verified external work ID, edition
 | v1 sync / backup | No export filters, tombstones, key changes or destructive migration |
 
 **Execution order**: RED fixture and count-outline gate -> typed claim acquisition/classifier -> additive persistent shadow ledger -> independent optional adapters -> safe promotion and read model -> acceptance tests, CI and manual smoke gate. CI v2.1 affected on every code checkpoint, `[ci-full]` only after integrated cross-module code. Device acceptance required before release-readiness; do not generate APK for pure domain/SQL work.
+
+## Native implementation checkpoint — 2026-10-24
+
+**Delivered in PR #156 on `feat/issue-155-independent-chapter-inventory`** (not release-approved):
+
+- Native Android `MangaUpdatesInventoryProducer` reads public `POST /v1/releases/search`; `MangaDexInventoryProducer` reads public `GET /manga/{uuid}/feed`. Both preserve releases as `RELEASE_RECORD` shadow observations. The MU `metadata.series.series_id` and each MD manga relationship must match the requested verified external work; incomplete or mismatched records reject the page.
+- The read-only native transport only permits the exact TLS hosts and metadata paths. Requests are manually confirmed per title/source; three pages at most per action, serialized/spaced 1.2 seconds apart, with a short in-memory cache and a response byte ceiling. 403/429 and other non-success statuses are terminal for that attempt, not automatic retries.
+- The detail view exposes explicit manual buttons and consent. MangaUpdates additionally requires its integration to be enabled; both sources require a canonical title to have an already-verified exact external work ID. Disabling/revoking during a call drops late results. No automatic source query runs when merely opening a title or refreshing usual metadata.
+- The local inventory ledger retains batch outcomes and claims across transient failures and app restarts. Subsequent *manual* requests resume from the next persisted partial cursor of the exact scope, and failed pages may be retried, subject to the same bounded budget and loop guard. Exhausted chains restart on a later explicit refresh, without implying editorial completeness.
+- Native acquisition and provenance UI remain separate from canonical chapter creation, Reader, downloads, v1 sync, progress and backup. No `READING_PROGRESS_V2` or canonical backup switch was enabled.
+
+**Verified checkpoints:** [CI #40152447946](https://github.com/jssantogit/tsuzuki/actions/runs/40152447946) GREEN at `c7958733` for App/Format; [CI #40152943002](https://github.com/jssantogit/tsuzuki/actions/runs/40152943002) GREEN at `6b7af07f` for Domain/App/Format/CI Gate. The comprehensive cross-module checkpoint must be checked on its exact subsequent HEAD.
+
+**Still open under issue #155:** optional source setup/identity linking for works without verified external IDs (especially MangaDex); independent **primary editorial** sources with verified edition/language to promote *actual* chapters safely; HTTP fixture coverage of 403/429/backoff and source configuration changes; regression matrix for Reader, existing count IDs, v1 sync/tombstones and backup; manual physical-device UX acceptance. MangaUpdates and MangaDex release feeds are **not** primary editorial evidence and do not solve the full chapter coverage requirement by themselves. No mass third-party queries, merge, or APK have been performed.
