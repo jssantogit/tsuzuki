@@ -108,6 +108,33 @@ class SelectedInventoryCandidateAdapterTest {
     }
 
     @Test
+    fun `selected Wikimedia revision can enumerate a large title without fabricating missing chapters`() {
+        val explicitlyIndexed = (1..1200).joinToString("\n") { number ->
+            "* [[Chapter_${number}|$number]]"
+        }
+        val selected = syntheticWikimediaRevision("== Chapters ==\n$explicitlyIndexed")
+
+        val result = SelectedWikimediaChapterIndexAdapter.adapt(selected).getOrThrow()
+
+        result.claims.size shouldBe 1200
+        result.claims.first().label shouldBe "1"
+        result.claims.last().label shouldBe "1200"
+        result.declaredTotal shouldBe null
+        result.outcome shouldBe InventoryFetchOutcome.PARTIAL
+        result.claims.none { InventoryClaimPolicy.mayPromote(result.scope, it) } shouldBe true
+    }
+
+    @Test
+    fun `Wikimedia source rejects more entries than the bounded selected-index budget`() {
+        val indexed = (1..2049).joinToString("\n") { number ->
+            "* [[Chapter_${number}|$number]]"
+        }
+        val selected = syntheticWikimediaRevision("== Chapters ==\n$indexed")
+
+        SelectedWikimediaChapterIndexAdapter.adapt(selected).isFailure shouldBe true
+    }
+
+    @Test
     fun `Wikimedia response beyond the byte budget is rejected`() {
         val oversized = syntheticWikimediaRevision(
             "x".repeat(SelectedWikimediaChapterIndexAdapter.MAX_SOURCE_BYTES + 1),
