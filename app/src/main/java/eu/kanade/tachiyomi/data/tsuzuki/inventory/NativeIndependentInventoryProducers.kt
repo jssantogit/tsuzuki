@@ -76,7 +76,7 @@ class NativeInventoryReleaseTransport(
     }
     private var lastRequestAtNanos: Long = 0L
 
-    override suspend fun fetch(url: String, postBody: String?): String = mutex.withLock {
+    override suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload = mutex.withLock {
         val parsed = url.toHttpUrlOrFail()
         val allowMu = parsed.host == "api.mangaupdates.com" &&
             parsed.encodedPath == "/v1/releases/search" && postBody != null
