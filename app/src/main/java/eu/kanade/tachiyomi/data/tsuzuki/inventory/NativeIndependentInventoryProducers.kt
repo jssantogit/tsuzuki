@@ -5,8 +5,8 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import eu.kanade.tachiyomi.network.NetworkHelper
-import eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor
 import eu.kanade.tachiyomi.network.await
+import eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -82,8 +82,10 @@ class NativeInventoryReleaseTransport(
             parsed.encodedPath == "/v1/releases/search" && postBody != null
         val allowMd = parsed.host == "api.mangadex.org" &&
             parsed.encodedPath.matches(Regex("""^/manga/[0-9a-fA-F-]{36}/feed$""")) && postBody == null
-        require(parsed.scheme == "https" && parsed.port == 443 &&
-            parsed.username.isEmpty() && parsed.password.isEmpty() && (allowMu || allowMd)) {
+        require(
+            parsed.scheme == "https" && parsed.port == 443 &&
+                parsed.username.isEmpty() && parsed.password.isEmpty() && (allowMu || allowMd),
+        ) {
             "Only allowlisted read-only metadata endpoints are permitted"
         }
         val now = System.nanoTime()
