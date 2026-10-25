@@ -29,8 +29,10 @@ class MangaDexVerifiedWorkLinkerTest {
         linker.confirm("title", candidate).isSuccess shouldBe true
         coVerify(exactly = 1) {
             repo.addExternalIdentity(
-                match { it.canonicalTitleId == "title" && it.provider == "mangadex" &&
-                    it.externalId == work && it.verified },
+                match {
+                    it.canonicalTitleId == "title" && it.provider == "mangadex" &&
+                        it.externalId == work && it.verified
+                },
             )
         }
     }
