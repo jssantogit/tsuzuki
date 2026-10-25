@@ -36,7 +36,8 @@ class MangaDexVerifiedWorkLinker(
         canonicalTitleId: String,
         mangaDexId: String,
         forceNetwork: Boolean,
-    ): Result<MangaDexVerifiedCandidate> = capture {
+    ): Result<MangaDexVerifiedCandidate> =
+        capture {
             require(canonicalTitleId.isNotBlank())
             require(mangaDexId.matches(MANGADEX_UUID)) { "Invalid MangaDex manga UUID" }
             val url = "https://api.mangadex.org/manga/$mangaDexId"
