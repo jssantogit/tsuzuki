@@ -59,6 +59,33 @@ class MangaDexVerifiedWorkLinkerTest {
     }
 
     @Test
+    fun `verified MangaList cross-reference is parsed and links to its exact identity`() = runTest {
+        val repo = mockk<CanonicalTitleRepository>()
+        coEvery { repo.getExternalIdentities("title") } returns listOf(
+            ExternalIdentity("title", "myanimelist", "500", true, 1L),
+        )
+        val candidate = MangaDexVerifiedWorkLinker(
+            repo,
+            FakeTransport(details(mu = "8675309", mal = "500")),
+        ).preview("title", work).getOrThrow()
+        candidate.matchedProvider shouldBe "myanimelist"
+        candidate.matchedExternalId shouldBe "500"
+    }
+
+    @Test
+    fun `matching one provider does not override a contradictory verified crosswalk`() = runTest {
+        val repo = mockk<CanonicalTitleRepository>()
+        coEvery { repo.getExternalIdentities("title") } returns listOf(
+            ExternalIdentity("title", "mangaupdates", "8675309", true, 1L),
+            ExternalIdentity("title", "myanimelist", "500", true, 1L),
+        )
+        MangaDexVerifiedWorkLinker(
+            repo,
+            FakeTransport(details(mu = "8675309", mal = "501")),
+        ).preview("title", work).isFailure shouldBe true
+    }
+
+    @Test
     fun `MangaDex response with different work id is rejected`() = runTest {
         val repo = mockk<CanonicalTitleRepository>()
         val invalid = details(mu = "8675309")
