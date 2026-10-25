@@ -48,7 +48,7 @@ class MangaDexWorkAssociationRepositoryImplTest {
     )
 
     @BeforeEach
-    fun setUp() = runBlocking {
+    fun setUp(): Unit = runBlocking<Unit> {
         originalNativeLibraryPath = System.getProperty("org.sqlite.lib.path")
         nativeLibraryDirectory = Files.createTempDirectory("tsuzuki-mangadex-association")
         val nativeLibrary = nativeLibraryDirectory!!.resolve("libsqlitejdbc.so")
@@ -77,7 +77,7 @@ class MangaDexWorkAssociationRepositoryImplTest {
     }
 
     @AfterEach
-    fun tearDown() {
+    fun tearDown(): Unit {
         if (::driver.isInitialized) driver.close()
         if (originalNativeLibraryPath == null) {
             System.clearProperty("org.sqlite.lib.path")
@@ -88,7 +88,7 @@ class MangaDexWorkAssociationRepositoryImplTest {
     }
 
     @Test
-    fun `explicitly enabled setting and exact crosswalk associate idempotently`() = runBlocking {
+    fun `explicitly enabled setting and exact crosswalk associate idempotently`(): Unit = runBlocking<Unit> {
         saveSettings(enabledSettings)
 
         repository.associateMangaDexWorkIfCurrent(request(), isAuthorized = { true }) shouldBe
@@ -102,14 +102,14 @@ class MangaDexWorkAssociationRepositoryImplTest {
     }
 
     @Test
-    fun `missing integration setting is refused without inserting an identity`() = runBlocking {
+    fun `missing integration setting is refused without inserting an identity`(): Unit = runBlocking<Unit> {
         repository.associateMangaDexWorkIfCurrent(request(), isAuthorized = { true }) shouldBe
             MangaDexWorkAssociationResult.REFUSED
         repository.getByExternalIdentity("mangadex", workId) shouldBe null
     }
 
     @Test
-    fun `legacy enabled integration with default off capability is refused`() = runBlocking {
+    fun `legacy enabled integration with default off capability is refused`(): Unit = runBlocking<Unit> {
         val defaultOff = enabledSettings.copy(configJson = "{}")
         saveSettings(defaultOff)
 
@@ -121,7 +121,7 @@ class MangaDexWorkAssociationRepositoryImplTest {
     }
 
     @Test
-    fun `disabled integration setting is refused without inserting an identity`() = runBlocking {
+    fun `disabled integration setting is refused without inserting an identity`(): Unit = runBlocking<Unit> {
         val disabled = enabledSettings.copy(enabled = false)
         saveSettings(disabled)
 
@@ -133,7 +133,7 @@ class MangaDexWorkAssociationRepositoryImplTest {
     }
 
     @Test
-    fun `changed persisted settings after preview refuse association`() = runBlocking {
+    fun `changed persisted settings after preview refuse association`(): Unit = runBlocking<Unit> {
         saveSettings(enabledSettings)
         saveSettings(enabledSettings.copy(updatedAt = 21L))
 
@@ -143,7 +143,7 @@ class MangaDexWorkAssociationRepositoryImplTest {
     }
 
     @Test
-    fun `changed verified crosswalk snapshot refuses association`() = runBlocking {
+    fun `changed verified crosswalk snapshot refuses association`(): Unit = runBlocking<Unit> {
         saveSettings(enabledSettings)
         seedIdentity(crosswalk.copy(externalId = "502", createdAt = 11L))
 
@@ -153,7 +153,7 @@ class MangaDexWorkAssociationRepositoryImplTest {
     }
 
     @Test
-    fun `existing MangaDex ownership by another title is never overwritten`() = runBlocking {
+    fun `existing MangaDex ownership by another title is never overwritten`(): Unit = runBlocking<Unit> {
         saveSettings(enabledSettings)
         seedTitle("other")
         seedIdentity(ExternalIdentity("other", "mangadex", workId, true, 30L))
@@ -164,7 +164,7 @@ class MangaDexWorkAssociationRepositoryImplTest {
     }
 
     @Test
-    fun `revocation during transaction rolls back the MangaDex identity insert`() = runBlocking {
+    fun `revocation during transaction rolls back the MangaDex identity insert`(): Unit = runBlocking<Unit> {
         saveSettings(enabledSettings)
         var authorized = true
         mutationObserver.afterMangaDexIdentityInsert = { authorized = false }
@@ -178,7 +178,7 @@ class MangaDexWorkAssociationRepositoryImplTest {
     }
 
     @Test
-    fun `cancellation during transaction rolls back the MangaDex identity insert`() = runBlocking {
+    fun `cancellation during transaction rolls back the MangaDex identity insert`(): Unit = runBlocking<Unit> {
         saveSettings(enabledSettings)
         val associationJob = Job()
         mutationObserver.afterMangaDexIdentityInsert = { associationJob.cancel() }
