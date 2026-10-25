@@ -39,7 +39,7 @@ class MangaDexVerifiedWorkLinker(
     ): Result<MangaDexVerifiedCandidate> =
         capture {
             require(canonicalTitleId.isNotBlank())
-            require(mangaDexId.matches(MANGADEX_UUID)) { "Invalid MangaDex manga UUID" }
+            require(mangaDexId.matches(MANGADEX_WORK_UUID_REGEX)) { "Invalid MangaDex manga UUID" }
             val url = "https://api.mangadex.org/manga/$mangaDexId"
             val payload = if (forceNetwork) transport.fetchFresh(url, null) else transport.fetch(url, null)
             val response = Json.parseToJsonElement(payload.content) as? JsonObject
@@ -133,9 +133,6 @@ class MangaDexVerifiedWorkLinker(
         (this[field] as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
 
     private companion object {
-        val MANGADEX_UUID = Regex(
-            """^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$""",
-        )
         val CROSSWALK_KEYS = listOf(
             "mu" to "mangaupdates",
             "mal" to "myanimelist",
