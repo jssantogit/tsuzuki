@@ -95,6 +95,17 @@ class NativeIndependentInventoryProducerTest {
     }
 
     @Test
+    fun `malformed MangaDex work identifiers fail before invoking the release transport`() = runTest {
+        val transport = RecordingInventoryTransport("{}")
+        val invalid = listOf("-".repeat(36), "a".repeat(36), "12345678-1234-1234-1234-123456789abg")
+        invalid.forEach { id ->
+            MangaDexInventoryProducer(transport)
+                .fetchPage(scope("mangadex", id), "start").isFailure shouldBe true
+        }
+        transport.calls shouldBe emptyList()
+    }
+
+    @Test
     fun `invalid cursor never starts a request`() = runTest {
         val transport = RecordingInventoryTransport("{}")
         MangaUpdatesInventoryProducer(transport).fetchPage(scope("mangaupdates", "123"), "page:-1").isFailure shouldBe
