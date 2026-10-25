@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.data.tsuzuki.inventory
 
 import io.kotest.matchers.shouldBe
-import io.mockk.coAnswers
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -24,7 +23,8 @@ class MangaDexWorkLinkInventoryIntegrationTest {
     private val mangaDexId = "12345678-1234-1234-1234-123456789abc"
 
     @Test
-    fun `manual verified work link permits release inventory without reading providers or chapter promotion`() = runTest {
+    fun `manual verified work link permits release inventory without reading providers or chapter promotion`() =
+        runTest {
         val identities = mutableListOf(ExternalIdentity("title", "mangaupdates", "8675309", true, 1L))
         val titles = mockk<CanonicalTitleRepository>()
         coEvery { titles.getExternalIdentities("title") } coAnswers { identities.toList() }
