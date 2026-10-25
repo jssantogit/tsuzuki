@@ -50,6 +50,48 @@ enum class InventoryDerivation {
     UNKNOWN,
 }
 
+enum class InventoryCandidateSourceKind {
+    WIKIMEDIA_SELECTED_PAGE_REVISION,
+    USER_SELECTED_EPUB3_TOC,
+}
+
+/** Bounded source pointers only; this value must never contain source article text or EPUB content. */
+data class InventoryCandidateProvenance(
+    val sourceKind: InventoryCandidateSourceKind,
+    val originReference: String,
+    val exactRevision: String,
+    val attributionReference: String? = null,
+    val licenseReference: String? = null,
+    val snapshotDigest: String,
+    val sourceUnitId: String,
+    val structuralCategory: String,
+) {
+    init {
+        require(originReference.isNotBlank() && originReference.length <= MAX_REFERENCE_LENGTH)
+        require(exactRevision.isNotBlank() && exactRevision.length <= MAX_REVISION_LENGTH)
+        require(attributionReference == null || attributionReference.length <= MAX_REFERENCE_LENGTH)
+        require(licenseReference == null || licenseReference.length <= MAX_REFERENCE_LENGTH)
+        require(snapshotDigest.isNotBlank() && snapshotDigest.length <= MAX_DIGEST_LENGTH)
+        require(sourceUnitId.isNotBlank() && sourceUnitId.length <= MAX_UNIT_ID_LENGTH)
+        require(structuralCategory.isNotBlank() && structuralCategory.length <= MAX_CATEGORY_LENGTH)
+    }
+
+    private companion object {
+        const val MAX_REFERENCE_LENGTH = 2048
+        const val MAX_REVISION_LENGTH = 128
+        const val MAX_DIGEST_LENGTH = 128
+        const val MAX_UNIT_ID_LENGTH = 1024
+        const val MAX_CATEGORY_LENGTH = 80
+    }
+}
+
+data class InventoryCandidateExample(
+    val sourceRecordId: String,
+    val label: String,
+    val provenance: InventoryCandidateProvenance,
+    val observedAt: Long,
+)
+
 enum class InventoryFetchOutcome {
     /** A bounded page was obtained; later pages may still be missing. */
     PARTIAL,
@@ -69,6 +111,7 @@ data class InventoryClaim(
     val derivation: InventoryDerivation,
     val upstreamSourceId: String?,
     val observedAt: Long,
+    val provenance: InventoryCandidateProvenance? = null,
 ) {
     init {
         require(sourceRecordId.isNotBlank())

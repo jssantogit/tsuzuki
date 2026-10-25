@@ -1,6 +1,7 @@
 package tachiyomi.data.tsuzuki.chapter
 
 import app.cash.sqldelight.async.coroutines.await
+import app.cash.sqldelight.async.coroutines.awaitAsList
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
@@ -18,6 +19,8 @@ import tachiyomi.data.Mangas
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryCandidateProvenance
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryCandidateSourceKind
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaim
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaimKind
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryDerivation
@@ -47,6 +50,71 @@ class IndependentInventoryRepositoryImplTest {
         )
         repository.batchesByTitle(TITLE_ID).single().itemCount shouldBe 2
     }
+
+    @Test
+    fun `candidate ledger preserves source edition isolation without expanding counts or writing chapters`() =
+        runBlocking<Unit> {
+            val wikimediaScope = inventoryScope(editionKey = "japanese-original", language = "ja")
+                .copy(producerId = "wikimedia")
+            val epubScope = inventoryScope(editionKey = "translated-edition", language = "en")
+                .copy(producerId = "epub3-user-selected")
+            val wikimedia = claim(wikimediaScope, "wiki-page-7-Chapter_12_05", "12.05", 10L).copy(
+                derivation = InventoryDerivation.COMMUNITY_CURATED,
+                provenance = candidateProvenance(
+                    InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION,
+                    "https://example.invalid/wiki/Synthetic_index?oldid=7",
+                    "7",
+                    "Chapter_12_05",
+                    "chapter-list-entry",
+                ),
+            )
+            val epub = claim(epubScope, "Text/ch-01.xhtml#chapter-01", "0.1", 11L).copy(
+                derivation = InventoryDerivation.USER_SUPPLIED_EDITION_TOC,
+                provenance = candidateProvenance(
+                    InventoryCandidateSourceKind.USER_SELECTED_EPUB3_TOC,
+                    "selected-edition:synthetic-2",
+                    "synthetic-2",
+                    "Text/ch-01.xhtml#chapter-01",
+                    "toc-chapter",
+                ),
+            )
+            val titleIdsBefore = database.tsuzuki_titlesQueries
+                .getAllTsuzukiTitles { id, _, _, _, _ -> id }
+                .awaitAsList()
+            val canonicalChapterIdsBefore = database.tsuzuki_canonical_chaptersQueries
+                .getTsuzukiCanonicalChaptersByTitle(TITLE_ID) { id, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> id }
+                .awaitAsList()
+
+            repository.saveBatch(
+                batch(
+                    scope = wikimediaScope,
+                    pageKey = "selected-revision-7",
+                    claims = listOf(wikimedia),
+                    declaredTotal = 120,
+                ),
+            )
+            repository.saveBatch(
+                batch(
+                    scope = epubScope,
+                    pageKey = "selected-snapshot-2",
+                    claims = listOf(epub),
+                ),
+            )
+
+            val stored = repository.byTitle(TITLE_ID)
+            stored.size shouldBe 2
+            stored.map { it.scope.editionKey }.toSet() shouldBe setOf("japanese-original", "translated-edition")
+            stored.single { it.scope.producerId == "wikimedia" }.claim.provenance shouldBe wikimedia.provenance
+            stored.single { it.scope.producerId == "epub3-user-selected" }.claim.provenance shouldBe epub.provenance
+            repository.batchesByTitle(TITLE_ID).single { it.pageKey == "selected-revision-7" }
+                .declaredTotal shouldBe 120
+            database.tsuzuki_titlesQueries
+                .getAllTsuzukiTitles { id, _, _, _, _ -> id }
+                .awaitAsList() shouldBe titleIdsBefore
+            database.tsuzuki_canonical_chaptersQueries
+                .getTsuzukiCanonicalChaptersByTitle(TITLE_ID) { id, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> id }
+                .awaitAsList() shouldBe canonicalChapterIdsBefore
+        }
 
     private lateinit var driver: SqlDriver
     private lateinit var database: Database
@@ -173,11 +241,21 @@ class IndependentInventoryRepositoryImplTest {
 
     @Test
     fun `failed and empty page refreshes retain claims from prior observations`() = runBlocking<Unit> {
+        val retainedClaim = claim(inventoryScope(), "release-1", "retained", 10L).copy(
+            derivation = InventoryDerivation.COMMUNITY_CURATED,
+            provenance = candidateProvenance(
+                InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION,
+                "https://example.invalid/wiki/Synthetic_index?oldid=9",
+                "9",
+                "Chapter_1",
+                "chapter-list-entry",
+            ),
+        )
         val original = batch(
             pageKey = "page-1",
             observedAt = 10L,
             outcome = InventoryFetchOutcome.PARTIAL,
-            claims = listOf(claim(inventoryScope(), "release-1", "retained", 10L)),
+            claims = listOf(retainedClaim),
             nextCursor = "page-2",
         )
         repository.saveBatch(original)
@@ -200,6 +278,7 @@ class IndependentInventoryRepositoryImplTest {
         )
 
         repository.byTitle(TITLE_ID).single().claim.label shouldBe "retained"
+        repository.byTitle(TITLE_ID).single().claim.provenance shouldBe retainedClaim.provenance
         val pages = repository.batchesByTitle(TITLE_ID)
         pages.size shouldBe 2
         pages.single { it.pageKey == "page-1" }.outcome shouldBe InventoryFetchOutcome.FAILED
@@ -252,10 +331,23 @@ class IndependentInventoryRepositoryImplTest {
             insertTitle(database, TITLE_ID)
             repository = IndependentInventoryRepositoryImpl(database)
 
+            val scope = inventoryScope(editionKey = "selected-edition", language = "ja")
+                .copy(producerId = "wikimedia")
+            val persistedClaim = claim(scope, "wiki-page-8-Chapter_1", "1", 42L).copy(
+                derivation = InventoryDerivation.COMMUNITY_CURATED,
+                provenance = candidateProvenance(
+                    InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION,
+                    "https://example.invalid/wiki/Synthetic_index?oldid=8",
+                    "8",
+                    "Chapter_1",
+                    "chapter-list-entry",
+                ),
+            )
             val persisted = batch(
+                scope = scope,
                 pageKey = "page-1",
                 observedAt = 42L,
-                claims = listOf(claim(inventoryScope(), "release-1", "persisted", 42L)),
+                claims = listOf(persistedClaim),
                 nextCursor = "page-2",
             )
             repository.saveBatch(persisted)
@@ -266,7 +358,7 @@ class IndependentInventoryRepositoryImplTest {
             repository = IndependentInventoryRepositoryImpl(database)
 
             repository.byTitle(TITLE_ID) shouldBe listOf(
-                InventoryStoredClaim(persisted.scope, persisted.claims.single()),
+                InventoryStoredClaim(persisted.scope, persistedClaim),
             )
             repository.batchesByTitle(TITLE_ID) shouldBe listOf(
                 InventoryStoredBatch(
@@ -352,6 +444,23 @@ class IndependentInventoryRepositoryImplTest {
         claims = claims,
         declaredTotal = declaredTotal,
         nextCursor = nextCursor,
+    )
+
+    private fun candidateProvenance(
+        sourceKind: InventoryCandidateSourceKind,
+        originReference: String,
+        exactRevision: String,
+        sourceUnitId: String,
+        structuralCategory: String,
+    ) = InventoryCandidateProvenance(
+        sourceKind = sourceKind,
+        originReference = originReference,
+        exactRevision = exactRevision,
+        attributionReference = "Synthetic fixture attribution",
+        licenseReference = "Synthetic fixture license reference",
+        snapshotDigest = "sha256:${"3".repeat(64)}",
+        sourceUnitId = sourceUnitId,
+        structuralCategory = structuralCategory,
     )
 
     private fun nativeLibraryArchitecture(): String = when (System.getProperty("os.arch").orEmpty().lowercase()) {

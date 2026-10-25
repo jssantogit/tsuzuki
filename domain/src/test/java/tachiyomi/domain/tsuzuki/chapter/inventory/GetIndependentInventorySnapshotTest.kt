@@ -47,6 +47,47 @@ class GetIndependentInventorySnapshotTest {
     }
 
     @Test
+    fun `offline candidate examples retain bounded provenance without editorial promotion`() = runTest {
+        val ledger = FakeLedger()
+        val source = scope("wikimedia", "selected-edition")
+        val provenance = InventoryCandidateProvenance(
+            sourceKind = InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION,
+            originReference = "https://example.invalid/wiki/Selected_index",
+            exactRevision = "synthetic-revision-7",
+            attributionReference = "Synthetic fixture attribution",
+            licenseReference = "Synthetic fixture license reference",
+            snapshotDigest = "sha256:${"2".repeat(64)}",
+            sourceUnitId = "Chapter_12_05",
+            structuralCategory = "chapter-list-entry",
+        )
+        val candidate = claim(
+            "wiki-unit-12.05",
+            "12.05",
+            InventoryDerivation.COMMUNITY_CURATED,
+            42L,
+        ).copy(provenance = provenance)
+        ledger.saveBatch(
+            batch(source, "selected-revision-7", 42L, InventoryFetchOutcome.PARTIAL, listOf(candidate)),
+        )
+
+        val snapshot = GetIndependentInventorySnapshot(ledger).execute("title")
+        val sourceSnapshot = snapshot.sources.single()
+
+        sourceSnapshot.knownIndividualClaims shouldBe 0
+        sourceSnapshot.candidateObservations shouldBe 1
+        sourceSnapshot.candidateExampleLabels shouldBe listOf("12.05")
+        sourceSnapshot.candidateExamples shouldBe listOf(
+            InventoryCandidateExample(
+                sourceRecordId = candidate.sourceRecordId,
+                label = "12.05",
+                provenance = provenance,
+                observedAt = 42L,
+            ),
+        )
+        snapshot.editorialCompletenessConfirmed shouldBe false
+    }
+
+    @Test
     fun `no evidence stays unknown without inventing a count or complete inventory`() = runTest {
         val result = GetIndependentInventorySnapshot(FakeLedger()).execute("title")
 

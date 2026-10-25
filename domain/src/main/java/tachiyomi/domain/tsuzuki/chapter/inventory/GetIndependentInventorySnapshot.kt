@@ -34,6 +34,8 @@ data class IndependentInventorySourceSnapshot(
     /** Explicit source-indexed units that still require user review, never verified editorial chapters. */
     val candidateObservations: Int = 0,
     val candidateExampleLabels: List<String> = emptyList(),
+    /** Bounded provenance pointers for offline review; never sufficient for canonical promotion. */
+    val candidateExamples: List<InventoryCandidateExample> = emptyList(),
 )
 
 data class IndependentInventorySnapshot(
