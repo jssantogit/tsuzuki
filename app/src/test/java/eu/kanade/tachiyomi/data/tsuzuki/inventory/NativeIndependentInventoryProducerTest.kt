@@ -48,10 +48,10 @@ class NativeIndependentInventoryProducerTest {
     @Test
     fun `MangaDex feed must prove manga relationship on every release`() = runTest {
         val transport = RecordingInventoryTransport(
-            """{"result":"ok","total":1,"offset":0,"limit":100,"data":[{"id":"release-1","attributes":{"chapter":"12.05","volume":"2","translatedLanguage":"en"},"relationships":[{"id":"correct-uuid","type":"manga"}]}]}""",
+            """{"result":"ok","total":1,"offset":0,"limit":100,"data":[{"id":"release-1","attributes":{"chapter":"12.05","volume":"2","translatedLanguage":"en"},"relationships":[{"id":"12345678-1234-1234-1234-123456789abc","type":"manga"}]}]}""",
         )
         val page = MangaDexInventoryProducer(transport)
-            .fetchPage(scope("mangadex", "correct-uuid"), "start").getOrThrow()
+            .fetchPage(scope("mangadex", "12345678-1234-1234-1234-123456789abc"), "start").getOrThrow()
 
         page.outcome shouldBe InventoryFetchOutcome.EXHAUSTED
         page.claims.single().label shouldBe "12.05"
@@ -64,14 +64,14 @@ class NativeIndependentInventoryProducerTest {
     fun `MangaDex missing or mismatched manga relationship rejects the entire page`() = runTest {
         val json = """{"result":"ok","total":1,"offset":0,"limit":100,"data":[{"id":"release-1","attributes":{"chapter":"1"},"relationships":[{"id":"other-uuid","type":"manga"}]}]}"""
         MangaDexInventoryProducer(RecordingInventoryTransport(json))
-            .fetchPage(scope("mangadex", "correct-uuid"), "start").isFailure shouldBe true
+            .fetchPage(scope("mangadex", "12345678-1234-1234-1234-123456789abc"), "start").isFailure shouldBe true
     }
 
     @Test
     fun `invalid cursor never starts a request`() = runTest {
         val transport = RecordingInventoryTransport("{}")
         MangaUpdatesInventoryProducer(transport).fetchPage(scope("mangaupdates", "123"), "page:-1").isFailure shouldBe true
-        MangaDexInventoryProducer(transport).fetchPage(scope("mangadex", "correct-uuid"), "offset:100000").isFailure shouldBe true
+        MangaDexInventoryProducer(transport).fetchPage(scope("mangadex", "12345678-1234-1234-1234-123456789abc"), "offset:100000").isFailure shouldBe true
         transport.calls shouldBe emptyList()
     }
 
