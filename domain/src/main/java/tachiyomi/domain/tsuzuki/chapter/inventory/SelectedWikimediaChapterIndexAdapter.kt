@@ -36,7 +36,11 @@ object SelectedWikimediaChapterIndexAdapter {
     private const val MAX_UNIT_LENGTH = 512
     private val chapterNumber = Regex("^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$")
     private val chapterRange = Regex("^[0-9]+(?:\\.[0-9]+)?\\s*[-–—]\\s*[0-9]+(?:\\.[0-9]+)?$")
-    private val specialChapter = Regex("(?i)^(?:special chapter|bonus chapter)(?:\\b|[:#-])")
+    private val specialChapter = Regex(
+        """(?i)^(?:special chapter|bonus chapter)(?:\s+(?:0|[1-9][0-9]*)(?:\.[0-9]+)?|\s*[:#–—-]\s*[\p{L}][^\r\n]*)?$""",
+    )
+    private val plainTableCell = Regex("""^[\p{L}\p{N} .,;:()'!+–—-]{1,512}$""")
+    private val otherHeading = Regex("^== [^=]+ ==$")
     private val internalTarget = Regex("^[\\p{L}\\p{N}_ .,:;()'!+–—\\-]+$")
 
     fun adapt(selected: SelectedWikimediaRevision): Result<InventoryEvidenceBatch> = try {
@@ -165,28 +169,22 @@ object SelectedWikimediaChapterIndexAdapter {
     private fun parseChapterList(wikitext: String): List<ParsedUnit> {
         var inChapterSection = false
         var foundChapterSection = false
+        var inTable = false
+        var hasTableHeader = false
+        var rowStarted = false
+        var rowHasChapter = false
         val units = mutableListOf<ParsedUnit>()
-        for (rawLine in wikitext.lineSequence()) {
-            val line = rawLine.trim()
-            if (line.isEmpty()) continue
-            if (line.startsWith("=")) {
-                require(line == "== Chapters ==" && !foundChapterSection) {
-                    "Only one exact Chapters heading is supported"
-                }
-                foundChapterSection = true
-                inChapterSection = true
-                continue
+
+        fun addLinkedUnit(markup: String, table: Boolean) {
+            require(markup.startsWith("[[") && markup.endsWith("]]")) {
+                "Only an explicit internal chapter link is supported"
             }
-            require(inChapterSection) { "Unsupported text outside the selected Chapters section" }
-            require(line.startsWith("* [[") && line.endsWith("]]")) {
-                "Only bullet-linked chapter list entries are supported"
-            }
-            val link = line.substring(4, line.length - 2)
+            val link = markup.substring(2, markup.length - 2)
             val separator = link.indexOf('|')
-            require(separator == link.lastIndexOf('|')) { "Unsupported Wikimedia chapter-list syntax" }
+            require(separator == link.lastIndexOf('|')) { "Unsupported Wikimedia chapter-link syntax" }
             val target = (if (separator < 0) link else link.substring(0, separator)).trim()
-            val labelText = if (separator < 0) "" else link.substring(separator + 1)
-            val label = (labelText.ifEmpty { target.replace('_', ' ') }).trim()
+            val text = if (separator < 0) "" else link.substring(separator + 1)
+            val label = (text.ifEmpty { target.replace('_', ' ') }).trim()
             require(target.isNotBlank() && target.length <= MAX_UNIT_LENGTH && internalTarget.matches(target)) {
                 "Wikimedia chapter target is not a bounded internal page reference"
             }
@@ -198,21 +196,92 @@ object SelectedWikimediaChapterIndexAdapter {
             val kind = when {
                 chapterNumber.matches(label) -> InventoryClaimKind.INDIVIDUAL
                 chapterRange.matches(label) -> InventoryClaimKind.RELEASE_RANGE
-                specialChapter.containsMatchIn(label) -> InventoryClaimKind.INDIVIDUAL
+                specialChapter.matches(label) -> InventoryClaimKind.INDIVIDUAL
                 else -> InventoryClaimKind.AMBIGUOUS
             }
             val category = when (kind) {
-                InventoryClaimKind.RELEASE_RANGE -> "chapter-range-list-entry"
-                InventoryClaimKind.AMBIGUOUS -> "unclassified-list-entry"
-                else -> if (specialChapter.containsMatchIn(label)) {
-                    "special-chapter-list-entry"
-                } else {
-                    "chapter-list-entry"
-                }
-            }
+                InventoryClaimKind.RELEASE_RANGE -> "chapter-range"
+                InventoryClaimKind.AMBIGUOUS -> "unclassified"
+                else -> if (specialChapter.matches(label)) "special-chapter" else "chapter"
+            } + if (table) "-table-entry" else "-list-entry"
             units += ParsedUnit(target, label, kind, category)
         }
+
+        // Only an exact, explicitly selected Chapters section is interpreted.
+        // Lead text and later sections are ignored; unknown syntax inside it fails closed.
+        for (rawLine in wikitext.lineSequence()) {
+            val line = rawLine.trim()
+            if (line.isEmpty()) continue
+            if (line.startsWith("=")) {
+                require(!inTable) { "A Wikimedia chapter table must close before another heading" }
+                when {
+                    line == "== Chapters ==" -> {
+                        require(!foundChapterSection) { "Duplicate Chapters sections are ambiguous" }
+                        foundChapterSection = true
+                        inChapterSection = true
+                    }
+                    inChapterSection -> {
+                        require(otherHeading.matches(line)) { "Unsupported nested chapter heading" }
+                        inChapterSection = false
+                    }
+                }
+                continue
+            }
+            if (!inChapterSection) continue
+
+            if (line == "{| class=\"wikitable\"") {
+                require(!inTable) { "Nested Wikimedia chapter tables are unsupported" }
+                inTable = true
+                hasTableHeader = false
+                rowStarted = false
+                rowHasChapter = false
+                continue
+            }
+
+            if (inTable) {
+                when {
+                    line.startsWith("! ") -> {
+                        require(!hasTableHeader && !rowStarted && line.startsWith("! Chapter !! ")) {
+                            "A chapter table must declare the first column as Chapter"
+                        }
+                        require(plainTableCell.matches(line.removePrefix("! Chapter !! "))) {
+                            "Unsupported Wikimedia chapter table header"
+                        }
+                        hasTableHeader = true
+                    }
+                    line == "|-" -> {
+                        require(hasTableHeader && (!rowStarted || rowHasChapter)) {
+                            "Every Wikimedia table row must identify an individual linked observation"
+                        }
+                        rowStarted = true
+                        rowHasChapter = false
+                    }
+                    line.startsWith("| ") -> {
+                        require(rowStarted && !rowHasChapter) { "Unsupported table row structure" }
+                        val endOfLink = line.indexOf("]] || ")
+                        require(endOfLink > 4) { "Chapter cell must be an explicit link" }
+                        val markup = line.substring(2, endOfLink + 2)
+                        val notes = line.substring(endOfLink + 6)
+                        require(plainTableCell.matches(notes)) { "Unsupported table notes or wiki markup" }
+                        addLinkedUnit(markup, table = true)
+                        rowHasChapter = true
+                    }
+                    line == "|}" -> {
+                        require(hasTableHeader && rowStarted && rowHasChapter) {
+                            "Selected chapter table contains an incomplete row"
+                        }
+                        inTable = false
+                    }
+                    else -> error("Unsupported Wikimedia table syntax in selected Chapters section")
+                }
+                continue
+            }
+
+            require(line.startsWith("* ")) { "Only explicitly linked bullets or chapter tables are supported" }
+            addLinkedUnit(line.substring(2), table = false)
+        }
         require(foundChapterSection) { "Selected revision has no exact Chapters heading" }
+        require(!inTable) { "Selected Wikimedia chapter table was not closed" }
         return units
     }
 
