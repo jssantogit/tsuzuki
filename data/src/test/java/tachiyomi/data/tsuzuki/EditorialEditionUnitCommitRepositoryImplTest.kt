@@ -110,6 +110,18 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         }
 
     @Test
+    fun `two distinct editions may reuse their publisher local source record id`(): Unit = runBlocking<Unit> {
+        val original = batch(claim("1").copy(sourceRecordId = "chapter-index-1"))
+        val revised = batch(claim("2").copy(sourceRecordId = "chapter-index-1"))
+            .copy(scope = scope("revised"))
+        (writer.commit(original, grant(original.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
+        (writer.commit(revised, grant(revised.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
+        chapters.getByCanonicalTitleId("title").size shouldBe 2
+        database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title")
+            .awaitAsList().map { it.editionKey }.toSet() shouldBe setOf("original", "revised")
+    }
+
+    @Test
     fun `host revocation after insertion rolls back both chapter and scoped ownership`(): Unit = runBlocking<Unit> {
         val selected = batch(claim("1"), claim("2"))
         var checks = 0
