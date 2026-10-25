@@ -39,6 +39,24 @@ class NativeIndependentInventoryProducerTest {
     }
 
     @Test
+    fun `cached response preserves original observed timestamp instead of inventing a fresh observation`() = runTest {
+        val body = """
+            {"total_hits":1,"page":1,"per_page":25,"results":[
+                {"record":{"id":10,"chapter":"12.05"},"metadata":{"series":{"series_id":123}}}
+            ]}
+        """.trimIndent()
+        val cached = InventoryHttpPayload(body, observedAt = 42L)
+        val transport = object : InventoryReleaseTransport {
+            override suspend fun fetch(url: String, postBody: String?) = cached
+        }
+        val batch = MangaUpdatesInventoryProducer(transport)
+            .fetchPage(scope("mangaupdates", "123"), "start").getOrThrow()
+
+        batch.observedAt shouldBe 42L
+        batch.claims.single().observedAt shouldBe 42L
+    }
+
+    @Test
     fun `MangaUpdates wrong series within HTTP 200 fails closed`() = runTest {
         val transport = RecordingInventoryTransport(
             """{"total_hits":1,"page":1,"per_page":25,"results":[{"record":{"id":10,"chapter":"1"},"metadata":{"series":{"series_id":999}}}]}""",
