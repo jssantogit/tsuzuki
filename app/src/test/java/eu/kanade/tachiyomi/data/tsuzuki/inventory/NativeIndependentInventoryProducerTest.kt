@@ -62,7 +62,13 @@ class NativeIndependentInventoryProducerTest {
 
     @Test
     fun `MangaDex missing or mismatched manga relationship rejects the entire page`() = runTest {
-        val json = """{"result":"ok","total":1,"offset":0,"limit":100,"data":[{"id":"release-1","attributes":{"chapter":"1"},"relationships":[{"id":"other-uuid","type":"manga"}]}]}"""
+        val json = """
+            {"result":"ok","total":1,"offset":0,"limit":100,"data":[
+                {"id":"release-1","attributes":{"chapter":"1"},"relationships":[
+                    {"id":"other-uuid","type":"manga"}
+                ]}
+            ]}
+        """.trimIndent()
         MangaDexInventoryProducer(RecordingInventoryTransport(json))
             .fetchPage(scope("mangadex", "12345678-1234-1234-1234-123456789abc"), "start").isFailure shouldBe true
     }
