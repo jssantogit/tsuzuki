@@ -206,7 +206,12 @@ private fun LoadedDetails(
                     }
                     if (chapters.isEmpty() || state.independentInventory.sources.isNotEmpty()) {
                         item(key = "independent-inventory") {
-                            IndependentInventoryInfo(state.independentInventory, inventoryRefresh, onFetchInventory, onLinkMangaDex)
+                            IndependentInventoryInfo(
+                                state.independentInventory,
+                                inventoryRefresh,
+                                onFetchInventory,
+                                onLinkMangaDex,
+                            )
                         }
                     }
                 }
@@ -233,7 +238,12 @@ private fun LoadedDetails(
                                 Icon(MaterialSymbols.Rounded.Search, stringResource(MR.strings.tsuzuki_details_jump))
                             }
                         }
-                        IndependentInventoryInfo(state.independentInventory, inventoryRefresh, onFetchInventory, onLinkMangaDex)
+                        IndependentInventoryInfo(
+                                state.independentInventory,
+                                inventoryRefresh,
+                                onFetchInventory,
+                                onLinkMangaDex,
+                            )
                     }
                     if (chapters.isEmpty()) {
                         item(key = "empty-chapters") {
