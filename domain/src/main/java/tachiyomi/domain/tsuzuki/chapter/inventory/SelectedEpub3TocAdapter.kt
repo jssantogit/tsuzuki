@@ -42,10 +42,10 @@ object SelectedEpub3TocAdapter {
     private const val MAX_HREF_LENGTH = 1024
     private val chapterNumber = Regex("^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$")
     private val namedChapter = Regex(
-        """(?i)^(?:chapter|ch\\.?|episode|ep\\.?)\\s+(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:\\s*[:–—-]\\s*[\\p{L}][^\\r\\n]*)?$""",
+        """(?i)^(?:chapter|ch\.?|episode|ep\.?)\s+(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:\s*[:–—-]\s*[\p{L}][^\r\n]*)?$""",
     )
     private val specialChapter = Regex(
-        """(?i)^(?:special chapter|bonus chapter)(?:\\s+(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?|\\s*[:#–—-]\\s*[\\p{L}][^\\r\\n]*)?$""",
+        """(?i)^(?:special chapter|bonus chapter)(?:\s+(?:0|[1-9][0-9]*)(?:\.[0-9]+)?|\s*[:#–—-]\s*[\p{L}][^\r\n]*)?$""",
     )
     private val safeEditionReference = Regex("^(?:selected-edition|user-selected):[A-Za-z0-9._:-]{1,192}$")
     private val safeSnapshotRevision = Regex("^[A-Za-z0-9._:-]{1,128}$")
