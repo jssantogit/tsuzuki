@@ -16,7 +16,12 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshIndependentInventory
+import tachiyomi.domain.tsuzuki.integration.IntegrationId
+import tachiyomi.domain.tsuzuki.integration.model.IntegrationSettings
+import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
+import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationRequest
+import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationResult
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 
 class MangaDexWorkLinkInventoryIntegrationTest {
@@ -28,10 +33,28 @@ class MangaDexWorkLinkInventoryIntegrationTest {
         val titles = mockk<CanonicalTitleRepository>()
         coEvery { titles.getExternalIdentities("title") } coAnswers { identities.toList() }
         coEvery { titles.getByExternalIdentity("mangadex", mangaDexId) } returns null
-        coEvery { titles.addExternalIdentity(any()) } coAnswers {
-            identities.add(firstArg())
-            Unit
+        coEvery {
+            titles.associateMangaDexWorkIfCurrent(any(), any())
+        } coAnswers {
+            val request = firstArg<MangaDexWorkAssociationRequest>()
+            identities.add(
+                ExternalIdentity(
+                    canonicalTitleId = request.canonicalTitleId,
+                    provider = "mangadex",
+                    externalId = request.mangaDexWorkId,
+                    verified = true,
+                    createdAt = 2L,
+                ),
+            )
+            MangaDexWorkAssociationResult.ASSOCIATED
         }
+        val settings = mockk<IntegrationSettingsRepository>()
+        coEvery { settings.get(IntegrationId("mangadex")) } returns IntegrationSettings(
+            integrationId = IntegrationId("mangadex"),
+            enabled = true,
+            configJson = """{"chapter_inventory":true}""",
+            updatedAt = 1L,
+        )
         val transport = object : InventoryReleaseTransport {
             val json = """
                 {"result":"ok","data":{"id":"$mangaDexId","type":"manga","attributes":
@@ -40,7 +63,7 @@ class MangaDexWorkLinkInventoryIntegrationTest {
             override suspend fun fetch(url: String, postBody: String?) = InventoryHttpPayload(json, 10L)
             override suspend fun fetchFresh(url: String, postBody: String?) = InventoryHttpPayload(json, 11L)
         }
-        val linker = MangaDexVerifiedWorkLinker(titles, transport)
+        val linker = MangaDexVerifiedWorkLinker(titles, settings, transport)
         val preview = linker.preview("title", mangaDexId) { true }.getOrThrow()
 
         identities.map { it.provider } shouldBe listOf("mangaupdates")

@@ -93,7 +93,7 @@ class NativeInventoryReleaseTransportTest {
     }
 
     @Test
-    fun `revoked authorization during request spacing prevents the HTTP access`() = runTest {
+    fun `persisted consent revoked during spacing blocks HTTP while registry remains enabled`() = runTest {
         var requests = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             requests++
@@ -103,14 +103,17 @@ class NativeInventoryReleaseTransportTest {
         val transport = transport(client)
         transport.fetch(url, "first")
 
-        var enabled = true
+        val registryEnabled = true
+        var persistedChapterInventoryEnabled = true
         val pending = async {
             runCatching {
-                transport.fetchAuthorized(url, "second") { enabled }
+                transport.fetchAuthorized(url, "second") {
+                    registryEnabled && persistedChapterInventoryEnabled
+                }
             }
         }
         delay(100)
-        enabled = false
+        persistedChapterInventoryEnabled = false
 
         pending.await().isFailure shouldBe true
         requests shouldBe 1

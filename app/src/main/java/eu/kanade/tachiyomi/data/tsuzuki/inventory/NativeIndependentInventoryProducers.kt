@@ -68,24 +68,24 @@ interface InventoryReleaseTransport {
     suspend fun fetchAuthorized(
         url: String,
         postBody: String?,
-        isEnabled: () -> Boolean,
+        isEnabled: suspend () -> Boolean,
     ): InventoryHttpPayload {
         check(isEnabled()) { "Inventory integration is disabled" }
-        return fetch(url, postBody).also {
-            check(isEnabled()) { "Inventory integration was disabled during the request" }
-        }
+        val payload = fetch(url, postBody)
+        check(isEnabled()) { "Inventory integration was disabled during the request" }
+        return payload
     }
 
     /** Guard a fresh read before and after transport access. */
     suspend fun fetchFreshAuthorized(
         url: String,
         postBody: String?,
-        isEnabled: () -> Boolean,
+        isEnabled: suspend () -> Boolean,
     ): InventoryHttpPayload {
         check(isEnabled()) { "Inventory integration is disabled" }
-        return fetchFresh(url, postBody).also {
-            check(isEnabled()) { "Inventory integration was disabled during the request" }
-        }
+        val payload = fetchFresh(url, postBody)
+        check(isEnabled()) { "Inventory integration was disabled during the request" }
+        return payload
     }
 }
 
@@ -120,7 +120,7 @@ class NativeInventoryReleaseTransport(
     override suspend fun fetchAuthorized(
         url: String,
         postBody: String?,
-        isEnabled: () -> Boolean,
+        isEnabled: suspend () -> Boolean,
     ): InventoryHttpPayload = fetchWithCachePolicy(
         url,
         postBody,
@@ -131,7 +131,7 @@ class NativeInventoryReleaseTransport(
     override suspend fun fetchFreshAuthorized(
         url: String,
         postBody: String?,
-        isEnabled: () -> Boolean,
+        isEnabled: suspend () -> Boolean,
     ): InventoryHttpPayload = fetchWithCachePolicy(
         url,
         postBody,
@@ -143,9 +143,9 @@ class NativeInventoryReleaseTransport(
         url: String,
         postBody: String?,
         forceNetwork: Boolean,
-        isEnabled: (() -> Boolean)? = null,
+        isEnabled: (suspend () -> Boolean)? = null,
     ): InventoryHttpPayload = mutex.withLock {
-        fun checkEnabled() {
+        suspend fun checkEnabled() {
             check(isEnabled?.invoke() != false) { "Inventory integration is disabled" }
         }
 

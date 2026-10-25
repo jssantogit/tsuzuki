@@ -77,7 +77,7 @@ class MangaDexWorkAssociationRepositoryImplTest {
     }
 
     @AfterEach
-    fun tearDown(): Unit {
+    fun tearDown() {
         if (::driver.isInitialized) driver.close()
         if (originalNativeLibraryPath == null) {
             System.clearProperty("org.sqlite.lib.path")
