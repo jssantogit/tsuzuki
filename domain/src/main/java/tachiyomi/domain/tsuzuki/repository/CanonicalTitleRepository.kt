@@ -4,6 +4,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
+import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationRequest
+import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationResult
 
 interface CanonicalTitleRepository {
     suspend fun getById(id: String): CanonicalTitle?
@@ -29,4 +31,15 @@ interface CanonicalTitleRepository {
     }
 
     suspend fun addExternalIdentity(identity: ExternalIdentity)
+
+    /**
+     * Associates one verified MangaDex work only when persisted integration permission and the
+     * exact verified crosswalk snapshot are still current. Repositories without an atomic
+     * implementation fail closed instead of falling back to [addExternalIdentity].
+     */
+    suspend fun associateMangaDexWorkIfCurrent(
+        request: MangaDexWorkAssociationRequest,
+        isAuthorized: () -> Boolean,
+    ): MangaDexWorkAssociationResult =
+        if (isAuthorized()) MangaDexWorkAssociationResult.UNSUPPORTED else MangaDexWorkAssociationResult.REFUSED
 }
