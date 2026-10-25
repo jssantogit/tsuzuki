@@ -25,7 +25,9 @@ class NativeIndependentInventoryProducerTest {
         val transport = RecordingInventoryTransport(
             """{"total_hits":26,"page":1,"per_page":25,"results":[{"record":{"id":10,"chapter":"246-251","volume":"8"},"metadata":{"series":{"series_id":123}}},{"record":{"id":11,"chapter":"0.01","volume":""},"metadata":{"series":{"series_id":123}}}]}""",
         )
-        val page = MangaUpdatesInventoryProducer(transport).fetchPage(scope("mangaupdates", "123"), "start").getOrThrow()
+        val page = MangaUpdatesInventoryProducer(
+            transport,
+        ).fetchPage(scope("mangaupdates", "123"), "start").getOrThrow()
 
         page.outcome shouldBe InventoryFetchOutcome.PARTIAL
         page.nextCursor shouldBe "page:2"
@@ -76,8 +78,12 @@ class NativeIndependentInventoryProducerTest {
     @Test
     fun `invalid cursor never starts a request`() = runTest {
         val transport = RecordingInventoryTransport("{}")
-        MangaUpdatesInventoryProducer(transport).fetchPage(scope("mangaupdates", "123"), "page:-1").isFailure shouldBe true
-        MangaDexInventoryProducer(transport).fetchPage(scope("mangadex", "12345678-1234-1234-1234-123456789abc"), "offset:100000").isFailure shouldBe true
+        MangaUpdatesInventoryProducer(transport).fetchPage(scope("mangaupdates", "123"), "page:-1").isFailure shouldBe
+            true
+        MangaDexInventoryProducer(
+            transport,
+        ).fetchPage(scope("mangadex", "12345678-1234-1234-1234-123456789abc"), "offset:100000").isFailure shouldBe
+            true
         transport.calls shouldBe emptyList()
     }
 
