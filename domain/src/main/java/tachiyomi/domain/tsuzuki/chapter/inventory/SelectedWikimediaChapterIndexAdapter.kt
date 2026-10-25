@@ -39,6 +39,7 @@ object SelectedWikimediaChapterIndexAdapter {
     private val specialChapter = Regex(
         """(?i)^(?:special chapter|bonus chapter)(?:\s+(?:0|[1-9][0-9]*)(?:\.[0-9]+)?|\s*[:#–—-]\s*[\p{L}][^\r\n]*)?$""",
     )
+
     // Even a descriptive special can mention multiple units or a reupload.
     // Neither can be treated as one individually identified editorial unit.
     private val ambiguousSpecialSequence = Regex(
