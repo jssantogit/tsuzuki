@@ -232,7 +232,8 @@ class EditorialEditionUnitCommitRepositoryImplTest {
                 grantedAt = 13L,
                 integrationSettingsRevision = 12L,
             )
-            (commitWithSyntheticHost(requested, grant(requested.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
+            (commitWithSyntheticHost(requested, grant(requested.scope)) is EditorialUnitCommitResult.Applied) shouldBe
+                true
             chapters.getByCanonicalTitleId("title").size shouldBe 1
         }
 
