@@ -1,5 +1,6 @@
 package tachiyomi.data.tsuzuki
 
+import app.cash.sqldelight.async.coroutines.awaitAsList
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -36,6 +37,12 @@ class UserAdoptedInventoryRepositoryImpl(
     private val mutationGate: ChapterMutationGate,
 ) : UserAdoptionRepository {
     private val planner = PreviewUserAdoptedInventory()
+
+    override suspend fun adoptedChapterIds(canonicalTitleId: String): Set<String> =
+        database.tsuzuki_user_adoption_receiptsQueries
+            .getTsuzukiUserAdoptedChapterIdsByTitle(canonicalTitleId)
+            .awaitAsList()
+            .toSet()
 
     override suspend fun preview(request: UserAdoptionReviewRequest): UserAdoptionPreview =
         planner.execute(
