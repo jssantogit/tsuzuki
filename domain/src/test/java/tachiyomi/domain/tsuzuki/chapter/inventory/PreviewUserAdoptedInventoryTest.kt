@@ -58,12 +58,16 @@ class PreviewUserAdoptedInventoryTest {
     fun updatedSourceRevisionOrLabelInvalidatesReviewFingerprint() {
         val preview = PreviewUserAdoptedInventory()
         fun checked(stored: InventoryStoredClaim) = preview.execute(
-            scope, listOf(stored), listOf("chapter-one"), emptyList(),
+            scope,
+            listOf(stored),
+            listOf("chapter-one"),
+            emptyList(),
         ) as UserAdoptionPreview.Ready
         val original = checked(claim())
-        val changed = checked(claim().copy(claim = claim().claim.copy(
+        val claimWithNewRevision = claim().claim.copy(
             provenance = source.copy(exactRevision = "r2"),
-        )))
+        )
+        val changed = checked(claim().copy(claim = claimWithNewRevision))
         val relabeled = checked(claim(label = "Chapter 2"))
         (original.fingerprint == changed.fingerprint) shouldBe false
         (original.fingerprint == relabeled.fingerprint) shouldBe false
@@ -74,15 +78,20 @@ class PreviewUserAdoptedInventoryTest {
         val preview = PreviewUserAdoptedInventory()
         val sourceClaim = claim()
         val rejected = listOf(
-            sourceClaim.copy(claim = sourceClaim.claim.copy(derivation = InventoryDerivation.RELEASE_RECORD, provenance = null)),
+            sourceClaim.copy(
+                claim = sourceClaim.claim.copy(
+                    derivation = InventoryDerivation.RELEASE_RECORD,
+                    provenance = null,
+                ),
+            ),
             sourceClaim.copy(claim = sourceClaim.claim.copy(kind = InventoryClaimKind.DECLARED_TOTAL)),
             claim(label = "Chapter 1-5"),
             claim(label = "Chapter 1v2"),
             sourceClaim.copy(claim = sourceClaim.claim.copy(language = "en")),
         )
         rejected.forEach { stored ->
-            (preview.execute(scope, listOf(stored), listOf("chapter-one"), emptyList())
-                is UserAdoptionPreview.Blocked) shouldBe true
+            val result = preview.execute(scope, listOf(stored), listOf("chapter-one"), emptyList())
+            (result is UserAdoptionPreview.Blocked) shouldBe true
         }
     }
 
@@ -96,11 +105,17 @@ class PreviewUserAdoptedInventoryTest {
             type = CanonicalChapterType.REGULAR,
             baseNumber = 1,
         )
-        (preview.execute(scope, listOf(claim()), listOf("chapter-one", "chapter-one"), emptyList())
-            is UserAdoptionPreview.Blocked) shouldBe true
-        (preview.execute(scope.copy(editionKey = "edition-2"), listOf(claim()), listOf("chapter-one"), emptyList())
-            is UserAdoptionPreview.Blocked) shouldBe true
-        (preview.execute(scope, listOf(claim()), listOf("chapter-one"), listOf(canonical))
-            is UserAdoptionPreview.Blocked) shouldBe true
+        val duplicate = preview.execute(
+            scope, listOf(claim()), listOf("chapter-one", "chapter-one"), emptyList(),
+        )
+        val wrongEdition = preview.execute(
+            scope.copy(editionKey = "edition-2"), listOf(claim()), listOf("chapter-one"), emptyList(),
+        )
+        val collision = preview.execute(
+            scope, listOf(claim()), listOf("chapter-one"), listOf(canonical),
+        )
+        (duplicate is UserAdoptionPreview.Blocked) shouldBe true
+        (wrongEdition is UserAdoptionPreview.Blocked) shouldBe true
+        (collision is UserAdoptionPreview.Blocked) shouldBe true
     }
 }
