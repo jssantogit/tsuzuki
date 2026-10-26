@@ -145,6 +145,116 @@ data class CanonicalTitleScreen(
             },
         )
 
+        reviewSource?.takeIf { it.scope.canonicalTitleId == canonicalTitleId }?.let { source ->
+            AlertDialog(
+                onDismissRequest = { reviewSource = null },
+                title = { Text("Selecionar capítulos da edição") },
+                text = {
+                    Column {
+                        Text("Edição: ${source.scope.editionKey} · Idioma: ${source.scope.language}")
+                        Text("Estes dados são candidatos, não capítulos oficiais atestados por uma editora.")
+                        source.candidateExamples.forEach { example ->
+                            Row {
+                                Checkbox(
+                                    checked = example.sourceRecordId in selectedCandidates,
+                                    onCheckedChange = { checked ->
+                                        selectedCandidates = if (checked) {
+                                            selectedCandidates + example.sourceRecordId
+                                        } else {
+                                            selectedCandidates - example.sourceRecordId
+                                        }
+                                    },
+                                )
+                                Text(example.label)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val selected = source.candidateExamples
+                                .map { it.sourceRecordId }
+                                .filter { it in selectedCandidates }
+                            reviewSource = null
+                            adoptionModel.preview(source.scope, selected)
+                        },
+                        enabled = selectedCandidates.isNotEmpty(),
+                    ) { Text("Ver prévia") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { reviewSource = null }) { Text("Cancelar") }
+                },
+            )
+        }
+
+        adoptionState.plan?.let { ready ->
+            var acknowledged by remember(ready.fingerprint) { mutableStateOf(false) }
+            AlertDialog(
+                onDismissRequest = { adoptionModel.dismiss() },
+                title = { Text("Confirmar adoção dos capítulos") },
+                text = {
+                    Column {
+                        Text("Obra: $canonicalTitleId")
+                        Text("Edição: ${ready.scope.editionKey} · Idioma: ${ready.scope.language}")
+                        Text("Origem: ${ready.scope.producerId}")
+                        ready.units.forEach { unit ->
+                            Text(
+                                "${unit.label} · ${unit.provenance.sourceKind.name} · " +
+                                    "revisão ${unit.provenance.exactRevision}",
+                            )
+                        }
+                        Text(
+                            "Os capítulos serão considerados adotados por você, não oficiais. " +
+                                "Isto não disponibiliza páginas para leitura.",
+                        )
+                        Row {
+                            Checkbox(
+                                checked = acknowledged,
+                                onCheckedChange = { acknowledged = it },
+                            )
+                            Text("Revisei a edição e os capítulos selecionados.")
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = { adoptionModel.confirm(canonicalTitleId) },
+                        enabled = acknowledged && !adoptionState.adopting,
+                    ) { Text(if (adoptionState.adopting) "Registrando..." else "Adotar capítulos") }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { adoptionModel.dismiss() },
+                        enabled = !adoptionState.adopting,
+                    ) { Text("Cancelar") }
+                },
+            )
+        }
+
+        if (adoptionState.failed || adoptionState.blockedReason != null || adoptionState.completed) {
+            AlertDialog(
+                onDismissRequest = { adoptionModel.dismiss() },
+                title = {
+                    Text(if (adoptionState.completed) "Adoção registrada" else "Adoção não realizada")
+                },
+                text = {
+                    Text(
+                        if (adoptionState.completed) {
+                            "Os capítulos foram adicionados com recibo de origem e revisão. " +
+                                "O conteúdo de leitura dependerá de uma fonte disponível."
+                        } else {
+                            "A seleção não passou na validação, pode conflitar com capítulos existentes " +
+                                "ou a origem ter mudado desde a prévia. Nenhum capítulo foi gravado."
+                        },
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { adoptionModel.dismiss() }) { Text("Entendi") }
+                },
+            )
+        }
+
         if (mangaDexLinkDialog) {
             val closeLinkDialog = {
                 mangaDexLinkDialog = false
