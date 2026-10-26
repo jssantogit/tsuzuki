@@ -36,13 +36,7 @@ WHERE canonical_title_id = :canonicalTitleId
   AND external_work_id = :externalWorkId
   AND edition_key = :editionKey
   AND scope_language = :scopeLanguage
-  AND revoked_at IS NULL
-  AND integration_settings_revision = (
-      SELECT updated_at
-      FROM tsuzuki_integration_settings
-      WHERE integration_id = :producerId
-      LIMIT 1
-  );
+  AND revoked_at IS NULL;
 
 countActiveTsuzukiEditorialEditionConsent:
 SELECT count(*)
@@ -52,7 +46,13 @@ WHERE canonical_title_id = :canonicalTitleId
   AND external_work_id = :externalWorkId
   AND edition_key = :editionKey
   AND scope_language = :scopeLanguage
-  AND revoked_at IS NULL;
+  AND revoked_at IS NULL
+  AND integration_settings_revision = (
+      SELECT updated_at
+      FROM tsuzuki_integration_settings
+      WHERE integration_id = :producerId
+      LIMIT 1
+  );
 
 countTsuzukiEditorialEditionConsentsForTitle:
 SELECT count(*)
