@@ -20,7 +20,10 @@ class ChapterSyncEvidenceRepositoryImpl(
     override suspend fun isEditionScopedChapter(canonicalChapterId: String): Boolean =
         database.tsuzuki_editorial_chapter_bindingsQueries
             .countTsuzukiEditorialChapterBindingsByChapter(canonicalChapterId)
-            .awaitAsOne() > 0L
+            .awaitAsOne() > 0L ||
+            database.tsuzuki_user_adoption_receiptsQueries
+                .countTsuzukiUserAdoptionReceiptsByChapter(canonicalChapterId)
+                .awaitAsOne() > 0L
 
     override suspend fun getStableEvidenceKey(canonicalChapterId: String): String? {
         val evidence = database.tsuzuki_chapter_evidenceQueries
