@@ -3,9 +3,9 @@ package eu.kanade.tachiyomi.data.tsuzuki.instrumentation
 import android.app.Activity
 import android.content.ContentValues
 import android.content.Intent
-import android.os.SystemClock
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -23,9 +23,9 @@ import com.eygraber.sqldelight.androidx.driver.FileProvider
 import eu.kanade.tachiyomi.App
 import eu.kanade.tachiyomi.data.backup.BackupDecoder
 import eu.kanade.tachiyomi.data.backup.models.Backup
-import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSnapshot
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
+import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSnapshot
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreUserAdoptionReceipt
@@ -61,8 +61,8 @@ import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
-import java.util.zip.GZIPOutputStream
 import java.util.UUID
+import java.util.zip.GZIPOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -314,8 +314,8 @@ class SelectedEpubAdoptionInstrumentedTest {
         }
     }
 
-    @Test(timeout = 120_000L)
-    fun safPickerLaunchAndCancellationLeaveLocalInventoryUnchanged() = runBlocking {
+    @Test(timeout = 180_000L)
+    fun safPickerCancellationAndFileSelectionAreUserDrivenAndShadowOnly() = runBlocking {
         val context = fixtureContext()
         val titleId = "ice-saf-${UUID.randomUUID()}"
         val now = System.currentTimeMillis()
@@ -341,6 +341,49 @@ class SelectedEpubAdoptionInstrumentedTest {
             assertTrue(IndependentInventoryRepositoryImpl(database).byTitle(titleId).isEmpty())
             assertTrue(CanonicalChapterRepositoryImpl(database).getByCanonicalTitleId(titleId).isEmpty())
             report("SAF_UI_CANCEL", "picker=OPENED|candidates=EMPTY|chapters=EMPTY")
+
+            // Now choose a real file through DocumentsUI, not by injecting a
+            // URI into the ActivityResult callback. Only shadow evidence may
+            // exist after the visual picker returns to the title screen.
+            val displayName = "ice-picker-${UUID.randomUUID()}.epub"
+            val fileUri = createDocument(epubBytes(), displayName)
+            try {
+                requireNotNull(awaitUiAction(device, "Import EPUB3 index", "Importar índice EPUB3")).click()
+                val pickerIsOpen =
+                    device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 8_000) ||
+                        device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 4_000)
+                assertTrue("System picker must reopen", pickerIsOpen)
+                var fileNode = device.wait(Until.findObject(By.text(displayName)), 5_000)
+                if (fileNode == null) {
+                    // Downloads can be hidden on Recent. Navigate using the
+                    // public system UI, never use a private provider grant.
+                    val roots = device.findObject(By.descContains("Show roots"))
+                        ?: device.findObject(By.descContains("Show navigation drawer"))
+                    roots?.click()
+                    device.wait(Until.findObject(By.text("Downloads")), 7_000)?.click()
+                    fileNode = device.wait(Until.findObject(By.text(displayName)), 8_000)
+                }
+                assertTrue(
+                    "Selected EPUB must be visible in system DocumentsUI, package=${device.currentPackageName}",
+                    fileNode != null,
+                )
+                requireNotNull(fileNode).click()
+                val ledger = IndependentInventoryRepositoryImpl(database)
+                var found = false
+                repeat(80) {
+                    if (ledger.byTitle(titleId).size == 3) {
+                        found = true
+                        return@repeat
+                    }
+                    SystemClock.sleep(200)
+                }
+                assertTrue("SAF picker result must import candidate evidence", found)
+                assertEquals(3, ledger.byTitle(titleId).size)
+                assertTrue(CanonicalChapterRepositoryImpl(database).getByCanonicalTitleId(titleId).isEmpty())
+                report("SAF_UI_SELECTED", "picker=RETURNED|candidates=3|chapters=EMPTY")
+            } finally {
+                context.contentResolver.delete(fileUri, null, null)
+            }
         } finally {
             device.pressBack()
         }
