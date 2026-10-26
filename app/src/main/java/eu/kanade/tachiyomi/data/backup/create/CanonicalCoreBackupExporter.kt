@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContentPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContinueReadingState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreEditorialChapterBinding
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreUserAdoptionReceipt
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreIdentity
@@ -78,6 +79,12 @@ class CanonicalCoreBackupExporter(
         val editorialChapterBindings = titles.flatMap { title ->
             database.tsuzuki_editorial_chapter_bindingsQueries
                 .getTsuzukiEditorialBindingsByTitle(title.id)
+                .awaitAsList()
+        }
+
+        val userAdoptionReceipts = titles.flatMap { title ->
+            database.tsuzuki_user_adoption_receiptsQueries
+                .getTsuzukiUserAdoptionReceiptsByTitle(title.id)
                 .awaitAsList()
         }
 
@@ -247,6 +254,33 @@ class CanonicalCoreBackupExporter(
                     identityKey = it.identity_key,
                     volumeKey = it.volume_key,
                     observedAt = it.observed_at,
+                )
+            },
+            userAdoptionReceipts = userAdoptionReceipts.map {
+                BackupCoreUserAdoptionReceipt(
+                    canonicalChapterId = it.canonical_chapter_id,
+                    receiptId = it.receipt_id,
+                    canonicalTitleId = it.canonical_title_id,
+                    producerId = it.producer_id,
+                    externalWorkId = it.external_work_id,
+                    editionKey = it.edition_key,
+                    scopeLanguage = it.scope_language,
+                    sourceRecordId = it.source_record_id,
+                    sourceKind = it.source_kind,
+                    derivation = it.derivation,
+                    originReference = it.origin_reference,
+                    exactRevision = it.exact_revision,
+                    attributionReference = it.attribution_reference,
+                    licenseReference = it.license_reference,
+                    snapshotDigest = it.snapshot_digest,
+                    sourceUnitId = it.source_unit_id,
+                    structuralCategory = it.structural_category,
+                    acceptedLabel = it.accepted_label,
+                    identityKey = it.identity_key,
+                    volumeKey = it.volume_key,
+                    observedAt = it.observed_at,
+                    acceptedAt = it.accepted_at,
+                    reviewFingerprint = it.review_fingerprint,
                 )
             },
             variants = variants.map {
