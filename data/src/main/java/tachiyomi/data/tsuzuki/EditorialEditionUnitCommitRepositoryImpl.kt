@@ -45,12 +45,10 @@ class EditorialEditionUnitCommitRepositoryImpl(
     private val database: Database,
     private val chapters: CanonicalChapterRepository,
     private val mutationGate: ChapterMutationGate,
+    private val hostAuthorization: HostEditorialEditionAuthorization,
 ) : EditorialUnitCommitRepository {
 
-    override suspend fun commit(
-        batch: InventoryEvidenceBatch,
-        authorization: HostEditorialEditionAuthorization,
-    ): EditorialUnitCommitResult = try {
+    override suspend fun commit(batch: InventoryEvidenceBatch): EditorialUnitCommitResult = try {
         mutationGate.withLock {
             database.transactionWithResult {
                 currentCoroutineContext().ensureActive()
@@ -98,7 +96,7 @@ class EditorialEditionUnitCommitRepositoryImpl(
                 val requestedIds = batch.claims.mapTo(hashSetOf()) { it.sourceRecordId }
                 val replayIds = owned.filter { it.sourceRecordId in requestedIds }
                     .mapTo(hashSetOf()) { it.chapterId }
-                val preflight = PreviewEditorialEditionInventory(authorization).execute(
+                val preflight = PreviewEditorialEditionInventory(hostAuthorization).execute(
                     batch = batch,
                     existingCanonicalChapters = existing.filterNot { it.id in replayIds },
                 )
@@ -174,7 +172,7 @@ class EditorialEditionUnitCommitRepositoryImpl(
                 // integration changes. Read persisted consent AFTER that final
                 // check, or a stale earlier read can authorize a commit.
                 if (
-                    authorization.approvedScope(scope.producerId, scope.canonicalTitleId) != scope ||
+                    hostAuthorization.approvedScope(scope.producerId, scope.canonicalTitleId) != scope ||
                     !hasPersistedEditionConsent(scope)
                 ) {
                     throw EditorialCommitRefused()

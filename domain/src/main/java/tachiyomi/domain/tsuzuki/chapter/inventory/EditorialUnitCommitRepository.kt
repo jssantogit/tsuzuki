@@ -11,10 +11,9 @@ sealed interface EditorialUnitCommitResult {
  * An explicit transactional boundary. No default implementation and no passive
  * calls from Details or metadata refresh. Host authorization must be checked
  * both against current persistent scope and again before committing.
+ * Authorization is injected by the Host composition, not provided by the caller.
  */
 interface EditorialUnitCommitRepository {
-    suspend fun commit(
-        batch: InventoryEvidenceBatch,
-        authorization: HostEditorialEditionAuthorization,
-    ): EditorialUnitCommitResult
+    // A caller may submit evidence, never mint its own trusted Host grant.
+    suspend fun commit(batch: InventoryEvidenceBatch): EditorialUnitCommitResult
 }

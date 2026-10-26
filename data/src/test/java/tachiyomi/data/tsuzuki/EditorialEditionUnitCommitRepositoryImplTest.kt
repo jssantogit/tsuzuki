@@ -35,7 +35,6 @@ class EditorialEditionUnitCommitRepositoryImplTest {
     private lateinit var driver: SqlDriver
     private lateinit var database: Database
     private lateinit var chapters: CanonicalChapterRepositoryImpl
-    private lateinit var writer: EditorialEditionUnitCommitRepositoryImpl
     private var oldNativePath: String? = null
     private var nativeDir: java.nio.file.Path? = null
 
@@ -80,7 +79,6 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         )
 
         chapters = CanonicalChapterRepositoryImpl(database)
-        writer = EditorialEditionUnitCommitRepositoryImpl(database, chapters, ChapterMutationGate())
     }
 
     @AfterEach
@@ -95,10 +93,24 @@ class EditorialEditionUnitCommitRepositoryImplTest {
     }
 
     @Test
+    fun `production Host rejects self-declared editorial claims even with local consent`(): Unit =
+        runBlocking<Unit> {
+            val request = batch(claim("18"))
+            val productionWriter = EditorialEditionUnitCommitRepositoryImpl(
+                database = database,
+                chapters = chapters,
+                mutationGate = ChapterMutationGate(),
+                hostAuthorization = DisabledEditorialEditionHostAuthority(),
+            )
+            productionWriter.commit(request) shouldBe EditorialUnitCommitResult.Refused
+            chapters.getByCanonicalTitleId("title") shouldBe emptyList()
+        }
+
+    @Test
     fun `synthetic exact editorial units create chapters without reading providers and replay unchanged`(): Unit =
         runBlocking<Unit> {
             val selected = batch(claim("12.05"), claim("12.5"))
-            val first = writer.commit(selected, grant(selected.scope))
+            val first = commitWithSyntheticHost(selected, grant(selected.scope))
             (first is EditorialUnitCommitResult.Applied) shouldBe true
             val written = first as EditorialUnitCommitResult.Applied
             written.inserted shouldBe 2
@@ -106,7 +118,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
             chaptersAfter.size shouldBe 2
             chaptersAfter.map { it.identity }.distinct().size shouldBe 2
             chaptersAfter.all { it.confirmation.name == "CONFIRMED" } shouldBe true
-            val replay = writer.commit(selected, grant(selected.scope))
+            val replay = commitWithSyntheticHost(selected, grant(selected.scope))
             replay shouldBe EditorialUnitCommitResult.Applied(written.chapterIds, 0)
             chapters.getByCanonicalTitleId("title") shouldBe chaptersAfter
             database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title")
@@ -116,7 +128,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
     @Test
     fun `sync evidence lookup identifies only persisted edition scoped ownership`() = runBlocking<Unit> {
         val selected = batch(claim("12"))
-        val applied = writer.commit(selected, grant(selected.scope)) as EditorialUnitCommitResult.Applied
+        val applied = commitWithSyntheticHost(selected, grant(selected.scope)) as EditorialUnitCommitResult.Applied
         val ordinary = CanonicalChapter(
             id = "old-local",
             canonicalTitleId = "title",
@@ -144,7 +156,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
                 editionKey = "original",
                 scopeLanguage = "ja",
             )
-            writer.commit(request, grant(request.scope)) shouldBe EditorialUnitCommitResult.Refused
+            commitWithSyntheticHost(request, grant(request.scope)) shouldBe EditorialUnitCommitResult.Refused
             chapters.getByCanonicalTitleId("title") shouldBe emptyList()
         }
 
@@ -158,14 +170,14 @@ class EditorialEditionUnitCommitRepositoryImplTest {
                 configJson = "{}",
                 updatedAt = 11L,
             )
-            writer.commit(request, grant(request.scope)) shouldBe EditorialUnitCommitResult.Refused
+            commitWithSyntheticHost(request, grant(request.scope)) shouldBe EditorialUnitCommitResult.Refused
             database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
                 integrationId = "synthetic-editorial",
                 enabled = false,
                 configJson = """{"chapter_inventory":true}""",
                 updatedAt = 12L,
             )
-            writer.commit(request, grant(request.scope)) shouldBe EditorialUnitCommitResult.Refused
+            commitWithSyntheticHost(request, grant(request.scope)) shouldBe EditorialUnitCommitResult.Refused
             database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
                 integrationId = "synthetic-editorial",
                 enabled = true,
@@ -181,7 +193,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
                 grantedAt = 14L,
                 integrationSettingsRevision = 13L,
             )
-            (writer.commit(request, grant(request.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
+            (commitWithSyntheticHost(request, grant(request.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
             database.tsuzuki_editorial_edition_consentsQueries.revokeTsuzukiEditorialEditionConsent(
                 canonicalTitleId = "title",
                 producerId = "synthetic-editorial",
@@ -189,7 +201,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
                 editionKey = "original",
                 scopeLanguage = "ja",
             )
-            writer.commit(request, grant(request.scope)) shouldBe EditorialUnitCommitResult.Refused
+            commitWithSyntheticHost(request, grant(request.scope)) shouldBe EditorialUnitCommitResult.Refused
             chapters.getByCanonicalTitleId("title").size shouldBe 1
         }
 
@@ -203,14 +215,14 @@ class EditorialEditionUnitCommitRepositoryImplTest {
                 configJson = """{"chapter_inventory":true}""",
                 updatedAt = 11L,
             )
-            writer.commit(requested, grant(requested.scope)) shouldBe EditorialUnitCommitResult.Refused
+            commitWithSyntheticHost(requested, grant(requested.scope)) shouldBe EditorialUnitCommitResult.Refused
             database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
                 integrationId = "synthetic-editorial",
                 enabled = true,
                 configJson = """{"chapter_inventory":true}""",
                 updatedAt = 12L,
             )
-            writer.commit(requested, grant(requested.scope)) shouldBe EditorialUnitCommitResult.Refused
+            commitWithSyntheticHost(requested, grant(requested.scope)) shouldBe EditorialUnitCommitResult.Refused
             database.tsuzuki_editorial_edition_consentsQueries.upsertTsuzukiEditorialEditionConsent(
                 canonicalTitleId = "title",
                 producerId = "synthetic-editorial",
@@ -220,7 +232,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
                 grantedAt = 13L,
                 integrationSettingsRevision = 12L,
             )
-            (writer.commit(requested, grant(requested.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
+            (commitWithSyntheticHost(requested, grant(requested.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
             chapters.getByCanonicalTitleId("title").size shouldBe 1
         }
 
@@ -229,10 +241,10 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         runBlocking<Unit> {
             for (alternate in listOf(scope("revised"), scope().copy(language = "en"))) {
                 val attempted = batch(claim("1").copy(language = alternate.language)).copy(scope = alternate)
-                writer.commit(attempted, grant(alternate)) shouldBe EditorialUnitCommitResult.Refused
+                commitWithSyntheticHost(attempted, grant(alternate)) shouldBe EditorialUnitCommitResult.Refused
             }
             val foreignWork = batch(claim("1")).copy(scope = scope().copy(externalWorkId = "work-other"))
-            writer.commit(foreignWork, grant(foreignWork.scope)) shouldBe EditorialUnitCommitResult.Refused
+            commitWithSyntheticHost(foreignWork, grant(foreignWork.scope)) shouldBe EditorialUnitCommitResult.Refused
             chapters.getByCanonicalTitleId("title") shouldBe emptyList()
         }
 
@@ -241,8 +253,8 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         runBlocking<Unit> {
             val first = batch(claim("1"))
             val second = batch(claim("1")).copy(scope = scope("revised"))
-            (writer.commit(first, grant(first.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
-            writer.commit(second, grant(second.scope)) shouldBe EditorialUnitCommitResult.Refused
+            (commitWithSyntheticHost(first, grant(first.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
+            commitWithSyntheticHost(second, grant(second.scope)) shouldBe EditorialUnitCommitResult.Refused
             chapters.getByCanonicalTitleId("title").size shouldBe 1
             database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title")
                 .awaitAsList().size shouldBe 1
@@ -253,7 +265,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         val original = batch(claim("1").copy(sourceRecordId = "chapter-index-1"))
         val revised = batch(claim("2").copy(sourceRecordId = "chapter-index-1"))
             .copy(scope = scope("revised"))
-        (writer.commit(original, grant(original.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
+        (commitWithSyntheticHost(original, grant(original.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
         database.tsuzuki_editorial_edition_consentsQueries.upsertTsuzukiEditorialEditionConsent(
             canonicalTitleId = "title",
             producerId = "synthetic-editorial",
@@ -263,7 +275,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
             grantedAt = 12L,
             integrationSettingsRevision = 10L,
         )
-        (writer.commit(revised, grant(revised.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
+        (commitWithSyntheticHost(revised, grant(revised.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
         chapters.getByCanonicalTitleId("title").size shouldBe 2
         database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title")
             .awaitAsList().map { it.edition_key }.toSet() shouldBe setOf("original", "revised")
@@ -274,7 +286,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         runBlocking<Unit> {
             val request = batch(claim("9"))
             var checks = 0
-            val result = writer.commit(request) { _, _ ->
+            val result = commitWithSyntheticHost(request) { _, _ ->
                 checks++
                 if (checks == 2) {
                     runBlocking {
@@ -302,7 +314,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         runBlocking<Unit> {
             val request = batch(claim("10"))
             var checks = 0
-            val result = writer.commit(request) { _, _ ->
+            val result = commitWithSyntheticHost(request) { _, _ ->
                 checks++
                 if (checks == 2) {
                     runBlocking {
@@ -327,7 +339,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
     fun `host revocation after insertion rolls back both chapter and scoped ownership`(): Unit = runBlocking<Unit> {
         val selected = batch(claim("1"), claim("2"))
         var checks = 0
-        val revoked = writer.commit(selected) { _, _ ->
+        val revoked = commitWithSyntheticHost(selected) { _, _ ->
             checks++
             if (checks == 1) selected.scope else null
         }
@@ -351,14 +363,14 @@ class EditorialEditionUnitCommitRepositoryImplTest {
             )
             chapters.upsert(old)
             val requested = batch(claim("12.05"))
-            writer.commit(requested, grant(requested.scope)) shouldBe EditorialUnitCommitResult.Refused
+            commitWithSyntheticHost(requested, grant(requested.scope)) shouldBe EditorialUnitCommitResult.Refused
             chapters.getByCanonicalTitleId("title") shouldBe listOf(old)
         }
 
     @Test
     fun `edition owned chapter is protected from legacy duplicate consolidation`(): Unit = runBlocking<Unit> {
         val selected = batch(claim("8"))
-        val owner = writer.commit(selected, grant(selected.scope)) as EditorialUnitCommitResult.Applied
+        val owner = commitWithSyntheticHost(selected, grant(selected.scope)) as EditorialUnitCommitResult.Applied
         val editorialChapterId = owner.chapterIds.single()
         val competing = CanonicalChapter(
             id = "legacy-competing-eight",
@@ -387,9 +399,9 @@ class EditorialEditionUnitCommitRepositoryImplTest {
     @Test
     fun `malformed or self-declared grant cannot persist chapters`(): Unit = runBlocking<Unit> {
         val selected = batch(claim("1"))
-        writer.commit(selected) { _, _ -> null } shouldBe EditorialUnitCommitResult.Refused
-        writer.commit(selected, grant(scope("other-edition"))) shouldBe EditorialUnitCommitResult.Refused
-        writer.commit(
+        commitWithSyntheticHost(selected) { _, _ -> null } shouldBe EditorialUnitCommitResult.Refused
+        commitWithSyntheticHost(selected, grant(scope("other-edition"))) shouldBe EditorialUnitCommitResult.Refused
+        commitWithSyntheticHost(
             selected.copy(claims = listOf(claim("1").copy(derivation = InventoryDerivation.RELEASE_RECORD))),
             grant(selected.scope),
         ) shouldBe EditorialUnitCommitResult.Refused
@@ -399,7 +411,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
     @Test
     fun `title convergence refuses to destroy scoped ownership and rolls back`(): Unit = runBlocking<Unit> {
         val selected = batch(claim("1"))
-        val written = writer.commit(selected, grant(selected.scope))
+        val written = commitWithSyntheticHost(selected, grant(selected.scope))
         (written is EditorialUnitCommitResult.Applied) shouldBe true
         database.tsuzuki_titlesQueries.insertTsuzukiTitle("target", "Target", "SOURCE_ONLY", 2L, 2L)
         val merging = runCatching { CanonicalTitleMergeRepositoryImpl(database).convergeTo("target", "title") }
@@ -408,6 +420,16 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title")
             .awaitAsList().size shouldBe 1
     }
+
+    private suspend fun commitWithSyntheticHost(
+        batch: InventoryEvidenceBatch,
+        authority: tachiyomi.domain.tsuzuki.chapter.inventory.HostEditorialEditionAuthorization,
+    ): EditorialUnitCommitResult = EditorialEditionUnitCommitRepositoryImpl(
+        database = database,
+        chapters = chapters,
+        mutationGate = ChapterMutationGate(),
+        hostAuthorization = authority,
+    ).commit(batch)
 
     private fun grant(approved: InventoryScope) =
         tachiyomi.domain.tsuzuki.chapter.inventory.HostEditorialEditionAuthorization { _, _ -> approved }
