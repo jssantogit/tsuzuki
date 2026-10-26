@@ -1598,4 +1598,9 @@
     <string name="tsuzuki_details_status_upcoming">Not yet published</string>
     <string name="tsuzuki_details_chapter_label">Chapter %1$s</string>
     <string name="tsuzuki_details_chapter_unnumbered">Unnumbered chapter</string>
+    <string name="tsuzuki_epub_import_action">Import EPUB3 index</string>
+    <string name="tsuzuki_epub_import_title">Local EPUB3 inventory</string>
+    <string name="tsuzuki_epub_import_in_progress">Reading the selected EPUB3 navigation…</string>
+    <string name="tsuzuki_epub_import_success">Candidate chapters imported. Review the edition before adopting; no reading pages were added.</string>
+    <string name="tsuzuki_epub_import_failed">Could not validate the selected EPUB3 file. No chapters were added.</string>
 </resources>

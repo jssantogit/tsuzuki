@@ -94,6 +94,7 @@ fun CanonicalTitleDetailScreen(
     onOpenProvidersSettings: () -> Unit,
     onFetchInventory: (String) -> Unit,
     onLinkMangaDex: () -> Unit,
+    onImportEpub: () -> Unit = {},
     onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit = {},
     inventoryRefresh: NativeInventoryRefreshState,
     modifier: Modifier = Modifier,
@@ -130,7 +131,7 @@ fun CanonicalTitleDetailScreen(
             is CanonicalTitleScreenState.Loaded -> LoadedDetails(
                 state, background, navigateUp, onAtualizar, onAddToLibrary, onRemoveFromLibrary,
                 onReadTitle, onOpenChapter, onBaixarChapter, onOpenProvidersSettings,
-                onFetchInventory, onLinkMangaDex, onReviewCandidates, inventoryRefresh,
+                onFetchInventory, onLinkMangaDex, onImportEpub, onReviewCandidates, inventoryRefresh,
             )
         }
     }
@@ -150,6 +151,7 @@ private fun LoadedDetails(
     onProviders: () -> Unit,
     onFetchInventory: (String) -> Unit,
     onLinkMangaDex: () -> Unit,
+    onImportEpub: () -> Unit,
     onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit,
     inventoryRefresh: NativeInventoryRefreshState,
 ) {
@@ -214,6 +216,7 @@ private fun LoadedDetails(
                                 inventoryRefresh,
                                 onFetchInventory,
                                 onLinkMangaDex,
+                                onImportEpub,
                                 onReviewCandidates,
                             )
                         }
@@ -247,6 +250,7 @@ private fun LoadedDetails(
                             inventoryRefresh,
                             onFetchInventory,
                             onLinkMangaDex,
+                            onImportEpub,
                             onReviewCandidates,
                         )
                     }
@@ -391,6 +395,7 @@ private fun IndependentInventoryInfo(
     refresh: NativeInventoryRefreshState,
     onFetchInventory: (String) -> Unit,
     onLinkMangaDex: () -> Unit,
+    onImportEpub: () -> Unit,
     onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit,
 ) {
     val colors = defaultSkinColors()
@@ -445,6 +450,10 @@ private fun IndependentInventoryInfo(
                 color = colors.secondary,
             )
         }
+        DefaultSkinTextAction(
+            text = stringResource(MR.strings.tsuzuki_epub_import_action),
+            onClick = onImportEpub,
+        )
         if (snapshot.sources.isEmpty()) {
             Text(
                 stringResource(MR.strings.tsuzuki_inventory_unknown),

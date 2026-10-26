@@ -1336,4 +1336,9 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_reader_preferred_provider">Usar este Provider como fonte de leitura preferida para esta obra?</string>
     <string name="tsuzuki_reader_preferred_language">Idioma preferido</string>
     <string name="tsuzuki_reader_preferred_language_message">Usar %1$s como idioma de leitura preferido para esta obra?</string>
+    <string name="tsuzuki_epub_import_action">Importar índice EPUB3</string>
+    <string name="tsuzuki_epub_import_title">Inventário EPUB3 local</string>
+    <string name="tsuzuki_epub_import_in_progress">Lendo a navegação EPUB3 selecionada…</string>
+    <string name="tsuzuki_epub_import_success">Capítulos candidatos importados. Revise a edição antes de adotar; nenhuma página de leitura foi adicionada.</string>
+    <string name="tsuzuki_epub_import_failed">Não foi possível validar o EPUB3 selecionado. Nenhum capítulo foi adicionado.</string>
 </resources>

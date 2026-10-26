@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.tsuzuki.detail
 
 import androidx.lifecycle.ViewModel
+import eu.kanade.tachiyomi.data.tsuzuki.inventory.SelectedEpub3ArchiveImport
 import androidx.lifecycle.viewModelScope
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
@@ -8,11 +9,16 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionBlockReason
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionCandidatePage
@@ -21,8 +27,13 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionConfirmation
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionPreview
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionRepository
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionReviewRequest
+import java.io.File
+import java.io.InputStream
 
 data class UserAdoptionReviewState(
+    val importingEpub: Boolean = false,
+    val epubImportFailed: Boolean = false,
+    val epubImported: Boolean = false,
     val candidateScope: InventoryScope? = null,
     val candidatePage: UserAdoptionCandidatePage? = null,
     val loadingCandidates: Boolean = false,
@@ -43,6 +54,7 @@ data class UserAdoptionReviewState(
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 class UserAdoptionReviewScreenModel(
     private val repository: UserAdoptionRepository,
+    private val ledger: InventoryEvidenceRepository,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(UserAdoptionReviewState())
     val state: StateFlow<UserAdoptionReviewState> = mutableState.asStateFlow()
@@ -58,6 +70,65 @@ class UserAdoptionReviewScreenModel(
         activeReview = null
         candidateCursors = mutableListOf(null)
         mutableState.value = UserAdoptionReviewState()
+    }
+
+
+    /**
+     * A foreground SAF selection is the only entry point; no passive scan,
+     * archive persistence, or automatic chapter materialization occurs.
+     */
+    fun importSelectedEpub(
+        canonicalTitleId: String,
+        cacheDirectory: File,
+        openStream: () -> InputStream?,
+    ) {
+        if (canonicalTitleId != titleId || operation?.isActive == true) return
+        mutableState.value = mutableState.value.copy(
+            importingEpub = true,
+            epubImportFailed = false,
+            epubImported = false,
+        )
+        operation = viewModelScope.launch {
+            try {
+                val batch = withContext(Dispatchers.IO) {
+                    val selected = openStream() ?: error("Selected EPUB cannot be opened")
+                    SelectedEpub3ArchiveImport.read(
+                        stream = selected,
+                        cacheDirectory = cacheDirectory,
+                        canonicalTitleId = canonicalTitleId,
+                        observedAt = System.currentTimeMillis(),
+                    ).getOrThrow()
+                }
+                currentCoroutineContext().ensureActive()
+                if (canonicalTitleId != titleId) return@launch
+                ledger.saveBatch(batch)
+                currentCoroutineContext().ensureActive()
+                if (canonicalTitleId == titleId) {
+                    mutableState.value = mutableState.value.copy(
+                        importingEpub = false,
+                        epubImported = true,
+                        revision = mutableState.value.revision + 1,
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                if (canonicalTitleId == titleId) {
+                    mutableState.value = mutableState.value.copy(
+                        importingEpub = false,
+                        epubImportFailed = true,
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearEpubImportResult() {
+        if (mutableState.value.importingEpub) return
+        mutableState.value = mutableState.value.copy(
+            epubImported = false,
+            epubImportFailed = false,
+        )
     }
 
     /** Explicit user action. Pages never trigger network fetches or adoption writes. */

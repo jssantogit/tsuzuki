@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.ui.tsuzuki.detail
 
 import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -74,6 +76,17 @@ data class CanonicalTitleScreen(
         val inventoryState by inventoryModel.state.collectAsStateWithLifecycle()
         val adoptionModel = metroViewModel<UserAdoptionReviewScreenModel>()
         val adoptionState by adoptionModel.state.collectAsStateWithLifecycle()
+        val selectedEpubLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+        ) { selectedUri ->
+            if (selectedUri != null) {
+                adoptionModel.importSelectedEpub(
+                    canonicalTitleId = canonicalTitleId,
+                    cacheDirectory = context.cacheDir,
+                    openStream = { context.contentResolver.openInputStream(selectedUri) },
+                )
+            }
+        }
         var selectedCandidates by remember(canonicalTitleId) { mutableStateOf(setOf<String>()) }
         var requestedInventorySource by rememberSaveable(canonicalTitleId) { mutableStateOf<String?>(null) }
         var mangaDexLinkDialog by rememberSaveable(canonicalTitleId) { mutableStateOf(false) }
@@ -134,6 +147,9 @@ data class CanonicalTitleScreen(
             onRemoveFromLibrary = { screenModel.removeFromLibrary() },
             onOpenProvidersSettings = openProviders,
             onFetchInventory = { source -> requestedInventorySource = source },
+            onImportEpub = {
+                selectedEpubLauncher.launch(arrayOf("application/epub+zip", "application/octet-stream"))
+            },
             onLinkMangaDex = {
                 inventoryModel.clearMangaDexLink()
                 mangaDexIdInput = ""
@@ -152,6 +168,38 @@ data class CanonicalTitleScreen(
                 screenModel.openChapter(canonicalChapterId, openReader)
             },
         )
+
+
+        if (adoptionState.importingEpub || adoptionState.epubImportFailed || adoptionState.epubImported) {
+            AlertDialog(
+                onDismissRequest = { adoptionModel.clearEpubImportResult() },
+                title = { Text(stringResource(MR.strings.tsuzuki_epub_import_title)) },
+                text = {
+                    Column {
+                        if (adoptionState.importingEpub) {
+                            CircularProgressIndicator()
+                            Text(stringResource(MR.strings.tsuzuki_epub_import_in_progress))
+                        } else {
+                            Text(
+                                stringResource(
+                                    if (adoptionState.epubImported) {
+                                        MR.strings.tsuzuki_epub_import_success
+                                    } else {
+                                        MR.strings.tsuzuki_epub_import_failed
+                                    },
+                                ),
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = !adoptionState.importingEpub,
+                        onClick = { adoptionModel.clearEpubImportResult() },
+                    ) { Text(stringResource(MR.strings.action_ok)) }
+                },
+            )
+        }
 
         adoptionState.candidateScope?.takeIf { it.canonicalTitleId == canonicalTitleId }?.let { scope ->
             val page = adoptionState.candidatePage
