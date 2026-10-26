@@ -53,14 +53,14 @@ class BackupRestorerCanonicalGateTest {
     )
 
     @Test
-    fun `canonical archive is refused before legacy library restoration`(): Unit = runBlocking {
-        val section = BackupCanonicalSection.fromJson("tsuzuki.core.v1", "{}")
+    fun `unsupported canonical archive is refused before legacy library restoration`(): Unit = runBlocking {
+        val section = BackupCanonicalSection.fromJson("tsuzuki.unsupported.v1", "{}")
         coEvery { backupDecoder.decode(uri) } returns Backup(
             backupManga = emptyList(),
             canonicalSnapshot = BackupCanonicalSnapshot(sections = listOf(section)),
         )
 
-        val failure = shouldThrow<IllegalStateException> {
+        val failure = shouldThrow<IllegalArgumentException> {
             restorer().restore(uri, RestoreOptions())
         }
 
@@ -76,7 +76,7 @@ class BackupRestorerCanonicalGateTest {
             canonicalSnapshot = BackupCanonicalSnapshot(),
         )
 
-        shouldThrow<IllegalStateException> {
+        shouldThrow<IllegalArgumentException> {
             restorer().restore(
                 uri,
                 RestoreOptions(

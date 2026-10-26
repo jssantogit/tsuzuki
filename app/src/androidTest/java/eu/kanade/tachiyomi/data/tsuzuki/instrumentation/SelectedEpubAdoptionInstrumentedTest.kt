@@ -7,6 +7,8 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.provider.MediaStore
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -22,6 +24,9 @@ import com.eygraber.sqldelight.androidx.driver.AndroidxSqliteDriver
 import com.eygraber.sqldelight.androidx.driver.FileProvider
 import eu.kanade.tachiyomi.App
 import eu.kanade.tachiyomi.data.backup.BackupDecoder
+import eu.kanade.tachiyomi.data.backup.CanonicalStandaloneArchive
+import eu.kanade.tachiyomi.data.backup.create.BackupCreateJob
+import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
@@ -59,9 +64,11 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionReviewRequest
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -471,6 +478,63 @@ class SelectedEpubAdoptionInstrumentedTest {
             SystemClock.sleep(150)
         }
         error("Expected ${type.simpleName} to be resumed")
+    }
+
+    @Test(timeout = 240_000L)
+    fun productionBackupWorkerWritesStandaloneTachibkWithAdoptedReceipts() = runBlocking {
+        val context = fixtureContext()
+        val database = (context.applicationContext as App).graph.database
+        val titleId = "ice-backup-${UUID.randomUUID()}"
+        val now = System.currentTimeMillis()
+        CanonicalTitleRepositoryImpl(database).insert(
+            CanonicalTitle(titleId, "Real writer adopted edition", CanonicalIdentityState.SOURCE_ONLY, now, now),
+        )
+        val ledger = IndependentInventoryRepositoryImpl(database)
+        val chapters = CanonicalChapterRepositoryImpl(database)
+        val adoption = UserAdoptedInventoryRepositoryImpl(database, ledger, chapters, ChapterMutationGate())
+        val batch = SelectedEpub3ArchiveImport.read(
+            epubBytes().inputStream(),
+            context.cacheDir,
+            titleId,
+            now,
+        ).getOrThrow()
+        ledger.saveBatch(batch)
+        val request = UserAdoptionReviewRequest(batch.scope, listOf(batch.claims.first().sourceRecordId))
+        val ready = adoption.preview(request) as UserAdoptionPreview.Ready
+        assertTrue(
+            adoption.adopt(UserAdoptionConfirmation(request, ready.fingerprint, now + 1, true)) is
+                UserAdoptionCommitResult.Adopted,
+        )
+        val file = File.createTempFile("ice-production-", ".tachibk", context.cacheDir)
+        try {
+            val uri = Uri.fromFile(file)
+            // Do not construct a synthetic Backup message here: run the same
+            // foreground WorkManager job used by CreateBackupScreen.
+            BackupCreateJob.startNow(context, uri, BackupOptions(canonicalLibraryOnly = true))
+            val work = WorkManager.getInstance(context)
+            var terminal: WorkInfo.State? = null
+            for (attempt in 0 until 170) {
+                val jobs = work.getWorkInfosForUniqueWork("BackupCreator:manual")
+                    .get(3, TimeUnit.SECONDS)
+                val state = jobs.lastOrNull()?.state
+                if (state != null && state.isFinished) {
+                    terminal = state
+                    break
+                }
+                SystemClock.sleep(500)
+            }
+            assertEquals("Production backup worker must successfully verify its own output", WorkInfo.State.SUCCEEDED, terminal)
+            val actual = BackupDecoder(context, ProtoBuf).decode(uri)
+            val section = CanonicalStandaloneArchive.requireRestorable(actual, true)
+            val core = Json.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
+            assertTrue(core.titles.any { it.id == titleId })
+            assertEquals(1, core.userAdoptionReceipts.count { it.canonicalTitleId == titleId })
+            assertEquals(1, core.chapters.count { it.canonicalTitleId == titleId })
+            assertTrue(actual.backupManga.isEmpty())
+            report("PRODUCTION_ARCHIVE", "worker=SUCCESS|gzip=VALID|receipts=1|chapters=1")
+        } finally {
+            file.delete()
+        }
     }
 
     private fun fixtureContext() = InstrumentationRegistry.getInstrumentation().targetContext.also { context ->
