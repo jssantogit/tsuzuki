@@ -160,7 +160,8 @@ internal object SelectedEpub3ArchiveImport {
     private fun parseXml(bytes: ByteArray): Document {
         val factory = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
-            isXIncludeAware = false
+            // Android's DOM factory throws on setXIncludeAware(false).
+            // We reject XInclude nodes explicitly after parsing instead.
             isExpandEntityReferences = false
             setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
             setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
@@ -168,9 +169,14 @@ internal object SelectedEpub3ArchiveImport {
             setFeature("http://xml.org/sax/features/external-parameter-entities", false)
             setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
         }
-        return factory.newDocumentBuilder().apply {
+        val parsed = factory.newDocumentBuilder().apply {
             setEntityResolver { _, _ -> error("External XML entities are not allowed") }
         }.parse(ByteArrayInputStream(bytes))
+        require(parsed.doctype == null) { "EPUB package XML cannot contain a DTD" }
+        require(parsed.getElementsByTagNameNS("http://www.w3.org/2001/XInclude", "*").length == 0) {
+            "EPUB package XML cannot include external XML content"
+        }
+        return parsed
     }
 
     private fun ByteArray.decodeStrict(): String =
