@@ -106,13 +106,22 @@ class PreviewUserAdoptedInventoryTest {
             baseNumber = 1,
         )
         val duplicate = preview.execute(
-            scope, listOf(claim()), listOf("chapter-one", "chapter-one"), emptyList(),
+            scope,
+            listOf(claim()),
+            listOf("chapter-one", "chapter-one"),
+            emptyList(),
         )
         val wrongEdition = preview.execute(
-            scope.copy(editionKey = "edition-2"), listOf(claim()), listOf("chapter-one"), emptyList(),
+            scope.copy(editionKey = "edition-2"),
+            listOf(claim()),
+            listOf("chapter-one"),
+            emptyList(),
         )
         val collision = preview.execute(
-            scope, listOf(claim()), listOf("chapter-one"), listOf(canonical),
+            scope,
+            listOf(claim()),
+            listOf("chapter-one"),
+            listOf(canonical),
         )
         (duplicate is UserAdoptionPreview.Blocked) shouldBe true
         (wrongEdition is UserAdoptionPreview.Blocked) shouldBe true
