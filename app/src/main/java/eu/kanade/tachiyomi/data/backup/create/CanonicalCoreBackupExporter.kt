@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterEvidence
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreEditorialChapterBinding
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterOverride
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterUpdateState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
@@ -74,6 +75,12 @@ class CanonicalCoreBackupExporter(
         val variants = chapters.flatMap { chapter ->
             chapterRepository.getVariantsByCanonicalChapterId(chapter.id).sortedBy { it.id }
         }
+        val editorialChapterBindings = titles.flatMap { title ->
+            database.tsuzuki_editorial_chapter_bindingsQueries
+                .getTsuzukiEditorialBindingsByTitle(title.id)
+                .awaitAsList()
+        }
+
         val chapterEvidence = titles.flatMap { title ->
             database.tsuzuki_chapter_evidenceQueries
                 .getTsuzukiChapterEvidenceByTitle(title.id).awaitAsList()
@@ -225,6 +232,21 @@ class CanonicalCoreBackupExporter(
                     numberingKind = it.numberingKind?.name,
                     decimalNumerator = it.decimalFraction?.numerator,
                     decimalScale = it.decimalFraction?.scale,
+                )
+            },
+            editorialChapterBindings = editorialChapterBindings.map {
+                BackupCoreEditorialChapterBinding(
+                    canonicalChapterId = it.canonical_chapter_id,
+                    canonicalTitleId = it.canonical_title_id,
+                    producerId = it.producer_id,
+                    externalWorkId = it.external_work_id,
+                    editionKey = it.edition_key,
+                    scopeLanguage = it.scope_language,
+                    sourceRecordId = it.source_record_id,
+                    upstreamSourceId = it.upstream_source_id,
+                    identityKey = it.identity_key,
+                    volumeKey = it.volume_key,
+                    observedAt = it.observed_at,
                 )
             },
             variants = variants.map {

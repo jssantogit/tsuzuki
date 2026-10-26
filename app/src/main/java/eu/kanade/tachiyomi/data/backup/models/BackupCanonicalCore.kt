@@ -24,6 +24,7 @@ data class BackupCanonicalCore(
     val sourceMappings: List<BackupCoreSourceMapping> = emptyList(),
     val library: List<BackupCoreLibraryEntry> = emptyList(),
     val chapters: List<BackupCoreChapter> = emptyList(),
+    val editorialChapterBindings: List<BackupCoreEditorialChapterBinding> = emptyList(),
     val variants: List<BackupCoreVariant> = emptyList(),
     val chapterEvidence: List<BackupCoreChapterEvidence> = emptyList(),
     val progress: List<BackupCoreProgress> = emptyList(),
@@ -98,6 +99,26 @@ data class BackupCanonicalCore(
         }
         require(chapters.isUniqueBy { it.id }) { "Duplicate canonical chapter" }
         chapters.forEach(BackupCoreChapter::validateExactNumbering)
+        require(editorialChapterBindings.isUniqueBy { it.canonicalChapterId }) {
+            "Duplicate editorial chapter ownership"
+        }
+        require(
+            editorialChapterBindings.isUniqueBy {
+                listOf(
+                    it.canonicalTitleId, it.producerId, it.externalWorkId, it.editionKey,
+                    it.scopeLanguage, it.sourceRecordId,
+                )
+            },
+        ) { "Duplicate editorial unit source reference" }
+        require(
+            editorialChapterBindings.isUniqueBy {
+                listOf(
+                    it.canonicalTitleId, it.producerId, it.externalWorkId, it.editionKey,
+                    it.scopeLanguage, it.identityKey, it.volumeKey.toString(),
+                )
+            },
+        ) { "Duplicate edition scoped canonical unit identity" }
+
         require(variants.isUniqueBy { it.id }) { "Duplicate chapter variant" }
         require(chapterEvidence.isUniqueBy { it.id }) { "Duplicate chapter evidence ID" }
         require(
@@ -244,6 +265,39 @@ data class BackupCanonicalCore(
         require(chapters.all { it.canonicalTitleId in titleIds }) {
             "Chapter refers to absent canonical title"
         }
+        require(
+            editorialChapterBindings.all { binding ->
+                val chapter = chaptersById[binding.canonicalChapterId]
+                val fraction = if (chapter?.decimalNumerator != null && chapter.decimalScale != null) {
+                    CanonicalChapterDecimalFraction(chapter.decimalNumerator, chapter.decimalScale)
+                } else {
+                    null
+                }
+                val identity = chapter?.let {
+                    CanonicalChapterIdentity(
+                        type = CanonicalChapterType.valueOf(it.type),
+                        baseNumber = it.baseNumber,
+                        part = it.part,
+                        alphaSuffix = it.alphaSuffix,
+                        numberingKind = it.numberingKind?.let(CanonicalChapterNumberingKind::valueOf),
+                        decimalFraction = fraction,
+                    )
+                }
+                chapter != null &&
+                    chapter.canonicalTitleId == binding.canonicalTitleId &&
+                    chapter.confirmation == "CONFIRMED" &&
+                    identity?.sortKey == binding.identityKey &&
+                    (chapter.volume ?: 0).toLong() == binding.volumeKey &&
+                    binding.producerId.isNotBlank() &&
+                    binding.externalWorkId.isNotBlank() &&
+                    binding.editionKey.isNotBlank() &&
+                    binding.scopeLanguage.isNotBlank() &&
+                    binding.sourceRecordId.isNotBlank() &&
+                    binding.upstreamSourceId.isNotBlank() &&
+                    binding.observedAt >= 0L
+            },
+        ) { "Invalid, ambiguous or cross-title editorial chapter ownership" }
+
         require(identities.all { it.canonicalTitleId in titleIds }) {
             "Identity refers to absent canonical title"
         }
@@ -513,6 +567,21 @@ data class BackupCoreLibraryEntry(
     val favorite: Boolean,
     val addedAt: Long,
     val updatedAt: Long,
+)
+
+@Serializable
+data class BackupCoreEditorialChapterBinding(
+    val canonicalChapterId: String,
+    val canonicalTitleId: String,
+    val producerId: String,
+    val externalWorkId: String,
+    val editionKey: String,
+    val scopeLanguage: String,
+    val sourceRecordId: String,
+    val upstreamSourceId: String,
+    val identityKey: String,
+    val volumeKey: Long,
+    val observedAt: Long,
 )
 
 @Serializable

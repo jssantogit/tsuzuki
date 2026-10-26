@@ -9,13 +9,13 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterEvidence
-import eu.kanade.tachiyomi.data.backup.models.BackupCoreEditorialChapterBinding
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterOverride
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterUpdateState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContentBinding
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContentPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContinueReadingState
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreEditorialChapterBinding
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreIntegrationSetting
@@ -56,6 +56,8 @@ import tachiyomi.data.tsuzuki.CanonicalLibraryRepositoryImpl
 import tachiyomi.data.tsuzuki.CanonicalReadingRepositoryImpl
 import tachiyomi.data.tsuzuki.CanonicalTitleRepositoryImpl
 import tachiyomi.data.tsuzuki.SourceTitleMappingRepositoryImpl
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.sync.service.CanonicalTitleSyncSource
 import java.nio.file.Files
 
@@ -171,7 +173,7 @@ class CanonicalCoreBackupImporterTest {
                 scopeLanguage = "ja",
                 sourceRecordId = "chapter-1",
                 upstreamSourceId = "publisher-feed",
-                identityKey = "REGULAR:1",
+                identityKey = CanonicalChapterIdentity(CanonicalChapterType.REGULAR, 1).sortKey,
                 volumeKey = 0L,
                 observedAt = 42L,
             )

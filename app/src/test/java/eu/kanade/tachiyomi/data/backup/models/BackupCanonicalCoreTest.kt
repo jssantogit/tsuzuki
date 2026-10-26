@@ -3,6 +3,8 @@ package eu.kanade.tachiyomi.data.backup.models
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 
 class BackupCanonicalCoreTest {
 
@@ -34,7 +36,7 @@ class BackupCanonicalCoreTest {
             scopeLanguage = "ja",
             sourceRecordId = "chapter-1",
             upstreamSourceId = "publisher-feed",
-            identityKey = "REGULAR:1",
+            identityKey = CanonicalChapterIdentity(CanonicalChapterType.REGULAR, 1).sortKey,
             volumeKey = 0L,
             observedAt = 42L,
         )

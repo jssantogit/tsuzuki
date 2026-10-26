@@ -212,6 +212,23 @@ class CanonicalCoreBackupImporter(
                     decimalScale = it.decimalScale?.toLong(),
                 )
             }
+            // Preserve publisher/edition lineage in the same transaction as
+            // canonical chapters, progress, history and the restore receipt.
+            core.editorialChapterBindings.forEach {
+                database.tsuzuki_editorial_chapter_bindingsQueries.insertTsuzukiEditorialChapterBinding(
+                    canonicalChapterId = it.canonicalChapterId,
+                    canonicalTitleId = it.canonicalTitleId,
+                    producerId = it.producerId,
+                    externalWorkId = it.externalWorkId,
+                    editionKey = it.editionKey,
+                    scopeLanguage = it.scopeLanguage,
+                    sourceRecordId = it.sourceRecordId,
+                    upstreamSourceId = it.upstreamSourceId,
+                    identityKey = it.identityKey,
+                    volumeKey = it.volumeKey,
+                    observedAt = it.observedAt,
+                )
+            }
             core.variants.forEach {
                 database.tsuzuki_chapter_variantsQueries.upsertTsuzukiChapterVariant(
                     id = it.id,
