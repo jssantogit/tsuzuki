@@ -140,6 +140,19 @@ data class BackupCanonicalCore(
                     it.externalWorkId,
                     it.editionKey,
                     it.scopeLanguage,
+                    it.identityKey,
+                    it.volumeKey.toString(),
+                )
+            },
+        ) { "Duplicate edition-scoped user-adoption unit identity" }
+        require(
+            userAdoptionReceipts.isUniqueBy {
+                listOf(
+                    it.canonicalTitleId,
+                    it.producerId,
+                    it.externalWorkId,
+                    it.editionKey,
+                    it.scopeLanguage,
                     it.sourceRecordId,
                 )
             },
@@ -381,7 +394,8 @@ data class BackupCanonicalCore(
                     listOf(
                         it.canonicalTitleId, it.producerId, it.externalWorkId,
                         it.editionKey, it.scopeLanguage, it.sourceKind,
-                        it.snapshotDigest, it.exactRevision,
+                        it.originReference, it.snapshotDigest, it.exactRevision,
+                        it.attributionReference.orEmpty(), it.licenseReference.orEmpty(),
                         it.reviewFingerprint, it.acceptedAt.toString(),
                     )
                 }.distinct().size == 1
