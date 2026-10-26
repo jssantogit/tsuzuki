@@ -65,15 +65,28 @@ class BackupCanonicalCoreTest {
     @Test
     fun `user adoption backup preserves exact personal provenance without editor claims`() {
         val receipt = BackupCoreUserAdoptionReceipt(
-            canonicalChapterId = "chapter-1", receiptId = "receipt-1", canonicalTitleId = "title-1",
-            producerId = "epub3-user-selected", externalWorkId = "book", editionKey = "edition",
-            scopeLanguage = "ja", sourceRecordId = "unit-1", sourceKind = "USER_SELECTED_EPUB3_TOC",
-            derivation = "USER_SUPPLIED_EDITION_TOC", originReference = "user-selected:edition",
-            exactRevision = "r1", attributionReference = null, licenseReference = null,
-            snapshotDigest = "sha256:" + "a".repeat(64), sourceUnitId = "chapter.xhtml",
-            structuralCategory = "toc-chapter", acceptedLabel = "1",
+            canonicalChapterId = "chapter-1",
+            receiptId = "receipt-1",
+            canonicalTitleId = "title-1",
+            producerId = "epub3-user-selected",
+            externalWorkId = "book",
+            editionKey = "edition",
+            scopeLanguage = "ja",
+            sourceRecordId = "unit-1",
+            sourceKind = "USER_SELECTED_EPUB3_TOC",
+            derivation = "USER_SUPPLIED_EDITION_TOC",
+            originReference = "user-selected:edition",
+            exactRevision = "r1",
+            attributionReference = null,
+            licenseReference = null,
+            snapshotDigest = "sha256:" + "a".repeat(64),
+            sourceUnitId = "chapter.xhtml",
+            structuralCategory = "toc-chapter",
+            acceptedLabel = "1",
             identityKey = CanonicalChapterIdentity(CanonicalChapterType.REGULAR, 1).sortKey,
-            volumeKey = 0L, observedAt = 10L, acceptedAt = 20L,
+            volumeKey = 0L,
+            observedAt = 10L,
+            acceptedAt = 20L,
             reviewFingerprint = "sha256:" + "b".repeat(64),
         )
         val original = core().copy(
@@ -82,7 +95,8 @@ class BackupCanonicalCoreTest {
         )
         original.validate()
         val decoded = Json.decodeFromString(
-            BackupCanonicalCore.serializer(), Json.encodeToString(BackupCanonicalCore.serializer(), original),
+            BackupCanonicalCore.serializer(),
+            Json.encodeToString(BackupCanonicalCore.serializer(), original),
         )
         decoded shouldBe original
         runCatching {

@@ -12,7 +12,6 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContentPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContinueReadingState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreEditorialChapterBinding
-import eu.kanade.tachiyomi.data.backup.models.BackupCoreUserAdoptionReceipt
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreIdentity
@@ -29,6 +28,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleArtwork
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleFormat
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleName
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreUserAdoptionReceipt
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreVariant
 import eu.kanade.tachiyomi.data.backup.models.PortableMihonBindingCodec
 import kotlinx.coroutines.flow.first

@@ -77,7 +77,7 @@ class PreviewUserAdoptedInventory {
             allById[id]?.singleOrNull()
                 ?: return UserAdoptionPreview.Blocked(UserAdoptionBlockReason.SOURCE_SNAPSHOT_MISMATCH)
         }
-        val revisionScopes = hashSetOf<Triple<InventoryCandidateSourceKind, String, String>>()
+        val revisionScopes = hashSetOf<List<String>>()
         val identities = hashSetOf<Pair<CanonicalChapterIdentity, Int?>>()
         val sourceUnits = hashSetOf<String>()
         val units = mutableListOf<UserAdoptionPreviewUnit>()
@@ -104,7 +104,16 @@ class PreviewUserAdoptedInventory {
             ) {
                 return UserAdoptionPreview.Blocked(UserAdoptionBlockReason.NOT_AN_EXPLICIT_INDIVIDUAL_CANDIDATE)
             }
-            revisionScopes += Triple(provenance.sourceKind, provenance.exactRevision, provenance.snapshotDigest)
+            // A selected edition/revision cannot combine different source origins
+            // even if two origins report an identical revision and digest.
+            revisionScopes += listOf(
+                provenance.sourceKind.name,
+                provenance.originReference,
+                provenance.exactRevision,
+                provenance.snapshotDigest,
+                provenance.attributionReference.orEmpty(),
+                provenance.licenseReference.orEmpty(),
+            )
             if (!sourceUnits.add(provenance.sourceUnitId)) {
                 return UserAdoptionPreview.Blocked(UserAdoptionBlockReason.DUPLICATE_OR_COLLIDING_UNIT)
             }

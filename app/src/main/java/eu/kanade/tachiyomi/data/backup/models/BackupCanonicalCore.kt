@@ -144,8 +144,10 @@ data class BackupCanonicalCore(
                 )
             },
         ) { "Duplicate user-adoption source identity" }
-        require(editorialChapterBindings.map { it.canonicalChapterId }.toSet()
-            .intersect(userAdoptionReceipts.map { it.canonicalChapterId }.toSet()).isEmpty()) {
+        require(
+            editorialChapterBindings.map { it.canonicalChapterId }.toSet()
+                .intersect(userAdoptionReceipts.map { it.canonicalChapterId }.toSet()).isEmpty(),
+        ) {
             "Publisher-owned and user-adopted provenance cannot share a chapter"
         }
         require(variants.isUniqueBy { it.id }) { "Duplicate chapter variant" }

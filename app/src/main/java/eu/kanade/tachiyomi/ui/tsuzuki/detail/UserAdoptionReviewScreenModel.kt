@@ -56,7 +56,11 @@ class UserAdoptionReviewScreenModel(
         if (scope.canonicalTitleId != titleId || operation?.isActive == true) return
         activeReview = null
         mutableState.value = mutableState.value.copy(
-            preparing = true, plan = null, blockedReason = null, failed = false, completed = false,
+            preparing = true,
+            plan = null,
+            blockedReason = null,
+            failed = false,
+            completed = false,
         )
         operation = viewModelScope.launch {
             try {
@@ -69,7 +73,8 @@ class UserAdoptionReviewScreenModel(
                     }
                     is UserAdoptionPreview.Blocked -> {
                         mutableState.value = mutableState.value.copy(
-                            preparing = false, blockedReason = result.reason,
+                            preparing = false,
+                            blockedReason = result.reason,
                         )
                     }
                 }
@@ -100,17 +105,25 @@ class UserAdoptionReviewScreenModel(
                 activeReview = null
                 mutableState.value = when (accepted) {
                     is UserAdoptionCommitResult.Adopted -> mutableState.value.copy(
-                        plan = null, adopting = false, completed = true,
+                        plan = null,
+                        adopting = false,
+                        completed = true,
                         revision = mutableState.value.revision + 1,
                     )
                     UserAdoptionCommitResult.Refused -> mutableState.value.copy(
-                        plan = null, adopting = false, failed = true,
+                        plan = null,
+                        adopting = false,
+                        failed = true,
                     )
                 }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
-                mutableState.value = mutableState.value.copy(plan = null, adopting = false, failed = true)
+                mutableState.value = mutableState.value.copy(
+                    plan = null,
+                    adopting = false,
+                    failed = true,
+                )
             }
         }
     }
