@@ -229,6 +229,35 @@ class CanonicalCoreBackupImporter(
                     observedAt = it.observedAt,
                 )
             }
+            // Each human approval and its source revision remains attached
+            // to the chapter in the same transaction. No Host grant is restored.
+            core.userAdoptionReceipts.forEach {
+                database.tsuzuki_user_adoption_receiptsQueries.insertTsuzukiUserAdoptionReceipt(
+                    canonicalChapterId = it.canonicalChapterId,
+                    receiptId = it.receiptId,
+                    canonicalTitleId = it.canonicalTitleId,
+                    producerId = it.producerId,
+                    externalWorkId = it.externalWorkId,
+                    editionKey = it.editionKey,
+                    scopeLanguage = it.scopeLanguage,
+                    sourceRecordId = it.sourceRecordId,
+                    sourceKind = it.sourceKind,
+                    derivation = it.derivation,
+                    originReference = it.originReference,
+                    exactRevision = it.exactRevision,
+                    attributionReference = it.attributionReference,
+                    licenseReference = it.licenseReference,
+                    snapshotDigest = it.snapshotDigest,
+                    sourceUnitId = it.sourceUnitId,
+                    structuralCategory = it.structuralCategory,
+                    acceptedLabel = it.acceptedLabel,
+                    identityKey = it.identityKey,
+                    volumeKey = it.volumeKey,
+                    observedAt = it.observedAt,
+                    acceptedAt = it.acceptedAt,
+                    reviewFingerprint = it.reviewFingerprint,
+                )
+            }
             core.variants.forEach {
                 database.tsuzuki_chapter_variantsQueries.upsertTsuzukiChapterVariant(
                     id = it.id,
