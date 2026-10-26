@@ -3,7 +3,9 @@ package eu.kanade.tachiyomi.ui.tsuzuki.detail
 import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -12,6 +14,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -30,6 +33,7 @@ import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkScreenModel
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkState
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentSelectorScreenModel
 import kotlinx.coroutines.flow.collect
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySourceSnapshot
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -58,6 +62,10 @@ data class CanonicalTitleScreen(
         val screenModel = metroViewModel<CanonicalTitleScreenModel>()
         val inventoryModel = metroViewModel<NativeInventoryRefreshScreenModel>()
         val inventoryState by inventoryModel.state.collectAsStateWithLifecycle()
+        val adoptionModel = metroViewModel<UserAdoptionReviewScreenModel>()
+        val adoptionState by adoptionModel.state.collectAsStateWithLifecycle()
+        var reviewSource by remember(canonicalTitleId) { mutableStateOf<IndependentInventorySourceSnapshot?>(null) }
+        var selectedCandidates by remember(canonicalTitleId) { mutableStateOf(setOf<String>()) }
         var requestedInventorySource by rememberSaveable(canonicalTitleId) { mutableStateOf<String?>(null) }
         var mangaDexLinkDialog by rememberSaveable(canonicalTitleId) { mutableStateOf(false) }
         var mangaDexIdInput by rememberSaveable(canonicalTitleId) { mutableStateOf("") }
@@ -81,6 +89,7 @@ data class CanonicalTitleScreen(
         LaunchedEffect(canonicalTitleId, openSourceBindingFlow) {
             screenModel.start(canonicalTitleId)
             inventoryModel.start(canonicalTitleId)
+            adoptionModel.start(canonicalTitleId)
             if (
                 shouldAutoOpenSourceBindingFlow(
                     canonicalTitleId,
@@ -95,10 +104,17 @@ data class CanonicalTitleScreen(
         }
 
         DisposableEffect(canonicalTitleId) {
-            onDispose { inventoryModel.cancel() }
+            onDispose {
+                inventoryModel.cancel()
+                adoptionModel.dismiss()
+            }
         }
         LaunchedEffect(canonicalTitleId, inventoryState.revision) {
             if (inventoryState.revision > 0) screenModel.reloadReconciledChapters()?.join()
+        }
+
+        LaunchedEffect(canonicalTitleId, adoptionState.revision) {
+            if (adoptionState.revision > 0) screenModel.reloadReconciledChapters()?.join()
         }
 
         CanonicalTitleDetailScreen(
@@ -113,6 +129,11 @@ data class CanonicalTitleScreen(
                 inventoryModel.clearMangaDexLink()
                 mangaDexIdInput = ""
                 mangaDexLinkDialog = true
+            },
+            onReviewCandidates = { source ->
+                adoptionModel.dismiss()
+                reviewSource = source
+                selectedCandidates = emptySet()
             },
             inventoryRefresh = inventoryState,
             onReadTitle = { screenModel.startReading(openReader) },
