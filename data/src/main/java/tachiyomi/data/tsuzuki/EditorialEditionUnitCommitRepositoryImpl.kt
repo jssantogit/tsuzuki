@@ -22,11 +22,11 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.EditorialUnitCommitRepository
 import tachiyomi.domain.tsuzuki.chapter.inventory.EditorialUnitCommitResult
 import tachiyomi.domain.tsuzuki.chapter.inventory.HostEditorialEditionAuthorization
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.chapter.inventory.PreviewEditorialEditionInventory
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
-import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import java.util.UUID
 
