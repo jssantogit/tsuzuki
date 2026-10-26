@@ -7,8 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.provider.MediaStore
-import androidx.work.WorkInfo
-import androidx.work.WorkManager
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -17,6 +15,8 @@ import androidx.test.runner.lifecycle.Stage
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import app.cash.sqldelight.async.coroutines.awaitAsList
 import com.eygraber.sqldelight.androidx.driver.AndroidxSqliteConfiguration
 import com.eygraber.sqldelight.androidx.driver.AndroidxSqliteDatabaseType
@@ -523,7 +523,11 @@ class SelectedEpubAdoptionInstrumentedTest {
                 }
                 SystemClock.sleep(500)
             }
-            assertEquals("Production backup worker must successfully verify its own output", WorkInfo.State.SUCCEEDED, terminal)
+            assertEquals(
+                "Production backup worker must successfully verify its own output",
+                WorkInfo.State.SUCCEEDED,
+                terminal,
+            )
             val actual = BackupDecoder(context, ProtoBuf).decode(uri)
             val section = CanonicalStandaloneArchive.requireRestorable(actual, true)
             val core = Json.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)

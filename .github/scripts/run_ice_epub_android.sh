@@ -46,6 +46,14 @@ run_case() {
     # Emit only diagnostic headings and first exception lines (not full device logs).
     grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|INSTRUMENTATION_CODE|Tests run:|^INSTRUMENTATION_STATUS: stack=|^Error in ' \
       "$results/$output" | tail -n 12 || true
+    if [[ "$test_name" == 'productionBackupWorkerWritesStandaloneTachibkWithAdoptedReceipts' ]]; then
+      # CI emulators are disposable and cleared before each scenario. Capture
+      # only error-class worker diagnostics; never publish complete app logs.
+      adb shell logcat -d -v brief 2>/dev/null |
+        grep -iE 'BackupCreate|BackupCreator|BackupExporter|WorkManager|WorkerWrapper|foregroundservice|FileNotFoundException|unexportable|exception|error' |
+        tail -n 45 > "$results/production-backup-error-logcat.txt" || true
+      cat "$results/production-backup-error-logcat.txt" >&2
+    fi
     return 1
   fi
   echo "ICE_EPUB_E2E|outcome=PASS|case=$test_name"
