@@ -276,3 +276,25 @@ DO UPDATE SET
     declared_total = excluded.declared_total,
     next_cursor = excluded.next_cursor
 WHERE excluded.observed_at > tsuzuki_independent_inventory_pages.observed_at;
+
+-- User-driven candidate browsing only: keyset pagination of exact local edition.
+getTsuzukiIndependentInventoryCandidatesByScope:
+SELECT source_record_id, raw_label, observed_at, provenance_json
+FROM tsuzuki_independent_inventory_claims
+WHERE canonical_title_id = :canonicalTitleId
+  AND producer_id = :producerId
+  AND external_work_id = :externalWorkId
+  AND edition_key = :editionKey
+  AND scope_language = :scopeLanguage
+  AND work_verified = :workVerified
+  AND edition_verified = :editionVerified
+  AND language = :scopeLanguage
+  AND claim_kind = 'INDIVIDUAL'
+  AND derivation IN ('COMMUNITY_CURATED', 'USER_SUPPLIED_EDITION_TOC')
+  AND provenance_json IS NOT NULL
+  AND raw_label IS NOT NULL
+  AND length(TRIM(raw_label)) BETWEEN 1 AND 512
+  AND length(source_record_id) BETWEEN 1 AND 1024
+  AND source_record_id > :afterRecordId
+ORDER BY source_record_id
+LIMIT :rowLimit;
