@@ -365,6 +365,17 @@ data class BackupCanonicalCore(
                     "WIKIMEDIA_SELECTED_PAGE_REVISION" -> "COMMUNITY_CURATED"
                     else -> null
                 }
+                // Backup provenance must satisfy the same structural evidence
+                // requirements as the reviewed local candidate. A restored
+                // preface or unattributed page must never look adopted.
+                val isSupportedSourceUnit = when (receipt.sourceKind) {
+                    "USER_SELECTED_EPUB3_TOC" -> receipt.structuralCategory == "toc-chapter"
+                    "WIKIMEDIA_SELECTED_PAGE_REVISION" ->
+                        receipt.structuralCategory in setOf("chapter-list-entry", "chapter-table-entry") &&
+                            !receipt.attributionReference.isNullOrBlank() &&
+                            !receipt.licenseReference.isNullOrBlank()
+                    else -> false
+                }
                 chapter != null &&
                     chapter.canonicalTitleId == receipt.canonicalTitleId &&
                     chapter.confirmation == "CONFIRMED" &&
@@ -382,6 +393,7 @@ data class BackupCanonicalCore(
                     receipt.originReference.isNotBlank() &&
                     receipt.exactRevision.isNotBlank() &&
                     receipt.derivation == expectedDerivation &&
+                    isSupportedSourceUnit &&
                     receipt.snapshotDigest.matches(Regex("^sha256:[0-9a-f]{64}$")) &&
                     receipt.reviewFingerprint.matches(Regex("^sha256:[0-9a-f]{64}$")) &&
                     receipt.observedAt >= 0L &&
