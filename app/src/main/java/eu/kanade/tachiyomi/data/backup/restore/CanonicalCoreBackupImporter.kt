@@ -5,6 +5,7 @@ import app.cash.sqldelight.async.coroutines.awaitAsOneOrNull
 import dev.zacsweers.metro.Inject
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
+import eu.kanade.tachiyomi.data.backup.models.CanonicalCoreWireJson
 import eu.kanade.tachiyomi.data.backup.models.PortableMihonBindingCodec
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -41,7 +42,7 @@ class CanonicalCoreBackupImporter(
             "Only canonical core sections can be restored by this importer"
         }
         section.validate()
-        val core = json.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
+        val core = CanonicalCoreWireJson.codec.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
         core.validate()
         // Validate enums and metadata before acquiring any database write locks.
         core.titles.forEach { CanonicalIdentityState.valueOf(it.identityState) }
