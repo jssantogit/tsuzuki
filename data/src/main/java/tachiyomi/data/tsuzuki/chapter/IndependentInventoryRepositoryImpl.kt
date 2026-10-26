@@ -161,7 +161,7 @@ class IndependentInventoryRepositoryImpl(
 }
 
 /** Stores bounded provenance pointers only; malformed or legacy values are not trusted. */
-private object CandidateProvenanceJsonCodec {
+internal object CandidateProvenanceJsonCodec {
     fun encode(provenance: InventoryCandidateProvenance?): String? = provenance?.let {
         buildJsonObject {
             put("sourceKind", JsonPrimitive(it.sourceKind.name))
