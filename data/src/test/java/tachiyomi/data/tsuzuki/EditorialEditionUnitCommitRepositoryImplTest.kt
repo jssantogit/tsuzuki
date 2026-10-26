@@ -63,6 +63,21 @@ class EditorialEditionUnitCommitRepositoryImplTest {
             chaptersAdapter = Chapters.Adapter(memoAdapter = MemoColumnAdapter),
         )
         database.tsuzuki_titlesQueries.insertTsuzukiTitle("title", "Synthetic", "SOURCE_ONLY", 1L, 1L)
+        database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+            integrationId = "synthetic-editorial",
+            enabled = true,
+            configJson = """{"chapter_inventory":true}""",
+            updatedAt = 10L,
+        )
+        database.tsuzuki_editorial_edition_consentsQueries.upsertTsuzukiEditorialEditionConsent(
+            canonicalTitleId = "title",
+            producerId = "synthetic-editorial",
+            externalWorkId = "work",
+            editionKey = "original",
+            scopeLanguage = "ja",
+            grantedAt = 10L,
+        )
+
         chapters = CanonicalChapterRepositoryImpl(database)
         writer = EditorialEditionUnitCommitRepositoryImpl(database, chapters, ChapterMutationGate())
     }
@@ -118,6 +133,69 @@ class EditorialEditionUnitCommitRepositoryImplTest {
     }
 
     @Test
+    fun `enabled integration alone cannot mint editorial authority without selected edition consent`(): Unit =
+        runBlocking<Unit> {
+            val request = batch(claim("11"))
+            database.tsuzuki_editorial_edition_consentsQueries.revokeTsuzukiEditorialEditionConsent(
+                canonicalTitleId = "title",
+                producerId = "synthetic-editorial",
+                externalWorkId = "work",
+                editionKey = "original",
+                scopeLanguage = "ja",
+            )
+            writer.commit(request, grant(request.scope)) shouldBe EditorialUnitCommitResult.Refused
+            chapters.getByCanonicalTitleId("title") shouldBe emptyList()
+        }
+
+    @Test
+    fun `integration inventory toggle must be explicitly enabled and revocation blocks replay`(): Unit =
+        runBlocking<Unit> {
+            val request = batch(claim("12"))
+            database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+                integrationId = "synthetic-editorial",
+                enabled = true,
+                configJson = "{}",
+                updatedAt = 11L,
+            )
+            writer.commit(request, grant(request.scope)) shouldBe EditorialUnitCommitResult.Refused
+            database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+                integrationId = "synthetic-editorial",
+                enabled = false,
+                configJson = """{"chapter_inventory":true}""",
+                updatedAt = 12L,
+            )
+            writer.commit(request, grant(request.scope)) shouldBe EditorialUnitCommitResult.Refused
+            database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+                integrationId = "synthetic-editorial",
+                enabled = true,
+                configJson = """{"chapter_inventory":true}""",
+                updatedAt = 13L,
+            )
+            (writer.commit(request, grant(request.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
+            database.tsuzuki_editorial_edition_consentsQueries.revokeTsuzukiEditorialEditionConsent(
+                canonicalTitleId = "title",
+                producerId = "synthetic-editorial",
+                externalWorkId = "work",
+                editionKey = "original",
+                scopeLanguage = "ja",
+            )
+            writer.commit(request, grant(request.scope)) shouldBe EditorialUnitCommitResult.Refused
+            chapters.getByCanonicalTitleId("title").size shouldBe 1
+        }
+
+    @Test
+    fun `grant for another edition work or language must never authorize a valid producer callback`(): Unit =
+        runBlocking<Unit> {
+            for (alternate in listOf(scope("revised"), scope().copy(language = "en"))) {
+                val attempted = batch(claim("1").copy(language = alternate.language)).copy(scope = alternate)
+                writer.commit(attempted, grant(alternate)) shouldBe EditorialUnitCommitResult.Refused
+            }
+            val foreignWork = batch(claim("1")).copy(scope = scope().copy(externalWorkId = "work-other"))
+            writer.commit(foreignWork, grant(foreignWork.scope)) shouldBe EditorialUnitCommitResult.Refused
+            chapters.getByCanonicalTitleId("title") shouldBe emptyList()
+        }
+
+    @Test
     fun `second edition with same chapter number cannot cross-link or overwrite earlier edition`(): Unit =
         runBlocking<Unit> {
             val first = batch(claim("1"))
@@ -135,6 +213,14 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         val revised = batch(claim("2").copy(sourceRecordId = "chapter-index-1"))
             .copy(scope = scope("revised"))
         (writer.commit(original, grant(original.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
+        database.tsuzuki_editorial_edition_consentsQueries.upsertTsuzukiEditorialEditionConsent(
+            canonicalTitleId = "title",
+            producerId = "synthetic-editorial",
+            externalWorkId = "work",
+            editionKey = "revised",
+            scopeLanguage = "ja",
+            grantedAt = 12L,
+        )
         (writer.commit(revised, grant(revised.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
         chapters.getByCanonicalTitleId("title").size shouldBe 2
         database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title")
