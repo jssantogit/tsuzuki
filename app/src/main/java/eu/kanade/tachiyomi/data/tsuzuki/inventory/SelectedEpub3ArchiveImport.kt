@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.data.tsuzuki.inventory
 
+import org.w3c.dom.Document
+import org.w3c.dom.Element
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.chapter.inventory.SelectedEpub3Navigation
@@ -16,8 +18,6 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilderFactory
-import org.w3c.dom.Document
-import org.w3c.dom.Element
 
 /**
  * Host-owned, user-selected EPUB3 metadata import. No DRM handling, no page
@@ -167,8 +167,6 @@ internal object SelectedEpub3ArchiveImport {
             setFeature("http://xml.org/sax/features/external-general-entities", false)
             setFeature("http://xml.org/sax/features/external-parameter-entities", false)
             setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
-            setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
-            setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
         }
         return factory.newDocumentBuilder().apply {
             setEntityResolver { _, _ -> error("External XML entities are not allowed") }

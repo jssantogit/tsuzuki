@@ -1,13 +1,13 @@
 package eu.kanade.tachiyomi.ui.tsuzuki.detail
 
 import androidx.lifecycle.ViewModel
-import eu.kanade.tachiyomi.data.tsuzuki.inventory.SelectedEpub3ArchiveImport
 import androidx.lifecycle.viewModelScope
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
+import eu.kanade.tachiyomi.data.tsuzuki.inventory.SelectedEpub3ArchiveImport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

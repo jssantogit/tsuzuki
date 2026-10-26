@@ -35,7 +35,10 @@ class SelectedEpub3ArchiveImportTest {
         result.claims.all { it.provenance?.originReference?.startsWith("user-selected:") == true } shouldBe true
         result.claims.all { it.provenance?.originReference?.contains("/") == false } shouldBe true
         val identical = SelectedEpub3ArchiveImport.read(
-            ByteArrayInputStream(epub), tempDir(), "canonical-book", 42L,
+            ByteArrayInputStream(epub),
+            tempDir(),
+            "canonical-book",
+            42L,
         ).getOrThrow()
         result.scope.editionKey shouldBe identical.scope.editionKey
         result.claims.map { it.sourceRecordId } shouldBe identical.claims.map { it.sourceRecordId }
@@ -45,7 +48,10 @@ class SelectedEpub3ArchiveImportTest {
     fun `refuse unsafe package paths before opening referenced entries`() {
         for (unsafe in listOf("../outside.opf", "/absolute.opf", "https://invalid/x.opf", "OPS/../bad.opf")) {
             SelectedEpub3ArchiveImport.read(
-                ByteArrayInputStream(packageArchive(rootfile = unsafe)), tempDir(), "canonical-book", 42L,
+                ByteArrayInputStream(packageArchive(rootfile = unsafe)),
+                tempDir(),
+                "canonical-book",
+                42L,
             ).isFailure shouldBe true
         }
     }
@@ -58,10 +64,16 @@ class SelectedEpub3ArchiveImportTest {
               <manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/></manifest>
             </package>""".trimIndent()
         SelectedEpub3ArchiveImport.read(
-            ByteArrayInputStream(packageArchive(opf = unsafeOpf)), tempDir(), "canonical-book", 42L,
+            ByteArrayInputStream(packageArchive(opf = unsafeOpf)),
+            tempDir(),
+            "canonical-book",
+            42L,
         ).isFailure shouldBe true
         SelectedEpub3ArchiveImport.read(
-            ByteArrayInputStream(packageArchive(navPath = "missing.xhtml")), tempDir(), "canonical-book", 42L,
+            ByteArrayInputStream(packageArchive(navPath = "missing.xhtml")),
+            tempDir(),
+            "canonical-book",
+            42L,
         ).isFailure shouldBe true
     }
 
@@ -71,7 +83,10 @@ class SelectedEpub3ArchiveImportTest {
           <body><nav epub:type="toc"><ol><li><a href="ch.xhtml">Chapter 1</a></li></ol></nav>
           <!-- ${"x".repeat(600_000)} --></body></html>"""
         SelectedEpub3ArchiveImport.read(
-            ByteArrayInputStream(packageArchive(nav = nav)), tempDir(), "canonical-book", 42L,
+            ByteArrayInputStream(packageArchive(nav = nav)),
+            tempDir(),
+            "canonical-book",
+            42L,
         ).isFailure shouldBe true
     }
 

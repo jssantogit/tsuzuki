@@ -1,9 +1,9 @@
 package eu.kanade.tachiyomi.ui.tsuzuki.detail
 
 import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -168,7 +168,6 @@ data class CanonicalTitleScreen(
                 screenModel.openChapter(canonicalChapterId, openReader)
             },
         )
-
 
         if (adoptionState.importingEpub || adoptionState.epubImportFailed || adoptionState.epubImported) {
             AlertDialog(
