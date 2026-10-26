@@ -79,6 +79,24 @@ class SelectedEpub3ArchiveImportTest {
     }
 
     @Test
+    fun `reject XInclude markup rather than relying on unsupported Android parser flags`() {
+        val xinclude = """
+            <package xmlns="http://www.idpf.org/2007/opf"
+                xmlns:xi="http://www.w3.org/2001/XInclude" version="3.0">
+              <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:language>ja</dc:language></metadata>
+              <xi:include href="file:///etc/passwd" parse="text"/>
+              <manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/></manifest>
+            </package>
+        """.trimIndent()
+        SelectedEpub3ArchiveImport.read(
+            ByteArrayInputStream(packageArchive(opf = xinclude)),
+            tempDir(),
+            "canonical-book",
+            42L,
+        ).isFailure shouldBe true
+    }
+
+    @Test
     fun `reject oversized nav even when its zip member compresses efficiently`() {
         val nav = """<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
           <body><nav epub:type="toc"><ol><li><a href="ch.xhtml">Chapter 1</a></li></ol></nav>
