@@ -7,7 +7,11 @@ import android.provider.MediaStore
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.cash.sqldelight.async.coroutines.awaitAsList
-import app.cash.sqldelight.driver.android.AndroidSqliteDriver
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import com.eygraber.sqldelight.androidx.driver.AndroidxSqliteConfiguration
+import com.eygraber.sqldelight.androidx.driver.AndroidxSqliteDatabaseType
+import com.eygraber.sqldelight.androidx.driver.AndroidxSqliteDriver
+import com.eygraber.sqldelight.androidx.driver.FileProvider
 import eu.kanade.tachiyomi.App
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
@@ -178,7 +182,12 @@ class SelectedEpubAdoptionInstrumentedTest {
 
             // Restore into a second disposable SQLite database. Never overwrite the live fixture.
             val isolatedName = "ice-restore-${UUID.randomUUID()}.db"
-            val driver = AndroidSqliteDriver(Database.Schema, context, isolatedName)
+            val driver = AndroidxSqliteDriver(
+                driver = BundledSQLiteDriver(),
+                databaseType = AndroidxSqliteDatabaseType.FileProvider(context, isolatedName),
+                schema = Database.Schema,
+                configuration = AndroidxSqliteConfiguration(isForeignKeyConstraintsEnabled = true),
+            )
             try {
                 val restoredDb = AppBindings.providesDatabase(driver)
                 val importer = CanonicalCoreBackupImporter(restoredDb, Json)
@@ -186,7 +195,10 @@ class SelectedEpubAdoptionInstrumentedTest {
                 importer.restoreCore(section) // Restore receipt prevents double replay.
                 val restoredReceipts = restoredDb.tsuzuki_user_adoption_receiptsQueries
                     .getTsuzukiUserAdoptionReceiptsByTitle(titleId).awaitAsList()
-                assertEquals(receipts.map { it.review_fingerprint }.sorted(), restoredReceipts.map { it.review_fingerprint }.sorted())
+                assertEquals(
+                    receipts.map { it.review_fingerprint }.sorted(),
+                    restoredReceipts.map { it.review_fingerprint }.sorted(),
+                )
                 assertEquals(2, restoredReceipts.size)
                 assertEquals(2, CanonicalChapterRepositoryImpl(restoredDb).getByCanonicalTitleId(titleId).size)
                 assertTrue(
