@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.tsuzuki.inventory
 
 import org.w3c.dom.Document
 import org.w3c.dom.Element
+import org.xml.sax.InputSource
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.chapter.inventory.SelectedEpub3Navigation
@@ -18,7 +19,6 @@ import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
-import org.xml.sax.InputSource
 
 /**
  * Host-owned, user-selected EPUB3 metadata import. No DRM handling, no page

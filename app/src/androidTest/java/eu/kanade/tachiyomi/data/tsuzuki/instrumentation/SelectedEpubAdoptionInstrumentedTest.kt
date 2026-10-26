@@ -106,7 +106,12 @@ class SelectedEpubAdoptionInstrumentedTest {
             assertTrue(created is UserAdoptionCommitResult.Adopted)
             val adopted = chapters.getByCanonicalTitleId(titleId).sortedBy { it.displayNumber }
             assertEquals(2, adopted.size)
-            assertEquals(setOf("Chapter 1", "Chapter 2"), adopted.map { it.displayNumber }.toSet())
+            // The canonical number is normalized; the original source label lives in the claim.
+            assertEquals(setOf("1", "2"), adopted.map { it.displayNumber }.toSet())
+            assertEquals(
+                setOf("Chapter 1", "Chapter 2"),
+                ledger.byTitle(titleId).mapNotNull { it.claim.label }.filter { it.startsWith("Chapter") }.toSet(),
+            )
             val receipts = database.tsuzuki_user_adoption_receiptsQueries
                 .getTsuzukiUserAdoptionReceiptsByTitle(titleId).awaitAsList()
             assertEquals(2, receipts.size)
