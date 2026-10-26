@@ -68,6 +68,12 @@ class CanonicalTitleMergeRepositoryImpl(
             // This local-only edition ownership cannot yet be re-homed safely.
             // A convergence must fail rather than cascade-delete the lineage.
             check(
+                database.tsuzuki_editorial_edition_consentsQueries
+                    .countTsuzukiEditorialEditionConsentsForTitle(localId).awaitAsOne() == 0L &&
+                    database.tsuzuki_editorial_edition_consentsQueries
+                        .countTsuzukiEditorialEditionConsentsForTitle(targetId).awaitAsOne() == 0L,
+            ) { "Title convergence with editorial Host consent requires explicit reauthorization" }
+            check(
                 database.tsuzuki_editorial_chapter_bindingsQueries
                     .getTsuzukiEditorialBindingsByTitle(localId).awaitAsList().isEmpty() &&
                     database.tsuzuki_editorial_chapter_bindingsQueries

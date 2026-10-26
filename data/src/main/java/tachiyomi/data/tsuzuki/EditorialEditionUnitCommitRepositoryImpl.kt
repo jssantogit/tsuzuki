@@ -1,6 +1,7 @@
 package tachiyomi.data.tsuzuki
 
 import app.cash.sqldelight.async.coroutines.awaitAsList
+import app.cash.sqldelight.async.coroutines.awaitAsOne
 import app.cash.sqldelight.async.coroutines.awaitAsOneOrNull
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -8,6 +9,10 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import tachiyomi.data.Database
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.interactor.ChapterMutationGate
@@ -21,6 +26,8 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.PreviewEditorialEditionInvento
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
+import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import java.util.UUID
 
 /**
@@ -48,6 +55,9 @@ class EditorialEditionUnitCommitRepositoryImpl(
             database.transactionWithResult {
                 currentCoroutineContext().ensureActive()
                 val scope = batch.scope
+                // Consent is local-only and separate from producer-supplied identity
+                // and the Host's independent editorial/publisher verification.
+                if (!hasPersistedEditionConsent(scope)) throw EditorialCommitRefused()
                 val linked = database.tsuzuki_editorial_chapter_bindingsQueries
                     .getTsuzukiEditorialBindingsByTitle(scope.canonicalTitleId) {
                             id,
@@ -160,6 +170,7 @@ class EditorialEditionUnitCommitRepositoryImpl(
                 currentCoroutineContext().ensureActive()
                 // This check is inside the transaction, AFTER the INSERTs. A
                 // withdrawn consent throws, rolling back both tables atomically.
+                if (!hasPersistedEditionConsent(scope)) throw EditorialCommitRefused()
                 if (authorization.approvedScope(scope.producerId, scope.canonicalTitleId) != scope) {
                     throw EditorialCommitRefused()
                 }
@@ -168,6 +179,34 @@ class EditorialEditionUnitCommitRepositoryImpl(
         }
     } catch (_: EditorialCommitRefused) {
         EditorialUnitCommitResult.Refused
+    }
+
+    /**
+     * SQLite calls run inside the same mutation-gated transaction as the
+     * chapters and the edition bindings. A UI toggle alone is insufficient.
+     * Missing, malformed, or absent explicit inventory opt-in is always denied.
+     */
+    private suspend fun hasPersistedEditionConsent(scope: InventoryScope): Boolean {
+        val edition = scope.editionKey?.takeIf(String::isNotBlank) ?: return false
+        val language = scope.language?.takeIf(String::isNotBlank) ?: return false
+        val setting = database.tsuzuki_integration_settingsQueries
+            .getTsuzukiIntegrationSetting(scope.producerId)
+            .awaitAsOneOrNull() ?: return false
+        if (!setting.enabled) return false
+        val enabled = runCatching {
+            val settings = Json.parseToJsonElement(setting.config_json) as? JsonObject
+            settings?.get(IntegrationCapability.CHAPTER_INVENTORY.configKey)
+                ?.jsonPrimitive?.booleanOrNull == true
+        }.getOrDefault(false)
+        if (!enabled) return false
+        return database.tsuzuki_editorial_edition_consentsQueries
+            .countActiveTsuzukiEditorialEditionConsent(
+                canonicalTitleId = scope.canonicalTitleId,
+                producerId = scope.producerId,
+                externalWorkId = scope.externalWorkId,
+                editionKey = edition,
+                scopeLanguage = language,
+            ).awaitAsOne() == 1L
     }
 
     private data class StoredEditorialBinding(
