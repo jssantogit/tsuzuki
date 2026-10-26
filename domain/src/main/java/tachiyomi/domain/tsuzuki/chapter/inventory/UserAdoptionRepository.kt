@@ -30,6 +30,9 @@ sealed interface UserAdoptionCommitResult {
  * Must not be invoked from automatic inventory refresh.
  */
 interface UserAdoptionRepository {
+    /** True even after restart or backup restoration; never publisher authority. */
+    suspend fun adoptedChapterIds(canonicalTitleId: String): Set<String>
+
     suspend fun preview(request: UserAdoptionReviewRequest): UserAdoptionPreview
 
     suspend fun adopt(confirmation: UserAdoptionConfirmation): UserAdoptionCommitResult
