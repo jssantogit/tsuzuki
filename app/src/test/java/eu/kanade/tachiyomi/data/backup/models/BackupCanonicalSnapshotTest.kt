@@ -38,7 +38,7 @@ class BackupCanonicalSnapshotTest {
         require(!payload.contains("\\"volume\\""))
         val section = BackupCanonicalSection.fromJson(BackupCanonicalCore.SECTION_KEY, payload)
         BackupCanonicalSnapshot(sections = listOf(section)).validate()
-        val restored = BackupCanonicalCoreJson.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
+        val restored = Json { explicitNulls = false }.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
         restored shouldBe core
     }
 
