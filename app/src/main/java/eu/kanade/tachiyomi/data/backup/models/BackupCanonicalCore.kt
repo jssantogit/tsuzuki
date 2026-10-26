@@ -25,6 +25,7 @@ data class BackupCanonicalCore(
     val library: List<BackupCoreLibraryEntry> = emptyList(),
     val chapters: List<BackupCoreChapter> = emptyList(),
     val editorialChapterBindings: List<BackupCoreEditorialChapterBinding> = emptyList(),
+    val userAdoptionReceipts: List<BackupCoreUserAdoptionReceipt> = emptyList(),
     val variants: List<BackupCoreVariant> = emptyList(),
     val chapterEvidence: List<BackupCoreChapterEvidence> = emptyList(),
     val progress: List<BackupCoreProgress> = emptyList(),
@@ -128,6 +129,25 @@ data class BackupCanonicalCore(
             },
         ) { "Duplicate edition scoped canonical unit identity" }
 
+        require(userAdoptionReceipts.isUniqueBy { it.canonicalChapterId }) {
+            "Duplicate user-adopted chapter"
+        }
+        require(
+            userAdoptionReceipts.isUniqueBy {
+                listOf(
+                    it.canonicalTitleId,
+                    it.producerId,
+                    it.externalWorkId,
+                    it.editionKey,
+                    it.scopeLanguage,
+                    it.sourceRecordId,
+                )
+            },
+        ) { "Duplicate user-adoption source identity" }
+        require(editorialChapterBindings.map { it.canonicalChapterId }.toSet()
+            .intersect(userAdoptionReceipts.map { it.canonicalChapterId }.toSet()).isEmpty()) {
+            "Publisher-owned and user-adopted provenance cannot share a chapter"
+        }
         require(variants.isUniqueBy { it.id }) { "Duplicate chapter variant" }
         require(chapterEvidence.isUniqueBy { it.id }) { "Duplicate chapter evidence ID" }
         require(
@@ -306,6 +326,65 @@ data class BackupCanonicalCore(
                     binding.observedAt >= 0L
             },
         ) { "Invalid, ambiguous or cross-title editorial chapter ownership" }
+
+        require(
+            userAdoptionReceipts.all { receipt ->
+                val chapter = chaptersById[receipt.canonicalChapterId]
+                val fraction = if (chapter?.decimalNumerator != null && chapter.decimalScale != null) {
+                    CanonicalChapterDecimalFraction(chapter.decimalNumerator, chapter.decimalScale)
+                } else {
+                    null
+                }
+                val identity = chapter?.let {
+                    CanonicalChapterIdentity(
+                        type = CanonicalChapterType.valueOf(it.type),
+                        baseNumber = it.baseNumber,
+                        part = it.part,
+                        alphaSuffix = it.alphaSuffix,
+                        numberingKind = it.numberingKind?.let(CanonicalChapterNumberingKind::valueOf),
+                        decimalFraction = fraction,
+                    )
+                }
+                val expectedDerivation = when (receipt.sourceKind) {
+                    "USER_SELECTED_EPUB3_TOC" -> "USER_SUPPLIED_EDITION_TOC"
+                    "WIKIMEDIA_SELECTED_PAGE_REVISION" -> "COMMUNITY_CURATED"
+                    else -> null
+                }
+                chapter != null &&
+                    chapter.canonicalTitleId == receipt.canonicalTitleId &&
+                    chapter.confirmation == "CONFIRMED" &&
+                    identity?.sortKey == receipt.identityKey &&
+                    chapter.displayNumber == receipt.acceptedLabel &&
+                    (chapter.volume ?: 0).toLong() == receipt.volumeKey &&
+                    receipt.receiptId.isNotBlank() &&
+                    receipt.producerId.isNotBlank() &&
+                    receipt.externalWorkId.isNotBlank() &&
+                    receipt.editionKey.isNotBlank() &&
+                    receipt.scopeLanguage.isNotBlank() &&
+                    receipt.sourceRecordId.isNotBlank() &&
+                    receipt.sourceUnitId.isNotBlank() &&
+                    receipt.structuralCategory.isNotBlank() &&
+                    receipt.originReference.isNotBlank() &&
+                    receipt.exactRevision.isNotBlank() &&
+                    receipt.derivation == expectedDerivation &&
+                    receipt.snapshotDigest.matches(Regex("^sha256:[0-9a-f]{64}$")) &&
+                    receipt.reviewFingerprint.matches(Regex("^sha256:[0-9a-f]{64}$")) &&
+                    receipt.observedAt >= 0L &&
+                    receipt.acceptedAt >= receipt.observedAt
+            },
+        ) { "Invalid user-adoption receipt, scope or chapter identity" }
+        require(
+            userAdoptionReceipts.groupBy { it.receiptId }.values.all { group ->
+                group.map {
+                    listOf(
+                        it.canonicalTitleId, it.producerId, it.externalWorkId,
+                        it.editionKey, it.scopeLanguage, it.sourceKind,
+                        it.snapshotDigest, it.exactRevision,
+                        it.reviewFingerprint, it.acceptedAt.toString(),
+                    )
+                }.distinct().size == 1
+            },
+        ) { "One user-adoption receipt cannot combine editions or source snapshots" }
 
         require(identities.all { it.canonicalTitleId in titleIds }) {
             "Identity refers to absent canonical title"
@@ -591,6 +670,33 @@ data class BackupCoreEditorialChapterBinding(
     val identityKey: String,
     val volumeKey: Long,
     val observedAt: Long,
+)
+
+@Serializable
+data class BackupCoreUserAdoptionReceipt(
+    val canonicalChapterId: String,
+    val receiptId: String,
+    val canonicalTitleId: String,
+    val producerId: String,
+    val externalWorkId: String,
+    val editionKey: String,
+    val scopeLanguage: String,
+    val sourceRecordId: String,
+    val sourceKind: String,
+    val derivation: String,
+    val originReference: String,
+    val exactRevision: String,
+    val attributionReference: String?,
+    val licenseReference: String?,
+    val snapshotDigest: String,
+    val sourceUnitId: String,
+    val structuralCategory: String,
+    val acceptedLabel: String,
+    val identityKey: String,
+    val volumeKey: Long,
+    val observedAt: Long,
+    val acceptedAt: Long,
+    val reviewFingerprint: String,
 )
 
 @Serializable
