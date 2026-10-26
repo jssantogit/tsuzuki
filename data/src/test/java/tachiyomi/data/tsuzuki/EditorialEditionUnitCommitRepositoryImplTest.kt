@@ -99,6 +99,73 @@ class EditorialEditionUnitCommitRepositoryImplTest {
     }
 
     @Test
+    fun `selected edition candidate pagination visits every stored unit without crossing scopes or release records`(): Unit =
+        runBlocking<Unit> {
+            val selection = InventoryScope(
+                canonicalTitleId = "title",
+                producerId = "epub3-user-selected",
+                externalWorkId = "selected-book",
+                editionKey = "selected-ja",
+                language = "ja",
+                workIdentityVerified = false,
+                editionIdentityVerified = false,
+            )
+            val ledger = tachiyomi.data.tsuzuki.chapter.IndependentInventoryRepositoryImpl(database)
+            val provenance = InventoryCandidateProvenance(
+                sourceKind = InventoryCandidateSourceKind.USER_SELECTED_EPUB3_TOC,
+                originReference = "user-selected:edition",
+                exactRevision = "r1",
+                snapshotDigest = "sha256:" + "b".repeat(64),
+                sourceUnitId = "chapter-1.xhtml",
+                structuralCategory = "toc-chapter",
+            )
+            fun candidate(number: Int) = InventoryClaim(
+                sourceRecordId = "unit-" + number.toString().padStart(3, '0'),
+                label = "Chapter $number",
+                volumeLabel = null,
+                language = "ja",
+                kind = InventoryClaimKind.INDIVIDUAL,
+                derivation = InventoryDerivation.USER_SUPPLIED_EDITION_TOC,
+                upstreamSourceId = "r1",
+                observedAt = 10L,
+                provenance = provenance.copy(sourceUnitId = "chapter-$number.xhtml"),
+            )
+            ledger.saveBatch(
+                InventoryEvidenceBatch(
+                    scope = selection,
+                    pageKey = "edition-1",
+                    observedAt = 10L,
+                    outcome = InventoryFetchOutcome.PARTIAL,
+                    claims = (1..75).map(::candidate) + candidate(76).copy(
+                        derivation = InventoryDerivation.RELEASE_RECORD,
+                        provenance = null,
+                    ),
+                ),
+            )
+            ledger.saveBatch(
+                InventoryEvidenceBatch(
+                    scope = selection.copy(editionKey = "other-edition"),
+                    pageKey = "other-edition",
+                    observedAt = 10L,
+                    outcome = InventoryFetchOutcome.PARTIAL,
+                    claims = listOf(candidate(77)),
+                ),
+            )
+            val adoption = UserAdoptedInventoryRepositoryImpl(database, ledger, chapters, ChapterMutationGate())
+            val pages = mutableListOf<String>()
+            var cursor: String? = null
+            do {
+                val page = adoption.candidatePage(selection, cursor)
+                pages += page.candidates.map { it.sourceRecordId }
+                cursor = page.nextCursor
+            } while (cursor != null)
+            pages shouldBe (1..75).map { "unit-" + it.toString().padStart(3, '0') }
+            val ninth = adoption.preview(UserAdoptionReviewRequest(selection, listOf("unit-009")))
+            (ninth is UserAdoptionPreview.Ready) shouldBe true
+            chapters.getByCanonicalTitleId("title") shouldBe emptyList()
+        }
+
+    @Test
     fun `user explicitly adopts selected local EPUB units with a durable non-editorial receipt`(): Unit =
         runBlocking<Unit> {
             val selection = InventoryScope(
