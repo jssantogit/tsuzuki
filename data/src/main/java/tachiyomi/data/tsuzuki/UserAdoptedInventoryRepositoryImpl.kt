@@ -8,9 +8,9 @@ import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import tachiyomi.data.Database
+import tachiyomi.data.tsuzuki.chapter.CandidateProvenanceJsonCodec
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.interactor.ChapterMutationGate
-import tachiyomi.data.tsuzuki.chapter.CandidateProvenanceJsonCodec
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryCandidateExample
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
