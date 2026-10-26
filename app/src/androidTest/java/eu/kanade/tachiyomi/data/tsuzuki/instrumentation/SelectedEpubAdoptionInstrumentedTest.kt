@@ -65,7 +65,6 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionReviewRequest
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import java.io.ByteArrayOutputStream
-import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.util.UUID
@@ -533,9 +532,15 @@ class SelectedEpubAdoptionInstrumentedTest {
             adoption.adopt(UserAdoptionConfirmation(request, ready.fingerprint, now + 1, true)) is
                 UserAdoptionCommitResult.Adopted,
         )
-        val file = File.createTempFile("ice-production-", ".tachibk", context.cacheDir)
+        // Match CreateBackupScreen's SAF content:// contract: a private
+        // file:// URI is rejected when the foreground Worker publishes its
+        // notification, before it can exercise the archive writer.
+        val uri = createDocument(
+            byteArrayOf(),
+            "ice-production-${UUID.randomUUID()}.tachibk",
+            "application/octet-stream",
+        )
         try {
-            val uri = Uri.fromFile(file)
             // Do not construct a synthetic Backup message here: run the same
             // foreground WorkManager job used by CreateBackupScreen.
             BackupCreateJob.startNow(context, uri, BackupOptions(canonicalLibraryOnly = true))
@@ -568,7 +573,7 @@ class SelectedEpubAdoptionInstrumentedTest {
             assertTrue(actual.backupManga.isEmpty())
             report("PRODUCTION_ARCHIVE", "worker=SUCCESS|gzip=VALID|receipts=1|chapters=1")
         } finally {
-            file.delete()
+            context.contentResolver.delete(uri, null, null)
         }
     }
 
