@@ -8,6 +8,7 @@ CREATE TABLE tsuzuki_editorial_edition_consents(
     edition_key TEXT NOT NULL,
     scope_language TEXT NOT NULL,
     granted_at INTEGER NOT NULL,
+    integration_settings_revision INTEGER NOT NULL,
     revoked_at INTEGER,
     PRIMARY KEY(canonical_title_id, producer_id, external_work_id, edition_key, scope_language),
     FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE RESTRICT
@@ -16,14 +17,15 @@ CREATE TABLE tsuzuki_editorial_edition_consents(
 upsertTsuzukiEditorialEditionConsent:
 INSERT INTO tsuzuki_editorial_edition_consents(
     canonical_title_id, producer_id, external_work_id, edition_key,
-    scope_language, granted_at, revoked_at
+    scope_language, granted_at, integration_settings_revision, revoked_at
 ) VALUES (
     :canonicalTitleId, :producerId, :externalWorkId, :editionKey,
-    :scopeLanguage, :grantedAt, NULL
+    :scopeLanguage, :grantedAt, :integrationSettingsRevision, NULL
 )
 ON CONFLICT(canonical_title_id, producer_id, external_work_id, edition_key, scope_language)
 DO UPDATE SET
     granted_at = excluded.granted_at,
+    integration_settings_revision = excluded.integration_settings_revision,
     revoked_at = NULL;
 
 revokeTsuzukiEditorialEditionConsent:
@@ -34,7 +36,13 @@ WHERE canonical_title_id = :canonicalTitleId
   AND external_work_id = :externalWorkId
   AND edition_key = :editionKey
   AND scope_language = :scopeLanguage
-  AND revoked_at IS NULL;
+  AND revoked_at IS NULL
+  AND integration_settings_revision = (
+      SELECT updated_at
+      FROM tsuzuki_integration_settings
+      WHERE integration_id = :producerId
+      LIMIT 1
+  );
 
 countActiveTsuzukiEditorialEditionConsent:
 SELECT count(*)

@@ -8,6 +8,7 @@ CREATE TABLE tsuzuki_editorial_edition_consents(
     edition_key TEXT NOT NULL,
     scope_language TEXT NOT NULL,
     granted_at INTEGER NOT NULL,
+    integration_settings_revision INTEGER NOT NULL,
     revoked_at INTEGER,
     PRIMARY KEY(canonical_title_id, producer_id, external_work_id, edition_key, scope_language),
     FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE RESTRICT

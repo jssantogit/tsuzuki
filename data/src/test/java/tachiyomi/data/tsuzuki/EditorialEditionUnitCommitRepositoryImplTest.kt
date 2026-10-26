@@ -76,6 +76,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
             editionKey = "original",
             scopeLanguage = "ja",
             grantedAt = 10L,
+            integrationSettingsRevision = 10L,
         )
 
         chapters = CanonicalChapterRepositoryImpl(database)
@@ -171,6 +172,15 @@ class EditorialEditionUnitCommitRepositoryImplTest {
                 configJson = """{"chapter_inventory":true}""",
                 updatedAt = 13L,
             )
+            database.tsuzuki_editorial_edition_consentsQueries.upsertTsuzukiEditorialEditionConsent(
+                canonicalTitleId = "title",
+                producerId = "synthetic-editorial",
+                externalWorkId = "work",
+                editionKey = "original",
+                scopeLanguage = "ja",
+                grantedAt = 14L,
+                integrationSettingsRevision = 13L,
+            )
             (writer.commit(request, grant(request.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
             database.tsuzuki_editorial_edition_consentsQueries.revokeTsuzukiEditorialEditionConsent(
                 canonicalTitleId = "title",
@@ -201,7 +211,17 @@ class EditorialEditionUnitCommitRepositoryImplTest {
                 updatedAt = 12L,
             )
             writer.commit(requested, grant(requested.scope)) shouldBe EditorialUnitCommitResult.Refused
-            chapters.getByCanonicalTitleId("title") shouldBe emptyList()
+            database.tsuzuki_editorial_edition_consentsQueries.upsertTsuzukiEditorialEditionConsent(
+                canonicalTitleId = "title",
+                producerId = "synthetic-editorial",
+                externalWorkId = "work",
+                editionKey = "original",
+                scopeLanguage = "ja",
+                grantedAt = 13L,
+                integrationSettingsRevision = 12L,
+            )
+            (writer.commit(requested, grant(requested.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
+            chapters.getByCanonicalTitleId("title").size shouldBe 1
         }
 
     @Test
@@ -241,6 +261,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
             editionKey = "revised",
             scopeLanguage = "ja",
             grantedAt = 12L,
+            integrationSettingsRevision = 10L,
         )
         (writer.commit(revised, grant(revised.scope)) is EditorialUnitCommitResult.Applied) shouldBe true
         chapters.getByCanonicalTitleId("title").size shouldBe 2
