@@ -72,7 +72,6 @@ class UserAdoptionReviewScreenModel(
         mutableState.value = UserAdoptionReviewState()
     }
 
-
     /**
      * A foreground SAF selection is the only entry point; no passive scan,
      * archive persistence, or automatic chapter materialization occurs.

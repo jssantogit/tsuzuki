@@ -62,7 +62,8 @@ class SelectedEpub3ArchiveImportTest {
             <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
               <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:language>ja</dc:language></metadata>
               <manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/></manifest>
-            </package>""".trimIndent()
+            </package>
+        """.trimIndent()
         SelectedEpub3ArchiveImport.read(
             ByteArrayInputStream(packageArchive(opf = unsafeOpf)),
             tempDir(),
