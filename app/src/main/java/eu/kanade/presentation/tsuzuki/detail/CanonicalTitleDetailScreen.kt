@@ -573,7 +573,7 @@ private fun IndependentInventoryInfo(
                 )
             }
             if (
-                source.candidateExamples.isNotEmpty() &&
+                source.candidateObservations > 0 &&
                 !source.scope.editionKey.isNullOrBlank() &&
                 !source.scope.language.isNullOrBlank()
             ) {

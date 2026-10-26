@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionBlockReason
+import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionCandidatePage
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionCommitResult
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionConfirmation
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionPreview
@@ -22,6 +23,11 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionRepository
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionReviewRequest
 
 data class UserAdoptionReviewState(
+    val candidateScope: InventoryScope? = null,
+    val candidatePage: UserAdoptionCandidatePage? = null,
+    val loadingCandidates: Boolean = false,
+    val candidateFailed: Boolean = false,
+    val candidatePageIndex: Int = 0,
     val preparing: Boolean = false,
     val plan: UserAdoptionPreview.Ready? = null,
     val blockedReason: UserAdoptionBlockReason? = null,
@@ -43,13 +49,92 @@ class UserAdoptionReviewScreenModel(
     private var titleId: String? = null
     private var activeReview: UserAdoptionReviewRequest? = null
     private var operation: Job? = null
+    private var candidateCursors = mutableListOf<String?>(null)
 
     fun start(canonicalTitleId: String) {
         if (titleId == canonicalTitleId) return
         operation?.cancel()
         titleId = canonicalTitleId
         activeReview = null
+        candidateCursors = mutableListOf(null)
         mutableState.value = UserAdoptionReviewState()
+    }
+
+    /** Explicit user action. Pages never trigger network fetches or adoption writes. */
+    fun browseCandidates(scope: InventoryScope) {
+        if (
+            scope.canonicalTitleId != titleId ||
+            scope.editionKey.isNullOrBlank() ||
+            scope.language.isNullOrBlank() ||
+            mutableState.value.adopting
+        ) return
+        operation?.cancel()
+        activeReview = null
+        candidateCursors = mutableListOf(null)
+        mutableState.value = UserAdoptionReviewState(
+            candidateScope = scope,
+            revision = mutableState.value.revision,
+        )
+        loadCandidatePage(scope, null, 0)
+    }
+
+    fun nextCandidatePage() {
+        val current = mutableState.value
+        val scope = current.candidateScope ?: return
+        val cursor = current.candidatePage?.nextCursor ?: return
+        if (current.loadingCandidates) return
+        loadCandidatePage(scope, cursor, current.candidatePageIndex + 1)
+    }
+
+    fun previousCandidatePage() {
+        val current = mutableState.value
+        val scope = current.candidateScope ?: return
+        if (current.loadingCandidates || current.candidatePageIndex < 1) return
+        loadCandidatePage(scope, candidateCursors[current.candidatePageIndex - 1], current.candidatePageIndex - 1)
+    }
+
+    private fun loadCandidatePage(scope: InventoryScope, cursor: String?, pageIndex: Int) {
+        if (titleId != scope.canonicalTitleId || mutableState.value.candidateScope != scope) return
+        if (operation?.isActive == true) return
+        mutableState.value = mutableState.value.copy(loadingCandidates = true, candidateFailed = false)
+        operation = viewModelScope.launch {
+            try {
+                val page = repository.candidatePage(scope, cursor)
+                if (titleId != scope.canonicalTitleId || mutableState.value.candidateScope != scope) return@launch
+                if (pageIndex < candidateCursors.size) {
+                    candidateCursors[pageIndex] = cursor
+                } else {
+                    candidateCursors.add(cursor)
+                }
+                mutableState.value = mutableState.value.copy(
+                    candidatePage = page,
+                    candidatePageIndex = pageIndex,
+                    loadingCandidates = false,
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                if (mutableState.value.candidateScope == scope) {
+                    mutableState.value = mutableState.value.copy(
+                        loadingCandidates = false,
+                        candidateFailed = true,
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissCandidates() {
+        if (mutableState.value.candidateScope == null) return
+        operation?.cancel()
+        candidateCursors = mutableListOf(null)
+        mutableState.value = mutableState.value.copy(
+            candidateScope = null,
+            candidatePage = null,
+            loadingCandidates = false,
+            candidateFailed = false,
+            candidatePageIndex = 0,
+        )
     }
 
     fun preview(scope: InventoryScope, sourceIds: List<String>) {
@@ -132,6 +217,7 @@ class UserAdoptionReviewScreenModel(
         if (mutableState.value.adopting) return
         operation?.cancel()
         activeReview = null
+        candidateCursors = mutableListOf(null)
         mutableState.value = UserAdoptionReviewState(revision = mutableState.value.revision)
     }
 }

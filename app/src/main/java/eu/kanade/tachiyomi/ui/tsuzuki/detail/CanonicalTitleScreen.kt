@@ -2,6 +2,14 @@ package eu.kanade.tachiyomi.ui.tsuzuki.detail
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
@@ -33,7 +41,7 @@ import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkScreenModel
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkState
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentSelectorScreenModel
 import kotlinx.coroutines.flow.collect
-import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySourceSnapshot
+import tachiyomi.domain.tsuzuki.chapter.inventory.PreviewUserAdoptedInventory
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -64,7 +72,6 @@ data class CanonicalTitleScreen(
         val inventoryState by inventoryModel.state.collectAsStateWithLifecycle()
         val adoptionModel = metroViewModel<UserAdoptionReviewScreenModel>()
         val adoptionState by adoptionModel.state.collectAsStateWithLifecycle()
-        var reviewSource by remember(canonicalTitleId) { mutableStateOf<IndependentInventorySourceSnapshot?>(null) }
         var selectedCandidates by remember(canonicalTitleId) { mutableStateOf(setOf<String>()) }
         var requestedInventorySource by rememberSaveable(canonicalTitleId) { mutableStateOf<String?>(null) }
         var mangaDexLinkDialog by rememberSaveable(canonicalTitleId) { mutableStateOf(false) }
@@ -131,8 +138,7 @@ data class CanonicalTitleScreen(
                 mangaDexLinkDialog = true
             },
             onReviewCandidates = { source ->
-                adoptionModel.dismiss()
-                reviewSource = source
+                adoptionModel.browseCandidates(source.scope)
                 selectedCandidates = emptySet()
             },
             inventoryRefresh = inventoryState,
@@ -145,45 +151,71 @@ data class CanonicalTitleScreen(
             },
         )
 
-        reviewSource?.takeIf { it.scope.canonicalTitleId == canonicalTitleId }?.let { source ->
+        adoptionState.candidateScope?.takeIf { it.canonicalTitleId == canonicalTitleId }?.let { scope ->
+            val page = adoptionState.candidatePage
             AlertDialog(
-                onDismissRequest = { reviewSource = null },
+                onDismissRequest = { adoptionModel.dismissCandidates() },
                 title = { Text("Selecionar capítulos da edição") },
                 text = {
-                    Column {
-                        Text("Edição: ${source.scope.editionKey} · Idioma: ${source.scope.language}")
+                    Column(verticalArrangement = Arrangement.spacedBy(androidx.compose.ui.unit.Dp(8f))) {
+                        Text("Edição: ${scope.editionKey} · Idioma: ${scope.language}")
                         Text("Estes dados são candidatos, não capítulos oficiais atestados por uma editora.")
-                        source.candidateExamples.forEach { example ->
+                        if (adoptionState.loadingCandidates) {
+                            CircularProgressIndicator()
+                        }
+                        if (adoptionState.candidateFailed) {
+                            Text("Não foi possível consultar os candidatos locais desta edição.")
+                        }
+                        if (page != null) {
+                            if (page.candidates.isEmpty()) {
+                                Text("Nenhum candidato disponível nesta página.")
+                            }
+                            LazyColumn(modifier = androidx.compose.ui.Modifier.fillMaxWidth().heightIn(max = androidx.compose.ui.unit.Dp(340f))) {
+                                items(page.candidates, key = { it.sourceRecordId }) { example ->
+                                    val checked = example.sourceRecordId in selectedCandidates
+                                    Row {
+                                        Checkbox(
+                                            checked = checked,
+                                            enabled = !adoptionState.loadingCandidates &&
+                                                (checked || selectedCandidates.size < PreviewUserAdoptedInventory.MAX_SELECTION),
+                                            onCheckedChange = { selected ->
+                                                selectedCandidates = if (selected) {
+                                                    selectedCandidates + example.sourceRecordId
+                                                } else {
+                                                    selectedCandidates - example.sourceRecordId
+                                                }
+                                            },
+                                        )
+                                        Text(example.label)
+                                    }
+                                }
+                            }
                             Row {
-                                Checkbox(
-                                    checked = example.sourceRecordId in selectedCandidates,
-                                    onCheckedChange = { checked ->
-                                        selectedCandidates = if (checked) {
-                                            selectedCandidates + example.sourceRecordId
-                                        } else {
-                                            selectedCandidates - example.sourceRecordId
-                                        }
-                                    },
-                                )
-                                Text(example.label)
+                                TextButton(
+                                    onClick = { adoptionModel.previousCandidatePage() },
+                                    enabled = !adoptionState.loadingCandidates && adoptionState.candidatePageIndex > 0,
+                                ) { Text("Anterior") }
+                                Text("Página ${adoptionState.candidatePageIndex + 1}")
+                                TextButton(
+                                    onClick = { adoptionModel.nextCandidatePage() },
+                                    enabled = !adoptionState.loadingCandidates && page.nextCursor != null,
+                                ) { Text("Próxima") }
                             }
                         }
+                        Text("${selectedCandidates.size} de ${PreviewUserAdoptedInventory.MAX_SELECTION} selecionados")
                     }
                 },
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            val selected = source.candidateExamples
-                                .map { it.sourceRecordId }
-                                .filter { it in selectedCandidates }
-                            reviewSource = null
-                            adoptionModel.preview(source.scope, selected)
+                            adoptionModel.dismissCandidates()
+                            adoptionModel.preview(scope, selectedCandidates.sorted())
                         },
-                        enabled = selectedCandidates.isNotEmpty(),
+                        enabled = !adoptionState.loadingCandidates && selectedCandidates.isNotEmpty(),
                     ) { Text("Ver prévia") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { reviewSource = null }) { Text("Cancelar") }
+                    TextButton(onClick = { adoptionModel.dismissCandidates() }) { Text("Cancelar") }
                 },
             )
         }
@@ -194,7 +226,10 @@ data class CanonicalTitleScreen(
                 onDismissRequest = { adoptionModel.dismiss() },
                 title = { Text("Confirmar adoção dos capítulos") },
                 text = {
-                    Column {
+                    Column(
+                        modifier = androidx.compose.ui.Modifier.heightIn(max = androidx.compose.ui.unit.Dp(420f))
+                            .verticalScroll(rememberScrollState()),
+                    ) {
                         Text("Obra: $canonicalTitleId")
                         Text("Edição: ${ready.scope.editionKey} · Idioma: ${ready.scope.language}")
                         Text("Origem: ${ready.scope.producerId}")

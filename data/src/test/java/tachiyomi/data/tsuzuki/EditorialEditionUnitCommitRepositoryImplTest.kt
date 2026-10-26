@@ -99,7 +99,7 @@ class EditorialEditionUnitCommitRepositoryImplTest {
     }
 
     @Test
-    fun `selected edition candidate pagination visits every stored unit without crossing scopes or release records`(): Unit =
+    fun `selected edition candidate pagination is bounded and excludes other scopes and releases`(): Unit =
         runBlocking<Unit> {
             val selection = InventoryScope(
                 canonicalTitleId = "title",
