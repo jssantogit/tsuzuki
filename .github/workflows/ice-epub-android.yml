@@ -10,6 +10,7 @@ on:
       - '.github/scripts/run_ice_epub_android.sh'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/SelectedEpubAdoptionInstrumentedTest.kt'
       - 'app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/inventory/SelectedEpub3ArchiveImport.kt'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/chapter/inventory/SelectedEpub3TocAdapter.kt'
       - 'app/src/main/java/eu/kanade/tachiyomi/ui/tsuzuki/detail/UserAdoptionReviewScreenModel.kt'
       - 'data/src/main/java/tachiyomi/data/tsuzuki/UserAdoptedInventoryRepositoryImpl.kt'
       - 'app/src/main/java/eu/kanade/tachiyomi/data/backup/**'

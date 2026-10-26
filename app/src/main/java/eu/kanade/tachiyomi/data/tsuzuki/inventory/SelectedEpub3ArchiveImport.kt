@@ -6,6 +6,7 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.chapter.inventory.SelectedEpub3Navigation
 import tachiyomi.domain.tsuzuki.chapter.inventory.SelectedEpub3TocAdapter
+import tachiyomi.domain.tsuzuki.chapter.inventory.SelectedEpubXmlPreflight
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
@@ -35,9 +36,6 @@ internal object SelectedEpub3ArchiveImport {
     private const val CONTAINER_NS = "urn:oasis:names:tc:opendocument:xmlns:container"
     private const val DC_NS = "http://purl.org/dc/elements/1.1/"
     private val languagePattern = Regex("^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,3}$")
-    // Strict UTF-8 preprocessing is portable across Android's DOM and JVM JAXP:
-    // neither an internal DTD nor an external entity is legal in selected metadata.
-    private val forbiddenXmlDeclaration = Regex("""<!\s*(?:DOCTYPE|ENTITY)\b""", RegexOption.IGNORE_CASE)
 
     fun read(
         stream: InputStream,
@@ -166,9 +164,7 @@ internal object SelectedEpub3ArchiveImport {
         // UTF-8 text *before* the DOM parser receives it: markup entity
         // declarations require a DOCTYPE and are never allowed.
         val xml = bytes.decodeStrict()
-        require(!forbiddenXmlDeclaration.containsMatchIn(xml)) {
-            "EPUB metadata XML cannot declare a DTD or entities"
-        }
+        SelectedEpubXmlPreflight.rejectExternalDeclarations(xml)
         val factory = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
         }

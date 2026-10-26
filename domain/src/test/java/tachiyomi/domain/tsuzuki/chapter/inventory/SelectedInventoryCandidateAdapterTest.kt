@@ -311,6 +311,16 @@ class SelectedInventoryCandidateAdapterTest {
     }
 
     @Test
+    fun `EPUB toc rejects XInclude even outside the selected nav`() {
+        val selected = syntheticEpubNavigation()
+        val injected = TOC_DOCUMENT.replace(
+            "<body>",
+            """<body><xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="file:///private"/>""",
+        )
+        SelectedEpub3TocAdapter.adapt(withSelectedDocument(selected, injected)).isFailure shouldBe true
+    }
+
+    @Test
     fun `EPUB toc only accepts XHTML list-item anchors in the selected toc`() {
         val selected = syntheticEpubNavigation()
         val anchorOutsideList = withSelectedDocument(

@@ -11,8 +11,22 @@ import java.io.StringReader
 import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets.UTF_8
-import javax.xml.XMLConstants
 import javax.xml.parsers.SAXParserFactory
+
+/**
+ * Shared bounded-document guard before Android/JVM XML parsing.
+ * DTDs and entity declarations are forbidden: no external or recursive entity
+ * can be introduced into either metadata DOM or TOC SAX readers.
+ */
+object SelectedEpubXmlPreflight {
+    private val forbiddenDeclaration = Regex("""<!\s*(?:DOCTYPE|ENTITY)\b""", RegexOption.IGNORE_CASE)
+
+    fun rejectExternalDeclarations(xml: String) {
+        require(!forbiddenDeclaration.containsMatchIn(xml)) {
+            "Selected EPUB XML cannot declare DTD or entities"
+        }
+    }
+}
 
 /** A single, explicitly selected EPUB3 nav XHTML document and edition snapshot. */
 data class SelectedEpub3Navigation(
@@ -34,10 +48,6 @@ object SelectedEpub3TocAdapter {
     const val MAX_DEPTH = 32
     private const val XHTML_NAMESPACE = "http://www.w3.org/1999/xhtml"
     private const val EPUB_OPS_NAMESPACE = "http://www.idpf.org/2007/ops"
-    private const val DISALLOW_DOCTYPE = "http://apache.org/xml/features/disallow-doctype-decl"
-    private const val EXTERNAL_GENERAL_ENTITIES = "http://xml.org/sax/features/external-general-entities"
-    private const val EXTERNAL_PARAMETER_ENTITIES = "http://xml.org/sax/features/external-parameter-entities"
-    private const val LOAD_EXTERNAL_DTD = "http://apache.org/xml/features/nonvalidating/load-external-dtd"
     private const val MAX_LABEL_LENGTH = 512
     private const val MAX_HREF_LENGTH = 1024
     private val chapterNumber = Regex("^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$")
@@ -62,6 +72,7 @@ object SelectedEpub3TocAdapter {
         validateSelection(selected)
         val digest = selected.navXhtml.sha256SnapshotDigest()
         require(selected.snapshotDigest == digest) { "EPUB navigation digest does not match selected bytes" }
+        SelectedEpubXmlPreflight.rejectExternalDeclarations(selected.navXhtml)
         val handler = TocHandler()
         val reader = secureReader()
         reader.contentHandler = handler
@@ -131,20 +142,12 @@ object SelectedEpub3TocAdapter {
     }
 
     private fun secureReader(): XMLReader {
+        // Android's SAX factory does not implement desktop JAXP XInclude and
+        // secure-processing setters. The exact bounded text is preflighted
+        // before parse, and the XMLReader's EntityResolver refuses external IO.
         val factory = SAXParserFactory.newInstance()
         factory.isNamespaceAware = true
-        factory.isXIncludeAware = false
-        factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
-        factory.setFeature(DISALLOW_DOCTYPE, true)
-        factory.setFeature(EXTERNAL_GENERAL_ENTITIES, false)
-        factory.setFeature(EXTERNAL_PARAMETER_ENTITIES, false)
-        factory.setFeature(LOAD_EXTERNAL_DTD, false)
-        val reader = factory.newSAXParser().xmlReader
-        reader.setFeature(DISALLOW_DOCTYPE, true)
-        reader.setFeature(EXTERNAL_GENERAL_ENTITIES, false)
-        reader.setFeature(EXTERNAL_PARAMETER_ENTITIES, false)
-        reader.setFeature(LOAD_EXTERNAL_DTD, false)
-        return reader
+        return factory.newSAXParser().xmlReader
     }
 
     private fun classify(label: String): Pair<InventoryClaimKind, String> = when {
@@ -200,6 +203,9 @@ object SelectedEpub3TocAdapter {
         override fun startElement(uri: String?, localName: String?, qName: String?, attributes: Attributes) {
             xmlDepth++
             require(xmlDepth <= MAX_DEPTH) { "EPUB navigation exceeds the XML depth limit" }
+            require(uri != "http://www.w3.org/2001/XInclude") {
+                "EPUB navigation cannot contain XInclude elements"
+            }
             val name = localName.orEmpty().ifBlank { qName.orEmpty().substringAfter(':') }
             val parent = elements.lastOrNull()
             val isToc =
