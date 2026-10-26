@@ -1,0 +1,78 @@
+name: ICE EPUB3 Android Acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/issue-155-independent-chapter-inventory
+    paths:
+      - '.github/workflows/ice-epub-android.yml'
+      - '.github/scripts/run_ice_epub_android.sh'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/SelectedEpubAdoptionInstrumentedTest.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/inventory/SelectedEpub3ArchiveImport.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/ui/tsuzuki/detail/UserAdoptionReviewScreenModel.kt'
+      - 'data/src/main/java/tachiyomi/data/tsuzuki/UserAdoptedInventoryRepositoryImpl.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/data/backup/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ice-epub-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fixture:
+    name: Validate offline harness script
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check script safety and shell syntax
+        run: |
+          bash -n .github/scripts/run_ice_epub_android.sh
+          grep -Fq 'ro.kernel.qemu' .github/scripts/run_ice_epub_android.sh
+          grep -Fq 'iceEpubE2eOptIn true' .github/scripts/run_ice_epub_android.sh
+          grep -Fq 'INSTRUMENTATION_CODE: -1' .github/scripts/run_ice_epub_android.sh
+
+  emulator:
+    name: EPUB selected URI / adoption / restore
+    needs: fixture
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up JDK
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Compile app and instrumentation APKs
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run two offline EPUB3 scenarios on disposable Android emulator
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_ice_epub_android.sh
+      - name: Upload short-lived test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ice-epub-android-${{ github.sha }}
+          path: .github/results/ice-epub-android/**
+          if-no-files-found: ignore
+          retention-days: 3
