@@ -1,18 +1,29 @@
 package eu.kanade.tachiyomi.data.tsuzuki.instrumentation
 
+import android.app.Activity
 import android.content.ContentValues
+import android.content.Intent
+import android.os.SystemClock
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
 import app.cash.sqldelight.async.coroutines.awaitAsList
 import com.eygraber.sqldelight.androidx.driver.AndroidxSqliteConfiguration
 import com.eygraber.sqldelight.androidx.driver.AndroidxSqliteDatabaseType
 import com.eygraber.sqldelight.androidx.driver.AndroidxSqliteDriver
 import com.eygraber.sqldelight.androidx.driver.FileProvider
 import eu.kanade.tachiyomi.App
+import eu.kanade.tachiyomi.data.backup.BackupDecoder
+import eu.kanade.tachiyomi.data.backup.models.Backup
+import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSnapshot
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
@@ -20,8 +31,12 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreUserAdoptionReceipt
 import eu.kanade.tachiyomi.data.backup.restore.CanonicalCoreBackupImporter
 import eu.kanade.tachiyomi.data.tsuzuki.inventory.SelectedEpub3ArchiveImport
+import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import eu.kanade.tachiyomi.ui.reader.ReaderViewModel
+import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleActivity
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.protobuf.ProtoBuf
 import mihon.app.di.AppBindings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -46,6 +61,7 @@ import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.util.zip.GZIPOutputStream
 import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -184,6 +200,36 @@ class SelectedEpubAdoptionInstrumentedTest {
                 BackupCanonicalCore.SECTION_KEY,
                 Json.encodeToString(BackupCanonicalCore.serializer(), portable),
             )
+            // Exercise the real .tachibk gzip/Protobuf decoder before the
+            // deliberately gated canonical restore. The production backup
+            // creator/restorer must not be treated as activated by this test.
+            val archiveBytes = ByteArrayOutputStream().use { bytes ->
+                GZIPOutputStream(bytes).use { gzip ->
+                    gzip.write(
+                        ProtoBuf.encodeToByteArray(
+                            Backup.serializer(),
+                            Backup(
+                                backupManga = emptyList(),
+                                canonicalSnapshot = BackupCanonicalSnapshot(sections = listOf(section)),
+                            ),
+                        ),
+                    )
+                }
+                bytes.toByteArray()
+            }
+            val archiveUri = createDocument(
+                archiveBytes,
+                "ice-canonical-${UUID.randomUUID()}.tachibk",
+                "application/octet-stream",
+            )
+            val decodedSection = try {
+                val decoded = BackupDecoder(context, ProtoBuf).decode(archiveUri)
+                assertEquals(1, decoded.canonicalSnapshot?.sections?.size)
+                requireNotNull(decoded.canonicalSnapshot).sections.single()
+            } finally {
+                context.contentResolver.delete(archiveUri, null, null)
+            }
+            assertEquals(section.sha256, decodedSection.sha256)
 
             // Restore into a second disposable SQLite database. Never overwrite the live fixture.
             val isolatedName = "ice-restore-${UUID.randomUUID()}.db"
@@ -196,8 +242,8 @@ class SelectedEpubAdoptionInstrumentedTest {
             try {
                 val restoredDb = AppBindings.providesDatabase(driver)
                 val importer = CanonicalCoreBackupImporter(restoredDb, Json)
-                importer.restoreCore(section)
-                importer.restoreCore(section) // Restore receipt prevents double replay.
+                importer.restoreCore(decodedSection)
+                importer.restoreCore(decodedSection) // Restore receipt prevents double replay.
                 val restoredReceipts = restoredDb.tsuzuki_user_adoption_receiptsQueries
                     .getTsuzukiUserAdoptionReceiptsByTitle(titleId).awaitAsList()
                 assertEquals(
@@ -216,6 +262,7 @@ class SelectedEpubAdoptionInstrumentedTest {
                 context.deleteDatabase(isolatedName)
             }
             report("IMPORT_ADOPT_RESTORE", "candidates=2|adopted=2|backup=RESTORED|reader=NO_PAGES")
+            report("BINARY_ARCHIVE_DECODE", "protobuf=VALID|gzip=VALID|canonical=RESTORED_ISOLATED")
         } finally {
             context.contentResolver.delete(document, null, null)
         }
@@ -267,6 +314,122 @@ class SelectedEpubAdoptionInstrumentedTest {
         }
     }
 
+    @Test(timeout = 120_000L)
+    fun safPickerLaunchAndCancellationLeaveLocalInventoryUnchanged() = runBlocking {
+        val context = fixtureContext()
+        val titleId = "ice-saf-${UUID.randomUUID()}"
+        val now = System.currentTimeMillis()
+        val database = (context.applicationContext as App).graph.database
+        CanonicalTitleRepositoryImpl(database).insert(
+            CanonicalTitle(titleId, "SAF UI EPUB fixture", CanonicalIdentityState.SOURCE_ONLY, now, now),
+        )
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val intent = requireNotNull(CanonicalTitleActivity.newIntent(context, titleId))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+        try {
+            val action = awaitUiAction(device, "Import EPUB3 index", "Importar índice EPUB3")
+            assertTrue("Import action must appear on actual title details", action != null)
+            requireNotNull(action).click()
+            assertTrue(
+                "Android DocumentsUI must own the picker window",
+                device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 12_000) ||
+                    device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 4_000),
+            )
+            device.pressBack()
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            assertTrue(IndependentInventoryRepositoryImpl(database).byTitle(titleId).isEmpty())
+            assertTrue(CanonicalChapterRepositoryImpl(database).getByCanonicalTitleId(titleId).isEmpty())
+            report("SAF_UI_CANCEL", "picker=OPENED|candidates=EMPTY|chapters=EMPTY")
+        } finally {
+            device.pressBack()
+        }
+    }
+
+    @Test(timeout = 120_000L)
+    fun adoptedChapterOpensReaderWithoutInventingPagesOrReadingProgress() = runBlocking {
+        val context = fixtureContext()
+        val titleId = "ice-reader-${UUID.randomUUID()}"
+        val now = System.currentTimeMillis()
+        val database = (context.applicationContext as App).graph.database
+        CanonicalTitleRepositoryImpl(database).insert(
+            CanonicalTitle(titleId, "Reader without content", CanonicalIdentityState.SOURCE_ONLY, now, now),
+        )
+        val ledger = IndependentInventoryRepositoryImpl(database)
+        val chapters = CanonicalChapterRepositoryImpl(database)
+        val adoption = UserAdoptedInventoryRepositoryImpl(database, ledger, chapters, ChapterMutationGate())
+        val imported = SelectedEpub3ArchiveImport.read(
+            epubBytes().inputStream(),
+            context.cacheDir,
+            titleId,
+            now,
+        ).getOrThrow()
+        ledger.saveBatch(imported)
+        val request = UserAdoptionReviewRequest(imported.scope, imported.claims.take(1).map { it.sourceRecordId })
+        val preview = adoption.preview(request) as UserAdoptionPreview.Ready
+        assertTrue(
+            adoption.adopt(UserAdoptionConfirmation(request, preview.fingerprint, now + 1, true)) is
+                UserAdoptionCommitResult.Adopted,
+        )
+        val chapter = chapters.getByCanonicalTitleId(titleId).single()
+        context.startActivity(
+            ReaderActivity.newCanonicalIntent(context, chapter.id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        val reader = awaitResumedActivity(ReaderActivity::class.java)
+        try {
+            var noSourcePresented = false
+            repeat(50) {
+                val state = reader.viewModel.state.value
+                if (state.dialog is ReaderViewModel.Dialog.ContentSelector) {
+                    noSourcePresented = true
+                    return@repeat
+                }
+                SystemClock.sleep(150)
+            }
+            val state = reader.viewModel.state.value
+            assertTrue("Reader must request a source instead of inventing EPUB pages", noSourcePresented)
+            assertTrue(state.currentChapter?.pages.isNullOrEmpty())
+            assertTrue(state.viewerChapters == null)
+            assertEquals(-1, state.totalPages)
+            assertTrue(chapters.getVariantsByCanonicalChapterId(chapter.id).isEmpty())
+            assertNull(CanonicalReadingRepositoryImpl(database).getProgress(chapter.id))
+            report("READER_UI_NO_PAGES", "source=REQUIRED|viewer=EMPTY|progress=EMPTY")
+        } finally {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync { reader.finish() }
+        }
+    }
+
+    private fun awaitUiAction(device: UiDevice, vararg labels: String): androidx.test.uiautomator.UiObject2? {
+        repeat(12) {
+            for (label in labels) {
+                device.wait(Until.findObject(By.text(label)), 1500)?.let { return it }
+            }
+            device.swipe(
+                device.displayWidth / 2,
+                device.displayHeight * 3 / 4,
+                device.displayWidth / 2,
+                device.displayHeight / 4,
+                22,
+            )
+        }
+        return null
+    }
+
+    private fun <T : Activity> awaitResumedActivity(type: Class<T>): T {
+        val monitor = ActivityLifecycleMonitorRegistry.getInstance()
+        repeat(80) {
+            var activity: T? = null
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                activity = monitor.getActivitiesInStage(Stage.RESUMED)
+                    .filterIsInstance(type)
+                    .firstOrNull()
+            }
+            if (activity != null) return requireNotNull(activity)
+            SystemClock.sleep(150)
+        }
+        error("Expected ${type.simpleName} to be resumed")
+    }
+
     private fun fixtureContext() = InstrumentationRegistry.getInstrumentation().targetContext.also { context ->
         assertEquals(
             "This test must run only via the disposable emulator harness",
@@ -288,11 +451,15 @@ class SelectedEpubAdoptionInstrumentedTest {
         )
     }
 
-    private fun createDocument(bytes: ByteArray, displayName: String): Uri {
+    private fun createDocument(
+        bytes: ByteArray,
+        displayName: String,
+        mimeType: String = "application/epub+zip",
+    ): Uri {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
-            put(MediaStore.MediaColumns.MIME_TYPE, "application/epub+zip")
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
         val uri = requireNotNull(context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values))
