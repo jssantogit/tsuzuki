@@ -170,8 +170,13 @@ class EditorialEditionUnitCommitRepositoryImpl(
                 currentCoroutineContext().ensureActive()
                 // This check is inside the transaction, AFTER the INSERTs. A
                 // withdrawn consent throws, rolling back both tables atomically.
-                if (!hasPersistedEditionConsent(scope)) throw EditorialCommitRefused()
-                if (authorization.approvedScope(scope.producerId, scope.canonicalTitleId) != scope) {
+                // Host-side authorization can itself observe revocation or
+                // integration changes. Read persisted consent AFTER that final
+                // check, or a stale earlier read can authorize a commit.
+                if (
+                    authorization.approvedScope(scope.producerId, scope.canonicalTitleId) != scope ||
+                    !hasPersistedEditionConsent(scope)
+                ) {
                     throw EditorialCommitRefused()
                 }
                 EditorialUnitCommitResult.Applied(chapterIds, insertions.size)
