@@ -351,7 +351,7 @@ class SelectedEpubAdoptionInstrumentedTest {
             val visibleText = if (titleShown) {
                 ""
             } else {
-                device.findObjects(By.textMatches(".*"))
+                device.findObjects(By.text(java.util.regex.Pattern.compile(".+")))
                     .mapNotNull { it.text }
                     .filter(String::isNotBlank)
                     .distinct()
