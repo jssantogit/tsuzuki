@@ -105,16 +105,25 @@ data class BackupCanonicalCore(
         require(
             editorialChapterBindings.isUniqueBy {
                 listOf(
-                    it.canonicalTitleId, it.producerId, it.externalWorkId, it.editionKey,
-                    it.scopeLanguage, it.sourceRecordId,
+                    it.canonicalTitleId,
+                    it.producerId,
+                    it.externalWorkId,
+                    it.editionKey,
+                    it.scopeLanguage,
+                    it.sourceRecordId,
                 )
             },
         ) { "Duplicate editorial unit source reference" }
         require(
             editorialChapterBindings.isUniqueBy {
                 listOf(
-                    it.canonicalTitleId, it.producerId, it.externalWorkId, it.editionKey,
-                    it.scopeLanguage, it.identityKey, it.volumeKey.toString(),
+                    it.canonicalTitleId,
+                    it.producerId,
+                    it.externalWorkId,
+                    it.editionKey,
+                    it.scopeLanguage,
+                    it.identityKey,
+                    it.volumeKey.toString(),
                 )
             },
         ) { "Duplicate edition scoped canonical unit identity" }
