@@ -96,6 +96,24 @@ class PreviewUserAdoptedInventoryTest {
     }
 
     @Test
+    fun differentSelectedOriginsCannotShareOneUserAdoptionReview() {
+        val first = claim(id = "chapter-one", label = "Chapter 1")
+        val second = claim(id = "chapter-two", label = "Chapter 2")
+        val otherOrigin = second.copy(
+            claim = second.claim.copy(
+                provenance = second.claim.provenance!!.copy(originReference = "user-selected:other-edition"),
+            ),
+        )
+        val result = PreviewUserAdoptedInventory().execute(
+            scope = scope,
+            storedClaims = listOf(first, otherOrigin),
+            selectedSourceRecordIds = listOf("chapter-one", "chapter-two"),
+            existingChapters = emptyList(),
+        )
+        result shouldBe UserAdoptionPreview.Blocked(UserAdoptionBlockReason.SOURCE_SNAPSHOT_MISMATCH)
+    }
+
+    @Test
     fun duplicatesWrongEditionAndLegacyNumbersAreRejected() {
         val preview = PreviewUserAdoptedInventory()
         val canonical = CanonicalChapter(
