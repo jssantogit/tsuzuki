@@ -39,6 +39,12 @@ FROM tsuzuki_user_adoption_receipts
 WHERE canonical_title_id = :canonicalTitleId
 ORDER BY canonical_chapter_id;
 
+getTsuzukiUserAdoptedChapterIdsByTitle:
+SELECT canonical_chapter_id
+FROM tsuzuki_user_adoption_receipts
+WHERE canonical_title_id = :canonicalTitleId
+ORDER BY canonical_chapter_id;
+
 countTsuzukiUserAdoptionReceiptsByTitle:
 SELECT count(*)
 FROM tsuzuki_user_adoption_receipts
