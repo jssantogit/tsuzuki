@@ -65,6 +65,7 @@ class CanonicalReadingProgressSyncAdapter(
                     .forEach { progress ->
                         val chapter = chapters[progress.canonicalChapterId]
                             ?: return@forEach
+                        if (evidenceRepository.isEditionScopedChapter(chapter.id)) return@forEach
                         check(chapter.id !in ambiguousNumberedIds) {
                             "Distinct canonical chapters would share a portable progress key"
                         }
@@ -176,6 +177,7 @@ class CanonicalReadingProgressSyncAdapter(
             val seenKeys = mutableSetOf<String>()
             for (progress in readingRepository.getProgressByCanonicalTitleId(title.id)) {
                 val chapter = chapters[progress.canonicalChapterId] ?: return true
+                if (evidenceRepository.isEditionScopedChapter(chapter.id)) return true
                 if (chapter.id in ambiguousNumberedIds) return true
                 val stableEvidence = evidenceRepository.getStableEvidenceKey(chapter.id)
                 val key = portableKey(chapter, stableEvidence) ?: return true
@@ -204,6 +206,9 @@ class CanonicalReadingProgressSyncAdapter(
             val stableEvidence = evidenceRepository.getStableEvidenceKey(chapter.id)
             val localKey = portableKey(chapter, stableEvidence)
             if (localKey?.chapterKey == chapterKey) {
+                require(!evidenceRepository.isEditionScopedChapter(chapter.id)) {
+                    "Unscoped remote progress cannot be imported into an edition-owned chapter"
+                }
                 matches += chapter
             }
         }
