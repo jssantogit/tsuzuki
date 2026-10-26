@@ -74,6 +74,13 @@ class CanonicalTitleMergeRepositoryImpl(
                     database.tsuzuki_editorial_edition_consentsQueries
                         .countTsuzukiEditorialEditionConsentsForTitle(targetId).awaitAsOne() == 0L,
             ) { "Title convergence with editorial Host consent requires explicit reauthorization" }
+            // A user adoption is personal provenance; no implicit rehome.
+            check(
+                database.tsuzuki_user_adoption_receiptsQueries
+                    .countTsuzukiUserAdoptionReceiptsByTitle(localId).awaitAsOne() == 0L &&
+                    database.tsuzuki_user_adoption_receiptsQueries
+                        .countTsuzukiUserAdoptionReceiptsByTitle(targetId).awaitAsOne() == 0L,
+            ) { "User-adopted chapters require an audited title merge" }
             check(
                 database.tsuzuki_editorial_chapter_bindingsQueries
                     .getTsuzukiEditorialBindingsByTitle(localId).awaitAsList().isEmpty() &&
