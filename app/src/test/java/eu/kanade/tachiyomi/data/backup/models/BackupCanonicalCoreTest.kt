@@ -108,6 +108,38 @@ class BackupCanonicalCoreTest {
         runCatching {
             original.copy(userAdoptionReceipts = listOf(receipt.copy(snapshotDigest = "not-a-digest"))).validate()
         }.isFailure shouldBe true
+        val otherChapter = original.chapters.single().copy(
+            id = "chapter-2",
+            displayNumber = "2",
+            baseNumber = 2,
+        )
+        val mixedOriginReceipt = receipt.copy(
+            canonicalChapterId = "chapter-2",
+            sourceRecordId = "unit-2",
+            sourceUnitId = "chapter-2.xhtml",
+            acceptedLabel = "2",
+            identityKey = CanonicalChapterIdentity(CanonicalChapterType.REGULAR, 2).sortKey,
+            originReference = "user-selected:other-edition",
+        )
+        runCatching {
+            original.copy(
+                chapters = original.chapters + otherChapter,
+                userAdoptionReceipts = listOf(receipt, mixedOriginReceipt),
+            ).validate()
+        }.isFailure shouldBe true
+
+        val duplicateIdentity = receipt.copy(
+            canonicalChapterId = "chapter-2",
+            receiptId = "receipt-2",
+            sourceRecordId = "unit-2",
+            sourceUnitId = "chapter-2.xhtml",
+        )
+        runCatching {
+            original.copy(
+                chapters = original.chapters + original.chapters.single().copy(id = "chapter-2"),
+                userAdoptionReceipts = listOf(receipt, duplicateIdentity),
+            ).validate()
+        }.isFailure shouldBe true
     }
 
     @Test
