@@ -182,6 +182,29 @@ class CanonicalCoreBackupImporterTest {
             )
             database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title-1")
                 .awaitAsList().single().edition_key shouldBe "edition-ja"
+            // Restoring lineage must NOT silently restore permission to claim
+            // more chapters from that publisher on a different installation.
+            database.tsuzuki_editorial_edition_consentsQueries
+                .countTsuzukiEditorialEditionConsentsForTitle("title-1")
+                .awaitAsOne() shouldBe 0L
+            database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+                integrationId = "editorial-test",
+                enabled = true,
+                configJson = """{"chapter_inventory":true}""",
+                updatedAt = 99L,
+            )
+            database.tsuzuki_editorial_edition_consentsQueries.upsertTsuzukiEditorialEditionConsent(
+                canonicalTitleId = "title-1",
+                producerId = "editorial-test",
+                externalWorkId = "work-1",
+                editionKey = "edition-ja",
+                scopeLanguage = "ja",
+                grantedAt = 123456789L,
+                integrationSettingsRevision = 99L,
+            )
+            database.tsuzuki_editorial_edition_consentsQueries
+                .countTsuzukiEditorialEditionConsentsForTitle("title-1")
+                .awaitAsOne() shouldBe 1L
             val titles = CanonicalTitleRepositoryImpl(database)
             val exporter = CanonicalCoreBackupExporter(
                 titleSource = CanonicalTitleSyncSource { titles.getAllAsFlow().first() },
@@ -193,7 +216,9 @@ class CanonicalCoreBackupImporterTest {
                 database = database,
                 json = Json,
             )
-            val exported = Json.decodeFromString(BackupCanonicalCore.serializer(), exporter.export().payloadJson)
+            val portableSection = exporter.export()
+            portableSection.payloadJson.contains("123456789") shouldBe false
+            val exported = Json.decodeFromString(BackupCanonicalCore.serializer(), portableSection.payloadJson)
             exported.editorialChapterBindings shouldBe listOf(link)
         }
 
