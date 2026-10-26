@@ -37,7 +37,7 @@ internal object SelectedEpub3ArchiveImport {
     private val languagePattern = Regex("^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,3}$")
     // Strict UTF-8 preprocessing is portable across Android's DOM and JVM JAXP:
     // neither an internal DTD nor an external entity is legal in selected metadata.
-    private val forbiddenXmlDeclaration = Regex("""<!\\s*(?:DOCTYPE|ENTITY)\\b""", RegexOption.IGNORE_CASE)
+    private val forbiddenXmlDeclaration = Regex("""<!\s*(?:DOCTYPE|ENTITY)\b""", RegexOption.IGNORE_CASE)
 
     fun read(
         stream: InputStream,
