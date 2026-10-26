@@ -52,7 +52,7 @@ run_case() {
 }
 
 run_case contentUriImportsShadowThenExplicitAdoptionRoundTripsPortableReceiptWithoutReaderPages import-adopt-restore.txt
-run_case safPickerLaunchAndCancellationLeaveLocalInventoryUnchanged saf-ui.txt
+run_case safPickerCancellationAndFileSelectionAreUserDrivenAndShadowOnly saf-ui.txt
 run_case adoptedChapterOpensReaderWithoutInventingPagesOrReadingProgress reader-ui.txt
 run_case malformedContentUriAndInterruptedStreamNeverMaterializeChapters failures.txt
 echo 'ICE_EPUB_E2E|outcome=PASS|cases=4|network=NONE|production=UNTOUCHED'
