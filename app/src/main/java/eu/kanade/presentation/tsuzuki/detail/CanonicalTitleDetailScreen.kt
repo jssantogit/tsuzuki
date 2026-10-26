@@ -72,6 +72,7 @@ import mihon.icons.materialsymbols.automirroredrounded.Sort
 import mihon.icons.materialsymbols.rounded.MoreVert
 import mihon.icons.materialsymbols.rounded.Search
 import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySourceSnapshot
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.i18n.MR
@@ -93,6 +94,7 @@ fun CanonicalTitleDetailScreen(
     onOpenProvidersSettings: () -> Unit,
     onFetchInventory: (String) -> Unit,
     onLinkMangaDex: () -> Unit,
+    onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit = {},
     inventoryRefresh: NativeInventoryRefreshState,
     modifier: Modifier = Modifier,
 ) {
@@ -128,7 +130,7 @@ fun CanonicalTitleDetailScreen(
             is CanonicalTitleScreenState.Loaded -> LoadedDetails(
                 state, background, navigateUp, onAtualizar, onAddToLibrary, onRemoveFromLibrary,
                 onReadTitle, onOpenChapter, onBaixarChapter, onOpenProvidersSettings,
-                onFetchInventory, onLinkMangaDex, inventoryRefresh,
+                onFetchInventory, onLinkMangaDex, onReviewCandidates, inventoryRefresh,
             )
         }
     }
@@ -148,6 +150,7 @@ private fun LoadedDetails(
     onProviders: () -> Unit,
     onFetchInventory: (String) -> Unit,
     onLinkMangaDex: () -> Unit,
+    onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit,
     inventoryRefresh: NativeInventoryRefreshState,
 ) {
     var mode by rememberSaveable(state.title.id) { mutableStateOf(CanonicalDetailsLowerMode.COMPACT) }
@@ -211,6 +214,7 @@ private fun LoadedDetails(
                                 inventoryRefresh,
                                 onFetchInventory,
                                 onLinkMangaDex,
+                                onReviewCandidates,
                             )
                         }
                     }
@@ -243,6 +247,7 @@ private fun LoadedDetails(
                             inventoryRefresh,
                             onFetchInventory,
                             onLinkMangaDex,
+                            onReviewCandidates,
                         )
                     }
                     if (chapters.isEmpty()) {
@@ -386,6 +391,7 @@ private fun IndependentInventoryInfo(
     refresh: NativeInventoryRefreshState,
     onFetchInventory: (String) -> Unit,
     onLinkMangaDex: () -> Unit,
+    onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit,
 ) {
     val colors = defaultSkinColors()
     Column(
@@ -564,6 +570,16 @@ private fun IndependentInventoryInfo(
                         source.candidateExampleLabels.joinToString(", "),
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.secondary,
+                )
+            }
+            if (
+                source.candidateExamples.isNotEmpty() &&
+                !source.scope.editionKey.isNullOrBlank() &&
+                !source.scope.language.isNullOrBlank()
+            ) {
+                DefaultSkinTextAction(
+                    text = "Revisar capítulos desta edição",
+                    onClick = { onReviewCandidates(source) },
                 )
             }
             if (source.releaseExampleLabels.isNotEmpty()) {
