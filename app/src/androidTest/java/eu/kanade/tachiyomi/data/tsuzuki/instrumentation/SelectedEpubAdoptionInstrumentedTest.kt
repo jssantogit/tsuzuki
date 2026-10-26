@@ -21,10 +21,8 @@ import kotlinx.serialization.json.Json
 import mihon.app.di.AppBindings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.data.Database
@@ -253,10 +251,17 @@ class SelectedEpubAdoptionInstrumentedTest {
     }
 
     private fun fixtureContext() = InstrumentationRegistry.getInstrumentation().targetContext.also { context ->
-        assumeTrue("Dedicated disposable-emulator job only", InstrumentationRegistry.getArguments()
-            .getString("iceEpubE2eOptIn") == "true")
+        assertEquals(
+            "This test must run only via the disposable emulator harness",
+            "true",
+            InstrumentationRegistry.getArguments().getString("iceEpubE2eOptIn"),
+        )
         assertEquals("app.tsuzuki.dev", context.packageName)
-        assertEquals("1", android.os.SystemProperties.get("ro.kernel.qemu", "0"))
+        assertTrue(
+            "Do not run against a physical user's device",
+            android.os.Build.HARDWARE.contains("ranchu") ||
+                android.os.Build.HARDWARE.contains("goldfish"),
+        )
     }
 
     private fun report(stage: String, facts: String) {
