@@ -98,6 +98,26 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         }
 
     @Test
+    fun `sync evidence lookup identifies only persisted edition scoped ownership`() = runBlocking<Unit> {
+        val selected = batch(claim("12"))
+        val applied = writer.commit(selected, grant(selected.scope)) as EditorialUnitCommitResult.Applied
+        val ordinary = CanonicalChapter(
+            id = "old-local",
+            canonicalTitleId = "title",
+            displayNumber = "13",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 13,
+            createdAt = 1L,
+            updatedAt = 1L,
+        )
+        chapters.upsert(ordinary)
+        val syncEvidence = tachiyomi.data.tsuzuki.sync.ChapterSyncEvidenceRepositoryImpl(database)
+        syncEvidence.isEditionScopedChapter(applied.chapterIds.single()) shouldBe true
+        syncEvidence.isEditionScopedChapter(ordinary.id) shouldBe false
+        syncEvidence.isEditionScopedChapter("missing") shouldBe false
+    }
+
+    @Test
     fun `second edition with same chapter number cannot cross-link or overwrite earlier edition`(): Unit =
         runBlocking<Unit> {
             val first = batch(claim("1"))

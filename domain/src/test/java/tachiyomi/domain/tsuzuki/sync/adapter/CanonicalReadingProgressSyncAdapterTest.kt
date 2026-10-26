@@ -130,6 +130,55 @@ class CanonicalReadingProgressSyncAdapterTest {
     }
 
     @Test
+    fun `edition scoped chapter progress cannot be silently exported under v1 or experimental v2`() = runTest {
+        val editorial = chapter("editorial-original").copy(baseNumber = 18, displayNumber = "18")
+        val legacy = chapter("legacy-other").copy(baseNumber = 19, displayNumber = "19")
+        val read = FakeReadingRepository().apply {
+            upsertProgress(CanonicalChapterProgress(editorial.id, lastPageRead = 12, updatedAt = 5))
+            upsertProgress(CanonicalChapterProgress(legacy.id, lastPageRead = 3, updatedAt = 6))
+        }
+        for (v2 in listOf(false, true)) {
+            val sync = adapter(
+                chapters = FakeChapterRepository(listOf(editorial, legacy), emptyList()),
+                reading = read,
+                exactVersion2Enabled = v2,
+                editionScopedIds = setOf(editorial.id),
+            )
+            sync.hasUnportableLocalState() shouldBe true
+            val exported = sync.exportDocument()
+            exported.records.size shouldBe 1
+            exported.records.values.single().fields.getValue("chapterKey").toString().contains("19") shouldBe true
+        }
+    }
+
+    @Test
+    fun `remote progress cannot resolve to edition owned chapter even when it is the only numbered match`() =
+        runTest {
+            val editorial = chapter("editorial-target").copy(baseNumber = 18, displayNumber = "18")
+            val remote = editorial.copy(id = "unscoped-source")
+            for (v2 in listOf(false, true)) {
+                val source = FakeReadingRepository().apply {
+                    upsertProgress(CanonicalChapterProgress(remote.id, lastPageRead = 8, updatedAt = 10))
+                }
+                val document = adapter(
+                    chapters = FakeChapterRepository(listOf(remote), emptyList()),
+                    reading = source,
+                    exactVersion2Enabled = v2,
+                ).exportDocument()
+                val local = FakeReadingRepository()
+                val importer = adapter(
+                    chapters = FakeChapterRepository(listOf(editorial), emptyList()),
+                    reading = local,
+                    exactVersion2Enabled = v2,
+                    editionScopedIds = setOf(editorial.id),
+                )
+                shouldThrow<IllegalArgumentException> { importer.applyDocument(document) }
+                local.atomicBatchCalls shouldBe 0
+                local.getProgress(editorial.id) shouldBe null
+            }
+        }
+
+    @Test
     fun `unknown chapter without stable evidence stays local and marks adapter unportable`() = runTest {
         val unknown = CanonicalChapter(
             id = "unknown-local",
@@ -464,11 +513,17 @@ class CanonicalReadingProgressSyncAdapterTest {
         chapters: CanonicalChapterRepository,
         reading: CanonicalReadingRepository,
         exactVersion2Enabled: Boolean = false,
+        editionScopedIds: Set<String> = emptySet(),
     ) = CanonicalReadingProgressSyncAdapter(
         titleSource = CanonicalTitleSyncSource { listOf(title()) },
         chapterRepository = chapters,
         readingRepository = reading,
-        evidenceRepository = ChapterSyncEvidenceRepository { null },
+        evidenceRepository = object : ChapterSyncEvidenceRepository {
+            override suspend fun getStableEvidenceKey(canonicalChapterId: String): String? = null
+
+            override suspend fun isEditionScopedChapter(canonicalChapterId: String): Boolean =
+                canonicalChapterId in editionScopedIds
+        },
         revisionSource = FakeRevisionSource(),
         clock = object : SyncClock {
             override fun nowEpochMillis(): Long = 100L
