@@ -25,7 +25,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -157,7 +159,7 @@ data class CanonicalTitleScreen(
                 onDismissRequest = { adoptionModel.dismissCandidates() },
                 title = { Text("Selecionar capítulos da edição") },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(androidx.compose.ui.unit.Dp(8f))) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Edição: ${scope.editionKey} · Idioma: ${scope.language}")
                         Text("Estes dados são candidatos, não capítulos oficiais atestados por uma editora.")
                         if (adoptionState.loadingCandidates) {
@@ -170,14 +172,16 @@ data class CanonicalTitleScreen(
                             if (page.candidates.isEmpty()) {
                                 Text("Nenhum candidato disponível nesta página.")
                             }
-                            LazyColumn(modifier = androidx.compose.ui.Modifier.fillMaxWidth().heightIn(max = androidx.compose.ui.unit.Dp(340f))) {
+                            LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp)) {
                                 items(page.candidates, key = { it.sourceRecordId }) { example ->
                                     val checked = example.sourceRecordId in selectedCandidates
+                                    val canSelectMore =
+                                        selectedCandidates.size < PreviewUserAdoptedInventory.MAX_SELECTION
                                     Row {
                                         Checkbox(
                                             checked = checked,
                                             enabled = !adoptionState.loadingCandidates &&
-                                                (checked || selectedCandidates.size < PreviewUserAdoptedInventory.MAX_SELECTION),
+                                                (checked || canSelectMore),
                                             onCheckedChange = { selected ->
                                                 selectedCandidates = if (selected) {
                                                     selectedCandidates + example.sourceRecordId
@@ -227,7 +231,7 @@ data class CanonicalTitleScreen(
                 title = { Text("Confirmar adoção dos capítulos") },
                 text = {
                     Column(
-                        modifier = androidx.compose.ui.Modifier.heightIn(max = androidx.compose.ui.unit.Dp(420f))
+                        modifier = Modifier.heightIn(max = 420.dp)
                             .verticalScroll(rememberScrollState()),
                     ) {
                         Text("Obra: $canonicalTitleId")
