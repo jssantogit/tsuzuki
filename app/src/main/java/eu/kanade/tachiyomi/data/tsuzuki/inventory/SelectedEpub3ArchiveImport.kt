@@ -6,18 +6,18 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.chapter.inventory.SelectedEpub3Navigation
 import tachiyomi.domain.tsuzuki.chapter.inventory.SelectedEpub3TocAdapter
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
+import java.io.StringReader
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
-import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilderFactory
+import org.xml.sax.InputSource
 
 /**
  * Host-owned, user-selected EPUB3 metadata import. No DRM handling, no page
@@ -35,6 +35,9 @@ internal object SelectedEpub3ArchiveImport {
     private const val CONTAINER_NS = "urn:oasis:names:tc:opendocument:xmlns:container"
     private const val DC_NS = "http://purl.org/dc/elements/1.1/"
     private val languagePattern = Regex("^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,3}$")
+    // Strict UTF-8 preprocessing is portable across Android's DOM and JVM JAXP:
+    // neither an internal DTD nor an external entity is legal in selected metadata.
+    private val forbiddenXmlDeclaration = Regex("""<!\\s*(?:DOCTYPE|ENTITY)\\b""", RegexOption.IGNORE_CASE)
 
     fun read(
         stream: InputStream,
@@ -158,20 +161,20 @@ internal object SelectedEpub3ArchiveImport {
     }
 
     private fun parseXml(bytes: ByteArray): Document {
+        // Android's DocumentBuilderFactory does not implement the desktop JAXP
+        // secure-processing or XInclude setters. Validate the exact bounded
+        // UTF-8 text *before* the DOM parser receives it: markup entity
+        // declarations require a DOCTYPE and are never allowed.
+        val xml = bytes.decodeStrict()
+        require(!forbiddenXmlDeclaration.containsMatchIn(xml)) {
+            "EPUB metadata XML cannot declare a DTD or entities"
+        }
         val factory = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
-            // Android's DOM factory throws on setXIncludeAware(false).
-            // We reject XInclude nodes explicitly after parsing instead.
-            isExpandEntityReferences = false
-            setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
-            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-            setFeature("http://xml.org/sax/features/external-general-entities", false)
-            setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-            setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
         }
         val parsed = factory.newDocumentBuilder().apply {
             setEntityResolver { _, _ -> error("External XML entities are not allowed") }
-        }.parse(ByteArrayInputStream(bytes))
+        }.parse(InputSource(StringReader(xml)))
         require(parsed.doctype == null) { "EPUB package XML cannot contain a DTD" }
         require(parsed.getElementsByTagNameNS("http://www.w3.org/2001/XInclude", "*").length == 0) {
             "EPUB package XML cannot include external XML content"
