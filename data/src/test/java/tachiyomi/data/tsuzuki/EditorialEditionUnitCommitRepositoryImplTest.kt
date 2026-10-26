@@ -20,18 +20,18 @@ import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
 import tachiyomi.domain.tsuzuki.chapter.interactor.ChapterMutationGate
 import tachiyomi.domain.tsuzuki.chapter.inventory.EditorialUnitCommitResult
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryCandidateProvenance
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryCandidateSourceKind
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaim
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaimKind
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryDerivation
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
-import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryCandidateProvenance
-import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryCandidateSourceKind
-import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionReviewRequest
-import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionConfirmation
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionCommitResult
+import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionConfirmation
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionPreview
+import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionReviewRequest
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import java.nio.file.Files
@@ -130,13 +130,15 @@ class EditorialEditionUnitCommitRepositoryImplTest {
                 provenance = provenance,
             )
             val ledger = tachiyomi.data.tsuzuki.chapter.IndependentInventoryRepositoryImpl(database)
-            ledger.saveBatch(InventoryEvidenceBatch(
-                scope = selection,
-                pageKey = "selected-r1",
-                observedAt = 10L,
-                outcome = InventoryFetchOutcome.PARTIAL,
-                claims = listOf(candidate),
-            ))
+            ledger.saveBatch(
+                InventoryEvidenceBatch(
+                    scope = selection,
+                    pageKey = "selected-r1",
+                    observedAt = 10L,
+                    outcome = InventoryFetchOutcome.PARTIAL,
+                    claims = listOf(candidate),
+                ),
+            )
             val repository = UserAdoptedInventoryRepositoryImpl(database, ledger, chapters, ChapterMutationGate())
             val request = UserAdoptionReviewRequest(selection, listOf(candidate.sourceRecordId))
             val plan = repository.preview(request) as UserAdoptionPreview.Ready
@@ -161,30 +163,54 @@ class EditorialEditionUnitCommitRepositoryImplTest {
     fun `stale source revision cannot pass a reviewed fingerprint into local chapter persistence`(): Unit =
         runBlocking<Unit> {
             val selection = InventoryScope(
-                canonicalTitleId = "title", producerId = "epub3-user-selected",
-                externalWorkId = "book", editionKey = "edition", language = "ja",
-                workIdentityVerified = false, editionIdentityVerified = false,
+                canonicalTitleId = "title",
+                producerId = "epub3-user-selected",
+                externalWorkId = "book",
+                editionKey = "edition",
+                language = "ja",
+                workIdentityVerified = false,
+                editionIdentityVerified = false,
             )
             fun candidate(revision: String, observed: Long) = InventoryClaim(
-                sourceRecordId = "chapter-1", label = "1", volumeLabel = null,
-                language = "ja", kind = InventoryClaimKind.INDIVIDUAL,
+                sourceRecordId = "chapter-1",
+                label = "1",
+                volumeLabel = null,
+                language = "ja",
+                kind = InventoryClaimKind.INDIVIDUAL,
                 derivation = InventoryDerivation.USER_SUPPLIED_EDITION_TOC,
-                upstreamSourceId = revision, observedAt = observed,
+                upstreamSourceId = revision,
+                observedAt = observed,
                 provenance = InventoryCandidateProvenance(
                     sourceKind = InventoryCandidateSourceKind.USER_SELECTED_EPUB3_TOC,
-                    originReference = "user-selected:book", exactRevision = revision,
+                    originReference = "user-selected:book",
+                    exactRevision = revision,
                     snapshotDigest = "sha256:" + (if (revision == "r1") "a" else "b").repeat(64),
-                    sourceUnitId = "1.xhtml", structuralCategory = "toc-chapter",
+                    sourceUnitId = "1.xhtml",
+                    structuralCategory = "toc-chapter",
                 ),
             )
             val ledger = tachiyomi.data.tsuzuki.chapter.IndependentInventoryRepositoryImpl(database)
-            ledger.saveBatch(InventoryEvidenceBatch(selection, "page1", 10L,
-                InventoryFetchOutcome.PARTIAL, listOf(candidate("r1", 10L))))
+            ledger.saveBatch(
+                InventoryEvidenceBatch(
+                    selection,
+                    "page1",
+                    10L,
+                    InventoryFetchOutcome.PARTIAL,
+                    listOf(candidate("r1", 10L)),
+                ),
+            )
             val repository = UserAdoptedInventoryRepositoryImpl(database, ledger, chapters, ChapterMutationGate())
             val request = UserAdoptionReviewRequest(selection, listOf("chapter-1"))
             val preview = repository.preview(request) as UserAdoptionPreview.Ready
-            ledger.saveBatch(InventoryEvidenceBatch(selection, "page1", 11L,
-                InventoryFetchOutcome.PARTIAL, listOf(candidate("r2", 11L))))
+            ledger.saveBatch(
+                InventoryEvidenceBatch(
+                    selection,
+                    "page1",
+                    11L,
+                    InventoryFetchOutcome.PARTIAL,
+                    listOf(candidate("r2", 11L)),
+                ),
+            )
             repository.adopt(UserAdoptionConfirmation(request, preview.fingerprint, 12L, true)) shouldBe
                 UserAdoptionCommitResult.Refused
             chapters.getByCanonicalTitleId("title") shouldBe emptyList()
