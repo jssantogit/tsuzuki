@@ -31,7 +31,8 @@ data class BackupOptions(
         canonicalLibraryOnly,
     )
 
-    fun canCreate() = canonicalLibraryOnly || libraryEntries || categories || appSettings || extensionStores || sourceSettings
+    fun canCreate() =
+        canonicalLibraryOnly || libraryEntries || categories || appSettings || extensionStores || sourceSettings
 
     companion object {
         val libraryOptions = listOf(

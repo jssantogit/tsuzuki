@@ -100,8 +100,29 @@ class BackupRestorerCanonicalGateTest {
         coEvery { backupDecoder.decode(uri) } returns CanonicalStandaloneArchive.compose(core)
         restorer().restore(uri, RestoreOptions())
         coVerify(exactly = 1) { canonicalImporter.restoreCore(core, any()) }
-        verify(exactly = 0) { categoriesRestorer.invoke(any()) }
+        coVerify(exactly = 0) { categoriesRestorer.invoke(any()) }
         verify(exactly = 1) { notifier.showRestoreComplete(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `a mixed archive cannot mutate either legacy or canonical data`(): Unit = runBlocking {
+        val core = BackupCanonicalSection.fromJson(
+            "tsuzuki.core.v1",
+            Json.encodeToString(BackupCanonicalCore.serializer(), BackupCanonicalCore()),
+        )
+        val mixed = CanonicalStandaloneArchive.compose(core).copy(
+            backupPreferences = listOf(
+                eu.kanade.tachiyomi.data.backup.models.BackupPreference(
+                    "settings",
+                    eu.kanade.tachiyomi.data.backup.models.StringPreferenceValue("original"),
+                ),
+            ),
+        )
+        coEvery { backupDecoder.decode(uri) } returns mixed
+        shouldThrow<IllegalArgumentException> { restorer().restore(uri, RestoreOptions()) }
+        coVerify(exactly = 0) { canonicalImporter.restoreCore(any(), any()) }
+        coVerify(exactly = 0) { categoriesRestorer.invoke(any()) }
+        verify(exactly = 0) { notifier.showRestoreComplete(any(), any(), any(), any(), any()) }
     }
 
     @Test
