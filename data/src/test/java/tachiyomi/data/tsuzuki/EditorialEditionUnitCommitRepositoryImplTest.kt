@@ -228,6 +228,56 @@ class EditorialEditionUnitCommitRepositoryImplTest {
     }
 
     @Test
+    fun `last Host check can revoke persisted edition consent and still force atomic rollback`(): Unit =
+        runBlocking<Unit> {
+            val request = batch(claim("9"))
+            var checks = 0
+            val result = writer.commit(request) { _, _ ->
+                checks++
+                if (checks == 2) {
+                    database.tsuzuki_editorial_edition_consentsQueries.revokeTsuzukiEditorialEditionConsent(
+                        canonicalTitleId = "title",
+                        producerId = "synthetic-editorial",
+                        externalWorkId = "work",
+                        editionKey = "original",
+                        scopeLanguage = "ja",
+                    )
+                }
+                request.scope
+            }
+
+            checks shouldBe 2
+            result shouldBe EditorialUnitCommitResult.Refused
+            chapters.getByCanonicalTitleId("title") shouldBe emptyList()
+            database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title")
+                .awaitAsList() shouldBe emptyList()
+        }
+
+    @Test
+    fun `a capability switch during final Host validation cannot leave orphaned editorial chapters`(): Unit =
+        runBlocking<Unit> {
+            val request = batch(claim("10"))
+            var checks = 0
+            val result = writer.commit(request) { _, _ ->
+                checks++
+                if (checks == 2) {
+                    database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+                        integrationId = "synthetic-editorial",
+                        enabled = false,
+                        configJson = """{"chapter_inventory":true}""",
+                        updatedAt = 14L,
+                    )
+                }
+                request.scope
+            }
+            checks shouldBe 2
+            result shouldBe EditorialUnitCommitResult.Refused
+            chapters.getByCanonicalTitleId("title") shouldBe emptyList()
+            database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title")
+                .awaitAsList() shouldBe emptyList()
+        }
+
+    @Test
     fun `host revocation after insertion rolls back both chapter and scoped ownership`(): Unit = runBlocking<Unit> {
         val selected = batch(claim("1"), claim("2"))
         var checks = 0
