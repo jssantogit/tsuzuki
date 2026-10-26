@@ -29,6 +29,7 @@ import tachiyomi.domain.tsuzuki.sync.model.SyncDocumentKind
 import tachiyomi.domain.tsuzuki.sync.model.SyncDocumentResult
 import tachiyomi.domain.tsuzuki.sync.model.SyncFailure
 import tachiyomi.domain.tsuzuki.sync.model.SyncFailureReason
+import tachiyomi.domain.tsuzuki.sync.model.SyncMutation
 import tachiyomi.domain.tsuzuki.sync.model.SyncOutboxEntry
 import tachiyomi.domain.tsuzuki.sync.model.SyncRecordEnvelope
 import tachiyomi.domain.tsuzuki.sync.model.SyncRevision
@@ -116,8 +117,8 @@ class SupabaseSyncOrchestratorTest {
             transport = remote,
         ).sync(kind)
 
-        remote.pushedBatches.flatMap { it.mutations }.none {
-            it.recordId == "title-1" && it.operation == SupabaseSyncOperation.DELETE
+        remote.pushedBatches.flatMap { it.operations }.none {
+            it is SyncMutation.DeleteRecord && it.recordId == "title-1"
         } shouldBe true
     }
 
