@@ -35,10 +35,11 @@ class BackupCanonicalSnapshotTest {
         // App-wide JSON omits nullable fields. Validation and import must
         // consume the very same wire form written by the real backup worker.
         val payload = Json { explicitNulls = false }.encodeToString(BackupCanonicalCore.serializer(), core)
-        require(!payload.contains("\\"volume\\""))
+        require(!payload.contains("\"volume\""))
         val section = BackupCanonicalSection.fromJson(BackupCanonicalCore.SECTION_KEY, payload)
         BackupCanonicalSnapshot(sections = listOf(section)).validate()
-        val restored = Json { explicitNulls = false }.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
+        val restored = Json { explicitNulls = false }
+            .decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
         restored shouldBe core
     }
 
@@ -46,7 +47,16 @@ class BackupCanonicalSnapshotTest {
     fun `missing required chapter identity is never treated as a nullable omission`() {
         val section = BackupCanonicalSection.fromJson(
             BackupCanonicalCore.SECTION_KEY,
-            """{"titles":[{"id":"work","displayTitle":"Work","identityState":"SOURCE_ONLY","createdAt":1,"updatedAt":1}],"chapters":[{"canonicalTitleId":"work","displayNumber":"1","type":"REGULAR","baseNumber":1,"confidence":1.0,"createdAt":1,"updatedAt":1,"confirmation":"PROVISIONAL"}]}""",
+            """
+            {
+              "titles":[{"id":"work","displayTitle":"Work","identityState":"SOURCE_ONLY","createdAt":1,"updatedAt":1}],
+              "chapters":[{
+                "canonicalTitleId":"work","displayNumber":"1","type":"REGULAR",
+                "baseNumber":1,"confidence":1.0,"createdAt":1,"updatedAt":1,
+                "confirmation":"PROVISIONAL"
+              }]
+            }
+            """.trimIndent(),
         )
         runCatching { BackupCanonicalSnapshot(sections = listOf(section)).validate() }.isFailure shouldBe true
     }
