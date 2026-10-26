@@ -184,6 +184,27 @@ class EditorialEditionUnitCommitRepositoryImplTest {
         }
 
     @Test
+    fun `re-enabling inventory after a disable never silently revives old edition consent`(): Unit =
+        runBlocking<Unit> {
+            val requested = batch(claim("17"))
+            database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+                integrationId = "synthetic-editorial",
+                enabled = false,
+                configJson = """{"chapter_inventory":true}""",
+                updatedAt = 11L,
+            )
+            writer.commit(requested, grant(requested.scope)) shouldBe EditorialUnitCommitResult.Refused
+            database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+                integrationId = "synthetic-editorial",
+                enabled = true,
+                configJson = """{"chapter_inventory":true}""",
+                updatedAt = 12L,
+            )
+            writer.commit(requested, grant(requested.scope)) shouldBe EditorialUnitCommitResult.Refused
+            chapters.getByCanonicalTitleId("title") shouldBe emptyList()
+        }
+
+    @Test
     fun `grant for another edition work or language must never authorize a valid producer callback`(): Unit =
         runBlocking<Unit> {
             for (alternate in listOf(scope("revised"), scope().copy(language = "en"))) {
