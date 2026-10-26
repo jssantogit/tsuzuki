@@ -235,13 +235,15 @@ class EditorialEditionUnitCommitRepositoryImplTest {
             val result = writer.commit(request) { _, _ ->
                 checks++
                 if (checks == 2) {
-                    database.tsuzuki_editorial_edition_consentsQueries.revokeTsuzukiEditorialEditionConsent(
-                        canonicalTitleId = "title",
-                        producerId = "synthetic-editorial",
-                        externalWorkId = "work",
-                        editionKey = "original",
-                        scopeLanguage = "ja",
-                    )
+                    runBlocking {
+                        database.tsuzuki_editorial_edition_consentsQueries.revokeTsuzukiEditorialEditionConsent(
+                            canonicalTitleId = "title",
+                            producerId = "synthetic-editorial",
+                            externalWorkId = "work",
+                            editionKey = "original",
+                            scopeLanguage = "ja",
+                        )
+                    }
                 }
                 request.scope
             }
@@ -261,12 +263,14 @@ class EditorialEditionUnitCommitRepositoryImplTest {
             val result = writer.commit(request) { _, _ ->
                 checks++
                 if (checks == 2) {
-                    database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
-                        integrationId = "synthetic-editorial",
-                        enabled = false,
-                        configJson = """{"chapter_inventory":true}""",
-                        updatedAt = 14L,
-                    )
+                    runBlocking {
+                        database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+                            integrationId = "synthetic-editorial",
+                            enabled = false,
+                            configJson = """{"chapter_inventory":true}""",
+                            updatedAt = 14L,
+                        )
+                    }
                 }
                 request.scope
             }
