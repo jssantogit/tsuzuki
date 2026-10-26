@@ -89,12 +89,18 @@ class PreviewUserAdoptedInventory {
                 !InventoryClaimPolicy.isNonEditorialCandidate(claim) ||
                 claim.language != scope.language ||
                 claim.label.isNullOrBlank() ||
-                (provenance.sourceKind == InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION &&
-                    (provenance.attributionReference.isNullOrBlank() || provenance.licenseReference.isNullOrBlank())) ||
-                (provenance.sourceKind == InventoryCandidateSourceKind.USER_SELECTED_EPUB3_TOC &&
-                    provenance.structuralCategory != "toc-chapter") ||
-                (provenance.sourceKind == InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION &&
-                    provenance.structuralCategory !in setOf("chapter-list-entry", "chapter-table-entry"))
+                (
+                    provenance.sourceKind == InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION &&
+                        (provenance.attributionReference.isNullOrBlank() || provenance.licenseReference.isNullOrBlank())
+                    ) ||
+                (
+                    provenance.sourceKind == InventoryCandidateSourceKind.USER_SELECTED_EPUB3_TOC &&
+                        provenance.structuralCategory != "toc-chapter"
+                    ) ||
+                (
+                    provenance.sourceKind == InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION &&
+                        provenance.structuralCategory !in setOf("chapter-list-entry", "chapter-table-entry")
+                    )
             ) {
                 return UserAdoptionPreview.Blocked(UserAdoptionBlockReason.NOT_AN_EXPLICIT_INDIVIDUAL_CANDIDATE)
             }
@@ -160,8 +166,13 @@ class PreviewUserAdoptedInventory {
             digest.update(bytes)
         }
         field("USER_ADOPTED:v1")
-        listOf(scope.canonicalTitleId, scope.producerId, scope.externalWorkId,
-            requireNotNull(scope.editionKey), requireNotNull(scope.language)).forEach(::field)
+        listOf(
+            scope.canonicalTitleId,
+            scope.producerId,
+            scope.externalWorkId,
+            requireNotNull(scope.editionKey),
+            requireNotNull(scope.language),
+        ).forEach(::field)
         units.forEach { unit ->
             field(unit.sourceRecordId)
             field(unit.label)
@@ -170,8 +181,16 @@ class PreviewUserAdoptedInventory {
             field(unit.observedAt.toString())
             field(unit.derivation.name)
             with(unit.provenance) {
-                listOf(sourceKind.name, originReference, exactRevision, attributionReference.orEmpty(),
-                    licenseReference.orEmpty(), snapshotDigest, sourceUnitId, structuralCategory).forEach(::field)
+                listOf(
+                    sourceKind.name,
+                    originReference,
+                    exactRevision,
+                    attributionReference.orEmpty(),
+                    licenseReference.orEmpty(),
+                    snapshotDigest,
+                    sourceUnitId,
+                    structuralCategory,
+                ).forEach(::field)
             }
         }
         return "sha256:" + digest.digest().joinToString("") { "%02x".format(it) }
