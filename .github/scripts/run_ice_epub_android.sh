@@ -43,7 +43,9 @@ run_case() {
     ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$results/$output" ||
     ! grep -Eq '^OK \(1 test\)' "$results/$output"; then
     echo "ICE_EPUB_E2E|outcome=FAIL|case=$test_name|runner=$result" >&2
-    grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|INSTRUMENTATION_CODE|Tests run:' "$results/$output" || true
+    # Emit only diagnostic headings and first exception lines (not full device logs).
+    grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|INSTRUMENTATION_CODE|Tests run:|^INSTRUMENTATION_STATUS: stack=|^Error in ' \
+      "$results/$output" | tail -n 12 || true
     return 1
   fi
   echo "ICE_EPUB_E2E|outcome=PASS|case=$test_name"
