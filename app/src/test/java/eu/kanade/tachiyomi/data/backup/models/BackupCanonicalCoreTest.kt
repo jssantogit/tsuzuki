@@ -21,6 +21,46 @@ class BackupCanonicalCoreTest {
     }
 
     @Test
+    fun `edition ownership survives a portable core roundtrip and rejects invalid ownership`() {
+        val original = core().copy(
+            chapters = core().chapters.map { it.copy(confirmation = "CONFIRMED") },
+        )
+        val link = BackupCoreEditorialChapterBinding(
+            canonicalChapterId = "chapter-1",
+            canonicalTitleId = "title-1",
+            producerId = "editorial-test",
+            externalWorkId = "work-1",
+            editionKey = "edition-ja",
+            scopeLanguage = "ja",
+            sourceRecordId = "chapter-1",
+            upstreamSourceId = "publisher-feed",
+            identityKey = "REGULAR:1",
+            volumeKey = 0L,
+            observedAt = 42L,
+        )
+        val valid = original.copy(editorialChapterBindings = listOf(link))
+        valid.validate()
+        val json = Json.encodeToString(BackupCanonicalCore.serializer(), valid)
+        val decoded = Json.decodeFromString(BackupCanonicalCore.serializer(), json)
+        decoded shouldBe valid
+        runCatching {
+            valid.copy(editorialChapterBindings = listOf(link, link)).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            valid.copy(editorialChapterBindings = listOf(link.copy(canonicalTitleId = "wrong"))).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            valid.copy(editorialChapterBindings = listOf(link.copy(canonicalChapterId = "missing"))).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            valid.copy(editorialChapterBindings = listOf(link.copy(editionKey = " "))).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            valid.copy(editorialChapterBindings = listOf(link.copy(volumeKey = -1))).validate()
+        }.isFailure shouldBe true
+    }
+
+    @Test
     fun `legacy count ID retains progress history and variant across portable backup roundtrip`() {
         val core = core()
         // A canonical-title merge changes the chapter owner, never its historical ID.

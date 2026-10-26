@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterEvidence
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreEditorialChapterBinding
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterOverride
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterUpdateState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
@@ -155,6 +156,44 @@ class CanonicalCoreBackupImporterTest {
         database.tsuzuki_backup_restore_receiptsQueries
             .getTsuzukiBackupRestoreReceipt(section.sha256).awaitAsOne().snapshot_hash shouldBe section.sha256
     }
+
+    @Test
+    fun `edition ownership is restored transactionally and is included in the next core export`(): Unit =
+        runBlocking {
+            val original = Json.decodeFromString(BackupCanonicalCore.serializer(), section().payloadJson)
+            val chapter = original.chapters.single().copy(confirmation = "CONFIRMED")
+            val link = BackupCoreEditorialChapterBinding(
+                canonicalChapterId = chapter.id,
+                canonicalTitleId = "title-1",
+                producerId = "editorial-test",
+                externalWorkId = "work-1",
+                editionKey = "edition-ja",
+                scopeLanguage = "ja",
+                sourceRecordId = "chapter-1",
+                upstreamSourceId = "publisher-feed",
+                identityKey = "REGULAR:1",
+                volumeKey = 0L,
+                observedAt = 42L,
+            )
+            importer.restoreCore(
+                coreSection(original.copy(chapters = listOf(chapter), editorialChapterBindings = listOf(link))),
+            )
+            database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title-1")
+                .awaitAsList().single().edition_key shouldBe "edition-ja"
+            val titles = CanonicalTitleRepositoryImpl(database)
+            val exporter = CanonicalCoreBackupExporter(
+                titleSource = CanonicalTitleSyncSource { titles.getAllAsFlow().first() },
+                titleRepository = titles,
+                libraryRepository = CanonicalLibraryRepositoryImpl(database),
+                chapterRepository = CanonicalChapterRepositoryImpl(database),
+                sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+                readingRepository = CanonicalReadingRepositoryImpl(database),
+                database = database,
+                json = Json,
+            )
+            val exported = Json.decodeFromString(BackupCanonicalCore.serializer(), exporter.export().payloadJson)
+            exported.editorialChapterBindings shouldBe listOf(link)
+        }
 
     @Test
     fun `canonical export of restored SQLite graph preserves its local-only state`(): Unit = runBlocking {
