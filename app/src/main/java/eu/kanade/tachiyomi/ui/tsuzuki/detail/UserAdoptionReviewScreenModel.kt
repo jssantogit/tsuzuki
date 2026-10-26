@@ -67,7 +67,9 @@ class UserAdoptionReviewScreenModel(
             scope.editionKey.isNullOrBlank() ||
             scope.language.isNullOrBlank() ||
             mutableState.value.adopting
-        ) return
+        ) {
+            return
+        }
         operation?.cancel()
         activeReview = null
         candidateCursors = mutableListOf(null)
