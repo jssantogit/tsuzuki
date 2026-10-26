@@ -31,10 +31,10 @@ import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSnapshot
-import eu.kanade.tachiyomi.data.backup.models.CanonicalCoreWireJson
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreUserAdoptionReceipt
+import eu.kanade.tachiyomi.data.backup.models.CanonicalCoreWireJson
 import eu.kanade.tachiyomi.data.backup.restore.CanonicalCoreBackupImporter
 import eu.kanade.tachiyomi.data.tsuzuki.inventory.SelectedEpub3ArchiveImport
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
@@ -334,7 +334,11 @@ class SelectedEpubAdoptionInstrumentedTest {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         val intent = requireNotNull(CanonicalTitleActivity.newIntent(context, titleId))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
+        // A background Context.startActivity() can be ignored by Android's
+        // background activity-start policy on a cold, cleared test process.
+        // Instrumentation launches explicitly and synchronously instead.
+        val launched = InstrumentationRegistry.getInstrumentation().startActivitySync(intent)
+        assertTrue(launched is CanonicalTitleActivity)
         try {
             // Wait for the real title screen to be RESUMED and populated before
             // scrolling its lazy list. Otherwise early swipes may leave the
@@ -344,8 +348,18 @@ class SelectedEpubAdoptionInstrumentedTest {
                 Until.hasObject(By.text("SAF UI EPUB fixture")),
                 30_000,
             )
+            val visibleText = if (titleShown) {
+                ""
+            } else {
+                device.findObjects(By.textMatches(".*"))
+                    .mapNotNull { it.text }
+                    .filter(String::isNotBlank)
+                    .distinct()
+                    .take(15)
+                    .joinToString(" | ")
+            }
             assertTrue(
-                "Canonical title details must render before opening DocumentsUI; foreground=${device.currentPackageName}",
+                "Canonical title not rendered; foreground=${device.currentPackageName}; visible=$visibleText",
                 titleShown,
             )
             val action = awaitUiAction(device, "Import EPUB3 index", "Importar índice EPUB3")
@@ -406,6 +420,7 @@ class SelectedEpubAdoptionInstrumentedTest {
             }
         } finally {
             device.pressBack()
+            InstrumentationRegistry.getInstrumentation().runOnMainSync { launched.finish() }
         }
     }
 
@@ -543,7 +558,10 @@ class SelectedEpubAdoptionInstrumentedTest {
             )
             val actual = BackupDecoder(context, ProtoBuf).decode(uri)
             val section = CanonicalStandaloneArchive.requireRestorable(actual, true)
-            val core = CanonicalCoreWireJson.codec.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
+            val core = CanonicalCoreWireJson.codec.decodeFromString(
+                BackupCanonicalCore.serializer(),
+                section.payloadJson,
+            )
             assertTrue(core.titles.any { it.id == titleId })
             assertEquals(1, core.userAdoptionReceipts.count { it.canonicalTitleId == titleId })
             assertEquals(1, core.chapters.count { it.canonicalTitleId == titleId })
