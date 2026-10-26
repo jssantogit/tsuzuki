@@ -31,6 +31,7 @@ import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSnapshot
+import eu.kanade.tachiyomi.data.backup.models.CanonicalCoreWireJson
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreUserAdoptionReceipt
@@ -335,6 +336,18 @@ class SelectedEpubAdoptionInstrumentedTest {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
         try {
+            // Wait for the real title screen to be RESUMED and populated before
+            // scrolling its lazy list. Otherwise early swipes may leave the
+            // import action outside the viewport when loading completes.
+            awaitResumedActivity(CanonicalTitleActivity::class.java)
+            val titleShown = device.wait(
+                Until.hasObject(By.text("SAF UI EPUB fixture")),
+                30_000,
+            )
+            assertTrue(
+                "Canonical title details must render before opening DocumentsUI; foreground=${device.currentPackageName}",
+                titleShown,
+            )
             val action = awaitUiAction(device, "Import EPUB3 index", "Importar índice EPUB3")
             assertTrue("Import action must appear on actual title details", action != null)
             requireNotNull(action).click()
@@ -530,7 +543,7 @@ class SelectedEpubAdoptionInstrumentedTest {
             )
             val actual = BackupDecoder(context, ProtoBuf).decode(uri)
             val section = CanonicalStandaloneArchive.requireRestorable(actual, true)
-            val core = Json.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
+            val core = CanonicalCoreWireJson.codec.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
             assertTrue(core.titles.any { it.id == titleId })
             assertEquals(1, core.userAdoptionReceipts.count { it.canonicalTitleId == titleId })
             assertEquals(1, core.chapters.count { it.canonicalTitleId == titleId })
