@@ -1,0 +1,34 @@
+-- Each row is a durable user-adoption receipt line, NOT publisher/editorial authority.
+-- Never delete or rekey a personal adoption in response to source refresh.
+CREATE TABLE tsuzuki_user_adoption_receipts(
+    canonical_chapter_id TEXT NOT NULL PRIMARY KEY,
+    receipt_id TEXT NOT NULL,
+    canonical_title_id TEXT NOT NULL,
+    producer_id TEXT NOT NULL,
+    external_work_id TEXT NOT NULL,
+    edition_key TEXT NOT NULL,
+    scope_language TEXT NOT NULL,
+    source_record_id TEXT NOT NULL,
+    source_kind TEXT NOT NULL,
+    derivation TEXT NOT NULL,
+    origin_reference TEXT NOT NULL,
+    exact_revision TEXT NOT NULL,
+    attribution_reference TEXT,
+    license_reference TEXT,
+    snapshot_digest TEXT NOT NULL,
+    source_unit_id TEXT NOT NULL,
+    structural_category TEXT NOT NULL,
+    accepted_label TEXT NOT NULL,
+    identity_key TEXT NOT NULL,
+    volume_key INTEGER NOT NULL,
+    observed_at INTEGER NOT NULL,
+    accepted_at INTEGER NOT NULL,
+    review_fingerprint TEXT NOT NULL,
+    FOREIGN KEY(canonical_chapter_id) REFERENCES tsuzuki_canonical_chapters(id) ON DELETE RESTRICT,
+    FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE RESTRICT,
+    UNIQUE(canonical_title_id, producer_id, external_work_id, edition_key, scope_language, source_record_id),
+    UNIQUE(canonical_title_id, producer_id, external_work_id, edition_key, scope_language, identity_key, volume_key)
+);
+
+CREATE INDEX tsuzuki_user_adoption_title_idx
+ON tsuzuki_user_adoption_receipts(canonical_title_id);
