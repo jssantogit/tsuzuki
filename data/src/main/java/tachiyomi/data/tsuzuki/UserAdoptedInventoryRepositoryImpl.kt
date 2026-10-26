@@ -10,8 +10,12 @@ import kotlinx.coroutines.ensureActive
 import tachiyomi.data.Database
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.interactor.ChapterMutationGate
+import tachiyomi.data.tsuzuki.chapter.CandidateProvenanceJsonCodec
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryCandidateExample
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceRepository
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.chapter.inventory.PreviewUserAdoptedInventory
+import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionCandidatePage
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionCommitResult
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionConfirmation
 import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionPreview
@@ -38,11 +42,48 @@ class UserAdoptedInventoryRepositoryImpl(
 ) : UserAdoptionRepository {
     private val planner = PreviewUserAdoptedInventory()
 
+    private companion object {
+        const val CANDIDATE_PAGE_SIZE = 32
+    }
+
     override suspend fun adoptedChapterIds(canonicalTitleId: String): Set<String> =
         database.tsuzuki_user_adoption_receiptsQueries
             .getTsuzukiUserAdoptedChapterIdsByTitle(canonicalTitleId)
             .awaitAsList()
             .toSet()
+
+    override suspend fun candidatePage(scope: InventoryScope, afterRecordId: String?): UserAdoptionCandidatePage {
+        require(!scope.editionKey.isNullOrBlank() && !scope.language.isNullOrBlank()) {
+            "Candidate browsing requires selected edition and language"
+        }
+        require(afterRecordId == null || (afterRecordId.isNotBlank() && afterRecordId.length <= 1024)) {
+            "Invalid candidate page cursor"
+        }
+        val rows = database.tsuzuki_independent_inventory_claimsQueries
+            .getTsuzukiIndependentInventoryCandidatesByScope(
+                canonicalTitleId = scope.canonicalTitleId,
+                producerId = scope.producerId,
+                externalWorkId = scope.externalWorkId,
+                editionKey = requireNotNull(scope.editionKey),
+                scopeLanguage = requireNotNull(scope.language),
+                workVerified = if (scope.workIdentityVerified) 1L else 0L,
+                editionVerified = if (scope.editionIdentityVerified) 1L else 0L,
+                afterRecordId = afterRecordId.orEmpty(),
+                rowLimit = (CANDIDATE_PAGE_SIZE + 1).toLong(),
+            ) { id, label, observedAt, provenanceJson ->
+                Triple(id, label, observedAt to provenanceJson)
+            }
+            .awaitAsList()
+        return UserAdoptionCandidatePage(
+            candidates = rows.take(CANDIDATE_PAGE_SIZE).mapNotNull { row ->
+                val label = row.second?.trim()?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                val provenance = CandidateProvenanceJsonCodec.decode(row.third.second)
+                    ?: return@mapNotNull null
+                InventoryCandidateExample(row.first, label, provenance, row.third.first)
+            },
+            nextCursor = if (rows.size > CANDIDATE_PAGE_SIZE) rows[CANDIDATE_PAGE_SIZE - 1].first else null,
+        )
+    }
 
     override suspend fun preview(request: UserAdoptionReviewRequest): UserAdoptionPreview =
         planner.execute(
