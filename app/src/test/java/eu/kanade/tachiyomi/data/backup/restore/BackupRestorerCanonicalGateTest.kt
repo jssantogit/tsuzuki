@@ -4,7 +4,9 @@ import android.content.Context
 import android.net.Uri
 import eu.kanade.tachiyomi.data.backup.BackupDecoder
 import eu.kanade.tachiyomi.data.backup.BackupNotifier
+import eu.kanade.tachiyomi.data.backup.CanonicalStandaloneArchive
 import eu.kanade.tachiyomi.data.backup.models.Backup
+import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSnapshot
 import eu.kanade.tachiyomi.data.backup.restore.restorers.CategoriesRestorer
@@ -15,15 +17,18 @@ import eu.kanade.tachiyomi.data.download.DownloadCache
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.string.shouldContain
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 import tachiyomi.data.Database
 
 class BackupRestorerCanonicalGateTest {
 
     private val backupDecoder = mockk<BackupDecoder>()
+    private val canonicalImporter = mockk<CanonicalCoreBackupImporter>(relaxed = true)
     private val notifier = mockk<BackupNotifier>(relaxed = true)
     private val categoriesRestorer = mockk<CategoriesRestorer>(relaxed = true)
     private val preferenceRestorer = mockk<PreferenceRestorer>(relaxed = true)
@@ -44,6 +49,7 @@ class BackupRestorerCanonicalGateTest {
         extensionStoreRestorer = extensionStoreRestorer,
         mangaRestorer = mangaRestorer,
         backupDecoder = backupDecoder,
+        canonicalCoreBackupImporter = canonicalImporter,
     )
 
     @Test
@@ -83,6 +89,19 @@ class BackupRestorerCanonicalGateTest {
             )
         }
         verify(exactly = 0) { notifier.showRestoreComplete(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `canonical-only archive restores exactly one validated section and skips legacy writers`(): Unit = runBlocking {
+        val core = BackupCanonicalSection.fromJson(
+            "tsuzuki.core.v1",
+            Json.encodeToString(BackupCanonicalCore.serializer(), BackupCanonicalCore()),
+        )
+        coEvery { backupDecoder.decode(uri) } returns CanonicalStandaloneArchive.compose(core)
+        restorer().restore(uri, RestoreOptions())
+        coVerify(exactly = 1) { canonicalImporter.restoreCore(core, any()) }
+        verify(exactly = 0) { categoriesRestorer.invoke(any()) }
+        verify(exactly = 1) { notifier.showRestoreComplete(any(), any(), any(), any(), any()) }
     }
 
     @Test

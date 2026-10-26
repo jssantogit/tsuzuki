@@ -1603,4 +1603,7 @@
     <string name="tsuzuki_epub_import_in_progress">Reading the selected EPUB3 navigation…</string>
     <string name="tsuzuki_epub_import_success">Candidate chapters imported. Review the edition before adopting; no reading pages were added.</string>
     <string name="tsuzuki_epub_import_failed">Could not validate the selected EPUB3 file. No chapters were added.</string>
+    <string name="tsuzuki_backup_canonical_only">Tsuzuki canonical library only (separate backup)</string>
+    <string name="tsuzuki_backup_canonical_only_note">This file contains only the local Tsuzuki canonical graph, reading progress and adoption receipts. Legacy Mihon manga, credentials, external account lists and offline page files are not included. Restore only into a clean Tsuzuki library.</string>
+    <string name="tsuzuki_backup_canonical_restore_note">Canonical-only Tsuzuki archive. Restore replaces no existing library and requires an empty canonical graph. Legacy Mihon records are not part of this backup; conflicting data is rejected.</string>
 </resources>

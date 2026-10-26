@@ -99,6 +99,15 @@ class CreateBackupScreen : Screen() {
                             BackupOptionsGroup(BackupOptions.libraryOptions, state, viewModel)
                         }
                     }
+                    if (state.options.canonicalLibraryOnly) {
+                        item(key = "canonical_backup_warning") {
+                            Text(
+                                text = stringResource(MR.strings.tsuzuki_backup_canonical_only_note),
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
                     item(key = "settings_options") {
                         SettingsGroup(title = stringResource(MR.strings.label_settings)) {
                             BackupOptionsGroup(BackupOptions.settingsOptions, state, viewModel)
@@ -181,10 +190,19 @@ class CreateBackupViewModel : ViewModel() {
         field = MutableStateFlow<CreateBackupViewModel.State>(State())
 
     fun toggle(setter: (BackupOptions, Boolean) -> BackupOptions, enabled: Boolean) {
-        state.update {
-            it.copy(
-                options = setter(it.options, enabled),
-            )
+        state.update { current ->
+            val changed = setter(current.options, enabled)
+            val exclusive = if (
+                enabled &&
+                current.options.canonicalLibraryOnly &&
+                changed.canonicalLibraryOnly &&
+                changed != current.options
+            ) {
+                changed.copy(canonicalLibraryOnly = false)
+            } else {
+                changed
+            }
+            current.copy(options = exclusive)
         }
     }
 

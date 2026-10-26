@@ -55,9 +55,11 @@ class CanonicalStandaloneArchiveTest {
         }
         shouldThrow<IllegalArgumentException> {
             CanonicalStandaloneArchive.requireRestorable(
-                archive.copy(canonicalSnapshot = BackupCanonicalSnapshot(
-                    sections = listOf(BackupCanonicalSection.fromJson("tsuzuki.other.v1", "{}")),
-                )),
+                archive.copy(
+                    canonicalSnapshot = BackupCanonicalSnapshot(
+                        sections = listOf(BackupCanonicalSection.fromJson("tsuzuki.other.v1", "{}")),
+                    ),
+                ),
                 true,
             )
         }

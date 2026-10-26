@@ -24,6 +24,10 @@ class BackupFileValidator(
             throw IllegalStateException(e)
         }
 
+        val canonicalOnly = backup.canonicalSnapshot != null
+        if (canonicalOnly) {
+            CanonicalStandaloneArchive.requireRestorable(backup, true)
+        }
         val sources = backup.backupSources.associate { it.sourceId to it.name }
         val missingSources = sources
             .filterKeys { sourceManager.get(it) == null }
@@ -48,11 +52,12 @@ class BackupFileValidator(
             .map { it.name }
             .sorted()
 
-        return Results(missingSources, missingTrackers)
+        return Results(missingSources, missingTrackers, canonicalOnly)
     }
 
     data class Results(
         val missingSources: List<String>,
         val missingTrackers: List<String>,
+        val canonicalOnly: Boolean = false,
     )
 }

@@ -14,6 +14,7 @@ data class BackupOptions(
     val extensionStores: Boolean = true,
     val sourceSettings: Boolean = true,
     val privateSettings: Boolean = false,
+    val canonicalLibraryOnly: Boolean = false,
 ) {
 
     fun asBooleanArray() = booleanArrayOf(
@@ -27,12 +28,36 @@ data class BackupOptions(
         extensionStores,
         sourceSettings,
         privateSettings,
+        canonicalLibraryOnly,
     )
 
-    fun canCreate() = libraryEntries || categories || appSettings || extensionStores || sourceSettings
+    fun canCreate() = canonicalLibraryOnly || libraryEntries || categories || appSettings || extensionStores || sourceSettings
 
     companion object {
         val libraryOptions = listOf(
+            Entry(
+                label = MR.strings.tsuzuki_backup_canonical_only,
+                getter = BackupOptions::canonicalLibraryOnly,
+                setter = { options, enabled ->
+                    if (enabled) {
+                        BackupOptions(
+                            libraryEntries = false,
+                            categories = false,
+                            chapters = false,
+                            tracking = false,
+                            history = false,
+                            readEntries = false,
+                            appSettings = false,
+                            extensionStores = false,
+                            sourceSettings = false,
+                            privateSettings = false,
+                            canonicalLibraryOnly = true,
+                        )
+                    } else {
+                        options.copy(canonicalLibraryOnly = false)
+                    }
+                },
+            ),
             Entry(
                 label = MR.strings.manga,
                 getter = BackupOptions::libraryEntries,
@@ -104,6 +129,7 @@ data class BackupOptions(
             extensionStores = array[7],
             sourceSettings = array[8],
             privateSettings = array[9],
+            canonicalLibraryOnly = array.getOrNull(10) ?: false,
         )
     }
 
