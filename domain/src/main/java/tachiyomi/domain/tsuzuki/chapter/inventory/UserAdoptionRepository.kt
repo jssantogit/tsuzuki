@@ -17,6 +17,12 @@ data class UserAdoptionConfirmation(
     val explicitlyConfirmed: Boolean,
 )
 
+/** Bounded offline keyset page, independent of Detail's eight summary examples. */
+data class UserAdoptionCandidatePage(
+    val candidates: List<InventoryCandidateExample>,
+    val nextCursor: String?,
+)
+
 sealed interface UserAdoptionCommitResult {
     data class Adopted(
         val receiptId: String,
@@ -32,6 +38,9 @@ sealed interface UserAdoptionCommitResult {
 interface UserAdoptionRepository {
     /** True even after restart or backup restoration; never publisher authority. */
     suspend fun adoptedChapterIds(canonicalTitleId: String): Set<String>
+
+    /** Exact edition, local-only browsing; never invokes a producer or writes chapters. */
+    suspend fun candidatePage(scope: InventoryScope, afterRecordId: String? = null): UserAdoptionCandidatePage
 
     suspend fun preview(request: UserAdoptionReviewRequest): UserAdoptionPreview
 
