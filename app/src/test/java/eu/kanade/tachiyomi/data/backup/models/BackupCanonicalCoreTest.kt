@@ -108,6 +108,22 @@ class BackupCanonicalCoreTest {
         runCatching {
             original.copy(userAdoptionReceipts = listOf(receipt.copy(snapshotDigest = "not-a-digest"))).validate()
         }.isFailure shouldBe true
+        runCatching {
+            original.copy(userAdoptionReceipts = listOf(receipt.copy(structuralCategory = "toc-preface"))).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            original.copy(
+                userAdoptionReceipts = listOf(
+                    receipt.copy(
+                        sourceKind = "WIKIMEDIA_SELECTED_PAGE_REVISION",
+                        derivation = "COMMUNITY_CURATED",
+                        structuralCategory = "chapter-list-entry",
+                        attributionReference = null,
+                        licenseReference = null,
+                    ),
+                ),
+            ).validate()
+        }.isFailure shouldBe true
         val otherChapter = original.chapters.single().copy(
             id = "chapter-2",
             displayNumber = "2",
