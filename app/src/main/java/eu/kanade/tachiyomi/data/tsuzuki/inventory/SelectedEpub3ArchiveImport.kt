@@ -133,32 +133,32 @@ internal object SelectedEpub3ArchiveImport {
                 } else {
                     val navItems = (0 until items.length).map { items.item(it) as Element }.filter {
                         it.getAttribute("properties").split(Regex("\\s+")).contains("nav")
-                }
-                require(navItems.size == 1) { "An EPUB3 navigation manifest item is required" }
-                val navItem = navItems.single()
-                require(navItem.getAttribute("media-type") == "application/xhtml+xml")
-                val navPath = resolveMemberPath(opfPath, navItem.getAttribute("href"))
-                val navBytes = readMember(zip, navPath, SelectedEpub3TocAdapter.MAX_DOCUMENT_BYTES)
-                val nav = navBytes.decodeStrict()
-                val navDigest = "sha256:" + MessageDigest.getInstance("SHA-256").digest(navBytes).toHex()
-                val editionKey = "epub3:" + editionFingerprint
-                val selection = SelectedEpub3Navigation(
-                    scope = InventoryScope(
-                        canonicalTitleId = canonicalTitleId,
-                        producerId = "epub3-user-selected",
-                        externalWorkId = editionKey,
-                        editionKey = editionKey,
-                        language = language,
-                        workIdentityVerified = false,
-                        editionIdentityVerified = false,
-                    ),
-                    editionReference = "user-selected:epub-" + editionFingerprint,
-                    snapshotRevision = editionFingerprint,
-                    snapshotDigest = navDigest,
-                    navXhtml = nav,
-                    observedAt = observedAt,
-                )
-                SelectedEpub3TocAdapter.adapt(selection).getOrThrow()
+                    }
+                    require(navItems.size == 1) { "An EPUB3 navigation manifest item is required" }
+                    val navItem = navItems.single()
+                    require(navItem.getAttribute("media-type") == "application/xhtml+xml")
+                    val navPath = resolveMemberPath(opfPath, navItem.getAttribute("href"))
+                    val navBytes = readMember(zip, navPath, SelectedEpub3TocAdapter.MAX_DOCUMENT_BYTES)
+                    val nav = navBytes.decodeStrict()
+                    val navDigest = "sha256:" + MessageDigest.getInstance("SHA-256").digest(navBytes).toHex()
+                    val editionKey = "epub3:" + editionFingerprint
+                    val selection = SelectedEpub3Navigation(
+                        scope = InventoryScope(
+                            canonicalTitleId = canonicalTitleId,
+                            producerId = "epub3-user-selected",
+                            externalWorkId = editionKey,
+                            editionKey = editionKey,
+                            language = language,
+                            workIdentityVerified = false,
+                            editionIdentityVerified = false,
+                        ),
+                        editionReference = "user-selected:epub-" + editionFingerprint,
+                        snapshotRevision = editionFingerprint,
+                        snapshotDigest = navDigest,
+                        navXhtml = nav,
+                        observedAt = observedAt,
+                    )
+                    SelectedEpub3TocAdapter.adapt(selection).getOrThrow()
                 }
             }
         } finally {
