@@ -428,7 +428,7 @@ class SelectedEpubAdoptionInstrumentedTest {
                 "Canonical title not rendered; foreground=${device.currentPackageName}; visible=$visibleText",
                 titleShown,
             )
-            val action = awaitUiAction(device, "Import EPUB3 index", "Importar índice EPUB3")
+            val action = awaitUiAction(device, "Import EPUB index", "Importar índice EPUB")
             assertTrue("Import action must appear on actual title details", action != null)
             requireNotNull(action).click()
             assertTrue(
@@ -448,7 +448,7 @@ class SelectedEpubAdoptionInstrumentedTest {
             val displayName = "ice-picker-${UUID.randomUUID()}.epub"
             val fileUri = createDocument(epubBytes(), displayName)
             try {
-                requireNotNull(awaitUiAction(device, "Import EPUB3 index", "Importar índice EPUB3")).click()
+                requireNotNull(awaitUiAction(device, "Import EPUB index", "Importar índice EPUB")).click()
                 val pickerIsOpen =
                     device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 8_000) ||
                         device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 4_000)
