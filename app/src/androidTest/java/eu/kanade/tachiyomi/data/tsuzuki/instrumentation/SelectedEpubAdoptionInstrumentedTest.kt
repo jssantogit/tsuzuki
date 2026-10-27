@@ -127,7 +127,11 @@ class SelectedEpubAdoptionInstrumentedTest {
             val adopted = chapters.getByCanonicalTitleId(titleId)
             assertEquals(setOf("0", "1"), adopted.map { it.displayNumber }.toSet())
             assertTrue(adopted.all { chapter -> chapters.getVariantsByCanonicalChapterId(chapter.id).isEmpty() })
-            assertTrue(adopted.all { chapter -> CanonicalReadingRepositoryImpl(database).getProgress(chapter.id) == null })
+            assertTrue(
+                adopted.all { chapter ->
+                    CanonicalReadingRepositoryImpl(database).getProgress(chapter.id) == null
+                },
+            )
             assertEquals(
                 2,
                 database.tsuzuki_user_adoption_receiptsQueries

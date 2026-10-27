@@ -104,8 +104,10 @@ internal object SelectedEpub3ArchiveImport {
                     val ncxItems = (0 until items.length).map { items.item(it) as Element }.filter {
                         it.getAttribute("id") == ncxId
                     }
-                    require(ncxItems.size == 1 && ncxItems.single().getAttribute("media-type") ==
-                        "application/x-dtbncx+xml") { "EPUB2 NCX manifest item is missing or ambiguous" }
+                    require(
+                        ncxItems.size == 1 && ncxItems.single().getAttribute("media-type") ==
+                            "application/x-dtbncx+xml",
+                    ) { "EPUB2 NCX manifest item is missing or ambiguous" }
                     val ncxPath = resolveMemberPath(opfPath, ncxItems.single().getAttribute("href"))
                     val ncxBytes = readMember(zip, ncxPath, SelectedEpub2NcxAdapter.MAX_DOCUMENT_BYTES)
                     val revision = "epub2:" + editionFingerprint
@@ -129,8 +131,8 @@ internal object SelectedEpub3ArchiveImport {
                         ),
                     ).getOrThrow()
                 } else {
-                val navItems = (0 until items.length).map { items.item(it) as Element }.filter {
-                    it.getAttribute("properties").split(Regex("\\s+")).contains("nav")
+                    val navItems = (0 until items.length).map { items.item(it) as Element }.filter {
+                        it.getAttribute("properties").split(Regex("\\s+")).contains("nav")
                 }
                 require(navItems.size == 1) { "An EPUB3 navigation manifest item is required" }
                 val navItem = navItems.single()

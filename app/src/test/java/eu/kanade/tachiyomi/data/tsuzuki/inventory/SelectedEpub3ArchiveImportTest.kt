@@ -124,7 +124,10 @@ class SelectedEpub3ArchiveImportTest {
         result.scope.workIdentityVerified shouldBe false
         result.scope.editionIdentityVerified shouldBe false
         result.claims.map { it.label } shouldBe listOf("Chapter 0", "Chapter 1")
-        result.claims.map { it.kind } shouldBe listOf(InventoryClaimKind.INDIVIDUAL, InventoryClaimKind.INDIVIDUAL)
+        result.claims.map { it.kind } shouldBe listOf(
+            InventoryClaimKind.INDIVIDUAL,
+            InventoryClaimKind.INDIVIDUAL,
+        )
         result.claims.map { it.provenance?.sourceKind?.name } shouldBe
             listOf("USER_SELECTED_EPUB2_NCX", "USER_SELECTED_EPUB2_NCX")
         result.claims.all { it.derivation == InventoryDerivation.USER_SUPPLIED_EDITION_TOC } shouldBe true
@@ -133,12 +136,13 @@ class SelectedEpub3ArchiveImportTest {
 
     @Test
     fun `EPUB2 NCX rejects external references DTD ambiguity and missing NCX`() {
+        val maliciousNcx = """<!DOCTYPE ncx [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>""" +
+            ncx2("index.html#p2")
         val unsafe = listOf(
             epub2Archive(ncx = ncx2("file:///etc/passwd")),
             epub2Archive(ncx = ncx2("../escaped.xhtml")),
             epub2Archive(ncx = ncx2("index.html#p2", "index.html#p2")),
-            epub2Archive(ncx = """<!DOCTYPE ncx [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
-                ${ncx2("index.html#p2")}"""),
+            epub2Archive(ncx = maliciousNcx),
             epub2Archive(opfNcxId = "absent"),
         )
         unsafe.forEach { archive ->
