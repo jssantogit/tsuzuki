@@ -929,6 +929,27 @@ class CanonicalCoreBackupImporterTest {
         }
 
     @Test
+    fun `existing canonical v1 archive without exclusion metadata restores with default zero`(): Unit =
+        runBlocking {
+            val archive = section()
+            archive.payloadJson.contains("\"omittedExternalAccountMemberships\"") shouldBe false
+            val decoded = Json.decodeFromString(BackupCanonicalCore.serializer(), archive.payloadJson)
+            decoded.omittedExternalAccountMemberships shouldBe 0
+            importer.restoreCore(archive)
+            database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList().single().id shouldBe "title-1"
+        }
+
+    @Test
+    fun `negative account omission count cannot trigger a partial restore`(): Unit = runBlocking {
+        val unsafe = Json.decodeFromString(BackupCanonicalCore.serializer(), section().payloadJson)
+            .copy(omittedExternalAccountMemberships = -1)
+        shouldThrow<IllegalArgumentException> { importer.restoreCore(coreSection(unsafe)) }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+        database.tsuzuki_backup_restore_receiptsQueries
+            .listTsuzukiBackupRestoreReceipts().awaitAsList() shouldBe emptyList()
+    }
+
+    @Test
     fun `portable archive rejects invalid omitted external membership audit count`() {
         shouldThrow<IllegalArgumentException> {
             BackupCanonicalCore(omittedExternalAccountMemberships = -1).validate()
