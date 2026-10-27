@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.provider.MediaStore
+import androidx.core.content.FileProvider
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -70,6 +71,7 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.UserAdoptionReviewRequest
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.util.UUID
@@ -591,7 +593,7 @@ class SelectedEpubAdoptionInstrumentedTest {
         assertTrue(database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList().isEmpty())
         val titleId = "ice-restore-${UUID.randomUUID()}"
         val chapterId = "$titleId-chapter"
-        val (uri, section) = createCanonicalRestoreDocument(titleId, chapterId)
+        val (uri, section, archiveFile) = createCanonicalRestoreDocument(titleId, chapterId)
         try {
             val work = WorkManager.getInstance(context)
             BackupRestoreJob.start(work, uri, RestoreOptions())
@@ -616,7 +618,7 @@ class SelectedEpubAdoptionInstrumentedTest {
             assertEquals(section.sha256, receipt.snapshot_hash)
             report("PRODUCTION_RESTORE", "worker=SUCCESS|titles=1|chapters=1|progress=7|history=55|receipt=VALID")
         } finally {
-            context.contentResolver.delete(uri, null, null)
+            archiveFile.delete()
         }
     }
 
@@ -630,7 +632,7 @@ class SelectedEpubAdoptionInstrumentedTest {
             CanonicalTitle(existingId, "Keep local personal title", CanonicalIdentityState.SOURCE_ONLY, now, now),
         )
         val archivedTitleId = "ice-foreign-${UUID.randomUUID()}"
-        val (uri, _) = createCanonicalRestoreDocument(archivedTitleId, "$archivedTitleId-chapter")
+        val (uri, _, archiveFile) = createCanonicalRestoreDocument(archivedTitleId, "$archivedTitleId-chapter")
         try {
             val work = WorkManager.getInstance(context)
             BackupRestoreJob.start(work, uri, RestoreOptions())
@@ -646,14 +648,14 @@ class SelectedEpubAdoptionInstrumentedTest {
                 .awaitAsList().isEmpty())
             report("PRODUCTION_RESTORE_CONFLICT", "worker=FAILED|existing=PRESERVED|import=NONE|receipt=NONE")
         } finally {
-            context.contentResolver.delete(uri, null, null)
+            archiveFile.delete()
         }
     }
 
     private fun createCanonicalRestoreDocument(
         titleId: String,
         chapterId: String,
-    ): Pair<Uri, BackupCanonicalSection> {
+    ): Triple<Uri, BackupCanonicalSection, File> {
         val now = System.currentTimeMillis()
         val core = BackupCanonicalCore(
             titles = listOf(BackupCoreTitle(titleId, "Portable archive title", "SOURCE_ONLY", now, now)),
@@ -692,11 +694,16 @@ class SelectedEpubAdoptionInstrumentedTest {
             }
             buffer.toByteArray()
         }
-        return createDocument(
-            bytes,
-            "ice-restore-${UUID.randomUUID()}.tachibk",
-            "application/octet-stream",
-        ) to section
+        // The production restore picker grants a readable content:// URI.
+        // MediaStore Downloads entries created directly by instrumentation
+        // may not grant a persisted read to a background worker on Android 35.
+        // This app-owned FileProvider exercises the same ContentResolver path
+        // without relying on public storage ownership or network access.
+        val context = fixtureContext()
+        val archiveFile = File.createTempFile("ice-restore-", ".tachibk", context.cacheDir)
+        archiveFile.writeBytes(bytes)
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", archiveFile)
+        return Triple(uri, section, archiveFile)
     }
 
     private fun awaitTerminalWork(work: WorkManager, uniqueName: String): WorkInfo.State? {
