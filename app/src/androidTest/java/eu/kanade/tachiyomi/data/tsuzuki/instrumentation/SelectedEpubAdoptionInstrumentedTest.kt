@@ -599,14 +599,11 @@ class SelectedEpubAdoptionInstrumentedTest {
             adoption.adopt(UserAdoptionConfirmation(request, ready.fingerprint, now + 1, true)) is
                 UserAdoptionCommitResult.Adopted,
         )
-        // Match CreateBackupScreen's SAF content:// contract: a private
-        // file:// URI is rejected when the foreground Worker publishes its
-        // notification, before it can exercise the archive writer.
-        val uri = createDocument(
-            byteArrayOf(),
-            "ice-production-${UUID.randomUUID()}.tachibk",
-            "application/octet-stream",
-        )
+        // Use an app-owned content:// destination, identical to the worker's
+        // SAF ContentResolver contract. Instrumentation-created MediaStore
+        // Downloads URIs can deny background access on Android 35 after pm clear.
+        val archiveFile = File.createTempFile("ice-production-", ".tachibk", context.cacheDir)
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", archiveFile)
         try {
             // Do not construct a synthetic Backup message here: run the same
             // foreground WorkManager job used by CreateBackupScreen.
@@ -640,7 +637,7 @@ class SelectedEpubAdoptionInstrumentedTest {
             assertTrue(actual.backupManga.isEmpty())
             report("PRODUCTION_ARCHIVE", "worker=SUCCESS|gzip=VALID|receipts=1|chapters=1")
         } finally {
-            context.contentResolver.delete(uri, null, null)
+            archiveFile.delete()
         }
     }
 
