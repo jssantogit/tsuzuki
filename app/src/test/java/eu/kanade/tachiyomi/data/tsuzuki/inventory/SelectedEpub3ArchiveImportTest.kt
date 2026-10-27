@@ -109,6 +109,90 @@ class SelectedEpub3ArchiveImportTest {
         ).isFailure shouldBe true
     }
 
+    @Test
+    fun `EPUB2 NCX with chapter anchors yields review-only candidates and preserves source format`() {
+        val source = epub2Archive()
+        val result = SelectedEpub3ArchiveImport.read(
+            ByteArrayInputStream(source),
+            tempDir(),
+            "canonical-book",
+            42L,
+        ).getOrThrow()
+
+        result.scope.producerId shouldBe "epub2-user-selected"
+        result.scope.language shouldBe "en"
+        result.scope.workIdentityVerified shouldBe false
+        result.scope.editionIdentityVerified shouldBe false
+        result.claims.map { it.label } shouldBe listOf("Chapter 0", "Chapter 1")
+        result.claims.map { it.kind } shouldBe listOf(InventoryClaimKind.INDIVIDUAL, InventoryClaimKind.INDIVIDUAL)
+        result.claims.map { it.provenance?.sourceKind?.name } shouldBe
+            listOf("USER_SELECTED_EPUB2_NCX", "USER_SELECTED_EPUB2_NCX")
+        result.claims.all { it.derivation == InventoryDerivation.USER_SUPPLIED_EDITION_TOC } shouldBe true
+        result.claims.all { it.provenance?.sourceUnitId?.startsWith("index.html#") == true } shouldBe true
+    }
+
+    @Test
+    fun `EPUB2 NCX rejects external references DTD ambiguity and missing NCX`() {
+        val unsafe = listOf(
+            epub2Archive(ncx = ncx2("file:///etc/passwd")),
+            epub2Archive(ncx = ncx2("../escaped.xhtml")),
+            epub2Archive(ncx = ncx2("index.html#p2", "index.html#p2")),
+            epub2Archive(ncx = """<!DOCTYPE ncx [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+                ${ncx2("index.html#p2")}"""),
+            epub2Archive(opfNcxId = "absent"),
+        )
+        unsafe.forEach { archive ->
+            SelectedEpub3ArchiveImport.read(
+                ByteArrayInputStream(archive),
+                tempDir(),
+                "canonical-book",
+                42L,
+            ).isFailure shouldBe true
+        }
+    }
+
+    private fun ncx2(first: String, second: String = "index.html#p56") = """
+        <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+          <navMap>
+            <navPoint id="one" playOrder="1"><navLabel><text>Example Cap. 00</text></navLabel>
+              <content src="$first"/></navPoint>
+            <navPoint id="two" playOrder="2"><navLabel><text>Example Cap. 01</text></navLabel>
+              <content src="$second"/></navPoint>
+          </navMap>
+        </ncx>
+    """.trimIndent()
+
+    private fun epub2Archive(
+        ncx: String = ncx2("index.html#p2"),
+        opfNcxId: String = "ncx",
+    ): ByteArray {
+        val bytes = ByteArrayOutputStream()
+        ZipOutputStream(bytes).use { zip ->
+            fun item(path: String, content: String) {
+                zip.putNextEntry(ZipEntry(path))
+                zip.write(content.toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+            }
+            item("mimetype", "application/epub+zip")
+            item(
+                "META-INF/container.xml",
+                """<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+                   <rootfiles><rootfile full-path="content.opf"
+                    media-type="application/oebps-package+xml"/></rootfiles></container>""",
+            )
+            item(
+                "content.opf",
+                """<package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+                  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                  <dc:language>en</dc:language><dc:title>Untitled</dc:title></metadata>
+                  <manifest><item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/></manifest>
+                  <spine toc="$opfNcxId"/></package>""",
+            )
+            item("toc.ncx", ncx)
+        }
+        return bytes.toByteArray()
+    }
+
     private fun tempDir() = java.nio.file.Files.createTempDirectory("tsuzuki-selected-epub-test").toFile()
         .apply { deleteOnExit() }
 
