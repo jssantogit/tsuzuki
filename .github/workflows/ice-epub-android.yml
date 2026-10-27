@@ -1,4 +1,4 @@
-name: ICE EPUB3 Android Acceptance
+name: ICE EPUB2/EPUB3 Android Acceptance
 
 on:
   workflow_dispatch:
@@ -11,6 +11,7 @@ on:
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/SelectedEpubAdoptionInstrumentedTest.kt'
       - 'app/src/main/java/eu/kanade/tachiyomi/data/tsuzuki/inventory/SelectedEpub3ArchiveImport.kt'
       - 'domain/src/main/java/tachiyomi/domain/tsuzuki/chapter/inventory/SelectedEpub3TocAdapter.kt'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/chapter/inventory/SelectedEpub2NcxAdapter.kt'
       - 'app/src/main/java/eu/kanade/tachiyomi/ui/tsuzuki/detail/UserAdoptionReviewScreenModel.kt'
       - 'data/src/main/java/tachiyomi/data/tsuzuki/UserAdoptedInventoryRepositoryImpl.kt'
       - 'app/src/main/java/eu/kanade/tachiyomi/data/backup/**'
