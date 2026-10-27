@@ -18,6 +18,7 @@ import androidx.test.uiautomator.Until
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import app.cash.sqldelight.async.coroutines.awaitAsList
+import app.cash.sqldelight.async.coroutines.awaitAsOne
 import com.eygraber.sqldelight.androidx.driver.AndroidxSqliteConfiguration
 import com.eygraber.sqldelight.androidx.driver.AndroidxSqliteDatabaseType
 import com.eygraber.sqldelight.androidx.driver.AndroidxSqliteDriver
@@ -27,11 +28,15 @@ import eu.kanade.tachiyomi.data.backup.BackupDecoder
 import eu.kanade.tachiyomi.data.backup.CanonicalStandaloneArchive
 import eu.kanade.tachiyomi.data.backup.create.BackupCreateJob
 import eu.kanade.tachiyomi.data.backup.create.BackupOptions
+import eu.kanade.tachiyomi.data.backup.restore.BackupRestoreJob
+import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSnapshot
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreProgress
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreUserAdoptionReceipt
 import eu.kanade.tachiyomi.data.backup.models.CanonicalCoreWireJson
@@ -575,6 +580,133 @@ class SelectedEpubAdoptionInstrumentedTest {
         } finally {
             context.contentResolver.delete(uri, null, null)
         }
+    }
+
+    @Test(timeout = 240_000L)
+    fun productionRestoreWorkerRestoresCanonicalArchiveIntoCleanGraph() = runBlocking {
+        val context = fixtureContext()
+        val database = (context.applicationContext as App).graph.database
+        // Each emulator case starts after pm clear. Never let an E2E restore
+        // mutate an occupied application graph.
+        assertTrue(database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList().isEmpty())
+        val titleId = "ice-restore-${UUID.randomUUID()}"
+        val chapterId = "$titleId-chapter"
+        val (uri, section) = createCanonicalRestoreDocument(titleId, chapterId)
+        try {
+            val work = WorkManager.getInstance(context)
+            BackupRestoreJob.start(work, uri, RestoreOptions())
+            assertEquals(
+                "Real restoration WorkManager job must accept canonical standalone archive",
+                WorkInfo.State.SUCCEEDED,
+                awaitTerminalWork(work, "BackupRestore"),
+            )
+            val titles = database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList()
+            assertEquals(listOf(titleId), titles.map { it.id })
+            val chapter = CanonicalChapterRepositoryImpl(database).getByCanonicalTitleId(titleId).single()
+            assertEquals(chapterId, chapter.id)
+            assertTrue(CanonicalChapterRepositoryImpl(database).getVariantsByCanonicalChapterId(chapterId).isEmpty())
+            val progress = database.tsuzuki_chapter_progressQueries
+                .getTsuzukiChapterProgress(chapterId).awaitAsOne()
+            assertEquals(7L, progress.last_page_read)
+            val history = database.tsuzuki_chapter_historyQueries
+                .getTsuzukiChapterHistory(chapterId).awaitAsOne()
+            assertEquals(55L, history.time_read)
+            val receipt = database.tsuzuki_backup_restore_receiptsQueries
+                .getTsuzukiBackupRestoreReceipt(section.sha256).awaitAsOne()
+            assertEquals(section.sha256, receipt.snapshot_hash)
+            report("PRODUCTION_RESTORE", "worker=SUCCESS|titles=1|chapters=1|progress=7|history=55|receipt=VALID")
+        } finally {
+            context.contentResolver.delete(uri, null, null)
+        }
+    }
+
+    @Test(timeout = 240_000L)
+    fun productionRestoreWorkerRefusesOccupiedGraphWithoutMutatingIt() = runBlocking {
+        val context = fixtureContext()
+        val database = (context.applicationContext as App).graph.database
+        val existingId = "ice-existing-${UUID.randomUUID()}"
+        val now = System.currentTimeMillis()
+        CanonicalTitleRepositoryImpl(database).insert(
+            CanonicalTitle(existingId, "Keep local personal title", CanonicalIdentityState.SOURCE_ONLY, now, now),
+        )
+        val archivedTitleId = "ice-foreign-${UUID.randomUUID()}"
+        val (uri, _) = createCanonicalRestoreDocument(archivedTitleId, "$archivedTitleId-chapter")
+        try {
+            val work = WorkManager.getInstance(context)
+            BackupRestoreJob.start(work, uri, RestoreOptions())
+            assertEquals(
+                "Restoring onto an occupied canonical graph must fail closed",
+                WorkInfo.State.FAILED,
+                awaitTerminalWork(work, "BackupRestore"),
+            )
+            val titles = database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList()
+            assertEquals(listOf(existingId), titles.map { it.id })
+            assertTrue(CanonicalChapterRepositoryImpl(database).getByCanonicalTitleId(archivedTitleId).isEmpty())
+            assertTrue(database.tsuzuki_backup_restore_receiptsQueries.listTsuzukiBackupRestoreReceipts()
+                .awaitAsList().isEmpty())
+            report("PRODUCTION_RESTORE_CONFLICT", "worker=FAILED|existing=PRESERVED|import=NONE|receipt=NONE")
+        } finally {
+            context.contentResolver.delete(uri, null, null)
+        }
+    }
+
+    private fun createCanonicalRestoreDocument(
+        titleId: String,
+        chapterId: String,
+    ): Pair<Uri, BackupCanonicalSection> {
+        val now = System.currentTimeMillis()
+        val core = BackupCanonicalCore(
+            titles = listOf(BackupCoreTitle(titleId, "Portable archive title", "SOURCE_ONLY", now, now)),
+            chapters = listOf(
+                BackupCoreChapter(
+                    id = chapterId,
+                    canonicalTitleId = titleId,
+                    displayNumber = "1",
+                    volume = null,
+                    title = "Chapter one",
+                    type = "REGULAR",
+                    baseNumber = 1,
+                    part = null,
+                    alphaSuffix = null,
+                    confidence = 0.9,
+                    createdAt = now,
+                    updatedAt = now,
+                    confirmation = "PROVISIONAL",
+                ),
+            ),
+            progress = listOf(BackupCoreProgress(chapterId, false, 7, null, now)),
+            history = listOf(BackupCoreHistory(chapterId, null, now, 55)),
+        )
+        val section = BackupCanonicalSection.fromJson(
+            BackupCanonicalCore.SECTION_KEY,
+            CanonicalCoreWireJson.codec.encodeToString(BackupCanonicalCore.serializer(), core),
+        )
+        val bytes = ByteArrayOutputStream().use { buffer ->
+            GZIPOutputStream(buffer).use { gzip ->
+                gzip.write(
+                    ProtoBuf.encodeToByteArray(
+                        Backup.serializer(),
+                        CanonicalStandaloneArchive.compose(section),
+                    ),
+                )
+            }
+            buffer.toByteArray()
+        }
+        return createDocument(
+            bytes,
+            "ice-restore-${UUID.randomUUID()}.tachibk",
+            "application/octet-stream",
+        ) to section
+    }
+
+    private fun awaitTerminalWork(work: WorkManager, uniqueName: String): WorkInfo.State? {
+        repeat(170) {
+            val state = work.getWorkInfosForUniqueWork(uniqueName)
+                .get(3, TimeUnit.SECONDS).lastOrNull()?.state
+            if (state != null && state.isFinished) return state
+            SystemClock.sleep(500)
+        }
+        return null
     }
 
     private fun fixtureContext() = InstrumentationRegistry.getInstrumentation().targetContext.also { context ->
