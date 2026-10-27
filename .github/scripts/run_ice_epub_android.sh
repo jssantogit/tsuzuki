@@ -46,7 +46,8 @@ run_case() {
     # Emit only diagnostic headings and first exception lines (not full device logs).
     grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|INSTRUMENTATION_CODE|Tests run:|^INSTRUMENTATION_STATUS: stack=|^Error in ' \
       "$results/$output" | tail -n 12 || true
-    if [[ "$test_name" == 'productionBackupWorkerWritesStandaloneTachibkWithAdoptedReceipts' ]]; then
+    if [[ "$test_name" == 'productionBackupWorkerWritesStandaloneTachibkWithAdoptedReceipts' ||
+      "$test_name" == productionRestoreWorker* ]]; then
       # CI emulators are disposable and cleared before each scenario. Capture
       # only error-class worker diagnostics; never publish complete app logs.
       adb shell logcat -d -v brief 2>/dev/null |
@@ -61,7 +62,9 @@ run_case() {
 
 run_case contentUriImportsShadowThenExplicitAdoptionRoundTripsPortableReceiptWithoutReaderPages import-adopt-restore.txt
 run_case productionBackupWorkerWritesStandaloneTachibkWithAdoptedReceipts production-backup.txt
+run_case productionRestoreWorkerRestoresCanonicalArchiveIntoCleanGraph production-restore.txt
+run_case productionRestoreWorkerRefusesOccupiedGraphWithoutMutatingIt production-restore-conflict.txt
 run_case safPickerCancellationAndFileSelectionAreUserDrivenAndShadowOnly saf-ui.txt
 run_case adoptedChapterOpensReaderWithoutInventingPagesOrReadingProgress reader-ui.txt
 run_case malformedContentUriAndInterruptedStreamNeverMaterializeChapters failures.txt
-echo 'ICE_EPUB_E2E|outcome=PASS|cases=5|network=NONE|production=UNTOUCHED'
+echo 'ICE_EPUB_E2E|outcome=PASS|cases=7|network=NONE|production=UNTOUCHED'
