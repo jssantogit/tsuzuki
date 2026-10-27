@@ -53,6 +53,7 @@ enum class InventoryDerivation {
 enum class InventoryCandidateSourceKind {
     WIKIMEDIA_SELECTED_PAGE_REVISION,
     USER_SELECTED_EPUB3_TOC,
+    USER_SELECTED_EPUB2_NCX,
 }
 
 /** Bounded source pointers only; this value must never contain source article text or EPUB content. */
@@ -135,7 +136,8 @@ data class InventoryClaim(
             provenance == null || when (provenance.sourceKind) {
                 InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION ->
                     derivation == InventoryDerivation.COMMUNITY_CURATED
-                InventoryCandidateSourceKind.USER_SELECTED_EPUB3_TOC ->
+                InventoryCandidateSourceKind.USER_SELECTED_EPUB3_TOC,
+                InventoryCandidateSourceKind.USER_SELECTED_EPUB2_NCX ->
                     derivation == InventoryDerivation.USER_SUPPLIED_EDITION_TOC
             },
         ) { "Selected-source candidate provenance cannot assert editorial authority" }

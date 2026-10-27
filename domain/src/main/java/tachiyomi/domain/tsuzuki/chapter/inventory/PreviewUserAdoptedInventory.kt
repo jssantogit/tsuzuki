@@ -94,8 +94,10 @@ class PreviewUserAdoptedInventory {
                         (provenance.attributionReference.isNullOrBlank() || provenance.licenseReference.isNullOrBlank())
                     ) ||
                 (
-                    provenance.sourceKind == InventoryCandidateSourceKind.USER_SELECTED_EPUB3_TOC &&
-                        provenance.structuralCategory != "toc-chapter"
+                    provenance.sourceKind in setOf(
+                        InventoryCandidateSourceKind.USER_SELECTED_EPUB3_TOC,
+                        InventoryCandidateSourceKind.USER_SELECTED_EPUB2_NCX,
+                    ) && provenance.structuralCategory != "toc-chapter"
                     ) ||
                 (
                     provenance.sourceKind == InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION &&

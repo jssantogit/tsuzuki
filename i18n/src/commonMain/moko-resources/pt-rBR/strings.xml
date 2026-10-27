@@ -1336,11 +1336,11 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_reader_preferred_provider">Usar este Provider como fonte de leitura preferida para esta obra?</string>
     <string name="tsuzuki_reader_preferred_language">Idioma preferido</string>
     <string name="tsuzuki_reader_preferred_language_message">Usar %1$s como idioma de leitura preferido para esta obra?</string>
-    <string name="tsuzuki_epub_import_action">Importar índice EPUB3</string>
-    <string name="tsuzuki_epub_import_title">Inventário EPUB3 local</string>
-    <string name="tsuzuki_epub_import_in_progress">Lendo a navegação EPUB3 selecionada…</string>
+    <string name="tsuzuki_epub_import_action">Importar índice EPUB</string>
+    <string name="tsuzuki_epub_import_title">Inventário EPUB local</string>
+    <string name="tsuzuki_epub_import_in_progress">Lendo o índice EPUB selecionado…</string>
     <string name="tsuzuki_epub_import_success">Capítulos candidatos importados. Revise a edição antes de adotar; nenhuma página de leitura foi adicionada.</string>
-    <string name="tsuzuki_epub_import_failed">Não foi possível validar o EPUB3 selecionado. Nenhum capítulo foi adicionado.</string>
+    <string name="tsuzuki_epub_import_failed">Não foi possível validar o índice EPUB2/EPUB3 selecionado. Nenhum capítulo foi adicionado.</string>
     <string name="tsuzuki_backup_canonical_only">Somente biblioteca canônica do Tsuzuki (backup separado)</string>
     <string name="tsuzuki_backup_canonical_only_note">Este arquivo contém somente o grafo canônico local do Tsuzuki, progresso e recibos de adoção. Mangás legados Mihon, credenciais, listas de contas externas e páginas offline não são incluídos. Restaure somente em uma biblioteca Tsuzuki limpa.</string>
     <string name="tsuzuki_backup_canonical_restore_note">Arquivo exclusivo do catálogo canônico Tsuzuki. A restauração exige um catálogo canônico vazio e não substitui dados existentes. Registros legados Mihon não fazem parte deste backup; dados conflitantes são rejeitados.</string>

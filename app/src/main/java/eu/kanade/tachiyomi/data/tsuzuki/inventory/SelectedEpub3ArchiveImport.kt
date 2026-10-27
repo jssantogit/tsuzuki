@@ -5,6 +5,8 @@ import org.w3c.dom.Element
 import org.xml.sax.InputSource
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
+import tachiyomi.domain.tsuzuki.chapter.inventory.SelectedEpub2Navigation
+import tachiyomi.domain.tsuzuki.chapter.inventory.SelectedEpub2NcxAdapter
 import tachiyomi.domain.tsuzuki.chapter.inventory.SelectedEpub3Navigation
 import tachiyomi.domain.tsuzuki.chapter.inventory.SelectedEpub3TocAdapter
 import tachiyomi.domain.tsuzuki.chapter.inventory.SelectedEpubXmlPreflight
@@ -21,7 +23,7 @@ import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
- * Host-owned, user-selected EPUB3 metadata import. No DRM handling, no page
+ * Host-owned, user-selected EPUB2/EPUB3 metadata import. No DRM handling, no page
  * extraction, no image reads, and no Provider/publisher authority.
  *
  * SAF streams are staged to a bounded temporary file for random access to
@@ -85,12 +87,48 @@ internal object SelectedEpub3ArchiveImport {
                 val opf = parseXml(readMember(zip, opfPath, MAX_OPF_BYTES))
                 val pkg = opf.documentElement
                 require(pkg.namespaceURI == OPF_NS && pkg.localName == "package")
-                require(pkg.getAttribute("version").startsWith("3.")) { "Only EPUB3 editions are supported" }
+                val isEpub2 = pkg.getAttribute("version") == "2.0"
+                require(isEpub2 || pkg.getAttribute("version").startsWith("3.")) {
+                    "Only EPUB2 and EPUB3 editions are supported"
+                }
                 val languages = opf.getElementsByTagNameNS(DC_NS, "language")
                 require(languages.length == 1) { "EPUB language is unknown or ambiguous" }
                 val language = languages.item(0).textContent.trim()
                 require(languagePattern.matches(language))
                 val items = opf.getElementsByTagNameNS(OPF_NS, "item")
+                if (isEpub2) {
+                    val spines = opf.getElementsByTagNameNS(OPF_NS, "spine")
+                    require(spines.length == 1) { "EPUB2 must identify one spine" }
+                    val ncxId = (spines.item(0) as Element).getAttribute("toc")
+                    require(ncxId.isNotBlank()) { "EPUB2 NCX manifest identifier is missing" }
+                    val ncxItems = (0 until items.length).map { items.item(it) as Element }.filter {
+                        it.getAttribute("id") == ncxId
+                    }
+                    require(ncxItems.size == 1 && ncxItems.single().getAttribute("media-type") ==
+                        "application/x-dtbncx+xml") { "EPUB2 NCX manifest item is missing or ambiguous" }
+                    val ncxPath = resolveMemberPath(opfPath, ncxItems.single().getAttribute("href"))
+                    val ncxBytes = readMember(zip, ncxPath, SelectedEpub2NcxAdapter.MAX_DOCUMENT_BYTES)
+                    val revision = "epub2:" + editionFingerprint
+                    SelectedEpub2NcxAdapter.adapt(
+                        SelectedEpub2Navigation(
+                            scope = InventoryScope(
+                                canonicalTitleId = canonicalTitleId,
+                                producerId = "epub2-user-selected",
+                                externalWorkId = revision,
+                                editionKey = revision,
+                                language = language,
+                                workIdentityVerified = false,
+                                editionIdentityVerified = false,
+                            ),
+                            editionReference = "user-selected:epub-" + editionFingerprint,
+                            snapshotRevision = editionFingerprint,
+                            snapshotDigest = "sha256:" +
+                                MessageDigest.getInstance("SHA-256").digest(ncxBytes).toHex(),
+                            ncxXml = ncxBytes.decodeStrict(),
+                            observedAt = observedAt,
+                        ),
+                    ).getOrThrow()
+                } else {
                 val navItems = (0 until items.length).map { items.item(it) as Element }.filter {
                     it.getAttribute("properties").split(Regex("\\s+")).contains("nav")
                 }
@@ -119,6 +157,7 @@ internal object SelectedEpub3ArchiveImport {
                     observedAt = observedAt,
                 )
                 SelectedEpub3TocAdapter.adapt(selection).getOrThrow()
+                }
             }
         } finally {
             staged.delete()

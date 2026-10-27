@@ -157,7 +157,8 @@ object SelectedEpub3TocAdapter {
         else -> InventoryClaimKind.AMBIGUOUS to "toc-navigation-ambiguous"
     }
 
-    private fun safeLocalReference(rawHref: String): String {
+    /** Shared EPUB2/EPUB3 local-only href validator; no network or traversal. */
+    internal fun safeLocalReference(rawHref: String): String {
         require(rawHref.isNotBlank() && rawHref.length <= MAX_HREF_LENGTH) { "EPUB nav href is invalid" }
         require(!rawHref.contains('\\') && !rawHref.startsWith('/') && !rawHref.startsWith("//")) {
             "Absolute EPUB references are not permitted"
