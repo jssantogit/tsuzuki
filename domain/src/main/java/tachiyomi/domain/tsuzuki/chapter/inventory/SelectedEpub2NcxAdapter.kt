@@ -24,6 +24,7 @@ object SelectedEpub2NcxAdapter {
     private const val MAX_LABEL_LENGTH = 512
     private const val NCX_NS = "http://www.daisy.org/z3986/2005/ncx/"
     private val numericLabel = Regex("""^(?:0|[1-9][0-9]*)$""")
+
     // Only an explicit terminal chapter marker (with optional work-title prefix)
     // may be normalized as an individual candidate; other labels remain ambiguous.
     private val namedChapter = Regex(
@@ -63,8 +64,10 @@ object SelectedEpub2NcxAdapter {
             var depth = 0
             var ancestor = point.parentNode
             while (ancestor !== map) {
-                require(ancestor is Element && ancestor.namespaceURI == NCX_NS &&
-                    ancestor.localName == "navPoint") { "NCX navigation hierarchy is ambiguous" }
+                require(
+                    ancestor is Element && ancestor.namespaceURI == NCX_NS &&
+                        ancestor.localName == "navPoint",
+                ) { "NCX navigation hierarchy is ambiguous" }
                 ancestor = ancestor.parentNode
                 depth++
                 require(depth <= MAX_DEPTH)

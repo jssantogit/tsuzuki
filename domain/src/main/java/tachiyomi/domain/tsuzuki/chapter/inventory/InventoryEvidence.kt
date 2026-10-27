@@ -137,7 +137,8 @@ data class InventoryClaim(
                 InventoryCandidateSourceKind.WIKIMEDIA_SELECTED_PAGE_REVISION ->
                     derivation == InventoryDerivation.COMMUNITY_CURATED
                 InventoryCandidateSourceKind.USER_SELECTED_EPUB3_TOC,
-                InventoryCandidateSourceKind.USER_SELECTED_EPUB2_NCX ->
+                InventoryCandidateSourceKind.USER_SELECTED_EPUB2_NCX,
+                ->
                     derivation == InventoryDerivation.USER_SUPPLIED_EDITION_TOC
             },
         ) { "Selected-source candidate provenance cannot assert editorial authority" }
