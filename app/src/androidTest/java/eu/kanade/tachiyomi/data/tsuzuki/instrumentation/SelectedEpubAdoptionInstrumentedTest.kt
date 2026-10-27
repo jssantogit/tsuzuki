@@ -29,8 +29,6 @@ import eu.kanade.tachiyomi.data.backup.BackupDecoder
 import eu.kanade.tachiyomi.data.backup.CanonicalStandaloneArchive
 import eu.kanade.tachiyomi.data.backup.create.BackupCreateJob
 import eu.kanade.tachiyomi.data.backup.create.BackupOptions
-import eu.kanade.tachiyomi.data.backup.restore.BackupRestoreJob
-import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
@@ -41,7 +39,9 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreProgress
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreUserAdoptionReceipt
 import eu.kanade.tachiyomi.data.backup.models.CanonicalCoreWireJson
+import eu.kanade.tachiyomi.data.backup.restore.BackupRestoreJob
 import eu.kanade.tachiyomi.data.backup.restore.CanonicalCoreBackupImporter
+import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
 import eu.kanade.tachiyomi.data.tsuzuki.inventory.SelectedEpub3ArchiveImport
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderViewModel
@@ -644,8 +644,10 @@ class SelectedEpubAdoptionInstrumentedTest {
             val titles = database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList()
             assertEquals(listOf(existingId), titles.map { it.id })
             assertTrue(CanonicalChapterRepositoryImpl(database).getByCanonicalTitleId(archivedTitleId).isEmpty())
-            assertTrue(database.tsuzuki_backup_restore_receiptsQueries.listTsuzukiBackupRestoreReceipts()
-                .awaitAsList().isEmpty())
+            assertTrue(
+                database.tsuzuki_backup_restore_receiptsQueries.listTsuzukiBackupRestoreReceipts()
+                    .awaitAsList().isEmpty(),
+            )
             report("PRODUCTION_RESTORE_CONFLICT", "worker=FAILED|existing=PRESERVED|import=NONE|receipt=NONE")
         } finally {
             archiveFile.delete()
