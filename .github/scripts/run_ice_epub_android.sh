@@ -61,10 +61,11 @@ run_case() {
 }
 
 run_case contentUriImportsShadowThenExplicitAdoptionRoundTripsPortableReceiptWithoutReaderPages import-adopt-restore.txt
+run_case contentUriImportsEpub2NcxAsUnverifiedCandidatesAndAdoptsOnlyAfterReview epub2-ncx-adoption.txt
 run_case productionBackupWorkerWritesStandaloneTachibkWithAdoptedReceipts production-backup.txt
 run_case productionRestoreWorkerRestoresCanonicalArchiveIntoCleanGraph production-restore.txt
 run_case productionRestoreWorkerRefusesOccupiedGraphWithoutMutatingIt production-restore-conflict.txt
 run_case safPickerCancellationAndFileSelectionAreUserDrivenAndShadowOnly saf-ui.txt
 run_case adoptedChapterOpensReaderWithoutInventingPagesOrReadingProgress reader-ui.txt
 run_case malformedContentUriAndInterruptedStreamNeverMaterializeChapters failures.txt
-echo 'ICE_EPUB_E2E|outcome=PASS|cases=7|network=NONE|production=UNTOUCHED'
+echo 'ICE_EPUB_E2E|outcome=PASS|cases=8|network=NONE|production=UNTOUCHED'
