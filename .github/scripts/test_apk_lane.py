@@ -18,6 +18,17 @@ class ApkLaneTest(unittest.TestCase):
             self.assertEqual(lane["flags"], "-Penable-updater")
             self.assertNotIn("include-telemetry", lane["flags"])
 
+    def test_issue_155_device_smoke_uses_signed_updatable_release_not_dev_c(self):
+        lane = resolve_lane("feat/issue-155-independent-chapter-inventory")
+        self.assertEqual(lane["lane"], "release")
+        self.assertEqual(lane["task"], "assembleRelease")
+        self.assertEqual(lane["flags"], "-Penable-updater")
+        self.assertEqual(
+            lane["apk"],
+            "app/build/outputs/apk/release/app-arm64-v8a-release.apk",
+        )
+        self.assertNotEqual(lane["lane"], "dev-c")
+
     def test_default_skin_branches_use_signed_release_lane(self):
         for branch in (
             "design/default-skin-consolidation",
