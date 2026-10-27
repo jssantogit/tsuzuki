@@ -185,16 +185,18 @@ class CanonicalCoreBackupExporter(
                     }
                 }
         }
-        // External library memberships encode the linked remote account's
-        // work/list status. They cannot be silently attributed to a new user.
-        check(
+        // Connected accounts' list statuses cannot be attributed to the
+        // recipient of a portable canonical backup. The manual backup UI
+        // explicitly excludes these account-owned lists. Count omissions
+        // without copying provider identity, owner keys or remote progress.
+        val omittedExternalAccountMemberships =
             database.tsuzuki_external_library_membershipsQueries
-                .getAllTsuzukiExternalLibraryMemberships().awaitAsList().isEmpty() &&
+                .getAllTsuzukiExternalLibraryMemberships().awaitAsList().size +
                 database.tsuzuki_external_library_membershipsQueries
-                    .getAllTsuzukiScopedExternalLibraryMemberships().awaitAsList().isEmpty(),
-        ) { "External account list memberships need an isolated backup migration" }
+                    .getAllTsuzukiScopedExternalLibraryMemberships().awaitAsList().size
 
         val core = BackupCanonicalCore(
+            omittedExternalAccountMemberships = omittedExternalAccountMemberships,
             titles = titles.map {
                 BackupCoreTitle(it.id, it.displayTitle, it.identityState.name, it.createdAt, it.updatedAt)
             },
