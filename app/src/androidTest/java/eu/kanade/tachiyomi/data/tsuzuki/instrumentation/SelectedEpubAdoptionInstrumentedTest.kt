@@ -84,6 +84,62 @@ import java.util.zip.ZipOutputStream
 @RunWith(AndroidJUnit4::class)
 class SelectedEpubAdoptionInstrumentedTest {
     @Test(timeout = 180_000L)
+    fun contentUriImportsEpub2NcxAsUnverifiedCandidatesAndAdoptsOnlyAfterReview() = runBlocking {
+        val context = fixtureContext()
+        val database = (context.applicationContext as App).graph.database
+        val titleId = "ice-ncx-${UUID.randomUUID()}"
+        val now = System.currentTimeMillis()
+        CanonicalTitleRepositoryImpl(database).insert(
+            CanonicalTitle(titleId, "EPUB2 NCX offline fixture", CanonicalIdentityState.SOURCE_ONLY, now, now),
+        )
+        val uri = createDocument(epub2Bytes(), "ice-ncx-${UUID.randomUUID()}.epub")
+        try {
+            val ledger = IndependentInventoryRepositoryImpl(database)
+            val chapters = CanonicalChapterRepositoryImpl(database)
+            val adoption = UserAdoptedInventoryRepositoryImpl(database, ledger, chapters, ChapterMutationGate())
+            val batch = SelectedEpub3ArchiveImport.read(
+                requireNotNull(context.contentResolver.openInputStream(uri)),
+                context.cacheDir,
+                titleId,
+                now,
+            ).getOrThrow()
+            assertEquals("epub2-user-selected", batch.scope.producerId)
+            assertEquals("en", batch.scope.language)
+            assertFalse(batch.scope.editionIdentityVerified)
+            assertFalse(batch.scope.workIdentityVerified)
+            assertEquals(8, batch.claims.size)
+            assertEquals((0..7).map { "Chapter $it" }, batch.claims.map { it.label })
+            assertTrue(batch.claims.all { it.provenance?.sourceKind?.name == "USER_SELECTED_EPUB2_NCX" })
+            assertTrue(chapters.getByCanonicalTitleId(titleId).isEmpty())
+            ledger.saveBatch(batch)
+            assertEquals(8, adoption.candidatePage(batch.scope).candidates.size)
+            val request = UserAdoptionReviewRequest(batch.scope, batch.claims.take(2).map { it.sourceRecordId })
+            val preview = adoption.preview(request) as UserAdoptionPreview.Ready
+            assertEquals(
+                UserAdoptionCommitResult.Refused,
+                adoption.adopt(UserAdoptionConfirmation(request, preview.fingerprint, now + 1, false)),
+            )
+            assertTrue(chapters.getByCanonicalTitleId(titleId).isEmpty())
+            assertTrue(
+                adoption.adopt(UserAdoptionConfirmation(request, preview.fingerprint, now + 2, true)) is
+                    UserAdoptionCommitResult.Adopted,
+            )
+            val adopted = chapters.getByCanonicalTitleId(titleId)
+            assertEquals(setOf("0", "1"), adopted.map { it.displayNumber }.toSet())
+            assertTrue(adopted.all { chapter -> chapters.getVariantsByCanonicalChapterId(chapter.id).isEmpty() })
+            assertTrue(adopted.all { chapter -> CanonicalReadingRepositoryImpl(database).getProgress(chapter.id) == null })
+            assertEquals(
+                2,
+                database.tsuzuki_user_adoption_receiptsQueries
+                    .getTsuzukiUserAdoptionReceiptsByTitle(titleId).awaitAsList().size,
+            )
+            report("EPUB2_NCX_ADOPTION", "candidates=8|adopted=2|identity=UNVERIFIED|readerPages=NONE")
+        } finally {
+            context.contentResolver.delete(uri, null, null)
+        }
+    }
+
+    @Test(timeout = 180_000L)
     fun contentUriImportsShadowThenExplicitAdoptionRoundTripsPortableReceiptWithoutReaderPages() = runBlocking {
         val context = fixtureContext()
         val database = (context.applicationContext as App).graph.database
@@ -763,6 +819,50 @@ class SelectedEpubAdoptionInstrumentedTest {
         } catch (error: Throwable) {
             context.contentResolver.delete(uri, null, null)
             throw error
+        }
+    }
+
+    private fun epub2Bytes(): ByteArray {
+        val navPoints = (0..7).joinToString("\n") { number ->
+            val label = number.toString().padStart(2, '0')
+            val order = number + 1
+            """<navPoint id="n$number" playOrder="$order">
+               <navLabel><text>Fixture Cap. $label</text></navLabel>
+               <content src="index.html#p$number"/></navPoint>"""
+        }
+        val entries = linkedMapOf(
+            "mimetype" to "application/epub+zip",
+            "META-INF/container.xml" to """
+                <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+                  <rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles>
+                </container>
+            """.trimIndent(),
+            "content.opf" to """
+                <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+                  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                    <dc:language>en</dc:language><dc:title>Untitled</dc:title>
+                  </metadata>
+                  <manifest>
+                    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+                  </manifest>
+                  <spine toc="ncx"/>
+                </package>
+            """.trimIndent(),
+            "toc.ncx" to """
+                <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+                  <navMap>$navPoints</navMap>
+                </ncx>
+            """.trimIndent(),
+        )
+        return ByteArrayOutputStream().use { buffer ->
+            ZipOutputStream(buffer).use { zip ->
+                entries.forEach { (name, content) ->
+                    zip.putNextEntry(ZipEntry(name))
+                    zip.write(content.toByteArray(Charsets.UTF_8))
+                    zip.closeEntry()
+                }
+            }
+            buffer.toByteArray()
         }
     }
 
