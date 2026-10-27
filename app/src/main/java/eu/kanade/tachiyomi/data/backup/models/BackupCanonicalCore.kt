@@ -46,9 +46,15 @@ data class BackupCanonicalCore(
     val titleArtwork: List<BackupCoreTitleArtwork> = emptyList(),
     val titleFormats: List<BackupCoreTitleFormat> = emptyList(),
     val titleNames: List<BackupCoreTitleName> = emptyList(),
+    // Audit the count of intentionally omitted, nonportable remote-account list
+    // rows. Never serialize account ownership, remote IDs or external status.
+    val omittedExternalAccountMemberships: Int = 0,
 ) {
     fun validate() {
         require(schemaVersion == VERSION) { "Unsupported canonical core schema" }
+        require(omittedExternalAccountMemberships >= 0) {
+            "Invalid omitted external account membership count"
+        }
         require(titles.isUniqueBy { it.id }) { "Duplicate canonical title" }
         require(collections.isUniqueBy { it.id }) { "Duplicate collection ID" }
         require(folders.isUniqueBy { it.id }) { "Duplicate folder ID" }
