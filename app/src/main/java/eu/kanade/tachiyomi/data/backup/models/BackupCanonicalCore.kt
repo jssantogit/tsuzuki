@@ -361,7 +361,7 @@ data class BackupCanonicalCore(
                     )
                 }
                 val expectedDerivation = when (receipt.sourceKind) {
-                    "USER_SELECTED_EPUB3_TOC" -> "USER_SUPPLIED_EDITION_TOC"
+                    "USER_SELECTED_EPUB3_TOC", "USER_SELECTED_EPUB2_NCX" -> "USER_SUPPLIED_EDITION_TOC"
                     "WIKIMEDIA_SELECTED_PAGE_REVISION" -> "COMMUNITY_CURATED"
                     else -> null
                 }
@@ -369,7 +369,8 @@ data class BackupCanonicalCore(
                 // requirements as the reviewed local candidate. A restored
                 // preface or unattributed page must never look adopted.
                 val isSupportedSourceUnit = when (receipt.sourceKind) {
-                    "USER_SELECTED_EPUB3_TOC" -> receipt.structuralCategory == "toc-chapter"
+                    "USER_SELECTED_EPUB3_TOC", "USER_SELECTED_EPUB2_NCX" ->
+                        receipt.structuralCategory == "toc-chapter"
                     "WIKIMEDIA_SELECTED_PAGE_REVISION" ->
                         receipt.structuralCategory in setOf("chapter-list-entry", "chapter-table-entry") &&
                             !receipt.attributionReference.isNullOrBlank() &&

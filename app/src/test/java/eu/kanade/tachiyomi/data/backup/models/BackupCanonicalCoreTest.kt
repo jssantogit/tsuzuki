@@ -99,6 +99,29 @@ class BackupCanonicalCoreTest {
             Json.encodeToString(BackupCanonicalCore.serializer(), original),
         )
         decoded shouldBe original
+        // EPUB2 uses identical explicit review and receipt semantics. The
+        // portable archive must retain this new provenance source kind.
+        val epub2 = original.copy(
+            userAdoptionReceipts = listOf(
+                receipt.copy(
+                    producerId = "epub2-user-selected",
+                    sourceKind = "USER_SELECTED_EPUB2_NCX",
+                    sourceUnitId = "index.html#p2",
+                ),
+            ),
+        )
+        epub2.validate()
+        Json.decodeFromString(
+            BackupCanonicalCore.serializer(),
+            Json.encodeToString(BackupCanonicalCore.serializer(), epub2),
+        ) shouldBe epub2
+        runCatching {
+            epub2.copy(
+                userAdoptionReceipts = epub2.userAdoptionReceipts.map {
+                    it.copy(structuralCategory = "toc-navigation-ambiguous")
+                },
+            ).validate()
+        }.isFailure shouldBe true
         runCatching {
             original.copy(userAdoptionReceipts = listOf(receipt, receipt)).validate()
         }.isFailure shouldBe true
