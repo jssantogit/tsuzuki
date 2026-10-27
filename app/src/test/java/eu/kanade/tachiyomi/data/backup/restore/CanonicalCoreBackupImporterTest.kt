@@ -852,6 +852,90 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
+    fun `canonical standalone export keeps titles and receipts while omitting account scoped memberships`(): Unit =
+        runBlocking {
+            importer.restoreCore(section())
+            val membershipQueries = database.tsuzuki_external_library_membershipsQueries
+            repeat(11) { index ->
+                membershipQueries.upsertTsuzukiScopedExternalLibraryMembership(
+                    canonicalTitleId = "title-1",
+                    provider = "kitsu",
+                    ownerKey = "private-owner-key",
+                    externalId = "remote-$index",
+                    listKey = "reading",
+                    listTitle = "Private list",
+                    selectionGroup = null,
+                    status = "READING",
+                    remoteStatus = "Current",
+                    progress = index.toDouble(),
+                    score = null,
+                    listedAt = null,
+                    syncedAt = 50L,
+                    coverUrl = null,
+                )
+            }
+            membershipQueries.upsertTsuzukiExternalLibraryMembership(
+                canonicalTitleId = "title-1",
+                provider = "mal",
+                externalId = "legacy-remote",
+                listKey = "planning",
+                listTitle = null,
+                selectionGroup = null,
+                status = null,
+                remoteStatus = null,
+                progress = null,
+                score = null,
+                listedAt = null,
+                syncedAt = 50L,
+                coverUrl = null,
+            )
+            val titles = CanonicalTitleRepositoryImpl(database)
+            val exported = CanonicalCoreBackupExporter(
+                titleSource = CanonicalTitleSyncSource { titles.getAllAsFlow().first() },
+                titleRepository = titles,
+                libraryRepository = CanonicalLibraryRepositoryImpl(database),
+                chapterRepository = CanonicalChapterRepositoryImpl(database),
+                sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+                readingRepository = CanonicalReadingRepositoryImpl(database),
+                database = database,
+                json = Json,
+            ).export()
+            val core = Json.decodeFromString(BackupCanonicalCore.serializer(), exported.payloadJson)
+            core.omittedExternalAccountMemberships shouldBe 12
+            core.titles.single().id shouldBe "title-1"
+            core.chapters.single().id shouldBe "chapter-1"
+            core.progress.single().lastPageRead shouldBe 7
+            exported.payloadJson.contains("private-owner-key") shouldBe false
+            exported.payloadJson.contains("legacy-remote") shouldBe false
+            exported.payloadJson.contains("remote-0") shouldBe false
+            membershipQueries.getAllTsuzukiScopedExternalLibraryMemberships().awaitAsList().size shouldBe 11
+            membershipQueries.getAllTsuzukiExternalLibraryMemberships().awaitAsList().size shouldBe 1
+            core.validate()
+        }
+
+    @Test
+    fun `restoring a portable core with excluded remote memberships never materializes another account's lists`(): Unit =
+        runBlocking {
+            val core = Json.decodeFromString(BackupCanonicalCore.serializer(), section().payloadJson)
+                .copy(omittedExternalAccountMemberships = 11)
+            importer.restoreCore(coreSection(core))
+            database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList().single().id shouldBe "title-1"
+            database.tsuzuki_external_library_membershipsQueries
+                .getAllTsuzukiScopedExternalLibraryMemberships().awaitAsList() shouldBe emptyList()
+            database.tsuzuki_external_library_membershipsQueries
+                .getAllTsuzukiExternalLibraryMemberships().awaitAsList() shouldBe emptyList()
+            database.tsuzuki_backup_restore_receiptsQueries
+                .listTsuzukiBackupRestoreReceipts().awaitAsList().size shouldBe 1
+        }
+
+    @Test
+    fun `portable archive rejects invalid omitted external membership audit count`() {
+        shouldThrow<IllegalArgumentException> {
+            BackupCanonicalCore(omittedExternalAccountMemberships = -1).validate()
+        }
+    }
+
+    @Test
     fun `provenance and mapped chapter evidence survive transactional restore and export`(): Unit = runBlocking {
         val core = coreWithCollectionsAndBindings().copy(
             chapterEvidence = listOf(
