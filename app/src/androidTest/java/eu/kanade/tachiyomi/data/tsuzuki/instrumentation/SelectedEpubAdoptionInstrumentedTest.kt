@@ -599,6 +599,28 @@ class SelectedEpubAdoptionInstrumentedTest {
             adoption.adopt(UserAdoptionConfirmation(request, ready.fingerprint, now + 1, true)) is
                 UserAdoptionCommitResult.Adopted,
         )
+        // Reproduce the real Samsung library: remote account-backed lists
+        // coexist with canonical chapters. Never copy another account's list
+        // state to a portable archive and never abort the personal backup.
+        repeat(11) { index ->
+            database.tsuzuki_external_library_membershipsQueries
+                .upsertTsuzukiScopedExternalLibraryMembership(
+                    canonicalTitleId = titleId,
+                    provider = "kitsu",
+                    ownerKey = "private-test-account",
+                    externalId = "remote-list-$index",
+                    listKey = "reading",
+                    listTitle = "Private remote list",
+                    selectionGroup = null,
+                    status = "READING",
+                    remoteStatus = "Current",
+                    progress = index.toDouble(),
+                    score = null,
+                    listedAt = null,
+                    syncedAt = now,
+                    coverUrl = null,
+                )
+        }
         // Use an app-owned content:// destination, identical to the worker's
         // SAF ContentResolver contract. Instrumentation-created MediaStore
         // Downloads URIs can deny background access on Android 35 after pm clear.
@@ -634,8 +656,16 @@ class SelectedEpubAdoptionInstrumentedTest {
             assertTrue(core.titles.any { it.id == titleId })
             assertEquals(1, core.userAdoptionReceipts.count { it.canonicalTitleId == titleId })
             assertEquals(1, core.chapters.count { it.canonicalTitleId == titleId })
+            assertEquals(11, core.omittedExternalAccountMemberships)
+            assertFalse(section.payloadJson.contains("private-test-account"))
+            assertFalse(section.payloadJson.contains("remote-list-"))
+            assertEquals(
+                11,
+                database.tsuzuki_external_library_membershipsQueries
+                    .getAllTsuzukiScopedExternalLibraryMemberships().awaitAsList().size,
+            )
             assertTrue(actual.backupManga.isEmpty())
-            report("PRODUCTION_ARCHIVE", "worker=SUCCESS|gzip=VALID|receipts=1|chapters=1")
+            report("PRODUCTION_ARCHIVE", "worker=SUCCESS|gzip=VALID|receipts=1|chapters=1|externalOmitted=11")
         } finally {
             archiveFile.delete()
         }
