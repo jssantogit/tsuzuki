@@ -914,7 +914,7 @@ class CanonicalCoreBackupImporterTest {
         }
 
     @Test
-    fun `restoring a portable core with excluded remote memberships never materializes another account's lists`(): Unit =
+    fun `excluded account list state never materializes on restore`(): Unit =
         runBlocking {
             val core = Json.decodeFromString(BackupCanonicalCore.serializer(), section().payloadJson)
                 .copy(omittedExternalAccountMemberships = 11)
