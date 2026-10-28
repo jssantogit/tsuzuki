@@ -152,6 +152,47 @@ class RefreshIndependentInventoryTest {
     }
 
     @Test
+    fun `refresh passes live authorization to the producer before release HTTP dispatch`() = runTest {
+        val ledger = FakeLedger()
+        var enabled = true
+        var unsafeCalls = 0
+        var guardedCalls = 0
+        val source = object : IndependentInventoryProducer {
+            override val producerId = "mangadex"
+
+            override suspend fun fetchPage(scope: InventoryScope, pageKey: String): Result<InventoryEvidenceBatch> {
+                unsafeCalls++
+                error("Legacy unguarded release fetch must not be used")
+            }
+
+            override suspend fun fetchPageAuthorized(
+                scope: InventoryScope,
+                pageKey: String,
+                isEnabled: suspend () -> Boolean,
+            ): Result<InventoryEvidenceBatch> {
+                guardedCalls++
+                enabled = false
+                return if (isEnabled()) {
+                    Result.success(batch(scope, pageKey, "late", "1", InventoryFetchOutcome.EXHAUSTED))
+                } else {
+                    Result.failure(IllegalStateException("Consent revoked before HTTP dispatch"))
+                }
+            }
+        }
+
+        val result = RefreshIndependentInventory(titleRepository(), ledger).execute(
+            "canonical",
+            source,
+            isEnabled = { enabled },
+        )
+
+        result.stop shouldBe InventoryRefreshStop.DISABLED
+        unsafeCalls shouldBe 0
+        guardedCalls shouldBe 1
+        ledger.saved shouldBe emptyList()
+    }
+
+    @Test
     fun `remapped work while request is running never leaks cross-work releases`() = runTest {
         val ledger = FakeLedger()
         var externalId = "123"
