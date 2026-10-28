@@ -317,6 +317,13 @@ class ScriptProviderReadingGateway internal constructor(
             return unavailable(retryable = true)
         }
 
+        // Invocations cross an isolated process boundary and can finish after
+        // a capability is revoked or its package is replaced. Never publish
+        // a result issued under a stale registration/permission snapshot.
+        if (registry.registration(providerId) != registration) {
+            return unavailable()
+        }
+
         response.failure?.let { failure ->
             return failure.toProviderFailure()
         }
