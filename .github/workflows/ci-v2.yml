@@ -413,11 +413,21 @@ jobs:
 
       - name: Reset database
         if: steps.project.outputs.present == 'true'
-        run: supabase db reset
+        shell: bash
+        run: |
+          # The CLI may pull auxiliary images during reset; preserve registry
+          # fallback rather than pinning the GHCR-only setup-cli override.
+          unset SUPABASE_INTERNAL_IMAGE_REGISTRY
+          supabase db reset
 
       - name: Run database tests
         if: steps.project.outputs.present == 'true'
-        run: supabase test db
+        shell: bash
+        run: |
+          # pgTAP uses pg_prove in a separate container. This step needs the
+          # same image-registry fallback as initial PostgreSQL startup.
+          unset SUPABASE_INTERNAL_IMAGE_REGISTRY
+          supabase test db
 
       - name: Stop local Supabase
         if: always() && steps.project.outputs.present == 'true'
