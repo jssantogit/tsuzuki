@@ -6,9 +6,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import okhttp3.HttpUrl
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationSettings
@@ -38,6 +40,81 @@ class MangaDexVerifiedWorkLinker(
     private val integrationSettings: IntegrationSettingsRepository,
     private val transport: InventoryReleaseTransport,
 ) {
+    /**
+     * Discover a work by its existing canonical title without asking the user
+     * to copy a MangaDex UUID. Title search only supplies candidates: a unique,
+     * independently verified external ID crosswalk is mandatory even to return
+     * one candidate. No database writes occur during discovery.
+     */
+    suspend fun discoverUnique(
+        canonicalTitleId: String,
+        isEnabled: () -> Boolean,
+    ): Result<MangaDexVerifiedCandidate?> = capture {
+        currentCoroutineContext().ensureActive()
+        val settingsSnapshot = requireInventoryPermission(isEnabled)
+        require(canonicalTitleId.isNotBlank())
+        val canonical = titles.getById(canonicalTitleId) ?: return@capture null
+        val name = canonical.displayTitle.trim()
+        if (name.length !in 2..160) return@capture null
+
+        val known = titles.getExternalIdentities(canonicalTitleId)
+        requireSettingsUnchanged(settingsSnapshot, isEnabled)
+        if (known.any { it.provider == "mangadex" }) return@capture null
+        val verified = known.filter { it.verified && it.canonicalTitleId == canonicalTitleId }
+        if (verified.none { identity -> CROSSWALK_KEYS.any { it.second == identity.provider } }) {
+            return@capture null
+        }
+
+        val url = HttpUrl.Builder()
+            .scheme("https")
+            .host("api.mangadex.org")
+            .addPathSegment("manga")
+            .addQueryParameter("title", name)
+            .addQueryParameter("limit", "10")
+            .build().toString()
+        val payload = transport.fetchAuthorized(url, null) {
+            isSettingsSnapshotCurrent(settingsSnapshot, isEnabled)
+        }
+        currentCoroutineContext().ensureActive()
+        requireSettingsUnchanged(settingsSnapshot, isEnabled)
+        val root = Json.parseToJsonElement(payload.content) as? JsonObject
+            ?: error("MangaDex search response is not an object")
+        require(root.string("result") == "ok")
+        val entries = root["data"] as? JsonArray ?: error("Missing MangaDex search data")
+        require(entries.size <= 10) { "Unbounded MangaDex search results" }
+
+        val matching = entries.mapNotNull { entry ->
+            val manga = entry as? JsonObject ?: error("Invalid MangaDex search result")
+            if (manga.string("type") != "manga") return@mapNotNull null
+            val mangaId = manga.string("id")?.takeIf { it.matches(MANGADEX_WORK_UUID_REGEX) }
+                ?: return@mapNotNull null
+            val attributes = manga["attributes"] as? JsonObject ?: return@mapNotNull null
+            val links = attributes["links"] as? JsonObject ?: return@mapNotNull null
+            // A candidate contradicted by a previously verified identity is
+            // not eligible. A matching display title alone proves nothing.
+            val contradicts = CROSSWALK_KEYS.any { (key, provider) ->
+                val claimed = links.string(key) ?: return@any false
+                verified.any { it.provider == provider && it.externalId != claimed }
+            }
+            if (contradicts) return@mapNotNull null
+            val matched = CROSSWALK_KEYS.firstNotNullOfOrNull { (key, provider) ->
+                val externalId = links.string(key)
+                verified.firstOrNull { it.provider == provider && it.externalId == externalId }
+            } ?: return@mapNotNull null
+            val titlesField = attributes["title"] as? JsonObject ?: return@mapNotNull null
+            val label = titlesField.string("en") ?: titlesField.string("ja-ro")
+                ?: titlesField.values.firstNotNullOfOrNull {
+                    (it as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
+                } ?: return@mapNotNull null
+            MangaDexVerifiedCandidate(mangaId, label, matched.provider, matched.externalId)
+        }.distinctBy { it.mangaDexId }
+        requireSettingsUnchanged(settingsSnapshot, isEnabled)
+        require(matching.size <= 1) {
+            "Ambiguous MangaDex works share this cross-reference; no automatic association"
+        }
+        matching.singleOrNull()
+    }
+
     suspend fun preview(
         canonicalTitleId: String,
         mangaDexId: String,
