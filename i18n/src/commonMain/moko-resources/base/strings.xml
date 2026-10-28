@@ -1498,6 +1498,14 @@
     <string name="tsuzuki_inventory_link_done">Done</string>
     <string name="tsuzuki_inventory_link_confirm">Confirm work link</string>
     <string name="tsuzuki_inventory_link_preview">Verify identity</string>
+    <string name="tsuzuki_inventory_auto_note">Metadata discovery is automatic after enabling chapter inventory in integrations; offline evidence remains available.</string>
+    <string name="tsuzuki_inventory_discovery_searching">Looking for a verified work identity…</string>
+    <string name="tsuzuki_inventory_discovery_linked">Verified work identity linked</string>
+    <string name="tsuzuki_inventory_discovery_no_match">No new work identity could be verified</string>
+    <string name="tsuzuki_inventory_discovery_failed">Identity lookup failed; no work link was saved</string>
+    <string name="tsuzuki_inventory_discovery_requires_md">MangaDex inventory consent is required for automatic cross-check</string>
+    <string name="tsuzuki_inventory_discovery_interrupted">Discovery interrupted or integration disabled</string>
+    <string name="tsuzuki_inventory_release_status">Release metadata: %1$s</string>
     <string name="tsuzuki_inventory_fetching">Checking releases (metadata only)…</string>
     <string name="tsuzuki_inventory_refresh_exhausted">All requested API pages fetched; editorial completeness is not proven</string>
     <string name="tsuzuki_inventory_refresh_partial">Partial release observations saved</string>
