@@ -354,6 +354,89 @@ class ProviderP2pJobManagerTest {
         }
     }
 
+
+    @Test
+    fun `revoking Host P2P authorization stops the active worker and blocks replay`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        var authorized = true
+        var starts = 0
+        var cancellations = 0
+        val manager = ProviderP2pJobManager(
+            root = tempDir.resolve("revoke-consent").toFile(),
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { _, _ ->
+                starts++
+                try {
+                    awaitCancellation()
+                } finally {
+                    cancellations++
+                }
+            },
+            scope = scope,
+            authorizationCheck = { authorized },
+            authorizationCheckIntervalMs = 100L,
+        )
+        val service = manager.service("org.example.p2p")
+        val request = request()
+        try {
+            (service.acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+            starts shouldBe 1
+
+            authorized = false
+            kotlinx.coroutines.test.advanceTimeBy(101L)
+            runCurrent()
+            cancellations shouldBe 1
+            service.acquire(request) shouldBe ProviderP2pAcquireResponse.Failure(
+                ProviderP2pFailureCode.CANCELLED,
+            )
+
+            authorized = true
+            (service.acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+            starts shouldBe 2
+        } finally {
+            manager.close()
+            runCurrent()
+        }
+    }
+
+    @Test
+    fun `cancelling one Provider does not cancel a different Providers active transfer`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        val cancellations = mutableListOf<String>()
+        val manager = ProviderP2pJobManager(
+            root = tempDir.resolve("revoke-provider").toFile(),
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { req, _ ->
+                try {
+                    awaitCancellation()
+                } finally {
+                    cancellations += req.operationId
+                }
+            },
+            scope = scope,
+        )
+        val first = request()
+        val second = first.copy(operationId = "read:second-provider")
+        try {
+            (manager.service("org.example.p2p").acquire(first) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            (manager.service("org.example.other").acquire(second) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+
+            manager.cancelProvider("org.example.p2p") shouldBe 1
+            runCurrent()
+            cancellations shouldBe listOf(first.operationId)
+            (manager.service("org.example.other").acquire(second) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            manager.cancelAll() shouldBe 1
+            runCurrent()
+            cancellations.toSet() shouldBe setOf(first.operationId, second.operationId)
+        } finally {
+            manager.close()
+            runCurrent()
+        }
+    }
+
     private fun request() = ProviderP2pAcquireRequest(
         operationId = "read:canonical-12",
         magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
