@@ -28,9 +28,9 @@ class TorrentChapterMapperEmbeddedMarkerTest {
     }
 
     @Test
-    fun `chapter mapper keeps arbitrary title numbers fail closed`() {
+    fun `chapter mapper keeps other work numeric filenames fail closed`() {
         val candidate = candidate(
-            file(0, "pack/Secret Example Manga 12.cbz"),
+            file(0, "pack/Other Series 12.cbz"),
         )
 
         TorrentChapterMapper().map(chapter12, candidate) shouldBe TorrentChapterFileMatch.None
