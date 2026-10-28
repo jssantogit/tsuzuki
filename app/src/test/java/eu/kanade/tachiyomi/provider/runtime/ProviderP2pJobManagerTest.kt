@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.provider.runtime
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -475,6 +476,51 @@ class ProviderP2pJobManagerTest {
             (service.acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
             runCurrent()
             started shouldBe 2
+        } finally {
+            manager.close()
+            runCurrent()
+        }
+    }
+
+    @Test
+    fun `cancelled native-like worker cannot adopt after rapid provider reauthorization`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        var authorized = true
+        val jobsRoot = tempDir.resolve("late-cancelled-jobs").toFile()
+        val manager = ProviderP2pJobManager(
+            root = jobsRoot,
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { _, directory ->
+                try {
+                    awaitCancellation()
+                } catch (_: CancellationException) {
+                    // A native boundary may swallow cancellation and return a late archive.
+                    val file = directory.resolve("late.cbz")
+                    file.writeBytes(zip("page.jpg", "late"))
+                    ProviderP2pDownloadResult.Ready(file, ProviderManagedResourceFormat.CBZ)
+                }
+            },
+            scope = scope,
+            authorizationCheck = { authorized },
+            authorizationCheckIntervalMs = 100L,
+        )
+        val service = manager.service("org.example.p2p")
+        val request = request()
+        try {
+            (service.acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+
+            authorized = false
+            manager.cancelProvider("org.example.p2p") shouldBe 1
+            // The provider becomes eligible again before the old worker unwinds.
+            authorized = true
+            runCurrent()
+
+            val storedArchives = tempDir.resolve("managed").toFile()
+                .walkTopDown()
+                .count { it.isFile && it.extension == "cbz" }
+            storedArchives shouldBe 0
+            jobsRoot.listFiles().orEmpty().size shouldBe 0
         } finally {
             manager.close()
             runCurrent()
