@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.ui.tsuzuki.detail
 
 import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaDexVerifiedCandidate
 import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaDexVerifiedWorkLinker
+import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaUpdatesVerifiedCandidate
+import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaUpdatesVerifiedWorkLinker
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -425,6 +427,37 @@ class NativeInventoryRefreshScreenModelTest {
             coVerify(exactly = 0) { refresh.execute(any(), any(), any(), any(), any()) }
         }
 
+    @Test
+    fun `automatic opt-in resolves MangaUpdates work via verified MangaDex and then fetches release evidence`() =
+        runTest(dispatcher) {
+            val md = allowedMangaDexProducer()
+            val mu = mockk<IndependentInventoryProducer>()
+            every { mu.producerId } returns "mangaupdates"
+            val registry = mockk<IntegrationRegistry>()
+            coEvery { registry.awaitReady() } returns Unit
+            every { registry.inventoryProducers() } returns listOf(md, mu)
+            every { registry.configurationFingerprint() } returns "current"
+            val mdLink = mockk<MangaDexVerifiedWorkLinker>()
+            coEvery { mdLink.discoverUnique("title", any()) } returns Result.success(null)
+            val muLink = mockk<MangaUpdatesVerifiedWorkLinker>()
+            val muCandidate = MangaUpdatesVerifiedCandidate("8675309", "Exact Manga", uuid)
+            coEvery { muLink.discoverUnique("title", any()) } returns Result.success(muCandidate)
+            coEvery { muLink.confirm("title", muCandidate, any()) } returns Result.success(Unit)
+            val refresh = mockk<RefreshIndependentInventory>()
+            coEvery { refresh.execute(any(), any(), any(), any(), any()) } returns
+                InventoryRefreshResult(InventoryRefreshStop.EXHAUSTED, 1, 5)
+            val model = NativeInventoryRefreshScreenModel(refresh, mdLink, muLink, registry)
+            model.start("title")
+
+            model.discoverAndRefreshAutomatically("title")
+            advanceUntilIdle()
+
+            model.state.value.revision shouldBe 1
+            coVerify(exactly = 1) { muLink.discoverUnique("title", any()) }
+            coVerify(exactly = 1) { muLink.confirm("title", muCandidate, any()) }
+            coVerify(exactly = 1) { refresh.execute("title", mu, any(), any(), any()) }
+        }
+
     private fun allowedMangaDexProducer(): IndependentInventoryProducer =
         mockk<IndependentInventoryProducer>().also { producer ->
             every { producer.producerId } returns "mangadex"
@@ -445,6 +478,7 @@ class NativeInventoryRefreshScreenModelTest {
     ) = NativeInventoryRefreshScreenModel(
         refreshInventory = refresh,
         mangaDexWorkLinker = linker,
+        mangaUpdatesWorkLinker = mockk(),
         integrationRegistry = registry,
     )
 }
