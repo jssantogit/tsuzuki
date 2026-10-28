@@ -197,17 +197,17 @@ class CanonicalTitleRepositoryImpl(
             }
 
             val owner = ownerOf(request.producerId, request.externalWorkId)
-            val currentMangaDexLinks = currentIdentities.filter { it.provider == request.producerId }
+            val currentProducerLinks = currentIdentities.filter { it.provider == request.producerId }
             if (owner != null) {
                 val alreadyAssociated = owner == request.canonicalTitleId &&
-                    currentMangaDexLinks.any {
+                    currentProducerLinks.any {
                         it.externalId == request.externalWorkId && it.verified
                     }
                 if (!alreadyAssociated) return@transactionWithResult VerifiedInventoryWorkAssociationResult.REFUSED
                 ensureCurrentBeforeCommit(request, request.expectedVerifiedCrosswalks, isAuthorized)
                 return@transactionWithResult VerifiedInventoryWorkAssociationResult.ALREADY_ASSOCIATED
             }
-            if (currentMangaDexLinks.isNotEmpty()) {
+            if (currentProducerLinks.isNotEmpty()) {
                 return@transactionWithResult VerifiedInventoryWorkAssociationResult.REFUSED
             }
 
