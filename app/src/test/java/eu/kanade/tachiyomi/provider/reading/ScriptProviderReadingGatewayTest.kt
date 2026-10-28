@@ -463,7 +463,8 @@ class ScriptProviderReadingGatewayTest {
                         descriptor = descriptor,
                         lifecycleStatus = lifecycle,
                         configurationFingerprint = "config-v1",
-                        enabledCapabilities = enabledCapabilitiesProvider?.invoke() ?: enabledCapabilities ?: descriptor.capabilities,
+                        enabledCapabilities =
+                            enabledCapabilitiesProvider?.invoke() ?: enabledCapabilities ?: descriptor.capabilities,
                     ),
                 )
             },
