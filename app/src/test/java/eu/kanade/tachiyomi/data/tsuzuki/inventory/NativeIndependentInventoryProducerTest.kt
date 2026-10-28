@@ -68,6 +68,37 @@ class NativeIndependentInventoryProducerTest {
     }
 
     @Test
+    fun `verified MangaUpdates title fallback persists across all release pages`() = runTest {
+        val transport = object : InventoryReleaseTransport {
+            override suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload {
+                val page = if (postBody?.contains("\\\"page\\\":2") == true) 2 else 1
+                val content = when {
+                    url.endsWith("/series/123") -> """{"series_id":123,"title":"Exact Manga"}"""
+                    postBody?.contains("Exact Manga") == true -> """
+                        {"total_hits":2,"page":$page,"per_page":1,"results":[
+                            {"record":{"id":$page,"chapter":"$page"},
+                             "metadata":{"series":{"series_id":123}}}
+                        ]}
+                    """.trimIndent()
+                    else -> """{"total_hits":0,"page":$page,"per_page":1,"results":[]}"""
+                }
+                return InventoryHttpPayload(content, observedAt = 42L)
+            }
+
+            override suspend fun fetchFresh(url: String, postBody: String?): InventoryHttpPayload =
+                fetch(url, postBody)
+        }
+        val producer = MangaUpdatesInventoryProducer(transport)
+        val first = producer.fetchPage(scope("mangaupdates", "123"), "start").getOrThrow()
+        val second = producer.fetchPage(scope("mangaupdates", "123"), "page:2").getOrThrow()
+
+        first.nextCursor shouldBe "page:2"
+        first.claims.single().label shouldBe "1"
+        second.claims.single().label shouldBe "2"
+        second.outcome shouldBe InventoryFetchOutcome.EXHAUSTED
+    }
+
+    @Test
     fun `cached response preserves original observed timestamp instead of inventing a fresh observation`() = runTest {
         val body = """
             {"total_hits":1,"page":1,"per_page":25,"results":[
