@@ -259,6 +259,7 @@ class ScriptProviderReadingGateway internal constructor(
         if (
             registration.lifecycleStatus != ProviderLifecycleStatus.ENABLED ||
             registration.descriptor.runtime != ProviderRuntimeKind.SCRIPT ||
+            capability !in registration.enabledCapabilities ||
             capability !in registration.descriptor.capabilities
         ) {
             return unavailable()
