@@ -438,7 +438,7 @@ class ProviderP2pJobManagerTest {
     }
 
     @Test
-    fun `revocation observed by Host does not leave a cancelled entry when consent returns without polling`() = runTest {
+    fun `Host revocation evicts cancelled jobs before reauthorization without polling`() = runTest {
         val scope = TestScope(StandardTestDispatcher(testScheduler))
         var allowed = true
         var started = 0
