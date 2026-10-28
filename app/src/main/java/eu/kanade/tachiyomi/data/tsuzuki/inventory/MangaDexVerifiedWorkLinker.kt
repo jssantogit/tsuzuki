@@ -19,6 +19,7 @@ import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationRequest
 import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationResult
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
+import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 
 /**
  * An explicit, identity-verified MangaDex work association.
@@ -39,6 +40,7 @@ class MangaDexVerifiedWorkLinker(
     private val titles: CanonicalTitleRepository,
     private val integrationSettings: IntegrationSettingsRepository,
     private val transport: InventoryReleaseTransport,
+    private val titleNames: TitleNameObservationRepository,
 ) {
     /**
      * Discover a work by its existing canonical title without asking the user
@@ -65,48 +67,59 @@ class MangaDexVerifiedWorkLinker(
             return@capture null
         }
 
-        val url = HttpUrl.Builder()
-            .scheme("https")
-            .host("api.mangadex.org")
-            .addPathSegment("manga")
-            .addQueryParameter("title", name)
-            .addQueryParameter("limit", "10")
-            .build().toString()
-        val payload = transport.fetchAuthorized(url, null) {
-            isSettingsSnapshotCurrent(settingsSnapshot, isEnabled)
-        }
-        currentCoroutineContext().ensureActive()
+        // Observed aliases are discovery-only, never evidence of identity.
+        // The crosswalk check below remains mandatory for every result.
+        val queryNames = (listOf(name) + titleNames.getByTitle(canonicalTitleId)
+            .sortedByDescending { it.updatedAt }
+            .map { it.value.trim() })
+            .filter { it.length in 2..160 }
+            .distinctBy { it.lowercase() }
+            .take(MAX_TITLE_SEARCHES)
         requireSettingsUnchanged(settingsSnapshot, isEnabled)
-        val root = Json.parseToJsonElement(payload.content) as? JsonObject
-            ?: error("MangaDex search response is not an object")
-        require(root.string("result") == "ok")
-        val entries = root["data"] as? JsonArray ?: error("Missing MangaDex search data")
-        require(entries.size <= 10) { "Unbounded MangaDex search results" }
-
-        val matching = entries.mapNotNull { entry ->
-            val manga = entry as? JsonObject ?: error("Invalid MangaDex search result")
-            if (manga.string("type") != "manga") return@mapNotNull null
-            val mangaId = manga.string("id")?.takeIf { it.matches(MANGADEX_WORK_UUID_REGEX) }
-                ?: return@mapNotNull null
-            val attributes = manga["attributes"] as? JsonObject ?: return@mapNotNull null
-            val links = attributes["links"] as? JsonObject ?: return@mapNotNull null
-            // A candidate contradicted by a previously verified identity is
-            // not eligible. A matching display title alone proves nothing.
-            val contradicts = CROSSWALK_KEYS.any { (key, provider) ->
-                val claimed = links.string(key) ?: return@any false
-                verified.any { it.provider == provider && it.externalId != claimed }
+        val matching = queryNames.flatMap { query ->
+            val url = HttpUrl.Builder()
+                .scheme("https")
+                .host("api.mangadex.org")
+                .addPathSegment("manga")
+                .addQueryParameter("title", query)
+                .addQueryParameter("limit", "10")
+                .build().toString()
+            val payload = transport.fetchAuthorized(url, null) {
+                isSettingsSnapshotCurrent(settingsSnapshot, isEnabled)
             }
-            if (contradicts) return@mapNotNull null
-            val matched = CROSSWALK_KEYS.firstNotNullOfOrNull { (key, provider) ->
-                val externalId = links.string(key)
-                verified.firstOrNull { it.provider == provider && it.externalId == externalId }
-            } ?: return@mapNotNull null
-            val titlesField = attributes["title"] as? JsonObject ?: return@mapNotNull null
-            val label = titlesField.string("en") ?: titlesField.string("ja-ro")
-                ?: titlesField.values.firstNotNullOfOrNull {
-                    (it as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
+            currentCoroutineContext().ensureActive()
+            requireSettingsUnchanged(settingsSnapshot, isEnabled)
+            val root = Json.parseToJsonElement(payload.content) as? JsonObject
+                ?: error("MangaDex search response is not an object")
+            require(root.string("result") == "ok")
+            val entries = root["data"] as? JsonArray ?: error("Missing MangaDex search data")
+            require(entries.size <= 10) { "Unbounded MangaDex search results" }
+                entries.mapNotNull { entry ->
+                val manga = entry as? JsonObject ?: error("Invalid MangaDex search result")
+                if (manga.string("type") != "manga") return@mapNotNull null
+                val mangaId = manga.string("id")?.takeIf { it.matches(MANGADEX_WORK_UUID_REGEX) }
+                    ?: return@mapNotNull null
+                val attributes = manga["attributes"] as? JsonObject ?: return@mapNotNull null
+                val links = attributes["links"] as? JsonObject ?: return@mapNotNull null
+                // A candidate contradicted by a previously verified identity is
+                // not eligible. A matching display title alone proves nothing.
+                val contradicts = CROSSWALK_KEYS.any { (key, provider) ->
+                    val claimed = links.string(key) ?: return@any false
+                    verified.any { it.provider == provider && it.externalId != claimed }
+                }
+                if (contradicts) return@mapNotNull null
+                val matched = CROSSWALK_KEYS.firstNotNullOfOrNull { (key, provider) ->
+                    val externalId = links.string(key)
+                    verified.firstOrNull { it.provider == provider && it.externalId == externalId }
                 } ?: return@mapNotNull null
-            MangaDexVerifiedCandidate(mangaId, label, matched.provider, matched.externalId)
+                val titlesField = attributes["title"] as? JsonObject ?: return@mapNotNull null
+                val label = titlesField.string("en") ?: titlesField.string("ja-ro")
+                    ?: titlesField.values.firstNotNullOfOrNull {
+                        (it as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
+                    } ?: return@mapNotNull null
+                MangaDexVerifiedCandidate(mangaId, label, matched.provider, matched.externalId)
+            }.distinctBy { it.mangaDexId }
+
         }.distinctBy { it.mangaDexId }
         requireSettingsUnchanged(settingsSnapshot, isEnabled)
         require(matching.size <= 1) {
@@ -317,6 +330,7 @@ class MangaDexVerifiedWorkLinker(
 
     private companion object {
         val MANGADEX_INTEGRATION_ID = IntegrationId("mangadex")
+        const val MAX_TITLE_SEARCHES = 3
         val CROSSWALK_KEYS = listOf(
             "mu" to "mangaupdates",
             "mal" to "myanimelist",
