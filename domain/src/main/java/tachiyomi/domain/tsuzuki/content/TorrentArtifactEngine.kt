@@ -11,6 +11,7 @@ data class TorrentArtifactRequest(
     val filePath: String?,
     val torrentUrl: String? = null,
     val fileSizeBytes: Long? = null,
+    val discoveryOperationId: String? = null,
 )
 
 data class PreparedTorrentArtifact(

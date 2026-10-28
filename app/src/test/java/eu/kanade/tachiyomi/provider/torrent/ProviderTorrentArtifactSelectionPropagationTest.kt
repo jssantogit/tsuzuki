@@ -5,6 +5,9 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.domain.tsuzuki.content.TorrentArtifactRequest
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
@@ -69,16 +72,35 @@ class ProviderTorrentArtifactSelectionPropagationTest {
             preferences = preferences,
         )
 
-        val result = engine.acquire(
-            TorrentArtifactRequest(
-                infoHash = "0123456789abcdef0123456789abcdef01234567",
-                magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
-                fileIndex = 2,
-                filePath = "Volume 2/Chapter 12.cbz",
-                torrentUrl = "https://source.example/verified.torrent",
-                fileSizeBytes = 48_000L,
-            ),
-        )
+        val events = mutableListOf<StructuredDiagnosticEvent>()
+        ProviderP2pDiagnostics.installRecorder(object : StructuredDiagnosticRecorder {
+            override val sessionId = "11111111-1111-1111-1111-111111111111"
+            override fun canonicalTitleReference(canonicalTitleId: String): String? = null
+            override fun mihonMangaReference(mihonMangaId: Long): String? = null
+            override fun record(event: StructuredDiagnosticEvent) {
+                events += event
+            }
+        })
+        val result = try {
+            engine.acquire(
+                TorrentArtifactRequest(
+                    infoHash = "0123456789abcdef0123456789abcdef01234567",
+                    magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+                    fileIndex = 2,
+                    filePath = "Volume 2/Chapter 12.cbz",
+                    torrentUrl = "https://source.example/verified.torrent",
+                    fileSizeBytes = 48_000L,
+                    discoveryOperationId = "123e4567-e89b-12d3-a456-426614174000",
+                ),
+            )
+        } finally {
+            ProviderP2pDiagnostics.installRecorder(null)
+        }
+
+        val bridge = events.single { it.operationId != null }
+        bridge.operationId shouldBe "123e4567-e89b-12d3-a456-426614174000"
+        bridge.name shouldBe DiagnosticEventName.PROVIDER_P2P_EVENT
+        bridge.attributes.getValue("provider_p2p_line").toString().contains("opRef=") shouldBe true
 
         result.getOrThrow().localUri shouldBe "content://host/selected.cbz"
         result.getOrThrow().format shouldBe "CBZ"

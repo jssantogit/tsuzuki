@@ -34,6 +34,8 @@ data class ProviderChapterTorrentOption(
     val providerId: ProviderId,
     val candidate: TorrentCandidate,
     val selectedFile: TorrentCandidateFile,
+    /** Host diagnostic correlation only, never the identity of a reusable P2P job. */
+    val discoveryOperationId: String? = null,
 ) {
     init {
         require(canonicalChapterId.isNotBlank()) { "Canonical chapter ID must not be blank" }
@@ -52,6 +54,7 @@ fun ProviderChapterTorrentOption.toContentDelivery(): ContentDelivery.Torrent? {
         filePath = selectedFile.path,
         torrentUrl = candidate.torrentUrl,
         fileSizeBytes = selectedFile.sizeBytes,
+        discoveryOperationId = discoveryOperationId,
     )
 }
 
@@ -208,6 +211,7 @@ class ResolveProviderChapterTorrent(
                                 providerId = providerId,
                                 candidate = candidate,
                                 selectedFile = file,
+                                discoveryOperationId = operationId,
                             )
                         }
                         providerTrace?.event(

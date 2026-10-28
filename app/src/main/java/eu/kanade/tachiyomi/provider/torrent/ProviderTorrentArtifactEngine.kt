@@ -77,6 +77,7 @@ class ProviderTorrentArtifactEngine(
             ProviderP2pDiagnostics.record(
                 event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_STATE,
                 operationId = operationId,
+                correlationOperationId = request.discoveryOperationId,
                 codes = mapOf(
                     "state" to "STARTED",
                     "preference" to preferences.acquisitionPreference.get().name,

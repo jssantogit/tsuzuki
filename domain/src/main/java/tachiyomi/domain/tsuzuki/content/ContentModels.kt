@@ -24,6 +24,7 @@ sealed interface ContentDelivery {
         val filePath: String?,
         val torrentUrl: String? = null,
         val fileSizeBytes: Long? = null,
+        val discoveryOperationId: String? = null,
     ) : ContentDelivery
 }
 
