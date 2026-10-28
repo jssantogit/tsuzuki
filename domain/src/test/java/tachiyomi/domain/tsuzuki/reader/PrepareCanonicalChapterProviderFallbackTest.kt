@@ -139,9 +139,9 @@ class PrepareCanonicalChapterProviderFallbackTest {
                 ),
             ),
             bindingRepository = bindingRepository(binding),
-            providerRegistry = DefaultProviderRegistry {
-                listOf(readingRegistration(binding.ref.providerId, binding.ref.facetId))
-            },
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { listOf(readingRegistration(binding.ref.providerId, binding.ref.facetId)) },
+            ),
             gateway = object : ProviderReadingGateway {
                 override suspend fun lookup(
                     providerId: ProviderId,
