@@ -502,7 +502,10 @@ class TorrentChapterMapper(
             "(?i)(?:pack|release|files|chapters|chapter|archives|archive|alternate|downloads|download|cbz|zip)",
         )
         val WORK_PREFIX = Regex("(?i)[\\s._,;:\\-]*(?:vol(?:ume)?\\.?\\s*\\d+)?[\\s._,;:\\-]*")
-        val TITLE_AWARE_NUMERIC_SUFFIX = Regex("[\\s._,;:\\-]*0*\\d+(?:\\.\\d+|[a-z])?[\\s._,;:\\-]*", RegexOption.IGNORE_CASE)
+        val TITLE_AWARE_NUMERIC_SUFFIX = Regex(
+            "[\\s._,;:\\-]*0*\\d+(?:\\.\\d+|[a-z])?[\\s._,;:\\-]*",
+            RegexOption.IGNORE_CASE,
+        )
         val TITLE_WORD = Regex("[\\p{L}\\p{N}]+")
         val ZERO_PADDED_CHAPTER_NUMBER = Regex("(\\d+)(\\.\\d+|[a-z])?", RegexOption.IGNORE_CASE)
         val EMBEDDED_VOLUME_CHAPTER_MARKER = Regex(
