@@ -13,6 +13,8 @@ class TorrentChapterMapperEmbeddedMarkerTest {
             baseNumber = 12,
         ),
         volume = null,
+        titles = listOf("Secret Example Manga"),
+        chapterNumber = "12",
     )
 
     @Test
