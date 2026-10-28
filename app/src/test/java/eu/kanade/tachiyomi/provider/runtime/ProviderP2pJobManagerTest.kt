@@ -4,8 +4,8 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -354,7 +354,6 @@ class ProviderP2pJobManagerTest {
             jobs.close()
         }
     }
-
 
     @Test
     fun `revoking Host P2P authorization stops the active worker and blocks replay`() = runTest {
