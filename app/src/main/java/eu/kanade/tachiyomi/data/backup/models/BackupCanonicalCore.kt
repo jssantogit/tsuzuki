@@ -306,6 +306,22 @@ data class BackupCanonicalCore(
                     evidence.confidence.isFinite() &&
                     (evidence.rawNumber == null || evidence.rawNumber.isFinite()) &&
                     (
+                        (evidence.providerLanguage == null &&
+                            evidence.providerScanlationGroup == null &&
+                            evidence.providerReleaseDateMillis == null) ||
+                            (
+                                evidence.producerKind == "PROVIDER" &&
+                                    evidence.authorityClass == "PROVIDER_PROVISIONAL" &&
+                                    (evidence.providerLanguage == null ||
+                                        (evidence.providerLanguage.isNotBlank() &&
+                                            evidence.providerLanguage.length <= 32)) &&
+                                    (evidence.providerScanlationGroup == null ||
+                                        evidence.providerScanlationGroup.length <= 4096) &&
+                                    (evidence.providerReleaseDateMillis == null ||
+                                        evidence.providerReleaseDateMillis >= 0L)
+                                )
+                    ) &&
+                    (
                         evidence.mappedCanonicalChapterId == null ||
                             chaptersById[evidence.mappedCanonicalChapterId]?.canonicalTitleId ==
                             evidence.canonicalTitleId
@@ -537,6 +553,9 @@ data class BackupCoreChapterEvidence(
     val confidence: Double,
     val authorityClass: String,
     val mappedCanonicalChapterId: String?,
+    val providerLanguage: String? = null,
+    val providerScanlationGroup: String? = null,
+    val providerReleaseDateMillis: Long? = null,
 )
 
 @Serializable
