@@ -174,6 +174,46 @@ class ProviderTorrentStructuredDiagnosticTest {
         }
     }
 
+    @Test
+    fun `Host hydration and match summaries retain one sanitized correlation operation`() = runTest {
+        val recorder = RecordingDiagnosticRecorder()
+        val gateway = ProviderTorrentMetadataSearchGateway(
+            delegate = TorrentSearchGateway { _, _ ->
+                ProviderCallResult.Success(ProviderPage(emptyList(), nextCursor = null))
+            },
+            registry = registry(),
+            inspector = ProviderTorrentMetadataInspector { _, _ ->
+                error("empty search must not inspect metadata")
+            },
+            diagnosticRecorder = recorder,
+        )
+
+        gateway.search(
+            providerId = providerId,
+            request = TorrentSearchRequest(
+                titles = listOf("Secret Example Manga"),
+                chapterNumber = "12",
+            ),
+        )
+
+        val summaries = recorder.events.filter {
+            it.name in setOf(
+                DiagnosticEventName.TORRENT_METADATA_SUMMARY,
+                DiagnosticEventName.TORRENT_MATCH_SUMMARY,
+                DiagnosticEventName.TORRENT_RELEASE_EVIDENCE_SUMMARY,
+            )
+        }
+        summaries.size shouldBe 3
+        val ids = summaries.map { requireNotNull(it.operationId) }
+        ids.distinct().size shouldBe 1
+        ids.singleOrNull() shouldBe null
+        ids.first().matches(
+            Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"),
+        ) shouldBe true
+        summaries.map { requireNotNull(StructuredDiagnosticSanitizer.sanitize(it)).operationId }
+            .distinct() shouldBe listOf(ids.first())
+    }
+
     private fun unmatchedCandidate(files: List<TorrentCandidateFile>) = TorrentCandidate(
         infoHash = "0123456789abcdef0123456789abcdef01234567",
         magnetUri = null,
