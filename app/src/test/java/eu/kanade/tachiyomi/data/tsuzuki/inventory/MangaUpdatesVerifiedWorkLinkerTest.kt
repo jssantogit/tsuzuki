@@ -64,6 +64,27 @@ class MangaUpdatesVerifiedWorkLinkerTest {
             coVerify(exactly = 0) { repo.associateVerifiedInventoryWorkIfCurrent(any(), any()) }
         }
 
+    @Test
+    fun `MangaUpdates base36 URL identity is normalized to the numeric API series ID`() = runTest {
+        val network = StubTransport(mangaDexId, "64897697818")
+        network.linkId = "ttaew4a"
+        val result = MangaUpdatesVerifiedWorkLinker(repository(), settings, network)
+            .discoverUnique("title") { true }.getOrThrow()
+
+        result?.mangaUpdatesId shouldBe "64897697818"
+    }
+
+    @Test
+    fun `MangaUpdates verified series detail is a safe fallback for an empty title index`() = runTest {
+        val network = StubTransport(mangaDexId, mangaUpdatesId)
+        network.searchEmpty = true
+        val result = MangaUpdatesVerifiedWorkLinker(repository(), settings, network)
+            .discoverUnique("title") { true }.getOrThrow()
+
+        result?.mangaUpdatesId shouldBe mangaUpdatesId
+        result?.displayTitle shouldBe "Exact Manga"
+    }
+
     private fun repository(): CanonicalTitleRepository = mockk<CanonicalTitleRepository>().also { repo ->
         coEvery { repo.getById("title") } returns CanonicalTitle(
             id = "title",
@@ -92,11 +113,14 @@ class MangaUpdatesVerifiedWorkLinkerTest {
 
     private class StubTransport(private val mdId: String, private val muId: String) : InventoryReleaseTransport {
         var linkId = muId
+        var searchEmpty = false
         override suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload {
             val content = when {
                 url.endsWith("/manga/$mdId") -> """
                     {"result":"ok","data":{"id":"$mdId","type":"manga","attributes":{"links":{"mu":"$linkId"}}}}
                 """.trimIndent()
+                url.endsWith("/v1/series/search") && searchEmpty ->
+                    """{"page":1,"per_page":10,"total_hits":0,"results":[]}"""
                 url.endsWith("/v1/series/search") -> """
                     {"page":1,"per_page":10,"total_hits":1,"results":[
                       {"record":{"series_id":$muId,"title":"Exact Manga"}}
