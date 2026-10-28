@@ -34,8 +34,9 @@ data class NativeInventoryRefreshState(
 )
 
 /**
- * Manual opt-in only. No title open, ordinary refresh, or background task starts
- * inventory network traffic. The confirmation dialog lives at the UI boundary.
+ * Inventory network access requires explicit integration/capability opt-in.
+ * Opening an existing canonical title can trigger bounded metadata-only refresh;
+ * configuration changes invalidate requests and prevent stale writes.
  */
 @Inject
 @ViewModelKey
@@ -168,6 +169,15 @@ class NativeInventoryRefreshScreenModel(
                         lastStop = InventoryRefreshStop.FAILED,
                         revision = mutableState.value.revision + 1,
                     )
+                }
+            } finally {
+                // Revocation or provider replacement can abort via an early
+                // return after refresh started. Never strand the loading UI,
+                // and never mutate the state of a newer title/generation.
+                if (titleId == activeTitleId && generation == autoGeneration &&
+                    mutableState.value.refreshing
+                ) {
+                    mutableState.value = mutableState.value.copy(refreshing = false)
                 }
             }
         }
