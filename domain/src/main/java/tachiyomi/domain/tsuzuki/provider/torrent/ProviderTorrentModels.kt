@@ -254,7 +254,9 @@ class TorrentChapterMapper(
         candidate: TorrentCandidate,
     ): TorrentChapterFileMatch {
         val files = candidate.files.orEmpty()
-        if (files.isEmpty()) return TorrentChapterFileMatch.None
+        // Canonical resolution always supplies title/alias context; without it there
+        // is no work-identity evidence, regardless of the chapter number.
+        if (files.isEmpty() || request.titles.isEmpty()) return TorrentChapterFileMatch.None
 
         var plausible = files
             .asSequence()
@@ -268,6 +270,9 @@ class TorrentChapterMapper(
                 val titleAwareSafe =
                     explicitLabel != null || titleAwareLabel != null || isImplicitIdentitySafe(request, label)
                 if (parsed.identity != request.identity || !titleAwareSafe) return@mapNotNull null
+                if (!hasWorkIdentityEvidence(request, candidate, file, label, explicitLabel)) {
+                    return@mapNotNull null
+                }
                 val volumes = volumeEvidence(file, mappingLabel).distinct()
                 if (volumes.size > 1) return@mapNotNull null
                 ParsedTorrentFile(file, volumes.singleOrNull())
@@ -292,11 +297,61 @@ class TorrentChapterMapper(
             .sortedBy(TorrentCandidateFile::index)
 
         return when (matchingFiles.size) {
-            0 -> titleAwareTokenFallback(request, files)
+            0 -> titleAwareTokenFallback(request, candidate, files)
             1 -> TorrentChapterFileMatch.Exact(matchingFiles.single())
             else -> TorrentChapterFileMatch.Ambiguous(matchingFiles)
         }
     }
+
+    /**
+     * Chapter markers prove only an ordinal, never the work. Validate independently
+     * against file/title context and refuse contradictory work prefixes or folders.
+     * An unqualified Chapter N.cbz may use an exact release-title claim only when
+     * the archive's own path contains no competing work attribution. This is still
+     * provider evidence, not a new canonical identity.
+     */
+    private fun hasWorkIdentityEvidence(
+        request: TorrentChapterRequest,
+        candidate: TorrentCandidate,
+        file: TorrentCandidateFile,
+        label: String,
+        explicitChapterLabel: String?,
+    ): Boolean {
+        val titlePatterns = request.titles.mapNotNull(::titlePattern)
+        val segments = file.path.split('/').dropLast(1)
+        val isKnownWorkDirectory = { segment: String ->
+            titlePatterns.any { it.matches(segment.trim()) }
+        }
+        if (segments.any { !isKnownWorkDirectory(it) && !isGenericDirectory(it) }) {
+            return false
+        }
+
+        val fileWork = titlePatterns
+            .asSequence()
+            .mapNotNull { it.find(label)?.takeIf { match -> match.range.first == 0 } }
+            .maxByOrNull { it.value.length }
+        if (fileWork != null) {
+            // Disallow a second, unverified work name between the title and chapter.
+            val beforeChapter = explicitChapterLabel
+                ?.let { label.substringBefore(it).removePrefix(fileWork.value).trim() }
+            return beforeChapter == null || WORK_PREFIX.matches(beforeChapter)
+        }
+
+        // A named-but-different archive must not inherit the title of its release
+        // or parent. Only unqualified chapter/volume archive basenames can do so.
+        val marker = explicitChapterLabel ?: return false
+        if (!WORK_PREFIX.matches(label.substringBefore(marker).trim())) return false
+        if (segments.any(isKnownWorkDirectory)) return true
+
+        // Release-name evidence is useful for generic "pack/Chapter N" layouts,
+        // but never defeats conflicting work names in file or parent directories.
+        return titlePatterns.any { pattern ->
+            pattern.find(candidate.displayName)?.range?.first == 0
+        }
+    }
+
+    private fun isGenericDirectory(segment: String): Boolean =
+        GENERIC_DIRECTORY.matches(segment.trim()) || PATH_VOLUME.matches(segment.trim())
 
     private fun titleAwareMappingLabel(
         request: TorrentChapterRequest,
@@ -323,6 +378,7 @@ class TorrentChapterMapper(
 
     private fun titleAwareTokenFallback(
         request: TorrentChapterRequest,
+        candidate: TorrentCandidate,
         files: List<TorrentCandidateFile>,
     ): TorrentChapterFileMatch {
         if (request.titles.isEmpty()) return TorrentChapterFileMatch.None
@@ -337,7 +393,9 @@ class TorrentChapterMapper(
         if (volumes.size > 1 || (request.volume != null && volumes.singleOrNull() != request.volume)) {
             return TorrentChapterFileMatch.None
         }
-        if (!hasTitleAwareChapterToken(file.chapterLabel(), request.titles, chapterNumber)) {
+        if (!hasTitleAwareChapterToken(file.chapterLabel(), request.titles, chapterNumber) ||
+            !hasWorkIdentityEvidence(request, candidate, file, file.chapterLabel(), explicitChapterLabel(file.chapterLabel()))
+        ) {
             return TorrentChapterFileMatch.None
         }
         return TorrentChapterFileMatch.Exact(file)
@@ -429,6 +487,10 @@ class TorrentChapterMapper(
 
     private companion object {
         val PATH_VOLUME = Regex("(?i)vol(?:ume)?\\.?\\s*(\\d+)")
+        val GENERIC_DIRECTORY = Regex(
+            "(?i)(?:pack|release|files|chapters|chapter|archives|archive|alternate|downloads|download|cbz|zip)",
+        )
+        val WORK_PREFIX = Regex("(?i)[\\s._,;:\\-]*(?:vol(?:ume)?\\.?\\s*\\d+)?[\\s._,;:\\-]*")
         val TITLE_WORD = Regex("[\\p{L}\\p{N}]+")
         val ZERO_PADDED_CHAPTER_NUMBER = Regex("(\\d+)(\\.\\d+|[a-z])?", RegexOption.IGNORE_CASE)
         val EMBEDDED_VOLUME_CHAPTER_MARKER = Regex(
