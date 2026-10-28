@@ -56,6 +56,8 @@ import tachiyomi.data.tsuzuki.CanonicalLibraryRepositoryImpl
 import tachiyomi.data.tsuzuki.CanonicalReadingRepositoryImpl
 import tachiyomi.data.tsuzuki.CanonicalTitleRepositoryImpl
 import tachiyomi.data.tsuzuki.SourceTitleMappingRepositoryImpl
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadata
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadataCodec
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.sync.service.CanonicalTitleSyncSource
@@ -1031,6 +1033,55 @@ class CanonicalCoreBackupImporterTest {
         database.tsuzuki_backup_restore_receiptsQueries
             .listTsuzukiBackupRestoreReceipts().awaitAsList() shouldBe emptyList()
     }
+
+    @Test
+    fun `portable Provider metadata survives import and export without persisting arbitrary bytes`(): Unit =
+        runBlocking {
+            val core = Json.decodeFromString(BackupCanonicalCore.serializer(), section().payloadJson)
+            val provider = BackupCoreChapterEvidence(
+                id = "provider-metadata-1",
+                canonicalTitleId = "title-1",
+                producerKind = "PROVIDER",
+                producerId = "provider-binding:portable",
+                externalChapterKey = "chapter-01",
+                rawLabel = "Chapter 1",
+                rawNumber = 1.0,
+                volume = null,
+                title = null,
+                observedAt = 18L,
+                confidence = 0.95,
+                authorityClass = "PROVIDER_PROVISIONAL",
+                mappedCanonicalChapterId = "chapter-1",
+                providerLanguage = "pt-BR",
+                providerScanlationGroup = "Grupo Ñ",
+                providerReleaseDateMillis = 1_700_000_000_000L,
+            )
+            importer.restoreCore(coreSection(core.copy(chapterEvidence = listOf(provider))))
+            val row = database.tsuzuki_chapter_evidenceQueries
+                .getTsuzukiChapterEvidenceByTitle("title-1").awaitAsList().single()
+            ProviderEvidenceMetadataCodec.decode(row.raw_metadata) shouldBe ProviderEvidenceMetadata(
+                "pt-BR",
+                "Grupo Ñ",
+                1_700_000_000_000L,
+            )
+
+            val titles = CanonicalTitleRepositoryImpl(database)
+            val exporter = CanonicalCoreBackupExporter(
+                titleSource = CanonicalTitleSyncSource { titles.getAllAsFlow().first() },
+                titleRepository = titles,
+                libraryRepository = CanonicalLibraryRepositoryImpl(database),
+                chapterRepository = CanonicalChapterRepositoryImpl(database),
+                sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+                readingRepository = CanonicalReadingRepositoryImpl(database),
+                database = database,
+                json = Json,
+            )
+            val exported = Json.decodeFromString(
+                BackupCanonicalCore.serializer(),
+                exporter.export().payloadJson,
+            )
+            exported.chapterEvidence.single() shouldBe provider
+        }
 
     @Test
     fun `opaque evidence metadata cannot silently disappear from portable backup`(): Unit = runBlocking {
