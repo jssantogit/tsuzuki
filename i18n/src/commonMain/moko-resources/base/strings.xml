@@ -1522,6 +1522,10 @@
     <string name="tsuzuki_inventory_individual">individually admissible observations (not necessarily readable)</string>
     <string name="tsuzuki_inventory_candidates">individual candidates awaiting review (not editorially verified)</string>
     <string name="tsuzuki_inventory_releases">release observations, not canonical chapter records</string>
+    <string name="tsuzuki_inventory_numbered_release_candidates">distinct provisional release numbers (not canonical chapters or readable pages)</string>
+    <string name="tsuzuki_inventory_numbered_release_example">Observed %1$s · language %2$s · %3$d release records</string>
+    <string name="tsuzuki_inventory_empty_release_feed">The API returned no releases for this linked work. No chapter numbers were observed.</string>
+    <string name="tsuzuki_inventory_no_numbered_release_candidates">Releases were observed, but none had an unambiguous individual chapter number.</string>
     <string name="tsuzuki_inventory_totals">Reported totals (unverified)</string>
     <string name="tsuzuki_inventory_offline_note">Locally stored source evidence; automatic metadata checks do not prove editorial completeness or reading access</string>
     <string name="tsuzuki_inventory_scope">Scope — producer work ID: %1$s; edition: %2$s; language: %3$s</string>
