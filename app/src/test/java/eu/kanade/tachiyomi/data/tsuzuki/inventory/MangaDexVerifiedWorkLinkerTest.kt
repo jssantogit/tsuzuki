@@ -350,7 +350,6 @@ class MangaDexVerifiedWorkLinkerTest {
         coVerify(exactly = 0) { repo.addExternalIdentity(any()) }
     }
 
-
     @Test
     fun `automatic title discovery selects only a unique independently cross-referenced MangaDex work`() = runTest {
         val repo = mockk<CanonicalTitleRepository>()
