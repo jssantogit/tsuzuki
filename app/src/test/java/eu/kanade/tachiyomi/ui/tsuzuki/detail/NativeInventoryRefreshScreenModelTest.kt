@@ -488,6 +488,52 @@ class NativeInventoryRefreshScreenModelTest {
             model.state.value.revision shouldBe 0
         }
 
+    @Test
+    fun `automatic discovery exposes per-source progress before metadata lookup finishes`() = runTest(dispatcher) {
+        val registry = activeInventoryRegistry()
+        coEvery { registry.awaitReady() } returns Unit
+        val candidateResponse = CompletableDeferred<Result<MangaDexVerifiedCandidate?>>()
+        val linker = mockk<MangaDexVerifiedWorkLinker>()
+        coEvery { linker.discoverUnique("title", any()) } coAnswers { candidateResponse.await() }
+        val refresh = mockk<RefreshIndependentInventory>()
+        coEvery { refresh.execute(any(), any(), any(), any(), any()) } returns
+            InventoryRefreshResult(InventoryRefreshStop.NO_VERIFIED_WORK, 0, 0)
+        val model = model(linker, refresh, registry)
+        model.start("title")
+
+        model.discoverAndRefreshAutomatically("title")
+        runCurrent()
+
+        model.state.value.refreshing shouldBe true
+        model.state.value.discoveryStatus["mangadex"] shouldBe InventoryWorkDiscoveryStatus.SEARCHING
+        candidateResponse.complete(Result.success(null))
+        advanceUntilIdle()
+        model.state.value.discoveryStatus["mangadex"] shouldBe InventoryWorkDiscoveryStatus.NO_VERIFIED_MATCH
+        model.state.value.refreshStops["mangadex"] shouldBe InventoryRefreshStop.NO_VERIFIED_WORK
+        model.state.value.refreshing shouldBe false
+    }
+
+    @Test
+    fun `automatic discovery failure remains visible independently from release refresh outcomes`() = runTest(dispatcher) {
+        val registry = activeInventoryRegistry()
+        coEvery { registry.awaitReady() } returns Unit
+        val linker = mockk<MangaDexVerifiedWorkLinker>()
+        coEvery { linker.discoverUnique("title", any()) } returns
+            Result.failure(IllegalStateException("invalid upstream response"))
+        val refresh = mockk<RefreshIndependentInventory>()
+        coEvery { refresh.execute(any(), any(), any(), any(), any()) } returns
+            InventoryRefreshResult(InventoryRefreshStop.NO_VERIFIED_WORK, 0, 0)
+        val model = model(linker, refresh, registry)
+        model.start("title")
+
+        model.discoverAndRefreshAutomatically("title")
+        advanceUntilIdle()
+
+        model.state.value.discoveryStatus["mangadex"] shouldBe InventoryWorkDiscoveryStatus.FAILED
+        model.state.value.refreshStops["mangadex"] shouldBe InventoryRefreshStop.NO_VERIFIED_WORK
+        model.state.value.revision shouldBe 1
+    }
+
     private fun allowedMangaDexProducer(): IndependentInventoryProducer =
         mockk<IndependentInventoryProducer>().also { producer ->
             every { producer.producerId } returns "mangadex"
