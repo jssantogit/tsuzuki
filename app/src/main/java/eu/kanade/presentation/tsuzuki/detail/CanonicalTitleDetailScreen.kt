@@ -587,6 +587,38 @@ private fun IndependentInventoryInfo(
                     color = colors.secondary,
                 )
             }
+            if (source.numberedReleaseCandidateCount > 0) {
+                Text(
+                    "${source.numberedReleaseCandidateCount} " +
+                        stringResource(MR.strings.tsuzuki_inventory_numbered_release_candidates),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+                source.numberedReleaseCandidates.forEach { candidate ->
+                    Text(
+                        stringResource(
+                            MR.strings.tsuzuki_inventory_numbered_release_example,
+                            candidate.label,
+                            candidate.language ?: stringResource(MR.strings.tsuzuki_inventory_language_unrecorded),
+                            candidate.releaseCount,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.secondary,
+                    )
+                }
+            } else if (source.releaseObservations == 0 && source.latestSuccessfulFetchAt != null) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_empty_release_feed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            } else if (source.releaseObservations > 0) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_no_numbered_release_candidates),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
             if (source.knownEditorialLabels.isNotEmpty()) {
                 Text(
                     stringResource(MR.strings.tsuzuki_inventory_editorial_examples) + ": " +
