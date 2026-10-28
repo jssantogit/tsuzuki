@@ -458,6 +458,36 @@ class NativeInventoryRefreshScreenModelTest {
             coVerify(exactly = 1) { refresh.execute("title", mu, any(), any(), any()) }
         }
 
+    @Test
+    fun `revoking an automatic inventory producer clears loading without publishing stale results`() =
+        runTest(dispatcher) {
+            val md = allowedMangaDexProducer()
+            var enabled = true
+            val registry = mockk<IntegrationRegistry>()
+            coEvery { registry.awaitReady() } returns Unit
+            every { registry.configurationFingerprint() } returns "stable"
+            every { registry.inventoryProducers() } answers {
+                if (enabled) listOf(md) else emptyList()
+            }
+            val linker = mockk<MangaDexVerifiedWorkLinker>()
+            coEvery { linker.discoverUnique("title", any()) } returns Result.success(null)
+            val refresh = mockk<RefreshIndependentInventory>()
+            val response = CompletableDeferred<InventoryRefreshResult>()
+            coEvery { refresh.execute(any(), any(), any(), any(), any()) } coAnswers { response.await() }
+            val model = model(linker, refresh, registry)
+            model.start("title")
+            model.discoverAndRefreshAutomatically("title")
+            runCurrent()
+
+            model.state.value.refreshing shouldBe true
+            enabled = false
+            response.complete(InventoryRefreshResult(InventoryRefreshStop.EXHAUSTED, 1, 2))
+            advanceUntilIdle()
+
+            model.state.value.refreshing shouldBe false
+            model.state.value.revision shouldBe 0
+        }
+
     private fun allowedMangaDexProducer(): IndependentInventoryProducer =
         mockk<IndependentInventoryProducer>().also { producer ->
             every { producer.producerId } returns "mangadex"
