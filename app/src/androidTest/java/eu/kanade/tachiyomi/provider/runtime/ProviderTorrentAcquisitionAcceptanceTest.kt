@@ -14,7 +14,6 @@ import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentMetadataSearchGateway
 import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentPreferences
 import eu.kanade.tachiyomi.provider.torrent.ScriptProviderTorrentGateway
 import eu.kanade.tachiyomi.ui.reader.loader.ArchivePageLoader
-import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -73,6 +72,7 @@ import tachiyomi.domain.tsuzuki.provider.torrent.TorrentReadableResource
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchRequest
 import tachiyomi.domain.tsuzuki.provider.torrent.toContentDelivery
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
+import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class ProviderTorrentAcquisitionAcceptanceTest {
