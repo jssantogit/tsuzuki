@@ -46,6 +46,7 @@ import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
+import tachiyomi.domain.tsuzuki.provider.ProviderFacetRef
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
@@ -138,6 +139,9 @@ class PrepareCanonicalChapterProviderFallbackTest {
                 ),
             ),
             bindingRepository = bindingRepository(binding),
+            providerRegistry = DefaultProviderRegistry {
+                listOf(readingRegistration(binding.ref.providerId, binding.ref.facetId))
+            },
             gateway = object : ProviderReadingGateway {
                 override suspend fun lookup(
                     providerId: ProviderId,
@@ -250,6 +254,26 @@ class PrepareCanonicalChapterProviderFallbackTest {
         contentOptionCache = ContentOptionCache(),
         inFlightContentResolution = InFlightContentResolution(),
         addonRepository = null,
+    )
+
+    private fun readingRegistration(id: ProviderId, facetId: String?) = ProviderRegistration(
+        descriptor = ProviderDescriptor(
+            id = id,
+            name = id.value,
+            version = ProviderVersion("1.0.0", 1),
+            origin = ProviderOrigin.Repository("repo"),
+            runtime = ProviderRuntimeKind.SCRIPT,
+            capabilities = setOf(
+                ProviderCapabilities.ReadingLookupV1,
+                ProviderCapabilities.ReadingChaptersV1,
+                ProviderCapabilities.ReadingPagesV1,
+            ),
+            permissions = ProviderPermissionSet(),
+            settings = emptyList(),
+            contentLanguages = setOf("en"),
+        ),
+        lifecycleStatus = ProviderLifecycleStatus.ENABLED,
+        facets = facetId?.let { listOf(ProviderFacetRef(id, it)) }.orEmpty(),
     )
 
     private fun torrentRegistration(id: ProviderId) = ProviderRegistration(
