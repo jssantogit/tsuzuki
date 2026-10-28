@@ -57,15 +57,102 @@ class NativeInventoryRefreshScreenModel(
     private var linkOperation: Job? = null
     private var linkOperationGeneration = 0L
     private var linkPermissionSnapshot: MangaDexPermissionSnapshot? = null
+    private var autoOperation: Job? = null
+    private var autoGeneration = 0L
 
     fun start(titleId: String) {
         if (activeTitleId == titleId) return
         invalidateLinkOperation()
         operation?.cancel()
         linkOperation?.cancel()
+        autoGeneration++
+        autoOperation?.cancel()
         activeTitleId = titleId
         linkPermissionSnapshot = null
         mutableState.value = NativeInventoryRefreshState()
+    }
+
+    /**
+     * A title-open can enrich an explicitly opted-in inventory without any
+     * manual UUID or refresh button. Never search when the integration is off;
+     * provider-independent release evidence stays shadow-only.
+     */
+    fun discoverAndRefreshAutomatically(titleId: String): Job? {
+        if (titleId != activeTitleId || autoOperation?.isActive == true) return null
+        val generation = ++autoGeneration
+        autoOperation = viewModelScope.launch {
+            try {
+                integrationRegistry.awaitReady()
+                if (titleId != activeTitleId || generation != autoGeneration) return@launch
+                val fingerprint = integrationRegistry.configurationFingerprint()
+                val enabledProducers = integrationRegistry.inventoryProducers()
+                if (enabledProducers.isEmpty()) return@launch
+                val isCurrent: (String) -> Boolean = { id ->
+                    activeTitleId == titleId &&
+                        generation == autoGeneration &&
+                        integrationRegistry.configurationFingerprint() == fingerprint &&
+                        enabledProducers.singleOrNull { it.producerId == id }?.let { original ->
+                            integrationRegistry.inventoryProducers()
+                                .singleOrNull { it.producerId == id } === original
+                        } == true
+                }
+                // Work lookup is a separate step from fetching releases. A
+                // title-only match never confirms an external work identity.
+                if (isCurrent(MANGADEX_PRODUCER_ID)) {
+                    val found = mangaDexWorkLinker.discoverUnique(titleId) {
+                        isCurrent(MANGADEX_PRODUCER_ID)
+                    }.getOrNull()
+                    if (!isCurrent(MANGADEX_PRODUCER_ID)) return@launch
+                    if (found != null) {
+                        val linked = mangaDexWorkLinker.confirm(titleId, found) {
+                            isCurrent(MANGADEX_PRODUCER_ID)
+                        }
+                        if (!isCurrent(MANGADEX_PRODUCER_ID)) return@launch
+                        mutableState.value = mutableState.value.copy(
+                            linkCompleted = linked.isSuccess,
+                            linkFailed = linked.isFailure,
+                        )
+                    }
+                }
+                mutableState.value = mutableState.value.copy(refreshing = true, lastStop = null)
+                var mostRecentStop: InventoryRefreshStop? = null
+                for (producer in enabledProducers) {
+                    if (!isCurrent(producer.producerId)) return@launch
+                    val result = refreshInventory.execute(
+                        canonicalTitleId = titleId,
+                        producer = producer,
+                        maxPages = 3,
+                        isEnabled = { isCurrent(producer.producerId) },
+                    )
+                    if (!isCurrent(producer.producerId)) return@launch
+                    // One unavailable crosswalk cannot wipe successful source
+                    // evidence or prevent the next independent producer.
+                    if (result.stop != InventoryRefreshStop.NO_VERIFIED_WORK ||
+                        mostRecentStop == null
+                    ) {
+                        mostRecentStop = result.stop
+                    }
+                }
+                if (titleId == activeTitleId && generation == autoGeneration) {
+                    mutableState.value = mutableState.value.copy(
+                        refreshing = false,
+                        lastStop = mostRecentStop,
+                        revision = mutableState.value.revision + 1,
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (titleId == activeTitleId && generation == autoGeneration) {
+                    mutableState.value = mutableState.value.copy(
+                        refreshing = false,
+                        lastStop = InventoryRefreshStop.FAILED,
+                        revision = mutableState.value.revision + 1,
+                    )
+                }
+            }
+        }
+        return autoOperation
     }
 
     fun refresh(titleId: String, producerId: String): Job? {
@@ -224,6 +311,8 @@ class NativeInventoryRefreshScreenModel(
         invalidateLinkOperation()
         operation?.cancel()
         linkOperation?.cancel()
+        autoGeneration++
+        autoOperation?.cancel()
         linkPermissionSnapshot = null
         mutableState.value = mutableState.value.copy(
             refreshing = false,
