@@ -107,12 +107,12 @@ class MangaDexVerifiedWorkLinker(
                 // not eligible. A matching display title alone proves nothing.
                 val contradicts = CROSSWALK_KEYS.any { (key, provider) ->
                     val claimed = links.string(key) ?: return@any false
-                    verified.any { it.provider == provider && it.externalId != claimed }
+                    verified.any { it.provider == provider && !sameCrosswalk(provider, claimed, it.externalId) }
                 }
                 if (contradicts) return@mapNotNull null
                 val matched = CROSSWALK_KEYS.firstNotNullOfOrNull { (key, provider) ->
                     val externalId = links.string(key)
-                    verified.firstOrNull { it.provider == provider && it.externalId == externalId }
+                    verified.firstOrNull { it.provider == provider && sameCrosswalk(provider, externalId, it.externalId) }
                 } ?: return@mapNotNull null
                 val titlesField = attributes["title"] as? JsonObject ?: return@mapNotNull null
                 val label = titlesField.string("en") ?: titlesField.string("ja-ro")
@@ -187,10 +187,12 @@ class MangaDexVerifiedWorkLinker(
             val matching = CROSSWALK_KEYS.mapNotNull { (mangaDexKey, tsuzukiProducer) ->
                 val claimedExternal = links.string(mangaDexKey) ?: return@mapNotNull null
                 val existing = verified.filter { it.provider == tsuzukiProducer }
-                require(existing.isEmpty() || existing.all { it.externalId == claimedExternal }) {
+                require(existing.isEmpty() || existing.all {
+                    sameCrosswalk(tsuzukiProducer, claimedExternal, it.externalId)
+                }) {
                     "MangaDex cross-references another $tsuzukiProducer work"
                 }
-                existing.firstOrNull { it.externalId == claimedExternal }
+                existing.firstOrNull { sameCrosswalk(tsuzukiProducer, claimedExternal, it.externalId) }
             }.distinctBy { it.provider to it.externalId }
             require(matching.isNotEmpty()) {
                 "No independently verified MangaDex external-work cross-reference"
@@ -312,6 +314,13 @@ class MangaDexVerifiedWorkLinker(
             actual.enabled &&
             IntegrationSettingsConfig.decode(actual.configJson)
                 .capabilityEnabled(IntegrationCapability.CHAPTER_INVENTORY)
+    }
+
+    private fun sameCrosswalk(producer: String, claimed: String?, verifiedId: String): Boolean {
+        if (claimed.isNullOrBlank()) return false
+        if (producer != "mangaupdates") return claimed == verifiedId
+        val normalizedClaim = normalizeMangaUpdatesWorkId(claimed) ?: return false
+        return normalizedClaim == normalizeMangaUpdatesWorkId(verifiedId)
     }
 
     private suspend inline fun <T> capture(crossinline block: suspend () -> T): Result<T> =
