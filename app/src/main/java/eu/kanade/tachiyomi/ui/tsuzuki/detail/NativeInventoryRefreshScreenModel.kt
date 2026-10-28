@@ -16,6 +16,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
@@ -72,6 +73,7 @@ class NativeInventoryRefreshScreenModel(
     private var linkOperationGeneration = 0L
     private var linkPermissionSnapshot: MangaDexPermissionSnapshot? = null
     private var autoOperation: Job? = null
+    private var integrationChangesObserver: Job? = null
     private var autoGeneration = 0L
 
     fun start(titleId: String) {
@@ -81,9 +83,40 @@ class NativeInventoryRefreshScreenModel(
         linkOperation?.cancel()
         autoGeneration++
         autoOperation?.cancel()
+        integrationChangesObserver?.cancel()
         activeTitleId = titleId
         linkPermissionSnapshot = null
         mutableState.value = NativeInventoryRefreshState()
+    }
+
+    /**
+     * Keep an open title in sync with explicit integration consent changes.
+     * A settings fingerprint change invalidates in-flight requests, then
+     * re-runs bounded work discovery. No network on a default-off registry.
+     */
+    fun observeIntegrationChanges(titleId: String): Job? {
+        if (titleId != activeTitleId) return null
+        integrationChangesObserver?.cancel()
+        integrationChangesObserver = viewModelScope.launch {
+            integrationRegistry.awaitReady()
+            var previousFingerprint = integrationRegistry.configurationFingerprint()
+            integrationRegistry.observeChanges().collect {
+                if (titleId != activeTitleId) return@collect
+                val currentFingerprint = integrationRegistry.configurationFingerprint()
+                if (currentFingerprint == previousFingerprint) return@collect
+                previousFingerprint = currentFingerprint
+                autoGeneration++
+                autoOperation?.cancel()
+                mutableState.value = mutableState.value.copy(
+                    refreshing = false,
+                    discoveryStatus = emptyMap(),
+                    refreshStops = emptyMap(),
+                    lastStop = null,
+                )
+                discoverAndRefreshAutomatically(titleId)
+            }
+        }
+        return integrationChangesObserver
     }
 
     /**
@@ -407,6 +440,7 @@ class NativeInventoryRefreshScreenModel(
         linkOperation?.cancel()
         autoGeneration++
         autoOperation?.cancel()
+        integrationChangesObserver?.cancel()
         linkPermissionSnapshot = null
         mutableState.value = mutableState.value.copy(
             refreshing = false,
