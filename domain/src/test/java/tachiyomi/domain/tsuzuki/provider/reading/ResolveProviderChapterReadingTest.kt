@@ -262,7 +262,7 @@ class ResolveProviderChapterReadingTest {
             canonicalChapterRepository = canonicalChapterRepository(chapter = null),
             evidenceRepository = evidenceRepository(emptyList()),
             bindingRepository = bindingRepository(listOf(binding)),
-            providerRegistry = DefaultProviderRegistry { listOf(readingRegistration()) },
+            providerRegistry = DefaultProviderRegistry(registrations = { listOf(readingRegistration()) }),
             gateway = gateway {
                 pagesCalls += 1
                 error("must not invoke")
@@ -289,9 +289,9 @@ class ResolveProviderChapterReadingTest {
     fun `persisted Provider binding is rechecked when Provider becomes disabled`() = runBlocking {
         var lifecycle = ProviderLifecycleStatus.ENABLED
         var pagesCalls = 0
-        val registry = DefaultProviderRegistry {
+        val registry = DefaultProviderRegistry(registrations = {
             listOf(readingRegistration(lifecycle = lifecycle))
-        }
+        })
         val resolver = resolver(
             bindings = listOf(binding),
             evidence = listOf(evidence(binding, "provider-chapter-1", chapter.id)),
@@ -325,16 +325,16 @@ class ResolveProviderChapterReadingTest {
         val capabilityResolver = resolver(
             bindings = listOf(binding),
             evidence = listOf(evidence(binding, "provider-chapter-1", chapter.id)),
-            providerRegistry = DefaultProviderRegistry { registrations },
+            providerRegistry = DefaultProviderRegistry(registrations = { registrations }),
         )
         capabilityResolver.options(chapter.id) shouldBe emptyList()
 
         val wrongFacet = resolver(
             bindings = listOf(binding),
             evidence = listOf(evidence(binding, "provider-chapter-1", chapter.id)),
-            providerRegistry = DefaultProviderRegistry {
+            providerRegistry = DefaultProviderRegistry(registrations = {
                 listOf(readingRegistration(facet = "pt-br"))
-            },
+            }),
         )
         wrongFacet.options(chapter.id) shouldBe emptyList()
     }
@@ -375,7 +375,7 @@ class ResolveProviderChapterReadingTest {
             error("pages not expected")
         },
         managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
-        providerRegistry: ProviderRegistry = DefaultProviderRegistry { listOf(readingRegistration()) },
+        providerRegistry: ProviderRegistry = DefaultProviderRegistry(registrations = { listOf(readingRegistration()) }),
     ) = ResolveProviderChapterReading(
         canonicalChapterRepository = canonicalChapterRepository(chapter),
         evidenceRepository = evidenceRepository(evidence),
