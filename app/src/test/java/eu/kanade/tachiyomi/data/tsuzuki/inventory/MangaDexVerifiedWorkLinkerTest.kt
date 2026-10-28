@@ -425,6 +425,27 @@ class MangaDexVerifiedWorkLinkerTest {
         network.calls shouldBe 2
     }
 
+    @Test
+    fun `MangaDex accepts base36 MangaUpdates link against independently verified numeric series ID`() = runTest {
+        val repo = mockk<CanonicalTitleRepository>()
+        val canonical = mockk<tachiyomi.domain.tsuzuki.model.CanonicalTitle>()
+        io.mockk.every { canonical.displayTitle } returns "Exact Manga"
+        coEvery { repo.getById("title") } returns canonical
+        coEvery { repo.getExternalIdentities("title") } returns listOf(
+            ExternalIdentity("title", "mangaupdates", "64897697818", true, 1L),
+        )
+        val network = FakeTransport(details(mu = "ttaew4a"))
+        network.searchResponse = """{"result":"ok","data":[
+            {"id":"$work","type":"manga","attributes":{"title":{"en":"Exact Manga"},"links":{"mu":"ttaew4a"}}}
+        ]}"""
+        val linker = linker(repo, network)
+
+        val discovered = linker.discoverUnique("title") { true }.getOrThrow()
+        discovered?.mangaDexId shouldBe work
+        discovered?.matchedExternalId shouldBe "64897697818"
+        linker.preview("title", work) { true }.getOrThrow().matchedExternalId shouldBe "64897697818"
+    }
+
     private fun details(mu: String, mal: String? = null): String {
         val malField = mal?.let { ",\"mal\":\"$it\"" } ?: ""
         return """{"result":"ok","data":{"id":"$work","type":"manga","attributes":""" +
