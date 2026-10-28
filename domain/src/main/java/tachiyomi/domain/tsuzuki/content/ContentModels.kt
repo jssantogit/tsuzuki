@@ -22,6 +22,8 @@ sealed interface ContentDelivery {
         val magnetUri: String?,
         val fileIndex: Int?,
         val filePath: String?,
+        val torrentUrl: String? = null,
+        val fileSizeBytes: Long? = null,
     ) : ContentDelivery
 }
 
