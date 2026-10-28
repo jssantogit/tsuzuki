@@ -18,9 +18,10 @@ class PlannerTest(unittest.TestCase):
         # the CLI to attempt its supported alternative image registries.
         workflow = (Path(__file__).parent.parent / "workflows" / "ci-v2.yml").read_text()
         supabase_lane = workflow.split("  supabase:", 1)[1].split("  native-package:", 1)[0]
-        self.assertIn("unset SUPABASE_INTERNAL_IMAGE_REGISTRY", supabase_lane)
+        self.assertEqual(supabase_lane.count("unset SUPABASE_INTERNAL_IMAGE_REGISTRY"), 3)
         self.assertIn('supabase start -x "$excluded"', supabase_lane)
-        self.assertIn("run: supabase test db", supabase_lane)
+        self.assertIn("supabase db reset", supabase_lane)
+        self.assertIn("supabase test db", supabase_lane)
 
     def test_full_mode_runs_every_primary_lane(self):
         result = plan([], "full")
