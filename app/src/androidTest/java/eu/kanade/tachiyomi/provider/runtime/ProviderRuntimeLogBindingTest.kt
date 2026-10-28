@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.provider.runtime
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentPreferences
 import mihon.app.di.AppBindings
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -10,6 +11,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import tachiyomi.core.common.preference.InMemoryPreferenceStore
+import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 
 @RunWith(AndroidJUnit4::class)
 class ProviderRuntimeLogBindingTest {
@@ -19,9 +22,11 @@ class ProviderRuntimeLogBindingTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val managedFiles = AppBindings.providesProviderManagedFileStore(context)
         val p2pJobs = AppBindings.providesProviderP2pJobManager(
-            context,
-            managedFiles,
-            AppBindings.providesHostVerifiedTorrentMetadataCache(),
+            context = context,
+            managedFiles = managedFiles,
+            verifiedMetadata = AppBindings.providesHostVerifiedTorrentMetadataCache(),
+            registry = DefaultProviderRegistry(registrations = { emptyList() }),
+            torrentPreferences = ProviderTorrentPreferences(InMemoryPreferenceStore()),
         )
         val observed = mutableListOf<Pair<String, String>>()
         val logSink = ProviderRuntimeLogSink { providerId, message ->
@@ -64,9 +69,11 @@ class ProviderRuntimeLogBindingTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val managedFiles = AppBindings.providesProviderManagedFileStore(context)
         val p2pJobs = AppBindings.providesProviderP2pJobManager(
-            context,
-            managedFiles,
-            AppBindings.providesHostVerifiedTorrentMetadataCache(),
+            context = context,
+            managedFiles = managedFiles,
+            verifiedMetadata = AppBindings.providesHostVerifiedTorrentMetadataCache(),
+            registry = DefaultProviderRegistry(registrations = { emptyList() }),
+            torrentPreferences = ProviderTorrentPreferences(InMemoryPreferenceStore()),
         )
         val observed = mutableListOf<Pair<String, String>>()
         val logSink = ProviderRuntimeLogSink { providerId, message ->

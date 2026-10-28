@@ -17,6 +17,7 @@ import tachiyomi.domain.tsuzuki.model.TitleNameObservation
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
+import tachiyomi.domain.tsuzuki.provider.ProviderCursor
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
@@ -71,6 +72,31 @@ class ResolveProviderChapterTorrentTest {
         calls.single().volume shouldBe 2
         options.map { it.providerId } shouldBe listOf(providerId)
         options.single().selectedFile.path shouldBe "pack/Vol. 2 Ch. 12.cbz"
+    }
+
+    @Test
+    fun `torrent discovery preserves one opaque operation id through sequential pagination`() = runTest {
+        val calls = mutableListOf<TorrentSearchRequest>()
+        val resolver = resolver(
+            gateway = TorrentSearchGateway { _, request ->
+                calls += request
+                ProviderCallResult.Success(
+                    ProviderPage(
+                        items = emptyList(),
+                        nextCursor = if (request.cursor == null) ProviderCursor("second-page") else null,
+                    ),
+                )
+            },
+        )
+
+        resolver.options(chapter.id)
+
+        calls.size shouldBe 2
+        val operationId = requireNotNull(calls.first().operationId)
+        operationId.matches(
+            Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"),
+        ) shouldBe true
+        calls.last().operationId shouldBe operationId
     }
 
     @Test

@@ -19,11 +19,22 @@ class PrepareTorrentArtifact(
             "Torrent file index must not be negative"
         }
         delivery.filePath?.let(::validateTorrentFilePath)
+        require(delivery.fileSizeBytes == null || delivery.fileSizeBytes >= 0L) {
+            "Torrent selected file size must not be negative"
+        }
+        require(
+            delivery.discoveryOperationId == null || DISCOVERY_OPERATION_ID.matches(delivery.discoveryOperationId),
+        ) {
+            "Torrent discovery correlation must be an opaque UUID"
+        }
         return TorrentArtifactRequest(
             infoHash = delivery.infoHash,
             magnetUri = delivery.magnetUri,
             fileIndex = delivery.fileIndex,
             filePath = delivery.filePath,
+            torrentUrl = delivery.torrentUrl,
+            fileSizeBytes = delivery.fileSizeBytes,
+            discoveryOperationId = delivery.discoveryOperationId,
         )
     }
 
@@ -42,6 +53,10 @@ class PrepareTorrentArtifact(
         } catch (error: Throwable) {
             Result.failure(error)
         }
+    }
+
+    private companion object {
+        val DISCOVERY_OPERATION_ID = Regex("[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}")
     }
 
     private fun prepareArtifact(artifact: PreparedTorrentArtifact): Result<PreparedChapterContent> {

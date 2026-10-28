@@ -39,6 +39,7 @@ import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderBrowserPermission
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
+import tachiyomi.domain.tsuzuki.provider.ProviderFacetRef
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderNetworkPermission
@@ -293,6 +294,9 @@ class ScriptProviderReadingGatewayIsolationTest {
                 canonicalChapterRepository = chapterRepository,
                 evidenceRepository = evidenceRepository,
                 bindingRepository = bindingRepository,
+                providerRegistry = DefaultProviderRegistry(
+                    registrations = { listOf(readingRegistryRegistration()) },
+                ),
                 gateway = gateway,
             )
             val option = resolver.options(canonicalChapter.id).single()
@@ -768,6 +772,26 @@ class ScriptProviderReadingGatewayIsolationTest {
             chapters.forEach { upsert(it) }
         }
     }
+
+    private fun readingRegistryRegistration() = ProviderRegistration(
+        descriptor = ProviderDescriptor(
+            id = PROVIDER_ID,
+            name = "Reading Fixture",
+            version = ProviderVersion("1.0.1", 1),
+            origin = ProviderOrigin.Repository(REPOSITORY_ID),
+            runtime = ProviderRuntimeKind.SCRIPT,
+            capabilities = setOf(
+                ProviderCapabilities.ReadingLookupV1,
+                ProviderCapabilities.ReadingChaptersV1,
+                ProviderCapabilities.ReadingPagesV1,
+            ),
+            permissions = ProviderPermissionSet(),
+            settings = emptyList(),
+            contentLanguages = setOf("en"),
+        ),
+        lifecycleStatus = ProviderLifecycleStatus.ENABLED,
+        facets = listOf(ProviderFacetRef(PROVIDER_ID, "en")),
+    )
 
     private fun gateway(
         main: String,
