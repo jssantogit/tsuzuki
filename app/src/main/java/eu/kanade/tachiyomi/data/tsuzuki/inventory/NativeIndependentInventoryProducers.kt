@@ -328,10 +328,11 @@ class MangaUpdatesInventoryProducer(
             var root = parseObject(response.content)
             // MangaUpdates can index releases by series title rather than
             // accepting its numeric work ID as the search term. Only on an
-            // exhausted first page, retrieve the exact VERIFIED series record
-            // and retry by that title. Every returned release still has to
-            // prove metadata.series.series_id == the verified work ID.
-            if (page == 1 && root.requiredInt("total_hits") == 0 &&
+            // exhausted page, retrieve the exact VERIFIED series record
+            // and retry by that title. Repeat on subsequent pages so a
+            // successful page-1 fallback never silently loses later releases.
+            // Each release must still prove its precise series ID.
+            if (root.requiredInt("total_hits") == 0 &&
                 root.requiredArray("results").isEmpty()
             ) {
                 val series = parseObject(
