@@ -316,15 +316,38 @@ class MangaUpdatesInventoryProducer(
                 else -> error("Invalid MangaUpdates page cursor")
             }
             require(page in 1..100)
-            val payload = buildJsonObject {
-                put("search", scope.externalWorkId)
+            fun bodyFor(search: String) = buildJsonObject {
+                put("search", search)
                 put("search_type", "series")
                 put("page", page)
                 put("perpage", 25)
                 put("include_metadata", true)
             }.toString()
-            val response = transport.fetch("https://api.mangaupdates.com/v1/releases/search", payload)
-            val root = parseObject(response.content)
+            val releaseSearchUrl = "https://api.mangaupdates.com/v1/releases/search"
+            var response = transport.fetch(releaseSearchUrl, bodyFor(scope.externalWorkId))
+            var root = parseObject(response.content)
+            // MangaUpdates can index releases by series title rather than
+            // accepting its numeric work ID as the search term. Only on an
+            // exhausted first page, retrieve the exact VERIFIED series record
+            // and retry by that title. Every returned release still has to
+            // prove metadata.series.series_id == the verified work ID.
+            if (page == 1 && root.requiredInt("total_hits") == 0 &&
+                root.requiredArray("results").isEmpty()
+            ) {
+                val series = parseObject(
+                    transport.fetch(
+                        "https://api.mangaupdates.com/v1/series/" + scope.externalWorkId,
+                        null,
+                    ).content,
+                )
+                require(series.requiredString("series_id") == scope.externalWorkId) {
+                    "MangaUpdates release fallback returned a different work"
+                }
+                val title = series.requiredString("title").trim()
+                require(title.length in 2..160)
+                response = transport.fetch(releaseSearchUrl, bodyFor(title))
+                root = parseObject(response.content)
+            }
             val reportedPage = root.requiredInt("page")
             val perPage = root.requiredInt("per_page")
             val totalReleases = root.requiredInt("total_hits")
