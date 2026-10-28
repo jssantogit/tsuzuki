@@ -80,6 +80,38 @@ class ProviderP2pStructuredHistoryTest {
     }
 
     @Test
+    fun `Reader bridge correlates Host discovery without leaking content derived acquisition identity`() {
+        val seen = mutableListOf<StructuredDiagnosticEvent>()
+        val correlation = "123e4567-e89b-12d3-a456-426614174000"
+        val acquisition = "reader:0123456789abcdef0123456789abcdef01234567:3"
+        ProviderP2pDiagnostics.installRecorder(HistoryRecorder { seen += it })
+        try {
+            ProviderP2pDiagnostics.record(
+                event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_STATE,
+                operationId = acquisition,
+                correlationOperationId = correlation,
+                codes = mapOf("state" to "STARTED"),
+            )
+            ProviderP2pDiagnostics.record(
+                event = ProviderP2pDiagnosticEvent.WORKER_STARTED,
+                operationId = acquisition,
+            )
+        } finally {
+            ProviderP2pDiagnostics.installRecorder(null)
+        }
+        val start = requireNotNull(StructuredDiagnosticSanitizer.sanitize(seen.first()))
+        val worker = requireNotNull(StructuredDiagnosticSanitizer.sanitize(seen.last()))
+        start.operationId shouldBe correlation
+        worker.operationId shouldBe null
+        val bridge = start.attributes.getValue("provider_p2p_line").toString()
+        val native = worker.attributes.getValue("provider_p2p_line").toString()
+        val opaqueReference = Regex("opRef=[0-9a-f]{16}").find(bridge)?.value
+        (opaqueReference != null) shouldBe true
+        native.contains(requireNotNull(opaqueReference)) shouldBe true
+        bridge.contains("0123456789abcdef0123456789abcdef01234567") shouldBe false
+    }
+
+    @Test
     fun `unsafe free text is excluded from export and recorder errors never affect acquisition`() {
         val seen = mutableListOf<StructuredDiagnosticEvent>()
         ProviderP2pDiagnostics.installRecorder(HistoryRecorder { seen.add(it) })

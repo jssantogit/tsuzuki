@@ -68,7 +68,8 @@ class PrepareProviderChapterTorrentTest {
             providerRegistry = DefaultProviderRegistry(
                 registrations = { listOf(registration(providerId)) },
             ),
-            gateway = TorrentSearchGateway { _, _ ->
+            gateway = TorrentSearchGateway { _, search ->
+                searchedDiscoveryId = search.operationId
                 ProviderCallResult.Success(ProviderPage(listOf(candidate), null))
             },
         )
@@ -76,6 +77,8 @@ class PrepareProviderChapterTorrentTest {
         var capturedPath: String? = null
         var capturedUrl: String? = null
         var capturedSize: Long? = null
+        var capturedDiscoveryId: String? = null
+        var searchedDiscoveryId: String? = null
         val preparer = PrepareProviderChapterTorrent(
             resolver = resolver,
             prepareTorrentArtifact = PrepareTorrentArtifact(
@@ -84,6 +87,7 @@ class PrepareProviderChapterTorrentTest {
                     capturedPath = request.filePath
                     capturedUrl = request.torrentUrl
                     capturedSize = request.fileSizeBytes
+                    capturedDiscoveryId = request.discoveryOperationId
                     Result.success(
                         PreparedTorrentArtifact(
                             localUri = "content://provider.test/chapter-12.cbz",
@@ -106,6 +110,7 @@ class PrepareProviderChapterTorrentTest {
         capturedPath shouldBe file.path
         capturedUrl shouldBe "https://source.example/verified.torrent"
         capturedSize shouldBe 42_000L
+        capturedDiscoveryId shouldBe requireNotNull(searchedDiscoveryId)
     }
 
     private fun registration(id: ProviderId): ProviderRegistration = ProviderRegistration(
