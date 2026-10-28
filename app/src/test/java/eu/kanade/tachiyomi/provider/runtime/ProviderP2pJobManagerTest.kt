@@ -437,6 +437,50 @@ class ProviderP2pJobManagerTest {
         }
     }
 
+    @Test
+    fun `revocation observed by Host does not leave a cancelled entry when consent returns without polling`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        var allowed = true
+        var started = 0
+        var cancelled = 0
+        val manager = ProviderP2pJobManager(
+            root = tempDir.resolve("revocation-no-poll").toFile(),
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { _, _ ->
+                started++
+                try {
+                    awaitCancellation()
+                } finally {
+                    cancelled++
+                }
+            },
+            scope = scope,
+            authorizationCheck = { allowed },
+            authorizationCheckIntervalMs = 100L,
+        )
+        val request = request()
+        val service = manager.service("org.example.p2p")
+        try {
+            (service.acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+            started shouldBe 1
+
+            allowed = false
+            advanceTimeBy(101L)
+            runCurrent()
+            cancelled shouldBe 1
+
+            // No poll while revoked: a later approval must never reuse the cancelled entry.
+            allowed = true
+            (service.acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+            started shouldBe 2
+        } finally {
+            manager.close()
+            runCurrent()
+        }
+    }
+
     private fun request() = ProviderP2pAcquireRequest(
         operationId = "read:canonical-12",
         magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
