@@ -235,6 +235,7 @@ enum class DiagnosticAttribute {
     TORRENT_FILE_TITLE_TOKEN_COUNT,
     TORRENT_FILE_TITLE_TOKEN_SINGLE_COUNT,
     TORRENT_VOLUME_REQUESTED,
+    TORRENT_NO_MATCH_REASON,
     PROVIDER_P2P_LINE,
 
     COVER_PRESENT,
@@ -301,6 +302,16 @@ enum class DiagnosticCandidateType : DiagnosticSafeCode {
     SOURCE_AWARE,
     SOURCE_RAW,
     LOCAL,
+}
+
+/** Closed, content-free reason codes for a torrent search with no safe exact match. */
+enum class DiagnosticTorrentNoMatchReason : DiagnosticSafeCode {
+    NO_CANDIDATES,
+    NO_READABLE_ARCHIVES,
+    CHAPTER_IDENTITY_NOT_PROVEN,
+    VOLUME_NOT_PROVEN,
+    AMBIGUOUS_ARCHIVES,
+    NO_EXACT_MATCH,
 }
 
 enum class DiagnosticCacheStatus : DiagnosticSafeCode {
@@ -519,6 +530,9 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.PROVIDER_RETRYABLE,
         DiagnosticAttribute.TORRENT_VOLUME_REQUESTED,
         -> value as? DiagnosticAttributeValue.Flag
+
+        DiagnosticAttribute.TORRENT_NO_MATCH_REASON -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticTorrentNoMatchReason }
 
         DiagnosticAttribute.PROVIDER_P2P_LINE -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { isSafeP2pLine(it.value) }
