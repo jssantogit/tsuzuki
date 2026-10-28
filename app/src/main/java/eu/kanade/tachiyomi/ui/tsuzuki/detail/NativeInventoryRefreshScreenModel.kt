@@ -9,6 +9,7 @@ import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaDexVerifiedCandidate
 import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaDexVerifiedWorkLinker
+import eu.kanade.tachiyomi.data.tsuzuki.inventory.MangaUpdatesVerifiedWorkLinker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -42,6 +43,7 @@ data class NativeInventoryRefreshState(
 class NativeInventoryRefreshScreenModel(
     private val refreshInventory: RefreshIndependentInventory,
     private val mangaDexWorkLinker: MangaDexVerifiedWorkLinker,
+    private val mangaUpdatesWorkLinker: MangaUpdatesVerifiedWorkLinker,
     private val integrationRegistry: IntegrationRegistry,
 ) : ViewModel() {
     private data class MangaDexPermissionSnapshot(
@@ -108,6 +110,23 @@ class NativeInventoryRefreshScreenModel(
                             isCurrent(MANGADEX_PRODUCER_ID)
                         }
                         if (!isCurrent(MANGADEX_PRODUCER_ID)) return@launch
+                        mutableState.value = mutableState.value.copy(
+                            linkCompleted = linked.isSuccess,
+                            linkFailed = linked.isFailure,
+                        )
+                    }
+                }
+                // Independent work identity may be discovered from the
+                // previously verified MangaDex crosswalk. No title-only link.
+                if (isCurrent(MANGAUPDATES_PRODUCER_ID) && isCurrent(MANGADEX_PRODUCER_ID)) {
+                    val muAuthorized = {
+                        isCurrent(MANGAUPDATES_PRODUCER_ID) && isCurrent(MANGADEX_PRODUCER_ID)
+                    }
+                    val candidate = mangaUpdatesWorkLinker.discoverUnique(titleId, muAuthorized).getOrNull()
+                    if (!muAuthorized()) return@launch
+                    if (candidate != null) {
+                        val linked = mangaUpdatesWorkLinker.confirm(titleId, candidate, muAuthorized)
+                        if (!muAuthorized()) return@launch
                         mutableState.value = mutableState.value.copy(
                             linkCompleted = linked.isSuccess,
                             linkFailed = linked.isFailure,
@@ -358,5 +377,6 @@ class NativeInventoryRefreshScreenModel(
 
     private companion object {
         const val MANGADEX_PRODUCER_ID = "mangadex"
+        const val MANGAUPDATES_PRODUCER_ID = "mangaupdates"
     }
 }
