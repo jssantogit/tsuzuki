@@ -112,7 +112,9 @@ class MangaDexVerifiedWorkLinker(
                 if (contradicts) return@mapNotNull null
                 val matched = CROSSWALK_KEYS.firstNotNullOfOrNull { (key, provider) ->
                     val externalId = links.string(key)
-                    verified.firstOrNull { it.provider == provider && sameCrosswalk(provider, externalId, it.externalId) }
+                    verified.firstOrNull {
+                        it.provider == provider && sameCrosswalk(provider, externalId, it.externalId)
+                    }
                 } ?: return@mapNotNull null
                 val titlesField = attributes["title"] as? JsonObject ?: return@mapNotNull null
                 val label = titlesField.string("en") ?: titlesField.string("ja-ro")
@@ -187,9 +189,11 @@ class MangaDexVerifiedWorkLinker(
             val matching = CROSSWALK_KEYS.mapNotNull { (mangaDexKey, tsuzukiProducer) ->
                 val claimedExternal = links.string(mangaDexKey) ?: return@mapNotNull null
                 val existing = verified.filter { it.provider == tsuzukiProducer }
-                require(existing.isEmpty() || existing.all {
-                    sameCrosswalk(tsuzukiProducer, claimedExternal, it.externalId)
-                }) {
+                require(
+                    existing.isEmpty() || existing.all {
+                        sameCrosswalk(tsuzukiProducer, claimedExternal, it.externalId)
+                    },
+                ) {
                     "MangaDex cross-references another $tsuzukiProducer work"
                 }
                 existing.firstOrNull { sameCrosswalk(tsuzukiProducer, claimedExternal, it.externalId) }
