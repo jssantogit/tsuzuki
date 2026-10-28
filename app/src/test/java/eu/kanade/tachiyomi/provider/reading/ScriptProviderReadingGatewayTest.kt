@@ -303,6 +303,40 @@ class ScriptProviderReadingGatewayTest {
     }
 
     @Test
+    fun `revoking page capability during script invocation discards its returned content`() = runBlocking {
+        var canReadPages = true
+        var invocations = 0
+        val revoked = gateway(
+            enabledCapabilitiesProvider = {
+                setOf(
+                    ProviderCapabilities.ReadingLookupV1,
+                    ProviderCapabilities.ReadingChaptersV1,
+                ) + if (canReadPages) setOf(ProviderCapabilities.ReadingPagesV1) else emptySet()
+            },
+        ) { _, _, _, _ ->
+            invocations++
+            canReadPages = false
+            ProviderRuntimeInvocationResponse.success(
+                """{"type":"page_list","pages":[{"url":"https://cdn.example/page.jpg"}]}""",
+            )
+        }
+
+        revoked.pages(
+            providerId,
+            ProviderReadingPagesRequest(
+                binding = ProviderBindingRef(providerId, "en", "work-42"),
+                providerChapterId = "chapter-1",
+            ),
+        ) shouldBe ProviderCallResult.Failure(
+            tachiyomi.domain.tsuzuki.provider.reading.ProviderError(
+                ProviderErrorCode.UNAVAILABLE,
+                retryable = false,
+            ),
+        )
+        invocations shouldBe 1
+    }
+
+    @Test
     fun `builtin registration cannot execute a colliding legacy script package`() = runBlocking {
         var invoked = false
         val builtin = ProviderDescriptor(
@@ -399,6 +433,7 @@ class ScriptProviderReadingGatewayTest {
         packageOverride: ActiveProviderScriptPackage = activePackage,
         managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
         enabledCapabilities: Set<ProviderCapabilityRef>? = null,
+        enabledCapabilitiesProvider: (() -> Set<ProviderCapabilityRef>)? = null,
         invoke: suspend (
             ProviderRuntimeInvocationRequest,
             ByteArray,
@@ -428,7 +463,7 @@ class ScriptProviderReadingGatewayTest {
                         descriptor = descriptor,
                         lifecycleStatus = lifecycle,
                         configurationFingerprint = "config-v1",
-                        enabledCapabilities = enabledCapabilities ?: descriptor.capabilities,
+                        enabledCapabilities = enabledCapabilitiesProvider?.invoke() ?: enabledCapabilities ?: descriptor.capabilities,
                     ),
                 )
             },
