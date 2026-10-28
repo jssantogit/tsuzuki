@@ -180,11 +180,11 @@ class MangaUpdatesVerifiedWorkLinker(
     private suspend fun permission(isEnabled: () -> Boolean): Permissions {
         currentCoroutineContext().ensureActive()
         check(isEnabled()) { "Inventory integration is disabled" }
-        val mu = settings.get(IntegrationId("mangaupdates"))
-        val md = settings.get(IntegrationId("mangadex"))
+        val mu = requireNotNull(settings.get(IntegrationId("mangaupdates")))
+        val md = requireNotNull(settings.get(IntegrationId("mangadex")))
         currentCoroutineContext().ensureActive()
-        check(mu?.hasInventoryPermission(IntegrationId("mangaupdates")) == true &&
-            md?.hasInventoryPermission(IntegrationId("mangadex")) == true && isEnabled()) {
+        check(mu.hasInventoryPermission(IntegrationId("mangaupdates")) &&
+            md.hasInventoryPermission(IntegrationId("mangadex")) && isEnabled()) {
             "MangaUpdates discovery requires consent for both metadata sources"
         }
         return Permissions(mu, md)
@@ -196,6 +196,7 @@ class MangaUpdatesVerifiedWorkLinker(
         val mu = settings.get(IntegrationId("mangaupdates"))
         val md = settings.get(IntegrationId("mangadex"))
         currentCoroutineContext().ensureActive()
+        if (mu == null || md == null) return false
         return isEnabled() && mu == expected.mu && md == expected.md &&
             mu.hasInventoryPermission(IntegrationId("mangaupdates")) &&
             md.hasInventoryPermission(IntegrationId("mangadex"))
