@@ -71,7 +71,7 @@ class NativeIndependentInventoryProducerTest {
     fun `verified MangaUpdates title fallback persists across all release pages`() = runTest {
         val transport = object : InventoryReleaseTransport {
             override suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload {
-                val page = if (postBody?.contains(String.raw`\"page\":2`) == true) 2 else 1
+                val page = if (postBody?.contains("\"page\":2") == true) 2 else 1
                 val content = when {
                     url.endsWith("/series/123") -> """{"series_id":123,"title":"Exact Manga"}"""
                     postBody?.contains("Exact Manga") == true -> """
