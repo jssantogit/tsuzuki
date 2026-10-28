@@ -85,13 +85,12 @@ class MangaUpdatesVerifiedWorkLinker(
         }.distinctBy { it.mangaUpdatesId }
         checkCurrent(permission, isEnabled)
         if (found.size == 1) return@capture found.single()
-        // A title index can omit an otherwise valid linked work (aliases,
-        // romanization, etc). Only allow direct fallback when search returned
-        // no rows at all AND the remote primary title itself matches.
-        if (rows.isNotEmpty()) return@capture null
+        // Title search may return homonyms while omitting the actual work
+        // (alias, translation, pagination). Never associate any of those rows.
+        // Instead, use the independently verified MangaDex → MU crosswalk
+        // to request that precise series ID, even if its title is different.
         val detail = readSeries(muId, permission, isEnabled, fresh = false)
         val label = detail.string("title") ?: return@capture null
-        check(label.equals(name, ignoreCase = true)) { "Unverified MangaUpdates fallback title" }
         MangaUpdatesVerifiedCandidate(muId, label, anchor.externalId)
     }
 
