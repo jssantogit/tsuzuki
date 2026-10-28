@@ -8,6 +8,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
@@ -236,6 +237,12 @@ class ProviderP2pJobManager internal constructor(
                 codes = mapOf("status" to if (verifiedBytes == null) "MISS" else "HIT"),
             )
             val download = engine.downloadWithHostMetadata(entry.request, workingDirectory, verifiedBytes)
+            // A cancelled or evicted Host job must never adopt a late native result.
+            // Revoking and rapidly re-enabling a Provider does not restore the old job.
+            currentCoroutineContext().ensureActive()
+            if (synchronized(lock) { jobs[key] !== entry }) {
+                throw CancellationException("Provider P2P job is no longer current")
+            }
             if (!isAuthorized(key.providerId)) {
                 throw CancellationException("Provider P2P authorization revoked")
             }
