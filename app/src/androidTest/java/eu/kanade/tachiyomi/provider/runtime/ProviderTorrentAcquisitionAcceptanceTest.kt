@@ -11,6 +11,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderPage
 import tachiyomi.domain.tsuzuki.provider.ProviderNetworkPermission
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.content.PrepareTorrentArtifact
+import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import okio.Buffer
 import okhttp3.OkHttpClient
@@ -417,6 +418,7 @@ class ProviderTorrentAcquisitionAcceptanceTest {
                     OkHttpClient(),
                     verifiedMetadata = cache,
                 ),
+                diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
             )
             val found = hydratedSearch.search(
                 providerId = searchId,
