@@ -90,8 +90,8 @@ class ProviderTorrentContractTest {
     fun `chapter mapper fails closed when more than one file remains plausible`() {
         val candidate = candidate(
             files = listOf(
-                file(0, "release-a/chapter-012.cbz"),
-                file(1, "release-b/chapter-012.zip"),
+                file(0, "pack/chapter-012.cbz"),
+                file(1, "alternate/chapter-012.zip"),
             ),
         )
 
