@@ -154,6 +154,12 @@ class NativeInventoryReleaseTransport(
         val parsed = url.toHttpUrlOrFail()
         val allowMu = parsed.host == "api.mangaupdates.com" &&
             parsed.encodedPath == "/v1/releases/search" && postBody != null
+        val allowMuSeries = parsed.host == "api.mangaupdates.com" &&
+            parsed.encodedPath.removePrefix("/v1/series/").let { id ->
+                parsed.encodedPath.startsWith("/v1/series/") &&
+                    id.matches(Regex("[0-9]{1,18}")) &&
+                    (id.toLongOrNull()?.let { it > 0 } == true)
+            } && parsed.querySize == 0 && postBody == null
         // Title discovery stays bounded and read-only. Never permit arbitrary
         // API methods, pages or filters through the metadata transport.
         val muSearch = postBody?.takeIf { it.length <= 1024 }?.let { body ->
@@ -187,7 +193,7 @@ class NativeInventoryReleaseTransport(
         require(
             parsed.scheme == "https" && parsed.port == 443 &&
                 parsed.username.isEmpty() && parsed.password.isEmpty() &&
-                (allowMu || allowMd || allowMuDiscovery || allowMdDiscovery),
+                (allowMu || allowMuSeries || allowMd || allowMuDiscovery || allowMdDiscovery),
         ) {
             "Only allowlisted read-only metadata endpoints are permitted"
         }
