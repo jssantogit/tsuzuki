@@ -101,10 +101,10 @@ class MangaUpdatesVerifiedWorkLinkerTest {
     fun `unrelated title candidates cannot become verified series when crosswalk points elsewhere`() = runTest {
         val repo = repository()
         val network = StubTransport(mangaDexId, mangaUpdatesId)
-        network.unrelatedSearchResults = true
+        network.exactTitleConflict = true
         network.linkId = "555555"
         val candidate = MangaUpdatesVerifiedWorkLinker(repo, settings, network)
-            .discoverUnique("title") { true }.getOrNull()
+            .discoverUnique("title") { true }.getOrThrow()
 
         candidate shouldBe null
         coVerify(exactly = 0) { repo.associateVerifiedInventoryWorkIfCurrent(any(), any()) }
@@ -149,15 +149,20 @@ class MangaUpdatesVerifiedWorkLinkerTest {
         var linkId = muId
         var searchEmpty = false
         var unrelatedSearchResults = false
+        var exactTitleConflict = false
         var seriesTitle = "Exact Manga"
         override suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload {
             val content = when {
                 url.endsWith("/manga/$mdId") -> """
                     {"result":"ok","data":{"id":"$mdId","type":"manga","attributes":{"links":{"mu":"$linkId"}}}}
                 """.trimIndent()
+                url.endsWith("/v1/series/search") && exactTitleConflict ->
+                    """{"page":1,"per_page":10,"total_hits":1,"results":[
+                       {"record":{"series_id":$muId,"title":"Exact Manga"}}
+                    ]}"""
                 url.endsWith("/v1/series/search") && unrelatedSearchResults ->
                     """{"page":1,"per_page":10,"total_hits":2,"results":[
-                       {"record":{"series_id":22222,"title":"Exact Manga"}},
+                       {"record":{"series_id":22222,"title":"Exact Manga (Side Story)"}},
                        {"record":{"series_id":33333,"title":"Exact Manga Alternative"}}
                     ]}"""
                 url.endsWith("/v1/series/search") && searchEmpty ->
@@ -168,6 +173,7 @@ class MangaUpdatesVerifiedWorkLinkerTest {
                     ]}
                 """.trimIndent()
                 url.endsWith("/v1/series/$muId") -> """{"series_id":$muId,"title":"$seriesTitle"}"""
+                url.endsWith("/v1/series/$linkId") -> """{"series_id":$linkId,"title":"Other Manga"}"""
                 else -> error("Unapproved URL $url")
             }
             return InventoryHttpPayload(content, observedAt = 1L)
