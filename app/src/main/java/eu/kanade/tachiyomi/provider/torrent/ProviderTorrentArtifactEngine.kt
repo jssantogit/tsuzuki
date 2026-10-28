@@ -60,13 +60,14 @@ class ProviderTorrentArtifactEngine(
             val selectedFile = TorrentCandidateFile(
                 index = selectedIndex,
                 path = selectedPath,
+                sizeBytes = request.fileSizeBytes,
             )
             val providerRequest = TorrentAcquisitionRequest(
                 operationId = operationId,
                 candidate = TorrentCandidate(
                     infoHash = request.infoHash,
                     magnetUri = request.magnetUri,
-                    torrentUrl = null,
+                    torrentUrl = request.torrentUrl,
                     displayName = request.infoHash,
                     files = listOf(selectedFile),
                 ),
@@ -89,7 +90,7 @@ class ProviderTorrentArtifactEngine(
                     "directP2pAllowed" to preferences.directP2pAllowed.get(),
                     "hasInfoHash" to request.infoHash.isNotBlank(),
                     "hasMagnet" to !request.magnetUri.isNullOrBlank(),
-                    "hasTorrentUrl" to false,
+                    "hasTorrentUrl" to !request.torrentUrl.isNullOrBlank(),
                 ),
             )
 
