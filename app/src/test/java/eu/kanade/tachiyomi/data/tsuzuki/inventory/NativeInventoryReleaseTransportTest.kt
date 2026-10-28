@@ -26,9 +26,8 @@ class NativeInventoryReleaseTransportTest {
         return NativeInventoryReleaseTransport(network)
     }
 
-
     @Test
-    fun `allowlisted bounded work search is permitted but broad and malformed discovery is rejected`() = runBlocking<Unit> {
+    fun `allowlisted bounded work search rejects broad and malformed discovery`() = runBlocking<Unit> {
         var requests = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             requests++
@@ -38,7 +37,10 @@ class NativeInventoryReleaseTransportTest {
         val transport = transport(client)
         val allowed = "https://api.mangadex.org/manga?title=Black%20Clover&limit=10"
         transport.fetch(allowed, null).content shouldBe """{"result":"ok","data":[]}"""
-        transport.fetch("https://api.mangaupdates.com/v1/series/search", """{"search":"Black Clover","stype":"title","page":1,"perpage":10}""")
+        transport.fetch(
+            "https://api.mangaupdates.com/v1/series/search",
+            """{"search":"Black Clover","stype":"title","page":1,"perpage":10}""",
+        )
         requests shouldBe 2
         listOf(
             "https://api.mangadex.org/manga?title=Black%20Clover&limit=100",
