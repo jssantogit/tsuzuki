@@ -19,11 +19,16 @@ class PrepareTorrentArtifact(
             "Torrent file index must not be negative"
         }
         delivery.filePath?.let(::validateTorrentFilePath)
+        require(delivery.fileSizeBytes == null || delivery.fileSizeBytes >= 0L) {
+            "Torrent selected file size must not be negative"
+        }
         return TorrentArtifactRequest(
             infoHash = delivery.infoHash,
             magnetUri = delivery.magnetUri,
             fileIndex = delivery.fileIndex,
             filePath = delivery.filePath,
+            torrentUrl = delivery.torrentUrl,
+            fileSizeBytes = delivery.fileSizeBytes,
         )
     }
 
