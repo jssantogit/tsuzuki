@@ -22,7 +22,9 @@ class PrepareTorrentArtifact(
         require(delivery.fileSizeBytes == null || delivery.fileSizeBytes >= 0L) {
             "Torrent selected file size must not be negative"
         }
-        require(delivery.discoveryOperationId == null || DISCOVERY_OPERATION_ID.matches(delivery.discoveryOperationId)) {
+        require(
+            delivery.discoveryOperationId == null || DISCOVERY_OPERATION_ID.matches(delivery.discoveryOperationId),
+        ) {
             "Torrent discovery correlation must be an opaque UUID"
         }
         return TorrentArtifactRequest(

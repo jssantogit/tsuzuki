@@ -1,8 +1,8 @@
 package tachiyomi.domain.tsuzuki.provider.torrent
 
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
-import tachiyomi.domain.tsuzuki.provider.ProviderCapabilityRef
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
+import tachiyomi.domain.tsuzuki.provider.ProviderCapabilityRef
 import tachiyomi.domain.tsuzuki.provider.ProviderErrorCode
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
