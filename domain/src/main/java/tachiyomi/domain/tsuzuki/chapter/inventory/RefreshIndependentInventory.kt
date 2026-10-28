@@ -14,6 +14,21 @@ interface IndependentInventoryProducer {
 
     /** One bounded request for a known external work. The cursor is an opaque page key. */
     suspend fun fetchPage(scope: InventoryScope, pageKey: String): Result<InventoryEvidenceBatch>
+
+    /**
+     * An optional live authorization check for producers that issue remote requests.
+     * Native producers recheck it at the HTTP dispatch boundary, including retries
+     * or fallback requests. The default keeps local and third-party producers
+     * source-compatible; the orchestrator still checks consent before saving.
+     */
+    suspend fun fetchPageAuthorized(
+        scope: InventoryScope,
+        pageKey: String,
+        isEnabled: suspend () -> Boolean,
+    ): Result<InventoryEvidenceBatch> {
+        if (!isEnabled()) return Result.failure(IllegalStateException("Inventory integration is disabled"))
+        return fetchPage(scope, pageKey)
+    }
 }
 
 enum class InventoryRefreshStop {
@@ -78,7 +93,7 @@ class RefreshIndependentInventory(
             check(visited.add(pageKey)) { "Inventory cursor loop detected" }
 
             val page = try {
-                producer.fetchPage(scope, pageKey)
+                producer.fetchPageAuthorized(scope, pageKey, isEnabled)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
