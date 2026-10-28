@@ -391,6 +391,12 @@ jobs:
           # rate limits; excluding non-database services reduces both risk
           # and CI resource use without skipping a single backend assertion.
           excluded="gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor"
+          # setup-cli exports GHCR as an explicit single-registry override.
+          # On shared GitHub runners, GHCR can refuse PostgreSQL layer pulls
+          # with toomanyrequests even after authenticated login and retries.
+          # Without the override, the CLI tries its supported ECR, GHCR and
+          # Docker Hub image candidates; do not skip pgTAP on pull failures.
+          unset SUPABASE_INTERNAL_IMAGE_REGISTRY
           # Retry infrastructure pulls only; database migrations/tests still
           # fail immediately on any assertion or schema error.
           for attempt in 1 2 3 4 5; do
