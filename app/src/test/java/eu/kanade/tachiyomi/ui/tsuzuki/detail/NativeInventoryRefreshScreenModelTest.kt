@@ -10,9 +10,9 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -515,7 +515,9 @@ class NativeInventoryRefreshScreenModelTest {
     }
 
     @Test
-    fun `automatic discovery failure remains visible independently from release refresh outcomes`() = runTest(dispatcher) {
+    fun `automatic discovery failure remains visible independently from release refresh outcomes`() = runTest(
+        dispatcher,
+    ) {
         val registry = activeInventoryRegistry()
         coEvery { registry.awaitReady() } returns Unit
         val linker = mockk<MangaDexVerifiedWorkLinker>()

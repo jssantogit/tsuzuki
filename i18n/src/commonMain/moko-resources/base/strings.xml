@@ -1523,7 +1523,7 @@
     <string name="tsuzuki_inventory_candidates">individual candidates awaiting review (not editorially verified)</string>
     <string name="tsuzuki_inventory_releases">release observations, not canonical chapter records</string>
     <string name="tsuzuki_inventory_totals">Reported totals (unverified)</string>
-    <string name="tsuzuki_inventory_offline_note">Offline view of stored source evidence only; this does not confirm editorial completeness or reading access</string>
+    <string name="tsuzuki_inventory_offline_note">Locally stored source evidence; automatic metadata checks do not prove editorial completeness or reading access</string>
     <string name="tsuzuki_inventory_scope">Scope — producer work ID: %1$s; edition: %2$s; language: %3$s</string>
     <string name="tsuzuki_inventory_edition_scope_value">%1$s (%2$s)</string>
     <string name="tsuzuki_inventory_edition_verified">verified</string>

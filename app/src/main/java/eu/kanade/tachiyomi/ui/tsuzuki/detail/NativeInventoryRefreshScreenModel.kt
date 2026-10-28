@@ -16,8 +16,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshIndependentInventory

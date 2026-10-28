@@ -1228,7 +1228,7 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_inventory_candidates">capítulos candidatos aguardando revisão (sem confirmação editorial)</string>
     <string name="tsuzuki_inventory_releases">observações de releases, não registros de capítulos canônicos</string>
     <string name="tsuzuki_inventory_totals">Totais informados (não verificados)</string>
-    <string name="tsuzuki_inventory_offline_note">Visão offline apenas das evidências de origem armazenadas; isso não confirma a completude editorial nem a disponibilidade para leitura</string>
+    <string name="tsuzuki_inventory_offline_note">Evidências locais armazenadas; consultas automáticas não comprovam completude editorial nem acesso à leitura</string>
     <string name="tsuzuki_inventory_scope">Escopo — ID da obra no produtor: %1$s; edição: %2$s; idioma: %3$s</string>
     <string name="tsuzuki_inventory_edition_scope_value">%1$s (%2$s)</string>
     <string name="tsuzuki_inventory_edition_verified">verificada</string>
