@@ -46,20 +46,23 @@ class TorrentChapterMapperWorkIdentityTest {
     @Test
     fun `accepts chapter explicitly attributed to a canonical alias in its archive name`() {
         val candidate = candidate("Unstructured release", "pack/Alternative Example - Chapter 12.cbz")
-        TorrentChapterMapper().map(request, candidate) shouldBe TorrentChapterFileMatch.Exact(candidate.files!!.single())
+        TorrentChapterMapper().map(request, candidate) shouldBe
+            TorrentChapterFileMatch.Exact(candidate.files!!.single())
     }
 
     @Test
     fun `accepts chapter in an exact work directory with explicit volume evidence`() {
         val candidate = candidate("Unstructured release", "Example Manga/Volume 2/Chapter 12.cbz")
         val byVolume = request.copy(volume = 2)
-        TorrentChapterMapper().map(byVolume, candidate) shouldBe TorrentChapterFileMatch.Exact(candidate.files!!.single())
+        TorrentChapterMapper().map(byVolume, candidate) shouldBe
+            TorrentChapterFileMatch.Exact(candidate.files!!.single())
     }
 
     @Test
     fun `keeps generic explicit chapter with matching release work as separate evidence`() {
         val candidate = candidate("Example Manga release", "pack/Chapter 12.cbz")
-        TorrentChapterMapper().map(request, candidate) shouldBe TorrentChapterFileMatch.Exact(candidate.files!!.single())
+        TorrentChapterMapper().map(request, candidate) shouldBe
+            TorrentChapterFileMatch.Exact(candidate.files!!.single())
     }
 
     @Test
