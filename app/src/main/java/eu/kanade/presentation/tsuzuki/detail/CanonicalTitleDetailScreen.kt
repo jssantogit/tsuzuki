@@ -206,7 +206,9 @@ private fun LoadedDetails(
                             moveMode(CanonicalDetailsLowerAction.VIEW_ALL)
                         }
                     }
-                    if (chapters.isEmpty() || state.independentInventory.sources.isNotEmpty()) {
+                    if (chapters.isEmpty() || state.independentInventory.sources.isNotEmpty() ||
+                        inventoryRefresh.refreshing || inventoryRefresh.discoveryStatus.isNotEmpty()
+                    ) {
                         item(key = "independent-inventory") {
                             IndependentInventoryInfo(
                                 state.independentInventory,
