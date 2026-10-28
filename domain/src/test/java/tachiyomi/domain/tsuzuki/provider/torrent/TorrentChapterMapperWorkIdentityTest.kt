@@ -66,6 +66,19 @@ class TorrentChapterMapperWorkIdentityTest {
     }
 
     @Test
+    fun `rejects another work that merely shares a canonical title prefix`() {
+        val narrowRequest = request.copy(titles = listOf("Example"))
+        val candidate = candidate("Example release", "pack/Example Manga 12.cbz")
+        TorrentChapterMapper().map(narrowRequest, candidate) shouldBe TorrentChapterFileMatch.None
+    }
+
+    @Test
+    fun `does not map numbered archives when canonical work titles are absent`() {
+        val candidate = candidate("Example Manga release", "pack/Chapter 12.cbz")
+        TorrentChapterMapper().map(request.copy(titles = emptyList()), candidate) shouldBe TorrentChapterFileMatch.None
+    }
+
+    @Test
     fun `rejects full-volume archive even when release declares work and chapter`() {
         val candidate = candidate("Example Manga - Chapter 12", "Example Manga/Volume 2.cbz")
         TorrentChapterMapper().map(request.copy(volume = 2), candidate) shouldBe TorrentChapterFileMatch.None
