@@ -22,7 +22,18 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshIndependentInventory
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 
+enum class InventoryWorkDiscoveryStatus {
+    SEARCHING,
+    LINKED,
+    NO_VERIFIED_MATCH,
+    FAILED,
+    REQUIRES_MANGADEX,
+    INTERRUPTED,
+}
+
 data class NativeInventoryRefreshState(
+    val discoveryStatus: Map<String, InventoryWorkDiscoveryStatus> = emptyMap(),
+    val refreshStops: Map<String, InventoryRefreshStop> = emptyMap(),
     val producerId: String? = null,
     val refreshing: Boolean = false,
     val lastStop: InventoryRefreshStop? = null,
@@ -90,6 +101,27 @@ class NativeInventoryRefreshScreenModel(
                 val fingerprint = integrationRegistry.configurationFingerprint()
                 val enabledProducers = integrationRegistry.inventoryProducers()
                 if (enabledProducers.isEmpty()) return@launch
+                val producerIds = enabledProducers.map { it.producerId }.toSet()
+                mutableState.value = mutableState.value.copy(
+                    refreshing = true,
+                    lastStop = null,
+                    discoveryStatus = buildMap {
+                        if (MANGADEX_PRODUCER_ID in producerIds) {
+                            put(MANGADEX_PRODUCER_ID, InventoryWorkDiscoveryStatus.SEARCHING)
+                        }
+                        if (MANGAUPDATES_PRODUCER_ID in producerIds) {
+                            put(
+                                MANGAUPDATES_PRODUCER_ID,
+                                if (MANGADEX_PRODUCER_ID in producerIds) {
+                                    InventoryWorkDiscoveryStatus.SEARCHING
+                                } else {
+                                    InventoryWorkDiscoveryStatus.REQUIRES_MANGADEX
+                                },
+                            )
+                        }
+                    },
+                    refreshStops = emptyMap(),
+                )
                 val isCurrent: (String) -> Boolean = { id ->
                     activeTitleId == titleId &&
                         generation == autoGeneration &&
@@ -99,42 +131,68 @@ class NativeInventoryRefreshScreenModel(
                                 .singleOrNull { it.producerId == id } === original
                         } == true
                 }
-                // Work lookup is a separate step from fetching releases. A
-                // title-only match never confirms an external work identity.
+                fun recordDiscovery(id: String, status: InventoryWorkDiscoveryStatus) {
+                    mutableState.value = mutableState.value.copy(
+                        discoveryStatus = mutableState.value.discoveryStatus + (id to status),
+                    )
+                }
+                // Search terms only produce candidates. Persisting a work always
+                // requires a crosswalk already verified for this canonical title.
                 if (isCurrent(MANGADEX_PRODUCER_ID)) {
                     val found = mangaDexWorkLinker.discoverUnique(titleId) {
                         isCurrent(MANGADEX_PRODUCER_ID)
-                    }.getOrNull()
-                    if (!isCurrent(MANGADEX_PRODUCER_ID)) return@launch
-                    if (found != null) {
-                        val linked = mangaDexWorkLinker.confirm(titleId, found) {
-                            isCurrent(MANGADEX_PRODUCER_ID)
-                        }
-                        if (!isCurrent(MANGADEX_PRODUCER_ID)) return@launch
-                        mutableState.value = mutableState.value.copy(
-                            linkCompleted = linked.isSuccess,
-                            linkFailed = linked.isFailure,
-                        )
                     }
+                    if (!isCurrent(MANGADEX_PRODUCER_ID)) return@launch
+                    val candidate = found.getOrNull()
+                    val status = when {
+                        found.isFailure -> InventoryWorkDiscoveryStatus.FAILED
+                        candidate == null -> InventoryWorkDiscoveryStatus.NO_VERIFIED_MATCH
+                        else -> {
+                            val linked = mangaDexWorkLinker.confirm(titleId, candidate) {
+                                isCurrent(MANGADEX_PRODUCER_ID)
+                            }
+                            if (!isCurrent(MANGADEX_PRODUCER_ID)) return@launch
+                            mutableState.value = mutableState.value.copy(
+                                linkCompleted = linked.isSuccess,
+                                linkFailed = linked.isFailure,
+                            )
+                            if (linked.isSuccess) {
+                                InventoryWorkDiscoveryStatus.LINKED
+                            } else {
+                                InventoryWorkDiscoveryStatus.FAILED
+                            }
+                        }
+                    }
+                    recordDiscovery(MANGADEX_PRODUCER_ID, status)
                 }
-                // Independent work identity may be discovered from the
-                // previously verified MangaDex crosswalk. No title-only link.
+                // MU work identity is derived from a *verified* MangaDex link.
+                // No title-only association can escape into canonical inventory.
                 if (isCurrent(MANGAUPDATES_PRODUCER_ID) && isCurrent(MANGADEX_PRODUCER_ID)) {
-                    val muAuthorized = {
+                    val authorized = {
                         isCurrent(MANGAUPDATES_PRODUCER_ID) && isCurrent(MANGADEX_PRODUCER_ID)
                     }
-                    val candidate = mangaUpdatesWorkLinker.discoverUnique(titleId, muAuthorized).getOrNull()
-                    if (!muAuthorized()) return@launch
-                    if (candidate != null) {
-                        val linked = mangaUpdatesWorkLinker.confirm(titleId, candidate, muAuthorized)
-                        if (!muAuthorized()) return@launch
-                        mutableState.value = mutableState.value.copy(
-                            linkCompleted = linked.isSuccess,
-                            linkFailed = linked.isFailure,
-                        )
+                    val found = mangaUpdatesWorkLinker.discoverUnique(titleId, authorized)
+                    if (!authorized()) return@launch
+                    val candidate = found.getOrNull()
+                    val status = when {
+                        found.isFailure -> InventoryWorkDiscoveryStatus.FAILED
+                        candidate == null -> InventoryWorkDiscoveryStatus.NO_VERIFIED_MATCH
+                        else -> {
+                            val linked = mangaUpdatesWorkLinker.confirm(titleId, candidate, authorized)
+                            if (!authorized()) return@launch
+                            mutableState.value = mutableState.value.copy(
+                                linkCompleted = mutableState.value.linkCompleted || linked.isSuccess,
+                                linkFailed = mutableState.value.linkFailed || linked.isFailure,
+                            )
+                            if (linked.isSuccess) {
+                                InventoryWorkDiscoveryStatus.LINKED
+                            } else {
+                                InventoryWorkDiscoveryStatus.FAILED
+                            }
+                        }
                     }
+                    recordDiscovery(MANGAUPDATES_PRODUCER_ID, status)
                 }
-                mutableState.value = mutableState.value.copy(refreshing = true, lastStop = null)
                 var mostRecentStop: InventoryRefreshStop? = null
                 for (producer in enabledProducers) {
                     if (!isCurrent(producer.producerId)) return@launch
@@ -145,8 +203,9 @@ class NativeInventoryRefreshScreenModel(
                         isEnabled = { isCurrent(producer.producerId) },
                     )
                     if (!isCurrent(producer.producerId)) return@launch
-                    // One unavailable crosswalk cannot wipe successful source
-                    // evidence or prevent the next independent producer.
+                    mutableState.value = mutableState.value.copy(
+                        refreshStops = mutableState.value.refreshStops + (producer.producerId to result.stop),
+                    )
                     if (result.stop != InventoryRefreshStop.NO_VERIFIED_WORK ||
                         mostRecentStop == null
                     ) {
@@ -171,13 +230,19 @@ class NativeInventoryRefreshScreenModel(
                     )
                 }
             } finally {
-                // Revocation or provider replacement can abort via an early
-                // return after refresh started. Never strand the loading UI,
-                // and never mutate the state of a newer title/generation.
-                if (titleId == activeTitleId && generation == autoGeneration &&
-                    mutableState.value.refreshing
-                ) {
-                    mutableState.value = mutableState.value.copy(refreshing = false)
+                // Mid-flight permission revocation and title switching must not
+                // strand the loading state or publish a stale result.
+                if (titleId == activeTitleId && generation == autoGeneration) {
+                    mutableState.value = mutableState.value.copy(
+                        refreshing = false,
+                        discoveryStatus = mutableState.value.discoveryStatus.mapValues { (_, status) ->
+                            if (status == InventoryWorkDiscoveryStatus.SEARCHING) {
+                                InventoryWorkDiscoveryStatus.INTERRUPTED
+                            } else {
+                                status
+                            }
+                        },
+                    )
                 }
             }
         }
