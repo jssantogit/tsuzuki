@@ -30,6 +30,7 @@ import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterMapper
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterRequest
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchRequest
+import java.util.UUID
 
 fun interface ProviderTorrentMetadataInspector {
     suspend fun inspect(
@@ -67,6 +68,9 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
             is ProviderCallResult.Success -> {
                 val descriptor = registry.registration(providerId)?.descriptor
                     ?: return result
+                // A caller trace is reused across discovery pages. For standalone Host
+                // searches, generate a fresh correlation ID rather than recording null.
+                val operationId = request.operationId ?: UUID.randomUUID().toString()
                 val sourceItems = result.value.items
                 val attempted = sourceItems.count { it.files == null }
                 val startedAtNanos = System.nanoTime()
@@ -88,6 +92,7 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                     .coerceAtLeast(0L)
                 emitHydrationSummary(
                     providerId = providerId,
+                    operationId = operationId,
                     total = sourceItems.size,
                     attempted = attempted,
                     hydrated = hydrated,
@@ -95,6 +100,7 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                 )
                 emitMatchSummary(
                     providerId = providerId,
+                    operationId = operationId,
                     request = request,
                     items = items,
                 )
@@ -118,6 +124,7 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
 
     private fun emitHydrationSummary(
         providerId: ProviderId,
+        operationId: String,
         total: Int,
         attempted: Int,
         hydrated: Int,
@@ -133,6 +140,7 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
         }
         recordSummary(
             providerId = providerId,
+            operationId = operationId,
             name = DiagnosticEventName.TORRENT_METADATA_SUMMARY,
             outcome = if (failed == 0) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
             durationMillis = elapsedMillis,
@@ -147,6 +155,7 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
 
     private fun emitMatchSummary(
         providerId: ProviderId,
+        operationId: String,
         request: TorrentSearchRequest,
         items: List<TorrentCandidate>,
     ) {
@@ -259,6 +268,7 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
             )
             recordSummary(
                 providerId = providerId,
+                operationId = operationId,
                 name = DiagnosticEventName.TORRENT_MATCH_SUMMARY,
                 outcome = if (exactMatches == 0) DiagnosticOutcome.EMPTY else DiagnosticOutcome.SUCCEEDED,
                 attributes = noMatchAttributes,
@@ -325,6 +335,7 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
             )
             recordSummary(
                 providerId = providerId,
+                operationId = operationId,
                 name = DiagnosticEventName.TORRENT_RELEASE_EVIDENCE_SUMMARY,
                 outcome = DiagnosticOutcome.SUCCEEDED,
                 attributes = mapOf(
@@ -369,6 +380,7 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
 
     private fun recordSummary(
         providerId: ProviderId,
+        operationId: String,
         name: DiagnosticEventName,
         outcome: DiagnosticOutcome,
         attributes: Map<String, DiagnosticAttributeValue>,
@@ -382,7 +394,7 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                     subsystem = DiagnosticSubsystem.CONTENT,
                     name = name,
                     sessionId = diagnosticRecorder.sessionId,
-                    operationId = null,
+                    operationId = operationId,
                     stage = DiagnosticStage.SUMMARY,
                     outcome = outcome,
                     durationMillis = durationMillis,

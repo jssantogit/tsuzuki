@@ -206,7 +206,6 @@ class ProviderTorrentStructuredDiagnosticTest {
         summaries.size shouldBe 3
         val ids = summaries.map { requireNotNull(it.operationId) }
         ids.distinct().size shouldBe 1
-        ids.singleOrNull() shouldBe null
         ids.first().matches(
             Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"),
         ) shouldBe true

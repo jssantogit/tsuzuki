@@ -97,8 +97,13 @@ data class TorrentSearchRequest(
     val chapterNumber: String? = null,
     val volume: Int? = null,
     val cursor: ProviderCursor? = null,
+    /** Host-only diagnostic UUID; never serialized into Provider script input. */
+    val operationId: String? = null,
 ) {
     init {
+        require(operationId == null || DIAGNOSTIC_OPERATION_UUID.matches(operationId)) {
+            "Torrent search diagnostic operation ID must be an opaque UUID"
+        }
         require(titles.isNotEmpty() && titles.size <= MAX_TITLES) {
             "Torrent search requires a bounded title set"
         }
@@ -786,6 +791,7 @@ private fun validJobId(value: String): Boolean =
         value.length <= 256 &&
         JOB_ID.matches(value)
 
+private val DIAGNOSTIC_OPERATION_UUID = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 private val OPERATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 private val JOB_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,255}")
 private val LANGUAGE = Regex("[A-Za-z0-9][A-Za-z0-9_-]{0,31}")

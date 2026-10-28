@@ -59,6 +59,17 @@ class ProviderTorrentContractTest {
     }
 
     @Test
+    fun `search diagnostic correlation only accepts opaque UUIDs`() {
+        shouldThrow<IllegalArgumentException> {
+            TorrentSearchRequest(titles = listOf("Example Manga"), operationId = "read:canonical-12")
+        }
+        TorrentSearchRequest(
+            titles = listOf("Example Manga"),
+            operationId = "123e4567-e89b-12d3-a456-426614174000",
+        ).operationId shouldBe "123e4567-e89b-12d3-a456-426614174000"
+    }
+
+    @Test
     fun `chapter mapper selects one explicit matching chapter file`() {
         val candidate = candidate(
             files = listOf(
