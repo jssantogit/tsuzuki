@@ -14,6 +14,8 @@ import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadata
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadataCodec
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterOverrideKind
 import tachiyomi.domain.tsuzuki.integration.model.PortableIntegrationConfig
@@ -297,7 +299,11 @@ class CanonicalCoreBackupImporter(
                     confidence = it.confidence,
                     authorityClass = it.authorityClass,
                     mappedCanonicalChapterId = it.mappedCanonicalChapterId,
-                    rawMetadata = byteArrayOf(),
+                    rawMetadata = ProviderEvidenceMetadata(
+                        language = it.providerLanguage,
+                        scanlationGroup = it.providerScanlationGroup,
+                        releaseDateMillis = it.providerReleaseDateMillis,
+                    ).takeIf { metadata -> metadata.hasValues }?.let(ProviderEvidenceMetadataCodec::encode) ?: byteArrayOf(),
                 )
             }
             core.collections.filterNot { it.id in existingCollectionIds }.forEach {
