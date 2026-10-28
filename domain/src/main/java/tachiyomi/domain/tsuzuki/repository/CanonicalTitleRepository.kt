@@ -35,11 +35,6 @@ interface CanonicalTitleRepository {
     suspend fun addExternalIdentity(identity: ExternalIdentity)
 
     /**
-     * Associates one verified MangaDex work only when persisted integration permission and the
-     * exact verified crosswalk snapshot are still current. Repositories without an atomic
-     * implementation fail closed instead of falling back to [addExternalIdentity].
-     */
-    /**
      * Transactional work-only association shared by inventory producers.
      * The default remains fail-closed for repositories without an implementation.
      */
@@ -53,6 +48,10 @@ interface CanonicalTitleRepository {
             VerifiedInventoryWorkAssociationResult.REFUSED
         }
 
+    /**
+     * Associates one verified MangaDex work only when persisted permission and
+     * the exact verified crosswalk are current; otherwise fails closed.
+     */
     suspend fun associateMangaDexWorkIfCurrent(
         request: MangaDexWorkAssociationRequest,
         isAuthorized: () -> Boolean,
