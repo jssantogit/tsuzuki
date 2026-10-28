@@ -6,6 +6,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
@@ -50,10 +52,13 @@ class ProviderP2pJobManager internal constructor(
     private val clock: () -> Long = System::currentTimeMillis,
     private val completedTtlMs: Long = DEFAULT_COMPLETED_TTL_MS,
     private val verifiedMetadata: HostVerifiedTorrentMetadataCache? = null,
+    private val authorizationCheck: ((String) -> Boolean)? = null,
+    private val authorizationCheckIntervalMs: Long = DEFAULT_AUTHORIZATION_CHECK_INTERVAL_MS,
 ) : AutoCloseable {
 
     init {
         require(completedTtlMs > 0L) { "Provider P2P completed-job TTL must be positive" }
+        require(authorizationCheckIntervalMs > 0L) { "Provider P2P authorization interval must be positive" }
         ensureDirectory(root)
     }
 
@@ -82,6 +87,10 @@ class ProviderP2pJobManager internal constructor(
         request: ProviderP2pAcquireRequest,
         approvedSelection: ProviderP2pAcquireRequest?,
     ): ProviderP2pAcquireResponse {
+        if (!isAuthorized(providerId)) {
+            cancelProvider(providerId)
+            return ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.CANCELLED)
+        }
         val key = JobKey(
             providerId = providerId,
             operationId = request.operationId,
@@ -185,6 +194,20 @@ class ProviderP2pJobManager internal constructor(
             "${sha256(key.providerId)}-${entry.jobId}",
         )
         ensureDirectory(workingDirectory)
+        val downloadJob = currentCoroutineContext()[Job]
+        val authorizationMonitor = if (authorizationCheck != null && downloadJob != null) {
+            scope.launch {
+                while (downloadJob.isActive) {
+                    delay(authorizationCheckIntervalMs)
+                    if (!isAuthorized(key.providerId)) {
+                        downloadJob.cancel(CancellationException("Provider P2P authorization revoked"))
+                        break
+                    }
+                }
+            }
+        } else {
+            null
+        }
         ProviderP2pDiagnostics.record(
             event = ProviderP2pDiagnosticEvent.WORKER_STARTED,
             operationId = entry.request.operationId,
@@ -194,6 +217,9 @@ class ProviderP2pJobManager internal constructor(
 
         var terminalExceptionClass: String? = null
         val response = try {
+            if (!isAuthorized(key.providerId)) {
+                throw CancellationException("Provider P2P authorization revoked")
+            }
             val verifiedBytes = if (entry.hostApproved) {
                 runCatching { verifiedMetadata?.find(key.providerId, entry.request) }.getOrNull()
             } else {
@@ -206,7 +232,11 @@ class ProviderP2pJobManager internal constructor(
                 providerId = key.providerId,
                 codes = mapOf("status" to if (verifiedBytes == null) "MISS" else "HIT"),
             )
-            when (val result = engine.downloadWithHostMetadata(entry.request, workingDirectory, verifiedBytes)) {
+            val download = engine.downloadWithHostMetadata(entry.request, workingDirectory, verifiedBytes)
+            if (!isAuthorized(key.providerId)) {
+                throw CancellationException("Provider P2P authorization revoked")
+            }
+            when (val result = download) {
                 is ProviderP2pDownloadResult.Ready -> {
                     val file = result.file
                     val withinWorkingDirectory = file.canonicalFile.toPath()
@@ -297,20 +327,26 @@ class ProviderP2pJobManager internal constructor(
             ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.UNAVAILABLE)
         }
 
+        authorizationMonitor?.cancel()
+        val finalResponse = if (isAuthorized(key.providerId)) {
+            response
+        } else {
+            ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.CANCELLED)
+        }
         ProviderP2pDiagnostics.record(
             event = ProviderP2pDiagnosticEvent.JOB_COMPLETED,
             operationId = entry.request.operationId,
             jobId = entry.jobId,
             providerId = key.providerId,
-            codes = when (response) {
+            codes = when (finalResponse) {
                 is ProviderP2pAcquireResponse.Ready -> mapOf(
                     "state" to "READY",
-                    "format" to response.format.name,
+                    "format" to finalResponse.format.name,
                 )
                 is ProviderP2pAcquireResponse.Pending -> mapOf("state" to "PENDING")
                 is ProviderP2pAcquireResponse.Failure -> mapOf(
                     "state" to "FAILED",
-                    "failure" to response.reason.name,
+                    "failure" to finalResponse.reason.name,
                 )
             },
             numbers = mapOf(
@@ -318,7 +354,7 @@ class ProviderP2pJobManager internal constructor(
                 "pollCount" to entry.pollCount,
             ),
             exceptionClass = terminalExceptionClass,
-            priority = if (response is ProviderP2pAcquireResponse.Failure) {
+            priority = if (finalResponse is ProviderP2pAcquireResponse.Failure) {
                 LogPriority.WARN
             } else {
                 LogPriority.INFO
@@ -328,7 +364,7 @@ class ProviderP2pJobManager internal constructor(
         synchronized(lock) {
             val current = jobs[key]
             if (current === entry) {
-                entry.response = response
+                entry.response = finalResponse
                 entry.completedAtMillis = clock()
             }
         }
@@ -343,6 +379,11 @@ class ProviderP2pJobManager internal constructor(
         )
     }
 
+    private fun isAuthorized(providerId: String): Boolean =
+        authorizationCheck?.let { check ->
+            runCatching { check(providerId) }.getOrDefault(false)
+        } ?: true
+
     private fun pruneCompletedLocked() {
         val now = clock()
         val iterator = jobs.iterator()
@@ -354,6 +395,34 @@ class ProviderP2pJobManager internal constructor(
                 iterator.remove()
             }
         }
+    }
+
+    /** Stops only this Provider's Host-owned transfers and clears completed replay entries. */
+    fun cancelProvider(providerId: String): Int {
+        ProviderId(providerId)
+        val active = synchronized(lock) {
+            val matches = mutableListOf<Triple<JobKey, JobEntry, Job>>()
+            val iterator = jobs.iterator()
+            while (iterator.hasNext()) {
+                val (key, entry) = iterator.next()
+                if (key.providerId != providerId) continue
+                entry.worker?.takeIf(Job::isActive)?.let { matches += Triple(key, entry, it) }
+                iterator.remove()
+            }
+            matches
+        }
+        active.forEach { (key, entry, worker) ->
+            ProviderP2pDiagnostics.record(
+                event = ProviderP2pDiagnosticEvent.JOB_CANCELLED,
+                operationId = entry.request.operationId,
+                jobId = entry.jobId,
+                providerId = key.providerId,
+                codes = mapOf("reason" to "PROVIDER_CANCEL"),
+                priority = LogPriority.WARN,
+            )
+            worker.cancel()
+        }
+        return active.size
     }
 
     fun cancelAll(): Int {
@@ -432,6 +501,7 @@ class ProviderP2pJobManager internal constructor(
 
     private companion object {
         const val DEFAULT_COMPLETED_TTL_MS = 24L * 60L * 60L * 1000L
+        const val DEFAULT_AUTHORIZATION_CHECK_INTERVAL_MS = 1_000L
         const val NANOS_PER_MILLISECOND = 1_000_000L
         val POLL_MILESTONES = setOf(1L, 2L, 5L, 10L, 25L, 50L, 100L, 250L, 500L)
     }
