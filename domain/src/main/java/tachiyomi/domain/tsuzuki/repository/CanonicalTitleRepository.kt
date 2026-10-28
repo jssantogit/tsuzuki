@@ -6,6 +6,8 @@ import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationRequest
 import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationResult
+import tachiyomi.domain.tsuzuki.model.VerifiedInventoryWorkAssociationRequest
+import tachiyomi.domain.tsuzuki.model.VerifiedInventoryWorkAssociationResult
 
 interface CanonicalTitleRepository {
     suspend fun getById(id: String): CanonicalTitle?
@@ -37,6 +39,20 @@ interface CanonicalTitleRepository {
      * exact verified crosswalk snapshot are still current. Repositories without an atomic
      * implementation fail closed instead of falling back to [addExternalIdentity].
      */
+    /**
+     * Transactional work-only association shared by inventory producers.
+     * The default remains fail-closed for repositories without an implementation.
+     */
+    suspend fun associateVerifiedInventoryWorkIfCurrent(
+        request: VerifiedInventoryWorkAssociationRequest,
+        isAuthorized: () -> Boolean,
+    ): VerifiedInventoryWorkAssociationResult =
+        if (isAuthorized()) {
+            VerifiedInventoryWorkAssociationResult.UNSUPPORTED
+        } else {
+            VerifiedInventoryWorkAssociationResult.REFUSED
+        }
+
     suspend fun associateMangaDexWorkIfCurrent(
         request: MangaDexWorkAssociationRequest,
         isAuthorized: () -> Boolean,
