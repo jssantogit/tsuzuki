@@ -306,6 +306,13 @@ class MangaUpdatesInventoryProducer(
     override val producerId = "mangaupdates"
 
     override suspend fun fetchPage(scope: InventoryScope, pageKey: String): Result<InventoryEvidenceBatch> =
+        fetchPageAuthorized(scope, pageKey) { true }
+
+    override suspend fun fetchPageAuthorized(
+        scope: InventoryScope,
+        pageKey: String,
+        isEnabled: suspend () -> Boolean,
+    ): Result<InventoryEvidenceBatch> =
         catchingInventory {
             require(scope.producerId == producerId && scope.workIdentityVerified)
             require(scope.externalWorkId.matches(Regex("""^[0-9]{1,18}$""")))
@@ -324,7 +331,7 @@ class MangaUpdatesInventoryProducer(
                 put("include_metadata", true)
             }.toString()
             val releaseSearchUrl = "https://api.mangaupdates.com/v1/releases/search"
-            var response = transport.fetch(releaseSearchUrl, bodyFor(scope.externalWorkId))
+            var response = transport.fetchAuthorized(releaseSearchUrl, bodyFor(scope.externalWorkId), isEnabled)
             var root = parseObject(response.content)
             // MangaUpdates can index releases by series title rather than
             // accepting its numeric work ID as the search term. Only on an
@@ -336,9 +343,10 @@ class MangaUpdatesInventoryProducer(
                 root.requiredArray("results").isEmpty()
             ) {
                 val series = parseObject(
-                    transport.fetch(
+                    transport.fetchAuthorized(
                         "https://api.mangaupdates.com/v1/series/" + scope.externalWorkId,
                         null,
+                        isEnabled,
                     ).content,
                 )
                 require(series.requiredString("series_id") == scope.externalWorkId) {
@@ -346,7 +354,7 @@ class MangaUpdatesInventoryProducer(
                 }
                 val title = series.requiredString("title").trim()
                 require(title.length in 2..160)
-                response = transport.fetch(releaseSearchUrl, bodyFor(title))
+                response = transport.fetchAuthorized(releaseSearchUrl, bodyFor(title), isEnabled)
                 root = parseObject(response.content)
             }
             val reportedPage = root.requiredInt("page")
@@ -390,6 +398,13 @@ class MangaDexInventoryProducer(
     override val producerId = "mangadex"
 
     override suspend fun fetchPage(scope: InventoryScope, pageKey: String): Result<InventoryEvidenceBatch> =
+        fetchPageAuthorized(scope, pageKey) { true }
+
+    override suspend fun fetchPageAuthorized(
+        scope: InventoryScope,
+        pageKey: String,
+        isEnabled: suspend () -> Boolean,
+    ): Result<InventoryEvidenceBatch> =
         catchingInventory {
             require(scope.producerId == producerId && scope.workIdentityVerified)
             require(scope.externalWorkId.matches(MANGADEX_WORK_UUID_REGEX))
@@ -411,7 +426,7 @@ class MangaDexInventoryProducer(
                 .addQueryParameter("contentRating[]", "suggestive")
                 .addQueryParameter("includeFutureUpdates", "0")
                 .build().toString()
-            val response = transport.fetch(url, null)
+            val response = transport.fetchAuthorized(url, null, isEnabled)
             val root = parseObject(response.content)
             require(root.requiredString("result") == "ok")
             val totalReleases = root.requiredInt("total")
