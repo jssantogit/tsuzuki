@@ -107,6 +107,7 @@ data class CanonicalTitleScreen(
         LaunchedEffect(canonicalTitleId, openSourceBindingFlow) {
             screenModel.start(canonicalTitleId)
             inventoryModel.start(canonicalTitleId)
+            inventoryModel.observeIntegrationChanges(canonicalTitleId)
             // Automatic only after explicit CHAPTER_INVENTORY opt-in; no
             // catalog bootstrap and no release-to-chapter promotion.
             inventoryModel.discoverAndRefreshAutomatically(canonicalTitleId)
