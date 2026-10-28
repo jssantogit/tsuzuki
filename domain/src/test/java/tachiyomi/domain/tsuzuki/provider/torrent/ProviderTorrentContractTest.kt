@@ -20,6 +20,8 @@ class ProviderTorrentContractTest {
         ),
         volume = null,
         preferredLanguages = emptySet(),
+        titles = listOf("Example title"),
+        chapterNumber = "12",
     )
 
     @Test
@@ -395,7 +397,7 @@ class ProviderTorrentContractTest {
         infoHash = "0123456789abcdef0123456789abcdef01234567",
         magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
         torrentUrl = null,
-        displayName = "Example pack",
+        displayName = "Example title release",
         languages = setOf("en"),
         files = files,
     )
