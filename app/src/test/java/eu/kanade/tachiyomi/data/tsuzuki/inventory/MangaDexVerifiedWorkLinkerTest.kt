@@ -20,8 +20,8 @@ import tachiyomi.domain.tsuzuki.integration.model.IntegrationSettings
 import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationResult
-import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import tachiyomi.domain.tsuzuki.model.TitleNameObservation
+import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 
 class MangaDexVerifiedWorkLinkerTest {
@@ -435,7 +435,9 @@ class MangaDexVerifiedWorkLinkerTest {
         titles: CanonicalTitleRepository,
         transport: InventoryReleaseTransport,
     ) = MangaDexVerifiedWorkLinker(
-        titles, integrationSettings, transport,
+        titles,
+        integrationSettings,
+        transport,
         mockk<TitleNameObservationRepository>().also {
             coEvery { it.getByTitle(any()) } returns emptyList()
         },

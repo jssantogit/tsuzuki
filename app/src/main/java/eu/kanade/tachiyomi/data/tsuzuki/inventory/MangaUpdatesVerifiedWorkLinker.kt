@@ -9,9 +9,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
@@ -105,9 +105,11 @@ class MangaUpdatesVerifiedWorkLinker(
         require(candidate.mangaDexId.matches(MANGADEX_WORK_UUID_REGEX))
         val verified = titles.getExternalIdentities(canonicalTitleId).filter { it.verified }
         checkCurrent(permission, isEnabled)
-        require(verified.any {
-            it.provider == "mangadex" && it.externalId == candidate.mangaDexId
-        }) { "MangaDex work proof was revoked" }
+        require(
+            verified.any {
+                it.provider == "mangadex" && it.externalId == candidate.mangaDexId
+            },
+        ) { "MangaDex work proof was revoked" }
         val linkedId = readMangaDexMuLink(candidate.mangaDexId, permission, isEnabled, fresh = true)
         require(linkedId == candidate.mangaUpdatesId) { "MangaUpdates crosswalk changed" }
         val detail = readSeries(candidate.mangaUpdatesId, permission, isEnabled, fresh = true)
@@ -183,8 +185,10 @@ class MangaUpdatesVerifiedWorkLinker(
         val mu = requireNotNull(settings.get(IntegrationId("mangaupdates")))
         val md = requireNotNull(settings.get(IntegrationId("mangadex")))
         currentCoroutineContext().ensureActive()
-        check(mu.hasInventoryPermission(IntegrationId("mangaupdates")) &&
-            md.hasInventoryPermission(IntegrationId("mangadex")) && isEnabled()) {
+        check(
+            mu.hasInventoryPermission(IntegrationId("mangaupdates")) &&
+                md.hasInventoryPermission(IntegrationId("mangadex")) && isEnabled(),
+        ) {
             "MangaUpdates discovery requires consent for both metadata sources"
         }
         return Permissions(mu, md)

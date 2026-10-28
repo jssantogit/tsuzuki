@@ -11,11 +11,11 @@ import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationSettings
 import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
+import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.model.VerifiedInventoryWorkAssociationResult
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
-import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 
 class MangaUpdatesVerifiedWorkLinkerTest {
     private val mangaDexId = "12345678-1234-1234-1234-123456789abc"

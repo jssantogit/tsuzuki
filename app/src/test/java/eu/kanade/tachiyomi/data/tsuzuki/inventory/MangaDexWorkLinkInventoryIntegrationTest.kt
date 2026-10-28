@@ -65,7 +65,9 @@ class MangaDexWorkLinkInventoryIntegrationTest {
             override suspend fun fetchFresh(url: String, postBody: String?) = InventoryHttpPayload(json, 11L)
         }
         val linker = MangaDexVerifiedWorkLinker(
-            titles, settings, transport,
+            titles,
+            settings,
+            transport,
             mockk<TitleNameObservationRepository>(),
         )
         val preview = linker.preview("title", mangaDexId) { true }.getOrThrow()

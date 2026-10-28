@@ -69,9 +69,11 @@ class MangaDexVerifiedWorkLinker(
 
         // Observed aliases are discovery-only, never evidence of identity.
         // The crosswalk check below remains mandatory for every result.
-        val queryNames = (listOf(name) + titleNames.getByTitle(canonicalTitleId)
-            .sortedByDescending { it.updatedAt }
-            .map { it.value.trim() })
+        val queryNames = (
+            listOf(name) + titleNames.getByTitle(canonicalTitleId)
+                .sortedByDescending { it.updatedAt }
+                .map { it.value.trim() }
+            )
             .filter { it.length in 2..160 }
             .distinctBy { it.lowercase() }
             .take(MAX_TITLE_SEARCHES)
