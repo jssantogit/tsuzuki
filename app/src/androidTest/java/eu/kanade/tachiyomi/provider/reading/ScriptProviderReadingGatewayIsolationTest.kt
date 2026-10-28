@@ -40,6 +40,7 @@ import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderBrowserPermission
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
+import tachiyomi.domain.tsuzuki.provider.ProviderFacetRef
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderNetworkPermission
@@ -896,6 +897,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                     ProviderRegistration(
                         descriptor = descriptor,
                         lifecycleStatus = ProviderLifecycleStatus.ENABLED,
+                        facets = listOf(ProviderFacetRef(PROVIDER_ID, "en")),
                         configurationFingerprint = "instrumentation",
                     ),
                 )
