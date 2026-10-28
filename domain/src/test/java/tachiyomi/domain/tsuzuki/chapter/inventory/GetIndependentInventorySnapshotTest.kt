@@ -301,6 +301,29 @@ class GetIndependentInventorySnapshotTest {
     }
 
     @Test
+    fun `numbered release examples are bounded while the total remains truthful`() = runTest {
+        val ledger = FakeLedger()
+        val source = scope("mangadex", null, editionVerified = false)
+        ledger.saveBatch(
+            batch(
+                source,
+                "start",
+                50L,
+                InventoryFetchOutcome.EXHAUSTED,
+                (1..22).map { number ->
+                    claim("release-$number", "$number", InventoryDerivation.RELEASE_RECORD, 50L)
+                },
+            ),
+        )
+
+        val snapshot = GetIndependentInventorySnapshot(ledger).execute("title").sources.single()
+        snapshot.numberedReleaseCandidateCount shouldBe 22
+        snapshot.numberedReleaseCandidates.map { it.label } shouldBe (1..16).map(Int::toString)
+        snapshot.knownIndividualClaims shouldBe 0
+        snapshot.candidateObservations shouldBe 0
+    }
+
+    @Test
     fun `two editions are different sources even for same external work and ordinal`() = runTest {
         val ledger = FakeLedger()
         val first = scope("editorial", "original")
