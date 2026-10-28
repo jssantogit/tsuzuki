@@ -94,7 +94,7 @@ class MangaDexVerifiedWorkLinker(
             require(root.string("result") == "ok")
             val entries = root["data"] as? JsonArray ?: error("Missing MangaDex search data")
             require(entries.size <= 10) { "Unbounded MangaDex search results" }
-                entries.mapNotNull { entry ->
+            entries.mapNotNull { entry ->
                 val manga = entry as? JsonObject ?: error("Invalid MangaDex search result")
                 if (manga.string("type") != "manga") return@mapNotNull null
                 val mangaId = manga.string("id")?.takeIf { it.matches(MANGADEX_WORK_UUID_REGEX) }
@@ -118,8 +118,7 @@ class MangaDexVerifiedWorkLinker(
                         (it as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
                     } ?: return@mapNotNull null
                 MangaDexVerifiedCandidate(mangaId, label, matched.provider, matched.externalId)
-            }.distinctBy { it.mangaDexId }
-
+            }
         }.distinctBy { it.mangaDexId }
         requireSettingsUnchanged(settingsSnapshot, isEnabled)
         require(matching.size <= 1) {
