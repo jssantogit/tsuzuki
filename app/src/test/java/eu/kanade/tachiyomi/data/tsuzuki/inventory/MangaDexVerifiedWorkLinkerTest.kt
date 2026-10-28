@@ -21,6 +21,8 @@ import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsReposi
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationResult
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
+import tachiyomi.domain.tsuzuki.model.TitleNameObservation
+import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 
 class MangaDexVerifiedWorkLinkerTest {
     private val work = "12345678-1234-1234-1234-123456789abc"
@@ -398,6 +400,31 @@ class MangaDexVerifiedWorkLinkerTest {
         linker(repo, network).discoverUnique("title") { true }.getOrThrow() shouldBe null
     }
 
+    @Test
+    fun `bounded observed aliases discover works that are absent from canonical display-title search`() = runTest {
+        val repo = mockk<CanonicalTitleRepository>()
+        val canonical = mockk<tachiyomi.domain.tsuzuki.model.CanonicalTitle>()
+        io.mockk.every { canonical.displayTitle } returns "Main Title"
+        coEvery { repo.getById("title") } returns canonical
+        coEvery { repo.getExternalIdentities("title") } returns listOf(
+            ExternalIdentity("title", "myanimelist", "500", true, 1L),
+        )
+        val names = mockk<TitleNameObservationRepository>()
+        coEvery { names.getByTitle("title") } returns listOf(
+            TitleNameObservation("title", "kitsu", "alternative", "Alt Title", 1L),
+        )
+        val network = FakeTransport(details(mu = "8675309", mal = "500"))
+        network.searchResponse = """{"result":"ok","data":[]}"""
+        network.aliasSearchResponse = """{"result":"ok","data":[
+            {"id":"$work","type":"manga","attributes":{"title":{"en":"Exact Manga"},"links":{"mal":"500"}}}
+        ]}"""
+        val found = MangaDexVerifiedWorkLinker(repo, integrationSettings, network, names)
+            .discoverUnique("title") { true }.getOrThrow()
+
+        found?.mangaDexId shouldBe work
+        network.calls shouldBe 2
+    }
+
     private fun details(mu: String, mal: String? = null): String {
         val malField = mal?.let { ",\"mal\":\"$it\"" } ?: ""
         return """{"result":"ok","data":{"id":"$work","type":"manga","attributes":""" +
@@ -407,7 +434,12 @@ class MangaDexVerifiedWorkLinkerTest {
     private fun linker(
         titles: CanonicalTitleRepository,
         transport: InventoryReleaseTransport,
-    ) = MangaDexVerifiedWorkLinker(titles, integrationSettings, transport)
+    ) = MangaDexVerifiedWorkLinker(
+        titles, integrationSettings, transport,
+        mockk<TitleNameObservationRepository>().also {
+            coEvery { it.getByTitle(any()) } returns emptyList()
+        },
+    )
 
     private class MutableIntegrationSettingsRepository(
         var settings: IntegrationSettings?,
@@ -463,11 +495,16 @@ class MangaDexVerifiedWorkLinkerTest {
         var freshCalls = 0
         var freshResponse = response
         var searchResponse = response
+        var aliasSearchResponse: String? = null
         override suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload {
             calls++
             onResponse?.invoke()
             return InventoryHttpPayload(
-                if (url.startsWith("https://api.mangadex.org/manga?")) searchResponse else response,
+                if (url.startsWith("https://api.mangadex.org/manga?")) {
+                    if (url.contains("Alt%20Title")) aliasSearchResponse ?: searchResponse else searchResponse
+                } else {
+                    response
+                },
                 observedAt = 10L,
             )
         }
