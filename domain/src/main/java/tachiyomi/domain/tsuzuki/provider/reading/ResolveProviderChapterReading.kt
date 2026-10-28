@@ -166,5 +166,4 @@ class ResolveProviderChapterReading(
             ProviderCapabilities.ReadingPagesV1,
         )
     }
-
 }

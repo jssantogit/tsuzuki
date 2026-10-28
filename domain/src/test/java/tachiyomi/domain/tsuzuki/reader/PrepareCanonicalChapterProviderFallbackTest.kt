@@ -157,6 +157,9 @@ class PrepareCanonicalChapterProviderFallbackTest {
                 )
             },
             managedResources = ProviderManagedResourceResolver.DenyAll,
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { listOf(readingRegistration(httpProviderId)) },
+            ),
         )
 
         val torrentProviderId = ProviderId("app.tsuzuki.nyaa")
@@ -250,6 +253,25 @@ class PrepareCanonicalChapterProviderFallbackTest {
         contentOptionCache = ContentOptionCache(),
         inFlightContentResolution = InFlightContentResolution(),
         addonRepository = null,
+    )
+
+    private fun readingRegistration(id: ProviderId) = ProviderRegistration(
+        descriptor = ProviderDescriptor(
+            id = id,
+            name = "Reading Provider",
+            version = ProviderVersion("1.0.0", 1),
+            origin = ProviderOrigin.Repository("repo"),
+            runtime = ProviderRuntimeKind.SCRIPT,
+            capabilities = setOf(
+                ProviderCapabilities.ReadingLookupV1,
+                ProviderCapabilities.ReadingChaptersV1,
+                ProviderCapabilities.ReadingPagesV1,
+            ),
+            permissions = ProviderPermissionSet(),
+            settings = emptyList(),
+            contentLanguages = setOf("en"),
+        ),
+        lifecycleStatus = ProviderLifecycleStatus.ENABLED,
     )
 
     private fun torrentRegistration(id: ProviderId) = ProviderRegistration(
