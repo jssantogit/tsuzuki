@@ -46,7 +46,7 @@ class NativeIndependentInventoryProducerTest {
                 calls += url to postBody
                 val payload = when {
                     url.endsWith("/series/123") -> """{"series_id":123,"title":"Exact Manga"}"""
-                    postBody?.contains("\\"search\\":\\"Exact Manga\\"") == true ->
+                    postBody?.contains("Exact Manga") == true ->
                         """{"total_hits":1,"page":1,"per_page":25,"results":[
                             {"record":{"id":10,"chapter":"4","volume":"1"},
                              "metadata":{"series":{"series_id":123}}}
