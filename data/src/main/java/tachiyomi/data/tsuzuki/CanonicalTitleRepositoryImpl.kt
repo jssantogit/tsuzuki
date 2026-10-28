@@ -306,9 +306,10 @@ class CanonicalTitleRepositoryImpl(
         }
         .awaitAsList()
 
-    private suspend fun ownerOf(producerId: String, workId: String): String? = database.tsuzuki_external_identitiesQueries
-        .getTsuzukiTitleIdByExternalIdentity(producerId, workId)
-        .awaitAsOneOrNull()
+    private suspend fun ownerOf(producerId: String, workId: String): String? =
+        database.tsuzuki_external_identitiesQueries
+            .getTsuzukiTitleIdByExternalIdentity(producerId, workId)
+            .awaitAsOneOrNull()
 
     private fun mapTitle(
         id: String,
