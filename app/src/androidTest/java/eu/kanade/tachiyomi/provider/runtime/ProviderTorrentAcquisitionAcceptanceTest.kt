@@ -73,6 +73,7 @@ import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchRequest
 import tachiyomi.domain.tsuzuki.provider.torrent.toContentDelivery
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 @RunWith(AndroidJUnit4::class)
 class ProviderTorrentAcquisitionAcceptanceTest {
@@ -683,6 +684,74 @@ class ProviderTorrentAcquisitionAcceptanceTest {
             await("failed P2P working directory cleanup") {
                 jobRoot.listFiles().orEmpty().isEmpty()
             }
+        } finally {
+            jobs.close()
+            managedFiles.clearAll()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun revokedHostAuthorization_stopsNativeP2pAndCleansWorkingDirectory() = runBlocking {
+        assertTrue("native libtorrent failed to load", LibTorrent.version().isNotBlank())
+
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "provider-torrent-revocation-native").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        val fixture = ProviderTorrentAcceptanceFixtures.createThreeChapterTorrent(root)
+        val managedFiles = ProviderManagedFileStore(context).apply { clearAll() }
+        val candidate = candidate(fixture)
+        val selected = (
+            TorrentChapterMapper().map(
+                chapter12Request(),
+                candidate,
+            ) as TorrentChapterFileMatch.Exact
+            ).file
+        val authorized = AtomicBoolean(true)
+        val jobRoot = File(root, "jobs")
+        val jobs = ProviderP2pJobManager(
+            root = jobRoot,
+            managedFiles = managedFiles,
+            engine = JlibtorrentProviderP2pDownloadEngine(
+                metadataResolver = { _, _, _ -> fixture.torrent },
+                initialPeers = { listOf(TcpEndpoint("127.0.0.1", 49331)) },
+                sessionParamsFactory = {
+                    ProviderTorrentAcceptanceFixtures.localOnlyParams(49332)
+                },
+                downloadTimeoutMs = 10_000L,
+                nativeSupport = { true },
+            ),
+            authorizationCheck = { authorized.get() },
+            authorizationCheckIntervalMs = 100L,
+        )
+        val request = ProviderP2pAcquireRequest(
+            operationId = "acceptance:revoke-native",
+            magnetUri = candidate.magnetUri,
+            infoHash = candidate.infoHash,
+            selectedFileIndex = selected.index,
+            selectedFilePath = selected.path,
+            selectedFileSizeBytes = selected.sizeBytes,
+        )
+        val service = jobs.service(PROVIDER_ID.value)
+
+        try {
+            assertTrue(service.acquire(request) is ProviderP2pAcquireResponse.Pending)
+            await("native P2P working directory created") {
+                jobRoot.listFiles().orEmpty().isNotEmpty()
+            }
+
+            // No Reader poll during the transition: the Host monitor must stop
+            // the native session and evict the stale job on its own.
+            authorized.set(false)
+            await("revoked native P2P working files cleaned", timeoutMs = 8_000L) {
+                jobRoot.listFiles().orEmpty().isEmpty()
+            }
+            assertEquals(
+                ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.CANCELLED),
+                service.acquire(request),
+            )
         } finally {
             jobs.close()
             managedFiles.clearAll()
