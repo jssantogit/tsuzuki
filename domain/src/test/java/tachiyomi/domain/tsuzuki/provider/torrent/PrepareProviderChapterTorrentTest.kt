@@ -50,11 +50,11 @@ class PrepareProviderChapterTorrentTest {
             updatedAt = 1,
         )
         val providerId = ProviderId("org.example.torrent")
-        val file = TorrentCandidateFile(1, "Example Manga/Volume 2/Chapter 12.cbz")
+        val file = TorrentCandidateFile(1, "Example Manga/Volume 2/Chapter 12.cbz", sizeBytes = 42_000L)
         val candidate = TorrentCandidate(
             infoHash = "0123456789abcdef0123456789abcdef01234567",
             magnetUri = null,
-            torrentUrl = null,
+            torrentUrl = "https://source.example/verified.torrent",
             displayName = "Example Manga",
             files = listOf(
                 TorrentCandidateFile(0, "Example Manga/Volume 1/Chapter 12.cbz"),
@@ -74,12 +74,16 @@ class PrepareProviderChapterTorrentTest {
         )
         var capturedIndex: Int? = null
         var capturedPath: String? = null
+        var capturedUrl: String? = null
+        var capturedSize: Long? = null
         val preparer = PrepareProviderChapterTorrent(
             resolver = resolver,
             prepareTorrentArtifact = PrepareTorrentArtifact(
                 TorrentArtifactEngine { request ->
                     capturedIndex = request.fileIndex
                     capturedPath = request.filePath
+                    capturedUrl = request.torrentUrl
+                    capturedSize = request.fileSizeBytes
                     Result.success(
                         PreparedTorrentArtifact(
                             localUri = "content://provider.test/chapter-12.cbz",
@@ -100,6 +104,8 @@ class PrepareProviderChapterTorrentTest {
         )
         capturedIndex shouldBe 1
         capturedPath shouldBe file.path
+        capturedUrl shouldBe "https://source.example/verified.torrent"
+        capturedSize shouldBe 42_000L
     }
 
     private fun registration(id: ProviderId): ProviderRegistration = ProviderRegistration(
