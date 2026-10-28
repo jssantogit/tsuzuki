@@ -111,9 +111,9 @@ class MangaUpdatesVerifiedWorkLinkerTest {
     }
 
     @Test
-    fun `untrusted MangaUpdates work references reject invalid or overflowing IDs`() {
+    fun `untrusted MangaUpdates work references reject invalid or overlong IDs`() {
         normalizeMangaUpdatesWorkId("ttaew4a") shouldBe "64897697818"
-        listOf(null, "", "0", "-1", "https://example.org/1", "ZZZZZZZZZZZZ", "1234567890123456789")
+        listOf(null, "", "0", "-1", "https://example.org/1", "ZZZZZZZZZZZZZ", "1234567890123456789")
             .forEach { untrusted ->
                 normalizeMangaUpdatesWorkId(untrusted) shouldBe null
             }
