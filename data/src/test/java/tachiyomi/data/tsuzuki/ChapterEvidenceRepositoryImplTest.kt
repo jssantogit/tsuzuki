@@ -28,6 +28,8 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceWrite
 import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadata
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadataCodec
 import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaim
@@ -180,6 +182,67 @@ class ChapterEvidenceRepositoryImplTest {
         firstRefresh.evidence.rawLabel shouldBe "Chapter 1 revised"
         secondRefresh.rawMetadata.toList() shouldBe listOf(1.toByte(), 2.toByte(), 3.toByte())
         evidenceRepository.getByCanonicalTitleId("title-1") shouldHaveSize 1
+    }
+
+    @Test
+    fun `provider variant metadata roundtrips through SQLite and updates without changing evidence identity`() =
+        runBlocking<Unit> {
+            val base = addonEvidence("provider-stable", "Chapter 1", "remote-chapter").copy(
+                producerKind = ProducerKind.PROVIDER,
+                producerId = "provider-binding:stable",
+                authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+                providerMetadata = ProviderEvidenceMetadata(
+                    language = "ja",
+                    scanlationGroup = "Group A",
+                    releaseDateMillis = 1_700_000_000_000L,
+                ),
+            )
+            evidenceRepository.upsert(base, null)
+            val stored = evidenceRepository.getByCanonicalTitleId("title-1").single()
+            stored.evidence.providerMetadata shouldBe base.providerMetadata
+            ProviderEvidenceMetadataCodec.decode(stored.rawMetadata) shouldBe base.providerMetadata
+
+            evidenceRepository.upsert(
+                base.copy(
+                    id = "new-random-id",
+                    observedAt = 2,
+                    providerMetadata = ProviderEvidenceMetadata(
+                        language = "en",
+                        scanlationGroup = "Group B",
+                        releaseDateMillis = null,
+                    ),
+                ),
+                null,
+            )
+            val newer = evidenceRepository.getByCanonicalTitleId("title-1").single()
+            newer.evidence.id shouldBe "provider-stable"
+            newer.evidence.providerMetadata?.language shouldBe "en"
+            newer.evidence.providerMetadata?.scanlationGroup shouldBe "Group B"
+        }
+
+    @Test
+    fun `unknown provider raw metadata remains byte exact during refresh`() = runBlocking<Unit> {
+        val base = addonEvidence("opaque-provider", "Chapter 1", "opaque").copy(
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "provider-binding:opaque",
+            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+        )
+        evidenceRepository.upsert(base, null)
+        driver.execute(
+            null,
+            "UPDATE tsuzuki_chapter_evidence SET raw_metadata = X'010203' WHERE id = 'opaque-provider'",
+            0,
+        ).await()
+        evidenceRepository.upsert(
+            base.copy(
+                observedAt = 2,
+                providerMetadata = ProviderEvidenceMetadata(language = "pt-BR"),
+            ),
+            null,
+        )
+        val persisted = evidenceRepository.getByCanonicalTitleId("title-1").single()
+        persisted.rawMetadata.toList() shouldBe listOf(1.toByte(), 2.toByte(), 3.toByte())
+        persisted.evidence.providerMetadata shouldBe null
     }
 
     @Test
