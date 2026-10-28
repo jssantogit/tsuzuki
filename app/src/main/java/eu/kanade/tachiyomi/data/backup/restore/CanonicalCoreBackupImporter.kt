@@ -285,6 +285,16 @@ class CanonicalCoreBackupImporter(
                 )
             }
             core.chapterEvidence.forEach {
+                val safeMetadata = ProviderEvidenceMetadata(
+                    language = it.providerLanguage,
+                    scanlationGroup = it.providerScanlationGroup,
+                    releaseDateMillis = it.providerReleaseDateMillis,
+                )
+                val portableRawMetadata = if (safeMetadata.hasValues) {
+                    ProviderEvidenceMetadataCodec.encode(safeMetadata)
+                } else {
+                    byteArrayOf()
+                }
                 database.tsuzuki_chapter_evidenceQueries.upsertTsuzukiChapterEvidence(
                     id = it.id,
                     canonicalTitleId = it.canonicalTitleId,
@@ -299,11 +309,7 @@ class CanonicalCoreBackupImporter(
                     confidence = it.confidence,
                     authorityClass = it.authorityClass,
                     mappedCanonicalChapterId = it.mappedCanonicalChapterId,
-                    rawMetadata = ProviderEvidenceMetadata(
-                        language = it.providerLanguage,
-                        scanlationGroup = it.providerScanlationGroup,
-                        releaseDateMillis = it.providerReleaseDateMillis,
-                    ).takeIf { metadata -> metadata.hasValues }?.let(ProviderEvidenceMetadataCodec::encode) ?: byteArrayOf(),
+                    rawMetadata = portableRawMetadata,
                 )
             }
             core.collections.filterNot { it.id in existingCollectionIds }.forEach {

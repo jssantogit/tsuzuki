@@ -56,7 +56,10 @@ class BackupCanonicalCoreTest {
             providerScanlationGroup = null,
             providerReleaseDateMillis = null,
         )
-        val olderJson = Json.encodeToString(BackupCanonicalCore.serializer(), core().copy(chapterEvidence = listOf(missing)))
+        val olderJson = Json.encodeToString(
+            BackupCanonicalCore.serializer(),
+            core().copy(chapterEvidence = listOf(missing)),
+        )
         Json.decodeFromString(BackupCanonicalCore.serializer(), olderJson).validate()
         runCatching {
             snapshot.copy(chapterEvidence = listOf(evidence.copy(producerKind = "INTEGRATION"))).validate()

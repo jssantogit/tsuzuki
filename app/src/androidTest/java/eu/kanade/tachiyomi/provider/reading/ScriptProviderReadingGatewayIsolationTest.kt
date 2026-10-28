@@ -123,6 +123,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 .build(),
         )
 
+        lateinit var providerRegistry: DefaultProviderRegistry
         val gateway = gateway(
             networkOrigins = setOf(origin),
             localNetwork = true,
@@ -141,6 +142,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                   }
                 };
             """.trimIndent(),
+            onRegistry = { providerRegistry = it },
         )
 
         try {
@@ -294,6 +296,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 evidenceRepository = evidenceRepository,
                 bindingRepository = bindingRepository,
                 gateway = gateway,
+                providerRegistry = providerRegistry,
             )
             val option = resolver.options(canonicalChapter.id).single()
             assertEquals("chapter-canonical-1", option.providerChapterId)
@@ -603,6 +606,73 @@ class ScriptProviderReadingGatewayIsolationTest {
         }
     }
 
+    @Test
+    fun metadataOnlyProvider_contributesChapterMetadataWithoutReaderPages() = runBlocking {
+        lateinit var providerRegistry: DefaultProviderRegistry
+        val gateway = gateway(
+            networkOrigins = emptySet(),
+            localNetwork = false,
+            includePages = false,
+            onRegistry = { providerRegistry = it },
+            main = """
+                export default {
+                  reading: {
+                    lookup: async () => ({items: [], nextCursor: null}),
+                    chapters: async () => ({
+                      items: [{
+                        providerChapterId: "metadata-only-4",
+                        rawLabel: "Chapter 4",
+                        rawNumber: 4.0,
+                        language: "pt-BR",
+                        scanlationGroup: "Grupo Ñ",
+                        releaseDateMillis: 1700000000000
+                      }],
+                      nextCursor: null
+                    })
+                  }
+                };
+            """.trimIndent(),
+        )
+        val binding = ProviderReadingBinding(
+            id = "metadata-only-binding",
+            canonicalTitleId = "metadata-only-title",
+            ref = ProviderBindingRef(PROVIDER_ID, "pt-BR", "metadata-only-work"),
+            verification = ProviderBindingVerification.EXACT,
+            availability = ProviderBindingAvailability.AVAILABLE,
+            createdAt = 1L,
+            updatedAt = 1L,
+        )
+        val chapterRepository = InMemoryCanonicalChapterRepository()
+        val evidenceRepository = InMemoryChapterEvidenceRepository()
+        val bindingRepository = SingleProviderReadingBindingRepository(binding)
+        val refresh = RefreshProviderReadingChapters(
+            gateway = gateway,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(clock = { 42L }),
+            reconcileChapterEvidence = ReconcileChapterEvidence(
+                parser = ParseCanonicalChapterLabel(),
+                canonicalChapterRepository = chapterRepository,
+                evidenceRepository = evidenceRepository,
+            ),
+        )
+
+        assertEquals(1, (refresh.execute(binding) as ProviderCallResult.Success).value)
+        val chapters = chapterRepository.getByCanonicalTitleId("metadata-only-title")
+        assertEquals(1, chapters.size)
+        val evidence = evidenceRepository.getByCanonicalTitleId("metadata-only-title").single().evidence
+        assertEquals("pt-BR", evidence.providerMetadata?.language)
+        assertEquals("Grupo Ñ", evidence.providerMetadata?.scanlationGroup)
+        assertEquals(1700000000000L, evidence.providerMetadata?.releaseDateMillis)
+
+        val resolver = ResolveProviderChapterReading(
+            canonicalChapterRepository = chapterRepository,
+            evidenceRepository = evidenceRepository,
+            bindingRepository = bindingRepository,
+            gateway = gateway,
+            providerRegistry = providerRegistry,
+        )
+        assertEquals(emptyList<Any>(), resolver.options(chapters.single().id))
+    }
+
     private suspend fun readFirstProviderPage(
         pageList: ProviderReadingDelivery.PageList,
         canonicalChapterId: String,
@@ -775,6 +845,8 @@ class ScriptProviderReadingGatewayIsolationTest {
         browserOrigins: Set<String> = emptySet(),
         localNetwork: Boolean,
         managedFiles: ProviderManagedFileStore? = null,
+        includePages: Boolean = true,
+        onRegistry: (DefaultProviderRegistry) -> Unit = {},
     ): ScriptProviderReadingGateway {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val storageRoot = File(context.cacheDir, "provider-reading-gateway").apply {
@@ -785,6 +857,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             networkOrigins = networkOrigins,
             browserOrigins = browserOrigins,
             localNetwork = localNetwork,
+            includePages = includePages,
         )
         val parsed = ProviderPackageParser().parse(packageBytes)
         val descriptor = ProviderDescriptor(
@@ -793,11 +866,11 @@ class ScriptProviderReadingGatewayIsolationTest {
             version = ProviderVersion("1.0.1", 1),
             origin = ProviderOrigin.Repository(REPOSITORY_ID),
             runtime = ProviderRuntimeKind.SCRIPT,
-            capabilities = setOf(
-                ProviderCapabilities.ReadingLookupV1,
-                ProviderCapabilities.ReadingChaptersV1,
-                ProviderCapabilities.ReadingPagesV1,
-            ),
+            capabilities = buildSet {
+                add(ProviderCapabilities.ReadingLookupV1)
+                add(ProviderCapabilities.ReadingChaptersV1)
+                if (includePages) add(ProviderCapabilities.ReadingPagesV1)
+            },
             permissions = ProviderPermissionSet(
                 network = ProviderNetworkPermission(
                     origins = networkOrigins,
@@ -820,6 +893,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 )
             },
         )
+        onRegistry(registry)
         val managedFileStore = managedFiles ?: ProviderManagedFileStore(context)
         val runtimeClient = ProviderRuntimeClient(
             context = context,
@@ -902,10 +976,12 @@ class ScriptProviderReadingGatewayIsolationTest {
         networkOrigins: Set<String>,
         browserOrigins: Set<String>,
         localNetwork: Boolean,
+        includePages: Boolean = true,
     ): ByteArray {
         fun origins(values: Set<String>) =
             values.joinToString(prefix = "[", postfix = "]") { value -> """"$value"""" }
 
+        val pageCapability = if (includePages) """, {"id":"reading.pages","version":1}""" else ""
         val manifest = """
             {
               "manifestVersion": 1,
@@ -916,8 +992,7 @@ class ScriptProviderReadingGatewayIsolationTest {
               "entrypoint": "main.js",
               "capabilities": [
                 {"id":"reading.lookup","version":1},
-                {"id":"reading.chapters","version":1},
-                {"id":"reading.pages","version":1}
+                {"id":"reading.chapters","version":1}$pageCapability
               ],
               "permissions": {
                 "network": {

@@ -305,22 +305,7 @@ data class BackupCanonicalCore(
                     evidence.authorityClass in setOf("EDITORIAL", "ADDON_PROVISIONAL", "PROVIDER_PROVISIONAL") &&
                     evidence.confidence.isFinite() &&
                     (evidence.rawNumber == null || evidence.rawNumber.isFinite()) &&
-                    (
-                        (evidence.providerLanguage == null &&
-                            evidence.providerScanlationGroup == null &&
-                            evidence.providerReleaseDateMillis == null) ||
-                            (
-                                evidence.producerKind == "PROVIDER" &&
-                                    evidence.authorityClass == "PROVIDER_PROVISIONAL" &&
-                                    (evidence.providerLanguage == null ||
-                                        (evidence.providerLanguage.isNotBlank() &&
-                                            evidence.providerLanguage.length <= 32)) &&
-                                    (evidence.providerScanlationGroup == null ||
-                                        evidence.providerScanlationGroup.length <= 4096) &&
-                                    (evidence.providerReleaseDateMillis == null ||
-                                        evidence.providerReleaseDateMillis >= 0L)
-                                )
-                    ) &&
+                    evidence.hasPortableProviderMetadata() &&
                     (
                         evidence.mappedCanonicalChapterId == null ||
                             chaptersById[evidence.mappedCanonicalChapterId]?.canonicalTitleId ==
@@ -557,6 +542,17 @@ data class BackupCoreChapterEvidence(
     val providerScanlationGroup: String? = null,
     val providerReleaseDateMillis: Long? = null,
 )
+
+private fun BackupCoreChapterEvidence.hasPortableProviderMetadata(): Boolean {
+    if (providerLanguage == null && providerScanlationGroup == null && providerReleaseDateMillis == null) {
+        return true
+    }
+    return producerKind == "PROVIDER" &&
+        authorityClass == "PROVIDER_PROVISIONAL" &&
+        (providerLanguage == null || (providerLanguage.isNotBlank() && providerLanguage.length <= 32)) &&
+        (providerScanlationGroup == null || providerScanlationGroup.length <= 4096) &&
+        (providerReleaseDateMillis == null || providerReleaseDateMillis >= 0L)
+}
 
 @Serializable
 data class BackupCoreProviderBinding(

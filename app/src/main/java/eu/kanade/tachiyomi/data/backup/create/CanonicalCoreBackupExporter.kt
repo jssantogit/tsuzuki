@@ -6,7 +6,6 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterEvidence
-import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadataCodec
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterOverride
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterUpdateState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
@@ -35,6 +34,7 @@ import eu.kanade.tachiyomi.data.backup.models.PortableMihonBindingCodec
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import tachiyomi.data.Database
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadataCodec
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.integration.model.PortableIntegrationConfig
 import tachiyomi.domain.tsuzuki.reader.repository.CanonicalReadingRepository
