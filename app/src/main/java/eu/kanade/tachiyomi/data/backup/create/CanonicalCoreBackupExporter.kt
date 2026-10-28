@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterEvidence
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadataCodec
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterOverride
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterUpdateState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
@@ -94,8 +95,17 @@ class CanonicalCoreBackupExporter(
         }
         // Opaque third-party BLOBs can contain device IDs or credentials.
         // Refuse lossy or unsafe export until a portable codec exists.
-        check(chapterEvidence.all { it.raw_metadata.isEmpty() }) {
-            "Opaque chapter evidence metadata requires a portable codec"
+        check(
+            chapterEvidence.all { evidence ->
+                evidence.raw_metadata.isEmpty() ||
+                    (
+                        evidence.producer_kind == "PROVIDER" &&
+                            evidence.authority_class == "PROVIDER_PROVISIONAL" &&
+                            ProviderEvidenceMetadataCodec.decode(evidence.raw_metadata) != null
+                        )
+            },
+        ) {
+            "Unknown chapter evidence metadata cannot be exported"
         }
         val progress = titles.flatMap { title ->
             readingRepository.getProgressByCanonicalTitleId(title.id)
@@ -309,6 +319,7 @@ class CanonicalCoreBackupExporter(
                 )
             },
             chapterEvidence = chapterEvidence.map {
+                val providerMetadata = ProviderEvidenceMetadataCodec.decode(it.raw_metadata)
                 BackupCoreChapterEvidence(
                     id = it.id,
                     canonicalTitleId = it.canonical_title_id,
@@ -323,6 +334,9 @@ class CanonicalCoreBackupExporter(
                     confidence = it.confidence,
                     authorityClass = it.authority_class,
                     mappedCanonicalChapterId = it.mapped_canonical_chapter_id,
+                    providerLanguage = providerMetadata?.language,
+                    providerScanlationGroup = providerMetadata?.scanlationGroup,
+                    providerReleaseDateMillis = providerMetadata?.releaseDateMillis,
                 )
             },
             progress = progress.map {
