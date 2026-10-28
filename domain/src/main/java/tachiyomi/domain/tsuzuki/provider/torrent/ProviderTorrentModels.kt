@@ -428,7 +428,7 @@ class TorrentChapterMapper(
     )
 
     private companion object {
-        val PATH_VOLUME = Regex("(?i)vol(?:ume)?\\\\.?\\\\s*(\\\\d+)")
+        val PATH_VOLUME = Regex("(?i)vol(?:ume)?\\.?\\s*(\\d+)")
         val TITLE_WORD = Regex("[\\p{L}\\p{N}]+")
         val ZERO_PADDED_CHAPTER_NUMBER = Regex("(\\d+)(\\.\\d+|[a-z])?", RegexOption.IGNORE_CASE)
         val EMBEDDED_VOLUME_CHAPTER_MARKER = Regex(
