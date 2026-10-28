@@ -394,8 +394,8 @@ class ProviderTorrentAcquisitionAcceptanceTest {
             val hostFactory = ProviderHostInvocationFactory(
                 context = context,
                 storageRoot = File(root, "storage"),
-                p2pServiceFactory = { id -> jobs.service(id) },
-                approvedP2pServiceFactory = { id, approved -> jobs.service(id, approved) },
+                p2pServiceFactory = { id -> requireNotNull(jobs).service(id) },
+                approvedP2pServiceFactory = { id, approved -> requireNotNull(jobs).service(id, approved) },
                 managedFiles = managedFiles,
             )
             val executor = ScriptProviderCapabilityExecutor(
@@ -444,6 +444,18 @@ class ProviderTorrentAcquisitionAcceptanceTest {
             )
             assertEquals(metadataUrl, delivery.torrentUrl)
             assertEquals(selected.sizeBytes, delivery.fileSizeBytes)
+            val verifiedSelection = ProviderP2pAcquireRequest(
+                operationId = "acceptance:full-chain",
+                infoHash = hash,
+                torrentUrl = metadataUrl,
+                selectedFileIndex = selected.index,
+                selectedFilePath = selected.path,
+                selectedFileSizeBytes = selected.sizeBytes,
+            )
+            assertTrue(
+                "Host-verified metadata must survive the discovery-to-acquisition provider boundary",
+                cache.find(PROVIDER_ID.value, verifiedSelection)?.contentEquals(fixture.metadataBytes) == true,
+            )
 
             val preferences = ProviderTorrentPreferences(InMemoryPreferenceStore()).apply {
                 acquisitionPreference.set(TorrentAcquisitionPreference.P2P_ONLY)
