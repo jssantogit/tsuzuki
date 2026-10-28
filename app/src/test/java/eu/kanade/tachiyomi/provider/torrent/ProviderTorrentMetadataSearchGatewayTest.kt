@@ -188,8 +188,8 @@ class ProviderTorrentMetadataSearchGatewayTest {
             ),
             candidate(
                 files = listOf(
-                    TorrentCandidateFile(index = 0, path = "pack-a/Vol. 2 Ch. 12.cbz"),
-                    TorrentCandidateFile(index = 1, path = "pack-b/Vol. 2 Chapter 12.zip"),
+                    TorrentCandidateFile(index = 0, path = "pack/Vol. 2 Ch. 12.cbz"),
+                    TorrentCandidateFile(index = 1, path = "alternate/Vol. 2 Chapter 12.zip"),
                 ),
             ),
             candidate(
@@ -312,7 +312,7 @@ class ProviderTorrentMetadataSearchGatewayTest {
         infoHash = "0123456789abcdef0123456789abcdef01234567",
         magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
         torrentUrl = "https://nyaa.si/download/1234567.torrent",
-        displayName = "Example Manga Chapter 12",
+        displayName = "Secret Example Manga Chapter 12",
         files = files,
     )
 
