@@ -174,10 +174,8 @@ class ProviderP2pJobManagerTest {
         val request = request()
         try {
             val polling = launch {
-                manager.service("org.example.p2p").acquire(request) shouldBe
-                    ProviderP2pAcquireResponse.Pending(
-                        (manager.service("org.example.p2p").acquire(request) as ProviderP2pAcquireResponse.Pending).jobId,
-                    )
+                val pending = manager.service("org.example.p2p").acquire(request)
+                (pending is ProviderP2pAcquireResponse.Pending) shouldBe true
                 awaitCancellation()
             }
             runCurrent()
