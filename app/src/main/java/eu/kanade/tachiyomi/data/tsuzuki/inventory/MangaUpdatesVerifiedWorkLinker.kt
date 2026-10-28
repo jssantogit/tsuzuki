@@ -155,7 +155,7 @@ class MangaUpdatesVerifiedWorkLinker(
         require(data.string("id") == mangaDexId && data.string("type") == "manga")
         val attributes = data["attributes"] as? JsonObject ?: error("Missing MangaDex attributes")
         val links = attributes["links"] as? JsonObject ?: return null
-        return normalizeMuLink(links.string("mu"))
+        return normalizeMangaUpdatesWorkId(links.string("mu"))
     }
 
     private suspend fun readSeries(
@@ -212,17 +212,6 @@ class MangaUpdatesVerifiedWorkLinker(
     private fun IntegrationSettings.hasInventoryPermission(id: IntegrationId): Boolean =
         integrationId == id && enabled &&
             IntegrationSettingsConfig.decode(configJson).capabilityEnabled(IntegrationCapability.CHAPTER_INVENTORY)
-
-    private fun normalizeMuLink(id: String?): String? {
-        val raw = id?.trim() ?: return null
-        val parsed = when {
-            raw.matches(Regex("[0-9]{1,18}")) -> raw.toLongOrNull()
-            raw.matches(Regex("[a-zA-Z0-9]{2,12}")) && raw.any(Char::isLetter) ->
-                raw.lowercase().toLongOrNull(36)
-            else -> null
-        }
-        return parsed?.takeIf { it > 0L }?.toString()
-    }
 
     private fun String.isPositiveMuId(): Boolean =
         matches(Regex("[0-9]{1,18}")) && (toLongOrNull()?.let { it > 0L } == true)
