@@ -350,6 +350,55 @@ class MangaDexVerifiedWorkLinkerTest {
         coVerify(exactly = 0) { repo.addExternalIdentity(any()) }
     }
 
+
+    @Test
+    fun `automatic title discovery selects only a unique independently cross-referenced MangaDex work`() = runTest {
+        val repo = mockk<CanonicalTitleRepository>()
+        val canonical = mockk<tachiyomi.domain.tsuzuki.model.CanonicalTitle>()
+        io.mockk.every { canonical.displayTitle } returns "Exact Manga"
+        coEvery { repo.getById("title") } returns canonical
+        coEvery { repo.getExternalIdentities("title") } returns listOf(
+            ExternalIdentity("title", "myanimelist", "500", true, 1L),
+        )
+        val network = FakeTransport(details(mu = "8675309", mal = "500")).apply {
+            searchResponse = """{"result":"ok","data":[
+                {"id":"$work","type":"manga","attributes":{"title":{"en":"Exact Manga"},"links":{"mal":"500"}}},
+                {"id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","type":"manga",
+                 "attributes":{"title":{"en":"Similar Manga"},"links":{"mal":"501"}}}
+            ]}"""
+        }
+
+        val match = linker(repo, network).discoverUnique("title") { true }.getOrThrow()
+
+        match?.mangaDexId shouldBe work
+        match?.matchedProvider shouldBe "myanimelist"
+        network.calls shouldBe 1
+        coVerify(exactly = 0) { repo.addExternalIdentity(any()) }
+    }
+
+    @Test
+    fun `automatic discovery refuses ambiguous crosswalks and never verifies from title alone`() = runTest {
+        val repo = mockk<CanonicalTitleRepository>()
+        val canonical = mockk<tachiyomi.domain.tsuzuki.model.CanonicalTitle>()
+        io.mockk.every { canonical.displayTitle } returns "Exact Manga"
+        coEvery { repo.getById("title") } returns canonical
+        coEvery { repo.getExternalIdentities("title") } returns listOf(
+            ExternalIdentity("title", "myanimelist", "500", true, 1L),
+        )
+        val network = FakeTransport(details(mu = "8675309", mal = "500")).apply {
+            searchResponse = """{"result":"ok","data":[
+                {"id":"$work","type":"manga","attributes":{"title":{"en":"Exact Manga"},"links":{"mal":"500"}}},
+                {"id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","type":"manga",
+                 "attributes":{"title":{"en":"Exact Manga"},"links":{"mal":"500"}}}
+            ]}"""
+        }
+        linker(repo, network).discoverUnique("title") { true }.isFailure shouldBe true
+        coVerify(exactly = 0) { repo.addExternalIdentity(any()) }
+
+        coEvery { repo.getExternalIdentities("title") } returns emptyList()
+        linker(repo, network).discoverUnique("title") { true }.getOrThrow() shouldBe null
+    }
+
     private fun details(mu: String, mal: String? = null): String {
         val malField = mal?.let { ",\"mal\":\"$it\"" } ?: ""
         return """{"result":"ok","data":{"id":"$work","type":"manga","attributes":""" +
@@ -414,10 +463,14 @@ class MangaDexVerifiedWorkLinkerTest {
         var calls = 0
         var freshCalls = 0
         var freshResponse = response
+        var searchResponse = response
         override suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload {
             calls++
             onResponse?.invoke()
-            return InventoryHttpPayload(response, observedAt = 10L)
+            return InventoryHttpPayload(
+                if (url.startsWith("https://api.mangadex.org/manga?")) searchResponse else response,
+                observedAt = 10L,
+            )
         }
         override suspend fun fetchFresh(url: String, postBody: String?): InventoryHttpPayload {
             freshCalls++
