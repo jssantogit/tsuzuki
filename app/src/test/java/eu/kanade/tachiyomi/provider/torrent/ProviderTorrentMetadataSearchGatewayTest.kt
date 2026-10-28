@@ -305,7 +305,7 @@ class ProviderTorrentMetadataSearchGatewayTest {
         // The generic label parser may recognize the leading 86, but the real mapper
         // must reject it when that token belongs only to the requested title.
         logs.single { it.startsWith("host_torrent_match ") }
-            .endsWith("identity=0 volume=0 exact=0 ambiguous=0") shouldBe true
+            .endsWith("identity=0 volume=0 exact=0 ambiguous=0 reason=CHAPTER_IDENTITY_NOT_PROVEN") shouldBe true
     }
 
     private fun candidate(files: List<TorrentCandidateFile>?): TorrentCandidate = TorrentCandidate(
