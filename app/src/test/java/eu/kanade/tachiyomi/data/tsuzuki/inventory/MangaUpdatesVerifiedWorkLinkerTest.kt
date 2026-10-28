@@ -110,6 +110,15 @@ class MangaUpdatesVerifiedWorkLinkerTest {
         coVerify(exactly = 0) { repo.associateVerifiedInventoryWorkIfCurrent(any(), any()) }
     }
 
+    @Test
+    fun `untrusted MangaUpdates work references reject invalid or overflowing IDs`() {
+        normalizeMangaUpdatesWorkId("ttaew4a") shouldBe "64897697818"
+        listOf(null, "", "0", "-1", "https://example.org/1", "ZZZZZZZZZZZZ", "1234567890123456789")
+            .forEach { untrusted ->
+                normalizeMangaUpdatesWorkId(untrusted) shouldBe null
+            }
+    }
+
     private fun repository(): CanonicalTitleRepository = mockk<CanonicalTitleRepository>().also { repo ->
         coEvery { repo.getById("title") } returns CanonicalTitle(
             id = "title",
