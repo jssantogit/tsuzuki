@@ -10,6 +10,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -533,6 +534,70 @@ class NativeInventoryRefreshScreenModelTest {
         model.state.value.refreshStops["mangadex"] shouldBe InventoryRefreshStop.NO_VERIFIED_WORK
         model.state.value.revision shouldBe 1
     }
+
+    @Test
+    fun `enabling chapter inventory while title is open automatically starts discovery without a button`() =
+        runTest(dispatcher) {
+            val md = allowedMangaDexProducer()
+            val updates = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+            var enabled = false
+            val registry = mockk<IntegrationRegistry>()
+            coEvery { registry.awaitReady() } returns Unit
+            every { registry.observeChanges() } returns updates
+            every { registry.configurationFingerprint() } answers { if (enabled) "on" else "off" }
+            every { registry.inventoryProducers() } answers { if (enabled) listOf(md) else emptyList() }
+            val linker = mockk<MangaDexVerifiedWorkLinker>()
+            coEvery { linker.discoverUnique("title", any()) } returns Result.success(null)
+            val refresh = mockk<RefreshIndependentInventory>()
+            coEvery { refresh.execute(any(), any(), any(), any(), any()) } returns
+                InventoryRefreshResult(InventoryRefreshStop.NO_VERIFIED_WORK, 0, 0)
+            val model = model(linker, refresh, registry)
+            model.start("title")
+            model.observeIntegrationChanges("title")
+            runCurrent()
+
+            coVerify(exactly = 0) { linker.discoverUnique(any(), any()) }
+            enabled = true
+            updates.emit(Unit)
+            advanceUntilIdle()
+
+            coVerify(exactly = 1) { linker.discoverUnique("title", any()) }
+            model.state.value.discoveryStatus["mangadex"] shouldBe
+                InventoryWorkDiscoveryStatus.NO_VERIFIED_MATCH
+        }
+
+    @Test
+    fun `disabling an integration while discovery is pending invalidates the in-flight result`() =
+        runTest(dispatcher) {
+            val md = allowedMangaDexProducer()
+            val updates = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+            var enabled = true
+            val registry = mockk<IntegrationRegistry>()
+            coEvery { registry.awaitReady() } returns Unit
+            every { registry.observeChanges() } returns updates
+            every { registry.configurationFingerprint() } answers { if (enabled) "on" else "off" }
+            every { registry.inventoryProducers() } answers { if (enabled) listOf(md) else emptyList() }
+            val linker = mockk<MangaDexVerifiedWorkLinker>()
+            val response = CompletableDeferred<Result<MangaDexVerifiedCandidate?>>()
+            coEvery { linker.discoverUnique("title", any()) } coAnswers { response.await() }
+            val refresh = mockk<RefreshIndependentInventory>()
+            val model = model(linker, refresh, registry)
+            model.start("title")
+            model.observeIntegrationChanges("title")
+            model.discoverAndRefreshAutomatically("title")
+            runCurrent()
+
+            model.state.value.refreshing shouldBe true
+            enabled = false
+            updates.emit(Unit)
+            response.complete(Result.success(candidate))
+            advanceUntilIdle()
+
+            model.state.value.refreshing shouldBe false
+            model.state.value.revision shouldBe 0
+            coVerify(exactly = 0) { linker.confirm(any(), any(), any()) }
+            coVerify(exactly = 0) { refresh.execute(any(), any(), any(), any(), any()) }
+        }
 
     private fun allowedMangaDexProducer(): IndependentInventoryProducer =
         mockk<IndependentInventoryProducer>().also { producer ->
