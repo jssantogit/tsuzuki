@@ -331,10 +331,15 @@ class TorrentChapterMapper(
             .mapNotNull { it.find(label)?.takeIf { match -> match.range.first == 0 } }
             .maxByOrNull { it.value.length }
         if (fileWork != null) {
-            // Disallow a second, unverified work name between the title and chapter.
-            val beforeChapter = explicitChapterLabel
-                ?.let { label.substringBefore(it).removePrefix(fileWork.value).trim() }
-            return beforeChapter == null || WORK_PREFIX.matches(beforeChapter)
+            // For title-aware numeric archives, the remainder must be only a
+            // chapter number; extra words might name a different work.
+            if (explicitChapterLabel == null) {
+                return TITLE_AWARE_NUMERIC_SUFFIX.matches(label.removePrefix(fileWork.value).trim())
+            }
+            val beforeChapter = label.substringBefore(explicitChapterLabel)
+                .removePrefix(fileWork.value)
+                .trim()
+            return WORK_PREFIX.matches(beforeChapter)
         }
 
         // A named-but-different archive must not inherit the title of its release
@@ -394,7 +399,13 @@ class TorrentChapterMapper(
             return TorrentChapterFileMatch.None
         }
         if (!hasTitleAwareChapterToken(file.chapterLabel(), request.titles, chapterNumber) ||
-            !hasWorkIdentityEvidence(request, candidate, file, file.chapterLabel(), explicitChapterLabel(file.chapterLabel()))
+            !hasWorkIdentityEvidence(
+                request,
+                candidate,
+                file,
+                file.chapterLabel(),
+                explicitChapterLabel(file.chapterLabel()),
+            )
         ) {
             return TorrentChapterFileMatch.None
         }
@@ -491,6 +502,7 @@ class TorrentChapterMapper(
             "(?i)(?:pack|release|files|chapters|chapter|archives|archive|alternate|downloads|download|cbz|zip)",
         )
         val WORK_PREFIX = Regex("(?i)[\\s._,;:\\-]*(?:vol(?:ume)?\\.?\\s*\\d+)?[\\s._,;:\\-]*")
+        val TITLE_AWARE_NUMERIC_SUFFIX = Regex("[\\s._,;:\\-]*0*\\d+(?:\\.\\d+|[a-z])?[\\s._,;:\\-]*", RegexOption.IGNORE_CASE)
         val TITLE_WORD = Regex("[\\p{L}\\p{N}]+")
         val ZERO_PADDED_CHAPTER_NUMBER = Regex("(\\d+)(\\.\\d+|[a-z])?", RegexOption.IGNORE_CASE)
         val EMBEDDED_VOLUME_CHAPTER_MARKER = Regex(
