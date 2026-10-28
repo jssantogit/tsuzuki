@@ -23,6 +23,8 @@ import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationRequest
 import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationResult
+import tachiyomi.domain.tsuzuki.model.VerifiedInventoryWorkAssociationRequest
+import tachiyomi.domain.tsuzuki.model.VerifiedInventoryWorkAssociationResult
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import kotlin.time.Clock
 
@@ -155,42 +157,65 @@ class CanonicalTitleRepositoryImpl(
     override suspend fun associateMangaDexWorkIfCurrent(
         request: MangaDexWorkAssociationRequest,
         isAuthorized: () -> Boolean,
-    ): MangaDexWorkAssociationResult = try {
+    ): MangaDexWorkAssociationResult {
+        val result = associateVerifiedInventoryWorkIfCurrent(
+            VerifiedInventoryWorkAssociationRequest(
+                canonicalTitleId = request.canonicalTitleId,
+                producerId = MANGADEX_PROVIDER,
+                externalWorkId = request.mangaDexWorkId,
+                expectedIntegrationSettings = request.expectedIntegrationSettings,
+                expectedVerifiedCrosswalks = request.expectedVerifiedCrosswalks,
+            ),
+            isAuthorized,
+        )
+        return when (result) {
+            VerifiedInventoryWorkAssociationResult.ASSOCIATED -> MangaDexWorkAssociationResult.ASSOCIATED
+            VerifiedInventoryWorkAssociationResult.ALREADY_ASSOCIATED ->
+                MangaDexWorkAssociationResult.ALREADY_ASSOCIATED
+            VerifiedInventoryWorkAssociationResult.REFUSED -> MangaDexWorkAssociationResult.REFUSED
+            VerifiedInventoryWorkAssociationResult.UNSUPPORTED -> MangaDexWorkAssociationResult.UNSUPPORTED
+        }
+    }
+
+    override suspend fun associateVerifiedInventoryWorkIfCurrent(
+        request: VerifiedInventoryWorkAssociationRequest,
+        isAuthorized: () -> Boolean,
+    ): VerifiedInventoryWorkAssociationResult = try {
         database.transactionWithResult {
             currentCoroutineContext().ensureActive()
             if (!request.isValid() || !isAuthorized() || !hasExpectedPermission(request)) {
-                return@transactionWithResult MangaDexWorkAssociationResult.REFUSED
+                return@transactionWithResult VerifiedInventoryWorkAssociationResult.REFUSED
             }
 
             val title = database.tsuzuki_titlesQueries
                 .getTsuzukiTitleById(request.canonicalTitleId, ::mapTitle)
                 .awaitAsOneOrNull()
-                ?: return@transactionWithResult MangaDexWorkAssociationResult.REFUSED
+                ?: return@transactionWithResult VerifiedInventoryWorkAssociationResult.REFUSED
             val currentIdentities = identitiesFor(title.id)
             if (!sameVerifiedCrosswalks(currentIdentities, request.expectedVerifiedCrosswalks)) {
-                return@transactionWithResult MangaDexWorkAssociationResult.REFUSED
+                return@transactionWithResult VerifiedInventoryWorkAssociationResult.REFUSED
             }
 
-            val owner = ownerOf(request.mangaDexWorkId)
-            val currentMangaDexLinks = currentIdentities.filter { it.provider == MANGADEX_PROVIDER }
+            val owner = ownerOf(request.producerId, request.externalWorkId)
+            val currentMangaDexLinks = currentIdentities.filter { it.provider == request.producerId }
             if (owner != null) {
                 val alreadyAssociated = owner == request.canonicalTitleId &&
                     currentMangaDexLinks.any {
-                        it.externalId == request.mangaDexWorkId && it.verified
+                        it.externalId == request.externalWorkId && it.verified
                     }
-                if (!alreadyAssociated) return@transactionWithResult MangaDexWorkAssociationResult.REFUSED
+                if (!alreadyAssociated) return@transactionWithResult VerifiedInventoryWorkAssociationResult.REFUSED
                 ensureCurrentBeforeCommit(request, request.expectedVerifiedCrosswalks, isAuthorized)
-                return@transactionWithResult MangaDexWorkAssociationResult.ALREADY_ASSOCIATED
+                return@transactionWithResult VerifiedInventoryWorkAssociationResult.ALREADY_ASSOCIATED
             }
             if (currentMangaDexLinks.isNotEmpty()) {
-                return@transactionWithResult MangaDexWorkAssociationResult.REFUSED
+                return@transactionWithResult VerifiedInventoryWorkAssociationResult.REFUSED
             }
 
             ensureCurrentBeforeMutation(request, isAuthorized)
             val identity = ExternalIdentity(
                 canonicalTitleId = request.canonicalTitleId,
-                provider = MANGADEX_PROVIDER,
-                externalId = request.mangaDexWorkId,
+                provider = request.producerId,
+                externalId = request.externalWorkId,
                 verified = true,
                 createdAt = Clock.System.now().toEpochMilliseconds(),
             )
@@ -205,16 +230,16 @@ class CanonicalTitleRepositoryImpl(
             currentCoroutineContext().ensureActive()
             val expectedAfterInsert = request.expectedVerifiedCrosswalks + identity
             ensureCurrentBeforeCommit(request, expectedAfterInsert, isAuthorized)
-            MangaDexWorkAssociationResult.ASSOCIATED
+            VerifiedInventoryWorkAssociationResult.ASSOCIATED
         }
     } catch (_: AssociationRefusedException) {
-        MangaDexWorkAssociationResult.REFUSED
+        VerifiedInventoryWorkAssociationResult.REFUSED
     } catch (cancelled: CancellationException) {
         throw cancelled
     }
 
     private suspend fun ensureCurrentBeforeCommit(
-        request: MangaDexWorkAssociationRequest,
+        request: VerifiedInventoryWorkAssociationRequest,
         expectedCrosswalks: List<ExternalIdentity>,
         isAuthorized: () -> Boolean,
     ) {
@@ -225,8 +250,8 @@ class CanonicalTitleRepositoryImpl(
             !hasExpectedPermission(request) ||
             !titleExists(request.canonicalTitleId) ||
             !sameVerifiedCrosswalks(currentIdentities, expectedCrosswalks) ||
-            !sameMangaDexLinks(currentIdentities, expectedCrosswalks) ||
-            ownerOf(request.mangaDexWorkId) != request.canonicalTitleId
+            !sameProducerLinks(currentIdentities, expectedCrosswalks, request.producerId) ||
+            ownerOf(request.producerId, request.externalWorkId) != request.canonicalTitleId
         ) {
             throw AssociationRefusedException()
         }
@@ -234,11 +259,11 @@ class CanonicalTitleRepositoryImpl(
         if (!isAuthorized()) throw AssociationRefusedException()
     }
 
-    private suspend fun hasExpectedPermission(request: MangaDexWorkAssociationRequest): Boolean {
+    private suspend fun hasExpectedPermission(request: VerifiedInventoryWorkAssociationRequest): Boolean {
         val expected = request.expectedIntegrationSettings
-        if (!expected.hasMangaDexInventoryPermission()) return false
+        if (!expected.hasInventoryPermission(request.producerId)) return false
         val actual = database.tsuzuki_integration_settingsQueries
-            .getTsuzukiIntegrationSetting(MANGADEX_PROVIDER) { integrationId, enabled, configJson, updatedAt ->
+            .getTsuzukiIntegrationSetting(request.producerId) { integrationId, enabled, configJson, updatedAt ->
                 IntegrationSettings(
                     integrationId = tachiyomi.domain.tsuzuki.integration.IntegrationId(integrationId),
                     enabled = enabled,
@@ -251,7 +276,7 @@ class CanonicalTitleRepositoryImpl(
     }
 
     private suspend fun ensureCurrentBeforeMutation(
-        request: MangaDexWorkAssociationRequest,
+        request: VerifiedInventoryWorkAssociationRequest,
         isAuthorized: () -> Boolean,
     ) {
         currentCoroutineContext().ensureActive()
@@ -261,8 +286,8 @@ class CanonicalTitleRepositoryImpl(
             !hasExpectedPermission(request) ||
             !titleExists(request.canonicalTitleId) ||
             !sameVerifiedCrosswalks(currentIdentities, request.expectedVerifiedCrosswalks) ||
-            currentIdentities.any { it.provider == MANGADEX_PROVIDER } ||
-            ownerOf(request.mangaDexWorkId) != null
+            currentIdentities.any { it.provider == request.producerId } ||
+            ownerOf(request.producerId, request.externalWorkId) != null
         ) {
             throw AssociationRefusedException()
         }
@@ -281,8 +306,8 @@ class CanonicalTitleRepositoryImpl(
         }
         .awaitAsList()
 
-    private suspend fun ownerOf(workId: String): String? = database.tsuzuki_external_identitiesQueries
-        .getTsuzukiTitleIdByExternalIdentity(MANGADEX_PROVIDER, workId)
+    private suspend fun ownerOf(producerId: String, workId: String): String? = database.tsuzuki_external_identitiesQueries
+        .getTsuzukiTitleIdByExternalIdentity(producerId, workId)
         .awaitAsOneOrNull()
 
     private fun mapTitle(
@@ -305,17 +330,26 @@ class CanonicalTitleRepositoryImpl(
     ): Boolean = actual.filter { it.verified }.sortedWith(EXTERNAL_IDENTITY_ORDER) ==
         expected.sortedWith(EXTERNAL_IDENTITY_ORDER)
 
-    private fun sameMangaDexLinks(
+    private fun sameProducerLinks(
         actual: List<ExternalIdentity>,
         expected: List<ExternalIdentity>,
-    ): Boolean = actual.filter { it.provider == MANGADEX_PROVIDER }
+        producerId: String,
+    ): Boolean = actual.filter { it.provider == producerId }
         .sortedWith(EXTERNAL_IDENTITY_ORDER) ==
-        expected.filter { it.provider == MANGADEX_PROVIDER }.sortedWith(EXTERNAL_IDENTITY_ORDER)
+        expected.filter { it.provider == producerId }.sortedWith(EXTERNAL_IDENTITY_ORDER)
 
-    private fun MangaDexWorkAssociationRequest.isValid(): Boolean =
-        canonicalTitleId.isNotBlank() &&
-            MANGADEX_WORK_UUID_REGEX.matches(mangaDexWorkId) &&
-            expectedIntegrationSettings.hasMangaDexInventoryPermission() &&
+    private fun VerifiedInventoryWorkAssociationRequest.isValid(): Boolean {
+        val identityIsValid = when (producerId) {
+            MANGADEX_PROVIDER -> MANGADEX_WORK_UUID_REGEX.matches(externalWorkId) &&
+                expectedVerifiedCrosswalks.any { it.provider != MANGADEX_PROVIDER }
+            MANGAUPDATES_PROVIDER -> MANGAUPDATES_WORK_ID_REGEX.matches(externalWorkId) &&
+                externalWorkId.toLongOrNull()?.let { it > 0L } == true &&
+                expectedVerifiedCrosswalks.any { it.provider == MANGADEX_PROVIDER }
+            else -> false
+        }
+        return canonicalTitleId.isNotBlank() &&
+            identityIsValid &&
+            expectedIntegrationSettings.hasInventoryPermission(producerId) &&
             expectedVerifiedCrosswalks.isNotEmpty() &&
             expectedVerifiedCrosswalks.all {
                 it.canonicalTitleId == canonicalTitleId &&
@@ -323,11 +357,11 @@ class CanonicalTitleRepositoryImpl(
                     it.externalId.isNotBlank() &&
                     it.verified
             } &&
-            expectedVerifiedCrosswalks.distinct().size == expectedVerifiedCrosswalks.size &&
-            expectedVerifiedCrosswalks.any { it.provider != MANGADEX_PROVIDER }
+            expectedVerifiedCrosswalks.distinct().size == expectedVerifiedCrosswalks.size
+    }
 
-    private fun IntegrationSettings.hasMangaDexInventoryPermission(): Boolean {
-        if (integrationId.value != MANGADEX_PROVIDER || !enabled) return false
+    private fun IntegrationSettings.hasInventoryPermission(producerId: String): Boolean {
+        if (integrationId.value != producerId || !enabled) return false
         val config = runCatching { Json.parseToJsonElement(configJson) as? JsonObject }.getOrNull()
             ?: return false
         return (config[CHAPTER_INVENTORY_CAPABILITY] as? JsonPrimitive)?.booleanOrNull == true
@@ -337,6 +371,8 @@ class CanonicalTitleRepositoryImpl(
 
     private companion object {
         const val MANGADEX_PROVIDER = "mangadex"
+        const val MANGAUPDATES_PROVIDER = "mangaupdates"
+        val MANGAUPDATES_WORK_ID_REGEX = Regex("""^[0-9]{1,18}$""")
         const val CHAPTER_INVENTORY_CAPABILITY = "chapter_inventory"
         val MANGADEX_WORK_UUID_REGEX = Regex(
             """^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$""",
