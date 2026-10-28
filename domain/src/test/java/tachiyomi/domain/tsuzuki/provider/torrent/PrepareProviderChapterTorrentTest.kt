@@ -50,13 +50,17 @@ class PrepareProviderChapterTorrentTest {
             updatedAt = 1,
         )
         val providerId = ProviderId("org.example.torrent")
-        val file = TorrentCandidateFile(0, "Example Manga - Vol 2 Ch 12.cbz")
+        val file = TorrentCandidateFile(1, "Example Manga/Volume 2/Chapter 12.cbz")
         val candidate = TorrentCandidate(
             infoHash = "0123456789abcdef0123456789abcdef01234567",
             magnetUri = null,
             torrentUrl = null,
             displayName = "Example Manga",
-            files = listOf(file),
+            files = listOf(
+                TorrentCandidateFile(0, "Example Manga/Volume 1/Chapter 12.cbz"),
+                file,
+                TorrentCandidateFile(2, "Example Manga/Volume 3/Chapter 12.cbz"),
+            ),
         )
         val resolver = ResolveProviderChapterTorrent(
             canonicalChapterRepository = chapterRepository(chapter),
@@ -94,7 +98,7 @@ class PrepareProviderChapterTorrentTest {
                 "content://provider.test/chapter-12.cbz",
             ),
         )
-        capturedIndex shouldBe 0
+        capturedIndex shouldBe 1
         capturedPath shouldBe file.path
     }
 
