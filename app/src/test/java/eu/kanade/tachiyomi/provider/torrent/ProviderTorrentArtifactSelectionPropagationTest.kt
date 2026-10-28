@@ -1,9 +1,9 @@
 package eu.kanade.tachiyomi.provider.torrent
 
+import eu.kanade.tachiyomi.provider.runtime.ProviderP2pDiagnostics
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
-import eu.kanade.tachiyomi.provider.runtime.ProviderP2pDiagnostics
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.domain.tsuzuki.content.TorrentArtifactRequest
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
