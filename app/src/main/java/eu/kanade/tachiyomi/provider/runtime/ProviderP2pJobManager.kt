@@ -200,7 +200,10 @@ class ProviderP2pJobManager internal constructor(
                 while (downloadJob.isActive) {
                     delay(authorizationCheckIntervalMs)
                     if (!isAuthorized(key.providerId)) {
-                        downloadJob.cancel(CancellationException("Provider P2P authorization revoked"))
+                        // Evict all entries on revocation, including completed results.
+                        // Cancelling only the worker would leave a stale terminal
+                        // response that could be replayed after authorization returns.
+                        cancelProvider(key.providerId)
                         break
                     }
                 }
