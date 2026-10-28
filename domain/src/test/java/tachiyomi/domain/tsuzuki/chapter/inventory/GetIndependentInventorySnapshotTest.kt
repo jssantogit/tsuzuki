@@ -238,6 +238,66 @@ class GetIndependentInventorySnapshotTest {
         result.sources.single().latestObservedAt shouldBe 20L
         result.sources.single().knownEditorialLabels shouldBe emptyList()
         result.sources.single().releaseExampleLabels shouldBe listOf("246-251", "12.05")
+        result.sources.single().numberedReleaseCandidateCount shouldBe 1
+        result.sources.single().numberedReleaseCandidates shouldBe listOf(
+            InventoryReleaseChapterCandidate(label = "12.05", language = null, releaseCount = 1),
+        )
+    }
+
+    @Test
+    fun `distinct release numbers and languages remain provisional groups without creating chapters`() = runTest {
+        val ledger = FakeLedger()
+        val source = scope("mangadex", null, editionVerified = false)
+        ledger.saveBatch(
+            batch(
+                source,
+                "start",
+                30L,
+                InventoryFetchOutcome.EXHAUSTED,
+                listOf(
+                    claim("a", "12.05", InventoryDerivation.RELEASE_RECORD, 30L).copy(language = "en"),
+                    claim("b", "12.05", InventoryDerivation.RELEASE_RECORD, 30L).copy(language = "en"),
+                    claim("c", "12.05", InventoryDerivation.RELEASE_RECORD, 30L).copy(language = "pt-BR"),
+                    claim("d", "12.5", InventoryDerivation.RELEASE_RECORD, 30L).copy(language = "en"),
+                    claim("e", "0.01", InventoryDerivation.RELEASE_RECORD, 30L),
+                    claim("f", "0.1", InventoryDerivation.RELEASE_RECORD, 30L),
+                    claim(
+                        "range",
+                        "246-251",
+                        InventoryDerivation.RELEASE_RECORD,
+                        30L,
+                        InventoryClaimKind.RELEASE_RANGE,
+                    ),
+                    claim("untrusted", "01", InventoryDerivation.RELEASE_RECORD, 30L),
+                ),
+            ),
+        )
+
+        val snapshot = GetIndependentInventorySnapshot(ledger).execute("title").sources.single()
+        snapshot.knownIndividualClaims shouldBe 0
+        snapshot.candidateObservations shouldBe 0
+        snapshot.releaseObservations shouldBe 8
+        snapshot.numberedReleaseCandidateCount shouldBe 5
+        snapshot.numberedReleaseCandidates shouldBe listOf(
+            InventoryReleaseChapterCandidate("12.05", "en", 2),
+            InventoryReleaseChapterCandidate("12.05", "pt-BR", 1),
+            InventoryReleaseChapterCandidate("12.5", "en", 1),
+            InventoryReleaseChapterCandidate("0.01", null, 1),
+            InventoryReleaseChapterCandidate("0.1", null, 1),
+        )
+    }
+
+    @Test
+    fun `an exhausted empty release feed has no provisional candidates or invented chapters`() = runTest {
+        val ledger = FakeLedger()
+        val source = scope("mangaupdates", null, editionVerified = false)
+        ledger.saveBatch(batch(source, "start", 50L, InventoryFetchOutcome.EXHAUSTED, emptyList()))
+        val snapshot = GetIndependentInventorySnapshot(ledger).execute("title").sources.single()
+        snapshot.releaseObservations shouldBe 0
+        snapshot.numberedReleaseCandidateCount shouldBe 0
+        snapshot.numberedReleaseCandidates shouldBe emptyList()
+        snapshot.knownIndividualClaims shouldBe 0
+        snapshot.latestSuccessfulFetchAt shouldBe 50L
     }
 
     @Test
