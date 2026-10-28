@@ -10,6 +10,7 @@ class ProviderRuntimeAndroidGateTest(unittest.TestCase):
         script = SCRIPT_PATH.read_text(encoding="utf-8")
 
         self.assertIn("eu.kanade.tachiyomi.provider.runtime", script)
+        self.assertIn("eu.kanade.tachiyomi.provider.reading", script)
         self.assertIn("eu.kanade.tachiyomi.ui.reader.loader", script)
         self.assertIn(":app:connectedDebugAndroidTest", script)
 
