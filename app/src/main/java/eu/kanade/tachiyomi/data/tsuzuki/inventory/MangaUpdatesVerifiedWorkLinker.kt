@@ -77,6 +77,16 @@ class MangaUpdatesVerifiedWorkLinker(
         }
         val rows = result["results"] as? JsonArray ?: error("Missing MangaUpdates search results")
         require(rows.size <= 10) { "Unbounded MangaUpdates search results" }
+        // An exact-title hit pointing to a *different* series is conflicting
+        // evidence. A verified MangaDex crosswalk can bypass a missing index
+        // entry or loosely related homonyms, not this explicit ambiguity.
+        val conflictingExactTitle = rows.any { item ->
+            val record = (item as? JsonObject)?.get("record") as? JsonObject ?: return@any false
+            record.string("title")?.trim()?.equals(name, ignoreCase = true) == true &&
+                record.string("series_id") != muId
+        }
+        checkCurrent(permission, isEnabled)
+        if (conflictingExactTitle) return@capture null
         val found = rows.mapNotNull { item ->
             val record = (item as? JsonObject)?.get("record") as? JsonObject ?: return@mapNotNull null
             val id = record.string("series_id")
