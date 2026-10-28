@@ -9,7 +9,6 @@ import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
-import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 
@@ -52,12 +51,11 @@ class ResolveProviderChapterReading(
             .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
             // Chapter metadata from an enabled Provider may be useful for ICE
             // even if that Provider cannot read pages. Only page-capable
-            // enabled SCRIPT Providers may create Reader options.
+            // enabled page-capable Providers may create Reader options.
             .filter { binding ->
                 val registration = providerRegistry.registration(binding.ref.providerId)
                 registration != null &&
                     registration.lifecycleStatus == ProviderLifecycleStatus.ENABLED &&
-                    registration.descriptor.runtime == ProviderRuntimeKind.SCRIPT &&
                     REQUIRED_READING_CAPABILITIES.all { it in registration.enabledCapabilities }
             }
             .associateBy { it.ref.evidenceProducerId() }
