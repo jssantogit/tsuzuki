@@ -23,6 +23,7 @@ import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationRequest
 import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationResult
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
+import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 
 class MangaDexWorkLinkInventoryIntegrationTest {
     private val mangaDexId = "12345678-1234-1234-1234-123456789abc"
@@ -63,7 +64,10 @@ class MangaDexWorkLinkInventoryIntegrationTest {
             override suspend fun fetch(url: String, postBody: String?) = InventoryHttpPayload(json, 10L)
             override suspend fun fetchFresh(url: String, postBody: String?) = InventoryHttpPayload(json, 11L)
         }
-        val linker = MangaDexVerifiedWorkLinker(titles, settings, transport)
+        val linker = MangaDexVerifiedWorkLinker(
+            titles, settings, transport,
+            mockk<TitleNameObservationRepository>(),
+        )
         val preview = linker.preview("title", mangaDexId) { true }.getOrThrow()
 
         identities.map { it.provider } shouldBe listOf("mangaupdates")
