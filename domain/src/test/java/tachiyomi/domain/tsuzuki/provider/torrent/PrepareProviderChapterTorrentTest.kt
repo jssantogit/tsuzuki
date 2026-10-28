@@ -62,6 +62,7 @@ class PrepareProviderChapterTorrentTest {
                 TorrentCandidateFile(2, "Example Manga/Volume 3/Chapter 12.cbz"),
             ),
         )
+        var searchedDiscoveryId: String? = null
         val resolver = ResolveProviderChapterTorrent(
             canonicalChapterRepository = chapterRepository(chapter),
             canonicalTitleRepository = titleRepository(title),
@@ -78,7 +79,6 @@ class PrepareProviderChapterTorrentTest {
         var capturedUrl: String? = null
         var capturedSize: Long? = null
         var capturedDiscoveryId: String? = null
-        var searchedDiscoveryId: String? = null
         val preparer = PrepareProviderChapterTorrent(
             resolver = resolver,
             prepareTorrentArtifact = PrepareTorrentArtifact(
