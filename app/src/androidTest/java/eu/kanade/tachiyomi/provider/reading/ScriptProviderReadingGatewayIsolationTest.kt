@@ -233,6 +233,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 .build(),
         )
 
+        lateinit var providerRegistry: DefaultProviderRegistry
         val gateway = gateway(
             networkOrigins = setOf(origin),
             localNetwork = true,
@@ -251,6 +252,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                   }
                 };
             """.trimIndent(),
+            onRegistry = { providerRegistry = it },
         )
 
         try {
