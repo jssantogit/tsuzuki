@@ -156,7 +156,7 @@ class NativeInventoryRefreshScreenModel(
     }
 
     fun refresh(titleId: String, producerId: String): Job? {
-        if (titleId != activeTitleId || operation?.isActive == true) return null
+        if (titleId != activeTitleId || operation?.isActive == true || autoOperation?.isActive == true) return null
         val producer = integrationRegistry.inventoryProducers().singleOrNull { it.producerId == producerId }
         if (producer == null) {
             mutableState.value = mutableState.value.copy(
