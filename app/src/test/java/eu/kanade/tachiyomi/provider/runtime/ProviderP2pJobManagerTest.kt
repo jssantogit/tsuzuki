@@ -4,6 +4,7 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -384,7 +385,7 @@ class ProviderP2pJobManagerTest {
             starts shouldBe 1
 
             authorized = false
-            kotlinx.coroutines.test.advanceTimeBy(101L)
+            advanceTimeBy(101L)
             runCurrent()
             cancellations shouldBe 1
             service.acquire(request) shouldBe ProviderP2pAcquireResponse.Failure(
@@ -402,7 +403,7 @@ class ProviderP2pJobManagerTest {
     }
 
     @Test
-    fun `cancelling one Provider does not cancel a different Providers active transfer`() = runTest {
+    fun `cancelling one Provider does not cancel another Providers active transfer`() = runTest {
         val scope = TestScope(StandardTestDispatcher(testScheduler))
         val cancellations = mutableListOf<String>()
         val manager = ProviderP2pJobManager(
