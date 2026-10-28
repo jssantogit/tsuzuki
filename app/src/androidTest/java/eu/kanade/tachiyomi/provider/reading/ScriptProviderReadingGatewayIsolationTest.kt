@@ -23,6 +23,7 @@ import mockwebserver3.MockWebServer
 import okio.Buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
@@ -497,7 +498,12 @@ class ScriptProviderReadingGatewayIsolationTest {
                     canonicalChapterId = "canonical-browser-chapter-1",
                 ),
             )
-            assertEquals(2, server.requestCount)
+            // WebView can request auxiliary resources such as favicons during
+            // document rendering; only the required document and Reader page
+            // requests are contractual, not the total HTTP request count.
+            val requestedPaths = List(server.requestCount) { server.takeRequest().url.encodedPath }
+            assertTrue("Browser document was not requested: $requestedPaths", "/browser" in requestedPaths)
+            assertEquals(1, requestedPaths.count { it == "/page.jpg" })
         } finally {
             server.close()
         }
