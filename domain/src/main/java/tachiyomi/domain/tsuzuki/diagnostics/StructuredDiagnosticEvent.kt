@@ -116,6 +116,7 @@ enum class DiagnosticEventName {
     TORRENT_METADATA_SUMMARY,
     TORRENT_MATCH_SUMMARY,
     TORRENT_RELEASE_EVIDENCE_SUMMARY,
+    TORRENT_CANDIDATE_EVALUATED,
     PROVIDER_P2P_EVENT,
 
     CACHE_LOOKUP,
@@ -236,6 +237,14 @@ enum class DiagnosticAttribute {
     TORRENT_FILE_TITLE_TOKEN_SINGLE_COUNT,
     TORRENT_VOLUME_REQUESTED,
     TORRENT_NO_MATCH_REASON,
+    TORRENT_CANDIDATE_MATCH_REASON,
+    TORRENT_CANDIDATE_EXACT_COUNT,
+    TORRENT_CANDIDATE_WORK_UNPROVEN_COUNT,
+    TORRENT_CANDIDATE_CHAPTER_UNPROVEN_COUNT,
+    TORRENT_CANDIDATE_NO_ARCHIVE_COUNT,
+    TORRENT_CANDIDATE_VOLUME_UNPROVEN_COUNT,
+    TORRENT_CANDIDATE_AMBIGUOUS_COUNT,
+    TORRENT_CANDIDATE_METADATA_UNAVAILABLE_COUNT,
     PROVIDER_P2P_LINE,
 
     COVER_PRESENT,
@@ -312,6 +321,17 @@ enum class DiagnosticTorrentNoMatchReason : DiagnosticSafeCode {
     VOLUME_NOT_PROVEN,
     AMBIGUOUS_ARCHIVES,
     NO_EXACT_MATCH,
+}
+
+/** Private, closed classifications for a single torrent candidate. Never include file paths or titles. */
+enum class DiagnosticTorrentCandidateMatchReason : DiagnosticSafeCode {
+    EXACT,
+    AMBIGUOUS_ARCHIVES,
+    METADATA_UNAVAILABLE,
+    NO_READABLE_ARCHIVES,
+    CHAPTER_IDENTITY_NOT_PROVEN,
+    WORK_IDENTITY_NOT_PROVEN,
+    VOLUME_NOT_PROVEN,
 }
 
 enum class DiagnosticCacheStatus : DiagnosticSafeCode {
@@ -509,6 +529,13 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.TORRENT_FILE_TOKEN_SINGLE_COUNT,
         DiagnosticAttribute.TORRENT_FILE_TITLE_TOKEN_COUNT,
         DiagnosticAttribute.TORRENT_FILE_TITLE_TOKEN_SINGLE_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_EXACT_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_WORK_UNPROVEN_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_CHAPTER_UNPROVEN_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_NO_ARCHIVE_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_VOLUME_UNPROVEN_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_AMBIGUOUS_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_METADATA_UNAVAILABLE_COUNT,
         -> (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..MAX_COUNT }
 
         DiagnosticAttribute.PROVIDER_VERSION_CODE -> (value as? DiagnosticAttributeValue.Number)
@@ -533,6 +560,8 @@ object StructuredDiagnosticSanitizer {
 
         DiagnosticAttribute.TORRENT_NO_MATCH_REASON -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticTorrentNoMatchReason }
+        DiagnosticAttribute.TORRENT_CANDIDATE_MATCH_REASON -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticTorrentCandidateMatchReason }
 
         DiagnosticAttribute.PROVIDER_P2P_LINE -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { isSafeP2pLine(it.value) }

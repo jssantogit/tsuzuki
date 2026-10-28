@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.provider.runtime
 
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -150,6 +151,95 @@ class ProviderP2pJobManagerTest {
         starts shouldBe 2
 
         manager.close()
+    }
+
+    @Test
+    fun `Reader polling cancellation does not implicitly cancel a Host owned pending transfer`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        var starts = 0
+        var cancellations = 0
+        val manager = ProviderP2pJobManager(
+            root = tempDir.resolve("pending-lifecycle").toFile(),
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { _, _ ->
+                starts += 1
+                try {
+                    awaitCancellation()
+                } finally {
+                    cancellations += 1
+                }
+            },
+            scope = scope,
+        )
+        val request = request()
+        try {
+            val polling = launch {
+                manager.service("org.example.p2p").acquire(request) shouldBe
+                    ProviderP2pAcquireResponse.Pending(
+                        (manager.service("org.example.p2p").acquire(request) as ProviderP2pAcquireResponse.Pending).jobId,
+                    )
+                awaitCancellation()
+            }
+            runCurrent()
+            starts shouldBe 1
+            polling.cancel()
+            runCurrent()
+            cancellations shouldBe 0
+            // A later Reader request may resume observing the same Host job.
+            (manager.service("org.example.p2p").acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            manager.cancelAll() shouldBe 1
+            runCurrent()
+            cancellations shouldBe 1
+            // Cancellation removes the stale job rather than letting it be polled again.
+            (manager.service("org.example.p2p").acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+            starts shouldBe 2
+        } finally {
+            manager.close()
+            runCurrent()
+        }
+    }
+
+    @Test
+    fun `switching chapters keeps distinct pending jobs isolated until explicit shutdown`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        var starts = 0
+        var cancellations = 0
+        val manager = ProviderP2pJobManager(
+            root = tempDir.resolve("chapter-switch").toFile(),
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { _, _ ->
+                starts += 1
+                try {
+                    awaitCancellation()
+                } finally {
+                    cancellations += 1
+                }
+            },
+            scope = scope,
+        )
+        val first = request()
+        val second = first.copy(
+            operationId = "read:canonical-13",
+            selectedFileIndex = 2,
+            selectedFilePath = "pack/chapter-013.cbz",
+        )
+        try {
+            (manager.service("org.example.p2p").acquire(first) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            (manager.service("org.example.p2p").acquire(second) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+            starts shouldBe 2
+            // A different canonical chapter never reuses the previous selection.
+            manager.service("org.example.p2p").acquire(
+                first.copy(selectedFilePath = second.selectedFilePath),
+            ) shouldBe ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.FILE_MISMATCH)
+            manager.cancelAll() shouldBe 2
+            runCurrent()
+            cancellations shouldBe 2
+        } finally {
+            manager.close()
+            runCurrent()
+        }
     }
 
     @Test
