@@ -26,6 +26,28 @@ class PrepareTorrentArtifactTest {
     }
 
     @Test
+    fun hostVerifiedTorrentIdentityAndExactSelectedFileSizeReachArtifactEngine() {
+        val preparer = PrepareTorrentArtifact(FakeTorrentArtifactEngine())
+        val delivery = ContentDelivery.Torrent(
+            infoHash = "0123456789abcdef0123456789abcdef01234567",
+            magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+            fileIndex = 3,
+            filePath = "pack/Vol 2/Ch 12.cbz",
+            torrentUrl = "https://source.example/123.torrent",
+            fileSizeBytes = 123_456L,
+            discoveryOperationId = "123e4567-e89b-12d3-a456-426614174000",
+        )
+
+        val request = preparer.toRequest(delivery)
+
+        request.torrentUrl shouldBe "https://source.example/123.torrent"
+        request.fileSizeBytes shouldBe 123_456L
+        request.discoveryOperationId shouldBe "123e4567-e89b-12d3-a456-426614174000"
+        request.fileIndex shouldBe 3
+        request.filePath shouldBe "pack/Vol 2/Ch 12.cbz"
+    }
+
+    @Test
     fun torrentPathTraversalIsRejectedBeforeArtifactExposure() {
         shouldThrow<IllegalArgumentException> {
             validateTorrentFilePath("../outside.cbz")

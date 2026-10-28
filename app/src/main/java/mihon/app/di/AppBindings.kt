@@ -70,6 +70,9 @@ import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
 import tachiyomi.domain.tsuzuki.provider.CompositeProviderRegistry
+import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
+import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceResolver
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
@@ -245,12 +248,20 @@ object AppBindings {
         context: Context,
         managedFiles: ProviderManagedFileStore,
         verifiedMetadata: HostVerifiedTorrentMetadataCache,
+        registry: ProviderRegistry,
+        torrentPreferences: ProviderTorrentPreferences,
     ): ProviderP2pJobManager =
         ProviderP2pJobManager(
             root = File(context.cacheDir, "provider-platform/p2p-jobs"),
             managedFiles = managedFiles,
             engine = JlibtorrentProviderP2pDownloadEngine(),
             verifiedMetadata = verifiedMetadata,
+            authorizationCheck = { providerId ->
+                val registration = registry.registration(ProviderId(providerId))
+                torrentPreferences.directP2pAllowed.get() &&
+                    registration?.lifecycleStatus == ProviderLifecycleStatus.ENABLED &&
+                    ProviderCapabilities.AcquisitionP2pV1 in registration.enabledCapabilities
+            },
         )
 
     @Provides

@@ -2,8 +2,11 @@ package tachiyomi.domain.tsuzuki.provider.torrent
 
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
+import tachiyomi.domain.tsuzuki.provider.ProviderCapabilityRef
 import tachiyomi.domain.tsuzuki.provider.ProviderErrorCode
 import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
+import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 
 sealed interface ProviderTorrentAcquisitionState {
@@ -74,7 +77,13 @@ class ProviderTorrentAcquisitionCoordinator(
             when (route) {
                 TorrentAcquisitionRoute.DEBRID -> {
                     for (providerId in debridProviders) {
-                        when (val result = debrid.resolve(providerId, request)) {
+                        val prior = registry.registration(providerId)
+                        if (!isEnabledFor(prior, ProviderCapabilities.DebridResolveV1)) continue
+                        val result = debrid.resolve(providerId, request)
+                        if (registry.registration(providerId) != prior) {
+                            return ProviderTorrentAcquisitionState.Failure(TorrentAcquisitionFailure.UNAVAILABLE)
+                        }
+                        when (result) {
                             is ProviderCallResult.Success -> when (val state = result.value) {
                                 is DebridResolveState.Ready ->
                                     return ProviderTorrentAcquisitionState.Ready(
@@ -103,7 +112,13 @@ class ProviderTorrentAcquisitionCoordinator(
                         )
                     }
                     for (providerId in p2pProviders) {
-                        when (val result = p2p.acquire(providerId, request)) {
+                        val prior = registry.registration(providerId)
+                        if (!isEnabledFor(prior, ProviderCapabilities.AcquisitionP2pV1)) continue
+                        val result = p2p.acquire(providerId, request)
+                        if (registry.registration(providerId) != prior) {
+                            return ProviderTorrentAcquisitionState.Failure(TorrentAcquisitionFailure.UNAVAILABLE)
+                        }
+                        when (result) {
                             is ProviderCallResult.Success -> when (val state = result.value) {
                                 is P2pAcquireState.Ready ->
                                     return ProviderTorrentAcquisitionState.Ready(
@@ -129,6 +144,11 @@ class ProviderTorrentAcquisitionCoordinator(
 
         return ProviderTorrentAcquisitionState.Failure(lastFailure)
     }
+
+    private fun isEnabledFor(registration: ProviderRegistration?, capability: ProviderCapabilityRef): Boolean =
+        registration != null &&
+            registration.lifecycleStatus == ProviderLifecycleStatus.ENABLED &&
+            capability in registration.enabledCapabilities
 
     private fun ProviderErrorCode.toAcquisitionFailure(): TorrentAcquisitionFailure = when (this) {
         ProviderErrorCode.AUTH_REQUIRED -> TorrentAcquisitionFailure.AUTH_REQUIRED

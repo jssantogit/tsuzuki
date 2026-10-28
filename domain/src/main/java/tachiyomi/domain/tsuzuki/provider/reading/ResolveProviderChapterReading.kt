@@ -8,7 +8,9 @@ import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
+import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
+import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 
@@ -39,24 +41,21 @@ class ResolveProviderChapterReading(
     private val canonicalChapterRepository: CanonicalChapterRepository,
     private val evidenceRepository: ChapterEvidenceRepository,
     private val bindingRepository: ProviderReadingBindingRepository,
-    private val gateway: ProviderReadingGateway,
     private val providerRegistry: ProviderRegistry,
+    private val gateway: ProviderReadingGateway,
     private val managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
 ) {
 
     suspend fun options(canonicalChapterId: String): List<ProviderChapterReadingOption> {
         val chapter = canonicalChapterRepository.getById(canonicalChapterId) ?: return emptyList()
+        providerRegistry.awaitReady()
+        val registrations = providerRegistry.providers().associateBy { it.descriptor.id }
         val bindings = bindingRepository.getByTitle(chapter.canonicalTitleId)
             .asSequence()
             .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
-            // Chapter metadata from an enabled Provider may be useful for ICE
-            // even if that Provider cannot read pages. Only page-capable
-            // enabled page-capable Providers may create Reader options.
             .filter { binding ->
-                val registration = providerRegistry.registration(binding.ref.providerId)
-                registration != null &&
-                    registration.lifecycleStatus == ProviderLifecycleStatus.ENABLED &&
-                    REQUIRED_READING_CAPABILITIES.all { it in registration.enabledCapabilities }
+                val registration = registrations[binding.ref.providerId]
+                registration != null && registration.isEligibleForReading(binding.ref.facetId)
             }
             .associateBy { it.ref.evidenceProducerId() }
         if (bindings.isEmpty()) return emptyList()
@@ -152,13 +151,16 @@ class ResolveProviderChapterReading(
         }
     }
 
-    private fun unavailable() =
-        ProviderCallResult.Failure(
-            ProviderError(
-                code = ProviderErrorCode.UNAVAILABLE,
-                retryable = false,
-            ),
-        )
+    private fun ProviderRegistration.isEligibleForReading(facetId: String?): Boolean =
+        lifecycleStatus == ProviderLifecycleStatus.ENABLED &&
+            descriptor.runtime == ProviderRuntimeKind.SCRIPT &&
+            REQUIRED_READING_CAPABILITIES.all { it in enabledCapabilities } &&
+            if (facets.isEmpty()) {
+                facetId == null
+            } else {
+                facets.any { it.facetId == facetId }
+            }
+
     private companion object {
         val REQUIRED_READING_CAPABILITIES = setOf(
             ProviderCapabilities.ReadingLookupV1,
@@ -166,4 +168,12 @@ class ResolveProviderChapterReading(
             ProviderCapabilities.ReadingPagesV1,
         )
     }
+
+    private fun unavailable() =
+        ProviderCallResult.Failure(
+            ProviderError(
+                code = ProviderErrorCode.UNAVAILABLE,
+                retryable = false,
+            ),
+        )
 }

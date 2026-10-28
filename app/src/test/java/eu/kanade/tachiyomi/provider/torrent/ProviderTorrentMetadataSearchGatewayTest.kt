@@ -188,8 +188,8 @@ class ProviderTorrentMetadataSearchGatewayTest {
             ),
             candidate(
                 files = listOf(
-                    TorrentCandidateFile(index = 0, path = "pack-a/Vol. 2 Ch. 12.cbz"),
-                    TorrentCandidateFile(index = 1, path = "pack-b/Vol. 2 Chapter 12.zip"),
+                    TorrentCandidateFile(index = 0, path = "pack/Vol. 2 Ch. 12.cbz"),
+                    TorrentCandidateFile(index = 1, path = "alternate/Vol. 2 Chapter 12.zip"),
                 ),
             ),
             candidate(
@@ -305,14 +305,14 @@ class ProviderTorrentMetadataSearchGatewayTest {
         // The generic label parser may recognize the leading 86, but the real mapper
         // must reject it when that token belongs only to the requested title.
         logs.single { it.startsWith("host_torrent_match ") }
-            .endsWith("identity=0 volume=0 exact=0 ambiguous=0") shouldBe true
+            .endsWith("identity=0 volume=0 exact=0 ambiguous=0 reason=CHAPTER_IDENTITY_NOT_PROVEN") shouldBe true
     }
 
     private fun candidate(files: List<TorrentCandidateFile>?): TorrentCandidate = TorrentCandidate(
         infoHash = "0123456789abcdef0123456789abcdef01234567",
         magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
         torrentUrl = "https://nyaa.si/download/1234567.torrent",
-        displayName = "Example Manga Chapter 12",
+        displayName = "Secret Example Manga Chapter 12",
         files = files,
     )
 

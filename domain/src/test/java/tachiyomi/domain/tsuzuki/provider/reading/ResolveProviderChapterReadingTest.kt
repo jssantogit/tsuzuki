@@ -18,7 +18,9 @@ import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
+import tachiyomi.domain.tsuzuki.provider.ProviderCapabilityRef
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
+import tachiyomi.domain.tsuzuki.provider.ProviderFacetRef
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
@@ -113,7 +115,18 @@ class ResolveProviderChapterReadingTest {
         val reader = resolver(
             bindings = listOf(binding),
             evidence = listOf(evidence(binding, "metadata-only", chapter.id)),
-            providerRegistry = providerRegistry(canReadPages = false),
+            providerRegistry = DefaultProviderRegistry(
+                registrations = {
+                    listOf(
+                        readingRegistration(
+                            enabledCapabilities = setOf(
+                                ProviderCapabilities.ReadingLookupV1,
+                                ProviderCapabilities.ReadingChaptersV1,
+                            ),
+                        ),
+                    )
+                },
+            ),
             gateway = gateway {
                 pagesCalls++
                 error("metadata-only provider cannot provide reading pages")
@@ -287,12 +300,12 @@ class ResolveProviderChapterReadingTest {
             canonicalChapterRepository = canonicalChapterRepository(chapter = null),
             evidenceRepository = evidenceRepository(emptyList()),
             bindingRepository = bindingRepository(listOf(binding)),
+            providerRegistry = DefaultProviderRegistry(registrations = { listOf(readingRegistration()) }),
             gateway = gateway {
                 pagesCalls += 1
                 error("must not invoke")
             },
             managedResources = ProviderManagedResourceResolver.DenyAll,
-            providerRegistry = providerRegistry(),
         )
         val option = ProviderChapterReadingOption(
             canonicalChapterId = "missing",
@@ -310,6 +323,89 @@ class ResolveProviderChapterReadingTest {
         pagesCalls shouldBe 0
     }
 
+    @Test
+    fun `persisted Provider binding is rechecked when Provider becomes disabled`() = runBlocking {
+        var lifecycle = ProviderLifecycleStatus.ENABLED
+        var pagesCalls = 0
+        val registry = DefaultProviderRegistry(registrations = {
+            listOf(readingRegistration(lifecycle = lifecycle))
+        })
+        val resolver = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(evidence(binding, "provider-chapter-1", chapter.id)),
+            providerRegistry = registry,
+            gateway = gateway {
+                pagesCalls++
+                error("Disabled Provider must never reach the runtime")
+            },
+        )
+
+        val staleOption = resolver.options(chapter.id).single()
+        lifecycle = ProviderLifecycleStatus.DISABLED
+
+        resolver.options(chapter.id) shouldBe emptyList()
+        resolver.delivery(staleOption) shouldBe ProviderCallResult.Failure(
+            ProviderError(ProviderErrorCode.UNAVAILABLE, retryable = false),
+        )
+        pagesCalls shouldBe 0
+    }
+
+    @Test
+    fun `persisted binding requires active reading capabilities and facet`() = runBlocking {
+        val registrations = listOf(
+            readingRegistration(
+                enabledCapabilities = setOf(
+                    ProviderCapabilities.ReadingLookupV1,
+                    ProviderCapabilities.ReadingChaptersV1,
+                ),
+            ),
+        )
+        val capabilityResolver = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(evidence(binding, "provider-chapter-1", chapter.id)),
+            providerRegistry = DefaultProviderRegistry(registrations = { registrations }),
+        )
+        capabilityResolver.options(chapter.id) shouldBe emptyList()
+
+        val wrongFacet = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(evidence(binding, "provider-chapter-1", chapter.id)),
+            providerRegistry = DefaultProviderRegistry(registrations = {
+                listOf(readingRegistration(facet = "pt-br"))
+            }),
+        )
+        wrongFacet.options(chapter.id) shouldBe emptyList()
+    }
+
+    private fun readingRegistration(
+        lifecycle: ProviderLifecycleStatus = ProviderLifecycleStatus.ENABLED,
+        facet: String = "en",
+        enabledCapabilities: Set<ProviderCapabilityRef> = setOf(
+            ProviderCapabilities.ReadingLookupV1,
+            ProviderCapabilities.ReadingChaptersV1,
+            ProviderCapabilities.ReadingPagesV1,
+        ),
+    ) = ProviderRegistration(
+        descriptor = ProviderDescriptor(
+            id = providerId,
+            name = "Reader",
+            version = ProviderVersion("1.0.0", 1),
+            origin = ProviderOrigin.Repository("fixture"),
+            runtime = ProviderRuntimeKind.SCRIPT,
+            capabilities = setOf(
+                ProviderCapabilities.ReadingLookupV1,
+                ProviderCapabilities.ReadingChaptersV1,
+                ProviderCapabilities.ReadingPagesV1,
+            ),
+            permissions = ProviderPermissionSet(),
+            settings = emptyList(),
+            contentLanguages = setOf("en", "pt-br"),
+        ),
+        lifecycleStatus = lifecycle,
+        facets = listOf(ProviderFacetRef(providerId, facet)),
+        enabledCapabilities = enabledCapabilities,
+    )
+
     private fun resolver(
         bindings: List<ProviderReadingBinding>,
         evidence: List<PersistedChapterEvidence>,
@@ -317,40 +413,15 @@ class ResolveProviderChapterReadingTest {
             error("pages not expected")
         },
         managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
-        providerRegistry: ProviderRegistry = providerRegistry(),
+        providerRegistry: ProviderRegistry = DefaultProviderRegistry(registrations = { listOf(readingRegistration()) }),
     ) = ResolveProviderChapterReading(
         canonicalChapterRepository = canonicalChapterRepository(chapter),
         evidenceRepository = evidenceRepository(evidence),
         bindingRepository = bindingRepository(bindings),
+        providerRegistry = providerRegistry,
         gateway = gateway,
         managedResources = managedResources,
-        providerRegistry = providerRegistry,
     )
-
-    private fun providerRegistry(canReadPages: Boolean = true): ProviderRegistry {
-        val capabilities = setOf(
-            ProviderCapabilities.ReadingLookupV1,
-            ProviderCapabilities.ReadingChaptersV1,
-        ) + if (canReadPages) setOf(ProviderCapabilities.ReadingPagesV1) else emptySet()
-        return DefaultProviderRegistry(registrations = {
-            listOf(
-                ProviderRegistration(
-                    descriptor = ProviderDescriptor(
-                        id = providerId,
-                        name = "Reader fixture",
-                        version = ProviderVersion("1.0.0", 1),
-                        origin = ProviderOrigin.Repository("app.tsuzuki.providers"),
-                        runtime = ProviderRuntimeKind.SCRIPT,
-                        capabilities = capabilities,
-                        permissions = ProviderPermissionSet(),
-                        settings = emptyList(),
-                        contentLanguages = setOf("en"),
-                    ),
-                    lifecycleStatus = ProviderLifecycleStatus.ENABLED,
-                ),
-            )
-        })
-    }
 
     private fun evidence(
         binding: ProviderReadingBinding,
