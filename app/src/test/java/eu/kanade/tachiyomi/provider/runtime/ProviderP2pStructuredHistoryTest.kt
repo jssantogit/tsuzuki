@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.provider.runtime
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import tachiyomi.data.tsuzuki.diagnostics.StructuredDiagnosticHistory
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
@@ -103,8 +104,8 @@ class ProviderP2pStructuredHistoryTest {
         val worker = requireNotNull(StructuredDiagnosticSanitizer.sanitize(seen.last()))
         start.operationId shouldBe correlation
         worker.operationId shouldBe null
-        val bridge = start.attributes.getValue("provider_p2p_line").toString()
-        val native = worker.attributes.getValue("provider_p2p_line").toString()
+        val bridge = start.attributes.getValue(DiagnosticAttribute.PROVIDER_P2P_LINE).toString()
+        val native = worker.attributes.getValue(DiagnosticAttribute.PROVIDER_P2P_LINE).toString()
         val opaqueReference = Regex("opRef=[0-9a-f]{16}").find(bridge)?.value
         (opaqueReference != null) shouldBe true
         native.contains(requireNotNull(opaqueReference)) shouldBe true
