@@ -16,7 +16,17 @@ import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
+import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
+import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
+import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
 import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
+import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
+import tachiyomi.domain.tsuzuki.provider.ProviderPermissionSet
+import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
+import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
+import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
+import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 
@@ -95,6 +105,33 @@ class ResolveProviderChapterReadingTest {
         )
 
         resolver.options(chapter.id) shouldBe emptyList()
+    }
+
+    @Test
+    fun `metadata-only chapter provider cannot be selected or invoked by Reader`() = runBlocking {
+        var pagesCalls = 0
+        val reader = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(evidence(binding, "metadata-only", chapter.id)),
+            providerRegistry = providerRegistry(canReadPages = false),
+            gateway = gateway {
+                pagesCalls++
+                error("metadata-only provider cannot provide reading pages")
+            },
+        )
+        val selected = ProviderChapterReadingOption(
+            canonicalChapterId = chapter.id,
+            bindingId = binding.id,
+            providerId = providerId,
+            facetId = "en",
+            externalWorkId = "work-1",
+            providerChapterId = "metadata-only",
+        )
+        reader.options(chapter.id) shouldBe emptyList()
+        reader.delivery(selected) shouldBe ProviderCallResult.Failure(
+            ProviderError(ProviderErrorCode.UNAVAILABLE, retryable = false),
+        )
+        pagesCalls shouldBe 0
     }
 
     @Test
@@ -255,6 +292,7 @@ class ResolveProviderChapterReadingTest {
                 error("must not invoke")
             },
             managedResources = ProviderManagedResourceResolver.DenyAll,
+            providerRegistry = providerRegistry(),
         )
         val option = ProviderChapterReadingOption(
             canonicalChapterId = "missing",
@@ -279,13 +317,40 @@ class ResolveProviderChapterReadingTest {
             error("pages not expected")
         },
         managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
+        providerRegistry: ProviderRegistry = providerRegistry(),
     ) = ResolveProviderChapterReading(
         canonicalChapterRepository = canonicalChapterRepository(chapter),
         evidenceRepository = evidenceRepository(evidence),
         bindingRepository = bindingRepository(bindings),
         gateway = gateway,
         managedResources = managedResources,
+        providerRegistry = providerRegistry,
     )
+
+    private fun providerRegistry(canReadPages: Boolean = true): ProviderRegistry {
+        val capabilities = setOf(
+            ProviderCapabilities.ReadingLookupV1,
+            ProviderCapabilities.ReadingChaptersV1,
+        ) + if (canReadPages) setOf(ProviderCapabilities.ReadingPagesV1) else emptySet()
+        return DefaultProviderRegistry {
+            listOf(
+                ProviderRegistration(
+                    descriptor = ProviderDescriptor(
+                        id = providerId,
+                        name = "Reader fixture",
+                        version = ProviderVersion("1.0.0", 1),
+                        origin = ProviderOrigin.Repository("app.tsuzuki.providers"),
+                        runtime = ProviderRuntimeKind.SCRIPT,
+                        capabilities = capabilities,
+                        permissions = ProviderPermissionSet(),
+                        settings = emptyList(),
+                        contentLanguages = setOf("en"),
+                    ),
+                    lifecycleStatus = ProviderLifecycleStatus.ENABLED,
+                ),
+            )
+        }
+    }
 
     private fun evidence(
         binding: ProviderReadingBinding,
