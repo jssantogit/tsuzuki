@@ -381,6 +381,51 @@ class NativeInventoryRefreshScreenModelTest {
         model.state.value.linkCandidate shouldBe null
     }
 
+
+    @Test
+    fun `automatic opt in flow discovers and confirms exact MangaDex identity before bounded release refresh`() =
+        runTest(dispatcher) {
+            val registry = activeInventoryRegistry()
+            coEvery { registry.awaitReady() } returns Unit
+            val linker = mockk<MangaDexVerifiedWorkLinker>()
+            coEvery { linker.discoverUnique("title", any()) } returns Result.success(candidate)
+            coEvery { linker.confirm("title", candidate, any()) } returns Result.success(Unit)
+            val refresh = mockk<RefreshIndependentInventory>()
+            coEvery { refresh.execute(any(), any(), any(), any(), any()) } returns
+                InventoryRefreshResult(InventoryRefreshStop.EXHAUSTED, 1, 15)
+            val model = model(linker, refresh, registry)
+            model.start("title")
+
+            model.discoverAndRefreshAutomatically("title")
+            advanceUntilIdle()
+
+            model.state.value.revision shouldBe 1
+            model.state.value.lastStop shouldBe InventoryRefreshStop.EXHAUSTED
+            coVerify(exactly = 1) { linker.discoverUnique("title", any()) }
+            coVerify(exactly = 1) { linker.confirm("title", candidate, any()) }
+            coVerify(exactly = 1) { refresh.execute("title", any(), any(), any(), any()) }
+        }
+
+    @Test
+    fun `automatic opt in flow does not issue metadata requests when inventory integrations are disabled`() =
+        runTest(dispatcher) {
+            val registry = mockk<IntegrationRegistry>()
+            coEvery { registry.awaitReady() } returns Unit
+            every { registry.inventoryProducers() } returns emptyList()
+            every { registry.configurationFingerprint() } returns "empty"
+            val linker = mockk<MangaDexVerifiedWorkLinker>()
+            val refresh = mockk<RefreshIndependentInventory>()
+            val model = model(linker, refresh, registry)
+            model.start("title")
+
+            model.discoverAndRefreshAutomatically("title")
+            advanceUntilIdle()
+
+            model.state.value.revision shouldBe 0
+            coVerify(exactly = 0) { linker.discoverUnique(any(), any()) }
+            coVerify(exactly = 0) { refresh.execute(any(), any(), any(), any(), any()) }
+        }
+
     private fun allowedMangaDexProducer(): IndependentInventoryProducer =
         mockk<IndependentInventoryProducer>().also { producer ->
             every { producer.producerId } returns "mangadex"
