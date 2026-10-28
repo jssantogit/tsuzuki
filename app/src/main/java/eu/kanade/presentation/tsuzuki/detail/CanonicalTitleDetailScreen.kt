@@ -64,6 +64,7 @@ import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.presentation.util.relativeTimeSpanString
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalChapterDetailItem
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreenState
+import eu.kanade.tachiyomi.ui.tsuzuki.detail.InventoryWorkDiscoveryStatus
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.NativeInventoryRefreshState
 import kotlinx.coroutines.launch
 import mihon.icons.materialsymbols.MaterialSymbols
@@ -92,8 +93,6 @@ fun CanonicalTitleDetailScreen(
     onOpenChapter: (String) -> Unit,
     onBaixarChapter: (String) -> Unit,
     onOpenProvidersSettings: () -> Unit,
-    onFetchInventory: (String) -> Unit,
-    onLinkMangaDex: () -> Unit,
     onImportEpub: () -> Unit = {},
     onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit = {},
     inventoryRefresh: NativeInventoryRefreshState,
@@ -131,7 +130,7 @@ fun CanonicalTitleDetailScreen(
             is CanonicalTitleScreenState.Loaded -> LoadedDetails(
                 state, background, navigateUp, onAtualizar, onAddToLibrary, onRemoveFromLibrary,
                 onReadTitle, onOpenChapter, onBaixarChapter, onOpenProvidersSettings,
-                onFetchInventory, onLinkMangaDex, onImportEpub, onReviewCandidates, inventoryRefresh,
+                onImportEpub, onReviewCandidates, inventoryRefresh,
             )
         }
     }
@@ -149,8 +148,6 @@ private fun LoadedDetails(
     onOpenChapter: (String) -> Unit,
     onDownload: (String) -> Unit,
     onProviders: () -> Unit,
-    onFetchInventory: (String) -> Unit,
-    onLinkMangaDex: () -> Unit,
     onImportEpub: () -> Unit,
     onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit,
     inventoryRefresh: NativeInventoryRefreshState,
@@ -214,8 +211,6 @@ private fun LoadedDetails(
                             IndependentInventoryInfo(
                                 state.independentInventory,
                                 inventoryRefresh,
-                                onFetchInventory,
-                                onLinkMangaDex,
                                 onImportEpub,
                                 onReviewCandidates,
                             )
@@ -248,8 +243,6 @@ private fun LoadedDetails(
                         IndependentInventoryInfo(
                             state.independentInventory,
                             inventoryRefresh,
-                            onFetchInventory,
-                            onLinkMangaDex,
                             onImportEpub,
                             onReviewCandidates,
                         )
@@ -393,8 +386,6 @@ private fun LoadedDetails(
 private fun IndependentInventoryInfo(
     snapshot: IndependentInventorySnapshot,
     refresh: NativeInventoryRefreshState,
-    onFetchInventory: (String) -> Unit,
-    onLinkMangaDex: () -> Unit,
     onImportEpub: () -> Unit,
     onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit,
 ) {
@@ -413,29 +404,58 @@ private fun IndependentInventoryInfo(
             style = MaterialTheme.typography.bodySmall,
             color = colors.secondary,
         )
+        Text(
+            stringResource(MR.strings.tsuzuki_inventory_auto_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.secondary,
+        )
         if (refresh.refreshing) {
             Text(
                 stringResource(MR.strings.tsuzuki_inventory_fetching),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.secondary,
             )
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                DefaultSkinTextAction(
-                    text = stringResource(MR.strings.tsuzuki_inventory_fetch_mangaupdates),
-                    onClick = { onFetchInventory("mangaupdates") },
-                )
-                DefaultSkinTextAction(
-                    text = stringResource(MR.strings.tsuzuki_inventory_fetch_mangadex),
-                    onClick = { onFetchInventory("mangadex") },
-                )
+        }
+        refresh.discoveryStatus.forEach { (producerId, status) ->
+            val source = when (producerId) {
+                "mangadex" -> "MangaDex"
+                "mangaupdates" -> "MangaUpdates"
+                else -> producerId
             }
-            DefaultSkinTextAction(
-                text = stringResource(MR.strings.tsuzuki_inventory_link_mangadex),
-                onClick = onLinkMangaDex,
+            val label = when (status) {
+                InventoryWorkDiscoveryStatus.SEARCHING -> MR.strings.tsuzuki_inventory_discovery_searching
+                InventoryWorkDiscoveryStatus.LINKED -> MR.strings.tsuzuki_inventory_discovery_linked
+                InventoryWorkDiscoveryStatus.NO_VERIFIED_MATCH -> MR.strings.tsuzuki_inventory_discovery_no_match
+                InventoryWorkDiscoveryStatus.FAILED -> MR.strings.tsuzuki_inventory_discovery_failed
+                InventoryWorkDiscoveryStatus.REQUIRES_MANGADEX -> MR.strings.tsuzuki_inventory_discovery_requires_md
+                InventoryWorkDiscoveryStatus.INTERRUPTED -> MR.strings.tsuzuki_inventory_discovery_interrupted
+            }
+            Text(
+                "$source · ${stringResource(label)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
             )
         }
-        refresh.lastStop?.let { stop ->
+        refresh.refreshStops.forEach { (producerId, stop) ->
+            val source = when (producerId) {
+                "mangadex" -> "MangaDex"
+                "mangaupdates" -> "MangaUpdates"
+                else -> producerId
+            }
+            val label = when (stop) {
+                InventoryRefreshStop.EXHAUSTED -> MR.strings.tsuzuki_inventory_refresh_exhausted
+                InventoryRefreshStop.PARTIAL -> MR.strings.tsuzuki_inventory_refresh_partial
+                InventoryRefreshStop.FAILED -> MR.strings.tsuzuki_inventory_refresh_failed
+                InventoryRefreshStop.NO_VERIFIED_WORK -> MR.strings.tsuzuki_inventory_refresh_unlinked
+                InventoryRefreshStop.DISABLED -> MR.strings.tsuzuki_inventory_refresh_disabled
+            }
+            Text(
+                "$source · ${stringResource(MR.strings.tsuzuki_inventory_release_status, stringResource(label))}",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+        }
+        refresh.lastStop?.takeIf { refresh.refreshStops.isEmpty() }?.let { stop ->
             Text(
                 stringResource(
                     when (stop) {
