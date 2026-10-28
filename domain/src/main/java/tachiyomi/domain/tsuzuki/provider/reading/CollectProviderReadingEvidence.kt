@@ -57,7 +57,7 @@ data class ProviderReadingEvidenceCollection(
 }
 
 /**
- * Connects enabled SCRIPT reading Providers to Tsuzuki's canonical chapter-evidence pipeline.
+ * Connects enabled SCRIPT chapter-inventory Providers to Tsuzuki's canonical chapter-evidence pipeline.
  *
  * Bindings are deliberately conservative: a Provider work is auto-bound only when exactly one
  * candidate is an exact normalized title/alias match for the canonical title and active facet.
@@ -350,10 +350,11 @@ class CollectProviderReadingEvidence private constructor(
     )
 
     private companion object {
+        // ICE only needs work lookup and chapter observations. ReadingPagesV1
+        // belongs to the Reader path, not the independent evidence collector.
         val REQUIRED_CAPABILITIES = setOf(
             ProviderCapabilities.ReadingLookupV1,
             ProviderCapabilities.ReadingChaptersV1,
-            ProviderCapabilities.ReadingPagesV1,
         )
         val WHITESPACE = Regex("\\s+")
         const val MAX_CONCURRENT_PROVIDERS = 4
