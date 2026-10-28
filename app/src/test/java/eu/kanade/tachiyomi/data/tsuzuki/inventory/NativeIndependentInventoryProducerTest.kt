@@ -39,6 +39,35 @@ class NativeIndependentInventoryProducerTest {
     }
 
     @Test
+    fun `MangaUpdates empty ID release search retries by verified series title and filters exact series`() = runTest {
+        val calls = mutableListOf<Pair<String, String?>>()
+        val transport = object : InventoryReleaseTransport {
+            override suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload {
+                calls += url to postBody
+                val payload = when {
+                    url.endsWith("/series/123") -> """{"series_id":123,"title":"Exact Manga"}"""
+                    postBody?.contains("\\"search\\":\\"Exact Manga\\"") == true ->
+                        """{"total_hits":1,"page":1,"per_page":25,"results":[
+                            {"record":{"id":10,"chapter":"4","volume":"1"},
+                             "metadata":{"series":{"series_id":123}}}
+                        ]}"""
+                    else -> """{"total_hits":0,"page":1,"per_page":25,"results":[]}"""
+                }
+                return InventoryHttpPayload(payload, observedAt = 42L)
+            }
+            override suspend fun fetchFresh(url: String, postBody: String?): InventoryHttpPayload =
+                fetch(url, postBody)
+        }
+
+        val batch = MangaUpdatesInventoryProducer(transport)
+            .fetchPage(scope("mangaupdates", "123"), "start").getOrThrow()
+
+        batch.claims.single().label shouldBe "4"
+        batch.claims.single().derivation shouldBe InventoryDerivation.RELEASE_RECORD
+        calls.size shouldBe 3
+    }
+
+    @Test
     fun `cached response preserves original observed timestamp instead of inventing a fresh observation`() = runTest {
         val body = """
             {"total_hits":1,"page":1,"per_page":25,"results":[
