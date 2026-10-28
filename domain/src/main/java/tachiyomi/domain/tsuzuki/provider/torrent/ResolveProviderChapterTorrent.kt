@@ -49,6 +49,8 @@ fun ProviderChapterTorrentOption.toContentDelivery(): ContentDelivery.Torrent? {
         magnetUri = candidate.magnetUri,
         fileIndex = selectedFile.index,
         filePath = selectedFile.path,
+        torrentUrl = candidate.torrentUrl,
+        fileSizeBytes = selectedFile.sizeBytes,
     )
 }
 
