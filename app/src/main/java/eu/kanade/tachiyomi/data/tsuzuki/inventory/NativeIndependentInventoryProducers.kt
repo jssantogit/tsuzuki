@@ -154,6 +154,25 @@ class NativeInventoryReleaseTransport(
         val parsed = url.toHttpUrlOrFail()
         val allowMu = parsed.host == "api.mangaupdates.com" &&
             parsed.encodedPath == "/v1/releases/search" && postBody != null
+        // Title discovery stays bounded and read-only. Never permit arbitrary
+        // API methods, pages or filters through the metadata transport.
+        val muSearch = postBody?.takeIf { it.length <= 1024 }?.let { body ->
+            runCatching { strictJson.parseToJsonElement(body) as? JsonObject }.getOrNull()
+        }
+        val allowMuDiscovery = parsed.host == "api.mangaupdates.com" &&
+            parsed.encodedPath == "/v1/series/search" &&
+            muSearch != null &&
+            muSearch.keys == setOf("search", "stype", "page", "perpage") &&
+            muSearch.optionalString("search")?.length in 2..160 &&
+            muSearch.optionalString("stype") == "title" &&
+            (muSearch["page"] as? JsonPrimitive)?.intOrNull == 1 &&
+            (muSearch["perpage"] as? JsonPrimitive)?.intOrNull == 10
+        val allowMdDiscovery = parsed.host == "api.mangadex.org" &&
+            parsed.encodedPath == "/manga" && postBody == null &&
+            parsed.queryParameterNames == setOf("title", "limit") &&
+            parsed.queryParameterValues("title").size == 1 &&
+            parsed.queryParameter("title")?.trim()?.length in 2..160 &&
+            parsed.queryParameterValues("limit") == listOf("10")
         val mangaDexPath = parsed.encodedPath.split('/')
         val validMangaDexShape = when (mangaDexPath.size) {
             3 -> true
@@ -167,7 +186,8 @@ class NativeInventoryReleaseTransport(
             postBody == null
         require(
             parsed.scheme == "https" && parsed.port == 443 &&
-                parsed.username.isEmpty() && parsed.password.isEmpty() && (allowMu || allowMd),
+                parsed.username.isEmpty() && parsed.password.isEmpty() &&
+                (allowMu || allowMd || allowMuDiscovery || allowMdDiscovery),
         ) {
             "Only allowlisted read-only metadata endpoints are permitted"
         }
