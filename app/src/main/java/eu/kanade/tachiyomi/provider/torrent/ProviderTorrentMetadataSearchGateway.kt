@@ -15,6 +15,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticTorrentNoMatchReason
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
@@ -228,25 +229,39 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                 }
             }
 
+            val noMatchReason = when {
+                exactMatches > 0 -> null
+                items.isEmpty() -> DiagnosticTorrentNoMatchReason.NO_CANDIDATES
+                readable == 0 -> DiagnosticTorrentNoMatchReason.NO_READABLE_ARCHIVES
+                ambiguousMatches > 0 -> DiagnosticTorrentNoMatchReason.AMBIGUOUS_ARCHIVES
+                identityMatches == 0 -> DiagnosticTorrentNoMatchReason.CHAPTER_IDENTITY_NOT_PROVEN
+                request.volume != null && volumeMatches == 0 ->
+                    DiagnosticTorrentNoMatchReason.VOLUME_NOT_PROVEN
+                else -> DiagnosticTorrentNoMatchReason.NO_EXACT_MATCH
+            }
+            val noMatchAttributes = mutableMapOf<String, DiagnosticAttributeValue>(
+                "candidate_count" to items.size.numberValue(),
+                "torrent_readable_count" to readable.numberValue(),
+                "torrent_parsed_count" to parsed.numberValue(),
+                "torrent_embedded_count" to embedded.numberValue(),
+                "torrent_identity_match_count" to identityMatches.numberValue(),
+                "torrent_volume_match_count" to volumeMatches.numberValue(),
+                "torrent_exact_match_count" to exactMatches.numberValue(),
+                "torrent_ambiguous_match_count" to ambiguousMatches.numberValue(),
+            )
+            noMatchReason?.let { noMatchAttributes["torrent_no_match_reason"] = DiagnosticAttributeValue.Code(it) }
+            val reasonSuffix = noMatchReason?.let { " reason=${it.name}" }.orEmpty()
             logSink.info(
                 providerId.value,
                 "host_torrent_match total=${items.size} readable=$readable parsed=$parsed embedded=$embedded " +
-                    "identity=$identityMatches volume=$volumeMatches exact=$exactMatches ambiguous=$ambiguousMatches",
+                    "identity=$identityMatches volume=$volumeMatches exact=$exactMatches ambiguous=$ambiguousMatches" +
+                    reasonSuffix,
             )
             recordSummary(
                 providerId = providerId,
                 name = DiagnosticEventName.TORRENT_MATCH_SUMMARY,
-                outcome = DiagnosticOutcome.SUCCEEDED,
-                attributes = mapOf(
-                    "candidate_count" to items.size.numberValue(),
-                    "torrent_readable_count" to readable.numberValue(),
-                    "torrent_parsed_count" to parsed.numberValue(),
-                    "torrent_embedded_count" to embedded.numberValue(),
-                    "torrent_identity_match_count" to identityMatches.numberValue(),
-                    "torrent_volume_match_count" to volumeMatches.numberValue(),
-                    "torrent_exact_match_count" to exactMatches.numberValue(),
-                    "torrent_ambiguous_match_count" to ambiguousMatches.numberValue(),
-                ),
+                outcome = if (exactMatches == 0) DiagnosticOutcome.EMPTY else DiagnosticOutcome.SUCCEEDED,
+                attributes = noMatchAttributes,
             )
 
             var releaseExplicit = 0
