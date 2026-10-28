@@ -14,6 +14,7 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceSupportSnapshot
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceWrite
 import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadataCodec
 
 @Inject
 @SingleIn(AppScope::class)
@@ -90,6 +91,7 @@ class ChapterEvidenceRepositoryImpl(
 
         values.map { persisted ->
             val evidence = persisted.evidence
+            val rawMetadata = resolvedMetadata(evidence, persisted.rawMetadata)
             database.tsuzuki_chapter_evidenceQueries.upsertTsuzukiChapterEvidence(
                 id = evidence.id,
                 canonicalTitleId = evidence.canonicalTitleId,
@@ -104,9 +106,9 @@ class ChapterEvidenceRepositoryImpl(
                 confidence = evidence.confidence,
                 authorityClass = evidence.authority.name,
                 mappedCanonicalChapterId = persisted.mappedCanonicalChapterId,
-                rawMetadata = persisted.rawMetadata,
+                rawMetadata = rawMetadata,
             )
-            persisted
+            persisted.copy(rawMetadata = rawMetadata)
         }
     }
 
@@ -136,7 +138,7 @@ class ChapterEvidenceRepositoryImpl(
                 val existingByExternalKey = externalKey?.let(byExternalKey::get)
                 val existing = existingByExternalKey ?: byId[evidence.id]
                 val stableEvidence = if (existing != null) evidence.copy(id = existing.evidence.id) else evidence
-                val rawMetadata = existing?.rawMetadata ?: byteArrayOf()
+                val rawMetadata = resolvedMetadata(stableEvidence, existing?.rawMetadata ?: byteArrayOf())
 
                 database.tsuzuki_chapter_evidenceQueries.upsertTsuzukiChapterEvidence(
                     id = stableEvidence.id,
@@ -206,10 +208,32 @@ class ChapterEvidenceRepositoryImpl(
             observedAt = observedAt,
             confidence = confidence,
             authority = ChapterEvidenceAuthority.valueOf(authorityClass),
+            providerMetadata = if (
+                producerKind == ProducerKind.PROVIDER.name &&
+                authorityClass == ChapterEvidenceAuthority.PROVIDER_PROVISIONAL.name
+            ) {
+                ProviderEvidenceMetadataCodec.decode(rawMetadata)
+            } else {
+                null
+            },
         ),
         mappedCanonicalChapterId = mappedCanonicalChapterId,
         rawMetadata = rawMetadata,
     )
+
+    private fun resolvedMetadata(evidence: ChapterEvidence, previousBytes: ByteArray): ByteArray {
+        if (evidence.producerKind != ProducerKind.PROVIDER ||
+            evidence.authority != ChapterEvidenceAuthority.PROVIDER_PROVISIONAL
+        ) {
+            return previousBytes
+        }
+        // Unknown BLOBs may contain private or third-party data. Do not
+        // reinterpret, discard, or replace them, even with new observations.
+        if (previousBytes.isNotEmpty() && !ProviderEvidenceMetadataCodec.isPortable(previousBytes)) {
+            return previousBytes
+        }
+        return evidence.providerMetadata?.let(ProviderEvidenceMetadataCodec::encode) ?: byteArrayOf()
+    }
 
     private data class SupportRow(
         val producerKind: String,
