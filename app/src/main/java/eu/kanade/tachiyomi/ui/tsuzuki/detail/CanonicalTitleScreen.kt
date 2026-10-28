@@ -16,7 +16,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -88,9 +87,6 @@ data class CanonicalTitleScreen(
             }
         }
         var selectedCandidates by remember(canonicalTitleId) { mutableStateOf(setOf<String>()) }
-        var requestedInventorySource by rememberSaveable(canonicalTitleId) { mutableStateOf<String?>(null) }
-        var mangaDexLinkDialog by rememberSaveable(canonicalTitleId) { mutableStateOf(false) }
-        var mangaDexIdInput by rememberSaveable(canonicalTitleId) { mutableStateOf("") }
         val contentSelectorViewModel = metroViewModel<ContentSelectorScreenModel>()
         val linkViewModel = metroViewModel<ContentBindingLinkScreenModel>()
         val linkState by linkViewModel.state.collectAsStateWithLifecycle()
@@ -149,14 +145,8 @@ data class CanonicalTitleScreen(
             onAddToLibrary = { screenModel.addToLibrary() },
             onRemoveFromLibrary = { screenModel.removeFromLibrary() },
             onOpenProvidersSettings = openProviders,
-            onFetchInventory = { source -> requestedInventorySource = source },
             onImportEpub = {
                 selectedEpubLauncher.launch(arrayOf("application/epub+zip", "application/octet-stream"))
-            },
-            onLinkMangaDex = {
-                inventoryModel.clearMangaDexLink()
-                mangaDexIdInput = ""
-                mangaDexLinkDialog = true
             },
             onReviewCandidates = { source ->
                 adoptionModel.browseCandidates(source.scope)
@@ -340,102 +330,6 @@ data class CanonicalTitleScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = { adoptionModel.dismiss() }) { Text("Entendi") }
-                },
-            )
-        }
-
-        if (mangaDexLinkDialog) {
-            val closeLinkDialog = {
-                mangaDexLinkDialog = false
-                inventoryModel.clearMangaDexLink()
-            }
-            AlertDialog(
-                onDismissRequest = closeLinkDialog,
-                title = { Text(stringResource(MR.strings.tsuzuki_inventory_link_title)) },
-                text = {
-                    Column {
-                        Text(stringResource(MR.strings.tsuzuki_inventory_link_description))
-                        OutlinedTextField(
-                            value = mangaDexIdInput,
-                            onValueChange = {
-                                mangaDexIdInput = it
-                                inventoryModel.clearMangaDexLink()
-                            },
-                            enabled = !inventoryState.linking && !inventoryState.linkCompleted,
-                            label = { Text(stringResource(MR.strings.tsuzuki_inventory_link_input)) },
-                            singleLine = true,
-                        )
-                        inventoryState.linkCandidate?.let { candidate ->
-                            Text(
-                                stringResource(
-                                    MR.strings.tsuzuki_inventory_link_verified_candidate,
-                                    candidate.displayTitle,
-                                    candidate.matchedProvider,
-                                    candidate.matchedExternalId,
-                                ),
-                            )
-                        }
-                        if (inventoryState.linkFailed) {
-                            Text(stringResource(MR.strings.tsuzuki_inventory_link_failed))
-                        }
-                        if (inventoryState.linkCompleted) {
-                            Text(stringResource(MR.strings.tsuzuki_inventory_link_success))
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            when {
-                                inventoryState.linkCompleted -> closeLinkDialog()
-                                inventoryState.linkCandidate != null ->
-                                    inventoryModel.confirmMangaDexLink(canonicalTitleId)
-                                else -> inventoryModel.previewMangaDexLink(canonicalTitleId, mangaDexIdInput)
-                            }
-                        },
-                        enabled = !inventoryState.linking &&
-                            (
-                                inventoryState.linkCompleted ||
-                                    inventoryState.linkCandidate != null ||
-                                    mangaDexIdInput.isNotBlank()
-                                ),
-                    ) {
-                        Text(
-                            stringResource(
-                                when {
-                                    inventoryState.linkCompleted -> MR.strings.tsuzuki_inventory_link_done
-                                    inventoryState.linkCandidate != null -> MR.strings.tsuzuki_inventory_link_confirm
-                                    else -> MR.strings.tsuzuki_inventory_link_preview
-                                },
-                            ),
-                        )
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = closeLinkDialog) {
-                        Text(stringResource(MR.strings.tsuzuki_inventory_confirm_cancel))
-                    }
-                },
-            )
-        }
-
-        requestedInventorySource?.let { source ->
-            AlertDialog(
-                onDismissRequest = { requestedInventorySource = null },
-                title = { Text(stringResource(MR.strings.tsuzuki_inventory_confirm_title)) },
-                text = { Text(stringResource(MR.strings.tsuzuki_inventory_confirm_description)) },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            requestedInventorySource = null
-                            inventoryModel.refresh(canonicalTitleId, source)
-                        },
-                    ) { Text(stringResource(MR.strings.tsuzuki_inventory_confirm_collect)) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { requestedInventorySource = null }) {
-                        Text(stringResource(MR.strings.tsuzuki_inventory_confirm_cancel))
-                    }
                 },
             )
         }
