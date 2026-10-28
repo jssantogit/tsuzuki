@@ -24,6 +24,8 @@ import tachiyomi.domain.tsuzuki.integration.model.IntegrationSettings
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationRequest
 import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationResult
+import tachiyomi.domain.tsuzuki.model.VerifiedInventoryWorkAssociationRequest
+import tachiyomi.domain.tsuzuki.model.VerifiedInventoryWorkAssociationResult
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
@@ -194,6 +196,55 @@ class MangaDexWorkAssociationRepositoryImplTest {
         (result.exceptionOrNull() is CancellationException) shouldBe true
         repository.getByExternalIdentity("mangadex", workId) shouldBe null
     }
+
+    @Test
+    fun `MangaUpdates association requires verified MangaDex anchor and explicit capability`(): Unit =
+        runBlocking<Unit> {
+            val settings = enabledSettings.copy(integrationId = IntegrationId("mangaupdates"), updatedAt = 24L)
+            saveSettings(settings)
+            seedIdentity(ExternalIdentity(titleId, "mangadex", workId, true, 11L))
+            val request = VerifiedInventoryWorkAssociationRequest(
+                canonicalTitleId = titleId,
+                producerId = "mangaupdates",
+                externalWorkId = "8675309",
+                expectedIntegrationSettings = settings,
+                expectedVerifiedCrosswalks = repository.getExternalIdentities(titleId).filter { it.verified },
+            )
+            repository.associateVerifiedInventoryWorkIfCurrent(request) { true } shouldBe
+                VerifiedInventoryWorkAssociationResult.ASSOCIATED
+            repository.getByExternalIdentity("mangaupdates", "8675309")?.id shouldBe titleId
+            val second = request.copy(
+                expectedVerifiedCrosswalks = repository.getExternalIdentities(titleId).filter { it.verified },
+            )
+            repository.associateVerifiedInventoryWorkIfCurrent(second) { true } shouldBe
+                VerifiedInventoryWorkAssociationResult.ALREADY_ASSOCIATED
+        }
+
+    @Test
+    fun `MangaUpdates association refuses missing anchor revoked permission and changed settings`(): Unit =
+        runBlocking<Unit> {
+            val settings = enabledSettings.copy(integrationId = IntegrationId("mangaupdates"), updatedAt = 24L)
+            saveSettings(settings)
+            val request = VerifiedInventoryWorkAssociationRequest(
+                canonicalTitleId = titleId,
+                producerId = "mangaupdates",
+                externalWorkId = "8675309",
+                expectedIntegrationSettings = settings,
+                expectedVerifiedCrosswalks = listOf(crosswalk),
+            )
+            repository.associateVerifiedInventoryWorkIfCurrent(request) { true } shouldBe
+                VerifiedInventoryWorkAssociationResult.REFUSED
+            seedIdentity(ExternalIdentity(titleId, "mangadex", workId, true, 11L))
+            val anchored = request.copy(
+                expectedVerifiedCrosswalks = repository.getExternalIdentities(titleId).filter { it.verified },
+            )
+            repository.associateVerifiedInventoryWorkIfCurrent(anchored) { false } shouldBe
+                VerifiedInventoryWorkAssociationResult.REFUSED
+            saveSettings(settings.copy(enabled = false, updatedAt = 25L))
+            repository.associateVerifiedInventoryWorkIfCurrent(anchored) { true } shouldBe
+                VerifiedInventoryWorkAssociationResult.REFUSED
+            repository.getByExternalIdentity("mangaupdates", "8675309") shouldBe null
+        }
 
     private fun request(
         settings: IntegrationSettings = enabledSettings,
