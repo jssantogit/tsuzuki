@@ -21,6 +21,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilityRef
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
 import tachiyomi.domain.tsuzuki.provider.ProviderFacetRef
+import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
 import tachiyomi.domain.tsuzuki.provider.ProviderPermissionSet
@@ -28,7 +29,6 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
-import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 
@@ -322,12 +322,12 @@ class ResolveProviderChapterReadingTest {
                 ),
             ),
         )
-        val resolver = resolver(
+        val capabilityResolver = resolver(
             bindings = listOf(binding),
             evidence = listOf(evidence(binding, "provider-chapter-1", chapter.id)),
             providerRegistry = DefaultProviderRegistry { registrations },
         )
-        resolver.options(chapter.id) shouldBe emptyList()
+        capabilityResolver.options(chapter.id) shouldBe emptyList()
 
         val wrongFacet = resolver(
             bindings = listOf(binding),
