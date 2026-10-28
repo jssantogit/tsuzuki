@@ -744,7 +744,10 @@ class ProviderTorrentAcquisitionAcceptanceTest {
 
             // No Reader poll during the transition: the Host monitor must stop
             // the native session and evict the stale job on its own.
-            authorized.set(false)
+            assertTrue(
+                "Host P2P consent transition must occur while the job is active",
+                authorized.compareAndSet(true, false),
+            )
             await("revoked native P2P working files cleaned", timeoutMs = 8_000L) {
                 jobRoot.listFiles().orEmpty().isEmpty()
             }
