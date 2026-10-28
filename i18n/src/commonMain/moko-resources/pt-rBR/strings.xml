@@ -1203,6 +1203,14 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_inventory_link_done">Concluir</string>
     <string name="tsuzuki_inventory_link_confirm">Confirmar vínculo</string>
     <string name="tsuzuki_inventory_link_preview">Verificar identidade</string>
+    <string name="tsuzuki_inventory_auto_note">A descoberta de metadados é automática após ativar o inventário de capítulos nas integrações; as evidências locais continuam disponíveis.</string>
+    <string name="tsuzuki_inventory_discovery_searching">Buscando identidade de obra verificável…</string>
+    <string name="tsuzuki_inventory_discovery_linked">Identidade de obra verificada e vinculada</string>
+    <string name="tsuzuki_inventory_discovery_no_match">Nenhuma nova identidade de obra pôde ser verificada</string>
+    <string name="tsuzuki_inventory_discovery_failed">A busca de identidade falhou; nenhum vínculo foi salvo</string>
+    <string name="tsuzuki_inventory_discovery_requires_md">É necessário habilitar o inventário MangaDex para cruzar identidades automaticamente</string>
+    <string name="tsuzuki_inventory_discovery_interrupted">Busca interrompida ou integração desativada</string>
+    <string name="tsuzuki_inventory_release_status">Metadados de lançamentos: %1$s</string>
     <string name="tsuzuki_inventory_fetching">Consultando releases (somente metadados)…</string>
     <string name="tsuzuki_inventory_refresh_exhausted">Paginação consultada; completude editorial não comprovada</string>
     <string name="tsuzuki_inventory_refresh_partial">Observações parciais de releases salvas</string>
