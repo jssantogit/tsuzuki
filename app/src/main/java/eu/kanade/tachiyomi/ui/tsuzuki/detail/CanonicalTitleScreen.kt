@@ -111,6 +111,9 @@ data class CanonicalTitleScreen(
         LaunchedEffect(canonicalTitleId, openSourceBindingFlow) {
             screenModel.start(canonicalTitleId)
             inventoryModel.start(canonicalTitleId)
+            // Automatic only after explicit CHAPTER_INVENTORY opt-in; no
+            // catalog bootstrap and no release-to-chapter promotion.
+            inventoryModel.discoverAndRefreshAutomatically(canonicalTitleId)
             adoptionModel.start(canonicalTitleId)
             if (
                 shouldAutoOpenSourceBindingFlow(
