@@ -430,7 +430,16 @@ class ProviderTorrentAcquisitionAcceptanceTest {
             )
             assertTrue("isolated discovery + Host hydration failed: $found", found is ProviderCallResult.Success)
             val candidate = (found as ProviderCallResult.Success).value.items.single()
-            assertEquals(3, candidate.files.orEmpty().size)
+            assertEquals(
+                "Host hydration must retain the entire native file table including padding",
+                fixture.torrent.files().numFiles(),
+                candidate.files.orEmpty().size,
+            )
+            assertEquals(
+                "native file table should contain the three CBZ chapters",
+                3,
+                candidate.files.orEmpty().count { it.path.endsWith(".cbz") },
+            )
             assertEquals(fixture.selectedFilePath, candidate.files!![fixture.selectedFileIndex].path)
             val match = TorrentChapterMapper().map(chapter12Request(), candidate)
             assertTrue("cross-work identity or archive ambiguity: $match", match is TorrentChapterFileMatch.Exact)
@@ -528,7 +537,7 @@ class ProviderTorrentAcquisitionAcceptanceTest {
             val candidate = candidate(fixture)
             val duplicate = TorrentCandidateFile(
                 index = candidate.files.orEmpty().maxOf(TorrentCandidateFile::index) + 1,
-                path = "alternate/chapter-012.zip",
+                path = "alternate/Acceptance Series 012.zip",
                 sizeBytes = fixture.selectedArchiveBytes.size.toLong(),
                 languages = setOf("en"),
             )
