@@ -1227,6 +1227,10 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_inventory_individual">observações individuais admissíveis (leitura não garantida)</string>
     <string name="tsuzuki_inventory_candidates">capítulos candidatos aguardando revisão (sem confirmação editorial)</string>
     <string name="tsuzuki_inventory_releases">observações de releases, não registros de capítulos canônicos</string>
+    <string name="tsuzuki_inventory_numbered_release_candidates">números provisórios distintos de releases (não são capítulos canônicos nem páginas para leitura)</string>
+    <string name="tsuzuki_inventory_numbered_release_example">Observado %1$s · idioma %2$s · %3$d registros de release</string>
+    <string name="tsuzuki_inventory_empty_release_feed">A API não retornou releases para esta obra vinculada. Nenhum número de capítulo foi observado.</string>
+    <string name="tsuzuki_inventory_no_numbered_release_candidates">Há releases observados, mas nenhum contém um número individual de capítulo inequívoco.</string>
     <string name="tsuzuki_inventory_totals">Totais informados (não verificados)</string>
     <string name="tsuzuki_inventory_offline_note">Evidências locais armazenadas; consultas automáticas não comprovam completude editorial nem acesso à leitura</string>
     <string name="tsuzuki_inventory_scope">Escopo — ID da obra no produtor: %1$s; edição: %2$s; idioma: %3$s</string>
