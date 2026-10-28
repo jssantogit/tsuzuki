@@ -163,7 +163,7 @@ class NativeInventoryReleaseTransport(
             parsed.encodedPath == "/v1/series/search" &&
             muSearch != null &&
             muSearch.keys == setOf("search", "stype", "page", "perpage") &&
-            muSearch.optionalString("search")?.length in 2..160 &&
+            (muSearch.optionalString("search")?.length ?: 0) in 2..160 &&
             muSearch.optionalString("stype") == "title" &&
             (muSearch["page"] as? JsonPrimitive)?.intOrNull == 1 &&
             (muSearch["perpage"] as? JsonPrimitive)?.intOrNull == 10
@@ -171,7 +171,7 @@ class NativeInventoryReleaseTransport(
             parsed.encodedPath == "/manga" && postBody == null &&
             parsed.queryParameterNames == setOf("title", "limit") &&
             parsed.queryParameterValues("title").size == 1 &&
-            parsed.queryParameter("title")?.trim()?.length in 2..160 &&
+            (parsed.queryParameter("title")?.trim()?.length ?: 0) in 2..160 &&
             parsed.queryParameterValues("limit") == listOf("10")
         val mangaDexPath = parsed.encodedPath.split('/')
         val validMangaDexShape = when (mangaDexPath.size) {
