@@ -332,7 +332,7 @@ class ResolveProviderChapterReadingTest {
             ProviderCapabilities.ReadingLookupV1,
             ProviderCapabilities.ReadingChaptersV1,
         ) + if (canReadPages) setOf(ProviderCapabilities.ReadingPagesV1) else emptySet()
-        return DefaultProviderRegistry {
+        return DefaultProviderRegistry(registrations = {
             listOf(
                 ProviderRegistration(
                     descriptor = ProviderDescriptor(
@@ -349,7 +349,7 @@ class ResolveProviderChapterReadingTest {
                     lifecycleStatus = ProviderLifecycleStatus.ENABLED,
                 ),
             )
-        }
+        })
     }
 
     private fun evidence(
