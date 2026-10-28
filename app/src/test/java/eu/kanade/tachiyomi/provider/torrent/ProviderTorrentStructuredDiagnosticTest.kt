@@ -108,6 +108,80 @@ class ProviderTorrentStructuredDiagnosticTest {
         exported.contains("nyaa.si/download") shouldBe false
     }
 
+    @Test
+    fun `unmatched torrent reasons are classified and survive diagnostic sanitization`() = runTest {
+        val cases = listOf(
+            Triple(emptyList<TorrentCandidate>(), null, "NO_CANDIDATES"),
+            Triple(
+                listOf(unmatchedCandidate(listOf(TorrentCandidateFile(0, "images/page.jpg")))),
+                null,
+                "NO_READABLE_ARCHIVES",
+            ),
+            Triple(
+                listOf(unmatchedCandidate(listOf(TorrentCandidateFile(0, "pack/unrelated.cbz")))),
+                null,
+                "CHAPTER_IDENTITY_NOT_PROVEN",
+            ),
+            Triple(
+                listOf(unmatchedCandidate(listOf(TorrentCandidateFile(0, "pack/Chapter 12.cbz")))),
+                2,
+                "VOLUME_NOT_PROVEN",
+            ),
+            Triple(
+                listOf(
+                    unmatchedCandidate(
+                        listOf(
+                            TorrentCandidateFile(0, "pack/Chapter 12.cbz"),
+                            TorrentCandidateFile(1, "alternate/Chapter 12.zip"),
+                        ),
+                    ),
+                ),
+                null,
+                "AMBIGUOUS_ARCHIVES",
+            ),
+        )
+
+        for ((candidates, volume, reason) in cases) {
+            val recorder = RecordingDiagnosticRecorder()
+            val gateway = ProviderTorrentMetadataSearchGateway(
+                delegate = TorrentSearchGateway { _, _ ->
+                    ProviderCallResult.Success(ProviderPage(candidates, nextCursor = null))
+                },
+                registry = registry(),
+                inspector = ProviderTorrentMetadataInspector { _, _ ->
+                    error("pre-hydrated fixture must not be inspected")
+                },
+                diagnosticRecorder = recorder,
+            )
+
+            gateway.search(
+                providerId = providerId,
+                request = TorrentSearchRequest(
+                    titles = listOf("Secret Example Manga"),
+                    chapterNumber = "12",
+                    volume = volume,
+                ),
+            )
+
+            val summary = recorder.events.single { it.name == DiagnosticEventName.TORRENT_MATCH_SUMMARY }
+            val safe = requireNotNull(StructuredDiagnosticSanitizer.sanitize(summary))
+            safe.attributes.entries
+                .singleOrNull { it.key.name == "TORRENT_NO_MATCH_REASON" }
+                ?.value
+                ?.toString()
+                ?.contains(reason) shouldBe true
+            safe.attributes.values.any { it.toString().contains("Secret Example Manga") } shouldBe false
+        }
+    }
+
+    private fun unmatchedCandidate(files: List<TorrentCandidateFile>) = TorrentCandidate(
+        infoHash = "0123456789abcdef0123456789abcdef01234567",
+        magnetUri = null,
+        torrentUrl = null,
+        displayName = "Secret Example Manga release",
+        files = files,
+    )
+
     private fun registry() = DefaultProviderRegistry(
         registrations = {
             listOf(
