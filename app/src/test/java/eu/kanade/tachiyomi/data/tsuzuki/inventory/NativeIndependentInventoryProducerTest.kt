@@ -118,6 +118,76 @@ class NativeIndependentInventoryProducerTest {
     }
 
     @Test
+    fun `MangaUpdates fallback checks live consent before each release HTTP request`() = runTest {
+        var enabled = true
+        val requested = mutableListOf<String>()
+        val transport = object : InventoryReleaseTransport {
+            override suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload =
+                error("Release producer bypassed the authorized transport")
+
+            override suspend fun fetchFresh(url: String, postBody: String?): InventoryHttpPayload =
+                error("Release producer bypassed the authorized transport")
+
+            override suspend fun fetchAuthorized(
+                url: String,
+                postBody: String?,
+                isEnabled: suspend () -> Boolean,
+            ): InventoryHttpPayload {
+                check(isEnabled()) { "Consent revoked before HTTP request" }
+                requested += url
+                if (requested.size == 1) {
+                    enabled = false
+                    return InventoryHttpPayload(
+                        """{"total_hits":0,"page":1,"per_page":25,"results":[]}""",
+                        observedAt = 42L,
+                    )
+                }
+                error("No request may start after revocation")
+            }
+        }
+
+        val result = MangaUpdatesInventoryProducer(transport)
+            .fetchPageAuthorized(scope("mangaupdates", "123"), "start") { enabled }
+
+        result.isFailure shouldBe true
+        requested shouldBe listOf("https://api.mangaupdates.com/v1/releases/search")
+    }
+
+    @Test
+    fun `MangaDex release fetch cannot bypass the live authorization callback`() = runTest {
+        var unsafeCalls = 0
+        var guardedCalls = 0
+        val transport = object : InventoryReleaseTransport {
+            override suspend fun fetch(url: String, postBody: String?): InventoryHttpPayload {
+                unsafeCalls++
+                return InventoryHttpPayload("{}", observedAt = 42L)
+            }
+
+            override suspend fun fetchFresh(url: String, postBody: String?): InventoryHttpPayload =
+                fetch(url, postBody)
+
+            override suspend fun fetchAuthorized(
+                url: String,
+                postBody: String?,
+                isEnabled: suspend () -> Boolean,
+            ): InventoryHttpPayload {
+                guardedCalls++
+                check(isEnabled()) { "Consent revoked before HTTP dispatch" }
+                error("Unexpected dispatched request")
+            }
+        }
+
+        MangaDexInventoryProducer(transport)
+            .fetchPageAuthorized(
+                scope("mangadex", "12345678-1234-1234-1234-123456789abc"),
+                "start",
+            ) { false }.isFailure shouldBe true
+
+        unsafeCalls shouldBe 0
+        guardedCalls shouldBe 1
+    }
+
+    @Test
     fun `MangaUpdates wrong series within HTTP 200 fails closed`() = runTest {
         val transport = RecordingInventoryTransport(
             """{"total_hits":1,"page":1,"per_page":25,"results":[{"record":{"id":10,"chapter":"1"},"metadata":{"series":{"series_id":999}}}]}""",
