@@ -381,7 +381,6 @@ class NativeInventoryRefreshScreenModelTest {
         model.state.value.linkCandidate shouldBe null
     }
 
-
     @Test
     fun `automatic opt in flow discovers and confirms exact MangaDex identity before bounded release refresh`() =
         runTest(dispatcher) {
