@@ -31,6 +31,10 @@ data class IndependentInventorySourceSnapshot(
     val knownEditorialLabels: List<String> = emptyList(),
     /** Bounded raw release labels, never automatically promoted to chapters. */
     val releaseExampleLabels: List<String> = emptyList(),
+    /** Unique observed release numbers by exact label and language; never editorial chapter identities. */
+    val numberedReleaseCandidateCount: Int = 0,
+    /** Bounded examples; each count represents source release records, not canonical chapters. */
+    val numberedReleaseCandidates: List<InventoryReleaseChapterCandidate> = emptyList(),
     /** Explicit source-indexed units that still require user review, never verified editorial chapters. */
     val candidateObservations: Int = 0,
     val candidateExampleLabels: List<String> = emptyList(),
@@ -38,6 +42,12 @@ data class IndependentInventorySourceSnapshot(
     val candidateExamples: List<InventoryCandidateExample> = emptyList(),
     /** Conflicting labels for one selected-source unit remain visible instead of being resolved. */
     val candidateConflicts: List<InventoryCandidateConflict> = emptyList(),
+)
+
+data class InventoryReleaseChapterCandidate(
+    val label: String,
+    val language: String?,
+    val releaseCount: Int,
 )
 
 data class InventoryCandidateConflict(
@@ -60,6 +70,9 @@ class GetIndependentInventorySnapshot(
         const val EXAMPLE_LIMIT = 8
         const val MAX_EXAMPLE_LABEL_LENGTH = 512
         const val MAX_EXAMPLE_SOURCE_RECORD_ID_LENGTH = 1024
+        const val RELEASE_LABEL_LIMIT = 64
+        const val NUMBERED_RELEASE_EXAMPLE_LIMIT = 16
+        val LANGUAGE_TAG = Regex("""^[a-zA-Z]{2,8}(?:-[a-zA-Z0-9]{1,8})*$""")
     }
 
     suspend fun execute(canonicalTitleId: String): IndependentInventorySnapshot {
@@ -102,6 +115,35 @@ class GetIndependentInventorySnapshot(
                     observedAt = stored.claim.observedAt,
                 )
             }
+            // Release numbers may be useful evidence, but never grant edition ownership,
+            // create chapters or assert a readable ContentBinding. Deduplicate uploads
+            // by exact number AND language without rounding decimal chapter identities.
+            val numberedReleaseCandidates = sourceClaims.asSequence()
+                .map { it.claim }
+                .filter {
+                    it.derivation == InventoryDerivation.RELEASE_RECORD &&
+                        it.kind == InventoryClaimKind.INDIVIDUAL
+                }
+                .mapNotNull { claim ->
+                    val label = claim.label?.trim()
+                        ?.takeIf { it.length in 1..RELEASE_LABEL_LIMIT }
+                        ?: return@mapNotNull null
+                    if (InventoryClaimPolicy.classifyReleaseLabel(label) != InventoryClaimKind.INDIVIDUAL) {
+                        return@mapNotNull null
+                    }
+                    val language = claim.language?.trim()?.takeIf(String::isNotBlank)
+                    if (language != null && !LANGUAGE_TAG.matches(language)) return@mapNotNull null
+                    label to language
+                }
+                .groupingBy { it }
+                .eachCount()
+                .map { (identity, count) ->
+                    InventoryReleaseChapterCandidate(
+                        label = identity.first,
+                        language = identity.second,
+                        releaseCount = count,
+                    )
+                }
             val attemptPages = sourcePages.filter { it.outcome != InventoryFetchOutcome.NOT_ATTEMPTED }
             val latestAttemptAt = attemptPages.maxOfOrNull { it.observedAt }
             val summary = summarizeInventory(sourceClaims)
@@ -109,6 +151,8 @@ class GetIndependentInventorySnapshot(
                 scope = scope,
                 knownIndividualClaims = summary.individuallyAdmissibleClaims,
                 releaseObservations = summary.releaseObservations,
+                numberedReleaseCandidateCount = numberedReleaseCandidates.size,
+                numberedReleaseCandidates = numberedReleaseCandidates.take(NUMBERED_RELEASE_EXAMPLE_LIMIT),
                 candidateObservations = summary.candidateObservations,
                 declaredTotals = sourcePages.mapNotNull { it.declaredTotal }.toSet(),
                 outcomes = sourcePages.map { it.outcome }.toSet(),
