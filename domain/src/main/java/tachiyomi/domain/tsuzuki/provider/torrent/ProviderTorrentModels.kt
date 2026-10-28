@@ -267,8 +267,10 @@ class TorrentChapterMapper(
                 val parsed = parseLabel(mappingLabel)
                 val titleAwareSafe =
                     explicitLabel != null || titleAwareLabel != null || isImplicitIdentitySafe(request, label)
-                file.takeIf { parsed.identity == request.identity && titleAwareSafe }
-                    ?.let { ParsedTorrentFile(file, parseVolume(mappingLabel)) }
+                if (parsed.identity != request.identity || !titleAwareSafe) return@mapNotNull null
+                val volumes = volumeEvidence(file, mappingLabel).distinct()
+                if (volumes.size > 1) return@mapNotNull null
+                ParsedTorrentFile(file, volumes.singleOrNull())
             }
             .toList()
 
@@ -323,7 +325,7 @@ class TorrentChapterMapper(
         request: TorrentChapterRequest,
         files: List<TorrentCandidateFile>,
     ): TorrentChapterFileMatch {
-        if (request.volume != null || request.titles.isEmpty()) return TorrentChapterFileMatch.None
+        if (request.titles.isEmpty()) return TorrentChapterFileMatch.None
         val chapterNumber = request.chapterNumber?.trim()?.takeIf(String::isNotEmpty)
             ?: return TorrentChapterFileMatch.None
         if (parseLabel(chapterNumber).identity != request.identity) return TorrentChapterFileMatch.None
@@ -331,6 +333,10 @@ class TorrentChapterMapper(
         val readableFiles = files.filter(::isSupportedReadableFile)
         if (readableFiles.size != 1) return TorrentChapterFileMatch.None
         val file = readableFiles.single()
+        val volumes = volumeEvidence(file, file.chapterLabel()).distinct()
+        if (volumes.size > 1 || (request.volume != null && volumes.singleOrNull() != request.volume)) {
+            return TorrentChapterFileMatch.None
+        }
         if (!hasTitleAwareChapterToken(file.chapterLabel(), request.titles, chapterNumber)) {
             return TorrentChapterFileMatch.None
         }
@@ -388,6 +394,23 @@ class TorrentChapterMapper(
         return lower.endsWith(".cbz") || lower.endsWith(".zip")
     }
 
+    /**
+     * The parent directory can carry explicit volume identity even when an archive's
+     * basename only contains the chapter. Never infer volumes from bare numbers or
+     * the torrent release name. Contradictory path/filename markers stay ineligible.
+     */
+    private fun volumeEvidence(file: TorrentCandidateFile, chapterLabel: String): List<Int> =
+        buildList {
+            parseVolume(chapterLabel)?.let(::add)
+            file.path.split('/').dropLast(1).forEach { directory ->
+                PATH_VOLUME.matchEntire(directory.trim())
+                    ?.groupValues
+                    ?.get(1)
+                    ?.toIntOrNull()
+                    ?.let(::add)
+            }
+        }
+
     private fun TorrentCandidateFile.chapterLabel(): String =
         path.substringAfterLast('/')
             .substringBeforeLast('.', missingDelimiterValue = path.substringAfterLast('/'))
@@ -405,6 +428,7 @@ class TorrentChapterMapper(
     )
 
     private companion object {
+        val PATH_VOLUME = Regex("(?i)vol(?:ume)?\\\\.?\\\\s*(\\\\d+)")
         val TITLE_WORD = Regex("[\\p{L}\\p{N}]+")
         val ZERO_PADDED_CHAPTER_NUMBER = Regex("(\\d+)(\\.\\d+|[a-z])?", RegexOption.IGNORE_CASE)
         val EMBEDDED_VOLUME_CHAPTER_MARKER = Regex(
