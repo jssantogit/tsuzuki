@@ -23,6 +23,47 @@ class BackupCanonicalCoreTest {
     }
 
     @Test
+    fun `provider observation metadata survives canonical backup without changing older snapshot schema`() {
+        val evidence = BackupCoreChapterEvidence(
+            id = "provider-evidence",
+            canonicalTitleId = "title-1",
+            producerKind = "PROVIDER",
+            producerId = "provider-binding:stable",
+            externalChapterKey = "ch-01",
+            rawLabel = "Chapter 1",
+            rawNumber = 1.0,
+            volume = null,
+            title = null,
+            observedAt = 10L,
+            confidence = 0.95,
+            authorityClass = "PROVIDER_PROVISIONAL",
+            mappedCanonicalChapterId = "chapter-1",
+            providerLanguage = "pt-BR",
+            providerScanlationGroup = "Grupo Ñ",
+            providerReleaseDateMillis = 1_700_000_000_000L,
+        )
+        val snapshot = core().copy(chapterEvidence = listOf(evidence))
+        snapshot.validate()
+        val decoded = Json.decodeFromString(
+            BackupCanonicalCore.serializer(),
+            Json.encodeToString(BackupCanonicalCore.serializer(), snapshot),
+        )
+        decoded.chapterEvidence.single() shouldBe evidence
+        decoded.validate()
+
+        val missing = evidence.copy(
+            providerLanguage = null,
+            providerScanlationGroup = null,
+            providerReleaseDateMillis = null,
+        )
+        val olderJson = Json.encodeToString(BackupCanonicalCore.serializer(), core().copy(chapterEvidence = listOf(missing)))
+        Json.decodeFromString(BackupCanonicalCore.serializer(), olderJson).validate()
+        runCatching {
+            snapshot.copy(chapterEvidence = listOf(evidence.copy(producerKind = "INTEGRATION"))).validate()
+        }.isFailure shouldBe true
+    }
+
+    @Test
     fun `edition ownership survives a portable core roundtrip and rejects invalid ownership`() {
         val original = core().copy(
             chapters = core().chapters.map { it.copy(confirmation = "CONFIRMED") },
