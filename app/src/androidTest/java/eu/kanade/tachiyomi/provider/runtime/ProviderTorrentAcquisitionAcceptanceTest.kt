@@ -1,6 +1,29 @@
 package eu.kanade.tachiyomi.provider.runtime
 
 import android.net.Uri
+import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
+import tachiyomi.domain.tsuzuki.provider.torrent.toContentDelivery
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchRequest
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentHttpFileMaterializer
+import tachiyomi.domain.tsuzuki.provider.torrent.ProviderChapterTorrentOption
+import tachiyomi.domain.tsuzuki.provider.torrent.PrepareProviderTorrentForReader
+import tachiyomi.domain.tsuzuki.provider.ProviderPage
+import tachiyomi.domain.tsuzuki.provider.ProviderNetworkPermission
+import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
+import tachiyomi.domain.tsuzuki.content.PrepareTorrentArtifact
+import tachiyomi.core.common.preference.InMemoryPreferenceStore
+import okio.Buffer
+import okhttp3.OkHttpClient
+import mockwebserver3.MockWebServer
+import mockwebserver3.MockResponse
+import mihon.core.archive.ArchiveReader
+import eu.kanade.tachiyomi.ui.reader.loader.ArchivePageLoader
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentPreferences
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentMetadataSearchGateway
+import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentArtifactEngine
+import eu.kanade.tachiyomi.provider.torrent.HttpProviderTorrentMetadataInspector
+import android.graphics.Color
+import android.graphics.BitmapFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.frostwire.jlibtorrent.LibTorrent
@@ -286,6 +309,195 @@ class ProviderTorrentAcquisitionAcceptanceTest {
             jobs.close()
             ProviderTorrentAcceptanceFixtures.stopLoopbackSeeder(seeder)
             managedFiles.clearAll()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun providerDiscoveryHydrationExactMatchApprovedP2pAndReaderPagesCompleteInOneSession() = runBlocking {
+        assertTrue("native libtorrent failed to load", LibTorrent.version().isNotBlank())
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "provider-torrent-full-chain").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        val fixture = ProviderTorrentAcceptanceFixtures.createThreeChapterTorrent(root)
+        val server = MockWebServer()
+        server.start()
+        val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+        val metadataUrl = server.url("/verified.torrent").toString()
+        val hash = requireNotNull(fixture.torrent.infoHashV1()?.toHex())
+        server.enqueue(
+            MockResponse.Builder().body(
+                """
+                {"items":[{"infoHash":"$hash","torrentUrl":"$metadataUrl",
+                "displayName":"Acceptance Series release","languages":["en"]}],"nextCursor":null}
+                """.trimIndent(),
+            ).build(),
+        )
+        server.enqueue(
+            MockResponse.Builder().body(Buffer().write(fixture.metadataBytes)).build(),
+        )
+
+        val searchId = ProviderId("org.example.torrent.search.acceptance")
+        val searchPackage = ProviderTorrentAcceptanceFixtures.createTorrentSearchProviderPackage(
+            providerId = searchId.value,
+            repositoryId = REPOSITORY_ID,
+            origin = origin,
+            endpoint = server.url("/torrent-search").toString(),
+        )
+        val p2pPackage = ProviderTorrentAcceptanceFixtures.createDirectP2pProviderPackage(
+            providerId = PROVIDER_ID.value,
+            repositoryId = REPOSITORY_ID,
+        )
+        val searchRegistration = ProviderRegistration(
+            descriptor = ProviderDescriptor(
+                id = searchId,
+                name = "Fixture discovery",
+                version = ProviderVersion("1.0.0", 1),
+                origin = ProviderOrigin.Repository(REPOSITORY_ID),
+                runtime = ProviderRuntimeKind.SCRIPT,
+                capabilities = setOf(ProviderCapabilities.TorrentSearchV1),
+                permissions = ProviderPermissionSet(
+                    network = ProviderNetworkPermission(
+                        origins = setOf(origin),
+                        localNetwork = true,
+                    ),
+                ),
+                settings = emptyList(),
+                contentLanguages = setOf("en"),
+            ),
+            lifecycleStatus = ProviderLifecycleStatus.ENABLED,
+        )
+        val registry = DefaultProviderRegistry(
+            registrations = { listOf(searchRegistration, registration(p2pPackage)) },
+        )
+        val cache = HostVerifiedTorrentMetadataCache()
+        val managedFiles = ProviderManagedFileStore(context).apply { clearAll() }
+        val seeder = SessionManager()
+        var jobs: ProviderP2pJobManager? = null
+
+        try {
+            ProviderTorrentAcceptanceFixtures.startLoopbackSeeder(seeder, fixture, 49451)
+            jobs = ProviderP2pJobManager(
+                root = File(root, "jobs"),
+                managedFiles = managedFiles,
+                verifiedMetadata = cache,
+                engine = JlibtorrentProviderP2pDownloadEngine(
+                    initialPeers = { listOf(TcpEndpoint("127.0.0.1", 49451)) },
+                    sessionParamsFactory = { ProviderTorrentAcceptanceFixtures.localOnlyParams(49452) },
+                    metadataTimeoutSeconds = 1,
+                    downloadTimeoutMs = 30_000L,
+                    nativeSupport = { true },
+                ),
+            )
+            val hostFactory = ProviderHostInvocationFactory(
+                context = context,
+                storageRoot = File(root, "storage"),
+                p2pServiceFactory = { id -> jobs.service(id) },
+                approvedP2pServiceFactory = { id, approved -> jobs.service(id, approved) },
+                managedFiles = managedFiles,
+            )
+            val executor = ScriptProviderCapabilityExecutor(
+                registry = registry,
+                packageSource = ScriptProviderPackageSource { id ->
+                    when (id) {
+                        searchId -> searchPackage
+                        PROVIDER_ID -> p2pPackage
+                        else -> null
+                    }
+                },
+                runtimeClient = ProviderRuntimeClient(context, hostFactory),
+            )
+            val gateway = ScriptProviderTorrentGateway(executor, managedResources = managedFiles)
+            val hydratedSearch = ProviderTorrentMetadataSearchGateway(
+                delegate = gateway,
+                registry = registry,
+                inspector = HttpProviderTorrentMetadataInspector(
+                    OkHttpClient(),
+                    verifiedMetadata = cache,
+                ),
+            )
+            val found = hydratedSearch.search(
+                providerId = searchId,
+                request = TorrentSearchRequest(
+                    titles = listOf("Acceptance Series"),
+                    preferredLanguages = setOf("en"),
+                    chapterNumber = "12",
+                ),
+            )
+            assertTrue("isolated discovery + Host hydration failed: $found", found is ProviderCallResult.Success)
+            val candidate = (found as ProviderCallResult.Success).value.items.single()
+            assertEquals(3, candidate.files.orEmpty().size)
+            assertEquals(fixture.selectedFilePath, candidate.files!![fixture.selectedFileIndex].path)
+            val match = TorrentChapterMapper().map(chapter12Request(), candidate)
+            assertTrue("cross-work identity or archive ambiguity: $match", match is TorrentChapterFileMatch.Exact)
+            val selected = (match as TorrentChapterFileMatch.Exact).file
+            assertEquals(fixture.selectedFileIndex, selected.index)
+            val delivery = requireNotNull(
+                ProviderChapterTorrentOption(
+                    canonicalChapterId = "canonical-chapter-12",
+                    providerId = searchId,
+                    candidate = candidate,
+                    selectedFile = selected,
+                ).toContentDelivery(),
+            )
+            assertEquals(metadataUrl, delivery.torrentUrl)
+            assertEquals(selected.sizeBytes, delivery.fileSizeBytes)
+
+            val preferences = ProviderTorrentPreferences(InMemoryPreferenceStore()).apply {
+                acquisitionPreference.set(TorrentAcquisitionPreference.P2P_ONLY)
+                directP2pAllowed.set(true)
+            }
+            val coordinator = ProviderTorrentAcquisitionCoordinator(
+                registry = registry,
+                debrid = DebridResolveGateway { _, _ -> error("P2P_ONLY must not call Debrid") },
+                p2p = gateway,
+                directP2pHostAvailable = { true },
+            )
+            val engine = ProviderTorrentArtifactEngine(
+                prepareForReader = PrepareProviderTorrentForReader(
+                    coordinator = coordinator,
+                    httpMaterializer = TorrentHttpFileMaterializer { _, _, _ ->
+                        error("Host-managed P2P archive must not be materialized via HTTP")
+                    },
+                ),
+                preferences = preferences,
+                pollIntervalMs = 100L,
+                acquisitionTimeoutMs = 45_000L,
+            )
+            val prepared = PrepareTorrentArtifact(engine).execute(delivery).getOrThrow()
+            assertTrue("Reader expected managed archive: $prepared", prepared is PreparedChapterContent.LocalArchive)
+            val uri = (prepared as PreparedChapterContent.LocalArchive).uri
+            val raw = context.contentResolver.openInputStream(Uri.parse(uri))!!.use { it.readBytes() }
+            assertArrayEquals("only the requested CBZ is materialized", fixture.selectedArchiveBytes, raw)
+
+            val reader = context.contentResolver.openFileDescriptor(Uri.parse(uri), "r").use { descriptor ->
+                ArchiveReader(requireNotNull(descriptor))
+            }
+            val loader = ArchivePageLoader(reader)
+            try {
+                val pages = loader.getPages()
+                assertEquals(3, pages.size)
+                val actualColors = pages.map { page ->
+                    val bitmap = BitmapFactory.decodeStream(requireNotNull(page.stream).invoke())
+                    val decoded = requireNotNull(bitmap)
+                    try {
+                        decoded.getPixel(0, 0)
+                    } finally {
+                        decoded.recycle()
+                    }
+                }
+                assertEquals(listOf(Color.RED, Color.GREEN, Color.BLUE), actualColors)
+            } finally {
+                loader.recycle()
+            }
+            assertEquals(2, server.requestCount)
+        } finally {
+            jobs?.close()
+            ProviderTorrentAcceptanceFixtures.stopLoopbackSeeder(seeder)
+            managedFiles.clearAll()
+            server.close()
             root.deleteRecursively()
         }
     }
