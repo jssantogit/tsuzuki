@@ -28,9 +28,9 @@ class DefaultSkinVisualContractTest {
         val toolbar = screen.substringAfter("private fun DetailsToolbar(")
             .substringBefore("@Composable\nprivate fun ChapterJumpSheet(")
 
-        toolbar shouldContain "onImportEpub: () -> Unit"
+        toolbar shouldContain "onImportEpub: (() -> Unit)? = null"
         toolbar shouldContain "Text(stringResource(MR.strings.tsuzuki_epub_import_action)"
-        toolbar shouldContain "onImportEpub()"
+        toolbar shouldContain "action()"
         inventory shouldNotContain "MR.strings.tsuzuki_epub_import_action"
         inventory shouldNotContain "onImportEpub"
         screen shouldContain "onImportEpub = onImportEpub"
