@@ -236,6 +236,42 @@ class ProviderTorrentMetadataSearchGatewayTest {
     }
 
     @Test
+    fun `verified chapter image directory is classified as readable exact match`() = runTest {
+        val folder = candidate(
+            files = listOf(
+                TorrentCandidateFile(0, "Secret Example Manga/Chapter 12/001.jpg", sizeBytes = 120L),
+                TorrentCandidateFile(1, "Secret Example Manga/Chapter 12/002.png", sizeBytes = 130L),
+            ),
+        )
+        val logs = mutableListOf<String>()
+        val gateway = ProviderTorrentMetadataSearchGateway(
+            delegate = TorrentSearchGateway { _, _ ->
+                ProviderCallResult.Success(ProviderPage(listOf(folder), nextCursor = null))
+            },
+            registry = registry(),
+            inspector = ProviderTorrentMetadataInspector { _, _ ->
+                error("pre-hydrated candidates must not be inspected")
+            },
+            diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
+            logSink = ProviderRuntimeLogSink { _, message -> logs += message },
+        )
+
+        gateway.search(
+            providerId = providerId,
+            request = TorrentSearchRequest(
+                titles = listOf("Secret Example Manga"),
+                chapterNumber = "12",
+            ),
+        )
+
+        val summary = logs.single { it.startsWith("host_torrent_match ") }
+        summary.contains("readable=1") shouldBe true
+        summary.contains("identity=1 volume=1 exact=1 ambiguous=0") shouldBe true
+        summary.contains("reason=") shouldBe false
+        summary.contains("Secret Example Manga") shouldBe false
+    }
+
+    @Test
     fun `match summary agrees with canonical title aware chapter mapping`() = runTest {
         val matchable = candidate(
             files = listOf(
