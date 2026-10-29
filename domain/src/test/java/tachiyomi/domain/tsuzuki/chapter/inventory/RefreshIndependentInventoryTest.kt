@@ -120,6 +120,45 @@ class RefreshIndependentInventoryTest {
     }
 
     @Test
+    fun `rate limit retains prior release claims and reports safe failure`() = runTest {
+        val ledger = FakeLedger()
+        val refresh = RefreshIndependentInventory(titleRepository(), ledger)
+        val result = refresh.execute(
+            "canonical",
+            producer { scope, page ->
+                if (page == "start") {
+                    Result.success(batch(scope, page, "release", "12.05", InventoryFetchOutcome.PARTIAL, "next"))
+                } else {
+                    Result.failure(InventorySourceFetchException(InventoryFetchFailureReason.RATE_LIMITED))
+                }
+            },
+            { true },
+        )
+
+        result.stop shouldBe InventoryRefreshStop.FAILED
+        result.failureReason shouldBe InventoryFetchFailureReason.RATE_LIMITED
+        ledger.claims.map { it.sourceRecordId } shouldBe listOf("release")
+        ledger.saved.last().outcome shouldBe InventoryFetchOutcome.FAILED
+    }
+
+    @Test
+    fun `refresh distinguishes network failures from malformed release responses`() = runTest {
+        val network = RefreshIndependentInventory(titleRepository(), FakeLedger()).execute(
+            "canonical",
+            producer { _, _ -> Result.failure(java.io.IOException("offline")) },
+            { true },
+        )
+        network.failureReason shouldBe InventoryFetchFailureReason.NETWORK_ERROR
+
+        val malformed = RefreshIndependentInventory(titleRepository(), FakeLedger()).execute(
+            "canonical",
+            producer { _, _ -> Result.failure(IllegalStateException("Invalid release response")) },
+            { true },
+        )
+        malformed.failureReason shouldBe InventoryFetchFailureReason.INVALID_RESPONSE
+    }
+
+    @Test
     fun `unverified crosswalk cannot cause source network access`() = runTest {
         val titles = titleRepository(verified = false)
         val ledger = FakeLedger()

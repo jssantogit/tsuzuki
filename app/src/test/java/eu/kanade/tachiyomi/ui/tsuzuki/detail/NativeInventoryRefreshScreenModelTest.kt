@@ -25,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventoryProducer
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshResult
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchFailureReason
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshIndependentInventory
 import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshProviderTorrentInventory
@@ -384,6 +385,33 @@ class NativeInventoryRefreshScreenModelTest {
         response.complete(Result.success(candidate))
         advanceUntilIdle()
         model.state.value.linkCandidate shouldBe null
+    }
+
+    @Test
+    fun `automatic source failure carries a safe failure reason to the detail screen`() = runTest(dispatcher) {
+        val registry = activeInventoryRegistry()
+        coEvery { registry.awaitReady() } returns Unit
+        val linker = mockk<MangaDexVerifiedWorkLinker>()
+        coEvery { linker.discoverUnique("title", any()) } returns Result.success(null)
+        val refresh = mockk<RefreshIndependentInventory>()
+        coEvery { refresh.execute(any(), any(), any(), any(), any()) } returns
+            InventoryRefreshResult(
+                InventoryRefreshStop.FAILED,
+                1,
+                0,
+                InventoryFetchFailureReason.RATE_LIMITED,
+            )
+        val model = model(linker, refresh, registry)
+        model.start("title")
+
+        model.discoverAndRefreshAutomatically("title")
+        advanceUntilIdle()
+
+        model.state.value.refreshStops["mangadex"] shouldBe InventoryRefreshStop.FAILED
+        model.state.value.refreshFailureReasons["mangadex"] shouldBe InventoryFetchFailureReason.RATE_LIMITED
+        model.state.value.revision shouldBe 1
+        model.start("another-title")
+        model.state.value.refreshFailureReasons shouldBe emptyMap()
     }
 
     @Test

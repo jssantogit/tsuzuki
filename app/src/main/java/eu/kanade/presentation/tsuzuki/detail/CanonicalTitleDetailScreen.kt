@@ -75,6 +75,7 @@ import mihon.icons.materialsymbols.rounded.Search
 import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
 import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySourceSnapshot
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchFailureReason
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -454,6 +455,9 @@ private fun IndependentInventoryInfo(
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.secondary,
             )
+            if (stop == InventoryRefreshStop.FAILED) {
+                refresh.refreshFailureReasons[producerId]?.let { InventoryFailureReasonText(it) }
+            }
         }
         refresh.lastStop?.takeIf { refresh.refreshStops.isEmpty() }?.let { stop ->
             Text(
@@ -469,6 +473,11 @@ private fun IndependentInventoryInfo(
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.secondary,
             )
+        }
+        if (refresh.lastStop == InventoryRefreshStop.FAILED && refresh.refreshStops.isEmpty()) {
+            refresh.producerId?.let { producerId ->
+                refresh.refreshFailureReasons[producerId]?.let { InventoryFailureReasonText(it) }
+            }
         }
         if (snapshot.sources.isEmpty()) {
             Text(
@@ -581,6 +590,38 @@ private fun IndependentInventoryInfo(
                     color = colors.secondary,
                 )
             }
+            if (source.numberedReleaseCandidateCount > 0) {
+                Text(
+                    "${source.numberedReleaseCandidateCount} " +
+                        stringResource(MR.strings.tsuzuki_inventory_numbered_release_candidates),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+                source.numberedReleaseCandidates.forEach { candidate ->
+                    Text(
+                        stringResource(
+                            MR.strings.tsuzuki_inventory_numbered_release_example,
+                            candidate.label,
+                            candidate.language ?: stringResource(MR.strings.tsuzuki_inventory_language_unrecorded),
+                            candidate.releaseCount,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.secondary,
+                    )
+                }
+            } else if (source.releaseObservations == 0 && source.latestSuccessfulFetchAt != null) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_empty_release_feed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            } else if (source.releaseObservations > 0) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_no_numbered_release_candidates),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
             if (source.knownEditorialLabels.isNotEmpty()) {
                 Text(
                     stringResource(MR.strings.tsuzuki_inventory_editorial_examples) + ": " +
@@ -625,6 +666,24 @@ private fun IndependentInventoryInfo(
             }
         }
     }
+}
+
+@Composable
+private fun InventoryFailureReasonText(reason: InventoryFetchFailureReason) {
+    val label = when (reason) {
+        InventoryFetchFailureReason.ACCESS_DENIED -> MR.strings.tsuzuki_inventory_error_access
+        InventoryFetchFailureReason.RATE_LIMITED -> MR.strings.tsuzuki_inventory_error_rate_limit
+        InventoryFetchFailureReason.HTTP_ERROR -> MR.strings.tsuzuki_inventory_error_http
+        InventoryFetchFailureReason.RESPONSE_TOO_LARGE -> MR.strings.tsuzuki_inventory_error_size
+        InventoryFetchFailureReason.NETWORK_ERROR -> MR.strings.tsuzuki_inventory_error_network
+        InventoryFetchFailureReason.INVALID_RESPONSE -> MR.strings.tsuzuki_inventory_error_response
+        InventoryFetchFailureReason.UNKNOWN -> MR.strings.tsuzuki_inventory_error_unknown
+    }
+    Text(
+        stringResource(label),
+        style = MaterialTheme.typography.bodySmall,
+        color = defaultSkinColors().secondary,
+    )
 }
 
 @Composable

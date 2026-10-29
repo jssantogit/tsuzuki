@@ -1614,4 +1614,15 @@
     <string name="tsuzuki_backup_canonical_only">Tsuzuki canonical library only (separate backup)</string>
     <string name="tsuzuki_backup_canonical_only_note">This file contains only the local Tsuzuki canonical graph, reading progress and adoption receipts. Legacy Mihon manga, credentials, external account lists and offline page files are not included. Restore only into a clean Tsuzuki library.</string>
     <string name="tsuzuki_backup_canonical_restore_note">Canonical-only Tsuzuki archive. Restore replaces no existing library and requires an empty canonical graph. Legacy Mihon records are not part of this backup; conflicting data is rejected.</string>
+    <string name="tsuzuki_inventory_error_access">Source denied access (HTTP 403); no further requests this session</string>
+    <string name="tsuzuki_inventory_error_rate_limit">Source rate limit (HTTP 429); no automatic retry</string>
+    <string name="tsuzuki_inventory_error_http">Source returned an HTTP error</string>
+    <string name="tsuzuki_inventory_error_size">Source response exceeded the safety limit</string>
+    <string name="tsuzuki_inventory_error_network">Network unavailable or connection failed</string>
+    <string name="tsuzuki_inventory_error_response">Source response did not match the expected format</string>
+    <string name="tsuzuki_inventory_error_unknown">Inventory check failed for an unidentified reason</string>
+    <string name="tsuzuki_inventory_numbered_release_candidates">distinct provisional release numbers (not canonical chapters or readable pages)</string>
+    <string name="tsuzuki_inventory_numbered_release_example">Observed %1$s · language %2$s · %3$d release records</string>
+    <string name="tsuzuki_inventory_empty_release_feed">The API returned no releases for this linked work. No chapter numbers were observed.</string>
+    <string name="tsuzuki_inventory_no_numbered_release_candidates">Releases were observed, but none had an unambiguous individual chapter number.</string>
 </resources>

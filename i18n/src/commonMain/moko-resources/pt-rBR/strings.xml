@@ -1352,4 +1352,15 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_backup_canonical_only">Somente biblioteca canônica do Tsuzuki (backup separado)</string>
     <string name="tsuzuki_backup_canonical_only_note">Este arquivo contém somente o grafo canônico local do Tsuzuki, progresso e recibos de adoção. Mangás legados Mihon, credenciais, listas de contas externas e páginas offline não são incluídos. Restaure somente em uma biblioteca Tsuzuki limpa.</string>
     <string name="tsuzuki_backup_canonical_restore_note">Arquivo exclusivo do catálogo canônico Tsuzuki. A restauração exige um catálogo canônico vazio e não substitui dados existentes. Registros legados Mihon não fazem parte deste backup; dados conflitantes são rejeitados.</string>
+    <string name="tsuzuki_inventory_error_access">Fonte recusou o acesso (HTTP 403); sem novas consultas nesta sessão</string>
+    <string name="tsuzuki_inventory_error_rate_limit">Limite de consultas da fonte (HTTP 429); sem repetição automática</string>
+    <string name="tsuzuki_inventory_error_http">A fonte retornou erro HTTP</string>
+    <string name="tsuzuki_inventory_error_size">A resposta da fonte excedeu o limite de segurança</string>
+    <string name="tsuzuki_inventory_error_network">Rede indisponível ou falha de conexão</string>
+    <string name="tsuzuki_inventory_error_response">A resposta da fonte não corresponde ao formato esperado</string>
+    <string name="tsuzuki_inventory_error_unknown">A consulta do inventário falhou por motivo não identificado</string>
+    <string name="tsuzuki_inventory_numbered_release_candidates">números provisórios distintos de releases (não são capítulos canônicos nem páginas para leitura)</string>
+    <string name="tsuzuki_inventory_numbered_release_example">Observado %1$s · idioma %2$s · %3$d registros de release</string>
+    <string name="tsuzuki_inventory_empty_release_feed">A API não retornou releases para esta obra vinculada. Nenhum número de capítulo foi observado.</string>
+    <string name="tsuzuki_inventory_no_numbered_release_candidates">Há releases observados, mas nenhum contém um número individual de capítulo inequívoco.</string>
 </resources>
