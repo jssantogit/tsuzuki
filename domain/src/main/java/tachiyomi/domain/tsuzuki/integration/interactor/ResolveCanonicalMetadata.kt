@@ -225,7 +225,9 @@ class ResolveCanonicalMetadata private constructor(
             )
             // Recheck after the suspending write before the result reaches Details.
             if (registry.configurationFingerprint() != configurationFingerprint) {
-                return Result.failure(IllegalStateException("Metadata integration configuration changed during refresh"))
+                return Result.failure(
+                    IllegalStateException("Metadata integration configuration changed during refresh"),
+                )
             }
             return Result.success(metadata)
         }
