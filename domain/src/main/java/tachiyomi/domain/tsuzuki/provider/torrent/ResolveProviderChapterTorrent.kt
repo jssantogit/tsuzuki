@@ -9,6 +9,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.content.ContentDelivery
+import tachiyomi.domain.tsuzuki.content.TorrentChapterImageFile
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
@@ -34,6 +35,7 @@ data class ProviderChapterTorrentOption(
     val providerId: ProviderId,
     val candidate: TorrentCandidate,
     val selectedFile: TorrentCandidateFile,
+    val selectedChapterImages: List<TorrentCandidateFile> = emptyList(),
     /** Host diagnostic correlation only, never the identity of a reusable P2P job. */
     val discoveryOperationId: String? = null,
 ) {
@@ -41,6 +43,15 @@ data class ProviderChapterTorrentOption(
         require(canonicalChapterId.isNotBlank()) { "Canonical chapter ID must not be blank" }
         require(candidate.files.orEmpty().any { it == selectedFile }) {
             "Selected torrent file must belong to the candidate"
+        }
+        require(
+            selectedChapterImages.isEmpty() ||
+                (
+                    selectedChapterImages.first() == selectedFile &&
+                        selectedChapterImages.all { it in candidate.files.orEmpty() }
+                    ),
+        ) {
+            "Selected chapter images must belong to the candidate"
         }
     }
 }
@@ -55,6 +66,9 @@ fun ProviderChapterTorrentOption.toContentDelivery(): ContentDelivery.Torrent? {
         torrentUrl = candidate.torrentUrl,
         fileSizeBytes = selectedFile.sizeBytes,
         discoveryOperationId = discoveryOperationId,
+        chapterImages = selectedChapterImages.map { image ->
+            TorrentChapterImageFile(image.index, image.path, requireNotNull(image.sizeBytes))
+        },
     )
 }
 
@@ -200,17 +214,26 @@ class ResolveProviderChapterTorrent(
 
                         val matches = candidates.mapNotNull { candidate ->
                             if (candidate.infoHash == null) return@mapNotNull null
-                            val file = when (val match = mapper.map(request, candidate)) {
-                                is TorrentChapterFileMatch.Exact -> match.file
-                                TorrentChapterFileMatch.None,
-                                is TorrentChapterFileMatch.Ambiguous,
+                            val payload = when (val match = mapper.select(request, candidate)) {
+                                is TorrentChapterPayloadMatch.Exact -> match.payload
+                                TorrentChapterPayloadMatch.None,
+                                is TorrentChapterPayloadMatch.Ambiguous,
                                 -> return@mapNotNull null
+                            }
+                            val selectedFile = when (payload) {
+                                is TorrentChapterPayload.SingleArchive -> payload.file
+                                is TorrentChapterPayload.ImageDirectory -> payload.files.first()
                             }
                             ProviderChapterTorrentOption(
                                 canonicalChapterId = canonicalChapterId,
                                 providerId = providerId,
                                 candidate = candidate,
-                                selectedFile = file,
+                                selectedFile = selectedFile,
+                                selectedChapterImages = if (payload is TorrentChapterPayload.ImageDirectory) {
+                                    payload.files
+                                } else {
+                                    emptyList()
+                                },
                                 discoveryOperationId = operationId,
                             )
                         }

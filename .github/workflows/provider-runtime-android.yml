@@ -6,6 +6,7 @@ on:
       - 'tsuzuki/provider-platform-*'
       - 'tsuzuki/provider-torrent-acceptance-harness'
       - 'tsuzuki/torrent-*'
+      - 'tsuzuki/issue-160-*'
       - 'feat/issue-155-independent-chapter-inventory'
     paths:
       # Runtime + Host Service boundary.

@@ -26,11 +26,13 @@ import tachiyomi.domain.tsuzuki.provider.ProviderPage
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateFile
-import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterFileMatch
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterMapper
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterPayload
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterPayloadMatch
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterRequest
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchGateway
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchRequest
+import tachiyomi.domain.tsuzuki.provider.torrent.select
 import java.util.UUID
 
 fun interface ProviderTorrentMetadataInspector {
@@ -191,11 +193,19 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
 
             items.forEachIndexed { index, candidate ->
                 val readableFiles = candidate.files.orEmpty().filter(::isSupportedReadableFile)
-                if (readableFiles.isNotEmpty()) {
+                val match = chapterMapper.select(volumeRequest, candidate)
+                val withoutVolume = if (request.volume != null && match is TorrentChapterPayloadMatch.None) {
+                    chapterMapper.select(identityRequest, candidate)
+                } else {
+                    TorrentChapterPayloadMatch.None
+                }
+                val hasReadableDirectory = hasImageDirectorySelection(match) ||
+                    hasImageDirectorySelection(withoutVolume)
+                if (readableFiles.isNotEmpty() || hasReadableDirectory) {
                     readable += 1
                 }
                 if (
-                    readableFiles.any { file ->
+                    hasReadableDirectory || readableFiles.any { file ->
                         parseChapterLabel(chapterLabel(file.path)).identity.let { parsedIdentity ->
                             parsedIdentity.isSpecific && parsedIdentity.isNumbered
                         }
@@ -205,29 +215,23 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                 }
 
                 var currentIdentityMatched = false
-                val match = chapterMapper.map(volumeRequest, candidate)
-                val withoutVolume = if (request.volume != null && match is TorrentChapterFileMatch.None) {
-                    chapterMapper.map(identityRequest, candidate)
-                } else {
-                    TorrentChapterFileMatch.None
-                }
                 when (match) {
-                    TorrentChapterFileMatch.None -> {
+                    TorrentChapterPayloadMatch.None -> {
                         if (
                             request.volume != null &&
-                            withoutVolume !is TorrentChapterFileMatch.None
+                            withoutVolume !is TorrentChapterPayloadMatch.None
                         ) {
                             identityMatches += 1
                             currentIdentityMatched = true
                         }
                     }
-                    is TorrentChapterFileMatch.Exact -> {
+                    is TorrentChapterPayloadMatch.Exact -> {
                         identityMatches += 1
                         volumeMatches += 1
                         exactMatches += 1
                         currentIdentityMatched = true
                     }
-                    is TorrentChapterFileMatch.Ambiguous -> {
+                    is TorrentChapterPayloadMatch.Ambiguous -> {
                         identityMatches += 1
                         volumeMatches += 1
                         ambiguousMatches += 1
@@ -245,11 +249,14 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
 
                 val decision = when {
                     candidate.files == null -> DiagnosticTorrentCandidateMatchReason.METADATA_UNAVAILABLE
-                    readableFiles.isEmpty() -> DiagnosticTorrentCandidateMatchReason.NO_READABLE_ARCHIVES
-                    match is TorrentChapterFileMatch.Exact -> DiagnosticTorrentCandidateMatchReason.EXACT
-                    match is TorrentChapterFileMatch.Ambiguous ->
+                    readableFiles.isEmpty() && !hasReadableDirectory && containsChapterImageFolder(candidate) ->
+                        DiagnosticTorrentCandidateMatchReason.IMAGE_DIRECTORY_UNSUPPORTED
+                    readableFiles.isEmpty() && !hasReadableDirectory ->
+                        DiagnosticTorrentCandidateMatchReason.NO_READABLE_ARCHIVES
+                    match is TorrentChapterPayloadMatch.Exact -> DiagnosticTorrentCandidateMatchReason.EXACT
+                    match is TorrentChapterPayloadMatch.Ambiguous ->
                         DiagnosticTorrentCandidateMatchReason.AMBIGUOUS_ARCHIVES
-                    withoutVolume !is TorrentChapterFileMatch.None ->
+                    withoutVolume !is TorrentChapterPayloadMatch.None ->
                         DiagnosticTorrentCandidateMatchReason.VOLUME_NOT_PROVEN
                     hasExplicitChapter -> DiagnosticTorrentCandidateMatchReason.WORK_IDENTITY_NOT_PROVEN
                     else -> DiagnosticTorrentCandidateMatchReason.CHAPTER_IDENTITY_NOT_PROVEN
@@ -265,6 +272,9 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
             val noMatchReason = when {
                 exactMatches > 0 -> null
                 items.isEmpty() -> DiagnosticTorrentNoMatchReason.NO_CANDIDATES
+                readable == 0 && candidateDecisions.countOf(
+                    DiagnosticTorrentCandidateMatchReason.IMAGE_DIRECTORY_UNSUPPORTED,
+                ) > 0 -> DiagnosticTorrentNoMatchReason.IMAGE_DIRECTORY_UNSUPPORTED
                 readable == 0 -> DiagnosticTorrentNoMatchReason.NO_READABLE_ARCHIVES
                 ambiguousMatches > 0 -> DiagnosticTorrentNoMatchReason.AMBIGUOUS_ARCHIVES
                 identityMatches == 0 -> DiagnosticTorrentNoMatchReason.CHAPTER_IDENTITY_NOT_PROVEN
@@ -292,6 +302,9 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                 ).numberValue(),
                 "torrent_candidate_no_archive_count" to candidateDecisions.countOf(
                     DiagnosticTorrentCandidateMatchReason.NO_READABLE_ARCHIVES,
+                ).numberValue(),
+                "torrent_candidate_image_directory_unsupported_count" to candidateDecisions.countOf(
+                    DiagnosticTorrentCandidateMatchReason.IMAGE_DIRECTORY_UNSUPPORTED,
                 ).numberValue(),
                 "torrent_candidate_volume_unproven_count" to candidateDecisions.countOf(
                     DiagnosticTorrentCandidateMatchReason.VOLUME_NOT_PROVEN,
@@ -401,6 +414,21 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
         }
     }
 
+    private fun hasImageDirectorySelection(match: TorrentChapterPayloadMatch): Boolean = when (match) {
+        is TorrentChapterPayloadMatch.Exact -> match.payload is TorrentChapterPayload.ImageDirectory
+        is TorrentChapterPayloadMatch.Ambiguous ->
+            match.options.any { it is TorrentChapterPayload.ImageDirectory }
+        TorrentChapterPayloadMatch.None -> false
+    }
+
+    private fun containsChapterImageFolder(candidate: TorrentCandidate): Boolean =
+        candidate.files.orEmpty().any { file ->
+            val segments = file.path.split('/')
+            segments.size >= 3 &&
+                IMAGE_CHAPTER_MARKER.matches(segments[segments.lastIndex - 1]) &&
+                file.path.substringAfterLast('.', "").lowercase() in IMAGE_PAGE_EXTENSIONS
+        }
+
     private fun Map<DiagnosticTorrentCandidateMatchReason, Int>.countOf(
         reason: DiagnosticTorrentCandidateMatchReason,
     ): Int = get(reason) ?: 0
@@ -506,6 +534,10 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
         const val DEFAULT_MAX_CONCURRENT_INSPECTIONS = 4
         const val MAX_CONCURRENT_INSPECTIONS = 8
         const val NANOS_PER_MILLISECOND = 1_000_000L
+        val IMAGE_PAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif")
+        val IMAGE_CHAPTER_MARKER = Regex(
+            "(?i)^(?:chapter|ch\\.?|cap[ií]tulo)\\s*0*\\d+(?:\\.\\d+|[a-z])?$",
+        )
         val TITLE_WORD = Regex("[\\p{L}\\p{N}]+")
         val EMBEDDED_VOLUME_CHAPTER_MARKER = Regex(
             "(?i)(?<![\\p{L}\\p{N}])vol(?:ume)?\\.?\\s*\\d+\\s*(?:[-:|/]\\s*|\\s+)" +

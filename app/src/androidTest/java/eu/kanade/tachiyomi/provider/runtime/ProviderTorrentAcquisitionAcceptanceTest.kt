@@ -66,10 +66,13 @@ import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateFile
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterFileMatch
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterMapper
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterPayload
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterPayloadMatch
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterRequest
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentHttpFileMaterializer
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentReadableResource
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchRequest
+import tachiyomi.domain.tsuzuki.provider.torrent.select
 import tachiyomi.domain.tsuzuki.provider.torrent.toContentDelivery
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import java.io.File
@@ -522,6 +525,144 @@ class ProviderTorrentAcquisitionAcceptanceTest {
             ProviderTorrentAcceptanceFixtures.stopLoopbackSeeder(seeder)
             managedFiles.clearAll()
             server.close()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun canonicalDirectoryChapter_crossesScriptHostAndReaderAsThreePages() = runBlocking {
+        assertTrue("native libtorrent failed to load", LibTorrent.version().isNotBlank())
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "provider-torrent-directory-acceptance").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        val fixture = ProviderTorrentAcceptanceFixtures.createDirectoryChapterTorrent(root)
+        val managedFiles = ProviderManagedFileStore(context).apply { clearAll() }
+        val seeder = SessionManager()
+        var jobs: ProviderP2pJobManager? = null
+        try {
+            ProviderTorrentAcceptanceFixtures.startLoopbackSeeder(seeder, fixture, 49511)
+            jobs = ProviderP2pJobManager(
+                root = File(root, "jobs"),
+                managedFiles = managedFiles,
+                engine = JlibtorrentProviderP2pDownloadEngine(
+                    metadataResolver = { _, _, _ -> fixture.torrent },
+                    initialPeers = { listOf(TcpEndpoint("127.0.0.1", 49511)) },
+                    sessionParamsFactory = { ProviderTorrentAcceptanceFixtures.localOnlyParams(49512) },
+                    downloadTimeoutMs = 30_000L,
+                    nativeSupport = { true },
+                ),
+            )
+            val activePackage = ProviderTorrentAcceptanceFixtures.createDirectP2pProviderPackage(
+                providerId = PROVIDER_ID.value,
+                repositoryId = REPOSITORY_ID,
+            )
+            val registry = DefaultProviderRegistry(
+                registrations = { listOf(registration(activePackage)) },
+            )
+            val hostFactory = ProviderHostInvocationFactory(
+                context = context,
+                storageRoot = File(root, "storage"),
+                p2pServiceFactory = { id -> requireNotNull(jobs).service(id) },
+                approvedP2pServiceFactory = { id, selection -> requireNotNull(jobs).service(id, selection) },
+                managedFiles = managedFiles,
+            )
+            val executor = ScriptProviderCapabilityExecutor(
+                registry = registry,
+                packageSource = ScriptProviderPackageSource { id ->
+                    activePackage.takeIf { id == PROVIDER_ID }
+                },
+                runtimeClient = ProviderRuntimeClient(context, hostFactory),
+            )
+            val gateway = ScriptProviderTorrentGateway(executor, managedResources = managedFiles)
+            val metadataFiles = fixture.torrent.files()
+            val candidate = TorrentCandidate(
+                infoHash = fixture.torrent.infoHashV1()?.toHex(),
+                magnetUri = fixture.torrent.makeMagnetUri(),
+                torrentUrl = null,
+                displayName = "Tokyo Ghoul Manga complete",
+                files = (0 until metadataFiles.numFiles()).map { index ->
+                    TorrentCandidateFile(
+                        index = index,
+                        path = metadataFiles.filePath(index).replace('\\', '/'),
+                        sizeBytes = metadataFiles.fileSize(index),
+                    )
+                },
+            )
+            val chapter = TorrentChapterRequest(
+                identity = CanonicalChapterIdentity(CanonicalChapterType.REGULAR, baseNumber = 1),
+                volume = null,
+                titles = listOf("Tokyo Ghoul"),
+                chapterNumber = "01",
+            )
+            val match = TorrentChapterMapper().select(chapter, candidate)
+            assertTrue(
+                "chapter directory must map to exactly one canonical identity: $match",
+                match is TorrentChapterPayloadMatch.Exact,
+            )
+            val payload = (match as TorrentChapterPayloadMatch.Exact).payload as TorrentChapterPayload.ImageDirectory
+            val delivery = requireNotNull(
+                ProviderChapterTorrentOption(
+                    canonicalChapterId = "canonical-tokyo-ghoul-chapter-01",
+                    providerId = PROVIDER_ID,
+                    candidate = candidate,
+                    selectedFile = payload.files.first(),
+                    selectedChapterImages = payload.files,
+                ).toContentDelivery(),
+            )
+            assertEquals(fixture.selectedImages.size, delivery.chapterImages.size)
+
+            val preferences = ProviderTorrentPreferences(InMemoryPreferenceStore()).apply {
+                acquisitionPreference.set(TorrentAcquisitionPreference.P2P_ONLY)
+                directP2pAllowed.set(true)
+            }
+            val coordinator = ProviderTorrentAcquisitionCoordinator(
+                registry = registry,
+                debrid = DebridResolveGateway { _, _ -> error("Image folders require P2P Host, not Debrid") },
+                p2p = gateway,
+                directP2pHostAvailable = { true },
+            )
+            val artifactEngine = ProviderTorrentArtifactEngine(
+                prepareForReader = PrepareProviderTorrentForReader(
+                    coordinator = coordinator,
+                    httpMaterializer = TorrentHttpFileMaterializer { _, _, _ ->
+                        error("Directory chapter must not use untrusted HTTP file materializer")
+                    },
+                ),
+                preferences = preferences,
+                pollIntervalMs = 100L,
+                acquisitionTimeoutMs = 45_000L,
+            )
+            val prepared = PrepareTorrentArtifact(artifactEngine).execute(delivery).getOrThrow()
+            assertTrue(
+                "Reader must receive a local archive: $prepared",
+                prepared is PreparedChapterContent.LocalArchive,
+            )
+            val uri = (prepared as PreparedChapterContent.LocalArchive).uri
+            val reader = context.contentResolver.openFileDescriptor(Uri.parse(uri), "r").use { descriptor ->
+                ArchiveReader(requireNotNull(descriptor))
+            }
+            val loader = ArchivePageLoader(reader)
+            try {
+                val pages = loader.getPages()
+                assertEquals(3, pages.size)
+                val colors = pages.map { page ->
+                    val bitmap = requireNotNull(BitmapFactory.decodeStream(requireNotNull(page.stream).invoke()))
+                    try {
+                        bitmap.getPixel(0, 0)
+                    } finally {
+                        bitmap.recycle()
+                    }
+                }
+                assertEquals(listOf(Color.RED, Color.GREEN, Color.BLUE), colors)
+            } finally {
+                loader.recycle()
+            }
+        } finally {
+            jobs?.close()
+            ProviderTorrentAcceptanceFixtures.stopLoopbackSeeder(seeder)
+            managedFiles.clearAll()
             root.deleteRecursively()
         }
     }

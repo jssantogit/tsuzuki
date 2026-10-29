@@ -54,7 +54,7 @@ class ProviderTorrentAcquisitionCoordinator(
 
         val decision = TorrentAcquisitionPolicy.resolve(
             preference = preference,
-            hasUsableDebrid = debridProviders.isNotEmpty(),
+            hasUsableDebrid = debridProviders.isNotEmpty() && request.selectedChapterImages.isEmpty(),
             hasUsableP2p = p2pProviders.isNotEmpty() && directP2pHostAvailable(),
             directP2pAllowed = directP2pAllowed,
         )

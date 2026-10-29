@@ -73,6 +73,59 @@ object ProviderTorrentAcceptanceFixtures {
         )
     }
 
+    data class DirectoryChapterTorrent(
+        val torrent: TorrentInfo,
+        val seedRoot: File,
+        val selectedImages: List<tachiyomi.core.provider.runtime.ProviderP2pChapterImage>,
+        val expectedPages: List<ByteArray>,
+        val ignoredIndices: List<Int>,
+    )
+
+    fun createDirectoryChapterTorrent(root: File): DirectoryChapterTorrent {
+        val seedRoot = File(root, "seed").apply { mkdirs() }
+        val series = File(seedRoot, "Tokyo Ghoul Manga")
+        val chapterOne = File(series, "Chapter 01").apply { mkdirs() }
+        val chapterTwo = File(series, "Chapter 02").apply { mkdirs() }
+        val pages = listOf(tinyPng(Color.RED), tinyPng(Color.GREEN), tinyPng(Color.BLUE))
+        pages.forEachIndexed { index, page ->
+            File(chapterOne, "${(index + 1).toString().padStart(3, '0')}.png").writeBytes(page)
+        }
+        File(chapterTwo, "001.png").writeBytes(tinyPng(Color.BLACK))
+        val torrent = TorrentInfo(
+            TorrentBuilder().path(series).pieceSize(16 * 1024).generate().entry().bencode(),
+        )
+        val metadata = torrent.files()
+        val selected = (0 until metadata.numFiles()).filter {
+            metadata.filePath(it).contains("/Chapter 01/")
+        }.map {
+            tachiyomi.core.provider.runtime.ProviderP2pChapterImage(
+                index = it,
+                path = metadata.filePath(it).replace('\\', '/'),
+                sizeBytes = metadata.fileSize(it),
+            )
+        }.sortedBy { it.path }
+        check(selected.size == pages.size)
+        return DirectoryChapterTorrent(
+            torrent = torrent,
+            seedRoot = seedRoot,
+            selectedImages = selected,
+            expectedPages = pages,
+            ignoredIndices = (0 until metadata.numFiles()).filterNot { i -> selected.any { it.index == i } },
+        )
+    }
+
+    fun startLoopbackSeeder(
+        seeder: SessionManager,
+        fixture: DirectoryChapterTorrent,
+        port: Int,
+    ) {
+        seeder.start(localOnlyParams(port))
+        seeder.download(fixture.torrent, fixture.seedRoot)
+        await("chapter image loopback seeder ready") {
+            seeder.find(fixture.torrent)?.status(true)?.isSeeding == true
+        }
+    }
+
     fun createTorrentSearchProviderPackage(
         providerId: String,
         repositoryId: String,
