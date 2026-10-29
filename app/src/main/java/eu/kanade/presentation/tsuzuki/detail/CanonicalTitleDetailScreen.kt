@@ -213,7 +213,6 @@ private fun LoadedDetails(
                             IndependentInventoryInfo(
                                 state.independentInventory,
                                 inventoryRefresh,
-                                onImportEpub,
                                 onReviewCandidates,
                             )
                         }
@@ -245,7 +244,6 @@ private fun LoadedDetails(
                         IndependentInventoryInfo(
                             state.independentInventory,
                             inventoryRefresh,
-                            onImportEpub,
                             onReviewCandidates,
                         )
                     }
@@ -271,6 +269,7 @@ private fun LoadedDetails(
             onBack = { moveMode(CanonicalDetailsLowerAction.BACK) },
             onRefresh = onRefresh,
             onProviders = onProviders,
+            onImportEpub = onImportEpub,
             background = if (mode == CanonicalDetailsLowerMode.FULL) {
                 background
             } else {
@@ -388,7 +387,6 @@ private fun LoadedDetails(
 private fun IndependentInventoryInfo(
     snapshot: IndependentInventorySnapshot,
     refresh: NativeInventoryRefreshState,
-    onImportEpub: () -> Unit,
     onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit,
 ) {
     val colors = defaultSkinColors()
@@ -472,10 +470,6 @@ private fun IndependentInventoryInfo(
                 color = colors.secondary,
             )
         }
-        DefaultSkinTextAction(
-            text = stringResource(MR.strings.tsuzuki_epub_import_action),
-            onClick = onImportEpub,
-        )
         if (snapshot.sources.isEmpty()) {
             Text(
                 stringResource(MR.strings.tsuzuki_inventory_unknown),
@@ -687,6 +681,7 @@ private fun DetailsToolbar(
     onProviders: () -> Unit,
     background: Color = Color.Transparent,
     onSources: (() -> Unit)? = null,
+    onImportEpub: (() -> Unit)? = null,
 ) {
     val colors = defaultSkinColors()
     var expanded by remember { mutableStateOf(false) }
@@ -739,6 +734,17 @@ private fun DetailsToolbar(
                         false
                     onProviders()
                 })
+                onImportEpub?.let { action ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(stringResource(MR.strings.tsuzuki_epub_import_action), color = colors.foreground)
+                        },
+                        onClick = {
+                            expanded = false
+                            action()
+                        },
+                    )
+                }
                 onSources?.let { action ->
                     DropdownMenuItem(text = {
                         Text(stringResource(MR.strings.tsuzuki_details_metadata_sources), color = colors.foreground)
