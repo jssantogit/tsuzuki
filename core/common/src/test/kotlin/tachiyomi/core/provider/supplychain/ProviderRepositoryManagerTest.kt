@@ -727,19 +727,27 @@ class ProviderRepositoryManagerTest {
         }
         val descriptors = sourceArtifacts.map { (id, bytes) ->
             ProviderArtifactDescriptor(
-                providerId = id, versionName = "1.0.1", versionCode = 1,
+                providerId = id,
+                versionName = "1.0.1",
+                versionCode = 1,
                 artifactUrl = "https://repo.example/$id.tsz",
-                sha256 = sha256Hex(bytes), minHostApi = 1,
+                sha256 = sha256Hex(bytes),
+                minHostApi = 1,
             )
         }
         val index = ProviderRepositoryIndex(
-            schemaVersion = 1, repositoryId = repositoryId,
-            sequence = 1, providers = descriptors,
+            schemaVersion = 1,
+            repositoryId = repositoryId,
+            sequence = 1,
+            providers = descriptors,
         )
         val signed = signedIndex(keyPair, index)
-        transport.publishMany(signed, descriptors.take(2).associate { descriptor ->
-            descriptor.artifactUrl to sourceArtifacts.getValue(descriptor.providerId)
-        })
+        transport.publishMany(
+            signed,
+            descriptors.take(2).associate { descriptor ->
+                descriptor.artifactUrl to sourceArtifacts.getValue(descriptor.providerId)
+            },
+        )
         manager.refresh(repositoryId)
         shouldThrow<NoSuchElementException> {
             manager.installMangaAll(repositoryId)
@@ -747,9 +755,12 @@ class ProviderRepositoryManagerTest {
         manager.installed() shouldBe emptyList()
         manager.repositories().map { it.enrollment.repositoryId } shouldBe listOf(repositoryId)
 
-        transport.publishMany(signed, descriptors.associate { descriptor ->
-            descriptor.artifactUrl to sourceArtifacts.getValue(descriptor.providerId)
-        })
+        transport.publishMany(
+            signed,
+            descriptors.associate { descriptor ->
+                descriptor.artifactUrl to sourceArtifacts.getValue(descriptor.providerId)
+            },
+        )
         manager.installMangaAll(repositoryId).size shouldBe 3
         manager.installed().map { it.providerId } shouldBe
             MangaAllFamilyCatalog.sourceProviderIds.sorted()
@@ -763,23 +774,25 @@ class ProviderRepositoryManagerTest {
         }
         val v2Descriptors = v2SourceArtifacts.map { (id, bytes) ->
             ProviderArtifactDescriptor(
-                providerId = id, versionName = "1.0.2", versionCode = 2,
+                providerId = id,
+                versionName = "1.0.2",
+                versionCode = 2,
                 artifactUrl = "https://repo.example/$id-2.tsz",
-                sha256 = sha256Hex(bytes), minHostApi = 1,
+                sha256 = sha256Hex(bytes),
+                minHostApi = 1,
             )
         }
-        transport.publishMany(
-            signedIndex(
-                keyPair, ProviderRepositoryIndex(
-                    schemaVersion = 1,
-                    repositoryId = repositoryId,
-                    sequence = 2,
-                    providers = v2Descriptors,
-                    revokedArtifactSha256 = setOf(
-                        sha256Hex(sourceArtifacts.getValue(MangaAllFamilyCatalog.sourceProviderIds[0])),
-                    ),
-                ),
+        val v2Index = ProviderRepositoryIndex(
+            schemaVersion = 1,
+            repositoryId = repositoryId,
+            sequence = 2,
+            providers = v2Descriptors,
+            revokedArtifactSha256 = setOf(
+                sha256Hex(sourceArtifacts.getValue(MangaAllFamilyCatalog.sourceProviderIds[0])),
             ),
+        )
+        transport.publishMany(
+            signedIndex(keyPair, v2Index),
             v2Descriptors.associate { descriptor ->
                 descriptor.artifactUrl to v2SourceArtifacts.getValue(descriptor.providerId)
             },
@@ -813,19 +826,23 @@ class ProviderRepositoryManagerTest {
         val transport = FakeTransport()
         val onlyDex = MangaAllFamilyCatalog.sourceProviderIds.first()
         val bytes = tsz(versionCode = 1, providerId = onlyDex)
-        transport.publishMany(
-            signedIndex(keyPair, ProviderRepositoryIndex(
-                schemaVersion = 1,
-                repositoryId = "repo.example",
-                sequence = 1,
-                providers = listOf(
-                    ProviderArtifactDescriptor(
-                        providerId = onlyDex, versionName = "1.0.1", versionCode = 1,
-                        artifactUrl = "https://repo.example/dex.tsz",
-                        sha256 = sha256Hex(bytes), minHostApi = 1,
-                    ),
+        val incompleteIndex = ProviderRepositoryIndex(
+            schemaVersion = 1,
+            repositoryId = "repo.example",
+            sequence = 1,
+            providers = listOf(
+                ProviderArtifactDescriptor(
+                    providerId = onlyDex,
+                    versionName = "1.0.1",
+                    versionCode = 1,
+                    artifactUrl = "https://repo.example/dex.tsz",
+                    sha256 = sha256Hex(bytes),
+                    minHostApi = 1,
                 ),
-            )),
+            ),
+        )
+        transport.publishMany(
+            signedIndex(keyPair, incompleteIndex),
             mapOf("https://repo.example/dex.tsz" to bytes),
         )
         val manager = manager(

@@ -70,8 +70,14 @@ data class MangaAllFamilyGroup(
     val familyId: String get() = MangaAllFamilyCatalog.FAMILY_ID
 
     val installableIds: List<String>
-        get() = if (!canInstall) emptyList() else entries
-            .filter { it.status == ProviderRepositoryEntryStatus.AVAILABLE ||
-                it.status == ProviderRepositoryEntryStatus.UPDATE_AVAILABLE }
-            .map { it.descriptor.providerId }
+        get() = if (!canInstall) {
+            emptyList()
+        } else {
+            entries
+                .filter {
+                    it.status == ProviderRepositoryEntryStatus.AVAILABLE ||
+                        it.status == ProviderRepositoryEntryStatus.UPDATE_AVAILABLE
+                }
+                .map { it.descriptor.providerId }
+        }
 }
