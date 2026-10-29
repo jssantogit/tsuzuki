@@ -233,7 +233,10 @@ class ProviderRepositoryManager(
                 ) {
                     throw ProviderSupplyChainException("MangaAll source belongs to a different repository trust origin")
                 }
-                if (current?.revoked == true) {
+                // An old revoked artifact may be replaced by a newer signed
+                // version from the SAME trusted repository. Never reuse or
+                // re-enable the revoked version itself.
+                if (current?.revoked == true && descriptor.versionCode <= current.versionCode) {
                     throw ProviderSupplyChainException("MangaAll installed source has been revoked")
                 }
                 if (current != null && current.versionCode == descriptor.versionCode &&

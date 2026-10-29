@@ -756,6 +756,38 @@ class ProviderRepositoryManagerTest {
         // Re-running the one-click install preserves all exact version IDs.
         manager.installMangaAll(repositoryId).size shouldBe 0
         manager.installed().size shouldBe 3
+        // A revoked old source can recover only through a NEW verified signed
+        // release from its existing trust origin, without dropping family state.
+        val v2SourceArtifacts = MangaAllFamilyCatalog.sourceProviderIds.associateWith { id ->
+            tsz(versionCode = 2, providerId = id)
+        }
+        val v2Descriptors = v2SourceArtifacts.map { (id, bytes) ->
+            ProviderArtifactDescriptor(
+                providerId = id, versionName = "1.0.2", versionCode = 2,
+                artifactUrl = "https://repo.example/$id-2.tsz",
+                sha256 = sha256Hex(bytes), minHostApi = 1,
+            )
+        }
+        transport.publishMany(
+            signedIndex(
+                keyPair, ProviderRepositoryIndex(
+                    schemaVersion = 1,
+                    repositoryId = repositoryId,
+                    sequence = 2,
+                    providers = v2Descriptors,
+                    revokedArtifactSha256 = setOf(
+                        sha256Hex(sourceArtifacts.getValue(MangaAllFamilyCatalog.sourceProviderIds[0])),
+                    ),
+                ),
+            ),
+            v2Descriptors.associate { descriptor ->
+                descriptor.artifactUrl to v2SourceArtifacts.getValue(descriptor.providerId)
+            },
+        )
+        manager.refresh(repositoryId)
+        artifactStore.current(MangaAllFamilyCatalog.sourceProviderIds[0])?.revoked shouldBe true
+        manager.installMangaAll(repositoryId).size shouldBe 3
+        manager.installed().all { !it.revoked && it.versionCode == 2L } shouldBe true
     }
 
     @Test

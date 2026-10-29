@@ -956,7 +956,10 @@ private fun InstalledProvidersList(
             item(key = "mangaall_family") {
                 ListItem(
                     headlineContent = { Text("MangaAll") },
-                    supportingContent = { Text("MangaDex · MangaBall · MangaDot") },
+                    supportingContent = {
+                        val repository = (display.first().descriptor.origin as ProviderOrigin.Repository).repositoryId
+                        Text("MangaDex · MangaBall · MangaDot · $repository")
+                    },
                 )
                 HorizontalDivider()
             }

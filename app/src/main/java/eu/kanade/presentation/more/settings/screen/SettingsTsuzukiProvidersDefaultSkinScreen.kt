@@ -475,7 +475,8 @@ private fun InstalledProviderCards(
 
                     if (family.isNotEmpty()) {
                         Text(
-                            text = "MangaAll · ${family.size} / ${MangaAllFamilyCatalog.sourceProviderIds.size} sources",
+                            text = "MangaAll · ${family.size} / ${MangaAllFamilyCatalog.sourceProviderIds.size} sources · " +
+                                (family.first().descriptor.origin as ProviderOrigin.Repository).repositoryId,
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
                             color = colors.foreground,
