@@ -210,7 +210,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `source-attested alias binds Haikyuu without fuzzy matching and records safe stage counts`(): Unit = runBlocking {
+    fun `source-attested alias uses proven matching and safe counters`(): Unit = runBlocking {
         val title = canonicalTitle.copy(displayTitle = "Haikyuu!!")
         val recorder = CapturingProviderDiagnostics()
         val bridge = CollectProviderReadingEvidence(
