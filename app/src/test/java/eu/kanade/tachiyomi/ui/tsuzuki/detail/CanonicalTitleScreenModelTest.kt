@@ -328,7 +328,9 @@ class CanonicalTitleScreenModelTest {
     }
 
     @Test
-    fun `chapter reload does not retain revoked integration metadata without an authorized cache`() = runTest(dispatcher) {
+    fun `chapter reload does not retain revoked integration metadata without an authorized cache`() = runTest(
+        dispatcher,
+    ) {
         val resolved = ResolvedMetadata(
             synopsis = ProvenancedMetadata("Previously enabled synopsis", IntegrationId("kitsu")),
             ratings = listOf(ProvenancedMetadata(ResolvedRating(8.7, 10.0), IntegrationId("mal"))),
