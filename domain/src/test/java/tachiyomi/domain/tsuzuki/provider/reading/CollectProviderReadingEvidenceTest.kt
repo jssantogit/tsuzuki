@@ -77,6 +77,7 @@ class CollectProviderReadingEvidenceTest {
         (result != null) shouldBe true
         result!!.complete shouldBe false
         result.evidence shouldBe emptyList()
+        result.snapshots shouldBe emptyList()
         bindings.getByTitle(canonicalTitle.id).shouldHaveSize(1)
         val timedOut = recorder.events.single {
             it.stage == DiagnosticStage.READ && it.outcome == DiagnosticOutcome.TIMEOUT
