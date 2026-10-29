@@ -251,6 +251,7 @@ class CollectProviderReadingEvidenceTest {
         result.bindingCount shouldBe 1
         result.evidence.shouldHaveSize(1)
         val lookup = recorder.events.single { it.stage == DiagnosticStage.LOOKUP }
+        lookup.attributes["provider_id"] shouldBe DiagnosticAttributeValue.Text("app.tsuzuki.mangafire")
         lookup.attributes["candidate_count"] shouldBe DiagnosticAttributeValue.Number(1)
         lookup.attributes["accepted_count"] shouldBe DiagnosticAttributeValue.Number(1)
         val chapters = recorder.events.single { it.stage == DiagnosticStage.READ }
