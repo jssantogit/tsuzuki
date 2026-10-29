@@ -559,8 +559,10 @@ class CanonicalTitleScreenModel(
                 val metadataResult = metadataRefresh.await()
                 val metadataElapsed = refreshStart.elapsedNow()
                 val current = (_state.value as? CanonicalTitleScreenState.Loaded)
-                    ?.takeIf { it.title.id == canonicalTitleId &&
-                            this@CanonicalTitleScreenModel.canonicalTitleId == canonicalTitleId }
+                    ?.takeIf {
+                        it.title.id == canonicalTitleId &&
+                            this@CanonicalTitleScreenModel.canonicalTitleId == canonicalTitleId
+                    }
                 if (current != null) {
                     // Publish completed metadata independently of chapter reconciliation.
                     // Chapter refresh can take seconds or be cancelled without invalidating
