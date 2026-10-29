@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
@@ -175,6 +176,7 @@ class CollectProviderReadingEvidenceTest {
 
     @Test
     fun `lookup failure marks collection incomplete`() = runBlocking {
+        val recorder = CapturingProviderDiagnostics()
         val bridge = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
             providerRegistry = registry(),
@@ -192,6 +194,7 @@ class CollectProviderReadingEvidenceTest {
             bindingRepository = MemoryBindingRepository(),
             evidenceAdapter = ProviderChapterEvidenceAdapter(),
             clock = { 4L },
+            diagnostics = recorder,
         )
 
         val result = bridge.execute(canonicalTitle.id)
@@ -199,6 +202,10 @@ class CollectProviderReadingEvidenceTest {
         result.complete shouldBe false
         result.bindingCount shouldBe 0
         result.evidence shouldBe emptyList()
+        val lookupFailure = recorder.events.single { it.stage == DiagnosticStage.LOOKUP }
+        lookupFailure.attributes["provider_error_code"] shouldBe DiagnosticAttributeValue.Text("NETWORK_ERROR")
+        val safe = StructuredDiagnosticSanitizer.sanitize(lookupFailure)
+        (safe != null) shouldBe true
     }
 
     @Test
