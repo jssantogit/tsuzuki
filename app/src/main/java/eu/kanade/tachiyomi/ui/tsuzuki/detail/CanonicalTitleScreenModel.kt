@@ -167,6 +167,7 @@ class CanonicalTitleScreenModel(
     private var canonicalTitleId: String? = null
     private var diagnosticTitleId: String? = null
     private var operation: Job? = null
+    private var reconciledReloadOperation: Job? = null
     private var downloadOperation: Job? = null
     private var readingStartOperation: Job? = null
 
@@ -177,6 +178,7 @@ class CanonicalTitleScreenModel(
             runCatching { diagnostics.stop() }
         }
         this.canonicalTitleId = canonicalTitleId
+        reconciledReloadOperation?.cancel()
         operation?.cancel()
         operation = viewModelScope.launch {
             val alreadyLoaded = (_state.value as? CanonicalTitleScreenState.Loaded)
@@ -192,6 +194,7 @@ class CanonicalTitleScreenModel(
 
     fun refresh(): Job? {
         val id = canonicalTitleId ?: return null
+        reconciledReloadOperation?.cancel()
         operation?.cancel()
         operation = viewModelScope.launch {
             refreshInBackground(id, forceChapterRefresh = true)
@@ -206,8 +209,10 @@ class CanonicalTitleScreenModel(
      */
     fun reloadReconciledChapters(): Job? {
         val id = canonicalTitleId ?: return null
-        operation?.cancel()
-        operation = viewModelScope.launch {
+        // Chapter-only updates must not cancel the metadata pipeline. Keep a
+        // separate cancellable operation so later revisions cannot race each other.
+        reconciledReloadOperation?.cancel()
+        reconciledReloadOperation = viewModelScope.launch {
             try {
                 // Only the chapter snapshot is being refreshed. Restore metadata from a
                 // cache validated against the current integration configuration so a chapter
@@ -227,6 +232,8 @@ class CanonicalTitleScreenModel(
                     refreshed
                 } else {
                     refreshed.copy(
+                        isRefreshing = current.isRefreshing,
+                        refreshError = current.refreshError,
                         libraryEntry = current.libraryEntry,
                         libraryMutationInProgress = current.libraryMutationInProgress,
                         libraryMutationError = current.libraryMutationError,
@@ -240,12 +247,14 @@ class CanonicalTitleScreenModel(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                val current = _state.value as? CanonicalTitleScreenState.Loaded
-                _state.value = current?.copy(isRefreshing = false, refreshError = error)
+                if (canonicalTitleId != id) return@launch
+                val current = (_state.value as? CanonicalTitleScreenState.Loaded)
+                    ?.takeIf { it.title.id == id }
+                _state.value = current?.copy(refreshError = error)
                     ?: CanonicalTitleScreenState.Error(error)
             }
         }
-        return operation
+        return reconciledReloadOperation
     }
 
     fun startChapterDiagnostics() {
