@@ -437,8 +437,23 @@ private fun InstalledProviderCards(
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
-    val family = registrations.filter { MangaAllFamilyCatalog.contains(it.descriptor.id.value) }
-    val others = registrations.filterNot { MangaAllFamilyCatalog.contains(it.descriptor.id.value) }
+    val candidates = registrations.filter { MangaAllFamilyCatalog.contains(it.descriptor.id.value) }
+    // Group only when every member has the same installed trust origin.
+    // A partial or mixed-repository state must never look like a complete
+    // approved MangaAll installation.
+    val sameRepository = candidates.mapNotNull { registration ->
+        (registration.descriptor.origin as? ProviderOrigin.Repository)?.repositoryId
+    }.toSet().size == 1
+    val family = if (candidates.size == MangaAllFamilyCatalog.sourceProviderIds.size &&
+        sameRepository &&
+        candidates.map { it.descriptor.id.value }.toSet() ==
+        MangaAllFamilyCatalog.sourceProviderIds.toSet()
+    ) {
+        candidates.sortedBy { MangaAllFamilyCatalog.sourceProviderIds.indexOf(it.descriptor.id.value) }
+    } else {
+        emptyList()
+    }
+    val others = registrations.filterNot { it in family }
     val displayOrder = family + others
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
