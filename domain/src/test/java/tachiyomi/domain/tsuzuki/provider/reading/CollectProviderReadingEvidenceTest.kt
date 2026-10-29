@@ -2,7 +2,10 @@ package tachiyomi.domain.tsuzuki.provider.reading
 
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
@@ -39,6 +42,47 @@ class CollectProviderReadingEvidenceTest {
         createdAt = 1L,
         updatedAt = 1L,
     )
+
+    @Test
+    fun `unresponsive MangaFire chapter listing stops within bounded provider budget without reporting a complete empty inventory`() = runTest {
+        val recorder = CapturingProviderDiagnostics()
+        val bindings = MemoryBindingRepository()
+        val neverCompletes = CompletableDeferred<Unit>()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderWorkCandidate("work-1", canonicalTitle.displayTitle, language = "en")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = {
+                    neverCompletes.await()
+                    error("unreachable")
+                },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+
+        // An outer test deadline proves the collector itself has a smaller budget.
+        val result = withTimeoutOrNull(21_000) { collector.execute(canonicalTitle.id) }
+
+        (result != null) shouldBe true
+        result!!.complete shouldBe false
+        result.evidence shouldBe emptyList()
+        bindings.getByTitle(canonicalTitle.id).shouldHaveSize(1)
+        val timedOut = recorder.events.single {
+            it.stage == DiagnosticStage.READ && it.outcome == DiagnosticOutcome.TIMEOUT
+        }
+        (StructuredDiagnosticSanitizer.sanitize(timedOut) != null) shouldBe true
+    }
 
     @Test
     fun `unique exact lookup creates binding and returns provider chapter evidence`() = runBlocking {
