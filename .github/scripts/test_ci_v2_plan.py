@@ -11,6 +11,18 @@ plan = MODULE.plan
 
 
 class PlannerTest(unittest.TestCase):
+    def test_supabase_start_uses_native_multi_registry_fallback(self):
+        # Supabase setup-cli exports a GHCR-only override. On shared GitHub
+        # runners this can exhaust rate limits without trying other registries.
+        # The test lane must keep PostgreSQL + pgTAP mandatory while allowing
+        # the CLI to attempt its supported alternative image registries.
+        workflow = (Path(__file__).parent.parent / "workflows" / "ci-v2.yml").read_text()
+        supabase_lane = workflow.split("  supabase:", 1)[1].split("  native-package:", 1)[0]
+        self.assertEqual(supabase_lane.count("unset SUPABASE_INTERNAL_IMAGE_REGISTRY"), 3)
+        self.assertIn('supabase start -x "$excluded"', supabase_lane)
+        self.assertIn("supabase db reset", supabase_lane)
+        self.assertIn("supabase test db", supabase_lane)
+
     def test_full_mode_runs_every_primary_lane(self):
         result = plan([], "full")
         self.assertEqual(set(result["selected_tests"]), {"Core Common", "Domain", "Data", "App"})

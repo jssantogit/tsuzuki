@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreChapterUpdateState
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContentPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContinueReadingState
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreEditorialChapterBinding
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreIdentity
@@ -27,11 +28,13 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitle
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleArtwork
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleFormat
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreTitleName
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreUserAdoptionReceipt
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreVariant
 import eu.kanade.tachiyomi.data.backup.models.PortableMihonBindingCodec
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import tachiyomi.data.Database
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadataCodec
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.integration.model.PortableIntegrationConfig
 import tachiyomi.domain.tsuzuki.reader.repository.CanonicalReadingRepository
@@ -74,14 +77,35 @@ class CanonicalCoreBackupExporter(
         val variants = chapters.flatMap { chapter ->
             chapterRepository.getVariantsByCanonicalChapterId(chapter.id).sortedBy { it.id }
         }
+        val editorialChapterBindings = titles.flatMap { title ->
+            database.tsuzuki_editorial_chapter_bindingsQueries
+                .getTsuzukiEditorialBindingsByTitle(title.id)
+                .awaitAsList()
+        }
+
+        val userAdoptionReceipts = titles.flatMap { title ->
+            database.tsuzuki_user_adoption_receiptsQueries
+                .getTsuzukiUserAdoptionReceiptsByTitle(title.id)
+                .awaitAsList()
+        }
+
         val chapterEvidence = titles.flatMap { title ->
             database.tsuzuki_chapter_evidenceQueries
                 .getTsuzukiChapterEvidenceByTitle(title.id).awaitAsList()
         }
         // Opaque third-party BLOBs can contain device IDs or credentials.
         // Refuse lossy or unsafe export until a portable codec exists.
-        check(chapterEvidence.all { it.raw_metadata.isEmpty() }) {
-            "Opaque chapter evidence metadata requires a portable codec"
+        check(
+            chapterEvidence.all { evidence ->
+                evidence.raw_metadata.isEmpty() ||
+                    (
+                        evidence.producer_kind == "PROVIDER" &&
+                            evidence.authority_class == "PROVIDER_PROVISIONAL" &&
+                            ProviderEvidenceMetadataCodec.decode(evidence.raw_metadata) != null
+                        )
+            },
+        ) {
+            "Unknown chapter evidence metadata cannot be exported"
         }
         val progress = titles.flatMap { title ->
             readingRepository.getProgressByCanonicalTitleId(title.id)
@@ -171,16 +195,18 @@ class CanonicalCoreBackupExporter(
                     }
                 }
         }
-        // External library memberships encode the linked remote account's
-        // work/list status. They cannot be silently attributed to a new user.
-        check(
+        // Connected accounts' list statuses cannot be attributed to the
+        // recipient of a portable canonical backup. The manual backup UI
+        // explicitly excludes these account-owned lists. Count omissions
+        // without copying provider identity, owner keys or remote progress.
+        val omittedExternalAccountMemberships =
             database.tsuzuki_external_library_membershipsQueries
-                .getAllTsuzukiExternalLibraryMemberships().awaitAsList().isEmpty() &&
+                .getAllTsuzukiExternalLibraryMemberships().awaitAsList().size +
                 database.tsuzuki_external_library_membershipsQueries
-                    .getAllTsuzukiScopedExternalLibraryMemberships().awaitAsList().isEmpty(),
-        ) { "External account list memberships need an isolated backup migration" }
+                    .getAllTsuzukiScopedExternalLibraryMemberships().awaitAsList().size
 
         val core = BackupCanonicalCore(
+            omittedExternalAccountMemberships = omittedExternalAccountMemberships,
             titles = titles.map {
                 BackupCoreTitle(it.id, it.displayTitle, it.identityState.name, it.createdAt, it.updatedAt)
             },
@@ -227,6 +253,48 @@ class CanonicalCoreBackupExporter(
                     decimalScale = it.decimalFraction?.scale,
                 )
             },
+            editorialChapterBindings = editorialChapterBindings.map {
+                BackupCoreEditorialChapterBinding(
+                    canonicalChapterId = it.canonical_chapter_id,
+                    canonicalTitleId = it.canonical_title_id,
+                    producerId = it.producer_id,
+                    externalWorkId = it.external_work_id,
+                    editionKey = it.edition_key,
+                    scopeLanguage = it.scope_language,
+                    sourceRecordId = it.source_record_id,
+                    upstreamSourceId = it.upstream_source_id,
+                    identityKey = it.identity_key,
+                    volumeKey = it.volume_key,
+                    observedAt = it.observed_at,
+                )
+            },
+            userAdoptionReceipts = userAdoptionReceipts.map {
+                BackupCoreUserAdoptionReceipt(
+                    canonicalChapterId = it.canonical_chapter_id,
+                    receiptId = it.receipt_id,
+                    canonicalTitleId = it.canonical_title_id,
+                    producerId = it.producer_id,
+                    externalWorkId = it.external_work_id,
+                    editionKey = it.edition_key,
+                    scopeLanguage = it.scope_language,
+                    sourceRecordId = it.source_record_id,
+                    sourceKind = it.source_kind,
+                    derivation = it.derivation,
+                    originReference = it.origin_reference,
+                    exactRevision = it.exact_revision,
+                    attributionReference = it.attribution_reference,
+                    licenseReference = it.license_reference,
+                    snapshotDigest = it.snapshot_digest,
+                    sourceUnitId = it.source_unit_id,
+                    structuralCategory = it.structural_category,
+                    acceptedLabel = it.accepted_label,
+                    identityKey = it.identity_key,
+                    volumeKey = it.volume_key,
+                    observedAt = it.observed_at,
+                    acceptedAt = it.accepted_at,
+                    reviewFingerprint = it.review_fingerprint,
+                )
+            },
             variants = variants.map {
                 BackupCoreVariant(
                     id = it.id,
@@ -251,6 +319,7 @@ class CanonicalCoreBackupExporter(
                 )
             },
             chapterEvidence = chapterEvidence.map {
+                val providerMetadata = ProviderEvidenceMetadataCodec.decode(it.raw_metadata)
                 BackupCoreChapterEvidence(
                     id = it.id,
                     canonicalTitleId = it.canonical_title_id,
@@ -265,6 +334,9 @@ class CanonicalCoreBackupExporter(
                     confidence = it.confidence,
                     authorityClass = it.authority_class,
                     mappedCanonicalChapterId = it.mapped_canonical_chapter_id,
+                    providerLanguage = providerMetadata?.language,
+                    providerScanlationGroup = providerMetadata?.scanlationGroup,
+                    providerReleaseDateMillis = providerMetadata?.releaseDateMillis,
                 )
             },
             progress = progress.map {

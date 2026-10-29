@@ -61,14 +61,22 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
+import eu.kanade.presentation.util.relativeTimeSpanString
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalChapterDetailItem
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreenState
+import eu.kanade.tachiyomi.ui.tsuzuki.detail.InventoryWorkDiscoveryStatus
+import eu.kanade.tachiyomi.ui.tsuzuki.detail.NativeInventoryRefreshState
 import kotlinx.coroutines.launch
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.automirroredrounded.ArrowBack
 import mihon.icons.materialsymbols.automirroredrounded.Sort
 import mihon.icons.materialsymbols.rounded.MoreVert
 import mihon.icons.materialsymbols.rounded.Search
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySourceSnapshot
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchFailureReason
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -86,6 +94,9 @@ fun CanonicalTitleDetailScreen(
     onOpenChapter: (String) -> Unit,
     onBaixarChapter: (String) -> Unit,
     onOpenProvidersSettings: () -> Unit,
+    onImportEpub: () -> Unit = {},
+    onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit = {},
+    inventoryRefresh: NativeInventoryRefreshState,
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
@@ -120,6 +131,7 @@ fun CanonicalTitleDetailScreen(
             is CanonicalTitleScreenState.Loaded -> LoadedDetails(
                 state, background, navigateUp, onAtualizar, onAddToLibrary, onRemoveFromLibrary,
                 onReadTitle, onOpenChapter, onBaixarChapter, onOpenProvidersSettings,
+                onImportEpub, onReviewCandidates, inventoryRefresh,
             )
         }
     }
@@ -137,6 +149,9 @@ private fun LoadedDetails(
     onOpenChapter: (String) -> Unit,
     onDownload: (String) -> Unit,
     onProviders: () -> Unit,
+    onImportEpub: () -> Unit,
+    onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit,
+    inventoryRefresh: NativeInventoryRefreshState,
 ) {
     var mode by rememberSaveable(state.title.id) { mutableStateOf(CanonicalDetailsLowerMode.COMPACT) }
     var sort by rememberSaveable(state.title.id) { mutableStateOf(CanonicalChapterSort.ORIGINAL) }
@@ -186,9 +201,23 @@ private fun LoadedDetails(
                 item(key = "modes") { DetailsModes(mode, moveMode) }
             }
             when (mode) {
-                CanonicalDetailsLowerMode.COMPACT -> item(key = "context") {
-                    ContextualChapterRail(state, onOpenChapter, onProviders) {
-                        moveMode(CanonicalDetailsLowerAction.VIEW_ALL)
+                CanonicalDetailsLowerMode.COMPACT -> {
+                    item(key = "context") {
+                        ContextualChapterRail(state, onOpenChapter, onProviders) {
+                            moveMode(CanonicalDetailsLowerAction.VIEW_ALL)
+                        }
+                    }
+                    if (chapters.isEmpty() || state.independentInventory.sources.isNotEmpty() ||
+                        inventoryRefresh.refreshing || inventoryRefresh.discoveryStatus.isNotEmpty()
+                    ) {
+                        item(key = "independent-inventory") {
+                            IndependentInventoryInfo(
+                                state.independentInventory,
+                                inventoryRefresh,
+                                onImportEpub,
+                                onReviewCandidates,
+                            )
+                        }
                     }
                 }
                 CanonicalDetailsLowerMode.EDITORIAL -> item(key = "editorial") { DetailsEditorial(state) }
@@ -214,6 +243,12 @@ private fun LoadedDetails(
                                 Icon(MaterialSymbols.Rounded.Search, stringResource(MR.strings.tsuzuki_details_jump))
                             }
                         }
+                        IndependentInventoryInfo(
+                            state.independentInventory,
+                            inventoryRefresh,
+                            onImportEpub,
+                            onReviewCandidates,
+                        )
                     }
                     if (chapters.isEmpty()) {
                         item(key = "empty-chapters") {
@@ -348,6 +383,313 @@ private fun LoadedDetails(
             }
         }
     }
+}
+
+@Composable
+private fun IndependentInventoryInfo(
+    snapshot: IndependentInventorySnapshot,
+    refresh: NativeInventoryRefreshState,
+    onImportEpub: () -> Unit,
+    onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit,
+) {
+    val colors = defaultSkinColors()
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            stringResource(MR.strings.tsuzuki_inventory_title),
+            style = MaterialTheme.typography.labelLarge,
+            color = colors.foreground,
+        )
+        Text(
+            stringResource(MR.strings.tsuzuki_inventory_offline_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.secondary,
+        )
+        Text(
+            stringResource(MR.strings.tsuzuki_inventory_auto_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.secondary,
+        )
+        if (refresh.refreshing) {
+            Text(
+                stringResource(MR.strings.tsuzuki_inventory_fetching),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+        }
+        refresh.discoveryStatus.forEach { (producerId, status) ->
+            val source = when (producerId) {
+                "mangadex" -> "MangaDex"
+                "mangaupdates" -> "MangaUpdates"
+                else -> producerId
+            }
+            val label = when (status) {
+                InventoryWorkDiscoveryStatus.SEARCHING -> MR.strings.tsuzuki_inventory_discovery_searching
+                InventoryWorkDiscoveryStatus.LINKED -> MR.strings.tsuzuki_inventory_discovery_linked
+                InventoryWorkDiscoveryStatus.NO_VERIFIED_MATCH -> MR.strings.tsuzuki_inventory_discovery_no_match
+                InventoryWorkDiscoveryStatus.FAILED -> MR.strings.tsuzuki_inventory_discovery_failed
+                InventoryWorkDiscoveryStatus.REQUIRES_MANGADEX -> MR.strings.tsuzuki_inventory_discovery_requires_md
+                InventoryWorkDiscoveryStatus.INTERRUPTED -> MR.strings.tsuzuki_inventory_discovery_interrupted
+            }
+            Text(
+                "$source · ${stringResource(label)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+        }
+        refresh.refreshStops.forEach { (producerId, stop) ->
+            val source = when (producerId) {
+                "mangadex" -> "MangaDex"
+                "mangaupdates" -> "MangaUpdates"
+                else -> producerId
+            }
+            val label = when (stop) {
+                InventoryRefreshStop.EXHAUSTED -> MR.strings.tsuzuki_inventory_refresh_exhausted
+                InventoryRefreshStop.PARTIAL -> MR.strings.tsuzuki_inventory_refresh_partial
+                InventoryRefreshStop.FAILED -> MR.strings.tsuzuki_inventory_refresh_failed
+                InventoryRefreshStop.NO_VERIFIED_WORK -> MR.strings.tsuzuki_inventory_refresh_unlinked
+                InventoryRefreshStop.DISABLED -> MR.strings.tsuzuki_inventory_refresh_disabled
+            }
+            Text(
+                "$source · ${stringResource(MR.strings.tsuzuki_inventory_release_status, stringResource(label))}",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+            if (stop == InventoryRefreshStop.FAILED) {
+                refresh.refreshFailureReasons[producerId]?.let { InventoryFailureReasonText(it) }
+            }
+        }
+        refresh.lastStop?.takeIf { refresh.refreshStops.isEmpty() }?.let { stop ->
+            Text(
+                stringResource(
+                    when (stop) {
+                        InventoryRefreshStop.EXHAUSTED -> MR.strings.tsuzuki_inventory_refresh_exhausted
+                        InventoryRefreshStop.PARTIAL -> MR.strings.tsuzuki_inventory_refresh_partial
+                        InventoryRefreshStop.FAILED -> MR.strings.tsuzuki_inventory_refresh_failed
+                        InventoryRefreshStop.NO_VERIFIED_WORK -> MR.strings.tsuzuki_inventory_refresh_unlinked
+                        InventoryRefreshStop.DISABLED -> MR.strings.tsuzuki_inventory_refresh_disabled
+                    },
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+        }
+        if (refresh.lastStop == InventoryRefreshStop.FAILED && refresh.refreshStops.isEmpty()) {
+            refresh.producerId?.let { producerId ->
+                refresh.refreshFailureReasons[producerId]?.let { InventoryFailureReasonText(it) }
+            }
+        }
+        DefaultSkinTextAction(
+            text = stringResource(MR.strings.tsuzuki_epub_import_action),
+            onClick = onImportEpub,
+        )
+        if (snapshot.sources.isEmpty()) {
+            Text(
+                stringResource(MR.strings.tsuzuki_inventory_unknown),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+            return@Column
+        }
+        Text(
+            stringResource(MR.strings.tsuzuki_inventory_partial),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.secondary,
+        )
+        snapshot.sources.forEach { source ->
+            val providerName = when (source.scope.producerId) {
+                "mangadex" -> "MangaDex"
+                "mangaupdates" -> "MangaUpdates"
+                else -> source.scope.producerId
+            }
+            Text(providerName, style = MaterialTheme.typography.labelMedium, color = colors.foreground)
+            val editionKey = source.scope.editionKey?.takeIf(String::isNotBlank)
+            Text(
+                stringResource(
+                    MR.strings.tsuzuki_inventory_scope,
+                    source.scope.externalWorkId,
+                    editionKey?.let {
+                        stringResource(
+                            MR.strings.tsuzuki_inventory_edition_scope_value,
+                            it,
+                            stringResource(
+                                if (source.scope.editionIdentityVerified) {
+                                    MR.strings.tsuzuki_inventory_edition_verified
+                                } else {
+                                    MR.strings.tsuzuki_inventory_edition_unverified
+                                },
+                            ),
+                        )
+                    } ?: stringResource(MR.strings.tsuzuki_inventory_edition_unrecorded),
+                    source.scope.language?.takeIf(String::isNotBlank)
+                        ?: stringResource(MR.strings.tsuzuki_inventory_language_unrecorded),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+            val latestAttempt = source.latestAttemptOutcomes
+                .sortedBy { it.name }
+                .map { outcome ->
+                    stringResource(
+                        when (outcome) {
+                            InventoryFetchOutcome.PARTIAL -> MR.strings.tsuzuki_inventory_outcome_partial
+                            InventoryFetchOutcome.EXHAUSTED -> MR.strings.tsuzuki_inventory_outcome_exhausted
+                            InventoryFetchOutcome.FAILED -> MR.strings.tsuzuki_inventory_outcome_failed
+                            InventoryFetchOutcome.NOT_ATTEMPTED -> MR.strings.tsuzuki_inventory_outcome_not_attempted
+                        },
+                    )
+                }
+                .ifEmpty {
+                    listOf(
+                        stringResource(
+                            if (source.latestAttemptAt == null) {
+                                MR.strings.tsuzuki_inventory_no_attempt
+                            } else {
+                                MR.strings.tsuzuki_inventory_outcome_unrecorded
+                            },
+                        ),
+                    )
+                }
+                .joinToString("; ")
+            if (source.latestAttemptAt == null && source.latestAttemptOutcomes.isEmpty()) {
+                Text(latestAttempt, style = MaterialTheme.typography.bodySmall, color = colors.secondary)
+            } else {
+                val attemptTime = source.latestAttemptAt?.let { relativeTimeSpanString(it) }
+                    ?: stringResource(MR.strings.tsuzuki_inventory_time_unrecorded)
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_latest_attempt, latestAttempt, attemptTime),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            val successfulFetchTime = source.latestSuccessfulFetchAt?.let { relativeTimeSpanString(it) }
+            val claimObservationTime = source.latestClaimObservedAt?.let { relativeTimeSpanString(it) }
+            Text(
+                stringResource(
+                    MR.strings.tsuzuki_inventory_success_and_claim_times,
+                    successfulFetchTime ?: stringResource(MR.strings.tsuzuki_inventory_no_successful_fetch),
+                    claimObservationTime ?: stringResource(MR.strings.tsuzuki_inventory_no_claim_observation),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+            if (source.knownIndividualClaims > 0) {
+                Text(
+                    "${source.knownIndividualClaims} " + stringResource(MR.strings.tsuzuki_inventory_individual),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.candidateObservations > 0) {
+                Text(
+                    "${source.candidateObservations} " + stringResource(MR.strings.tsuzuki_inventory_candidates),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.releaseObservations > 0) {
+                Text(
+                    "${source.releaseObservations} " + stringResource(MR.strings.tsuzuki_inventory_releases),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.numberedReleaseCandidateCount > 0) {
+                Text(
+                    "${source.numberedReleaseCandidateCount} " +
+                        stringResource(MR.strings.tsuzuki_inventory_numbered_release_candidates),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+                source.numberedReleaseCandidates.forEach { candidate ->
+                    Text(
+                        stringResource(
+                            MR.strings.tsuzuki_inventory_numbered_release_example,
+                            candidate.label,
+                            candidate.language ?: stringResource(MR.strings.tsuzuki_inventory_language_unrecorded),
+                            candidate.releaseCount,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.secondary,
+                    )
+                }
+            } else if (source.releaseObservations == 0 && source.latestSuccessfulFetchAt != null) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_empty_release_feed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            } else if (source.releaseObservations > 0) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_no_numbered_release_candidates),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.knownEditorialLabels.isNotEmpty()) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_editorial_examples) + ": " +
+                        source.knownEditorialLabels.joinToString(", "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.candidateExampleLabels.isNotEmpty()) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_candidate_examples) + ": " +
+                        source.candidateExampleLabels.joinToString(", "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (
+                source.candidateObservations > 0 &&
+                !source.scope.editionKey.isNullOrBlank() &&
+                !source.scope.language.isNullOrBlank()
+            ) {
+                DefaultSkinTextAction(
+                    text = "Revisar capítulos desta edição",
+                    onClick = { onReviewCandidates(source) },
+                )
+            }
+            if (source.releaseExampleLabels.isNotEmpty()) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_release_examples) + ": " +
+                        source.releaseExampleLabels.joinToString(", "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.declaredTotals.isNotEmpty()) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_totals) + ": " +
+                        source.declaredTotals.sorted().joinToString(", "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun InventoryFailureReasonText(reason: InventoryFetchFailureReason) {
+    val label = when (reason) {
+        InventoryFetchFailureReason.ACCESS_DENIED -> MR.strings.tsuzuki_inventory_error_access
+        InventoryFetchFailureReason.RATE_LIMITED -> MR.strings.tsuzuki_inventory_error_rate_limit
+        InventoryFetchFailureReason.HTTP_ERROR -> MR.strings.tsuzuki_inventory_error_http
+        InventoryFetchFailureReason.RESPONSE_TOO_LARGE -> MR.strings.tsuzuki_inventory_error_size
+        InventoryFetchFailureReason.NETWORK_ERROR -> MR.strings.tsuzuki_inventory_error_network
+        InventoryFetchFailureReason.INVALID_RESPONSE -> MR.strings.tsuzuki_inventory_error_response
+        InventoryFetchFailureReason.UNKNOWN -> MR.strings.tsuzuki_inventory_error_unknown
+    }
+    Text(
+        stringResource(label),
+        style = MaterialTheme.typography.bodySmall,
+        color = defaultSkinColors().secondary,
+    )
 }
 
 @Composable

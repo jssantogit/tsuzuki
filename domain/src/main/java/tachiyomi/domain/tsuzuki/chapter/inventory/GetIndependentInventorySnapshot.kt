@@ -1,0 +1,225 @@
+package tachiyomi.domain.tsuzuki.chapter.inventory
+
+import dev.zacsweers.metro.Inject
+
+/**
+ * A read-only, offline view of what independent inventory producers actually observed.
+ * Neither release records nor exhausted HTTP pagination prove editorial completeness.
+ */
+enum class InventoryKnowledge {
+    UNKNOWN,
+    PARTIAL,
+}
+
+data class IndependentInventorySourceSnapshot(
+    val scope: InventoryScope,
+    val knownIndividualClaims: Int,
+    val releaseObservations: Int,
+    val declaredTotals: Set<Int>,
+    val outcomes: Set<InventoryFetchOutcome>,
+    /** Legacy aggregate timestamp across stored claim and page observations. */
+    val latestObservedAt: Long?,
+    /** Latest recorded fetch attempt; explicit NOT_ATTEMPTED rows are not attempts. */
+    val latestAttemptAt: Long? = null,
+    /** Outcomes tied at the latest attempt timestamp, retaining ambiguity across pages. */
+    val latestAttemptOutcomes: Set<InventoryFetchOutcome> = emptySet(),
+    /** Latest page observation from a successful PARTIAL or EXHAUSTED fetch. */
+    val latestSuccessfulFetchAt: Long? = null,
+    /** Latest timestamp carried by a stored claim; it does not imply a successful page outcome. */
+    val latestClaimObservedAt: Long? = null,
+    /** Bounded examples of verified primary editorial units, not Reader targets. */
+    val knownEditorialLabels: List<String> = emptyList(),
+    /** Bounded raw release labels, never automatically promoted to chapters. */
+    val releaseExampleLabels: List<String> = emptyList(),
+    /** Unique observed release numbers by exact label and language; never editorial chapter identities. */
+    val numberedReleaseCandidateCount: Int = 0,
+    /** Bounded examples; each count represents source release records, not canonical chapters. */
+    val numberedReleaseCandidates: List<InventoryReleaseChapterCandidate> = emptyList(),
+    /** Explicit source-indexed units that still require user review, never verified editorial chapters. */
+    val candidateObservations: Int = 0,
+    val candidateExampleLabels: List<String> = emptyList(),
+    /** Bounded provenance pointers for offline review; never sufficient for canonical promotion. */
+    val candidateExamples: List<InventoryCandidateExample> = emptyList(),
+    /** Conflicting labels for one selected-source unit remain visible instead of being resolved. */
+    val candidateConflicts: List<InventoryCandidateConflict> = emptyList(),
+)
+
+data class InventoryReleaseChapterCandidate(
+    val label: String,
+    val language: String?,
+    val releaseCount: Int,
+)
+
+data class InventoryCandidateConflict(
+    val sourceKind: InventoryCandidateSourceKind,
+    val sourceUnitId: String,
+    val candidates: List<InventoryCandidateExample>,
+)
+
+data class IndependentInventorySnapshot(
+    val knowledge: InventoryKnowledge,
+    val sources: List<IndependentInventorySourceSnapshot>,
+    val editorialCompletenessConfirmed: Boolean = false,
+)
+
+@Inject
+class GetIndependentInventorySnapshot(
+    private val ledger: InventoryEvidenceRepository,
+) {
+    private companion object {
+        const val EXAMPLE_LIMIT = 8
+        const val MAX_EXAMPLE_LABEL_LENGTH = 512
+        const val MAX_EXAMPLE_SOURCE_RECORD_ID_LENGTH = 1024
+        const val RELEASE_LABEL_LIMIT = 64
+        const val NUMBERED_RELEASE_EXAMPLE_LIMIT = 16
+        val LANGUAGE_TAG = Regex("""^[a-zA-Z]{2,8}(?:-[a-zA-Z0-9]{1,8})*$""")
+    }
+
+    suspend fun execute(canonicalTitleId: String): IndependentInventorySnapshot {
+        require(canonicalTitleId.isNotBlank())
+
+        // Stored evidence belongs to the requested canonical title, and edition
+        // is part of the identity boundary, never an implicit wildcard.
+        val claims = ledger.byTitle(canonicalTitleId)
+            .filter { it.scope.canonicalTitleId == canonicalTitleId }
+        val pages = ledger.batchesByTitle(canonicalTitleId)
+            .filter { it.scope.canonicalTitleId == canonicalTitleId }
+        val scopes = (claims.map { it.scope } + pages.map { it.scope })
+            .distinct()
+            .sortedWith(
+                compareBy<InventoryScope>(
+                    { it.producerId },
+                    { it.externalWorkId },
+                    { it.editionKey.orEmpty() },
+                    { it.language.orEmpty() },
+                ),
+            )
+
+        val sources = scopes.map { scope ->
+            val sourceClaims = claims.filter { it.scope == scope }
+                .sortedByDescending { it.claim.observedAt }
+                .distinctBy { it.claim.sourceRecordId }
+            val sourcePages = pages.filter { it.scope == scope }
+            val candidateExamples = sourceClaims.mapNotNull { stored ->
+                if (!InventoryClaimPolicy.isNonEditorialCandidate(stored.claim)) return@mapNotNull null
+                val label = stored.claim.label?.trim()?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                if (label.length > MAX_EXAMPLE_LABEL_LENGTH) return@mapNotNull null
+                if (stored.claim.sourceRecordId.length > MAX_EXAMPLE_SOURCE_RECORD_ID_LENGTH) {
+                    return@mapNotNull null
+                }
+                val provenance = stored.claim.provenance ?: return@mapNotNull null
+                InventoryCandidateExample(
+                    sourceRecordId = stored.claim.sourceRecordId,
+                    label = label,
+                    provenance = provenance,
+                    observedAt = stored.claim.observedAt,
+                )
+            }
+            // Release numbers may be useful evidence, but never grant edition ownership,
+            // create chapters or assert a readable ContentBinding. Deduplicate uploads
+            // by exact number AND language without rounding decimal chapter identities.
+            val numberedReleaseCandidates = sourceClaims.asSequence()
+                .map { it.claim }
+                .filter {
+                    it.derivation == InventoryDerivation.RELEASE_RECORD &&
+                        it.kind == InventoryClaimKind.INDIVIDUAL
+                }
+                .mapNotNull { claim ->
+                    val label = claim.label?.trim()
+                        ?.takeIf { it.length in 1..RELEASE_LABEL_LIMIT }
+                        ?: return@mapNotNull null
+                    if (InventoryClaimPolicy.classifyReleaseLabel(label) != InventoryClaimKind.INDIVIDUAL) {
+                        return@mapNotNull null
+                    }
+                    val language = claim.language?.trim()?.takeIf(String::isNotBlank)
+                    if (language != null && !LANGUAGE_TAG.matches(language)) return@mapNotNull null
+                    label to language
+                }
+                .groupingBy { it }
+                .eachCount()
+                .map { (identity, count) ->
+                    InventoryReleaseChapterCandidate(
+                        label = identity.first,
+                        language = identity.second,
+                        releaseCount = count,
+                    )
+                }
+            val attemptPages = sourcePages.filter { it.outcome != InventoryFetchOutcome.NOT_ATTEMPTED }
+            val latestAttemptAt = attemptPages.maxOfOrNull { it.observedAt }
+            val summary = summarizeInventory(sourceClaims)
+            IndependentInventorySourceSnapshot(
+                scope = scope,
+                knownIndividualClaims = summary.individuallyAdmissibleClaims,
+                releaseObservations = summary.releaseObservations,
+                numberedReleaseCandidateCount = numberedReleaseCandidates.size,
+                numberedReleaseCandidates = numberedReleaseCandidates.take(NUMBERED_RELEASE_EXAMPLE_LIMIT),
+                candidateObservations = summary.candidateObservations,
+                declaredTotals = sourcePages.mapNotNull { it.declaredTotal }.toSet(),
+                outcomes = sourcePages.map { it.outcome }.toSet(),
+                latestObservedAt = (
+                    sourceClaims.map { it.claim.observedAt } +
+                        sourcePages.map { it.observedAt }
+                    ).maxOrNull(),
+                latestAttemptAt = latestAttemptAt,
+                latestAttemptOutcomes = latestAttemptAt?.let { at ->
+                    attemptPages.filter { it.observedAt == at }.map { it.outcome }.toSet()
+                }.orEmpty(),
+                latestSuccessfulFetchAt = sourcePages
+                    .filter {
+                        it.outcome == InventoryFetchOutcome.PARTIAL ||
+                            it.outcome == InventoryFetchOutcome.EXHAUSTED
+                    }
+                    .maxOfOrNull { it.observedAt },
+                latestClaimObservedAt = sourceClaims.maxOfOrNull { it.claim.observedAt },
+                knownEditorialLabels = sourceClaims
+                    .filter { InventoryClaimPolicy.mayPromote(scope, it.claim) }
+                    .mapNotNull { it.claim.label?.trim()?.takeIf(String::isNotBlank) }
+                    .distinct()
+                    .take(EXAMPLE_LIMIT),
+                candidateExampleLabels = sourceClaims
+                    .filter { InventoryClaimPolicy.isNonEditorialCandidate(it.claim) }
+                    .mapNotNull {
+                        it.claim.label?.trim()?.takeIf {
+                            it.isNotBlank() && it.length <= MAX_EXAMPLE_LABEL_LENGTH
+                        }
+                    }
+                    .distinct()
+                    .take(EXAMPLE_LIMIT),
+                candidateExamples = candidateExamples.take(EXAMPLE_LIMIT),
+                candidateConflicts = candidateExamples
+                    .groupBy { it.provenance.sourceKind to it.provenance.sourceUnitId }
+                    .mapNotNull { (identity, observations) ->
+                        val variants = observations.distinctBy { it.label }
+                        if (variants.size < 2) return@mapNotNull null
+                        InventoryCandidateConflict(
+                            sourceKind = identity.first,
+                            sourceUnitId = identity.second,
+                            candidates = variants.take(2),
+                        )
+                    }
+                    .take(EXAMPLE_LIMIT),
+                releaseExampleLabels = sourceClaims
+                    .filter { it.claim.derivation == InventoryDerivation.RELEASE_RECORD }
+                    .mapNotNull { it.claim.label?.trim()?.takeIf(String::isNotBlank) }
+                    .distinct()
+                    .take(EXAMPLE_LIMIT),
+            )
+        }
+
+        // This ledger currently cannot certify editorial completeness. In
+        // particular EXHAUSTED applies only to its technical page request.
+        val hasKnowledge = sources.any { source ->
+            source.knownIndividualClaims > 0 ||
+                source.candidateObservations > 0 ||
+                source.releaseObservations > 0 ||
+                source.declaredTotals.isNotEmpty() ||
+                source.outcomes.any {
+                    it == InventoryFetchOutcome.PARTIAL || it == InventoryFetchOutcome.EXHAUSTED
+                }
+        }
+        return IndependentInventorySnapshot(
+            knowledge = if (hasKnowledge) InventoryKnowledge.PARTIAL else InventoryKnowledge.UNKNOWN,
+            sources = sources,
+        )
+    }
+}

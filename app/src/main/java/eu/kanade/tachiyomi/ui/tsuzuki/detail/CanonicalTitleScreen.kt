@@ -2,13 +2,33 @@ package eu.kanade.tachiyomi.ui.tsuzuki.detail
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -24,6 +44,9 @@ import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkScreenModel
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkState
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentSelectorScreenModel
 import kotlinx.coroutines.flow.collect
+import tachiyomi.domain.tsuzuki.chapter.inventory.PreviewUserAdoptedInventory
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 data class CanonicalTitleScreen(
     val canonicalTitleId: String,
@@ -48,6 +71,22 @@ data class CanonicalTitleScreen(
         )
 
         val screenModel = metroViewModel<CanonicalTitleScreenModel>()
+        val inventoryModel = metroViewModel<NativeInventoryRefreshScreenModel>()
+        val inventoryState by inventoryModel.state.collectAsStateWithLifecycle()
+        val adoptionModel = metroViewModel<UserAdoptionReviewScreenModel>()
+        val adoptionState by adoptionModel.state.collectAsStateWithLifecycle()
+        val selectedEpubLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+        ) { selectedUri ->
+            if (selectedUri != null) {
+                adoptionModel.importSelectedEpub(
+                    canonicalTitleId = canonicalTitleId,
+                    cacheDirectory = context.cacheDir,
+                    openStream = { context.contentResolver.openInputStream(selectedUri) },
+                )
+            }
+        }
+        var selectedCandidates by remember(canonicalTitleId) { mutableStateOf(setOf<String>()) }
         val contentSelectorViewModel = metroViewModel<ContentSelectorScreenModel>()
         val linkViewModel = metroViewModel<ContentBindingLinkScreenModel>()
         val linkState by linkViewModel.state.collectAsStateWithLifecycle()
@@ -67,6 +106,12 @@ data class CanonicalTitleScreen(
 
         LaunchedEffect(canonicalTitleId, openSourceBindingFlow) {
             screenModel.start(canonicalTitleId)
+            inventoryModel.start(canonicalTitleId)
+            inventoryModel.observeIntegrationChanges(canonicalTitleId)
+            // Automatic only after explicit CHAPTER_INVENTORY opt-in; no
+            // catalog bootstrap and no release-to-chapter promotion.
+            inventoryModel.discoverAndRefreshAutomatically(canonicalTitleId)
+            adoptionModel.start(canonicalTitleId)
             if (
                 shouldAutoOpenSourceBindingFlow(
                     canonicalTitleId,
@@ -80,6 +125,20 @@ data class CanonicalTitleScreen(
             }
         }
 
+        DisposableEffect(canonicalTitleId) {
+            onDispose {
+                inventoryModel.cancel()
+                adoptionModel.dismiss()
+            }
+        }
+        LaunchedEffect(canonicalTitleId, inventoryState.revision) {
+            if (inventoryState.revision > 0) screenModel.reloadReconciledChapters()?.join()
+        }
+
+        LaunchedEffect(canonicalTitleId, adoptionState.revision) {
+            if (adoptionState.revision > 0) screenModel.reloadReconciledChapters()?.join()
+        }
+
         CanonicalTitleDetailScreen(
             state = state,
             navigateUp = navigateUp,
@@ -87,6 +146,14 @@ data class CanonicalTitleScreen(
             onAddToLibrary = { screenModel.addToLibrary() },
             onRemoveFromLibrary = { screenModel.removeFromLibrary() },
             onOpenProvidersSettings = openProviders,
+            onImportEpub = {
+                selectedEpubLauncher.launch(arrayOf("application/epub+zip", "application/octet-stream"))
+            },
+            onReviewCandidates = { source ->
+                adoptionModel.browseCandidates(source.scope)
+                selectedCandidates = emptySet()
+            },
+            inventoryRefresh = inventoryState,
             onReadTitle = { screenModel.startReading(openReader) },
             onBaixarChapter = { canonicalChapterId ->
                 screenModel.requestDownload(canonicalChapterId)
@@ -95,6 +162,178 @@ data class CanonicalTitleScreen(
                 screenModel.openChapter(canonicalChapterId, openReader)
             },
         )
+
+        if (adoptionState.importingEpub || adoptionState.epubImportFailed || adoptionState.epubImported) {
+            AlertDialog(
+                onDismissRequest = { adoptionModel.clearEpubImportResult() },
+                title = { Text(stringResource(MR.strings.tsuzuki_epub_import_title)) },
+                text = {
+                    Column {
+                        if (adoptionState.importingEpub) {
+                            CircularProgressIndicator()
+                            Text(stringResource(MR.strings.tsuzuki_epub_import_in_progress))
+                        } else {
+                            Text(
+                                stringResource(
+                                    if (adoptionState.epubImported) {
+                                        MR.strings.tsuzuki_epub_import_success
+                                    } else {
+                                        MR.strings.tsuzuki_epub_import_failed
+                                    },
+                                ),
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = !adoptionState.importingEpub,
+                        onClick = { adoptionModel.clearEpubImportResult() },
+                    ) { Text(stringResource(MR.strings.action_ok)) }
+                },
+            )
+        }
+
+        adoptionState.candidateScope?.takeIf { it.canonicalTitleId == canonicalTitleId }?.let { scope ->
+            val page = adoptionState.candidatePage
+            AlertDialog(
+                onDismissRequest = { adoptionModel.dismissCandidates() },
+                title = { Text("Selecionar capítulos da edição") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Edição: ${scope.editionKey} · Idioma: ${scope.language}")
+                        Text("Estes dados são candidatos, não capítulos oficiais atestados por uma editora.")
+                        if (adoptionState.loadingCandidates) {
+                            CircularProgressIndicator()
+                        }
+                        if (adoptionState.candidateFailed) {
+                            Text("Não foi possível consultar os candidatos locais desta edição.")
+                        }
+                        if (page != null) {
+                            if (page.candidates.isEmpty()) {
+                                Text("Nenhum candidato disponível nesta página.")
+                            }
+                            LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp)) {
+                                items(page.candidates, key = { it.sourceRecordId }) { example ->
+                                    val checked = example.sourceRecordId in selectedCandidates
+                                    val canSelectMore =
+                                        selectedCandidates.size < PreviewUserAdoptedInventory.MAX_SELECTION
+                                    Row {
+                                        Checkbox(
+                                            checked = checked,
+                                            enabled = !adoptionState.loadingCandidates &&
+                                                (checked || canSelectMore),
+                                            onCheckedChange = { selected ->
+                                                selectedCandidates = if (selected) {
+                                                    selectedCandidates + example.sourceRecordId
+                                                } else {
+                                                    selectedCandidates - example.sourceRecordId
+                                                }
+                                            },
+                                        )
+                                        Text(example.label)
+                                    }
+                                }
+                            }
+                            Row {
+                                TextButton(
+                                    onClick = { adoptionModel.previousCandidatePage() },
+                                    enabled = !adoptionState.loadingCandidates && adoptionState.candidatePageIndex > 0,
+                                ) { Text("Anterior") }
+                                Text("Página ${adoptionState.candidatePageIndex + 1}")
+                                TextButton(
+                                    onClick = { adoptionModel.nextCandidatePage() },
+                                    enabled = !adoptionState.loadingCandidates && page.nextCursor != null,
+                                ) { Text("Próxima") }
+                            }
+                        }
+                        Text("${selectedCandidates.size} de ${PreviewUserAdoptedInventory.MAX_SELECTION} selecionados")
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            adoptionModel.dismissCandidates()
+                            adoptionModel.preview(scope, selectedCandidates.sorted())
+                        },
+                        enabled = !adoptionState.loadingCandidates && selectedCandidates.isNotEmpty(),
+                    ) { Text("Ver prévia") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { adoptionModel.dismissCandidates() }) { Text("Cancelar") }
+                },
+            )
+        }
+
+        adoptionState.plan?.let { ready ->
+            var acknowledged by remember(ready.fingerprint) { mutableStateOf(false) }
+            AlertDialog(
+                onDismissRequest = { adoptionModel.dismiss() },
+                title = { Text("Confirmar adoção dos capítulos") },
+                text = {
+                    Column(
+                        modifier = Modifier.heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Text("Obra: $canonicalTitleId")
+                        Text("Edição: ${ready.scope.editionKey} · Idioma: ${ready.scope.language}")
+                        Text("Origem: ${ready.scope.producerId}")
+                        ready.units.forEach { unit ->
+                            Text(
+                                "${unit.label} · ${unit.provenance.sourceKind.name} · " +
+                                    "revisão ${unit.provenance.exactRevision}",
+                            )
+                        }
+                        Text(
+                            "Os capítulos serão considerados adotados por você, não oficiais. " +
+                                "Isto não disponibiliza páginas para leitura.",
+                        )
+                        Row {
+                            Checkbox(
+                                checked = acknowledged,
+                                onCheckedChange = { acknowledged = it },
+                            )
+                            Text("Revisei a edição e os capítulos selecionados.")
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = { adoptionModel.confirm(canonicalTitleId) },
+                        enabled = acknowledged && !adoptionState.adopting,
+                    ) { Text(if (adoptionState.adopting) "Registrando..." else "Adotar capítulos") }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { adoptionModel.dismiss() },
+                        enabled = !adoptionState.adopting,
+                    ) { Text("Cancelar") }
+                },
+            )
+        }
+
+        if (adoptionState.failed || adoptionState.blockedReason != null || adoptionState.completed) {
+            AlertDialog(
+                onDismissRequest = { adoptionModel.dismiss() },
+                title = {
+                    Text(if (adoptionState.completed) "Adoção registrada" else "Adoção não realizada")
+                },
+                text = {
+                    Text(
+                        if (adoptionState.completed) {
+                            "Os capítulos foram adicionados com recibo de origem e revisão. " +
+                                "O conteúdo de leitura dependerá de uma fonte disponível."
+                        } else {
+                            "A seleção não passou na validação, pode conflitar com capítulos existentes " +
+                                "ou a origem ter mudado desde a prévia. Nenhum capítulo foi gravado."
+                        },
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { adoptionModel.dismiss() }) { Text("Entendi") }
+                },
+            )
+        }
 
         LaunchedEffect(linkViewModel, canonicalTitleId) {
             linkViewModel.bindingUpdates.collect { request ->

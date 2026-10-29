@@ -259,6 +259,7 @@ class ScriptProviderReadingGateway internal constructor(
         if (
             registration.lifecycleStatus != ProviderLifecycleStatus.ENABLED ||
             registration.descriptor.runtime != ProviderRuntimeKind.SCRIPT ||
+            capability !in registration.enabledCapabilities ||
             capability !in registration.descriptor.capabilities
         ) {
             return unavailable()
@@ -314,6 +315,13 @@ class ScriptProviderReadingGateway internal constructor(
             throw error
         } catch (_: Throwable) {
             return unavailable(retryable = true)
+        }
+
+        // Invocations cross an isolated process boundary and can finish after
+        // a capability is revoked or its package is replaced. Never publish
+        // a result issued under a stale registration/permission snapshot.
+        if (registry.registration(providerId) != registration) {
+            return unavailable()
         }
 
         response.failure?.let { failure ->

@@ -14,8 +14,10 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventoryProducer
 import tachiyomi.domain.tsuzuki.integration.ChapterEvidenceProvider
 import tachiyomi.domain.tsuzuki.integration.DiscoveryProvider
+import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.MetadataProvider
 import tachiyomi.domain.tsuzuki.integration.RatingsProvider
@@ -53,6 +55,7 @@ class DefaultIntegrationRegistry(
     private val ratingsProviders: Set<RatingsProvider> = emptySet(),
     private val trackingProviders: Set<TrackingProvider> = emptySet(),
     private val userListProviders: Set<UserListProvider> = emptySet(),
+    private val inventoryProducers: Set<IndependentInventoryProducer> = emptySet(),
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) : IntegrationRegistry {
 
@@ -133,6 +136,16 @@ class DefaultIntegrationRegistry(
     override fun chapterEvidenceProviders(): List<ChapterEvidenceProvider> {
         val enabledIds = enabledIntegrationIds("chapter_evidence")
         return chapterEvidenceProviders.filter { it.producerId in enabledIds }
+    }
+
+    override fun inventoryProducers(): List<IndependentInventoryProducer> {
+        val enabledIds = enabledIntegrationIds(IntegrationCapability.CHAPTER_INVENTORY)
+        return inventoryProducers.filter { producer ->
+            val id = IntegrationId(producer.producerId)
+            producer.producerId in enabledIds &&
+                isGlobalCapabilityActive(id, IntegrationCapability.CHAPTER_INVENTORY) &&
+                inventoryProducers.count { it.producerId == producer.producerId } == 1
+        }
     }
 
     override fun ratingsProviders(): List<RatingsProvider> = allowedProviders(
@@ -222,10 +235,13 @@ class BuiltinIntegrationProviderRegistry(
             .groupBy { it.integrationId }
             .mapValues { (_, rows) -> rows.maxByOrNull(IntegrationSettings::updatedAt) }
 
-        return integrationRegistry.manifests().map { manifest ->
+        return integrationRegistry.manifests().mapNotNull { manifest ->
             val persisted = latest[manifest.integrationId]
             val declared = manifest.capabilities.keys
                 .flatMapTo(linkedSetOf()) { it.toProviderCapabilities() }
+            // Integration-only inventory adapters are not executable Provider capabilities.
+            // Do not publish a zero-capability fake Provider just because it has a manifest.
+            if (declared.isEmpty()) return@mapNotNull null
             val config = IntegrationSettingsConfig.decode(persisted?.configJson)
             val enabledCapabilities = if (persisted?.enabled == true) {
                 manifest.capabilities
@@ -323,6 +339,8 @@ class BuiltinIntegrationProviderRegistry(
         IntegrationCapability.METADATA_ARTWORK -> setOf(ProviderCapabilities.MetadataArtworkV1)
         IntegrationCapability.METADATA_EDITORIAL -> setOf(ProviderCapabilities.MetadataEditorialV1)
         IntegrationCapability.METADATA_STAFF -> setOf(ProviderCapabilities.MetadataStaffV1)
+        // Inventory is integration-owned metadata, not a reading Provider capability.
+        IntegrationCapability.CHAPTER_INVENTORY -> emptySet()
         IntegrationCapability.RATINGS -> setOf(ProviderCapabilities.RatingsReadV1)
         IntegrationCapability.RELATIONS -> setOf(ProviderCapabilities.RelationsReadV1)
         IntegrationCapability.CROSSWALK -> setOf(ProviderCapabilities.MetadataCrosswalkV1)

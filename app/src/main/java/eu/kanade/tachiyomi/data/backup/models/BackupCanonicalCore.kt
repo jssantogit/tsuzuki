@@ -24,6 +24,8 @@ data class BackupCanonicalCore(
     val sourceMappings: List<BackupCoreSourceMapping> = emptyList(),
     val library: List<BackupCoreLibraryEntry> = emptyList(),
     val chapters: List<BackupCoreChapter> = emptyList(),
+    val editorialChapterBindings: List<BackupCoreEditorialChapterBinding> = emptyList(),
+    val userAdoptionReceipts: List<BackupCoreUserAdoptionReceipt> = emptyList(),
     val variants: List<BackupCoreVariant> = emptyList(),
     val chapterEvidence: List<BackupCoreChapterEvidence> = emptyList(),
     val progress: List<BackupCoreProgress> = emptyList(),
@@ -44,9 +46,15 @@ data class BackupCanonicalCore(
     val titleArtwork: List<BackupCoreTitleArtwork> = emptyList(),
     val titleFormats: List<BackupCoreTitleFormat> = emptyList(),
     val titleNames: List<BackupCoreTitleName> = emptyList(),
+    // Audit the count of intentionally omitted, nonportable remote-account list
+    // rows. Never serialize account ownership, remote IDs or external status.
+    val omittedExternalAccountMemberships: Int = 0,
 ) {
     fun validate() {
         require(schemaVersion == VERSION) { "Unsupported canonical core schema" }
+        require(omittedExternalAccountMemberships >= 0) {
+            "Invalid omitted external account membership count"
+        }
         require(titles.isUniqueBy { it.id }) { "Duplicate canonical title" }
         require(collections.isUniqueBy { it.id }) { "Duplicate collection ID" }
         require(folders.isUniqueBy { it.id }) { "Duplicate folder ID" }
@@ -98,6 +106,69 @@ data class BackupCanonicalCore(
         }
         require(chapters.isUniqueBy { it.id }) { "Duplicate canonical chapter" }
         chapters.forEach(BackupCoreChapter::validateExactNumbering)
+        require(editorialChapterBindings.isUniqueBy { it.canonicalChapterId }) {
+            "Duplicate editorial chapter ownership"
+        }
+        require(
+            editorialChapterBindings.isUniqueBy {
+                listOf(
+                    it.canonicalTitleId,
+                    it.producerId,
+                    it.externalWorkId,
+                    it.editionKey,
+                    it.scopeLanguage,
+                    it.sourceRecordId,
+                )
+            },
+        ) { "Duplicate editorial unit source reference" }
+        require(
+            editorialChapterBindings.isUniqueBy {
+                listOf(
+                    it.canonicalTitleId,
+                    it.producerId,
+                    it.externalWorkId,
+                    it.editionKey,
+                    it.scopeLanguage,
+                    it.identityKey,
+                    it.volumeKey.toString(),
+                )
+            },
+        ) { "Duplicate edition scoped canonical unit identity" }
+
+        require(userAdoptionReceipts.isUniqueBy { it.canonicalChapterId }) {
+            "Duplicate user-adopted chapter"
+        }
+        require(
+            userAdoptionReceipts.isUniqueBy {
+                listOf(
+                    it.canonicalTitleId,
+                    it.producerId,
+                    it.externalWorkId,
+                    it.editionKey,
+                    it.scopeLanguage,
+                    it.identityKey,
+                    it.volumeKey.toString(),
+                )
+            },
+        ) { "Duplicate edition-scoped user-adoption unit identity" }
+        require(
+            userAdoptionReceipts.isUniqueBy {
+                listOf(
+                    it.canonicalTitleId,
+                    it.producerId,
+                    it.externalWorkId,
+                    it.editionKey,
+                    it.scopeLanguage,
+                    it.sourceRecordId,
+                )
+            },
+        ) { "Duplicate user-adoption source identity" }
+        require(
+            editorialChapterBindings.map { it.canonicalChapterId }.toSet()
+                .intersect(userAdoptionReceipts.map { it.canonicalChapterId }.toSet()).isEmpty(),
+        ) {
+            "Publisher-owned and user-adopted provenance cannot share a chapter"
+        }
         require(variants.isUniqueBy { it.id }) { "Duplicate chapter variant" }
         require(chapterEvidence.isUniqueBy { it.id }) { "Duplicate chapter evidence ID" }
         require(
@@ -234,6 +305,7 @@ data class BackupCanonicalCore(
                     evidence.authorityClass in setOf("EDITORIAL", "ADDON_PROVISIONAL", "PROVIDER_PROVISIONAL") &&
                     evidence.confidence.isFinite() &&
                     (evidence.rawNumber == null || evidence.rawNumber.isFinite()) &&
+                    evidence.hasPortableProviderMetadata() &&
                     (
                         evidence.mappedCanonicalChapterId == null ||
                             chaptersById[evidence.mappedCanonicalChapterId]?.canonicalTitleId ==
@@ -244,6 +316,112 @@ data class BackupCanonicalCore(
         require(chapters.all { it.canonicalTitleId in titleIds }) {
             "Chapter refers to absent canonical title"
         }
+        require(
+            editorialChapterBindings.all { binding ->
+                val chapter = chaptersById[binding.canonicalChapterId]
+                val fraction = if (chapter?.decimalNumerator != null && chapter.decimalScale != null) {
+                    CanonicalChapterDecimalFraction(chapter.decimalNumerator, chapter.decimalScale)
+                } else {
+                    null
+                }
+                val identity = chapter?.let {
+                    CanonicalChapterIdentity(
+                        type = CanonicalChapterType.valueOf(it.type),
+                        baseNumber = it.baseNumber,
+                        part = it.part,
+                        alphaSuffix = it.alphaSuffix,
+                        numberingKind = it.numberingKind?.let(CanonicalChapterNumberingKind::valueOf),
+                        decimalFraction = fraction,
+                    )
+                }
+                chapter != null &&
+                    chapter.canonicalTitleId == binding.canonicalTitleId &&
+                    chapter.confirmation == "CONFIRMED" &&
+                    identity?.sortKey == binding.identityKey &&
+                    (chapter.volume ?: 0).toLong() == binding.volumeKey &&
+                    binding.producerId.isNotBlank() &&
+                    binding.externalWorkId.isNotBlank() &&
+                    binding.editionKey.isNotBlank() &&
+                    binding.scopeLanguage.isNotBlank() &&
+                    binding.sourceRecordId.isNotBlank() &&
+                    binding.upstreamSourceId.isNotBlank() &&
+                    binding.observedAt >= 0L
+            },
+        ) { "Invalid, ambiguous or cross-title editorial chapter ownership" }
+
+        require(
+            userAdoptionReceipts.all { receipt ->
+                val chapter = chaptersById[receipt.canonicalChapterId]
+                val fraction = if (chapter?.decimalNumerator != null && chapter.decimalScale != null) {
+                    CanonicalChapterDecimalFraction(chapter.decimalNumerator, chapter.decimalScale)
+                } else {
+                    null
+                }
+                val identity = chapter?.let {
+                    CanonicalChapterIdentity(
+                        type = CanonicalChapterType.valueOf(it.type),
+                        baseNumber = it.baseNumber,
+                        part = it.part,
+                        alphaSuffix = it.alphaSuffix,
+                        numberingKind = it.numberingKind?.let(CanonicalChapterNumberingKind::valueOf),
+                        decimalFraction = fraction,
+                    )
+                }
+                val expectedDerivation = when (receipt.sourceKind) {
+                    "USER_SELECTED_EPUB3_TOC", "USER_SELECTED_EPUB2_NCX" -> "USER_SUPPLIED_EDITION_TOC"
+                    "WIKIMEDIA_SELECTED_PAGE_REVISION" -> "COMMUNITY_CURATED"
+                    else -> null
+                }
+                // Backup provenance must satisfy the same structural evidence
+                // requirements as the reviewed local candidate. A restored
+                // preface or unattributed page must never look adopted.
+                val isSupportedSourceUnit = when (receipt.sourceKind) {
+                    "USER_SELECTED_EPUB3_TOC", "USER_SELECTED_EPUB2_NCX" ->
+                        receipt.structuralCategory == "toc-chapter"
+                    "WIKIMEDIA_SELECTED_PAGE_REVISION" ->
+                        receipt.structuralCategory in setOf("chapter-list-entry", "chapter-table-entry") &&
+                            !receipt.attributionReference.isNullOrBlank() &&
+                            !receipt.licenseReference.isNullOrBlank()
+                    else -> false
+                }
+                chapter != null &&
+                    chapter.canonicalTitleId == receipt.canonicalTitleId &&
+                    chapter.confirmation == "CONFIRMED" &&
+                    identity?.sortKey == receipt.identityKey &&
+                    chapter.displayNumber == receipt.acceptedLabel &&
+                    (chapter.volume ?: 0).toLong() == receipt.volumeKey &&
+                    receipt.receiptId.isNotBlank() &&
+                    receipt.producerId.isNotBlank() &&
+                    receipt.externalWorkId.isNotBlank() &&
+                    receipt.editionKey.isNotBlank() &&
+                    receipt.scopeLanguage.isNotBlank() &&
+                    receipt.sourceRecordId.isNotBlank() &&
+                    receipt.sourceUnitId.isNotBlank() &&
+                    receipt.structuralCategory.isNotBlank() &&
+                    receipt.originReference.isNotBlank() &&
+                    receipt.exactRevision.isNotBlank() &&
+                    receipt.derivation == expectedDerivation &&
+                    isSupportedSourceUnit &&
+                    receipt.snapshotDigest.matches(Regex("^sha256:[0-9a-f]{64}$")) &&
+                    receipt.reviewFingerprint.matches(Regex("^sha256:[0-9a-f]{64}$")) &&
+                    receipt.observedAt >= 0L &&
+                    receipt.acceptedAt >= receipt.observedAt
+            },
+        ) { "Invalid user-adoption receipt, scope or chapter identity" }
+        require(
+            userAdoptionReceipts.groupBy { it.receiptId }.values.all { group ->
+                group.map {
+                    listOf(
+                        it.canonicalTitleId, it.producerId, it.externalWorkId,
+                        it.editionKey, it.scopeLanguage, it.sourceKind,
+                        it.originReference, it.snapshotDigest, it.exactRevision,
+                        it.attributionReference.orEmpty(), it.licenseReference.orEmpty(),
+                        it.reviewFingerprint, it.acceptedAt.toString(),
+                    )
+                }.distinct().size == 1
+            },
+        ) { "One user-adoption receipt cannot combine editions or source snapshots" }
+
         require(identities.all { it.canonicalTitleId in titleIds }) {
             "Identity refers to absent canonical title"
         }
@@ -360,7 +538,21 @@ data class BackupCoreChapterEvidence(
     val confidence: Double,
     val authorityClass: String,
     val mappedCanonicalChapterId: String?,
+    val providerLanguage: String? = null,
+    val providerScanlationGroup: String? = null,
+    val providerReleaseDateMillis: Long? = null,
 )
+
+private fun BackupCoreChapterEvidence.hasPortableProviderMetadata(): Boolean {
+    if (providerLanguage == null && providerScanlationGroup == null && providerReleaseDateMillis == null) {
+        return true
+    }
+    return producerKind == "PROVIDER" &&
+        authorityClass == "PROVIDER_PROVISIONAL" &&
+        (providerLanguage == null || (providerLanguage.isNotBlank() && providerLanguage.length <= 32)) &&
+        (providerScanlationGroup == null || providerScanlationGroup.length <= 4096) &&
+        (providerReleaseDateMillis == null || providerReleaseDateMillis >= 0L)
+}
 
 @Serializable
 data class BackupCoreProviderBinding(
@@ -513,6 +705,48 @@ data class BackupCoreLibraryEntry(
     val favorite: Boolean,
     val addedAt: Long,
     val updatedAt: Long,
+)
+
+@Serializable
+data class BackupCoreEditorialChapterBinding(
+    val canonicalChapterId: String,
+    val canonicalTitleId: String,
+    val producerId: String,
+    val externalWorkId: String,
+    val editionKey: String,
+    val scopeLanguage: String,
+    val sourceRecordId: String,
+    val upstreamSourceId: String,
+    val identityKey: String,
+    val volumeKey: Long,
+    val observedAt: Long,
+)
+
+@Serializable
+data class BackupCoreUserAdoptionReceipt(
+    val canonicalChapterId: String,
+    val receiptId: String,
+    val canonicalTitleId: String,
+    val producerId: String,
+    val externalWorkId: String,
+    val editionKey: String,
+    val scopeLanguage: String,
+    val sourceRecordId: String,
+    val sourceKind: String,
+    val derivation: String,
+    val originReference: String,
+    val exactRevision: String,
+    val attributionReference: String?,
+    val licenseReference: String?,
+    val snapshotDigest: String,
+    val sourceUnitId: String,
+    val structuralCategory: String,
+    val acceptedLabel: String,
+    val identityKey: String,
+    val volumeKey: Long,
+    val observedAt: Long,
+    val acceptedAt: Long,
+    val reviewFingerprint: String,
 )
 
 @Serializable

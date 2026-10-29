@@ -7,6 +7,21 @@ import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 class IntegrationSettingsConfigTest {
 
     @Test
+    fun `chapter inventory is opt-in even when the integration and legacy capabilities are enabled`() {
+        val legacy = IntegrationSettingsConfig.decode("""{"search":true}""")
+        legacy.capabilityEnabled(IntegrationCapability.SEARCH) shouldBe true
+        legacy.capabilityEnabled(IntegrationCapability.CHAPTER_INVENTORY) shouldBe false
+
+        IntegrationSettingsConfig.decode("{not-json")
+            .capabilityEnabled(IntegrationCapability.CHAPTER_INVENTORY) shouldBe false
+
+        val enabled = legacy.withCapability(IntegrationCapability.CHAPTER_INVENTORY, true)
+        enabled.capabilityEnabled(IntegrationCapability.CHAPTER_INVENTORY) shouldBe true
+        enabled.withCapability(IntegrationCapability.CHAPTER_INVENTORY, false)
+            .capabilityEnabled(IntegrationCapability.CHAPTER_INVENTORY) shouldBe false
+    }
+
+    @Test
     fun `typed config preserves unknown legacy keys while changing capability`() {
         val config = IntegrationSettingsConfig.decode(
             """{"chapter_evidence":false,"custom":"keep","search":true}""",

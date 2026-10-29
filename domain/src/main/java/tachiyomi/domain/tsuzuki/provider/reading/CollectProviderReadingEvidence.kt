@@ -10,6 +10,15 @@ import kotlinx.coroutines.sync.withPermit
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
+import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
@@ -57,7 +66,7 @@ data class ProviderReadingEvidenceCollection(
 }
 
 /**
- * Connects enabled SCRIPT reading Providers to Tsuzuki's canonical chapter-evidence pipeline.
+ * Connects enabled SCRIPT chapter-inventory Providers to Tsuzuki's canonical chapter-evidence pipeline.
  *
  * Bindings are deliberately conservative: a Provider work is auto-bound only when exactly one
  * candidate is an exact normalized title/alias match for the canonical title and active facet.
@@ -70,6 +79,7 @@ class CollectProviderReadingEvidence private constructor(
     private val bindingRepository: ProviderReadingBindingRepository,
     private val evidenceAdapter: ProviderChapterEvidenceAdapter,
     private val clock: () -> Long,
+    private val diagnostics: StructuredDiagnosticRecorder,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit,
 ) {
 
@@ -79,6 +89,7 @@ class CollectProviderReadingEvidence private constructor(
         providerRegistry: ProviderRegistry,
         gateway: ProviderReadingGateway,
         bindingRepository: ProviderReadingBindingRepository,
+        diagnostics: StructuredDiagnosticRecorder,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         providerRegistry = providerRegistry,
@@ -86,6 +97,7 @@ class CollectProviderReadingEvidence private constructor(
         bindingRepository = bindingRepository,
         evidenceAdapter = ProviderChapterEvidenceAdapter(),
         clock = System::currentTimeMillis,
+        diagnostics = diagnostics,
         constructorMarker = Unit,
     )
 
@@ -96,6 +108,7 @@ class CollectProviderReadingEvidence private constructor(
         bindingRepository: ProviderReadingBindingRepository,
         evidenceAdapter: ProviderChapterEvidenceAdapter,
         clock: () -> Long,
+        diagnostics: StructuredDiagnosticRecorder = NoOpStructuredDiagnosticRecorder,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         providerRegistry = providerRegistry,
@@ -103,6 +116,7 @@ class CollectProviderReadingEvidence private constructor(
         bindingRepository = bindingRepository,
         evidenceAdapter = evidenceAdapter,
         clock = clock,
+        diagnostics = diagnostics,
         constructorMarker = Unit,
     )
 
@@ -112,7 +126,7 @@ class CollectProviderReadingEvidence private constructor(
         val canonicalTitle = canonicalTitleRepository.getById(canonicalTitleId)
             ?: return ProviderReadingEvidenceCollection(complete = false)
         val targets = readingTargets()
-        if (targets.isEmpty()) return ProviderReadingEvidenceCollection()
+        trace(canonicalTitleId, null, DiagnosticStage.SUMMARY, DiagnosticOutcome.STARTED, targets = targets.size)
 
         val results = coroutineScope {
             val gate = Semaphore(MAX_CONCURRENT_PROVIDERS)
@@ -129,11 +143,27 @@ class CollectProviderReadingEvidence private constructor(
             }.awaitAll()
         }
 
-        return ProviderReadingEvidenceCollection(
+        val collection = ProviderReadingEvidenceCollection(
             snapshots = results.flatMap(ProviderReadingEvidenceCollection::snapshots),
             bindingCount = results.sumOf(ProviderReadingEvidenceCollection::bindingCount),
             complete = results.all(ProviderReadingEvidenceCollection::complete),
         )
+        val acceptedChapters = collection.snapshots.sumOf { it.evidence.size }
+        trace(
+            canonicalTitleId,
+            null,
+            DiagnosticStage.SUMMARY,
+            when {
+                !collection.complete -> DiagnosticOutcome.PARTIAL
+                acceptedChapters == 0 -> DiagnosticOutcome.EMPTY
+                else -> DiagnosticOutcome.SUCCEEDED
+            },
+            targets = targets.size,
+            bindings = collection.bindingCount,
+            accepted = acceptedChapters,
+            completed = collection.complete,
+        )
+        return collection
     }
 
     suspend fun configurationTokens(): List<String> {
@@ -163,6 +193,9 @@ class CollectProviderReadingEvidence private constructor(
                 providerId = target.registration.descriptor.id,
                 facetId = target.facetId,
             )?.takeIf { it.availability == ProviderBindingAvailability.AVAILABLE }
+            if (existing != null) {
+                trace(canonicalTitleId, target, DiagnosticStage.BINDING, DiagnosticOutcome.REUSED, bindings = 1)
+            }
             val binding = existing ?: when (
                 val discovery = discoverBinding(
                     canonicalTitleId = canonicalTitleId,
@@ -192,15 +225,33 @@ class CollectProviderReadingEvidence private constructor(
                 },
                 clock = clock,
             )
-            when (refresher.execute(binding)) {
-                is ProviderCallResult.Failure -> ProviderReadingEvidenceCollection(
-                    bindingCount = 1,
-                    complete = false,
-                )
+            when (val result = refresher.execute(binding)) {
+                is ProviderCallResult.Failure -> {
+                    trace(
+                        canonicalTitleId,
+                        target,
+                        DiagnosticStage.READ,
+                        DiagnosticOutcome.FAILED,
+                        bindings = 1,
+                        errorCode = result.error.code,
+                    )
+                    ProviderReadingEvidenceCollection(bindingCount = 1, complete = false)
+                }
                 is ProviderCallResult.Success -> {
                     val snapshot = published ?: return ProviderReadingEvidenceCollection(
                         bindingCount = 1,
                         complete = false,
+                    ).also {
+                        trace(canonicalTitleId, target, DiagnosticStage.READ, DiagnosticOutcome.FAILED, bindings = 1)
+                    }
+                    trace(
+                        canonicalTitleId,
+                        target,
+                        DiagnosticStage.READ,
+                        if (result.value == 0) DiagnosticOutcome.EMPTY else DiagnosticOutcome.SUCCEEDED,
+                        bindings = 1,
+                        observed = result.value,
+                        accepted = snapshot.evidence.size,
                     )
                     ProviderReadingEvidenceCollection(
                         snapshots = listOf(snapshot),
@@ -210,8 +261,10 @@ class CollectProviderReadingEvidence private constructor(
                 }
             }
         } catch (error: CancellationException) {
+            trace(canonicalTitleId, target, DiagnosticStage.READ, DiagnosticOutcome.CANCELLED)
             throw error
         } catch (_: Throwable) {
+            trace(canonicalTitleId, target, DiagnosticStage.READ, DiagnosticOutcome.THREW)
             ProviderReadingEvidenceCollection(complete = false)
         }
     }
@@ -222,7 +275,16 @@ class CollectProviderReadingEvidence private constructor(
         target: ReadingTarget,
     ): ProviderCallResult<ProviderReadingBinding?> {
         val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
-            is ProviderCallResult.Failure -> return result
+            is ProviderCallResult.Failure -> {
+                trace(
+                    canonicalTitleId,
+                    target,
+                    DiagnosticStage.LOOKUP,
+                    DiagnosticOutcome.FAILED,
+                    errorCode = result.error.code,
+                )
+                return result
+            }
             is ProviderCallResult.Success -> result.value
         }
         val normalizedTitle = normalize(title)
@@ -240,6 +302,19 @@ class CollectProviderReadingEvidence private constructor(
             }
             .distinctBy(ProviderWorkCandidate::externalWorkId)
             .toList()
+        trace(
+            canonicalTitleId,
+            target,
+            DiagnosticStage.LOOKUP,
+            when (matches.size) {
+                0 -> DiagnosticOutcome.EMPTY
+                1 -> DiagnosticOutcome.ACCEPTED
+                else -> DiagnosticOutcome.REJECTED
+            },
+            candidates = candidates.size,
+            exactMatches = matches.size,
+            bindings = if (matches.size == 1) 1 else 0,
+        )
         if (matches.size != 1) return ProviderCallResult.Success(null)
 
         val now = clock()
@@ -314,6 +389,56 @@ class CollectProviderReadingEvidence private constructor(
         )
         .toList()
 
+    /** Sanitized counters only; no title, alias, URL, external work ID, or chapter labels. */
+    private fun trace(
+        titleId: String,
+        target: ReadingTarget?,
+        stage: DiagnosticStage,
+        outcome: DiagnosticOutcome,
+        targets: Int? = null,
+        candidates: Int? = null,
+        exactMatches: Int? = null,
+        bindings: Int? = null,
+        observed: Int? = null,
+        accepted: Int? = null,
+        completed: Boolean? = null,
+        errorCode: ProviderErrorCode? = null,
+    ) {
+        runCatching {
+            val attributes = buildMap<String, DiagnosticAttributeValue> {
+                target?.let { put("provider_id", DiagnosticAttributeValue.Text(it.registration.descriptor.id.value)) }
+                diagnostics.canonicalTitleReference(titleId)?.let {
+                    put("canonical_title_ref", DiagnosticAttributeValue.Text(it))
+                }
+                targets?.let { put("target_source_count", DiagnosticAttributeValue.Number(it.toLong())) }
+                candidates?.let { put("candidate_count", DiagnosticAttributeValue.Number(it.toLong())) }
+                exactMatches?.let { put("accepted_count", DiagnosticAttributeValue.Number(it.toLong())) }
+                bindings?.let { put("binding_count", DiagnosticAttributeValue.Number(it.toLong())) }
+                observed?.let { put("observation_count", DiagnosticAttributeValue.Number(it.toLong())) }
+                accepted?.let { put("chapter_count", DiagnosticAttributeValue.Number(it.toLong())) }
+                completed?.let { put("completed", DiagnosticAttributeValue.Flag(it)) }
+                errorCode?.let { put("provider_error_code", DiagnosticAttributeValue.Text(it.name)) }
+            }
+            diagnostics.record(
+                StructuredDiagnosticEvent(
+                    timestampMillis = clock().coerceAtLeast(0L),
+                    severity = if (outcome in setOf(DiagnosticOutcome.FAILED, DiagnosticOutcome.THREW)) {
+                        DiagnosticSeverity.WARN
+                    } else {
+                        DiagnosticSeverity.INFO
+                    },
+                    subsystem = DiagnosticSubsystem.CHAPTER,
+                    name = DiagnosticEventName.PROVIDER_READING_EVIDENCE,
+                    sessionId = diagnostics.sessionId,
+                    operationId = null,
+                    stage = stage,
+                    outcome = outcome,
+                    attributes = attributes,
+                ),
+            )
+        }
+    }
+
     private fun normalize(value: String): String = value
         .trim()
         .lowercase()
@@ -350,10 +475,11 @@ class CollectProviderReadingEvidence private constructor(
     )
 
     private companion object {
+        // ICE only needs work lookup and chapter observations. ReadingPagesV1
+        // belongs to the Reader path, not the independent evidence collector.
         val REQUIRED_CAPABILITIES = setOf(
             ProviderCapabilities.ReadingLookupV1,
             ProviderCapabilities.ReadingChaptersV1,
-            ProviderCapabilities.ReadingPagesV1,
         )
         val WHITESPACE = Regex("\\s+")
         const val MAX_CONCURRENT_PROVIDERS = 4

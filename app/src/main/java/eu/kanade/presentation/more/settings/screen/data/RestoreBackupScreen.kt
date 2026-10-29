@@ -86,7 +86,14 @@ class RestoreBackupScreen(
                     }
                 }
 
-                if (state.canRestore) {
+                if (state.canRestore && state.canonicalOnly) {
+                    item {
+                        SectionCard {
+                            Text(stringResource(MR.strings.tsuzuki_backup_canonical_restore_note))
+                        }
+                    }
+                }
+                if (state.canRestore && !state.canonicalOnly) {
                     item {
                         SectionCard {
                             RestoreOptions.options.forEach { option ->
@@ -233,14 +240,15 @@ class RestoreBackupViewModel(
             return
         }
 
-        setError(error = null, canRestore = true)
+        setError(error = null, canRestore = true, canonicalOnly = results.canonicalOnly)
     }
 
-    private fun setError(error: Any?, canRestore: Boolean) {
+    private fun setError(error: Any?, canRestore: Boolean, canonicalOnly: Boolean = false) {
         state.update {
             it.copy(
                 error = error,
                 canRestore = canRestore,
+                canonicalOnly = canonicalOnly,
             )
         }
     }
@@ -249,6 +257,7 @@ class RestoreBackupViewModel(
     data class State(
         val error: Any? = null,
         val canRestore: Boolean = false,
+        val canonicalOnly: Boolean = false,
         val options: RestoreOptions = RestoreOptions(),
     )
 }

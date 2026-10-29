@@ -29,6 +29,7 @@ import tachiyomi.domain.tsuzuki.sync.model.SyncDocumentKind
 import tachiyomi.domain.tsuzuki.sync.model.SyncDocumentResult
 import tachiyomi.domain.tsuzuki.sync.model.SyncFailure
 import tachiyomi.domain.tsuzuki.sync.model.SyncFailureReason
+import tachiyomi.domain.tsuzuki.sync.model.SyncMutation
 import tachiyomi.domain.tsuzuki.sync.model.SyncOutboxEntry
 import tachiyomi.domain.tsuzuki.sync.model.SyncRecordEnvelope
 import tachiyomi.domain.tsuzuki.sync.model.SyncRevision
@@ -49,6 +50,77 @@ import tachiyomi.domain.tsuzuki.sync.service.SyncDocumentAdapter
 import tachiyomi.domain.tsuzuki.sync.service.VerifiedCanonicalIdentity
 
 class SupabaseSyncOrchestratorTest {
+
+    @Test
+    fun `unportable edition-owned progress stops v1 sync before network and local tombstone generation`() =
+        runTest {
+            val kind = SyncDocumentKind.READING_PROGRESS
+            val base = document(status = "READING").copy(kind = kind)
+            val local = base.copy(records = emptyMap())
+            val adapter = FakeAdapter(local, unportable = true)
+            val stored = FakeStoredState().apply {
+                put(SyncStoredState(kind, base, null, 1L))
+            }
+            val cloud = FakeCloudState().apply {
+                putCursor(kind, 3L, 1L)
+            }
+            val remote = FakeTransport()
+            val outbox = FakeOutbox().apply { markDirty(kind, 1L) }
+
+            val result = orchestrator(
+                adapter = adapter,
+                storedState = stored,
+                cloudState = cloud,
+                transport = remote,
+                outbox = outbox,
+            ).sync(kind)
+
+            (result as SyncDocumentResult.Failed).failure.reason shouldBe
+                SyncFailureReason.LOCAL_STATE_UNAVAILABLE
+            remote.networkCalls shouldBe 0
+            remote.pushedBatches shouldBe emptyList()
+            cloud.getCursor(kind)?.eventCursor shouldBe 3L
+            outbox.get(kind) shouldNotBe null
+            adapter.current shouldBe local
+        }
+
+    @Test
+    fun `missing v1 progress record is not converted to a remote deletion tombstone`() = runTest {
+        val kind = SyncDocumentKind.READING_PROGRESS
+        val base = document(status = "READING").copy(kind = kind)
+        val local = base.copy(records = emptyMap())
+        val adapter = FakeAdapter(local)
+        val stored = FakeStoredState().apply {
+            put(SyncStoredState(kind, base, null, 1L))
+        }
+        val cloud = FakeCloudState().apply {
+            putCursor(kind, 3L, 1L)
+        }
+        val remote = FakeTransport().apply {
+            snapshotValue = SupabaseSyncSnapshot(
+                documentKind = kind,
+                cursor = 3L,
+                records = listOf(
+                    SupabaseSyncSnapshotRecord(
+                        recordId = "title-1",
+                        isDeleted = false,
+                        fields = base.records.getValue("title-1").fields,
+                    ),
+                ),
+            )
+        }
+
+        orchestrator(
+            adapter = adapter,
+            storedState = stored,
+            cloudState = cloud,
+            transport = remote,
+        ).sync(kind)
+
+        remote.pushedBatches.flatMap { it.operations }.none {
+            it is SyncMutation.DeleteRecord && it.recordId == "title-1"
+        } shouldBe true
+    }
 
     @Test
     fun `unnegotiated v2 schema never contacts legacy Supabase sync transport`() = runTest {
@@ -617,7 +689,10 @@ class SupabaseSyncOrchestratorTest {
 
     private class FakeAdapter(
         var current: SyncDocumentEnvelope,
+        private val unportable: Boolean = false,
     ) : SyncDocumentAdapter {
+        override suspend fun hasUnportableLocalState(): Boolean = unportable
+
         override val documentKind: SyncDocumentKind
             get() = current.kind
 

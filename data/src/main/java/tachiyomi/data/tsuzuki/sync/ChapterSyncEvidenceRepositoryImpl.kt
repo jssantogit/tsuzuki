@@ -1,5 +1,6 @@
 package tachiyomi.data.tsuzuki.sync
 
+import app.cash.sqldelight.async.coroutines.awaitAsOne
 import app.cash.sqldelight.async.coroutines.awaitAsOneOrNull
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -15,6 +16,14 @@ import tachiyomi.domain.tsuzuki.sync.service.ChapterSyncEvidenceRepository
 class ChapterSyncEvidenceRepositoryImpl(
     private val database: Database,
 ) : ChapterSyncEvidenceRepository {
+
+    override suspend fun isEditionScopedChapter(canonicalChapterId: String): Boolean =
+        database.tsuzuki_editorial_chapter_bindingsQueries
+            .countTsuzukiEditorialChapterBindingsByChapter(canonicalChapterId)
+            .awaitAsOne() > 0L ||
+            database.tsuzuki_user_adoption_receiptsQueries
+                .countTsuzukiUserAdoptionReceiptsByChapter(canonicalChapterId)
+                .awaitAsOne() > 0L
 
     override suspend fun getStableEvidenceKey(canonicalChapterId: String): String? {
         val evidence = database.tsuzuki_chapter_evidenceQueries

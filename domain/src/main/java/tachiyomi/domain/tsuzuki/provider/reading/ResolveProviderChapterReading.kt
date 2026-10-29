@@ -5,7 +5,10 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
+import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
+import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 
@@ -37,6 +40,7 @@ class ResolveProviderChapterReading(
     private val evidenceRepository: ChapterEvidenceRepository,
     private val bindingRepository: ProviderReadingBindingRepository,
     private val gateway: ProviderReadingGateway,
+    private val providerRegistry: ProviderRegistry,
     private val managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
 ) {
 
@@ -45,6 +49,15 @@ class ResolveProviderChapterReading(
         val bindings = bindingRepository.getByTitle(chapter.canonicalTitleId)
             .asSequence()
             .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
+            // Chapter metadata from an enabled Provider may be useful for ICE
+            // even if that Provider cannot read pages. Only page-capable
+            // enabled page-capable Providers may create Reader options.
+            .filter { binding ->
+                val registration = providerRegistry.registration(binding.ref.providerId)
+                registration != null &&
+                    registration.lifecycleStatus == ProviderLifecycleStatus.ENABLED &&
+                    REQUIRED_READING_CAPABILITIES.all { it in registration.enabledCapabilities }
+            }
             .associateBy { it.ref.evidenceProducerId() }
         if (bindings.isEmpty()) return emptyList()
 
@@ -146,4 +159,11 @@ class ResolveProviderChapterReading(
                 retryable = false,
             ),
         )
+    private companion object {
+        val REQUIRED_READING_CAPABILITIES = setOf(
+            ProviderCapabilities.ReadingLookupV1,
+            ProviderCapabilities.ReadingChaptersV1,
+            ProviderCapabilities.ReadingPagesV1,
+        )
+    }
 }

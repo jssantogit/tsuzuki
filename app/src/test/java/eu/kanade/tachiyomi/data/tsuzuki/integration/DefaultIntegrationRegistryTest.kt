@@ -12,6 +12,9 @@ import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventoryProducer
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.integration.ChapterEvidenceProvider
 import tachiyomi.domain.tsuzuki.integration.DiscoveryProvider
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
@@ -33,6 +36,75 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 
 class DefaultIntegrationRegistryTest {
+
+    @Test
+    fun `inventory producers require a persisted explicit opt in and an active integration`() = runTest {
+        val mu = FakeInventoryProducer("mangaupdates")
+        val md = FakeInventoryProducer("mangadex")
+        val settings = MutableStateFlow(fakeSettings("mangaupdates" to true, "mangadex" to true))
+        val registry = registry(
+            scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+            settings = settings,
+            inventoryProducers = setOf(mu, md),
+        )
+
+        registry.inventoryProducers() shouldBe emptyList()
+        registry.isGlobalCapabilityActive(
+            IntegrationId("mangaupdates"),
+            IntegrationCapability.CHAPTER_INVENTORY,
+        ) shouldBe false
+
+        settings.value = listOf(
+            IntegrationSettings(IntegrationId("mangaupdates"), true, """{"chapter_inventory":true}""", 10),
+            IntegrationSettings(IntegrationId("mangadex"), true, "{}", 10),
+        )
+        registry.inventoryProducers() shouldContainExactly listOf(mu)
+        registry.isGlobalCapabilityActive(
+            IntegrationId("mangaupdates"),
+            IntegrationCapability.CHAPTER_INVENTORY,
+        ) shouldBe true
+
+        settings.value = listOf(
+            IntegrationSettings(IntegrationId("mangaupdates"), false, """{"chapter_inventory":true}""", 11),
+            IntegrationSettings(IntegrationId("mangadex"), true, """{"chapter_inventory":true}""", 11),
+        )
+        registry.inventoryProducers() shouldContainExactly listOf(md)
+
+        settings.value = emptyList()
+        registry.inventoryProducers() shouldBe emptyList()
+    }
+
+    @Test
+    fun `duplicate inventory producer registrations fail closed instead of choosing arbitrarily`() = runTest {
+        val first = FakeInventoryProducer("mangadex")
+        val second = FakeInventoryProducer("mangadex")
+        val registry = registry(
+            scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+            settings = MutableStateFlow(
+                listOf(IntegrationSettings(IntegrationId("mangadex"), true, """{"chapter_inventory":true}""")),
+            ),
+            inventoryProducers = setOf(first, second),
+        )
+
+        registry.inventoryProducers() shouldBe emptyList()
+        registry.isGlobalCapabilityActive(
+            IntegrationId("mangadex"),
+            IntegrationCapability.CHAPTER_INVENTORY,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `no unrelated integration may impersonate an inventory producer`() = runTest {
+        val foreign = FakeInventoryProducer("unknown")
+        val registry = registry(
+            scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+            settings = MutableStateFlow(
+                listOf(IntegrationSettings(IntegrationId("unknown"), true, """{"chapter_inventory":true}""")),
+            ),
+            inventoryProducers = setOf(foreign),
+        )
+        registry.inventoryProducers() shouldBe emptyList()
+    }
 
     @Test
     fun `registry excludes providers whose integration is disabled`() = runTest {
@@ -121,6 +193,7 @@ class DefaultIntegrationRegistryTest {
             "kitsu",
             "mal",
             "mangaupdates",
+            "mangadex",
             "bangumi",
             "shikimori",
             "hikka",
@@ -239,6 +312,7 @@ class DefaultIntegrationRegistryTest {
             "kitsu" to 3L,
             "mal" to 1L,
             "mangaupdates" to 7L,
+            "mangadex" to null,
             "bangumi" to 5L,
             "shikimori" to 4L,
             "hikka" to 10L,
@@ -614,6 +688,7 @@ class DefaultIntegrationRegistryTest {
         ratingsProviders: Set<RatingsProvider> = emptySet(),
         trackingProviders: Set<TrackingProvider> = emptySet(),
         userListProviders: Set<UserListProvider> = emptySet(),
+        inventoryProducers: Set<IndependentInventoryProducer> = emptySet(),
     ) = DefaultIntegrationRegistry(
         settingsRepository = FakeIntegrationSettingsRepository(settings),
         searchProviders = searchProviders,
@@ -623,6 +698,7 @@ class DefaultIntegrationRegistryTest {
         ratingsProviders = ratingsProviders,
         trackingProviders = trackingProviders,
         userListProviders = userListProviders,
+        inventoryProducers = inventoryProducers,
         scope = scope,
     )
 
@@ -643,6 +719,15 @@ class DefaultIntegrationRegistryTest {
             this.settings.value = this.settings.value
                 .filterNot { it.integrationId == settings.integrationId } + settings
         }
+    }
+
+    private class FakeInventoryProducer(
+        override val producerId: String,
+    ) : IndependentInventoryProducer {
+        override suspend fun fetchPage(
+            scope: InventoryScope,
+            pageKey: String,
+        ): Result<InventoryEvidenceBatch> = Result.failure(UnsupportedOperationException())
     }
 
     private class FakeSearchProvider(id: String) : SearchProvider {

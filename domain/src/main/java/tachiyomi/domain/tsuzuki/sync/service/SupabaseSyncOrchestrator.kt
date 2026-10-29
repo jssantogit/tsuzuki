@@ -160,6 +160,18 @@ class SupabaseSyncOrchestrator(
         }
 
         return try {
+            // Editorial chapters deliberately lack a portable v1 progress
+            // identity. Do not pull, replay pending writes or derive remote
+            // deletions from a partial export. Keep unrelated sync domains live.
+            if (
+                documentKind == SyncDocumentKind.READING_PROGRESS &&
+                adapter.hasUnportableLocalState()
+            ) {
+                return SyncDocumentResult.Failed(
+                    documentKind,
+                    SyncFailure(SyncFailureReason.LOCAL_STATE_UNAVAILABLE),
+                )
+            }
             val localBeforePull = adapter.exportDocument()
             // The existing Supabase event transport does not carry document
             // schema versions. Never stamp a v1 remote snapshot as v2.
@@ -770,6 +782,17 @@ class SupabaseSyncOrchestrator(
         local: SyncDocumentEnvelope,
         now: Long,
     ): SyncDocumentEnvelope {
+        // Progress records are not user-deletable in the v1 protocol and its
+        // adapter explicitly rejects tombstones. Missing local records can
+        // mean an edition-scoped, intentionally nonportable chapter, NOT
+        // deletion. Preserve the base frontier by rejecting incomplete merges
+        // rather than minting a destructive remote DELETE operation.
+        if (
+            local.kind == SyncDocumentKind.READING_PROGRESS ||
+            local.kind == SyncDocumentKind.READING_PROGRESS_V2
+        ) {
+            return local
+        }
         if (
             base == null ||
             base.kind != local.kind ||

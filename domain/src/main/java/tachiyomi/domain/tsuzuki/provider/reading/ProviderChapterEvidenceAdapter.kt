@@ -3,6 +3,7 @@ package tachiyomi.domain.tsuzuki.provider.reading
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadata
 import java.security.MessageDigest
 
 class ProviderChapterEvidenceAdapter(
@@ -36,6 +37,11 @@ class ProviderChapterEvidenceAdapter(
                 observedAt = observedAt,
                 confidence = PROVIDER_OBSERVATION_CONFIDENCE,
                 authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+                providerMetadata = ProviderEvidenceMetadata(
+                    language = observation.language,
+                    scanlationGroup = observation.scanlationGroup,
+                    releaseDateMillis = observation.releaseDateMillis,
+                ).takeIf { it.hasValues },
             )
         }
     }
