@@ -73,8 +73,8 @@ import kotlinx.coroutines.withContext
 import mihon.app.di.appGraph
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.automirroredrounded.ArrowRight
-import tachiyomi.core.provider.supplychain.MangaAllFamilyCatalog
 import tachiyomi.core.provider.supplychain.EnrolledProviderRepository
+import tachiyomi.core.provider.supplychain.MangaAllFamilyCatalog
 import tachiyomi.core.provider.supplychain.ProviderRepositoryCatalogEntry
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEnrollment
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEntryStatus
@@ -470,10 +470,10 @@ private fun InstalledProviderCards(
         if (registrations.isNotEmpty()) {
             item(key = "installed_group") {
                 SettingsGroup {
-
                     if (family.isNotEmpty()) {
                         Text(
-                            text = "MangaAll · ${family.size} / ${MangaAllFamilyCatalog.sourceProviderIds.size} sources · " +
+                            text =
+                                "MangaAll · ${family.size} / ${MangaAllFamilyCatalog.sourceProviderIds.size} sources · " +
                                 (family.first().descriptor.origin as ProviderOrigin.Repository).repositoryId,
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
