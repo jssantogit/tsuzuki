@@ -143,6 +143,33 @@ class ResolveCanonicalMetadataCachingTest {
     }
 
     @Test
+    fun `revoked integration cannot publish metadata resolved under an obsolete configuration`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val provider = CountingMetadataProvider(gate)
+        val snapshots = FakeSnapshotRepository()
+        val registry = FakeRegistry(provider)
+        val resolver = resolver(
+            provider = provider,
+            snapshots = snapshots,
+            clock = { 10_000L },
+            scope = backgroundScope,
+            registry = registry,
+        )
+
+        val pending = async { resolver.execute(TITLE_ID, forceRefresh = true) }
+        runCurrent()
+        provider.calls shouldBe 1
+
+        // The request was authorized at dispatch, but consent changed while HTTP was in flight.
+        registry.fingerprint = "cfg-revoked"
+        gate.complete(Unit)
+
+        pending.await().isFailure shouldBe true
+        snapshots.get(TITLE_ID) shouldBe null
+        resolver.cached(TITLE_ID) shouldBe null
+    }
+
+    @Test
     fun `provider details also refresh reported chapter count without a second provider call`() = runTest {
         val provider = CountingMetadataProvider()
         val counts = FakeReportedChapterCountRepository()
