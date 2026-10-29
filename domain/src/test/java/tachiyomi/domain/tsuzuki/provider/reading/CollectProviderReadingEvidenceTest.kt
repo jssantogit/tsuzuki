@@ -9,9 +9,9 @@ import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
-import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
@@ -300,7 +300,9 @@ class CollectProviderReadingEvidenceTest {
         val events = mutableListOf<StructuredDiagnosticEvent>()
         override fun canonicalTitleReference(canonicalTitleId: String): String? = null
         override fun mihonMangaReference(mihonMangaId: Long): String? = null
-        override fun record(event: StructuredDiagnosticEvent) { events += event }
+        override fun record(event: StructuredDiagnosticEvent) {
+            events += event
+        }
     }
 
     private fun registry() = DefaultProviderRegistry(
