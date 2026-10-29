@@ -1,5 +1,6 @@
 package tachiyomi.domain.tsuzuki.chapter.inventory
 
+import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -23,13 +24,15 @@ import kotlin.time.Clock
  * through [authorized]. The active Provider registration is revalidated after
  * every remote request, before persisting any observation.
  */
+@Inject
 class RefreshProviderTorrentInventory(
     private val canonicalTitles: CanonicalTitleRepository,
     private val registry: ProviderRegistry,
     private val searchGateway: TorrentSearchGateway,
     private val ledger: InventoryEvidenceRepository,
-    private val projector: TorrentInventoryEvidenceProjector = TorrentInventoryEvidenceProjector(),
 ) {
+    private val projector = TorrentInventoryEvidenceProjector()
+
     fun hasEnabledSources(): Boolean = enabledSources().isNotEmpty()
 
     suspend fun execute(
