@@ -24,8 +24,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventoryProducer
-import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshResult
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchFailureReason
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshResult
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshIndependentInventory
 import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshProviderTorrentInventory
