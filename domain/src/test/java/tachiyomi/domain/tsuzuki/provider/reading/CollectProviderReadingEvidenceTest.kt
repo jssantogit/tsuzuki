@@ -8,6 +8,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
@@ -258,6 +259,47 @@ class CollectProviderReadingEvidenceTest {
         val dump = recorder.events.joinToString()
         (dump.contains("Haikyuu") || dump.contains("haikyu-source-work")) shouldBe false
         recorder.events.all { it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE } shouldBe true
+    }
+
+    @Test
+    fun `empty successful chapter inventory remains complete and visibly zero for that provider`() = runBlocking {
+        val recorder = CapturingProviderDiagnostics()
+        val bridge = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(ProviderWorkCandidate("dandadan-1", "Dandadan", language = "en")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = {
+                    ProviderCallResult.Success(ProviderPage(emptyList(), nextCursor = null))
+                },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+
+        val result = bridge.execute(canonicalTitle.id)
+        result.complete shouldBe true
+        result.bindingCount shouldBe 1
+        result.evidence shouldBe emptyList()
+        result.snapshots.size shouldBe 1
+
+        val lookup = recorder.events.single { it.stage == DiagnosticStage.LOOKUP }
+        lookup.attributes["candidate_count"] shouldBe DiagnosticAttributeValue.Number(1)
+        lookup.attributes["binding_count"] shouldBe DiagnosticAttributeValue.Number(1)
+        val chapters = recorder.events.single { it.stage == DiagnosticStage.READ }
+        chapters.outcome shouldBe DiagnosticOutcome.EMPTY
+        chapters.attributes["observation_count"] shouldBe DiagnosticAttributeValue.Number(0)
+        chapters.attributes["chapter_count"] shouldBe DiagnosticAttributeValue.Number(0)
+        (StructuredDiagnosticSanitizer.sanitize(chapters) != null) shouldBe true
     }
 
     @Test
