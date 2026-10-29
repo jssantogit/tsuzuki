@@ -89,6 +89,7 @@ class CollectProviderReadingEvidenceTest {
             it.stage == DiagnosticStage.SUMMARY && it.outcome != DiagnosticOutcome.STARTED
         }
         summary.outcome shouldBe DiagnosticOutcome.PARTIAL
+        summary.attributes["target_source_count"] shouldBe DiagnosticAttributeValue.Number(1)
         summary.attributes["completed"] shouldBe DiagnosticAttributeValue.Flag(false)
         summary.attributes["chapter_count"] shouldBe DiagnosticAttributeValue.Number(0)
         (StructuredDiagnosticSanitizer.sanitize(summary) != null) shouldBe true
