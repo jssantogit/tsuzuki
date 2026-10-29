@@ -39,7 +39,12 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.RefreshChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.interactor.ChapterMutationGate
 import tachiyomi.domain.tsuzuki.chapter.interactor.MaterializeInferredChapter
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
-import tachiyomi.domain.tsuzuki.chapter.interactor.inferredChapterId
+import tachiyomi.domain.tsuzuki.chapter.inventory.GetIndependentInventorySnapshot
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySourceSnapshot
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryKnowledge
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
@@ -93,6 +98,61 @@ class CanonicalTitleScreenModelTest {
     @AfterEach
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun `cached detail exposes partial release evidence offline without fabricating readable chapters`() = runTest(
+        dispatcher,
+    ) {
+        val snapshot = IndependentInventorySnapshot(
+            knowledge = InventoryKnowledge.PARTIAL,
+            sources = listOf(
+                IndependentInventorySourceSnapshot(
+                    scope = InventoryScope(
+                        "title",
+                        "mangadex",
+                        "verified-work",
+                        null,
+                        "pt-br",
+                        true,
+                        false,
+                    ),
+                    knownIndividualClaims = 0,
+                    releaseObservations = 80,
+                    declaredTotals = setOf(120),
+                    outcomes = setOf(InventoryFetchOutcome.EXHAUSTED),
+                    latestObservedAt = 100L,
+                ),
+            ),
+        )
+        val inventory = mockk<GetIndependentInventorySnapshot>()
+        coEvery { inventory.execute("title") } returns snapshot
+        val model = readingModel(
+            chapters = FakeChapterRepository(emptyList()),
+            inventorySnapshot = inventory,
+        )
+
+        model.start("title")
+        advanceUntilIdle()
+
+        val state = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        state.independentInventory shouldBe snapshot
+        state.chapters shouldBe emptyList()
+        state.hasReadableChapters shouldBe false
+    }
+
+    @Test
+    fun `failed optional inventory read cannot block existing canonical chapters`() = runTest(dispatcher) {
+        val inventory = mockk<GetIndependentInventorySnapshot>()
+        coEvery { inventory.execute("title") } throws IllegalStateException("corrupt optional ledger")
+        val model = readingModel(inventorySnapshot = inventory)
+
+        model.start("title")
+        advanceUntilIdle()
+
+        val state = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        state.independentInventory.knowledge shouldBe InventoryKnowledge.UNKNOWN
+        state.chapters.map { it.chapter.id } shouldBe listOf("first")
     }
 
     @Test
@@ -478,6 +538,11 @@ class CanonicalTitleScreenModelTest {
         confirmation = CanonicalChapterConfirmation.CONFIRMED,
     )
 
+    private fun emptyInventorySnapshot(): GetIndependentInventorySnapshot =
+        mockk<GetIndependentInventorySnapshot>().also {
+            coEvery { it.execute(any()) } returns IndependentInventorySnapshot(InventoryKnowledge.UNKNOWN, emptyList())
+        }
+
     private fun readingModel(
         chapters: FakeChapterRepository = FakeChapterRepository(listOf(readingChapter("first", "1"))),
         progress: List<CanonicalChapterProgress> = emptyList(),
@@ -485,6 +550,7 @@ class CanonicalTitleScreenModelTest {
         metadata: ResolveCanonicalMetadata = emptyMetadataResolver(),
         titles: CanonicalTitleRepository = FakeTitleRepository(),
         chapterRefresh: RefreshChapterEvidence? = null,
+        inventorySnapshot: GetIndependentInventorySnapshot = emptyInventorySnapshot(),
     ): CanonicalTitleScreenModel {
         val downloads = mockk<CanonicalDownloadRepository>()
         coEvery { downloads.getChapterIdsByCanonicalTitle(any()) } returns emptySet()
@@ -502,6 +568,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = inventorySnapshot,
             canonicalReadingRepository = reading,
             getCanonicalChapterDownloadState = mockk(relaxed = true),
             downloadCanonicalChapter = mockk(relaxed = true),
@@ -533,6 +600,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = evidence,
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -588,6 +656,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -649,6 +718,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -782,6 +852,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = FakeChapterRepository(emptyList()),
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -842,6 +913,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = FakeChapterRepository(emptyList()),
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -938,6 +1010,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = evidenceRepository,
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -999,6 +1072,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -1071,6 +1145,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -1143,6 +1218,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapterRepo,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -1205,6 +1281,7 @@ class CanonicalTitleScreenModelTest {
             canonicalChapterRepository = chapters,
             materializeInferredChapter = mockk(relaxed = true),
             chapterEvidenceRepository = FakeEvidenceRepository(),
+            getIndependentInventorySnapshot = emptyInventorySnapshot(),
             canonicalReadingRepository = FakeReadingRepository(),
             resolveCanonicalReadingStart = mockk(relaxed = true),
             getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -1240,7 +1317,7 @@ class CanonicalTitleScreenModelTest {
     }
 
     @Test
-    fun `Kitsu count produces unified rows before source discovery and selected slot keeps identity`() =
+    fun `Kitsu count without enumerated evidence cannot create reader targets`() =
         runTest(dispatcher) {
             val chapters = FakeChapterRepository(emptyList())
             val reported = FakeReportedChapterCountRepository(
@@ -1256,6 +1333,7 @@ class CanonicalTitleScreenModelTest {
                 canonicalChapterRepository = chapters,
                 materializeInferredChapter = materializer,
                 chapterEvidenceRepository = FakeEvidenceRepository(),
+                getIndependentInventorySnapshot = emptyInventorySnapshot(),
                 canonicalReadingRepository = FakeReadingRepository(),
                 resolveCanonicalReadingStart = mockk(relaxed = true),
                 getCanonicalChapterDownloadState = GetCanonicalChapterDownloadState(
@@ -1286,28 +1364,20 @@ class CanonicalTitleScreenModelTest {
             advanceUntilIdle()
 
             val current = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
-            current.chapters.size shouldBe 108
-            current.chapters.first().chapter.displayNumber shouldBe "1"
-            current.chapters.last().chapter.displayNumber shouldBe "108"
-            current.chapters.all(CanonicalChapterDetailItem::inferredFromCount) shouldBe true
+            current.chapters shouldBe emptyList()
             chapters.getByCanonicalTitleId("title") shouldBe emptyList()
             val uiEvents = diagnostics.events.filter { it.stage == ChapterInventoryDiagnosticStage.UI }
             uiEvents.first().received shouldBe 0
             val uiEvent = uiEvents.last()
             uiEvent.accepted shouldBe 0
-            uiEvent.inferred shouldBe 108
+            uiEvent.inferred shouldBe 0
             uiEvent.discarded shouldBe 0
 
             val opened = mutableListOf<String>()
-            model.openChapter(inferredChapterId("title", 37), opened::add)
+            model.openChapter("tsuzuki:count:title:37", opened::add) shouldBe null
             advanceUntilIdle()
-            opened shouldBe listOf(inferredChapterId("title", 37))
-            chapters.getByCanonicalTitleId("title").single().id shouldBe opened.single()
-
-            model.openChapter(inferredChapterId("title", 37), opened::add)
-            advanceUntilIdle()
-            opened.size shouldBe 2
-            chapters.getByCanonicalTitleId("title").size shouldBe 1
+            opened shouldBe emptyList()
+            chapters.getByCanonicalTitleId("title") shouldBe emptyList()
         }
 
     private class FakeAddonRepository : AddonRepository {
