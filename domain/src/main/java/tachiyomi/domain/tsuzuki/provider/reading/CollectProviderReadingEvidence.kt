@@ -128,8 +128,6 @@ class CollectProviderReadingEvidence private constructor(
             ?: return ProviderReadingEvidenceCollection(complete = false)
         val targets = readingTargets()
         trace(canonicalTitleId, null, DiagnosticStage.SUMMARY, DiagnosticOutcome.STARTED, targets = targets.size)
-        if (targets.isEmpty()) return ProviderReadingEvidenceCollection()
-
         val results = coroutineScope {
             val gate = Semaphore(MAX_CONCURRENT_PROVIDERS)
             targets.map { target ->
@@ -157,11 +155,27 @@ class CollectProviderReadingEvidence private constructor(
             }.awaitAll()
         }
 
-        return ProviderReadingEvidenceCollection(
+        val collection = ProviderReadingEvidenceCollection(
             snapshots = results.flatMap(ProviderReadingEvidenceCollection::snapshots),
             bindingCount = results.sumOf(ProviderReadingEvidenceCollection::bindingCount),
             complete = results.all(ProviderReadingEvidenceCollection::complete),
         )
+        val acceptedChapters = collection.snapshots.sumOf { it.evidence.size }
+        trace(
+            canonicalTitleId,
+            null,
+            DiagnosticStage.SUMMARY,
+            when {
+                !collection.complete -> DiagnosticOutcome.PARTIAL
+                acceptedChapters == 0 -> DiagnosticOutcome.EMPTY
+                else -> DiagnosticOutcome.SUCCEEDED
+            },
+            targets = targets.size,
+            bindings = collection.bindingCount,
+            accepted = acceptedChapters,
+            completed = collection.complete,
+        )
+        return collection
     }
 
     suspend fun configurationTokens(): List<String> {
@@ -403,6 +417,7 @@ class CollectProviderReadingEvidence private constructor(
         bindings: Int? = null,
         observed: Int? = null,
         accepted: Int? = null,
+        completed: Boolean? = null,
         errorCode: ProviderErrorCode? = null,
     ) {
         runCatching {
@@ -417,6 +432,7 @@ class CollectProviderReadingEvidence private constructor(
                 bindings?.let { put("binding_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 observed?.let { put("observation_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 accepted?.let { put("chapter_count", DiagnosticAttributeValue.Number(it.toLong())) }
+                completed?.let { put("completed", DiagnosticAttributeValue.Flag(it)) }
                 errorCode?.let { put("provider_error_code", DiagnosticAttributeValue.Text(it.name)) }
             }
             diagnostics.record(
