@@ -243,10 +243,11 @@ class NativeInventoryRefreshScreenModel(
                     mutableState.value = mutableState.value.copy(
                         refreshStops = mutableState.value.refreshStops + (producer.producerId to result.stop),
                         refreshFailureReasons = mutableState.value.refreshFailureReasons.toMutableMap().apply {
-                            if (result.failureReason == null) {
+                            val reason = result.failureReason
+                            if (reason == null) {
                                 remove(producer.producerId)
                             } else {
-                                put(producer.producerId, result.failureReason)
+                                put(producer.producerId, reason)
                             }
                         },
                     )
@@ -330,10 +331,11 @@ class NativeInventoryRefreshScreenModel(
                         refreshing = false,
                         lastStop = result.stop,
                         refreshFailureReasons = mutableState.value.refreshFailureReasons.toMutableMap().apply {
-                            if (result.failureReason == null) {
+                            val reason = result.failureReason
+                            if (reason == null) {
                                 remove(producerId)
                             } else {
-                                put(producerId, result.failureReason)
+                                put(producerId, reason)
                             }
                         },
                         revision = mutableState.value.revision + 1,
