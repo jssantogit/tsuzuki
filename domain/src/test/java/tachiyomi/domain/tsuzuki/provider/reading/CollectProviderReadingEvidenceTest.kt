@@ -44,7 +44,7 @@ class CollectProviderReadingEvidenceTest {
     )
 
     @Test
-    fun `unresponsive MangaFire chapter listing stops within bounded provider budget without reporting a complete empty inventory`() = runTest {
+    fun `stalled provider chapters stop before deadline without reporting a complete empty inventory`() = runTest {
         val recorder = CapturingProviderDiagnostics()
         val bindings = MemoryBindingRepository()
         val neverCompletes = CompletableDeferred<Unit>()
@@ -83,6 +83,7 @@ class CollectProviderReadingEvidenceTest {
             it.stage == DiagnosticStage.READ && it.outcome == DiagnosticOutcome.TIMEOUT
         }
         (StructuredDiagnosticSanitizer.sanitize(timedOut) != null) shouldBe true
+        recorder.events.none { it.outcome == DiagnosticOutcome.CANCELLED } shouldBe true
     }
 
     @Test
