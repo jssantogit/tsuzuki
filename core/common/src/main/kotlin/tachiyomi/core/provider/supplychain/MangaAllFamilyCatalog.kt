@@ -9,12 +9,12 @@ package tachiyomi.core.provider.supplychain
  * able to impersonate a MangaAll source by choosing a similar Provider ID.
  */
 object MangaAllFamilyCatalog {
-    const val familyId = "app.tsuzuki.mangaall"
+    const val FAMILY_ID = "app.tsuzuki.mangaall"
 
     val sourceProviderIds: List<String> = listOf(
-        "$familyId.mangadex",
-        "$familyId.mangaball",
-        "$familyId.mangadot",
+        "$FAMILY_ID.mangadex",
+        "$FAMILY_ID.mangaball",
+        "$FAMILY_ID.mangadot",
     )
 
     private val ids = sourceProviderIds.toSet()
@@ -67,7 +67,7 @@ data class MangaAllFamilyGroup(
     val isComplete: Boolean,
     val canInstall: Boolean,
 ) {
-    val familyId: String get() = MangaAllFamilyCatalog.familyId
+    val familyId: String get() = MangaAllFamilyCatalog.FAMILY_ID
 
     val installableIds: List<String>
         get() = if (!canInstall) emptyList() else entries

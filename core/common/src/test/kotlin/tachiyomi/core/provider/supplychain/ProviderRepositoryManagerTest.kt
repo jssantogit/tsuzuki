@@ -695,7 +695,7 @@ class ProviderRepositoryManagerTest {
     }
 
     @Test
-    fun `MangaAll stages all three trusted packages before any activation and keeps the same enrolled repository`() = runBlocking {
+    fun `MangaAll stages trusted packages before activation and preserves repository`() = runBlocking {
         val keyPair = ecKeyPair()
         val repositoryId = "repo.example"
         val enrollmentStore = FileProviderRepositoryEnrollmentStore(
