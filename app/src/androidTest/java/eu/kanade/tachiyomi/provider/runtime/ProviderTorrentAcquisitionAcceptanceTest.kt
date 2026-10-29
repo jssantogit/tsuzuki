@@ -14,6 +14,8 @@ import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentMetadataSearchGateway
 import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentPreferences
 import eu.kanade.tachiyomi.provider.torrent.ScriptProviderTorrentGateway
 import eu.kanade.tachiyomi.ui.reader.loader.ArchivePageLoader
+import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -26,8 +28,8 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Test
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireResponse
@@ -57,6 +59,8 @@ import tachiyomi.domain.tsuzuki.provider.torrent.PrepareProviderTorrentForReader
 import tachiyomi.domain.tsuzuki.provider.torrent.ProviderChapterTorrentOption
 import tachiyomi.domain.tsuzuki.provider.torrent.ProviderTorrentAcquisitionCoordinator
 import tachiyomi.domain.tsuzuki.provider.torrent.ProviderTorrentAcquisitionState
+import tachiyomi.domain.tsuzuki.provider.torrent.select
+import tachiyomi.domain.tsuzuki.provider.torrent.toContentDelivery
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentAcquisitionFailure
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentAcquisitionPreference
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentAcquisitionRequest
@@ -65,17 +69,14 @@ import tachiyomi.domain.tsuzuki.provider.torrent.TorrentArchiveFormat
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateFile
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterFileMatch
+import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterMapper
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterPayload
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterPayloadMatch
-import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterMapper
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterRequest
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentHttpFileMaterializer
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentReadableResource
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchRequest
-import tachiyomi.domain.tsuzuki.provider.torrent.toContentDelivery
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
-import java.io.File
-import java.util.concurrent.atomic.AtomicBoolean
 
 @RunWith(AndroidJUnit4::class)
 class ProviderTorrentAcquisitionAcceptanceTest {
@@ -596,8 +597,10 @@ class ProviderTorrentAcquisitionAcceptanceTest {
                 chapterNumber = "01",
             )
             val match = TorrentChapterMapper().select(chapter, candidate)
-            assertTrue("chapter directory must map to exactly one canonical identity: $match",
-                match is TorrentChapterPayloadMatch.Exact)
+            assertTrue(
+                "chapter directory must map to exactly one canonical identity: $match",
+                match is TorrentChapterPayloadMatch.Exact,
+            )
             val payload = (match as TorrentChapterPayloadMatch.Exact).payload as TorrentChapterPayload.ImageDirectory
             val delivery = requireNotNull(
                 ProviderChapterTorrentOption(
@@ -632,8 +635,10 @@ class ProviderTorrentAcquisitionAcceptanceTest {
                 acquisitionTimeoutMs = 45_000L,
             )
             val prepared = PrepareTorrentArtifact(artifactEngine).execute(delivery).getOrThrow()
-            assertTrue("Reader must receive a local archive: $prepared",
-                prepared is PreparedChapterContent.LocalArchive)
+            assertTrue(
+                "Reader must receive a local archive: $prepared",
+                prepared is PreparedChapterContent.LocalArchive,
+            )
             val uri = (prepared as PreparedChapterContent.LocalArchive).uri
             val reader = context.contentResolver.openFileDescriptor(Uri.parse(uri), "r").use { descriptor ->
                 ArchiveReader(requireNotNull(descriptor))

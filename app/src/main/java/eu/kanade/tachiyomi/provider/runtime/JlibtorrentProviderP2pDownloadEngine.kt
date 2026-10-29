@@ -9,19 +9,19 @@ import com.frostwire.jlibtorrent.TcpEndpoint
 import com.frostwire.jlibtorrent.TorrentFlags
 import com.frostwire.jlibtorrent.TorrentHandle
 import com.frostwire.jlibtorrent.TorrentInfo
+import java.io.File
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import logcat.LogPriority
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
 import tachiyomi.core.provider.runtime.ProviderP2pFailureCode
-import java.io.File
-import kotlin.coroutines.coroutineContext
 
 class JlibtorrentProviderP2pDownloadEngine internal constructor(
     private val metadataResolver: (
@@ -358,15 +358,14 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 configuredInitialPeers,
                 TorrentFlags.PAUSED,
             )
+            val ignoredFileCount = torrent.numFiles() - if (chapterImages.isEmpty()) 1 else chapterImages.size
             ProviderP2pDiagnostics.record(
                 event = ProviderP2pDiagnosticEvent.DOWNLOAD_SUBMITTED,
                 operationId = request.operationId,
                 numbers = mapOf(
                     "selectedIndex" to selectedIndex.toLong(),
                     "fileCount" to torrent.numFiles().toLong(),
-                    "ignoredFileCount" to (
-                        torrent.numFiles() - (if (chapterImages.isEmpty()) 1 else chapterImages.size)
-                    ).coerceAtLeast(0).toLong(),
+                    "ignoredFileCount" to ignoredFileCount.coerceAtLeast(0).toLong(),
                     "selectedImageCount" to chapterImages.size.toLong(),
                     "initialPeerCount" to configuredInitialPeers.size.toLong(),
                 ),
