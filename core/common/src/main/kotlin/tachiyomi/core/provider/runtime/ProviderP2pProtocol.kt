@@ -77,13 +77,15 @@ data class ProviderP2pAcquireRequest(
             }
             var totalBytes = 0L
             for (page in selectedChapterImages) {
-                require(page.index >= 0 && validRelativeImagePath(page.path) &&
-                    page.path.substringBeforeLast('/', "") == chapterDirectory
+                require(
+                    page.index >= 0 && validRelativeImagePath(page.path) &&
+                        page.path.substringBeforeLast('/', "") == chapterDirectory,
                 ) {
                     "Provider P2P chapter image path is invalid"
                 }
-                require(page.sizeBytes in 1L..MAX_IMAGE_BYTES &&
-                    totalBytes <= MAX_CHAPTER_BYTES - page.sizeBytes
+                require(
+                    page.sizeBytes in 1L..MAX_IMAGE_BYTES &&
+                        totalBytes <= MAX_CHAPTER_BYTES - page.sizeBytes,
                 ) {
                     "Provider P2P chapter images exceed verified size bounds"
                 }
