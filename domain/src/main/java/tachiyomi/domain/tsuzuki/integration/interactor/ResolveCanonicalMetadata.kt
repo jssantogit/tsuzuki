@@ -206,6 +206,13 @@ class ResolveCanonicalMetadata private constructor(
             block = resolve,
         ) ?: resolve()
 
+        // An integration may be revoked while a provider request is in flight.
+        // Never publish a result authorized under a superseded configuration,
+        // even if its source returned successfully.
+        if (registry.configurationFingerprint() != configurationFingerprint) {
+            return Result.failure(IllegalStateException("Metadata integration configuration changed during refresh"))
+        }
+
         val metadata = result.getOrNull()
         if (metadata != null) {
             snapshotRepository?.upsertIfNewer(
@@ -216,6 +223,10 @@ class ResolveCanonicalMetadata private constructor(
                     refreshedAt = now,
                 ),
             )
+            // Recheck after the suspending write before the result reaches Details.
+            if (registry.configurationFingerprint() != configurationFingerprint) {
+                return Result.failure(IllegalStateException("Metadata integration configuration changed during refresh"))
+            }
             return Result.success(metadata)
         }
 
