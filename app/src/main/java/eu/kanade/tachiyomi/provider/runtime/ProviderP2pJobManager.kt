@@ -92,6 +92,23 @@ class ProviderP2pJobManager internal constructor(
             cancelProvider(providerId)
             return ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.CANCELLED)
         }
+        // The script may only echo the first selected page. Extra pages are
+        // injected from the Host-only verified grant, never script-controlled.
+        val fullImageSelection = approvedSelection
+            ?.takeIf { it.selectedChapterImages.isNotEmpty() }
+        val expandedRequest = if (
+            fullImageSelection != null &&
+            fullImageSelection.copy(selectedChapterImages = emptyList()) == request
+        ) {
+            fullImageSelection
+        } else {
+            request
+        }
+        val isImageRequest = request.selectedFilePath.substringAfterLast('.', "").lowercase() in
+            setOf("jpg", "jpeg", "png", "webp", "gif")
+        if (isImageRequest && (fullImageSelection == null || expandedRequest != fullImageSelection)) {
+            return ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.FILE_MISMATCH)
+        }
         val key = JobKey(
             providerId = providerId,
             operationId = request.operationId,
@@ -105,7 +122,9 @@ class ProviderP2pJobManager internal constructor(
                 // A Host-verified job must remain scoped to a currently approved selection.
                 // Matching operation IDs alone never authorize polling it from another
                 // Provider invocation, whether the job is pending or completed.
-                if (existing.request != request || (existing.hostApproved && approvedSelection != request)) {
+                if (existing.request != request ||
+                    (existing.hostApproved && approvedSelection != existing.downloadRequest)
+                ) {
                     ProviderP2pDiagnostics.record(
                         event = ProviderP2pDiagnosticEvent.JOB_REJECTED,
                         operationId = request.operationId,
@@ -135,9 +154,10 @@ class ProviderP2pJobManager internal constructor(
             val jobId = UUID.randomUUID().toString()
             val entry = JobEntry(
                 request = request,
+                downloadRequest = expandedRequest,
                 jobId = jobId,
                 response = ProviderP2pAcquireResponse.Pending(jobId),
-                hostApproved = approvedSelection == request,
+                hostApproved = approvedSelection == expandedRequest,
             )
             jobs[key] = entry
             ProviderP2pDiagnostics.record(
@@ -225,7 +245,7 @@ class ProviderP2pJobManager internal constructor(
                 throw CancellationException("Provider P2P authorization revoked")
             }
             val verifiedBytes = if (entry.hostApproved) {
-                runCatching { verifiedMetadata?.find(key.providerId, entry.request) }.getOrNull()
+                runCatching { verifiedMetadata?.find(key.providerId, entry.downloadRequest) }.getOrNull()
             } else {
                 null
             }
@@ -236,7 +256,7 @@ class ProviderP2pJobManager internal constructor(
                 providerId = key.providerId,
                 codes = mapOf("status" to if (verifiedBytes == null) "MISS" else "HIT"),
             )
-            val download = engine.downloadWithHostMetadata(entry.request, workingDirectory, verifiedBytes)
+            val download = engine.downloadWithHostMetadata(entry.downloadRequest, workingDirectory, verifiedBytes)
             // A cancelled or evicted Host job must never adopt a late native result.
             // Revoking and rapidly re-enabling a Provider does not restore the old job.
             currentCoroutineContext().ensureActive()
@@ -501,6 +521,7 @@ class ProviderP2pJobManager internal constructor(
 
     private data class JobEntry(
         val request: ProviderP2pAcquireRequest,
+        val downloadRequest: ProviderP2pAcquireRequest,
         val jobId: String,
         var response: ProviderP2pAcquireResponse,
         var completedAtMillis: Long? = null,

@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
+import tachiyomi.core.provider.runtime.ProviderP2pChapterImage
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireResponse
 import tachiyomi.core.provider.runtime.ProviderP2pFailureCode
 import tachiyomi.domain.tsuzuki.provider.ProviderId
@@ -78,6 +79,49 @@ class ProviderP2pJobManagerTest {
         ) shouldBe null
 
         manager.close()
+    }
+
+    @Test
+    fun `Host-verified directory selection upgrades a legacy script page without granting extra files`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        val firstPage = ProviderP2pChapterImage(0, "Tokyo Ghoul Manga/Chapter 01/001.jpg", 100L)
+        val secondPage = ProviderP2pChapterImage(3, "Tokyo Ghoul Manga/Chapter 01/002.jpg", 150L)
+        val approved = ProviderP2pAcquireRequest(
+            operationId = "read:chapter-folder",
+            infoHash = "0123456789abcdef0123456789abcdef01234567",
+            selectedFileIndex = firstPage.index,
+            selectedFilePath = firstPage.path,
+            selectedFileSizeBytes = firstPage.sizeBytes,
+            selectedChapterImages = listOf(firstPage, secondPage),
+        )
+        val scriptEcho = approved.copy(selectedChapterImages = emptyList())
+        var downloadedPages = emptyList<ProviderP2pChapterImage>()
+        val manager = ProviderP2pJobManager(
+            root = tempDir.resolve("folder-jobs").toFile(),
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { request, directory ->
+                downloadedPages = request.selectedChapterImages
+                val archive = directory.resolve("chapter.cbz")
+                archive.writeBytes(zip("0001.jpg", "chapter"))
+                ProviderP2pDownloadResult.Ready(archive, ProviderManagedResourceFormat.CBZ)
+            },
+            scope = scope,
+        )
+        try {
+            manager.service("org.example.p2p").acquire(scriptEcho) shouldBe
+                ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.FILE_MISMATCH)
+
+            val granted = manager.service("org.example.p2p", approved)
+            (granted.acquire(scriptEcho) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            scope.advanceUntilIdle()
+            downloadedPages shouldBe listOf(firstPage, secondPage)
+            (granted.acquire(scriptEcho) is ProviderP2pAcquireResponse.Ready) shouldBe true
+            // An ungranted invocation cannot poll the completed job.
+            manager.service("org.example.p2p").acquire(scriptEcho) shouldBe
+                ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.FILE_MISMATCH)
+        } finally {
+            manager.close()
+        }
     }
 
     @Test

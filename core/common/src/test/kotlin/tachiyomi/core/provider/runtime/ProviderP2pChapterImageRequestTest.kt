@@ -24,6 +24,9 @@ class ProviderP2pChapterImageRequestTest {
     fun `Host-owned chapter image list retains exact file identities across the bounded protocol`() {
         val approved = request()
         ProviderP2pProtocol.decodeRequest(ProviderP2pProtocol.encodeRequest(approved)) shouldBe approved
+        // Older JS providers echo only the representative page.
+        val scriptEcho = approved.copy(selectedChapterImages = emptyList())
+        ProviderP2pProtocol.decodeRequest(ProviderP2pProtocol.encodeRequest(scriptEcho)) shouldBe scriptEcho
     }
 
     @Test

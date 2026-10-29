@@ -42,9 +42,12 @@ data class ProviderP2pAcquireRequest(
         ) {
             "Provider P2P selected file size must not be negative"
         }
+        // Legacy isolated Provider calls identify the first selected page only.
+        // The Host manager rejects that bare page request unless the invocation
+        // carries an identical, privately approved complete image selection.
         require(
             if (selectedChapterImages.isEmpty()) {
-                validRelativeArchivePath(selectedFilePath)
+                validRelativeArchivePath(selectedFilePath) || validRelativeImagePath(selectedFilePath)
             } else {
                 validRelativeImagePath(selectedFilePath)
             },
