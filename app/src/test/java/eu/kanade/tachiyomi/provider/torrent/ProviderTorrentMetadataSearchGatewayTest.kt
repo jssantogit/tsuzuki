@@ -272,6 +272,39 @@ class ProviderTorrentMetadataSearchGatewayTest {
     }
 
     @Test
+    fun `alternate image chapter directory receives distinct unsupported reason`() = runTest {
+        val alternate = candidate(
+            files = listOf(
+                TorrentCandidateFile(
+                    0,
+                    "Secret Example Manga/Alternate Chapter Releases/Chapter 12/001.jpg",
+                    sizeBytes = 120L,
+                ),
+            ),
+        )
+        val logs = mutableListOf<String>()
+        val gateway = ProviderTorrentMetadataSearchGateway(
+            delegate = TorrentSearchGateway { _, _ ->
+                ProviderCallResult.Success(ProviderPage(listOf(alternate), nextCursor = null))
+            },
+            registry = registry(),
+            inspector = ProviderTorrentMetadataInspector { _, _ ->
+                error("pre-hydrated candidates must not be inspected")
+            },
+            diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
+            logSink = ProviderRuntimeLogSink { _, message -> logs += message },
+        )
+        gateway.search(
+            providerId,
+            TorrentSearchRequest(titles = listOf("Secret Example Manga"), chapterNumber = "12"),
+        )
+        val summary = logs.single { it.startsWith("host_torrent_match ") }
+        summary.endsWith("reason=IMAGE_DIRECTORY_UNSUPPORTED") shouldBe true
+        summary.contains("exact=0") shouldBe true
+        summary.contains("Secret Example Manga") shouldBe false
+    }
+
+    @Test
     fun `match summary agrees with canonical title aware chapter mapping`() = runTest {
         val matchable = candidate(
             files = listOf(
