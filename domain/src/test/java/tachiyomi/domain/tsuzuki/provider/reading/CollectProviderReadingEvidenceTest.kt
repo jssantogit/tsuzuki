@@ -4,10 +4,10 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
@@ -55,7 +55,9 @@ class CollectProviderReadingEvidenceTest {
                 lookupHandler = {
                     ProviderCallResult.Success(
                         ProviderPage(
-                            items = listOf(ProviderWorkCandidate("work-1", canonicalTitle.displayTitle, language = "en")),
+                            items = listOf(
+                                ProviderWorkCandidate("work-1", canonicalTitle.displayTitle, language = "en"),
+                            ),
                             nextCursor = null,
                         ),
                     )
