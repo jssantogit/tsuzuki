@@ -51,9 +51,16 @@ internal class P2pChapterImageArchiveBuilder {
             }
             val extension = image.path.substringAfterLast('.', "").lowercase()
             if (extension !in ALLOWED_EXTENSIONS) return null
+            val relativeSegments = image.path.split('/')
+            var currentPath = downloadedPath
+            for (segment in relativeSegments) {
+                currentPath = currentPath.resolve(segment)
+                // A symlink in any parent segment can alias pages from another
+                // release while still resolving inside our downloaded directory.
+                if (Files.isSymbolicLink(currentPath)) return null
+            }
             val source = runCatching { File(downloadedRoot, image.path).canonicalFile }.getOrNull() ?: return null
             if (!source.toPath().startsWith(downloadedPath) || !source.isFile ||
-                Files.isSymbolicLink(File(downloadedRoot, image.path).toPath()) ||
                 source.length() != image.sizeBytes || !matchesImageSignature(source, extension)
             ) {
                 return null
