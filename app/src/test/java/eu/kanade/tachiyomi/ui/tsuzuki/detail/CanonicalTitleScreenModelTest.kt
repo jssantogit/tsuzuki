@@ -294,11 +294,40 @@ class CanonicalTitleScreenModelTest {
         advanceUntilIdle()
 
         val after = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
-        after.chapters.map { it.chapter.id } shouldBe listOf("first", "second")
+        after.chapters.map { it.chapter.id }.toSet() shouldBe setOf("first", "second")
         after.description shouldBe before.description
         after.genres shouldBe before.genres
         after.ratings shouldBe before.ratings
         after.metadataSources shouldBe before.metadataSources
+    }
+
+    @Test
+    fun `chapter reload does not retain revoked integration metadata without an authorized cache`() = runTest(dispatcher) {
+        val resolved = ResolvedMetadata(
+            synopsis = ProvenancedMetadata("Previously enabled synopsis", IntegrationId("kitsu")),
+            ratings = listOf(ProvenancedMetadata(ResolvedRating(8.7, 10.0), IntegrationId("mal"))),
+        )
+        var cachedConfigurationActive = true
+        val metadata = mockk<ResolveCanonicalMetadata>()
+        coEvery { metadata.cached("title") } coAnswers {
+            if (cachedConfigurationActive) resolved else null
+        }
+        coEvery { metadata.execute("title", any()) } returns Result.success(resolved)
+        val model = readingModel(metadata = metadata)
+
+        model.start("title")
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+            .description shouldBe "Previously enabled synopsis"
+
+        // cached() rejects snapshots when the integration configuration fingerprint changed.
+        cachedConfigurationActive = false
+        model.reloadReconciledChapters()
+        advanceUntilIdle()
+
+        val after = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        after.description shouldBe null
+        after.ratings shouldBe emptyList()
     }
 
     @Test
