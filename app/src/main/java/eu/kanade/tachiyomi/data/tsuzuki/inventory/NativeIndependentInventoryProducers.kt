@@ -377,12 +377,16 @@ class MangaUpdatesInventoryProducer(
             val perPage = root.requiredInt("per_page")
             val totalReleases = root.requiredInt("total_hits")
             require(reportedPage == page && perPage in 1..25 && totalReleases >= 0)
-            val records = root.requiredArray("results").map { item ->
+            val responseRecords = root.requiredArray("results")
+            val records = responseRecords.mapNotNull { item ->
                 val result = item as? JsonObject ?: error("Invalid release result")
                 val record = result.requiredObject("record")
                 val sourceId = result.requiredObject("metadata").requiredObject("series")
                     .requiredString("series_id")
-                require(sourceId == scope.externalWorkId) { "MangaUpdates returned a different series ID" }
+                // A title search can contain similarly named series. Ignore them
+                // only when this same page also proves an exact series match.
+                // Never commit a foreign release or treat title text as identity.
+                if (sourceId != scope.externalWorkId) return@mapNotNull null
                 InventoryReleaseRecord(
                     releaseId = record.requiredString("id"),
                     chapterLabel = record.optionalString("chapter"),
@@ -391,6 +395,12 @@ class MangaUpdatesInventoryProducer(
                     upstreamSourceId = null,
                     externalWorkId = sourceId,
                 )
+            }
+            // An entirely foreign result page is still an identity failure.
+            // Empty search results are valid; a mixed page can contribute only
+            // exact work records without contaminating the canonical ledger.
+            require(responseRecords.isEmpty() || records.isNotEmpty()) {
+                "MangaUpdates page did not prove the requested series"
             }
             val hasNextPage = page.toLong() * perPage.toLong() < totalReleases
             require(!hasNextPage || records.isNotEmpty()) { "Unexpected empty MangaUpdates page" }
