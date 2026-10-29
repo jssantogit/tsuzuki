@@ -471,10 +471,9 @@ private fun InstalledProviderCards(
             item(key = "installed_group") {
                 SettingsGroup {
                     if (family.isNotEmpty()) {
+                        val repositoryId = (family.first().descriptor.origin as ProviderOrigin.Repository).repositoryId
                         Text(
-                            text =
-                                "MangaAll · ${family.size} / ${MangaAllFamilyCatalog.sourceProviderIds.size} sources · " +
-                                (family.first().descriptor.origin as ProviderOrigin.Repository).repositoryId,
+                            text = "MangaAll · ${family.size}/3 sources · $repositoryId",
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
                             color = colors.foreground,
