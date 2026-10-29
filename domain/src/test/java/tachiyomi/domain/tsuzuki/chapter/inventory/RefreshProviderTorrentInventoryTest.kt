@@ -36,7 +36,7 @@ class RefreshProviderTorrentInventoryTest {
         coEvery { titles.getById("tokyo") } returns title
         val ledger = mockk<InventoryEvidenceRepository>(relaxed = true)
         val provider = registration()
-        val registry = DefaultProviderRegistry { listOf(provider) }
+        val registry = DefaultProviderRegistry(registrations = { listOf(provider) })
         var searches = 0
         val search = TorrentSearchGateway { id, request ->
             id shouldBe providerId
@@ -85,7 +85,7 @@ class RefreshProviderTorrentInventoryTest {
         coEvery { titles.getById("tokyo") } returns title
         val ledger = mockk<InventoryEvidenceRepository>(relaxed = true)
         val provider = registration()
-        val registry = DefaultProviderRegistry { listOf(provider) }
+        val registry = DefaultProviderRegistry(registrations = { listOf(provider) })
         var authorized = true
         val search = TorrentSearchGateway { _, _ ->
             authorized = false
@@ -116,7 +116,7 @@ class RefreshProviderTorrentInventoryTest {
         val titles = mockk<CanonicalTitleRepository>()
         coEvery { titles.getById("tokyo") } returns title
         val ledger = mockk<InventoryEvidenceRepository>(relaxed = true)
-        val registry = DefaultProviderRegistry { listOf(registration(ProviderLifecycleStatus.DISABLED)) }
+        val registry = DefaultProviderRegistry(registrations = { listOf(registration(ProviderLifecycleStatus.DISABLED)) })
         var searches = 0
         val refresh = RefreshProviderTorrentInventory(
             titles,
