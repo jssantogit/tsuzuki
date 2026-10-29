@@ -33,8 +33,10 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventoryProducer
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchFailureReason
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryReleaseRecord
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventorySourceFetchException
 import tachiyomi.domain.tsuzuki.chapter.inventory.MangaDexReleaseEvidenceAdapter
 import tachiyomi.domain.tsuzuki.chapter.inventory.MangaUpdatesReleaseEvidenceAdapter
 import java.io.ByteArrayOutputStream
@@ -97,7 +99,9 @@ class NativeInventoryReleaseTransport(
 ) : InventoryReleaseTransport {
     private val mutex = Mutex()
     private val cache = LinkedHashMap<String, Pair<Long, InventoryHttpPayload>>()
-    private val blockedUntilByHost = mutableMapOf<String, Long>()
+    private data class BlockedHost(val untilNanos: Long, val reason: InventoryFetchFailureReason)
+
+    private val blockedUntilByHost = mutableMapOf<String, BlockedHost>()
     private val metadataClient by lazy {
         // The public metadata client must never inherit tracker session cookies,
         // Cloudflare WebView challenge bypasses or automatic off-host redirects.
@@ -198,8 +202,8 @@ class NativeInventoryReleaseTransport(
             "Only allowlisted read-only metadata endpoints are permitted"
         }
         val now = System.nanoTime()
-        blockedUntilByHost[parsed.host]?.let { blockedUntil ->
-            if (now < blockedUntil) throw IOException("Inventory source is temporarily blocked")
+        blockedUntilByHost[parsed.host]?.let { blocked ->
+            if (now < blocked.untilNanos) throw InventorySourceFetchException(blocked.reason)
             blockedUntilByHost.remove(parsed.host)
         }
         val key = url + "\n" + postBody.orEmpty()
@@ -235,18 +239,30 @@ class NativeInventoryReleaseTransport(
             currentCoroutineContext().ensureActive()
             checkEnabled()
             when (it.code) {
-                403 -> blockedUntilByHost[parsed.host] = Long.MAX_VALUE
+                403 -> blockedUntilByHost[parsed.host] = BlockedHost(
+                    Long.MAX_VALUE,
+                    InventoryFetchFailureReason.ACCESS_DENIED,
+                )
                 429 -> {
                     val durationMs = retryAfterMilliseconds(it.header("Retry-After"))
-                    blockedUntilByHost[parsed.host] = System.nanoTime() + durationMs * 1_000_000L
+                    blockedUntilByHost[parsed.host] = BlockedHost(
+                        System.nanoTime() + durationMs * 1_000_000L,
+                        InventoryFetchFailureReason.RATE_LIMITED,
+                    )
                 }
             }
             if (!it.isSuccessful) {
-                throw IOException("Independent inventory endpoint returned HTTP " + it.code)
+                throw InventorySourceFetchException(
+                    when (it.code) {
+                        403 -> InventoryFetchFailureReason.ACCESS_DENIED
+                        429 -> InventoryFetchFailureReason.RATE_LIMITED
+                        else -> InventoryFetchFailureReason.HTTP_ERROR
+                    },
+                )
             }
             val responseBody = it.body ?: throw IOException("Empty inventory response")
             if (responseBody.contentLength() > MAX_RESPONSE_BYTES) {
-                throw IOException("Inventory response exceeded the byte budget")
+                throw InventorySourceFetchException(InventoryFetchFailureReason.RESPONSE_TOO_LARGE)
             }
             val bytes = withContext(Dispatchers.IO) {
                 responseBody.byteStream().use { stream ->
@@ -256,7 +272,7 @@ class NativeInventoryReleaseTransport(
                         val size = stream.read(chunk)
                         if (size < 0) break
                         if (result.size() + size > MAX_RESPONSE_BYTES) {
-                            throw IOException("Inventory response exceeded the byte budget")
+                            throw InventorySourceFetchException(InventoryFetchFailureReason.RESPONSE_TOO_LARGE)
                         }
                         result.write(chunk, 0, size)
                     }
@@ -361,12 +377,16 @@ class MangaUpdatesInventoryProducer(
             val perPage = root.requiredInt("per_page")
             val totalReleases = root.requiredInt("total_hits")
             require(reportedPage == page && perPage in 1..25 && totalReleases >= 0)
-            val records = root.requiredArray("results").map { item ->
+            val responseRecords = root.requiredArray("results")
+            val records = responseRecords.mapNotNull { item ->
                 val result = item as? JsonObject ?: error("Invalid release result")
                 val record = result.requiredObject("record")
                 val sourceId = result.requiredObject("metadata").requiredObject("series")
                     .requiredString("series_id")
-                require(sourceId == scope.externalWorkId) { "MangaUpdates returned a different series ID" }
+                // A title search can contain similarly named series. Ignore them
+                // only when this same page also proves an exact series match.
+                // Never commit a foreign release or treat title text as identity.
+                if (sourceId != scope.externalWorkId) return@mapNotNull null
                 InventoryReleaseRecord(
                     releaseId = record.requiredString("id"),
                     chapterLabel = record.optionalString("chapter"),
@@ -375,6 +395,12 @@ class MangaUpdatesInventoryProducer(
                     upstreamSourceId = null,
                     externalWorkId = sourceId,
                 )
+            }
+            // An entirely foreign result page is still an identity failure.
+            // Empty search results are valid; a mixed page can contribute only
+            // exact work records without contaminating the canonical ledger.
+            require(responseRecords.isEmpty() || records.isNotEmpty()) {
+                "MangaUpdates page did not prove the requested series"
             }
             val hasNextPage = page.toLong() * perPage.toLong() < totalReleases
             require(!hasNextPage || records.isNotEmpty()) { "Unexpected empty MangaUpdates page" }

@@ -188,6 +188,24 @@ class NativeIndependentInventoryProducerTest {
     }
 
     @Test
+    fun `MangaUpdates mixed series page retains only releases of the verified work`() = runTest {
+        val transport = RecordingInventoryTransport(
+            """{"total_hits":2,"page":1,"per_page":25,"results":[
+                {"record":{"id":10,"chapter":"99"},"metadata":{"series":{"series_id":999}}},
+                {"record":{"id":11,"chapter":"4"},"metadata":{"series":{"series_id":123}}}
+            ]}""",
+        )
+        val page = MangaUpdatesInventoryProducer(transport)
+            .fetchPage(scope("mangaupdates", "123"), "start").getOrThrow()
+
+        page.outcome shouldBe InventoryFetchOutcome.EXHAUSTED
+        page.claims.size shouldBe 1
+        page.claims.single().sourceRecordId shouldBe "11"
+        page.claims.single().label shouldBe "4"
+        page.claims.single().derivation shouldBe InventoryDerivation.RELEASE_RECORD
+    }
+
+    @Test
     fun `MangaUpdates wrong series within HTTP 200 fails closed`() = runTest {
         val transport = RecordingInventoryTransport(
             """{"total_hits":1,"page":1,"per_page":25,"results":[{"record":{"id":10,"chapter":"1"},"metadata":{"series":{"series_id":999}}}]}""",
