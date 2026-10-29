@@ -28,9 +28,10 @@ class PrepareTorrentArtifact(
             "Torrent discovery correlation must be an opaque UUID"
         }
         if (delivery.chapterImages.isNotEmpty()) {
-            require(delivery.chapterImages.first().index == delivery.fileIndex &&
-                delivery.chapterImages.first().path == delivery.filePath &&
-                delivery.chapterImages.first().sizeBytes == delivery.fileSizeBytes
+            require(
+                delivery.chapterImages.first().index == delivery.fileIndex &&
+                    delivery.chapterImages.first().path == delivery.filePath &&
+                    delivery.chapterImages.first().sizeBytes == delivery.fileSizeBytes,
             ) { "Torrent chapter first page must equal the selected file" }
             delivery.chapterImages.forEach { image ->
                 validateTorrentFilePath(image.path)

@@ -156,8 +156,9 @@ data class TorrentAcquisitionRequest(
             "Selected torrent file does not belong to the candidate"
         }
         if (selectedChapterImages.isNotEmpty()) {
-            require(selectedChapterImages.first() == selectedFile &&
-                selectedChapterImages.all { it in candidate.files.orEmpty() }
+            require(
+                selectedChapterImages.first() == selectedFile &&
+                    selectedChapterImages.all { it in candidate.files.orEmpty() },
             ) {
                 "Host-selected chapter images must belong to the exact torrent candidate"
             }

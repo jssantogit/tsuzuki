@@ -44,9 +44,12 @@ data class ProviderChapterTorrentOption(
         require(candidate.files.orEmpty().any { it == selectedFile }) {
             "Selected torrent file must belong to the candidate"
         }
-        require(selectedChapterImages.isEmpty() ||
-            (selectedChapterImages.first() == selectedFile &&
-                selectedChapterImages.all { it in candidate.files.orEmpty() })
+        require(
+            selectedChapterImages.isEmpty() ||
+                (
+                    selectedChapterImages.first() == selectedFile &&
+                        selectedChapterImages.all { it in candidate.files.orEmpty() }
+                    ),
         ) {
             "Selected chapter images must belong to the candidate"
         }
