@@ -228,8 +228,10 @@ class ProviderRepositoryManager(
                 }
                 val current = artifactStore.current(providerId)
                 if (current != null &&
-                    (current.repositoryId != repositoryId ||
-                        current.repositoryTrustAnchorSha256 != repository.keyFingerprintSha256)
+                    (
+                        current.repositoryId != repositoryId ||
+                            current.repositoryTrustAnchorSha256 != repository.keyFingerprintSha256
+                        )
                 ) {
                     throw ProviderSupplyChainException("MangaAll source belongs to a different repository trust origin")
                 }
