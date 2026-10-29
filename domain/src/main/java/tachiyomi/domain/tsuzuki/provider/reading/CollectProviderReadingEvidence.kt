@@ -212,7 +212,14 @@ class CollectProviderReadingEvidence private constructor(
             )
             when (val result = refresher.execute(binding)) {
                 is ProviderCallResult.Failure -> {
-                    trace(canonicalTitleId, target, DiagnosticStage.READ, DiagnosticOutcome.FAILED, bindings = 1)
+                    trace(
+                        canonicalTitleId,
+                        target,
+                        DiagnosticStage.READ,
+                        DiagnosticOutcome.FAILED,
+                        bindings = 1,
+                        errorCode = result.error.code,
+                    )
                     ProviderReadingEvidenceCollection(bindingCount = 1, complete = false)
                 }
                 is ProviderCallResult.Success -> {
@@ -254,7 +261,13 @@ class CollectProviderReadingEvidence private constructor(
     ): ProviderCallResult<ProviderReadingBinding?> {
         val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
             is ProviderCallResult.Failure -> {
-                trace(canonicalTitleId, target, DiagnosticStage.LOOKUP, DiagnosticOutcome.FAILED)
+                trace(
+                    canonicalTitleId,
+                    target,
+                    DiagnosticStage.LOOKUP,
+                    DiagnosticOutcome.FAILED,
+                    errorCode = result.error.code,
+                )
                 return result
             }
             is ProviderCallResult.Success -> result.value
@@ -373,6 +386,7 @@ class CollectProviderReadingEvidence private constructor(
         bindings: Int? = null,
         observed: Int? = null,
         accepted: Int? = null,
+        errorCode: ProviderErrorCode? = null,
     ) {
         runCatching {
             val attributes = buildMap<String, DiagnosticAttributeValue> {
@@ -386,6 +400,7 @@ class CollectProviderReadingEvidence private constructor(
                 bindings?.let { put("binding_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 observed?.let { put("observation_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 accepted?.let { put("chapter_count", DiagnosticAttributeValue.Number(it.toLong())) }
+                errorCode?.let { put("provider_error_code", DiagnosticAttributeValue.Text(it.name)) }
             }
             diagnostics.record(
                 StructuredDiagnosticEvent(
