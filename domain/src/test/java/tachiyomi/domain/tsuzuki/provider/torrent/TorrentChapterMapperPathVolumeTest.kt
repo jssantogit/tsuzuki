@@ -61,6 +61,82 @@ class TorrentChapterMapperPathVolumeTest {
         TorrentChapterMapper().map(request, candidate) shouldBe TorrentChapterFileMatch.None
     }
 
+    @Test
+    fun `chapter directory with numbered images is an exact readable chapter selection`() {
+        val chapter1 = request.copy(
+            identity = CanonicalChapterIdentity(type = CanonicalChapterType.REGULAR, baseNumber = 1),
+            volume = null,
+            titles = listOf("Tokyo Ghoul"),
+            chapterNumber = "1",
+        )
+        val candidate = candidate(
+            "Tokyo Ghoul Manga/Chapter 01/001.jpg",
+            "Tokyo Ghoul Manga/Chapter 01/002.png",
+            "Tokyo Ghoul Manga/Chapter 05/001.jpg",
+            "Tokyo Ghoul Manga/Chapter 11/001.jpg",
+        )
+
+        TorrentChapterMapper().select(chapter1, candidate) shouldBe
+            TorrentChapterPayloadMatch.Exact(
+                TorrentChapterPayload.ImageDirectory(
+                    prefix = "Tokyo Ghoul Manga/Chapter 01",
+                    files = candidate.files!!.take(2),
+                ),
+            )
+    }
+
+    @Test
+    fun `chapter directory cannot borrow the identity of a different manga`() {
+        val chapter1 = request.copy(
+            identity = CanonicalChapterIdentity(type = CanonicalChapterType.REGULAR, baseNumber = 1),
+            volume = null,
+            titles = listOf("Tokyo Ghoul"),
+            chapterNumber = "1",
+        )
+        val candidate = candidate("Tokyo Ghoul Re/Chapter 01/001.jpg")
+        TorrentChapterMapper().select(chapter1, candidate) shouldBe TorrentChapterPayloadMatch.None
+    }
+
+    @Test
+    fun `alternate release folder cannot be silently treated as primary chapter`() {
+        val chapter1 = request.copy(
+            identity = CanonicalChapterIdentity(type = CanonicalChapterType.REGULAR, baseNumber = 1),
+            volume = null,
+            titles = listOf("Tokyo Ghoul"),
+            chapterNumber = "1",
+        )
+        val candidate = candidate("Tokyo Ghoul Manga/Alternate Chapter Releases/Chapter 01/001.jpg")
+        TorrentChapterMapper().select(chapter1, candidate) shouldBe TorrentChapterPayloadMatch.None
+    }
+
+    @Test
+    fun `a directory request never selects files belonging to a different chapter`() {
+        val chapter1 = request.copy(
+            identity = CanonicalChapterIdentity(type = CanonicalChapterType.REGULAR, baseNumber = 1),
+            volume = null,
+            titles = listOf("Tokyo Ghoul"),
+            chapterNumber = "1",
+        )
+        val candidate = candidate("Tokyo Ghoul Manga/Chapter 11/001.jpg")
+        TorrentChapterMapper().select(chapter1, candidate) shouldBe TorrentChapterPayloadMatch.None
+    }
+
+    @Test
+    fun `unsafe image paths are rejected before chapter-directory selection`() {
+        val chapter1 = request.copy(
+            identity = CanonicalChapterIdentity(type = CanonicalChapterType.REGULAR, baseNumber = 1),
+            volume = null,
+            titles = listOf("Tokyo Ghoul"),
+            chapterNumber = "1",
+        )
+        io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+            candidate(
+                "Tokyo Ghoul Manga/Chapter 01/001.jpg",
+                "Tokyo Ghoul Manga/Chapter 01/../002.png",
+            )
+        }
+    }
+
     private fun candidate(vararg paths: String) = TorrentCandidate(
         infoHash = "0123456789abcdef0123456789abcdef01234567",
         magnetUri = null,

@@ -18,9 +18,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshIndependentInventory
+import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshProviderTorrentInventory
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 
 enum class InventoryWorkDiscoveryStatus {
@@ -58,6 +60,7 @@ class NativeInventoryRefreshScreenModel(
     private val mangaDexWorkLinker: MangaDexVerifiedWorkLinker,
     private val mangaUpdatesWorkLinker: MangaUpdatesVerifiedWorkLinker,
     private val integrationRegistry: IntegrationRegistry,
+    private val refreshTorrentInventory: RefreshProviderTorrentInventory,
 ) : ViewModel() {
     private data class MangaDexPermissionSnapshot(
         val titleId: String,
@@ -75,6 +78,9 @@ class NativeInventoryRefreshScreenModel(
     private var autoOperation: Job? = null
     private var integrationChangesObserver: Job? = null
     private var autoGeneration = 0L
+
+    private fun sourceConfigurationFingerprint(): String =
+        integrationRegistry.configurationFingerprint() + "|" + refreshTorrentInventory.sourceFingerprint()
 
     fun start(titleId: String) {
         if (activeTitleId == titleId) return
@@ -99,10 +105,14 @@ class NativeInventoryRefreshScreenModel(
         integrationChangesObserver?.cancel()
         integrationChangesObserver = viewModelScope.launch {
             integrationRegistry.awaitReady()
-            var previousFingerprint = integrationRegistry.configurationFingerprint()
-            integrationRegistry.observeChanges().collect {
+            refreshTorrentInventory.awaitReady()
+            var previousFingerprint = sourceConfigurationFingerprint()
+            merge(
+                integrationRegistry.observeChanges(),
+                refreshTorrentInventory.observeSourceChanges(),
+            ).collect {
                 if (titleId != activeTitleId) return@collect
-                val currentFingerprint = integrationRegistry.configurationFingerprint()
+                val currentFingerprint = sourceConfigurationFingerprint()
                 if (currentFingerprint == previousFingerprint) return@collect
                 previousFingerprint = currentFingerprint
                 autoGeneration++
@@ -130,10 +140,11 @@ class NativeInventoryRefreshScreenModel(
         autoOperation = viewModelScope.launch {
             try {
                 integrationRegistry.awaitReady()
+                refreshTorrentInventory.awaitReady()
                 if (titleId != activeTitleId || generation != autoGeneration) return@launch
                 val fingerprint = integrationRegistry.configurationFingerprint()
                 val enabledProducers = integrationRegistry.inventoryProducers()
-                if (enabledProducers.isEmpty()) return@launch
+                if (enabledProducers.isEmpty() && !refreshTorrentInventory.hasEnabledSources()) return@launch
                 val producerIds = enabledProducers.map { it.producerId }.toSet()
                 mutableState.value = mutableState.value.copy(
                     refreshing = true,
@@ -243,6 +254,31 @@ class NativeInventoryRefreshScreenModel(
                         mostRecentStop == null
                     ) {
                         mostRecentStop = result.stop
+                    }
+                }
+                // A manually enabled torrent.search Provider can reveal bounded,
+                // provisional release evidence even without MD/MU integrations.
+                // It does not authorize new canonical chapters or download peers.
+                if (refreshTorrentInventory.hasEnabledSources()) {
+                    val permissionIsCurrent = {
+                        titleId == activeTitleId &&
+                            generation == autoGeneration &&
+                            integrationRegistry.configurationFingerprint() == fingerprint &&
+                            refreshTorrentInventory.hasEnabledSources()
+                    }
+                    val torrentResult = refreshTorrentInventory.execute(
+                        canonicalTitleId = titleId,
+                        authorized = permissionIsCurrent,
+                    )
+                    if (!permissionIsCurrent()) return@launch
+                    mutableState.value = mutableState.value.copy(
+                        refreshStops = mutableState.value.refreshStops +
+                            ("provider:torrent" to torrentResult.stop),
+                    )
+                    if (torrentResult.stop != InventoryRefreshStop.NO_VERIFIED_WORK ||
+                        mostRecentStop == null
+                    ) {
+                        mostRecentStop = torrentResult.stop
                     }
                 }
                 if (titleId == activeTitleId && generation == autoGeneration) {
