@@ -26,6 +26,7 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventoryProducer
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshResult
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshIndependentInventory
+import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshProviderTorrentInventory
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -447,7 +448,7 @@ class NativeInventoryRefreshScreenModelTest {
             val refresh = mockk<RefreshIndependentInventory>()
             coEvery { refresh.execute(any(), any(), any(), any(), any()) } returns
                 InventoryRefreshResult(InventoryRefreshStop.EXHAUSTED, 1, 5)
-            val model = NativeInventoryRefreshScreenModel(refresh, mdLink, muLink, registry)
+            val model = NativeInventoryRefreshScreenModel(refresh, mdLink, muLink, registry, disabledTorrentRefresh())
             model.start("title")
 
             model.discoverAndRefreshAutomatically("title")
@@ -601,6 +602,27 @@ class NativeInventoryRefreshScreenModelTest {
             coVerify(exactly = 0) { refresh.execute(any(), any(), any(), any(), any()) }
         }
 
+    @Test
+    fun `enabled torrent evidence refresh runs without a separate inventory integration`() = runTest(dispatcher) {
+        val registry = mockk<IntegrationRegistry>()
+        coEvery { registry.awaitReady() } returns Unit
+        every { registry.configurationFingerprint() } returns "steady"
+        every { registry.inventoryProducers() } returns emptyList()
+        val torrent = mockk<RefreshProviderTorrentInventory>()
+        every { torrent.hasEnabledSources() } returns true
+        coEvery { torrent.execute("title", any(), any(), any()) } returns
+            InventoryRefreshResult(InventoryRefreshStop.EXHAUSTED, 1, 2)
+        val model = model(mockk(), registry = registry, torrent = torrent)
+        model.start("title")
+
+        model.discoverAndRefreshAutomatically("title")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { torrent.execute("title", any(), any(), any()) }
+        model.state.value.refreshStops["provider:torrent"] shouldBe InventoryRefreshStop.EXHAUSTED
+        model.state.value.revision shouldBe 1
+    }
+
     private fun allowedMangaDexProducer(): IndependentInventoryProducer =
         mockk<IndependentInventoryProducer>().also { producer ->
             every { producer.producerId } returns "mangadex"
@@ -614,14 +636,21 @@ class NativeInventoryRefreshScreenModelTest {
         }
     }
 
+    private fun disabledTorrentRefresh(): RefreshProviderTorrentInventory =
+        mockk<RefreshProviderTorrentInventory>().also { refresh ->
+            every { refresh.hasEnabledSources() } returns false
+        }
+
     private fun model(
         linker: MangaDexVerifiedWorkLinker,
         refresh: RefreshIndependentInventory = mockk(),
         registry: IntegrationRegistry = activeInventoryRegistry(),
+        torrent: RefreshProviderTorrentInventory = disabledTorrentRefresh(),
     ) = NativeInventoryRefreshScreenModel(
         refreshInventory = refresh,
         mangaDexWorkLinker = linker,
         mangaUpdatesWorkLinker = mockk(),
         integrationRegistry = registry,
+        refreshTorrentInventory = torrent,
     )
 }
