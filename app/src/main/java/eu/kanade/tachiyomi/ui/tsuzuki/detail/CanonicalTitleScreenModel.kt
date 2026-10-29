@@ -209,13 +209,18 @@ class CanonicalTitleScreenModel(
         operation?.cancel()
         operation = viewModelScope.launch {
             try {
-                val refreshed = loadLocalState(
+                // Only the chapter snapshot is being refreshed. Restore metadata from a
+                // cache validated against the current integration configuration so a chapter
+                // reconciliation cannot erase valid synopsis/ratings or revive revoked sources.
+                val cachedIntegrationMetadata = resolveCanonicalMetadata.cached(id)
+                val local = loadLocalState(
                     canonicalTitleId = id,
                     includeIntegrationMetadata = false,
                     allowSourceNetwork = false,
                     isRefreshing = false,
                 )
                 if (canonicalTitleId != id) return@launch
+                val refreshed = cachedIntegrationMetadata?.let { local.withIntegrationMetadata(it) } ?: local
                 val current = (_state.value as? CanonicalTitleScreenState.Loaded)
                     ?.takeIf { it.title.id == id }
                 _state.value = if (current == null) {
@@ -544,10 +549,16 @@ class CanonicalTitleScreenModel(
 
                 val metadataResult = metadataRefresh.await()
                 val metadataElapsed = refreshStart.elapsedNow()
-                val current = _state.value as? CanonicalTitleScreenState.Loaded
-                if (current?.title?.id == canonicalTitleId) {
+                val current = (_state.value as? CanonicalTitleScreenState.Loaded)
+                    ?.takeIf { it.title.id == canonicalTitleId && this.canonicalTitleId == canonicalTitleId }
+                if (current != null) {
+                    // Publish completed metadata independently of chapter reconciliation.
+                    // Chapter refresh can take seconds or be cancelled without invalidating
+                    // already verified synopsis, ratings, genres or editorial facts.
+                    val enriched = metadataResult.getOrNull()
+                        ?.let { current.withIntegrationMetadata(it) } ?: current
                     val refreshedCounts = reportedChapterCountRepository.getByTitle(canonicalTitleId)
-                    _state.value = current.copy(
+                    _state.value = enriched.copy(
                         reportedChapterCounts = refreshedCounts,
                         chapters = withMetadataSlots(
                             canonicalTitleId,
