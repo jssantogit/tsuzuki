@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mihon.app.di.appGraph
+import tachiyomi.core.provider.supplychain.MangaAllFamilyCatalog
 import tachiyomi.core.provider.supplychain.EnrolledProviderRepository
 import tachiyomi.core.provider.supplychain.ProviderRepositoryCatalogEntry
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEnrollment
@@ -297,14 +298,23 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                     DiscoverProvidersList(
                         snapshots = snapshots.values.toList(),
                         operationKeys = operations,
-                        onInstall = { entry ->
+                        onInstall = { selections ->
+                            val entry = selections.first()
+                            val isMangaAll = selections.size == MangaAllFamilyCatalog.sourceProviderIds.size &&
+                                selections.map { it.descriptor.providerId }.toSet() ==
+                                MangaAllFamilyCatalog.sourceProviderIds.toSet()
                             runProviderOperation(
-                                "install:${entry.repositoryId}:${entry.descriptor.providerId}",
+                                "install:${entry.repositoryId}:" +
+                                    (if (isMangaAll) "mangaall" else entry.descriptor.providerId),
                             ) {
-                                manager.install(
-                                    repositoryId = entry.repositoryId,
-                                    providerId = entry.descriptor.providerId,
-                                )
+                                if (isMangaAll) {
+                                    manager.installMangaAll(entry.repositoryId)
+                                } else {
+                                    manager.install(
+                                        repositoryId = entry.repositoryId,
+                                        providerId = entry.descriptor.providerId,
+                                    )
+                                }
                             }
                         },
                     )
@@ -918,6 +928,19 @@ private fun InstalledProvidersList(
     onEnabledChange: (ProviderRegistration, Boolean) -> Unit,
     onRollback: (String) -> Unit,
 ) {
+    val candidates = registrations.filter { MangaAllFamilyCatalog.contains(it.descriptor.id.value) }
+    val completeFamily = candidates.size == MangaAllFamilyCatalog.sourceProviderIds.size &&
+        candidates.map { it.descriptor.id.value }.toSet() ==
+        MangaAllFamilyCatalog.sourceProviderIds.toSet() &&
+        candidates.mapNotNull {
+            (it.descriptor.origin as? ProviderOrigin.Repository)?.repositoryId
+        }.toSet().size == 1
+    val display = if (completeFamily) {
+        candidates.sortedBy { MangaAllFamilyCatalog.sourceProviderIds.indexOf(it.descriptor.id.value) } +
+            registrations.filterNot { it in candidates }
+    } else {
+        registrations
+    }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         if (registrations.isEmpty()) {
             item(key = "empty") {
@@ -929,8 +952,17 @@ private fun InstalledProvidersList(
             }
         }
 
+        if (completeFamily) {
+            item(key = "mangaall_family") {
+                ListItem(
+                    headlineContent = { Text("MangaAll") },
+                    supportingContent = { Text("MangaDex · MangaBall · MangaDot") },
+                )
+                HorizontalDivider()
+            }
+        }
         items(
-            items = registrations,
+            items = display,
             key = { it.descriptor.id.value },
         ) { registration ->
             val descriptor = registration.descriptor
@@ -984,14 +1016,15 @@ private fun InstalledProvidersList(
 private fun DiscoverProvidersList(
     snapshots: List<ProviderRepositorySnapshot>,
     operationKeys: Set<String>,
-    onInstall: (ProviderRepositoryCatalogEntry) -> Unit,
+    onInstall: (List<ProviderRepositoryCatalogEntry>) -> Unit,
 ) {
-    val entries = snapshots
-        .flatMap { snapshot -> snapshot.entries }
+    val catalog = snapshots.flatMap { snapshot -> snapshot.entries }
+    val familyGroups = MangaAllFamilyCatalog.discoverGroups(catalog)
+    val entries = MangaAllFamilyCatalog.ordinaryEntries(catalog)
         .sortedWith(compareBy({ it.descriptor.providerId }, { it.repositoryId }))
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
-        if (entries.isEmpty()) {
+        if (entries.isEmpty() && familyGroups.isEmpty()) {
             item(key = "empty") {
                 ListItem(
                     headlineContent = {
@@ -1001,6 +1034,34 @@ private fun DiscoverProvidersList(
             }
         }
 
+        items(
+            items = familyGroups,
+            key = { "mangaall:${it.repositoryId}" },
+        ) { family ->
+            ListItem(
+                headlineContent = { Text("MangaAll") },
+                supportingContent = {
+                    Text(
+                        if (family.isComplete) {
+                            "MangaDex · MangaBall · MangaDot · ${family.repositoryId}"
+                        } else {
+                            "Incomplete signed MangaAll source set · ${family.repositoryId}"
+                        },
+                    )
+                },
+                trailingContent = {
+                    if (family.canInstall) {
+                        Button(
+                            enabled = "install:${family.repositoryId}:mangaall" !in operationKeys,
+                            onClick = { onInstall(family.entries) },
+                        ) {
+                            Text(stringResource(MR.strings.tsuzuki_providers_install))
+                        }
+                    }
+                },
+            )
+            HorizontalDivider()
+        }
         items(
             items = entries,
             key = { entry -> "${entry.repositoryId}:${entry.descriptor.providerId}" },
@@ -1020,7 +1081,7 @@ private fun DiscoverProvidersList(
                         ProviderRepositoryEntryStatus.UPDATE_AVAILABLE,
                         -> Button(
                             enabled = operationKey !in operationKeys,
-                            onClick = { onInstall(entry) },
+                            onClick = { onInstall(listOf(entry)) },
                         ) {
                             Text(
                                 stringResource(
