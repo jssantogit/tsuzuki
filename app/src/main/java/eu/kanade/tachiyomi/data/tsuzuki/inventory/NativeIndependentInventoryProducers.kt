@@ -34,9 +34,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventoryProducer
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchFailureReason
-import tachiyomi.domain.tsuzuki.chapter.inventory.InventorySourceFetchException
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryReleaseRecord
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventorySourceFetchException
 import tachiyomi.domain.tsuzuki.chapter.inventory.MangaDexReleaseEvidenceAdapter
 import tachiyomi.domain.tsuzuki.chapter.inventory.MangaUpdatesReleaseEvidenceAdapter
 import java.io.ByteArrayOutputStream

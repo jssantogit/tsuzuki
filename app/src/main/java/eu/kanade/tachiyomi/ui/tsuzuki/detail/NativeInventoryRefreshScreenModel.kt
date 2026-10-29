@@ -19,8 +19,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchFailureReason
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshIndependentInventory
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 
@@ -243,8 +243,11 @@ class NativeInventoryRefreshScreenModel(
                     mutableState.value = mutableState.value.copy(
                         refreshStops = mutableState.value.refreshStops + (producer.producerId to result.stop),
                         refreshFailureReasons = mutableState.value.refreshFailureReasons.toMutableMap().apply {
-                            if (result.failureReason == null) remove(producer.producerId)
-                            else put(producer.producerId, result.failureReason)
+                            if (result.failureReason == null) {
+                                remove(producer.producerId)
+                            } else {
+                                put(producer.producerId, result.failureReason)
+                            }
                         },
                     )
                     if (result.stop != InventoryRefreshStop.NO_VERIFIED_WORK ||
@@ -327,8 +330,11 @@ class NativeInventoryRefreshScreenModel(
                         refreshing = false,
                         lastStop = result.stop,
                         refreshFailureReasons = mutableState.value.refreshFailureReasons.toMutableMap().apply {
-                            if (result.failureReason == null) remove(producerId)
-                            else put(producerId, result.failureReason)
+                            if (result.failureReason == null) {
+                                remove(producerId)
+                            } else {
+                                put(producerId, result.failureReason)
+                            }
                         },
                         revision = mutableState.value.revision + 1,
                     )
