@@ -271,6 +271,125 @@ class CanonicalTitleScreenModelTest {
     }
 
     @Test
+    fun `post-reconcile chapter reload keeps resolved synopsis and ratings`() = runTest(dispatcher) {
+        val resolved = ResolvedMetadata(
+            synopsis = ProvenancedMetadata("Cached synopsis for the work", IntegrationId("kitsu")),
+            genres = ProvenancedMetadata(listOf("Sports", "Drama"), IntegrationId("kitsu")),
+            ratings = listOf(ProvenancedMetadata(ResolvedRating(8.7, 10.0), IntegrationId("mal"))),
+        )
+        val metadata = mockk<ResolveCanonicalMetadata>()
+        coEvery { metadata.cached("title") } returns resolved
+        coEvery { metadata.execute("title", any()) } returns Result.success(resolved)
+        val chapters = FakeChapterRepository(listOf(readingChapter("first", "1")))
+        val model = readingModel(chapters = chapters, metadata = metadata)
+
+        model.start("title")
+        advanceUntilIdle()
+        val before = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        before.description shouldBe "Cached synopsis for the work"
+        before.ratings.map { it.providerId } shouldBe listOf("mal")
+
+        chapters.upsert(readingChapter("second", "2"))
+        model.reloadReconciledChapters()
+        advanceUntilIdle()
+
+        val after = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        after.chapters.map { it.chapter.id }.toSet() shouldBe setOf("first", "second")
+        after.description shouldBe before.description
+        after.genres shouldBe before.genres
+        after.ratings shouldBe before.ratings
+        after.metadataSources shouldBe before.metadataSources
+    }
+
+    @Test
+    fun `chapter reconciliation cannot cancel an in-flight metadata refresh`() = runTest(dispatcher) {
+        val metadataGate = CompletableDeferred<Unit>()
+        val resolved = ResolvedMetadata(
+            synopsis = ProvenancedMetadata("Arrived after chapter reconciliation", IntegrationId("kitsu")),
+        )
+        val metadata = mockk<ResolveCanonicalMetadata>()
+        coEvery { metadata.cached("title") } returns null
+        coEvery { metadata.execute("title", any()) } coAnswers {
+            metadataGate.await()
+            Result.success(resolved)
+        }
+        val model = readingModel(metadata = metadata)
+
+        val originalRefresh = model.start("title")
+        runCurrent()
+        model.reloadReconciledChapters()
+        runCurrent()
+
+        originalRefresh.isCancelled shouldBe false
+        metadataGate.complete(Unit)
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+            .description shouldBe "Arrived after chapter reconciliation"
+    }
+
+    @Test
+    fun `chapter reload does not retain revoked integration metadata without an authorized cache`() = runTest(
+        dispatcher,
+    ) {
+        val resolved = ResolvedMetadata(
+            synopsis = ProvenancedMetadata("Previously enabled synopsis", IntegrationId("kitsu")),
+            ratings = listOf(ProvenancedMetadata(ResolvedRating(8.7, 10.0), IntegrationId("mal"))),
+        )
+        var cachedConfigurationActive = true
+        val metadata = mockk<ResolveCanonicalMetadata>()
+        coEvery { metadata.cached("title") } coAnswers {
+            if (cachedConfigurationActive) resolved else null
+        }
+        coEvery { metadata.execute("title", any()) } returns Result.success(resolved)
+        val model = readingModel(metadata = metadata)
+
+        model.start("title")
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+            .description shouldBe "Previously enabled synopsis"
+
+        // cached() rejects snapshots when the integration configuration fingerprint changed.
+        cachedConfigurationActive = false
+        model.reloadReconciledChapters()
+        advanceUntilIdle()
+
+        val after = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        after.description shouldBe null
+        after.ratings shouldBe emptyList()
+    }
+
+    @Test
+    fun `resolved metadata appears before a slow chapter refresh completes`() = runTest(dispatcher) {
+        val chapterGate = CompletableDeferred<Unit>()
+        val chapterRefresh = mockk<RefreshChapterEvidence>()
+        coEvery { chapterRefresh.executeProgressively("title", any(), any()) } coAnswers {
+            chapterGate.await()
+            Result.success(Unit)
+        }
+        val resolved = ResolvedMetadata(
+            synopsis = ProvenancedMetadata("Live synopsis", IntegrationId("kitsu")),
+            ratings = listOf(ProvenancedMetadata(ResolvedRating(8.7, 10.0), IntegrationId("mal"))),
+        )
+        val metadata = mockk<ResolveCanonicalMetadata>()
+        coEvery { metadata.cached("title") } returns null
+        coEvery { metadata.execute("title", any()) } returns Result.success(resolved)
+        val model = readingModel(metadata = metadata, chapterRefresh = chapterRefresh)
+
+        val operation = model.start("title")
+        runCurrent()
+
+        val pending = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        pending.description shouldBe "Live synopsis"
+        pending.ratings.map { it.providerId } shouldBe listOf("mal")
+        operation.isCompleted shouldBe false
+
+        chapterGate.complete(Unit)
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+            .description shouldBe "Live synopsis"
+    }
+
+    @Test
     fun `degraded empty inventory preserves resume context when reusing previous real chapters`() = runTest(
         dispatcher,
     ) {
