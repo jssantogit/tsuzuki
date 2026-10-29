@@ -302,6 +302,32 @@ class CanonicalTitleScreenModelTest {
     }
 
     @Test
+    fun `chapter reconciliation cannot cancel an in-flight metadata refresh`() = runTest(dispatcher) {
+        val metadataGate = CompletableDeferred<Unit>()
+        val resolved = ResolvedMetadata(
+            synopsis = ProvenancedMetadata("Arrived after chapter reconciliation", IntegrationId("kitsu")),
+        )
+        val metadata = mockk<ResolveCanonicalMetadata>()
+        coEvery { metadata.cached("title") } returns null
+        coEvery { metadata.execute("title", any()) } coAnswers {
+            metadataGate.await()
+            Result.success(resolved)
+        }
+        val model = readingModel(metadata = metadata)
+
+        val originalRefresh = model.start("title")
+        runCurrent()
+        model.reloadReconciledChapters()
+        runCurrent()
+
+        originalRefresh.isCancelled shouldBe false
+        metadataGate.complete(Unit)
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+            .description shouldBe "Arrived after chapter reconciliation"
+    }
+
+    @Test
     fun `chapter reload does not retain revoked integration metadata without an authorized cache`() = runTest(dispatcher) {
         val resolved = ResolvedMetadata(
             synopsis = ProvenancedMetadata("Previously enabled synopsis", IntegrationId("kitsu")),
