@@ -85,6 +85,27 @@ class P2pChapterImageArchiveBuilderTest {
         }
     }
 
+    @Test
+    fun symlinkedParentDirectoryCannotSupplyUnselectedTorrentImages() {
+        withFiles { root, download ->
+            val selectedPath = "Tokyo Ghoul Manga/Chapter 01/001.jpg"
+            val otherPath = "other-release/Chapter 01/001.jpg"
+            val jpg = byteArrayOf(0xff.toByte(), 0xd8.toByte(), 0xff.toByte(), 0x00)
+            write(download, otherPath, jpg)
+            Files.createSymbolicLink(
+                File(download, "Tokyo Ghoul Manga").toPath(),
+                File(download, "other-release").toPath(),
+            )
+
+            P2pChapterImageArchiveBuilder().build(
+                download,
+                root,
+                listOf(TorrentVerifiedImageFile(0, selectedPath, jpg.size.toLong())),
+            ) shouldBe null
+            root.listFiles().orEmpty().none { it.extension == "cbz" } shouldBe true
+        }
+    }
+
     private fun write(root: File, path: String, bytes: ByteArray) {
         File(root, path).apply {
             parentFile!!.mkdirs()
