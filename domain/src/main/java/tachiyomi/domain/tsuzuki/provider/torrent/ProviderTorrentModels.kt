@@ -146,6 +146,7 @@ data class TorrentAcquisitionRequest(
     val operationId: String,
     val candidate: TorrentCandidate,
     val selectedFile: TorrentCandidateFile,
+    val selectedChapterImages: List<TorrentCandidateFile> = emptyList(),
 ) {
     init {
         require(OPERATION_ID.matches(operationId)) {
@@ -153,6 +154,13 @@ data class TorrentAcquisitionRequest(
         }
         require(candidate.files.orEmpty().any { it == selectedFile }) {
             "Selected torrent file does not belong to the candidate"
+        }
+        if (selectedChapterImages.isNotEmpty()) {
+            require(selectedChapterImages.first() == selectedFile &&
+                selectedChapterImages.all { it in candidate.files.orEmpty() }
+            ) {
+                "Host-selected chapter images must belong to the exact torrent candidate"
+            }
         }
     }
 }

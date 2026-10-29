@@ -62,6 +62,9 @@ class ProviderTorrentArtifactEngine(
                 path = selectedPath,
                 sizeBytes = request.fileSizeBytes,
             )
+            val selectedChapterImages = request.chapterImages.map {
+                TorrentCandidateFile(index = it.index, path = it.path, sizeBytes = it.sizeBytes)
+            }
             val providerRequest = TorrentAcquisitionRequest(
                 operationId = operationId,
                 candidate = TorrentCandidate(
@@ -69,9 +72,10 @@ class ProviderTorrentArtifactEngine(
                     magnetUri = request.magnetUri,
                     torrentUrl = request.torrentUrl,
                     displayName = request.infoHash,
-                    files = listOf(selectedFile),
+                    files = if (selectedChapterImages.isEmpty()) listOf(selectedFile) else selectedChapterImages,
                 ),
                 selectedFile = selectedFile,
+                selectedChapterImages = selectedChapterImages,
             )
 
             ProviderP2pDiagnostics.record(
