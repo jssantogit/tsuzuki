@@ -167,6 +167,12 @@ class ResolveCanonicalMetadataCachingTest {
         pending.await().isFailure shouldBe true
         snapshots.get(TITLE_ID) shouldBe null
         resolver.cached(TITLE_ID) shouldBe null
+
+        // Re-enabling a source starts from its current authorization, not the stale result.
+        registry.fingerprint = "cfg-reenabled"
+        resolver.execute(TITLE_ID, forceRefresh = true).getOrThrow().title?.value shouldBe "Live"
+        provider.calls shouldBe 2
+        snapshots.get(TITLE_ID)?.configurationFingerprint shouldBe "cfg-reenabled"
     }
 
     @Test
