@@ -41,7 +41,7 @@ class CollectProviderReadingEvidenceTest {
     )
 
     @Test
-    fun `unique exact lookup creates binding and returns provider chapter evidence`() = runBlocking {
+    fun `unique exact lookup creates binding and returns provider chapter evidence`(): Unit = runBlocking {
         val bindings = MemoryBindingRepository()
         var lookupCalls = 0
         val bridge = CollectProviderReadingEvidence(
@@ -98,7 +98,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `existing available binding is reused without lookup`() = runBlocking {
+    fun `existing available binding is reused without lookup`(): Unit = runBlocking {
         val bindings = MemoryBindingRepository()
         bindings.upsert(
             ProviderReadingBinding(
@@ -143,7 +143,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `ambiguous exact lookup does not auto bind`() = runBlocking {
+    fun `ambiguous exact lookup does not auto bind`(): Unit = runBlocking {
         val bindings = MemoryBindingRepository()
         val bridge = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
@@ -176,7 +176,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `lookup failure marks collection incomplete`() = runBlocking {
+    fun `lookup failure marks collection incomplete`(): Unit = runBlocking {
         val recorder = CapturingProviderDiagnostics()
         val bridge = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
@@ -210,7 +210,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `source-attested alias binds Haikyuu without fuzzy matching and records safe stage counts`() = runBlocking {
+    fun `source-attested alias binds Haikyuu without fuzzy matching and records safe stage counts`(): Unit = runBlocking {
         val title = canonicalTitle.copy(displayTitle = "Haikyuu!!")
         val recorder = CapturingProviderDiagnostics()
         val bridge = CollectProviderReadingEvidence(
@@ -262,7 +262,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `empty successful chapter inventory remains complete and visibly zero for that provider`() = runBlocking {
+    fun `empty successful chapter inventory remains complete and visibly zero for that provider`(): Unit = runBlocking {
         val recorder = CapturingProviderDiagnostics()
         val bridge = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
@@ -303,7 +303,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `complete provider collection publishes an aggregate summary with accepted count`() = runBlocking {
+    fun `complete provider collection publishes an aggregate summary with accepted count`(): Unit = runBlocking {
         val recorder = CapturingProviderDiagnostics()
         val bridge = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
@@ -348,7 +348,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `failed lookup publishes an incomplete aggregate summary with zero chapters`() = runBlocking {
+    fun `failed lookup publishes an incomplete aggregate summary with zero chapters`(): Unit = runBlocking {
         val recorder = CapturingProviderDiagnostics()
         val bridge = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
@@ -379,7 +379,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `no enabled provider reports complete empty aggregate without network`() = runBlocking {
+    fun `no enabled provider reports complete empty aggregate without network`(): Unit = runBlocking {
         val recorder = CapturingProviderDiagnostics()
         val bridge = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
@@ -409,7 +409,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `two source alias hits remain ambiguous and no chapters are fetched`() = runBlocking {
+    fun `two source alias hits remain ambiguous and no chapters are fetched`(): Unit = runBlocking {
         val title = canonicalTitle.copy(displayTitle = "Haikyuu!!")
         val recorder = CapturingProviderDiagnostics()
         val bridge = CollectProviderReadingEvidence(
