@@ -14,8 +14,6 @@ import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentMetadataSearchGateway
 import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentPreferences
 import eu.kanade.tachiyomi.provider.torrent.ScriptProviderTorrentGateway
 import eu.kanade.tachiyomi.ui.reader.loader.ArchivePageLoader
-import java.io.File
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -28,8 +26,8 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.runner.RunWith
 import org.junit.Test
+import org.junit.runner.RunWith
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireResponse
@@ -59,8 +57,6 @@ import tachiyomi.domain.tsuzuki.provider.torrent.PrepareProviderTorrentForReader
 import tachiyomi.domain.tsuzuki.provider.torrent.ProviderChapterTorrentOption
 import tachiyomi.domain.tsuzuki.provider.torrent.ProviderTorrentAcquisitionCoordinator
 import tachiyomi.domain.tsuzuki.provider.torrent.ProviderTorrentAcquisitionState
-import tachiyomi.domain.tsuzuki.provider.torrent.select
-import tachiyomi.domain.tsuzuki.provider.torrent.toContentDelivery
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentAcquisitionFailure
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentAcquisitionPreference
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentAcquisitionRequest
@@ -76,7 +72,11 @@ import tachiyomi.domain.tsuzuki.provider.torrent.TorrentChapterRequest
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentHttpFileMaterializer
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentReadableResource
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentSearchRequest
+import tachiyomi.domain.tsuzuki.provider.torrent.select
+import tachiyomi.domain.tsuzuki.provider.torrent.toContentDelivery
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
+import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 @RunWith(AndroidJUnit4::class)
 class ProviderTorrentAcquisitionAcceptanceTest {

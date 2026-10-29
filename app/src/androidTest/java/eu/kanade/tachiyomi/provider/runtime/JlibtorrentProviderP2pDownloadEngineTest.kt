@@ -5,16 +5,16 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.frostwire.jlibtorrent.LibTorrent
 import com.frostwire.jlibtorrent.SessionManager
 import com.frostwire.jlibtorrent.TcpEndpoint
-import java.io.File
-import java.util.zip.ZipFile
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.runner.RunWith
 import org.junit.Test
+import org.junit.runner.RunWith
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
+import java.io.File
+import java.util.zip.ZipFile
 
 @RunWith(AndroidJUnit4::class)
 class JlibtorrentProviderP2pDownloadEngineTest {

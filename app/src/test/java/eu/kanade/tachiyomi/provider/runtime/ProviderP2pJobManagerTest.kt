@@ -1,21 +1,17 @@
 package eu.kanade.tachiyomi.provider.runtime
 
 import io.kotest.matchers.shouldBe
-import java.io.ByteArrayOutputStream
-import java.nio.file.Path
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestScope
-import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireResponse
@@ -26,6 +22,10 @@ import tachiyomi.domain.tsuzuki.provider.ProviderManagedFileFormat
 import tachiyomi.domain.tsuzuki.provider.ProviderManagedResourceRef
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateFile
+import java.io.ByteArrayOutputStream
+import java.nio.file.Path
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class ProviderP2pJobManagerTest {
 
