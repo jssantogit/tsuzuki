@@ -4,6 +4,7 @@ import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
@@ -34,6 +35,28 @@ class RefreshProviderTorrentInventory(
     private val projector = TorrentInventoryEvidenceProjector()
 
     fun hasEnabledSources(): Boolean = enabledSources().isNotEmpty()
+
+    suspend fun awaitReady() = registry.awaitReady()
+
+    fun observeSourceChanges(): Flow<Unit> = registry.observeChanges()
+
+    /** Only configuration and capability state; never names, queries or P2P payload. */
+    fun sourceFingerprint(): String = registry.providers()
+        .asSequence()
+        .filter { it.descriptor.runtime == ProviderRuntimeKind.SCRIPT }
+        .filter { ProviderCapabilities.TorrentSearchV1 in it.descriptor.capabilities }
+        .sortedBy { it.descriptor.id.value }
+        .map { registration ->
+            listOf(
+                registration.descriptor.id.value,
+                registration.descriptor.version.code.toString(),
+                registration.lifecycleStatus.name,
+                registration.configurationFingerprint,
+                (ProviderCapabilities.TorrentSearchV1 in registration.enabledCapabilities).toString(),
+            )
+        }
+        .toList()
+        .toString()
 
     suspend fun execute(
         canonicalTitleId: String,
