@@ -271,6 +271,68 @@ class CanonicalTitleScreenModelTest {
     }
 
     @Test
+    fun `post-reconcile chapter reload keeps resolved synopsis and ratings`() = runTest(dispatcher) {
+        val resolved = ResolvedMetadata(
+            synopsis = ProvenancedMetadata("Cached synopsis for the work", IntegrationId("kitsu")),
+            genres = ProvenancedMetadata(listOf("Sports", "Drama"), IntegrationId("kitsu")),
+            ratings = listOf(ProvenancedMetadata(ResolvedRating(8.7, 10.0), IntegrationId("mal"))),
+        )
+        val metadata = mockk<ResolveCanonicalMetadata>()
+        coEvery { metadata.cached("title") } returns resolved
+        coEvery { metadata.execute("title", any()) } returns Result.success(resolved)
+        val chapters = FakeChapterRepository(listOf(readingChapter("first", "1")))
+        val model = readingModel(chapters = chapters, metadata = metadata)
+
+        model.start("title")
+        advanceUntilIdle()
+        val before = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        before.description shouldBe "Cached synopsis for the work"
+        before.ratings.map { it.providerId } shouldBe listOf("mal")
+
+        chapters.upsert(readingChapter("second", "2"))
+        model.reloadReconciledChapters()
+        advanceUntilIdle()
+
+        val after = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        after.chapters.map { it.chapter.id } shouldBe listOf("first", "second")
+        after.description shouldBe before.description
+        after.genres shouldBe before.genres
+        after.ratings shouldBe before.ratings
+        after.metadataSources shouldBe before.metadataSources
+    }
+
+    @Test
+    fun `resolved metadata appears before a slow chapter refresh completes`() = runTest(dispatcher) {
+        val chapterGate = CompletableDeferred<Unit>()
+        val chapterRefresh = mockk<RefreshChapterEvidence>()
+        coEvery { chapterRefresh.executeProgressively("title", any(), any()) } coAnswers {
+            chapterGate.await()
+            Result.success(Unit)
+        }
+        val resolved = ResolvedMetadata(
+            synopsis = ProvenancedMetadata("Live synopsis", IntegrationId("kitsu")),
+            ratings = listOf(ProvenancedMetadata(ResolvedRating(8.7, 10.0), IntegrationId("mal"))),
+        )
+        val metadata = mockk<ResolveCanonicalMetadata>()
+        coEvery { metadata.cached("title") } returns null
+        coEvery { metadata.execute("title", any()) } returns Result.success(resolved)
+        val model = readingModel(metadata = metadata, chapterRefresh = chapterRefresh)
+
+        val operation = model.start("title")
+        runCurrent()
+
+        val pending = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        pending.description shouldBe "Live synopsis"
+        pending.ratings.map { it.providerId } shouldBe listOf("mal")
+        operation.isCompleted shouldBe false
+
+        chapterGate.complete(Unit)
+        advanceUntilIdle()
+        model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+            .description shouldBe "Live synopsis"
+    }
+
+    @Test
     fun `degraded empty inventory preserves resume context when reusing previous real chapters`() = runTest(
         dispatcher,
     ) {
