@@ -21,6 +21,16 @@ class ProviderPackageActivator(
     }
 
     suspend fun activate(artifact: VerifiedProviderArtifact): ParsedProviderPackage {
+        val parsed = validate(artifact)
+        artifactStore.activate(artifact)
+        return parsed
+    }
+
+    /**
+     * Validate a signed artifact without changing the installed state.
+     * Used when installing a family: all members pass before any is activated.
+     */
+    suspend fun validate(artifact: VerifiedProviderArtifact): ParsedProviderPackage {
         val parsed = parser.parse(artifact.bytes)
         val manifest = parsed.manifest
         val descriptor = artifact.descriptor
@@ -44,7 +54,6 @@ class ProviderPackageActivator(
             fail("Provider package capability exports do not match its manifest")
         }
 
-        artifactStore.activate(artifact)
         return parsed
     }
 

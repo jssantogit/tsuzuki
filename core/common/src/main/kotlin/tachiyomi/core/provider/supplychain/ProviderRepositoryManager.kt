@@ -192,6 +192,73 @@ class ProviderRepositoryManager(
             packageActivator.activate(verifiedArtifact)
         }
 
+    /**
+     * Installs the reviewed MangaAll source family from ONE enrolled trust origin.
+     * All downloads, repository/signature checks and package contracts succeed
+     * before any source can become active. A storage failure during final
+     * activation can leave a partial family, which is safe to retry and is
+     * never misreported as a completed operation by the calling UI.
+     *
+     * No repository enrollments, grants or existing source configuration are
+     * reset. Each source keeps its own Provider ID and permissions.
+     */
+    suspend fun installMangaAll(repositoryId: String): List<ParsedProviderPackage> =
+        repositoryLock(repositoryId).withLock {
+            val repository = enrollmentStore.get(repositoryId)
+                ?: throw ProviderSupplyChainException("Provider repository is not enrolled")
+            val existing = sessions[repositoryId]
+            val session = if (existing != null && existing.repository == repository) {
+                existing
+            } else {
+                refreshLocked(repositoryId)
+                sessions.getValue(repositoryId)
+            }
+            val signed = session.verified.index
+            val revoked = signed.revokedArtifactSha256.map(String::lowercase).toSet()
+            val descriptors = MangaAllFamilyCatalog.sourceProviderIds.map { providerId ->
+                signed.providers.singleOrNull { it.providerId == providerId }
+                    ?: throw ProviderSupplyChainException("MangaAll signed repository lacks a required source")
+            }
+            val pending = descriptors.filter { descriptor ->
+                val providerId = descriptor.providerId
+                if (providerId in reservedProviderIds || descriptor.minHostApi > hostApiVersion ||
+                    descriptor.sha256.lowercase() in revoked
+                ) {
+                    throw ProviderSupplyChainException("MangaAll source is blocked or incompatible")
+                }
+                val current = artifactStore.current(providerId)
+                if (current != null &&
+                    (current.repositoryId != repositoryId ||
+                        current.repositoryTrustAnchorSha256 != repository.keyFingerprintSha256)
+                ) {
+                    throw ProviderSupplyChainException("MangaAll source belongs to a different repository trust origin")
+                }
+                if (current?.revoked == true) {
+                    throw ProviderSupplyChainException("MangaAll installed source has been revoked")
+                }
+                if (current != null && current.versionCode == descriptor.versionCode &&
+                    current.sha256 != descriptor.sha256.lowercase()
+                ) {
+                    throw ProviderSupplyChainException("MangaAll source version identity conflicts")
+                }
+                current == null || descriptor.versionCode > current.versionCode
+            }
+
+            val staged = pending.map { descriptor ->
+                val bytes = transport.fetchArtifact(descriptor.artifactUrl)
+                session.trust.verifyArtifact(
+                    repository = session.verified,
+                    providerId = descriptor.providerId,
+                    artifactBytes = bytes,
+                    installedVersionCode = artifactStore.current(descriptor.providerId)?.versionCode,
+                )
+            }
+            // Downloads and contract validation are staged before activation;
+            // no partially installed family from a failed network/contract step.
+            staged.forEach { artifact -> packageActivator.validate(artifact) }
+            staged.map { artifact -> packageActivator.activate(artifact) }
+        }
+
     fun rollback(providerId: String) {
         artifactStore.rollback(providerId)
     }
