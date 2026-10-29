@@ -122,18 +122,19 @@ class TorrentChapterMapperPathVolumeTest {
     }
 
     @Test
-    fun `unsafe image paths cannot be selected for a chapter directory`() {
+    fun `unsafe image paths are rejected before chapter-directory selection`() {
         val chapter1 = request.copy(
             identity = CanonicalChapterIdentity(type = CanonicalChapterType.REGULAR, baseNumber = 1),
             volume = null,
             titles = listOf("Tokyo Ghoul"),
             chapterNumber = "1",
         )
-        val candidate = candidate(
-            "Tokyo Ghoul Manga/Chapter 01/001.jpg",
-            "Tokyo Ghoul Manga/Chapter 01/../002.png",
-        )
-        TorrentChapterMapper().select(chapter1, candidate) shouldBe TorrentChapterPayloadMatch.None
+        io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+            candidate(
+                "Tokyo Ghoul Manga/Chapter 01/001.jpg",
+                "Tokyo Ghoul Manga/Chapter 01/../002.png",
+            )
+        }
     }
 
     private fun candidate(vararg paths: String) = TorrentCandidate(
