@@ -57,7 +57,7 @@ class RefreshProviderTorrentInventory(
             var cursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
             val visited = mutableSetOf<String>()
             var exhausted = false
-            repeat(maxPages) {
+            for (pageIndex in 0 until maxPages) {
                 if (!authorized() || !isStillEnabled(initialRegistration)) {
                     return result(InventoryRefreshStop.DISABLED, saved, observations)
                 }
@@ -106,11 +106,11 @@ class RefreshProviderTorrentInventory(
                 val next = page.nextCursor
                 if (next == null && page.parallelCursors.isEmpty()) {
                     exhausted = true
-                    return@repeat
+                    break
                 }
                 if (next == null || !visited.add(next.value)) {
                     incomplete = true
-                    return@repeat
+                    break
                 }
                 cursor = next
             }
