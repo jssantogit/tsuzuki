@@ -1,4 +1,5 @@
 name: Provider Platform Android gate
+# Temporary validation branch: code tree matches PR #168; trigger device instrumentation.
 
 on:
   push:
