@@ -120,7 +120,7 @@ class RefreshIndependentInventoryTest {
     }
 
     @Test
-    fun `failed release request preserves typed reason without exposing source metadata or deleting prior claims`() = runTest {
+    fun `rate limit retains prior release claims and reports safe failure`() = runTest {
         val ledger = FakeLedger()
         val refresh = RefreshIndependentInventory(titleRepository(), ledger)
         val result = refresh.execute(
