@@ -409,3 +409,4 @@ class ResolveCanonicalMetadataCachingTest {
         const val TITLE_ID = "title"
     }
 }
+
