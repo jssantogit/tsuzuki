@@ -929,13 +929,12 @@ private fun InstalledProvidersList(
     onRollback: (String) -> Unit,
 ) {
     val candidates = registrations.filter { MangaAllFamilyCatalog.contains(it.descriptor.id.value) }
-    val completeFamily = candidates.size == MangaAllFamilyCatalog.sourceProviderIds.size &&
-        candidates.map { it.descriptor.id.value }.toSet() ==
-        MangaAllFamilyCatalog.sourceProviderIds.toSet() &&
+    val groupFamily = candidates.isNotEmpty() &&
+        candidates.map { it.descriptor.id.value }.distinct().size == candidates.size &&
         candidates.mapNotNull {
             (it.descriptor.origin as? ProviderOrigin.Repository)?.repositoryId
         }.toSet().size == 1
-    val display = if (completeFamily) {
+    val display = if (groupFamily) {
         candidates.sortedBy { MangaAllFamilyCatalog.sourceProviderIds.indexOf(it.descriptor.id.value) } +
             registrations.filterNot { it in candidates }
     } else {
@@ -952,13 +951,13 @@ private fun InstalledProvidersList(
             }
         }
 
-        if (completeFamily) {
+        if (groupFamily) {
             item(key = "mangaall_family") {
                 ListItem(
                     headlineContent = { Text("MangaAll") },
                     supportingContent = {
                         val repository = (display.first().descriptor.origin as ProviderOrigin.Repository).repositoryId
-                        Text("MangaDex · MangaBall · MangaDot · $repository")
+                        Text("MangaDex · MangaBall · MangaDot · $repository · ${candidates.size}/3 installed")
                     },
                 )
                 HorizontalDivider()

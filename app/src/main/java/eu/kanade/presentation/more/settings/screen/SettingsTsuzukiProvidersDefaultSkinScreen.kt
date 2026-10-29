@@ -444,10 +444,8 @@ private fun InstalledProviderCards(
     val sameRepository = candidates.mapNotNull { registration ->
         (registration.descriptor.origin as? ProviderOrigin.Repository)?.repositoryId
     }.toSet().size == 1
-    val family = if (candidates.size == MangaAllFamilyCatalog.sourceProviderIds.size &&
-        sameRepository &&
-        candidates.map { it.descriptor.id.value }.toSet() ==
-        MangaAllFamilyCatalog.sourceProviderIds.toSet()
+    val family = if (candidates.isNotEmpty() && sameRepository &&
+        candidates.map { it.descriptor.id.value }.distinct().size == candidates.size
     ) {
         candidates.sortedBy { MangaAllFamilyCatalog.sourceProviderIds.indexOf(it.descriptor.id.value) }
     } else {
