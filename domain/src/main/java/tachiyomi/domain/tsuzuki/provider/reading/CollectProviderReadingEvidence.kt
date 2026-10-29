@@ -7,6 +7,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
@@ -134,11 +135,23 @@ class CollectProviderReadingEvidence private constructor(
             targets.map { target ->
                 async {
                     gate.withPermit {
-                        collectTarget(
-                            canonicalTitleId = canonicalTitleId,
-                            title = canonicalTitle.displayTitle,
-                            target = target,
-                        )
+                        // A hanging or paginated remote Provider must not keep the entire
+                        // canonical refresh (and Details spinner) waiting indefinitely.
+                        // Incomplete inventories never detach previously observed support.
+                        withTimeoutOrNull(MAX_PROVIDER_COLLECTION_MILLIS) {
+                            collectTarget(
+                                canonicalTitleId = canonicalTitleId,
+                                title = canonicalTitle.displayTitle,
+                                target = target,
+                            )
+                        } ?: ProviderReadingEvidenceCollection(complete = false).also {
+                            trace(
+                                canonicalTitleId,
+                                target,
+                                DiagnosticStage.READ,
+                                DiagnosticOutcome.TIMEOUT,
+                            )
+                        }
                     }
                 }
             }.awaitAll()
@@ -246,7 +259,11 @@ class CollectProviderReadingEvidence private constructor(
                 }
             }
         } catch (error: CancellationException) {
-            trace(canonicalTitleId, target, DiagnosticStage.READ, DiagnosticOutcome.CANCELLED)
+            // The caller records a timed-out Provider separately. Do not label
+            // that deadline as a user/navigation cancellation in diagnostics.
+            if (error !is kotlinx.coroutines.TimeoutCancellationException) {
+                trace(canonicalTitleId, target, DiagnosticStage.READ, DiagnosticOutcome.CANCELLED)
+            }
             throw error
         } catch (_: Throwable) {
             trace(canonicalTitleId, target, DiagnosticStage.READ, DiagnosticOutcome.THREW)
@@ -466,6 +483,7 @@ class CollectProviderReadingEvidence private constructor(
         )
         val WHITESPACE = Regex("\\s+")
         const val MAX_CONCURRENT_PROVIDERS = 4
+        const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
         const val MAX_LOOKUP_PAGES = 8
         const val MAX_LOOKUP_ITEMS = 2_000
     }
