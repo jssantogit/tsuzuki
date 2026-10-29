@@ -6,6 +6,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
+import java.io.IOException
 import kotlin.time.Clock
 
 /** A source of release/evidence metadata, not a provider of readable pages. */
@@ -39,10 +40,25 @@ enum class InventoryRefreshStop {
     DISABLED,
 }
 
+enum class InventoryFetchFailureReason {
+    ACCESS_DENIED,
+    RATE_LIMITED,
+    HTTP_ERROR,
+    RESPONSE_TOO_LARGE,
+    NETWORK_ERROR,
+    INVALID_RESPONSE,
+    UNKNOWN,
+}
+
+/** Stable source failure classification. Never carries URLs, work IDs or source response data. */
+class InventorySourceFetchException(val reason: InventoryFetchFailureReason) :
+    IOException("Independent inventory request failed: ${reason.name}")
+
 data class InventoryRefreshResult(
     val stop: InventoryRefreshStop,
     val pagesSaved: Int,
     val observationsSaved: Int,
+    val failureReason: InventoryFetchFailureReason? = null,
 )
 
 /**
@@ -99,8 +115,15 @@ class RefreshIndependentInventory(
             } catch (error: Exception) {
                 Result.failure(error)
             }
-            page.exceptionOrNull()?.let { error ->
+            val failureReason = page.exceptionOrNull()?.let { error ->
                 if (error is CancellationException) throw error
+                when (error) {
+                    is InventorySourceFetchException -> error.reason
+                    is IOException -> InventoryFetchFailureReason.NETWORK_ERROR
+                    is IllegalArgumentException, is IllegalStateException ->
+                        InventoryFetchFailureReason.INVALID_RESPONSE
+                    else -> InventoryFetchFailureReason.UNKNOWN
+                }
             }
             currentCoroutineContext().ensureActive()
             // Revocation, logout and remapping during fetch must discard the late
@@ -129,7 +152,12 @@ class RefreshIndependentInventory(
                 InventoryFetchOutcome.EXHAUSTED ->
                     return InventoryRefreshResult(InventoryRefreshStop.EXHAUSTED, saved, observations)
                 InventoryFetchOutcome.FAILED ->
-                    return InventoryRefreshResult(InventoryRefreshStop.FAILED, saved, observations)
+                    return InventoryRefreshResult(
+                        InventoryRefreshStop.FAILED,
+                        saved,
+                        observations,
+                        failureReason ?: InventoryFetchFailureReason.UNKNOWN,
+                    )
                 InventoryFetchOutcome.NOT_ATTEMPTED ->
                     return InventoryRefreshResult(InventoryRefreshStop.PARTIAL, saved, observations)
                 InventoryFetchOutcome.PARTIAL -> {

@@ -15,6 +15,8 @@ import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchFailureReason
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventorySourceFetchException
 import java.io.IOException
 
 class NativeInventoryReleaseTransportTest {
@@ -89,8 +91,10 @@ class NativeInventoryReleaseTransportTest {
                 .body("rate limited".toResponseBody()).build()
         }.build()
         val transport = transport(client)
-        shouldThrow<IOException> { transport.fetch(url, """{"search":"123"}""") }
-        shouldThrow<IOException> { transport.fetch(url, """{"search":"456"}""") }
+        shouldThrow<InventorySourceFetchException> { transport.fetch(url, """{"search":"123"}""") }
+            .reason shouldBe InventoryFetchFailureReason.RATE_LIMITED
+        shouldThrow<InventorySourceFetchException> { transport.fetch(url, """{"search":"456"}""") }
+            .reason shouldBe InventoryFetchFailureReason.RATE_LIMITED
         requested shouldBe 1
     }
 
@@ -103,8 +107,10 @@ class NativeInventoryReleaseTransportTest {
                 .message("Forbidden").body("".toResponseBody()).build()
         }.build()
         val transport = transport(client)
-        shouldThrow<IOException> { transport.fetch(url, "{}") }
-        shouldThrow<IOException> { transport.fetch(url, """{"page":2}""") }
+        shouldThrow<InventorySourceFetchException> { transport.fetch(url, "{}") }
+            .reason shouldBe InventoryFetchFailureReason.ACCESS_DENIED
+        shouldThrow<InventorySourceFetchException> { transport.fetch(url, """{"page":2}""") }
+            .reason shouldBe InventoryFetchFailureReason.ACCESS_DENIED
         requested shouldBe 1
     }
 

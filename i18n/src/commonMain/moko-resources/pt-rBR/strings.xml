@@ -1215,6 +1215,13 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_inventory_refresh_exhausted">Paginação consultada; completude editorial não comprovada</string>
     <string name="tsuzuki_inventory_refresh_partial">Observações parciais de releases salvas</string>
     <string name="tsuzuki_inventory_refresh_failed">Consulta do inventário falhou; evidências anteriores preservadas</string>
+    <string name="tsuzuki_inventory_error_${k}">${v}</string>
+    <string name="tsuzuki_inventory_error_${k}">${v}</string>
+    <string name="tsuzuki_inventory_error_${k}">${v}</string>
+    <string name="tsuzuki_inventory_error_${k}">${v}</string>
+    <string name="tsuzuki_inventory_error_${k}">${v}</string>
+    <string name="tsuzuki_inventory_error_${k}">${v}</string>
+    <string name="tsuzuki_inventory_error_${k}">${v}</string>
     <string name="tsuzuki_inventory_refresh_unlinked">Não há vínculo externo verificado para esta fonte</string>
     <string name="tsuzuki_inventory_refresh_disabled">Ative o inventário de capítulos na integração selecionada antes de atualizar</string>
     <string name="tsuzuki_inventory_confirm_title">Consultar metadados independentes de releases?</string>
