@@ -85,6 +85,13 @@ class CollectProviderReadingEvidenceTest {
             it.stage == DiagnosticStage.READ && it.outcome == DiagnosticOutcome.TIMEOUT
         }
         (StructuredDiagnosticSanitizer.sanitize(timedOut) != null) shouldBe true
+        val summary = recorder.events.single {
+            it.stage == DiagnosticStage.SUMMARY && it.outcome != DiagnosticOutcome.STARTED
+        }
+        summary.outcome shouldBe DiagnosticOutcome.PARTIAL
+        summary.attributes["completed"] shouldBe DiagnosticAttributeValue.Flag(false)
+        summary.attributes["chapter_count"] shouldBe DiagnosticAttributeValue.Number(0)
+        (StructuredDiagnosticSanitizer.sanitize(summary) != null) shouldBe true
         recorder.events.none { it.outcome == DiagnosticOutcome.CANCELLED } shouldBe true
     }
 
