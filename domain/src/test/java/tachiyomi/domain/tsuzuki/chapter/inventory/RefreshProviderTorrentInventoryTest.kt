@@ -68,12 +68,14 @@ class RefreshProviderTorrentInventoryTest {
         result shouldBe InventoryRefreshResult(InventoryRefreshStop.EXHAUSTED, 1, 1)
         searches shouldBe 1
         coVerify(exactly = 1) {
-            ledger.saveBatch(match {
-                it.claims.size == 1 &&
-                    it.claims.single().derivation == InventoryDerivation.RELEASE_RECORD &&
-                    !it.scope.editionIdentityVerified &&
-                    !it.scope.workIdentityVerified
-            })
+            ledger.saveBatch(
+                match {
+                    it.claims.size == 1 &&
+                        it.claims.single().derivation == InventoryDerivation.RELEASE_RECORD &&
+                        !it.scope.editionIdentityVerified &&
+                        !it.scope.workIdentityVerified
+                },
+            )
         }
     }
 
@@ -116,10 +118,15 @@ class RefreshProviderTorrentInventoryTest {
         val ledger = mockk<InventoryEvidenceRepository>(relaxed = true)
         val registry = DefaultProviderRegistry { listOf(registration(ProviderLifecycleStatus.DISABLED)) }
         var searches = 0
-        val refresh = RefreshProviderTorrentInventory(titles, registry, TorrentSearchGateway { _, _ ->
-            searches++
-            error("Disabled provider must not search")
-        }, ledger)
+        val refresh = RefreshProviderTorrentInventory(
+            titles,
+            registry,
+            TorrentSearchGateway { _, _ ->
+                searches++
+                error("Disabled provider must not search")
+            },
+            ledger,
+        )
 
         refresh.hasEnabledSources() shouldBe false
         refresh.execute("tokyo").stop shouldBe InventoryRefreshStop.DISABLED
