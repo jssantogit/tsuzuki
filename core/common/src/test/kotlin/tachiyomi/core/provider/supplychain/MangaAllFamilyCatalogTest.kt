@@ -21,7 +21,7 @@ class MangaAllFamilyCatalogTest {
 
     @Test
     fun `MangaAll groups only three exact source identities from one repository`() {
-        val entries = MangaAllFamilyCatalog.sourceProviderIds.map(::entry) +
+        val entries = MangaAllFamilyCatalog.sourceProviderIds.map { entry(it) } +
             entry("app.tsuzuki.mangafire")
         val groups = MangaAllFamilyCatalog.discoverGroups(entries)
         groups.size shouldBe 1
@@ -39,7 +39,7 @@ class MangaAllFamilyCatalogTest {
     @Test
     fun `missing or revoked MangaAll source fails closed without pretending complete installation`() {
         val ids = MangaAllFamilyCatalog.sourceProviderIds
-        val incomplete = MangaAllFamilyCatalog.discoverGroups(ids.take(2).map(::entry)).single()
+        val incomplete = MangaAllFamilyCatalog.discoverGroups(ids.take(2).map { entry(it) }).single()
         incomplete.isComplete shouldBe false
         incomplete.canInstall shouldBe false
         val revoked = MangaAllFamilyCatalog.discoverGroups(ids.mapIndexed { index, id ->
