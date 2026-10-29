@@ -303,6 +303,112 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `complete provider collection publishes an aggregate summary with accepted count`() = runBlocking {
+        val recorder = CapturingProviderDiagnostics()
+        val bridge = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(ProviderWorkCandidate("work-1", "Dandadan", language = "en")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(ProviderChapterObservation("chapter-1", "Chapter 1", rawNumber = 1.0)),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+
+        val result = bridge.execute(canonicalTitle.id)
+
+        result.complete shouldBe true
+        val summary = recorder.events.single {
+            it.stage == DiagnosticStage.SUMMARY && it.outcome != DiagnosticOutcome.STARTED
+        }
+        summary.outcome shouldBe DiagnosticOutcome.SUCCEEDED
+        summary.attributes["target_source_count"] shouldBe DiagnosticAttributeValue.Number(1)
+        summary.attributes["binding_count"] shouldBe DiagnosticAttributeValue.Number(1)
+        summary.attributes["chapter_count"] shouldBe DiagnosticAttributeValue.Number(1)
+        summary.attributes["completed"] shouldBe DiagnosticAttributeValue.Flag(true)
+        val safe = StructuredDiagnosticSanitizer.sanitize(summary)
+        safe?.attributes?.size shouldBe 4
+    }
+
+    @Test
+    fun `failed lookup publishes an incomplete aggregate summary with zero chapters`() = runBlocking {
+        val recorder = CapturingProviderDiagnostics()
+        val bridge = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Failure(ProviderError(ProviderErrorCode.NETWORK_ERROR, retryable = true))
+                },
+                chaptersHandler = { error("Failed lookup must not request chapters") },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+        val result = bridge.execute(canonicalTitle.id)
+
+        result.complete shouldBe false
+        val summary = recorder.events.single {
+            it.stage == DiagnosticStage.SUMMARY && it.outcome != DiagnosticOutcome.STARTED
+        }
+        summary.outcome shouldBe DiagnosticOutcome.PARTIAL
+        summary.attributes["target_source_count"] shouldBe DiagnosticAttributeValue.Number(1)
+        summary.attributes["binding_count"] shouldBe DiagnosticAttributeValue.Number(0)
+        summary.attributes["chapter_count"] shouldBe DiagnosticAttributeValue.Number(0)
+        summary.attributes["completed"] shouldBe DiagnosticAttributeValue.Flag(false)
+        (StructuredDiagnosticSanitizer.sanitize(summary) != null) shouldBe true
+    }
+
+    @Test
+    fun `no enabled provider reports complete empty aggregate without network`() = runBlocking {
+        val recorder = CapturingProviderDiagnostics()
+        val bridge = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = DefaultProviderRegistry(registrations = { emptyList() }),
+            gateway = gateway(
+                lookupHandler = { error("Disabled inventory must not search") },
+                chaptersHandler = { error("Disabled inventory must not request chapters") },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+        val result = bridge.execute(canonicalTitle.id)
+
+        result.complete shouldBe true
+        result.evidence shouldBe emptyList()
+        val summary = recorder.events.single {
+            it.stage == DiagnosticStage.SUMMARY && it.outcome != DiagnosticOutcome.STARTED
+        }
+        summary.outcome shouldBe DiagnosticOutcome.EMPTY
+        summary.attributes["target_source_count"] shouldBe DiagnosticAttributeValue.Number(0)
+        summary.attributes["binding_count"] shouldBe DiagnosticAttributeValue.Number(0)
+        summary.attributes["chapter_count"] shouldBe DiagnosticAttributeValue.Number(0)
+        summary.attributes["completed"] shouldBe DiagnosticAttributeValue.Flag(true)
+        (StructuredDiagnosticSanitizer.sanitize(summary) != null) shouldBe true
+    }
+
+    @Test
     fun `two source alias hits remain ambiguous and no chapters are fetched`() = runBlocking {
         val title = canonicalTitle.copy(displayTitle = "Haikyuu!!")
         val recorder = CapturingProviderDiagnostics()
