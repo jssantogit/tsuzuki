@@ -98,6 +98,34 @@ class ProviderNetworkPolicyTest {
         }
     }
 
+    @Test
+    fun `MangaDex forcePort443 image grants accept only reviewed HTTPS hosts`() {
+        val policy = ProviderNetworkPolicy(
+            allowedOrigins = setOf(
+                "https://api.mangadex.org",
+                "https://uploads.mangadex.org",
+                "https://*.mangadex.network",
+            ),
+            addressResolver = publicResolver(),
+        )
+        policy.validate("https://uploads.mangadex.org/data/hash/001.png").host shouldBe
+            "uploads.mangadex.org"
+        policy.validate("https://node.mangadex.network/temporary/data/hash/001.png").host shouldBe
+            "node.mangadex.network"
+        shouldThrow<ProviderNetworkPolicyException> {
+            policy.validate("https://node.mangadex.network:12345/temporary/data/hash/001.png")
+        }
+        shouldThrow<ProviderNetworkPolicyException> {
+            policy.validate("https://mangadex.network/temporary/data/hash/001.png")
+        }
+        shouldThrow<ProviderNetworkPolicyException> {
+            policy.validate("https://node.mangadex.network.evil.example/data/hash/001.png")
+        }
+        shouldThrow<ProviderNetworkPolicyException> {
+            policy.validate("http://node.mangadex.network/data/hash/001.png")
+        }
+    }
+
     private fun publicResolver() = ProviderAddressResolver {
         listOf(InetAddress.getByName("93.184.216.34"))
     }
