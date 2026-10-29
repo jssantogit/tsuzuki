@@ -259,7 +259,11 @@ class CollectProviderReadingEvidence private constructor(
                 }
             }
         } catch (error: CancellationException) {
-            trace(canonicalTitleId, target, DiagnosticStage.READ, DiagnosticOutcome.CANCELLED)
+            // The caller records a timed-out Provider separately. Do not label
+            // that deadline as a user/navigation cancellation in diagnostics.
+            if (error !is kotlinx.coroutines.TimeoutCancellationException) {
+                trace(canonicalTitleId, target, DiagnosticStage.READ, DiagnosticOutcome.CANCELLED)
+            }
             throw error
         } catch (_: Throwable) {
             trace(canonicalTitleId, target, DiagnosticStage.READ, DiagnosticOutcome.THREW)
