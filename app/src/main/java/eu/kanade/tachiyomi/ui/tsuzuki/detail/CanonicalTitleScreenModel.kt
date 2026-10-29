@@ -37,9 +37,6 @@ import tachiyomi.domain.tsuzuki.chapter.interactor.MaterializeInferredChapter
 import tachiyomi.domain.tsuzuki.chapter.interactor.OpenCanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.interactor.buildCanonicalChapterOutline
 import tachiyomi.domain.tsuzuki.chapter.interactor.isVisibleCanonicalChapter
-import tachiyomi.domain.tsuzuki.chapter.inventory.GetIndependentInventorySnapshot
-import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
-import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryKnowledge
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.content.ContentOption
@@ -77,8 +74,6 @@ sealed interface CanonicalTitleScreenState {
         val libraryEntry: CanonicalLibraryEntry?,
         val chapters: List<CanonicalChapterDetailItem>,
         val reportedChapterCounts: List<ReportedChapterCount> = emptyList(),
-        val independentInventory: IndependentInventorySnapshot =
-            IndependentInventorySnapshot(InventoryKnowledge.UNKNOWN, emptyList()),
         val addonCoverage: List<ObservedAddonCoverage> = emptyList(),
         val coverUrl: String? = null,
         val sourceCover: MangaCover? = null,
@@ -149,7 +144,6 @@ class CanonicalTitleScreenModel(
     private val canonicalChapterRepository: CanonicalChapterRepository,
     private val materializeInferredChapter: MaterializeInferredChapter,
     private val chapterEvidenceRepository: ChapterEvidenceRepository,
-    private val getIndependentInventorySnapshot: GetIndependentInventorySnapshot,
     private val canonicalReadingRepository: CanonicalReadingRepository,
     private val getCanonicalChapterDownloadState: GetCanonicalChapterDownloadState,
     private val downloadCanonicalChapter: DownloadCanonicalChapter,
@@ -173,6 +167,7 @@ class CanonicalTitleScreenModel(
     private var canonicalTitleId: String? = null
     private var diagnosticTitleId: String? = null
     private var operation: Job? = null
+    private var reconciledReloadOperation: Job? = null
     private var downloadOperation: Job? = null
     private var readingStartOperation: Job? = null
 
@@ -183,6 +178,7 @@ class CanonicalTitleScreenModel(
             runCatching { diagnostics.stop() }
         }
         this.canonicalTitleId = canonicalTitleId
+        reconciledReloadOperation?.cancel()
         operation?.cancel()
         operation = viewModelScope.launch {
             val alreadyLoaded = (_state.value as? CanonicalTitleScreenState.Loaded)
@@ -198,6 +194,7 @@ class CanonicalTitleScreenModel(
 
     fun refresh(): Job? {
         val id = canonicalTitleId ?: return null
+        reconciledReloadOperation?.cancel()
         operation?.cancel()
         operation = viewModelScope.launch {
             refreshInBackground(id, forceChapterRefresh = true)
@@ -212,22 +209,31 @@ class CanonicalTitleScreenModel(
      */
     fun reloadReconciledChapters(): Job? {
         val id = canonicalTitleId ?: return null
-        operation?.cancel()
-        operation = viewModelScope.launch {
+        // Chapter-only updates must not cancel the metadata pipeline. Keep a
+        // separate cancellable operation so later revisions cannot race each other.
+        reconciledReloadOperation?.cancel()
+        reconciledReloadOperation = viewModelScope.launch {
             try {
-                val refreshed = loadLocalState(
+                // Only the chapter snapshot is being refreshed. Restore metadata from a
+                // cache validated against the current integration configuration so a chapter
+                // reconciliation cannot erase valid synopsis/ratings or revive revoked sources.
+                val cachedIntegrationMetadata = resolveCanonicalMetadata.cached(id)
+                val local = loadLocalState(
                     canonicalTitleId = id,
                     includeIntegrationMetadata = false,
                     allowSourceNetwork = false,
                     isRefreshing = false,
                 )
                 if (canonicalTitleId != id) return@launch
+                val refreshed = cachedIntegrationMetadata?.let { local.withIntegrationMetadata(it) } ?: local
                 val current = (_state.value as? CanonicalTitleScreenState.Loaded)
                     ?.takeIf { it.title.id == id }
                 _state.value = if (current == null) {
                     refreshed
                 } else {
                     refreshed.copy(
+                        isRefreshing = current.isRefreshing,
+                        refreshError = current.refreshError,
                         libraryEntry = current.libraryEntry,
                         libraryMutationInProgress = current.libraryMutationInProgress,
                         libraryMutationError = current.libraryMutationError,
@@ -241,12 +247,14 @@ class CanonicalTitleScreenModel(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                val current = _state.value as? CanonicalTitleScreenState.Loaded
-                _state.value = current?.copy(isRefreshing = false, refreshError = error)
+                if (canonicalTitleId != id) return@launch
+                val current = (_state.value as? CanonicalTitleScreenState.Loaded)
+                    ?.takeIf { it.title.id == id }
+                _state.value = current?.copy(refreshError = error)
                     ?: CanonicalTitleScreenState.Error(error)
             }
         }
-        return operation
+        return reconciledReloadOperation
     }
 
     fun startChapterDiagnostics() {
@@ -550,10 +558,19 @@ class CanonicalTitleScreenModel(
 
                 val metadataResult = metadataRefresh.await()
                 val metadataElapsed = refreshStart.elapsedNow()
-                val current = _state.value as? CanonicalTitleScreenState.Loaded
-                if (current?.title?.id == canonicalTitleId) {
+                val current = (_state.value as? CanonicalTitleScreenState.Loaded)
+                    ?.takeIf {
+                        it.title.id == canonicalTitleId &&
+                            this@CanonicalTitleScreenModel.canonicalTitleId == canonicalTitleId
+                    }
+                if (current != null) {
+                    // Publish completed metadata independently of chapter reconciliation.
+                    // Chapter refresh can take seconds or be cancelled without invalidating
+                    // already verified synopsis, ratings, genres or editorial facts.
+                    val enriched = metadataResult.getOrNull()
+                        ?.let { current.withIntegrationMetadata(it) } ?: current
                     val refreshedCounts = reportedChapterCountRepository.getByTitle(canonicalTitleId)
-                    _state.value = current.copy(
+                    _state.value = enriched.copy(
                         reportedChapterCounts = refreshedCounts,
                         chapters = withMetadataSlots(
                             canonicalTitleId,
@@ -630,7 +647,6 @@ class CanonicalTitleScreenModel(
         _state.value = latest.copy(
             chapters = if (retainObservedChapters) latest.chapters else staged.chapters,
             addonCoverage = staged.addonCoverage,
-            independentInventory = staged.independentInventory,
             isRefreshing = true,
             refreshError = current.refreshError,
         )
@@ -649,14 +665,6 @@ class CanonicalTitleScreenModel(
         val libraryEntry = canonicalLibraryRepository.get(canonicalTitleId)
         val chapters = canonicalChapterRepository.getByCanonicalTitleId(canonicalTitleId)
         val supportSnapshot = chapterEvidenceRepository.getSupportSnapshot(canonicalTitleId)
-        // Optional inventory metadata must never block an already readable title.
-        val independentInventory = try {
-            getIndependentInventorySnapshot.execute(canonicalTitleId)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Exception) {
-            IndependentInventorySnapshot(InventoryKnowledge.UNKNOWN, emptyList())
-        }
         val supportedChapterIds = supportSnapshot.mappedCanonicalChapterIds
         val addonNames = try {
             addonRepository.snapshot().associate { it.id.value to it.displayName }
@@ -770,7 +778,6 @@ class CanonicalTitleScreenModel(
             libraryEntry = libraryEntry,
             chapters = withMetadataSlots(canonicalTitleId, details, reportedCounts),
             reportedChapterCounts = reportedCounts,
-            independentInventory = independentInventory,
             addonCoverage = observedAddonCoverage(chapters, supportSnapshot.addonMappedChapterIds, addonNames),
             coverUrl = canonicalArtwork?.coverUrl,
             sourceCover = metadata?.asMangaCover(),

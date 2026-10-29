@@ -6,6 +6,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
@@ -170,6 +176,7 @@ class CollectProviderReadingEvidenceTest {
 
     @Test
     fun `lookup failure marks collection incomplete`() = runBlocking {
+        val recorder = CapturingProviderDiagnostics()
         val bridge = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
             providerRegistry = registry(),
@@ -187,6 +194,7 @@ class CollectProviderReadingEvidenceTest {
             bindingRepository = MemoryBindingRepository(),
             evidenceAdapter = ProviderChapterEvidenceAdapter(),
             clock = { 4L },
+            diagnostics = recorder,
         )
 
         val result = bridge.execute(canonicalTitle.id)
@@ -194,6 +202,105 @@ class CollectProviderReadingEvidenceTest {
         result.complete shouldBe false
         result.bindingCount shouldBe 0
         result.evidence shouldBe emptyList()
+        val lookupFailure = recorder.events.single { it.stage == DiagnosticStage.LOOKUP }
+        lookupFailure.attributes["provider_error_code"] shouldBe DiagnosticAttributeValue.Text("NETWORK_ERROR")
+        val safe = StructuredDiagnosticSanitizer.sanitize(lookupFailure)
+        (safe != null) shouldBe true
+    }
+
+    @Test
+    fun `source-attested alias binds Haikyuu without fuzzy matching and records safe stage counts`() = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "Haikyuu!!")
+        val recorder = CapturingProviderDiagnostics()
+        val bridge = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(
+                                ProviderWorkCandidate(
+                                    "haikyu-source-work",
+                                    "Haikyu!!",
+                                    aliases = listOf("Haikyuu!!"),
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(ProviderChapterObservation("chapter-one", "Chapter 1", rawNumber = 1.0)),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+        val result = bridge.execute(title.id)
+        result.complete shouldBe true
+        result.bindingCount shouldBe 1
+        result.evidence.shouldHaveSize(1)
+        val lookup = recorder.events.single { it.stage == DiagnosticStage.LOOKUP }
+        lookup.attributes["candidate_count"] shouldBe DiagnosticAttributeValue.Number(1)
+        lookup.attributes["accepted_count"] shouldBe DiagnosticAttributeValue.Number(1)
+        val chapters = recorder.events.single { it.stage == DiagnosticStage.READ }
+        chapters.attributes["observation_count"] shouldBe DiagnosticAttributeValue.Number(1)
+        chapters.attributes["chapter_count"] shouldBe DiagnosticAttributeValue.Number(1)
+        val dump = recorder.events.joinToString()
+        (dump.contains("Haikyuu") || dump.contains("haikyu-source-work")) shouldBe false
+        recorder.events.all { it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE } shouldBe true
+    }
+
+    @Test
+    fun `two source alias hits remain ambiguous and no chapters are fetched`() = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "Haikyuu!!")
+        val recorder = CapturingProviderDiagnostics()
+        val bridge = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(
+                                ProviderWorkCandidate("work-a", "Haikyu!!", aliases = listOf("Haikyuu!!")),
+                                ProviderWorkCandidate("work-b", "Haikyu!!", aliases = listOf("Haikyuu!!")),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("ambiguous aliases cannot authorize chapters") },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+        val result = bridge.execute(title.id)
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+        val lookup = recorder.events.single { it.stage == DiagnosticStage.LOOKUP }
+        lookup.attributes["candidate_count"] shouldBe DiagnosticAttributeValue.Number(2)
+        lookup.attributes["accepted_count"] shouldBe DiagnosticAttributeValue.Number(2)
+        lookup.attributes["binding_count"] shouldBe DiagnosticAttributeValue.Number(0)
+    }
+
+    private class CapturingProviderDiagnostics : StructuredDiagnosticRecorder {
+        override val sessionId: String = "00000000-0000-0000-0000-000000000000"
+        val events = mutableListOf<StructuredDiagnosticEvent>()
+        override fun canonicalTitleReference(canonicalTitleId: String): String? = null
+        override fun mihonMangaReference(mihonMangaId: Long): String? = null
+        override fun record(event: StructuredDiagnosticEvent) { events += event }
     }
 
     private fun registry() = DefaultProviderRegistry(
