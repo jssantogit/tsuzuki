@@ -306,18 +306,28 @@ class DefaultProviderHttpHostService(
         headers: Map<String, String>,
         body: String?,
     ): Request {
-        val contentType = headers.entries
+        val declaredContentType = headers.entries
             .firstOrNull { (name, _) -> name.equals("Content-Type", ignoreCase = true) }
             ?.value
-            ?.toMediaTypeOrNull()
+        val contentType = declaredContentType?.toMediaTypeOrNull()
+
+        // OkHttp String.toRequestBody adds '; charset=utf-8' to a media type
+        // with no declared charset. Some JSON APIs (including MangaBall's)
+        // require exactly 'application/json'. UTF-8 bytes preserve that type
+        // while keeping the original behavior for other declared charsets.
+        fun textBody(value: String) = if (declaredContentType.equals("application/json", ignoreCase = true)) {
+            value.encodeToByteArray().toRequestBody(contentType)
+        } else {
+            value.toRequestBody(contentType)
+        }
 
         val requestBody = when (method) {
             ProviderHttpMethod.GET -> null
-            ProviderHttpMethod.DELETE -> body?.toRequestBody(contentType)
+            ProviderHttpMethod.DELETE -> body?.let(::textBody)
             ProviderHttpMethod.POST,
             ProviderHttpMethod.PUT,
             ProviderHttpMethod.PATCH,
-            -> body.orEmpty().toRequestBody(contentType)
+            -> textBody(body.orEmpty())
         }
 
         return Request.Builder()
