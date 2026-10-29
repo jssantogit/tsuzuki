@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.domain.tsuzuki.chapter.inventory.RefreshIndependentInventory
@@ -78,6 +79,9 @@ class NativeInventoryRefreshScreenModel(
     private var integrationChangesObserver: Job? = null
     private var autoGeneration = 0L
 
+    private fun sourceConfigurationFingerprint(): String =
+        integrationRegistry.configurationFingerprint() + "|" + refreshTorrentInventory.sourceFingerprint()
+
     fun start(titleId: String) {
         if (activeTitleId == titleId) return
         invalidateLinkOperation()
@@ -101,10 +105,14 @@ class NativeInventoryRefreshScreenModel(
         integrationChangesObserver?.cancel()
         integrationChangesObserver = viewModelScope.launch {
             integrationRegistry.awaitReady()
-            var previousFingerprint = integrationRegistry.configurationFingerprint()
-            integrationRegistry.observeChanges().collect {
+            refreshTorrentInventory.awaitReady()
+            var previousFingerprint = sourceConfigurationFingerprint()
+            merge(
+                integrationRegistry.observeChanges(),
+                refreshTorrentInventory.observeSourceChanges(),
+            ).collect {
                 if (titleId != activeTitleId) return@collect
-                val currentFingerprint = integrationRegistry.configurationFingerprint()
+                val currentFingerprint = sourceConfigurationFingerprint()
                 if (currentFingerprint == previousFingerprint) return@collect
                 previousFingerprint = currentFingerprint
                 autoGeneration++
@@ -132,6 +140,7 @@ class NativeInventoryRefreshScreenModel(
         autoOperation = viewModelScope.launch {
             try {
                 integrationRegistry.awaitReady()
+                refreshTorrentInventory.awaitReady()
                 if (titleId != activeTitleId || generation != autoGeneration) return@launch
                 val fingerprint = integrationRegistry.configurationFingerprint()
                 val enabledProducers = integrationRegistry.inventoryProducers()
