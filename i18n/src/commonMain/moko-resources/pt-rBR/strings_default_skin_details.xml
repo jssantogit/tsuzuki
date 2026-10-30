@@ -3,7 +3,7 @@
     <string name="tsuzuki_edition_choose">Escolher edição de leitura</string>
     <string name="tsuzuki_edition_title">Selecionar edição</string>
     <string name="tsuzuki_edition_description">Escolha a ficha apresentada pela fonte. Isso não comprova completude editorial.</string>
-    <string name="tsuzuki_edition_search">Buscar outro título</string>
+    <string name="tsuzuki_edition_search">Título ou link da fonte (se suportado)</string>
     <string name="tsuzuki_edition_find">Buscar</string>
     <string name="tsuzuki_edition_none">Nenhuma edição encontrada nesta busca.</string>
     <string name="tsuzuki_edition_loading">Consultando providers…</string>
