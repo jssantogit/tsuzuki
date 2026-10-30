@@ -119,7 +119,7 @@ class MangaAllFamilyCatalogTest {
         val ids = MangaAllFamilyCatalog.sourceProviderIds
         val groups = MangaAllFamilyCatalog.discoverGroups(
             ids.mapIndexed { index, id ->
-                val status = if (index == 1) {
+                val status = if (index == 2) {
                     ProviderRepositoryEntryStatus.UPDATE_AVAILABLE
                 } else {
                     ProviderRepositoryEntryStatus.INSTALLED
