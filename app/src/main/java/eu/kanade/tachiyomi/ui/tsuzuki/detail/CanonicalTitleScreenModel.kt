@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.manga.model.MangaCover
 import tachiyomi.domain.manga.model.asMangaCover
@@ -556,10 +557,14 @@ class CanonicalTitleScreenModel(
                     ).exceptionOrNull()
                 }
                 val metadataRefresh = async {
-                    resolveCanonicalMetadata.execute(
-                        canonicalTitleId = canonicalTitleId,
-                        forceRefresh = forceChapterRefresh,
-                    )
+                    // A provider can take much longer than the chapter budget to answer.
+                    // Keep the detail refresh finite without dropping cached metadata.
+                    withTimeoutOrNull(METADATA_REFRESH_LIMIT_MS) {
+                        resolveCanonicalMetadata.execute(
+                            canonicalTitleId = canonicalTitleId,
+                            forceRefresh = forceChapterRefresh,
+                        )
+                    } ?: Result.failure(IllegalStateException("Metadata refresh timed out"))
                 }
 
                 val metadataResult = metadataRefresh.await()
@@ -598,7 +603,7 @@ class CanonicalTitleScreenModel(
 
             val refreshed = loadLocalState(
                 canonicalTitleId = canonicalTitleId,
-                includeIntegrationMetadata = true,
+                includeIntegrationMetadata = refreshResults.first.isSuccess,
                 integrationMetadataOverride = refreshResults.first.getOrNull(),
                 allowSourceNetwork = false,
                 isRefreshing = false,
@@ -1047,5 +1052,6 @@ class CanonicalTitleScreenModel(
     }
 
     private companion object {
+        const val METADATA_REFRESH_LIMIT_MS = 25_000L
     }
 }
