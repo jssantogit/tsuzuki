@@ -419,7 +419,6 @@ class CanonicalTitleScreenModelTest {
         after.ratings shouldBe emptyList()
     }
 
-
     @Test
     fun `metadata network stall cannot keep details progress active beyond refresh budget`() = runTest(dispatcher) {
         val neverReturns = CompletableDeferred<Unit>()
