@@ -25,7 +25,7 @@ import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 class CollectProviderReadingEvidenceEligibilityTest {
 
     @Test
-    fun `Provider with lookup and chapters but without pages contributes provisional ICE evidence`() = runBlocking<Unit> {
+    fun `lookup and chapters feed ICE without pages`() = runBlocking<Unit> {
         val providerId = ProviderId("app.tsuzuki.mangaall.mangadex")
         val title = CanonicalTitle(
             id = "title-1",
