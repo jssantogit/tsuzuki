@@ -225,6 +225,46 @@ class ProviderHttpPageLoaderTest {
         }
     }
 
+    @Test
+    fun `HTTP 200 HTML and JSON error bodies must not become ready Reader pages`() = runTest {
+        val server = MockWebServer()
+        server.start()
+        val responses = listOf(
+            "<html><body>access denied</body></html>" to "text/html; charset=utf-8",
+            "{\\"error\\":\\"blocked\\"}" to "application/json",
+            " \\n<!DOCTYPE html><html>challenge</html>" to null,
+        )
+        responses.forEach { (body, contentType) ->
+            val builder = MockResponse.Builder().body(body)
+            if (contentType != null) builder.addHeader("Content-Type", contentType)
+            server.enqueue(builder.build())
+        }
+        val loader = ProviderHttpPageLoader(
+            requests = responses.indices.map { index ->
+                PreparedHttpPage(
+                    url = server.url("/page-${index + 1}.jpg").toString(),
+                    allowedOrigins = setOf(server.origin()),
+                    allowLocalNetwork = true,
+                )
+            },
+            cacheRoot = tempDir.toFile(),
+        )
+
+        try {
+            loader.getPages().forEach { page ->
+                shouldThrow<ProviderHttpPageException> {
+                    loader.loadPage(page)
+                }
+                (page.status is Page.State.Error) shouldBe true
+            }
+            server.requestCount shouldBe responses.size
+            tempDir.toFile().walkTopDown().filter { it.isFile }.toList().isEmpty() shouldBe true
+        } finally {
+            loader.recycle()
+            server.close()
+        }
+    }
+
     private fun MockWebServer.origin(): String =
         url("/").let { "${it.scheme}://${it.host}:${it.port}" }
 }
