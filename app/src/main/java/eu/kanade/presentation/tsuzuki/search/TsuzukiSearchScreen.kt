@@ -65,6 +65,7 @@ import eu.kanade.tachiyomi.ui.tsuzuki.search.DiscoverKind
 import eu.kanade.tachiyomi.ui.tsuzuki.search.SearchState
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
+import tachiyomi.domain.tsuzuki.catalog.model.preferredDisplayTitle
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogScore
 import tachiyomi.domain.tsuzuki.integration.model.TsuzukiRating
 import tachiyomi.domain.tsuzuki.integration.model.metadataStartYear
@@ -425,13 +426,13 @@ internal fun SearchCompactCard(
     ) {
         SearchCompactArtwork(
             data = item.coverUrl,
-            title = item.title,
+            title = item.preferredDisplayTitle(),
             modifier = Modifier.fillMaxWidth(),
             onForegroundLoadEvent = onForegroundLoadEvent,
             onAtmosphereLoadEvent = onAtmosphereLoadEvent,
         )
         Text(
-            text = item.title,
+            text = item.preferredDisplayTitle(),
             color = colors.foreground,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
