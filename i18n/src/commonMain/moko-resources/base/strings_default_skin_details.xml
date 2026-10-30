@@ -12,4 +12,5 @@
     <string name="tsuzuki_edition_conflict">Another edition is already linked. Changing it requires a separate safe migration.</string>
     <string name="tsuzuki_edition_stale">This edition changed. Search again before confirming.</string>
     <string name="tsuzuki_edition_unavailable">Provider is unavailable or its permissions changed.</string>
+    <string name="tsuzuki_edition_open_source">Open source page</string>
 </resources>
