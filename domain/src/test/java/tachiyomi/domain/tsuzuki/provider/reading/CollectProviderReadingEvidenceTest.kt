@@ -32,6 +32,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 
+/** RED fixture: the edition selection interactor is deliberately absent on this branch. */
 class CollectProviderReadingEvidenceTest {
 
     private val providerId = ProviderId("app.tsuzuki.mangafire")
