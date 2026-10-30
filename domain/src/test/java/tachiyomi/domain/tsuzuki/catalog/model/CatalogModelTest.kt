@@ -202,5 +202,4 @@ class CatalogModelTest {
         result[0][1].preferredDisplayTitle() shouldBe "Attack on Titan: Edition"
         result[0][0].providerId shouldBe "77"
     }
-
 }
