@@ -25,7 +25,7 @@ import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 class MangaAllChapterEvidenceEligibilityTest {
 
     @Test
-    fun mangaAllChaptersContributeWithoutPages() = runBlocking {
+    fun mangaAllChaptersContributeWithoutPages() = runBlocking<Unit> {
         val providerId = ProviderId("app.tsuzuki.mangaall.mangadex")
         val title = CanonicalTitle(
             id = "title-1",
