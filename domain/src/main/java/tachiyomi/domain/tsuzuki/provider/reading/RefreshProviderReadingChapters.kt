@@ -70,9 +70,10 @@ class RefreshProviderReadingChapters internal constructor(
             if (next != null && !seenCursors.add(next.value)) {
                 return failure(ProviderErrorCode.MALFORMED_RESULT)
             }
-            // These are diagnostic counts only. Never publish a canonical snapshot until
-            // the final page is verified, so a stalled or failed later page cannot detach
-            // previously recorded chapters or pretend the inventory is complete.
+            // These are sanitized page-level diagnostics only, not partial chapter inventory.
+            // Never publish a canonical snapshot until the final page is verified, so a
+            // stalled or failed later page cannot detach previously recorded chapters.
+            // The incomplete result must not pretend that the inventory is complete.
             onPageObserved(it + 1, observations.size)
             if (next == null) {
                 val evidence = evidenceAdapter.toEvidence(
