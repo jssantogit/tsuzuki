@@ -603,6 +603,73 @@ class CollectProviderReadingEvidenceTest {
         bindings.getByTitle(canonicalTitle.id) shouldBe listOf(old)
     }
 
+    @Test
+    fun `manual edition selection loses a concurrent binding reservation without overwriting it`() = runBlocking<Unit> {
+        val bindings = MemoryBindingRepository()
+        bindings.onBeforeConditionalInsert = { attempted ->
+            attempted.copy(
+                id = "auto-work",
+                ref = attempted.ref.copy(externalWorkId = "manga-standard"),
+                verification = ProviderBindingVerification.EXACT,
+            )
+        }
+        val picker = SelectProviderReadingEdition(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderWorkCandidate("manga-colored", "Dandadan", language = "en")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Edition selection must not fetch chapters") },
+            ),
+            bindingRepository = bindings,
+        )
+
+        val chosen = picker.search(canonicalTitle.id, "Dandadan").candidates.single()
+        picker.confirm(canonicalTitle.id, chosen) shouldBe ProviderEditionConfirmation.BLOCKED
+        bindings.getByTitle(canonicalTitle.id).map { it.ref.externalWorkId } shouldBe listOf("manga-standard")
+    }
+
+    @Test
+    fun `background discovery cannot replace a concurrent user confirmed edition`() = runBlocking<Unit> {
+        val bindings = MemoryBindingRepository()
+        bindings.onBeforeConditionalInsert = { attempted ->
+            attempted.copy(
+                id = "confirmed-work",
+                ref = attempted.ref.copy(externalWorkId = "manga-colored"),
+                verification = ProviderBindingVerification.USER_CONFIRMED,
+            )
+        }
+        val bridge = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderWorkCandidate("manga-standard", "Dandadan", language = "en")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("A losing discovery must not read an unconfirmed edition") },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+
+        val result = bridge.execute(canonicalTitle.id)
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+        bindings.getByTitle(canonicalTitle.id).map { it.ref.externalWorkId } shouldBe listOf("manga-colored")
+    }
+
     private class CapturingProviderDiagnostics : StructuredDiagnosticRecorder {
         override val sessionId: String = "00000000-0000-0000-0000-000000000000"
         val events = mutableListOf<StructuredDiagnosticEvent>()
@@ -683,6 +750,7 @@ class CollectProviderReadingEvidenceTest {
 
     private class MemoryBindingRepository : ProviderReadingBindingRepository {
         private val values = linkedMapOf<String, ProviderReadingBinding>()
+        var onBeforeConditionalInsert: ((ProviderReadingBinding) -> ProviderReadingBinding?)? = null
 
         override suspend fun get(
             canonicalTitleId: String,
@@ -696,6 +764,13 @@ class CollectProviderReadingEvidenceTest {
 
         override suspend fun getByTitle(canonicalTitleId: String): List<ProviderReadingBinding> =
             values.values.filter { it.canonicalTitleId == canonicalTitleId }
+
+        override suspend fun insertIfAbsent(binding: ProviderReadingBinding): Boolean {
+            onBeforeConditionalInsert?.invoke(binding)?.let { upsert(it) }
+            if (get(binding.canonicalTitleId, binding.ref.providerId, binding.ref.facetId) != null) return false
+            upsert(binding)
+            return true
+        }
 
         override suspend fun upsert(binding: ProviderReadingBinding) {
             values[binding.id] = binding
