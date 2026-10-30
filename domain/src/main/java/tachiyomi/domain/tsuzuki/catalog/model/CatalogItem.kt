@@ -50,17 +50,21 @@ fun CatalogItem.preferredDisplayTitle(): String {
 
     val place = country?.trim()?.lowercase()
     val prefersEnglish = format == CatalogItemFormat.MANHWA || format == CatalogItemFormat.MANHUA ||
-        place in setOf("kr", "kor", "korea", "south korea", "cn", "chn", "china", "tw", "taiwan")
+        (place != null && place in setOf("kr", "kor", "korea", "south korea", "cn", "chn", "china", "tw", "taiwan"))
     val prefersRomanized = !prefersEnglish && (
         format == CatalogItemFormat.MANGA || format == CatalogItemFormat.ONE_SHOT ||
             format == CatalogItemFormat.DOUJIN ||
-            place in setOf("jp", "jpn", "japan")
+            (place != null && place in setOf("jp", "jpn", "japan"))
         )
 
     val preferred = when {
         prefersEnglish -> firstTitle("en", "en_us", "en_gb", "english")
-        prefersRomanized -> firstTitle("en_jp", "ja_latn", "ja_romaji", "romaji")
-            ?.takeUnless { value -> value.any { char -> char in '\u3040'..'\u30ff' || char in '\u3400'..'\u9fff' } }
+        prefersRomanized -> listOf("en_jp", "ja_latn", "ja_romaji", "romaji")
+            .firstNotNullOfOrNull { key ->
+                normalized[key]?.takeUnless { value ->
+                    value.any { char -> char in '\u3040'..'\u30ff' || char in '\u3400'..'\u9fff' }
+                }
+            }
         else -> null
     }
     return preferred ?: title
