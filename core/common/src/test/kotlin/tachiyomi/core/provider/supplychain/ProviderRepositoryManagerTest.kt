@@ -735,11 +735,23 @@ class ProviderRepositoryManagerTest {
                 minHostApi = 1,
             )
         }
+        // A signed repository may carry a dormant MangaBall descriptor. Its
+        // package is deliberately absent from transport, so installation must
+        // never try to download it.
+        val pausedBytes = tsz(versionCode = 1, providerId = "app.tsuzuki.mangaall.mangaball")
+        val pausedDescriptor = ProviderArtifactDescriptor(
+            providerId = "app.tsuzuki.mangaall.mangaball",
+            versionName = "1.0.1",
+            versionCode = 1,
+            artifactUrl = "https://repo.example/mangaball-paused.tsz",
+            sha256 = sha256Hex(pausedBytes),
+            minHostApi = 1,
+        )
         val index = ProviderRepositoryIndex(
             schemaVersion = 1,
             repositoryId = repositoryId,
             sequence = 1,
-            providers = descriptors,
+            providers = descriptors + pausedDescriptor,
         )
         val signed = signedIndex(keyPair, index)
         transport.publishMany(
@@ -767,6 +779,7 @@ class ProviderRepositoryManagerTest {
         // Re-running the one-click install preserves all exact version IDs.
         manager.installMangaAll(repositoryId).size shouldBe 0
         manager.installed().size shouldBe 2
+        transport.requestedArtifactUrls.none { it.contains("mangaball") } shouldBe true
         artifactStore.current("app.tsuzuki.mangaall.mangaball") shouldBe null
         // A revoked old source can recover only through a NEW verified signed
         // release from its existing trust origin, without dropping family state.
@@ -787,7 +800,7 @@ class ProviderRepositoryManagerTest {
             schemaVersion = 1,
             repositoryId = repositoryId,
             sequence = 2,
-            providers = v2Descriptors,
+            providers = v2Descriptors + pausedDescriptor,
             revokedArtifactSha256 = setOf(
                 sha256Hex(sourceArtifacts.getValue(MangaAllFamilyCatalog.activeSourceProviderIds[0])),
             ),
