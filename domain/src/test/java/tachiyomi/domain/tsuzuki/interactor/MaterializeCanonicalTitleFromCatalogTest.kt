@@ -48,7 +48,6 @@ class MaterializeCanonicalTitleFromCatalogTest {
         identity.verified shouldBe true
     }
 
-
     @Test
     fun `materializing a new manga chooses published romanized name without changing external identity`() = runTest {
         val repository = FakeCanonicalTitleRepository()
