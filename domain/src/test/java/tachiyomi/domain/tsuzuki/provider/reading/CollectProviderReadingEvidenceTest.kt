@@ -498,6 +498,111 @@ class CollectProviderReadingEvidenceTest {
         lookup.attributes["binding_count"] shouldBe DiagnosticAttributeValue.Number(0)
     }
 
+    @Test
+    fun `edition picker shows both exact matches but persists only the user confirmed work`(): Unit = runBlocking {
+        val bindings = MemoryBindingRepository()
+        val picker = SelectProviderReadingEdition(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    "manga-standard",
+                                    "Dandadan",
+                                    url = "https://mangafire.to/title/standard-dandadan",
+                                    language = "en",
+                                ),
+                                ProviderWorkCandidate(
+                                    "manga-colored",
+                                    "Dandadan",
+                                    url = "https://mangafire.to/title/colored-dandadan",
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Choosing an edition must not fetch chapters") },
+            ),
+            bindingRepository = bindings,
+        )
+
+        val results = picker.search(canonicalTitle.id, "Dandadan")
+
+        results.candidates.map { it.ref.externalWorkId } shouldBe listOf("manga-standard", "manga-colored")
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        picker.confirm(canonicalTitle.id, results.candidates[1]) shouldBe ProviderEditionConfirmation.BOUND
+        bindings.get(canonicalTitle.id, providerId, "en")?.let { binding ->
+            binding.ref.externalWorkId shouldBe "manga-colored"
+            binding.verification shouldBe ProviderBindingVerification.USER_CONFIRMED
+        }
+        bindings.getByTitle(canonicalTitle.id).shouldHaveSize(1)
+    }
+
+    @Test
+    fun `edition confirmation refuses stale candidate not returned by a fresh lookup`(): Unit = runBlocking {
+        val bindings = MemoryBindingRepository()
+        val picker = SelectProviderReadingEdition(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderWorkCandidate("real", "Dandadan", language = "en")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("not used") },
+            ),
+            bindingRepository = bindings,
+        )
+        val candidate = picker.search(canonicalTitle.id, "Dandadan").candidates.single()
+        picker.confirm(canonicalTitle.id, candidate.copy(ref = candidate.ref.copy(externalWorkId = "forged"))) shouldBe
+            ProviderEditionConfirmation.STALE
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+    }
+
+    @Test
+    fun `edition confirmation never silently replaces an existing readable work binding`(): Unit = runBlocking {
+        val bindings = MemoryBindingRepository()
+        val old = ProviderReadingBinding(
+            id = "existing-reading",
+            canonicalTitleId = canonicalTitle.id,
+            ref = ProviderBindingRef(providerId, "en", "manga-standard"),
+            verification = ProviderBindingVerification.EXACT,
+            availability = ProviderBindingAvailability.AVAILABLE,
+            createdAt = 1L,
+            updatedAt = 1L,
+        )
+        bindings.upsert(old)
+        val picker = SelectProviderReadingEdition(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderWorkCandidate("manga-colored", "Dandadan", language = "en")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("not used") },
+            ),
+            bindingRepository = bindings,
+        )
+
+        val chosen = picker.search(canonicalTitle.id, "Dandadan").candidates.single()
+        picker.confirm(canonicalTitle.id, chosen) shouldBe ProviderEditionConfirmation.BLOCKED
+        bindings.getByTitle(canonicalTitle.id) shouldBe listOf(old)
+    }
+
     private class CapturingProviderDiagnostics : StructuredDiagnosticRecorder {
         override val sessionId: String = "00000000-0000-0000-0000-000000000000"
         val events = mutableListOf<StructuredDiagnosticEvent>()
