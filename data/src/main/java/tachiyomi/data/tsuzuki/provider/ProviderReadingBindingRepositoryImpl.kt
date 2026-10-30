@@ -43,6 +43,27 @@ class ProviderReadingBindingRepositoryImpl(
             )
             .awaitAsList()
 
+    override suspend fun insertIfAbsent(binding: ProviderReadingBinding): Boolean {
+        database.tsuzuki_provider_bindingsQueries.insertTsuzukiProviderBindingIfAbsent(
+            id = binding.id,
+            canonicalTitleId = binding.canonicalTitleId,
+            providerId = binding.ref.providerId.value,
+            facetId = binding.ref.facetId.orEmpty(),
+            externalWorkId = binding.ref.externalWorkId,
+            verification = binding.verification.name,
+            availability = binding.availability.name,
+            createdAt = binding.createdAt,
+            updatedAt = binding.updatedAt,
+        )
+        // The insert is one SQLite statement. A competing edition cannot be added to
+        // the same canonical-title / Provider / facet slot between its check and write.
+        return get(
+            binding.canonicalTitleId,
+            binding.ref.providerId,
+            binding.ref.facetId,
+        )?.id == binding.id
+    }
+
     override suspend fun upsert(binding: ProviderReadingBinding) {
         database.tsuzuki_provider_bindingsQueries.upsertTsuzukiProviderBinding(
             id = binding.id,
