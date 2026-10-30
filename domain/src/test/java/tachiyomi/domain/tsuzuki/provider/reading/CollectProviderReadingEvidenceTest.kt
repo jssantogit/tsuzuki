@@ -95,6 +95,60 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `page progress survives next page timeout as sanitized counts not canonical evidence`() = runTest {
+        val recorder = CapturingProviderDiagnostics()
+        val neverCompletes = CompletableDeferred<Unit>()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderWorkCandidate("work-1", "Dandadan", language = "en")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    if (request.cursor == null) {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(ProviderChapterObservation("chapter-one", "Chapter 1")),
+                                nextCursor = ProviderCursor("more"),
+                            ),
+                        )
+                    } else {
+                        neverCompletes.await()
+                        error("unreachable")
+                    }
+                },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+
+        val result = withTimeoutOrNull(21_000) { collector.execute(canonicalTitle.id) }
+        (result != null) shouldBe true
+        result!!.complete shouldBe false
+        result.evidence shouldBe emptyList()
+        result.snapshots shouldBe emptyList()
+        val page = recorder.events.single { it.name == DiagnosticEventName.PROVIDER_READING_PAGE }
+        page.stage shouldBe DiagnosticStage.READ
+        page.outcome shouldBe DiagnosticOutcome.PARTIAL
+        page.attributes["page_count"] shouldBe DiagnosticAttributeValue.Number(1)
+        page.attributes["observation_count"] shouldBe DiagnosticAttributeValue.Number(1)
+        val sanitized = StructuredDiagnosticSanitizer.sanitize(page)
+        (sanitized != null) shouldBe true
+        recorder.events.any {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.READ && it.outcome == DiagnosticOutcome.TIMEOUT
+        } shouldBe true
+    }
+
+    @Test
     fun `unique exact lookup creates binding and returns provider chapter evidence`(): Unit = runBlocking {
         val bindings = MemoryBindingRepository()
         var lookupCalls = 0
@@ -308,12 +362,15 @@ class CollectProviderReadingEvidenceTest {
         lookup.attributes["provider_id"] shouldBe DiagnosticAttributeValue.Text("app.tsuzuki.mangafire")
         lookup.attributes["candidate_count"] shouldBe DiagnosticAttributeValue.Number(1)
         lookup.attributes["accepted_count"] shouldBe DiagnosticAttributeValue.Number(1)
-        val chapters = recorder.events.single { it.stage == DiagnosticStage.READ }
+        val chapters = recorder.events.single { it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE && it.stage == DiagnosticStage.READ }
         chapters.attributes["observation_count"] shouldBe DiagnosticAttributeValue.Number(1)
         chapters.attributes["chapter_count"] shouldBe DiagnosticAttributeValue.Number(1)
         val dump = recorder.events.joinToString()
         (dump.contains("Haikyuu") || dump.contains("haikyu-source-work")) shouldBe false
-        recorder.events.all { it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE } shouldBe true
+        recorder.events.all {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE ||
+                it.name == DiagnosticEventName.PROVIDER_READING_PAGE
+        } shouldBe true
     }
 
     @Test
@@ -350,7 +407,7 @@ class CollectProviderReadingEvidenceTest {
         val lookup = recorder.events.single { it.stage == DiagnosticStage.LOOKUP }
         lookup.attributes["candidate_count"] shouldBe DiagnosticAttributeValue.Number(1)
         lookup.attributes["binding_count"] shouldBe DiagnosticAttributeValue.Number(1)
-        val chapters = recorder.events.single { it.stage == DiagnosticStage.READ }
+        val chapters = recorder.events.single { it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE && it.stage == DiagnosticStage.READ }
         chapters.outcome shouldBe DiagnosticOutcome.EMPTY
         chapters.attributes["observation_count"] shouldBe DiagnosticAttributeValue.Number(0)
         chapters.attributes["chapter_count"] shouldBe DiagnosticAttributeValue.Number(0)
