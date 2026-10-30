@@ -1,5 +1,7 @@
 package tachiyomi.domain.tsuzuki.provider.reading
 
+// Instrumentation gate trigger: executable code matches PR #173 revision ea3aa988.
+
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
 
