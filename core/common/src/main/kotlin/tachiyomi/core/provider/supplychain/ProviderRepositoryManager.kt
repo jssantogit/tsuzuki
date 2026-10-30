@@ -215,7 +215,10 @@ class ProviderRepositoryManager(
             }
             val signed = session.verified.index
             val revoked = signed.revokedArtifactSha256.map(String::lowercase).toSet()
-            val descriptors = MangaAllFamilyCatalog.sourceProviderIds.map { providerId ->
+            // Only active sources participate in the atomic install. A signed
+            // repository may still retain the paused MangaBall identity, but
+            // never download, validate or activate its package here.
+            val descriptors = MangaAllFamilyCatalog.activeSourceProviderIds.map { providerId ->
                 signed.providers.singleOrNull { it.providerId == providerId }
                     ?: throw ProviderSupplyChainException("MangaAll signed repository lacks a required source")
             }
