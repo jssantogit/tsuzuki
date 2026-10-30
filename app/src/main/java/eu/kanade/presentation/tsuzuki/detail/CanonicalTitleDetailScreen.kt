@@ -66,6 +66,7 @@ import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalChapterDetailItem
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreenState
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.InventoryWorkDiscoveryStatus
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.NativeInventoryRefreshState
+import eu.kanade.tachiyomi.ui.tsuzuki.detail.ProviderEditionPickerState
 import kotlinx.coroutines.launch
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.automirroredrounded.ArrowBack
@@ -77,10 +78,12 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySourceSnap
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchFailureReason
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionCandidate
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionConfirmation
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
-private enum class DetailsSheet { SORT, JUMP, SOURCES }
+private enum class DetailsSheet { SORT, JUMP, SOURCES, EDITION }
 private const val FULL_CHAPTER_FIRST_ITEM = 1
 
 @Composable
@@ -97,6 +100,11 @@ fun CanonicalTitleDetailScreen(
     onImportEpub: () -> Unit = {},
     onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit = {},
     inventoryRefresh: NativeInventoryRefreshState,
+    editionPicker: ProviderEditionPickerState = ProviderEditionPickerState(),
+    onChooseEdition: () -> Unit = {},
+    onEditionSearch: (String) -> Unit = {},
+    onEditionConfirm: (ProviderEditionCandidate) -> Unit = {},
+    onEditionDismiss: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
@@ -132,6 +140,7 @@ fun CanonicalTitleDetailScreen(
                 state, background, navigateUp, onAtualizar, onAddToLibrary, onRemoveFromLibrary,
                 onReadTitle, onOpenChapter, onBaixarChapter, onOpenProvidersSettings,
                 onImportEpub, onReviewCandidates, inventoryRefresh,
+                editionPicker, onChooseEdition, onEditionSearch, onEditionConfirm, onEditionDismiss,
             )
         }
     }
@@ -152,10 +161,26 @@ private fun LoadedDetails(
     onImportEpub: () -> Unit,
     onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit,
     inventoryRefresh: NativeInventoryRefreshState,
+    editionPicker: ProviderEditionPickerState,
+    onChooseEdition: () -> Unit,
+    onEditionSearch: (String) -> Unit,
+    onEditionConfirm: (ProviderEditionCandidate) -> Unit,
+    onEditionDismiss: () -> Unit,
 ) {
     var mode by rememberSaveable(state.title.id) { mutableStateOf(CanonicalDetailsLowerMode.COMPACT) }
     var sort by rememberSaveable(state.title.id) { mutableStateOf(CanonicalChapterSort.ORIGINAL) }
     var sheet by remember { mutableStateOf<DetailsSheet?>(null) }
+    var editionQuery by remember(state.title.id) { mutableStateOf(state.title.displayTitle) }
+    var selectedEdition by remember(state.title.id) { mutableStateOf<ProviderEditionCandidate?>(null) }
+    LaunchedEffect(editionPicker.open) {
+        if (editionPicker.open) {
+            editionQuery = editionPicker.query
+            sheet = DetailsSheet.EDITION
+        } else if (sheet == DetailsSheet.EDITION) {
+            sheet = null
+            selectedEdition = null
+        }
+    }
     val chapters = remember(state.chapters, sort) { sortDetailChapters(state.chapters, sort) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -203,9 +228,11 @@ private fun LoadedDetails(
             when (mode) {
                 CanonicalDetailsLowerMode.COMPACT -> {
                     item(key = "context") {
-                        ContextualChapterRail(state, onOpenChapter, onProviders) {
-                            moveMode(CanonicalDetailsLowerAction.VIEW_ALL)
-                        }
+                        ContextualChapterRail(
+                            state, onOpenChapter, onProviders,
+                            onAll = { moveMode(CanonicalDetailsLowerAction.VIEW_ALL) },
+                            onChooseEdition = onChooseEdition,
+                        )
                     }
                     if (chapters.isEmpty() || state.independentInventory.sources.isNotEmpty() ||
                         inventoryRefresh.refreshing || inventoryRefresh.discoveryStatus.isNotEmpty()
@@ -250,7 +277,10 @@ private fun LoadedDetails(
                     }
                     if (chapters.isEmpty()) {
                         item(key = "empty-chapters") {
-                            ContextualChapterRail(state, onOpenChapter, onProviders) {}
+                            ContextualChapterRail(
+                                state, onOpenChapter, onProviders,
+                                onAll = {}, onChooseEdition = onChooseEdition,
+                            )
                         }
                     }
                     items(chapters, key = { it.chapter.id }) { item ->
@@ -289,7 +319,10 @@ private fun LoadedDetails(
     sheet?.let { current ->
         val colors = defaultSkinColors()
         ModalBottomSheet(
-            onDismissRequest = { sheet = null },
+            onDismissRequest = {
+                if (current == DetailsSheet.EDITION) onEditionDismiss()
+                sheet = null
+            },
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
             containerColor = colors.surface,
             contentColor = colors.foreground,
@@ -362,6 +395,102 @@ private fun LoadedDetails(
                     sheet = null
                     val index = chapters.indexOfFirst { it.chapter.id == target.chapter.id }
                     scope.launch { listState.animateScrollToItem(FULL_CHAPTER_FIRST_ITEM + index, -toolbarOffset) }
+                }
+                DetailsSheet.EDITION -> Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 560.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        stringResource(MR.strings.tsuzuki_edition_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.foreground,
+                    )
+                    Text(
+                        stringResource(MR.strings.tsuzuki_edition_description),
+                        color = colors.secondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    OutlinedTextField(
+                        value = editionQuery,
+                        onValueChange = { editionQuery = it },
+                        label = { Text(stringResource(MR.strings.tsuzuki_edition_search)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    DefaultSkinTextAction(
+                        text = stringResource(MR.strings.tsuzuki_edition_find),
+                        onClick = {
+                            selectedEdition = null
+                            onEditionSearch(editionQuery)
+                        },
+                        enabled = !editionPicker.searching && !editionPicker.confirming && editionQuery.isNotBlank(),
+                    )
+                    if (editionPicker.searching || editionPicker.confirming) {
+                        CircularProgressIndicator(color = colors.accent)
+                    }
+                    if (editionPicker.failed) {
+                        Text(stringResource(MR.strings.tsuzuki_edition_error), color = colors.secondary)
+                    }
+                    if (!editionPicker.searching && editionPicker.candidates.isEmpty()) {
+                        Text(stringResource(MR.strings.tsuzuki_edition_none), color = colors.secondary)
+                    }
+                    editionPicker.candidates.forEach { candidate ->
+                        val selected = candidate == selectedEdition
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (selected) colors.surfaceMuted else Color.Transparent,
+                                    DefaultSkinShape.Control,
+                                )
+                                .selectable(
+                                    selected = selected,
+                                    enabled = !editionPicker.confirming,
+                                    role = Role.RadioButton,
+                                    onClick = { selectedEdition = candidate },
+                                )
+                                .heightIn(min = 56.dp)
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(candidate.title, color = colors.foreground)
+                                Text(
+                                    candidate.providerName + " · " + (candidate.ref.facetId ?: "—"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.secondary,
+                                )
+                                candidate.url?.let { url ->
+                                    Text(
+                                        url,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.secondary,
+                                    )
+                                }
+                            }
+                            if (selected) Text("✓", color = colors.accent)
+                        }
+                    }
+                    editionPicker.confirmation?.let { result ->
+                        val message = when (result) {
+                            ProviderEditionConfirmation.BLOCKED -> MR.strings.tsuzuki_edition_conflict
+                            ProviderEditionConfirmation.STALE -> MR.strings.tsuzuki_edition_stale
+                            ProviderEditionConfirmation.UNAVAILABLE -> MR.strings.tsuzuki_edition_unavailable
+                            else -> MR.strings.tsuzuki_edition_unavailable
+                        }
+                        Text(stringResource(message), color = colors.secondary)
+                    }
+                    DefaultSkinTextAction(
+                        text = stringResource(MR.strings.tsuzuki_edition_confirm),
+                        onClick = { selectedEdition?.let(onEditionConfirm) },
+                        enabled = selectedEdition in editionPicker.candidates &&
+                            !editionPicker.searching && !editionPicker.confirming,
+                    )
                 }
                 DetailsSheet.SOURCES -> Column(
                     modifier = Modifier
