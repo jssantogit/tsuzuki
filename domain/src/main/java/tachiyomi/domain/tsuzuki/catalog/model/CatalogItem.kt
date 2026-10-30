@@ -39,6 +39,38 @@ data class CatalogItem(
 )
 
 /**
+ * Display-name preference only. Provider identities, source titles and aliases remain unchanged.
+ * Never guess a transliteration from Japanese/Chinese/Korean script or a translated title.
+ */
+fun CatalogItem.preferredDisplayTitle(): String {
+    val normalized = titles.entries
+        .filter { it.value.isNotBlank() }
+        .associate { it.key.trim().lowercase().replace('-', '_') to it.value.trim() }
+    fun firstTitle(vararg keys: String): String? = keys.firstNotNullOfOrNull { normalized[it] }
+
+    val place = country?.trim()?.lowercase()
+    val prefersEnglish = format == CatalogItemFormat.MANHWA || format == CatalogItemFormat.MANHUA ||
+        (place != null && place in setOf("kr", "kor", "korea", "south korea", "cn", "chn", "china", "tw", "taiwan"))
+    val prefersRomanized = !prefersEnglish && (
+        format == CatalogItemFormat.MANGA || format == CatalogItemFormat.ONE_SHOT ||
+            format == CatalogItemFormat.DOUJIN ||
+            (place != null && place in setOf("jp", "jpn", "japan"))
+        )
+
+    val preferred = when {
+        prefersEnglish -> firstTitle("en", "en_us", "en_gb", "english")
+        prefersRomanized -> listOf("en_jp", "ja_latn", "ja_romaji", "romaji")
+            .firstNotNullOfOrNull { key ->
+                normalized[key]?.takeUnless { value ->
+                    value.any { char -> char in '\u3040'..'\u30ff' || char in '\u3400'..'\u9fff' }
+                }
+            }
+        else -> null
+    }
+    return preferred ?: title
+}
+
+/**
  * Collapses catalog rows only when they share an exact provider/external-id identity.
  *
  * A cross-provider collapse therefore requires a provider-published mapping in [CatalogItem.externalIds].
@@ -82,11 +114,55 @@ fun mergeCatalogItemsByVerifiedIdentity(items: List<CatalogItem>): List<CatalogI
             }
         }
 
+        val names = buildMap {
+            group.forEach { candidate ->
+                candidate.titles.forEach { (key, value) ->
+                    if (key.isNotBlank() && value.isNotBlank()) putIfAbsent(key, value)
+                }
+                if (candidate.title.isNotBlank()) {
+                    putIfAbsent("source:${candidate.provider}", candidate.title)
+                }
+            }
+        }
         representative.copy(
             score = scores.firstOrNull(),
+            format = if (representative.format != CatalogItemFormat.UNKNOWN) {
+                representative.format
+            } else {
+                group.firstOrNull { it.format != CatalogItemFormat.UNKNOWN }?.format
+                    ?: CatalogItemFormat.UNKNOWN
+            },
+            titles = names,
             externalIds = externalIds,
             scores = scores,
         )
+    }
+}
+
+/**
+ * Reuses only source-published identity mappings to harmonize a work's display aliases across
+ * independently fetched Discover shelves. The shelf rows, ordering, editions and source IDs stay intact.
+ */
+fun harmonizeCatalogTitlesAcrossSections(sections: List<List<CatalogItem>>): List<List<CatalogItem>> {
+    val merged = mergeCatalogItemsByVerifiedIdentity(sections.flatten())
+    val sharedById = buildMap {
+        merged.forEach { item ->
+            item.identityKeys().forEach { key -> put(key, item) }
+        }
+    }
+    return sections.map { rows ->
+        rows.map { item ->
+            val shared = item.identityKeys().firstNotNullOfOrNull { sharedById[it] }
+            if (shared == null) {
+                item
+            } else {
+                item.copy(
+                    titles = shared.titles + item.titles,
+                    format = if (item.format == CatalogItemFormat.UNKNOWN) shared.format else item.format,
+                    country = item.country ?: shared.country,
+                )
+            }
+        }
     }
 }
 

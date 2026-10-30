@@ -83,7 +83,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionConfirmation
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
-private enum class DetailsSheet { SORT, JUMP, SOURCES, EDITION }
+private enum class DetailsSheet { SORT, JUMP, SOURCES, INVENTORY, EDITION }
 private const val FULL_CHAPTER_FIRST_ITEM = 1
 
 @Composable
@@ -236,17 +236,6 @@ private fun LoadedDetails(
                             onChooseEdition = onChooseEdition,
                         )
                     }
-                    if (chapters.isEmpty() || state.independentInventory.sources.isNotEmpty() ||
-                        inventoryRefresh.refreshing || inventoryRefresh.discoveryStatus.isNotEmpty()
-                    ) {
-                        item(key = "independent-inventory") {
-                            IndependentInventoryInfo(
-                                state.independentInventory,
-                                inventoryRefresh,
-                                onReviewCandidates,
-                            )
-                        }
-                    }
                 }
                 CanonicalDetailsLowerMode.EDITORIAL -> item(key = "editorial") { DetailsEditorial(state) }
                 CanonicalDetailsLowerMode.FULL -> {
@@ -271,11 +260,6 @@ private fun LoadedDetails(
                                 Icon(MaterialSymbols.Rounded.Search, stringResource(MR.strings.tsuzuki_details_jump))
                             }
                         }
-                        IndependentInventoryInfo(
-                            state.independentInventory,
-                            inventoryRefresh,
-                            onReviewCandidates,
-                        )
                     }
                     if (chapters.isEmpty()) {
                         item(key = "empty-chapters") {
@@ -319,6 +303,7 @@ private fun LoadedDetails(
                 )
             },
             onSources = if (state.metadataSources.isNotEmpty()) ({ sheet = DetailsSheet.SOURCES }) else null,
+            onInventory = { sheet = DetailsSheet.INVENTORY },
         )
     }
     sheet?.let { current ->
@@ -502,6 +487,23 @@ private fun LoadedDetails(
                         modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp),
                         enabled = selectedEdition in editionPicker.candidates &&
                             !editionPicker.searching && !editionPicker.confirming,
+                    )
+                }
+                DetailsSheet.INVENTORY -> Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 560.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = 16.dp),
+                ) {
+                    // Detailed evidence is available on demand, never in the chapter feed.
+                    IndependentInventoryInfo(
+                        state.independentInventory,
+                        inventoryRefresh,
+                        onReviewCandidates = { candidate ->
+                            sheet = null
+                            onReviewCandidates(candidate)
+                        },
                     )
                 }
                 DetailsSheet.SOURCES -> Column(
@@ -881,6 +883,7 @@ private fun DetailsToolbar(
     onProviders: () -> Unit,
     background: Color = Color.Transparent,
     onSources: (() -> Unit)? = null,
+    onInventory: (() -> Unit)? = null,
     onImportEpub: (() -> Unit)? = null,
 ) {
     val colors = defaultSkinColors()
@@ -953,6 +956,17 @@ private fun DetailsToolbar(
                             false
                         action()
                     })
+                }
+                onInventory?.let { action ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(stringResource(MR.strings.tsuzuki_inventory_title), color = colors.foreground)
+                        },
+                        onClick = {
+                            expanded = false
+                            action()
+                        },
+                    )
                 }
             }
         }
