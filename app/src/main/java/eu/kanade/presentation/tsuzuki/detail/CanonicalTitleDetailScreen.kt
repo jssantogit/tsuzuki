@@ -229,7 +229,9 @@ private fun LoadedDetails(
                 CanonicalDetailsLowerMode.COMPACT -> {
                     item(key = "context") {
                         ContextualChapterRail(
-                            state, onOpenChapter, onProviders,
+                            state,
+                            onOpenChapter,
+                            onProviders,
                             onAll = { moveMode(CanonicalDetailsLowerAction.VIEW_ALL) },
                             onChooseEdition = onChooseEdition,
                         )
@@ -278,8 +280,11 @@ private fun LoadedDetails(
                     if (chapters.isEmpty()) {
                         item(key = "empty-chapters") {
                             ContextualChapterRail(
-                                state, onOpenChapter, onProviders,
-                                onAll = {}, onChooseEdition = onChooseEdition,
+                                state,
+                                onOpenChapter,
+                                onProviders,
+                                onAll = {},
+                                onChooseEdition = onChooseEdition,
                             )
                         }
                     }
@@ -407,88 +412,88 @@ private fun LoadedDetails(
                             .padding(horizontal = 20.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                    Text(
-                        stringResource(MR.strings.tsuzuki_edition_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = colors.foreground,
-                    )
-                    Text(
-                        stringResource(MR.strings.tsuzuki_edition_description),
-                        color = colors.secondary,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    OutlinedTextField(
-                        value = editionQuery,
-                        onValueChange = { editionQuery = it },
-                        label = { Text(stringResource(MR.strings.tsuzuki_edition_search)) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    DefaultSkinTextAction(
-                        text = stringResource(MR.strings.tsuzuki_edition_find),
-                        onClick = {
-                            selectedEdition = null
-                            onEditionSearch(editionQuery)
-                        },
-                        enabled = !editionPicker.searching &&
-                            !editionPicker.confirming && editionQuery.isNotBlank(),
-                    )
-                    if (editionPicker.searching || editionPicker.confirming) {
-                        CircularProgressIndicator(color = colors.accent)
-                    }
-                    if (editionPicker.failed) {
-                        Text(stringResource(MR.strings.tsuzuki_edition_error), color = colors.secondary)
-                    }
-                    if (!editionPicker.searching && editionPicker.candidates.isEmpty()) {
-                        Text(stringResource(MR.strings.tsuzuki_edition_none), color = colors.secondary)
-                    }
-                    editionPicker.candidates.forEach { candidate ->
-                        val selected = candidate == selectedEdition
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    if (selected) colors.surfaceMuted else Color.Transparent,
-                                    DefaultSkinShape.Control,
-                                )
-                                .selectable(
-                                    selected = selected,
-                                    enabled = !editionPicker.confirming,
-                                    role = Role.RadioButton,
-                                    onClick = { selectedEdition = candidate },
-                                )
-                                .heightIn(min = 56.dp)
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(candidate.title, color = colors.foreground)
-                                Text(
-                                    candidate.providerName + " · " + (candidate.ref.facetId ?: "—"),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = colors.secondary,
-                                )
-                                candidate.url?.let { url ->
+                        Text(
+                            stringResource(MR.strings.tsuzuki_edition_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = colors.foreground,
+                        )
+                        Text(
+                            stringResource(MR.strings.tsuzuki_edition_description),
+                            color = colors.secondary,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        OutlinedTextField(
+                            value = editionQuery,
+                            onValueChange = { editionQuery = it },
+                            label = { Text(stringResource(MR.strings.tsuzuki_edition_search)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        DefaultSkinTextAction(
+                            text = stringResource(MR.strings.tsuzuki_edition_find),
+                            onClick = {
+                                selectedEdition = null
+                                onEditionSearch(editionQuery)
+                            },
+                            enabled = !editionPicker.searching &&
+                                !editionPicker.confirming && editionQuery.isNotBlank(),
+                        )
+                        if (editionPicker.searching || editionPicker.confirming) {
+                            CircularProgressIndicator(color = colors.accent)
+                        }
+                        if (editionPicker.failed) {
+                            Text(stringResource(MR.strings.tsuzuki_edition_error), color = colors.secondary)
+                        }
+                        if (!editionPicker.searching && editionPicker.candidates.isEmpty()) {
+                            Text(stringResource(MR.strings.tsuzuki_edition_none), color = colors.secondary)
+                        }
+                        editionPicker.candidates.forEach { candidate ->
+                            val selected = candidate == selectedEdition
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        if (selected) colors.surfaceMuted else Color.Transparent,
+                                        DefaultSkinShape.Control,
+                                    )
+                                    .selectable(
+                                        selected = selected,
+                                        enabled = !editionPicker.confirming,
+                                        role = Role.RadioButton,
+                                        onClick = { selectedEdition = candidate },
+                                    )
+                                    .heightIn(min = 56.dp)
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(candidate.title, color = colors.foreground)
                                     Text(
-                                        url,
+                                        candidate.providerName + " · " + (candidate.ref.facetId ?: "—"),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = colors.secondary,
                                     )
+                                    candidate.url?.let { url ->
+                                        Text(
+                                            url,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = colors.secondary,
+                                        )
+                                    }
                                 }
+                                if (selected) Text("✓", color = colors.accent)
                             }
-                            if (selected) Text("✓", color = colors.accent)
                         }
-                    }
-                    editionPicker.confirmation?.let { result ->
-                        val message = when (result) {
-                            ProviderEditionConfirmation.BLOCKED -> MR.strings.tsuzuki_edition_conflict
-                            ProviderEditionConfirmation.STALE -> MR.strings.tsuzuki_edition_stale
-                            ProviderEditionConfirmation.UNAVAILABLE -> MR.strings.tsuzuki_edition_unavailable
-                            else -> MR.strings.tsuzuki_edition_unavailable
+                        editionPicker.confirmation?.let { result ->
+                            val message = when (result) {
+                                ProviderEditionConfirmation.BLOCKED -> MR.strings.tsuzuki_edition_conflict
+                                ProviderEditionConfirmation.STALE -> MR.strings.tsuzuki_edition_stale
+                                ProviderEditionConfirmation.UNAVAILABLE -> MR.strings.tsuzuki_edition_unavailable
+                                else -> MR.strings.tsuzuki_edition_unavailable
+                            }
+                            Text(stringResource(message), color = colors.secondary)
                         }
-                        Text(stringResource(message), color = colors.secondary)
-                    }
                     }
                     HorizontalDivider(color = colors.outline)
                     DefaultSkinTextAction(
