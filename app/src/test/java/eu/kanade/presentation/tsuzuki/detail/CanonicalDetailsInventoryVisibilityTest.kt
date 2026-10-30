@@ -18,6 +18,7 @@ class CanonicalDetailsInventoryVisibilityTest {
 
         defaultBody.contains("IndependentInventoryInfo(") shouldBe false
         defaultBody.contains("independent-inventory") shouldBe false
+        defaultBody.contains("inventoryRefresh.refreshing") shouldBe false
         defaultBody.contains("ContextualChapterRail(") shouldBe true
     }
 
@@ -30,6 +31,7 @@ class CanonicalDetailsInventoryVisibilityTest {
         sheetBody.contains("DetailsSheet.INVENTORY ->") shouldBe true
         sheetBody.contains("IndependentInventoryInfo(") shouldBe true
         source.contains("onInventory = { sheet = DetailsSheet.INVENTORY }") shouldBe true
+        source.contains("onInventory?.let { action ->") shouldBe true
         source.contains("onReviewCandidates(source)") shouldBe true
     }
 
