@@ -397,13 +397,16 @@ private fun LoadedDetails(
                     scope.launch { listState.animateScrollToItem(FULL_CHAPTER_FIRST_ITEM + index, -toolbarOffset) }
                 }
                 DetailsSheet.EDITION -> Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 560.dp)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 560.dp),
                 ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                     Text(
                         stringResource(MR.strings.tsuzuki_edition_title),
                         style = MaterialTheme.typography.titleMedium,
@@ -485,9 +488,12 @@ private fun LoadedDetails(
                         }
                         Text(stringResource(message), color = colors.secondary)
                     }
+                    }
+                    HorizontalDivider(color = colors.outline)
                     DefaultSkinTextAction(
                         text = stringResource(MR.strings.tsuzuki_edition_confirm),
                         onClick = { selectedEdition?.let(onEditionConfirm) },
+                        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp),
                         enabled = selectedEdition in editionPicker.candidates &&
                             !editionPicker.searching && !editionPicker.confirming,
                     )
