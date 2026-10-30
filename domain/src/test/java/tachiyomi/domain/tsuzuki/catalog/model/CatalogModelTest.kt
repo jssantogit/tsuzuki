@@ -197,7 +197,7 @@ class CatalogModelTest {
         val result = harmonizeCatalogTitlesAcrossSections(
             listOf(listOf(english, differentEdition), listOf(romanized)),
         )
-        result.map(List<CatalogItem>::size) shouldBe listOf(2, 1)
+        result.map { it.size } shouldBe listOf(2, 1)
         result[0][0].preferredDisplayTitle() shouldBe "Shingeki no Kyojin"
         result[1][0].preferredDisplayTitle() shouldBe "Shingeki no Kyojin"
         result[0][1].preferredDisplayTitle() shouldBe "Attack on Titan: Edition"
