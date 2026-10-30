@@ -10,6 +10,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import java.util.UUID
 
+// Android instrumentation trigger only; executable code matches PR #173 HEAD.
 /** A source-provided work, not a canonical chapter or editorial certification. */
 data class ProviderEditionCandidate(
     val ref: ProviderBindingRef,
