@@ -25,6 +25,36 @@ class MangaAllFamilyCatalogTest {
         )
 
     @Test
+    fun `paused MangaBall must not block the active MangaDex and MangaDot family installation`() {
+        val active = listOf(
+            "app.tsuzuki.mangaall.mangadex",
+            "app.tsuzuki.mangaall.mangadot",
+        )
+        MangaAllFamilyCatalog.requireExactInstallSet(active)
+
+        val onlyActive = MangaAllFamilyCatalog.discoverGroups(active.map { entry(it) }).single()
+        onlyActive.isComplete shouldBe true
+        onlyActive.canInstall shouldBe true
+        onlyActive.installableIds shouldBe active
+
+        // A repository may still carry a previously reviewed but paused source.
+        // Never install it as part of the active family.
+        val withPaused = MangaAllFamilyCatalog.discoverGroups(
+            MangaAllFamilyCatalog.sourceProviderIds.map { entry(it) },
+        ).single()
+        withPaused.isComplete shouldBe true
+        withPaused.installableIds shouldBe active
+
+        // Paused MangaBall must not substitute for either active source.
+        val missingDot = MangaAllFamilyCatalog.discoverGroups(
+            listOf("app.tsuzuki.mangaall.mangadex", "app.tsuzuki.mangaall.mangaball")
+                .map { entry(it) },
+        ).single()
+        missingDot.isComplete shouldBe false
+        missingDot.canInstall shouldBe false
+    }
+
+    @Test
     fun `MangaAll groups only three exact source identities from one repository`() {
         val entries = MangaAllFamilyCatalog.sourceProviderIds.map { entry(it) } +
             entry("app.tsuzuki.mangafire")
