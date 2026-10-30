@@ -722,7 +722,7 @@ class ProviderRepositoryManagerTest {
             artifactStore = artifactStore,
             transport = transport,
         )
-        val sourceArtifacts = MangaAllFamilyCatalog.sourceProviderIds.associateWith { id ->
+        val sourceArtifacts = MangaAllFamilyCatalog.activeSourceProviderIds.associateWith { id ->
             tsz(versionCode = 1, providerId = id)
         }
         val descriptors = sourceArtifacts.map { (id, bytes) ->
@@ -744,7 +744,7 @@ class ProviderRepositoryManagerTest {
         val signed = signedIndex(keyPair, index)
         transport.publishMany(
             signed,
-            descriptors.take(2).associate { descriptor ->
+            descriptors.take(1).associate { descriptor ->
                 descriptor.artifactUrl to sourceArtifacts.getValue(descriptor.providerId)
             },
         )
@@ -761,15 +761,16 @@ class ProviderRepositoryManagerTest {
                 descriptor.artifactUrl to sourceArtifacts.getValue(descriptor.providerId)
             },
         )
-        manager.installMangaAll(repositoryId).size shouldBe 3
+        manager.installMangaAll(repositoryId).size shouldBe 2
         manager.installed().map { it.providerId } shouldBe
-            MangaAllFamilyCatalog.sourceProviderIds.sorted()
+            MangaAllFamilyCatalog.activeSourceProviderIds.sorted()
         // Re-running the one-click install preserves all exact version IDs.
         manager.installMangaAll(repositoryId).size shouldBe 0
-        manager.installed().size shouldBe 3
+        manager.installed().size shouldBe 2
+        artifactStore.current("app.tsuzuki.mangaall.mangaball") shouldBe null
         // A revoked old source can recover only through a NEW verified signed
         // release from its existing trust origin, without dropping family state.
-        val v2SourceArtifacts = MangaAllFamilyCatalog.sourceProviderIds.associateWith { id ->
+        val v2SourceArtifacts = MangaAllFamilyCatalog.activeSourceProviderIds.associateWith { id ->
             tsz(versionCode = 2, providerId = id)
         }
         val v2Descriptors = v2SourceArtifacts.map { (id, bytes) ->
@@ -788,7 +789,7 @@ class ProviderRepositoryManagerTest {
             sequence = 2,
             providers = v2Descriptors,
             revokedArtifactSha256 = setOf(
-                sha256Hex(sourceArtifacts.getValue(MangaAllFamilyCatalog.sourceProviderIds[0])),
+                sha256Hex(sourceArtifacts.getValue(MangaAllFamilyCatalog.activeSourceProviderIds[0])),
             ),
         )
         transport.publishMany(
@@ -798,8 +799,8 @@ class ProviderRepositoryManagerTest {
             },
         )
         manager.refresh(repositoryId)
-        artifactStore.current(MangaAllFamilyCatalog.sourceProviderIds[0])?.revoked shouldBe true
-        manager.installMangaAll(repositoryId).size shouldBe 3
+        artifactStore.current(MangaAllFamilyCatalog.activeSourceProviderIds[0])?.revoked shouldBe true
+        manager.installMangaAll(repositoryId).size shouldBe 2
         manager.installed().all { !it.revoked && it.versionCode == 2L } shouldBe true
     }
 
