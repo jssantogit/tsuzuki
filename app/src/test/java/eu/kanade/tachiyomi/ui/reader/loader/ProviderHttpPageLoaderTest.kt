@@ -231,8 +231,8 @@ class ProviderHttpPageLoaderTest {
         server.start()
         val responses = listOf(
             "<html><body>access denied</body></html>" to "text/html; charset=utf-8",
-            "{\\"error\\":\\"blocked\\"}" to "application/json",
-            " \\n<!DOCTYPE html><html>challenge</html>" to null,
+            """{"error":"blocked"}""" to "application/json",
+            "  " + "\n" + "<!DOCTYPE html><html>challenge</html>" to null,
         )
         responses.forEach { (body, contentType) ->
             val builder = MockResponse.Builder().body(body)
