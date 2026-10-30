@@ -171,7 +171,6 @@ class CatalogModelTest {
         merged.single().preferredDisplayTitle() shouldBe "Shingeki no Kyojin"
     }
 
-
     @Test
     fun `discovery sections share verified romanized aliases without collapsing distinct rows`() {
         val english = CatalogItem(
