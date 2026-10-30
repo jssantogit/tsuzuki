@@ -130,6 +130,72 @@ class CollectProviderReadingEvidenceEligibilityTest {
         pageCalls shouldBe 0
     }
 
+    @Test
+    fun `Provider missing chapters remains excluded even when lookup is advertised`() = runBlocking<Unit> {
+        val providerId = ProviderId("app.tsuzuki.lookup-only")
+        val title = CanonicalTitle(
+            id = "title-lookup-only",
+            displayTitle = "Dandadan",
+            identityState = CanonicalIdentityState.RESOLVED,
+            createdAt = 1L,
+            updatedAt = 1L,
+        )
+        val registry = DefaultProviderRegistry(
+            registrations = {
+                listOf(
+                    ProviderRegistration(
+                        descriptor = ProviderDescriptor(
+                            id = providerId,
+                            name = "Lookup only",
+                            version = ProviderVersion("0.1.0", 1),
+                            origin = ProviderOrigin.Repository("app.tsuzuki.providers"),
+                            runtime = ProviderRuntimeKind.SCRIPT,
+                            capabilities = setOf(ProviderCapabilities.ReadingLookupV1),
+                            permissions = ProviderPermissionSet(),
+                            settings = emptyList(),
+                            contentLanguages = setOf("en"),
+                        ),
+                        lifecycleStatus = ProviderLifecycleStatus.ENABLED,
+                        facets = listOf(ProviderFacetRef(providerId, "en")),
+                    ),
+                )
+            },
+        )
+        val gateway = object : ProviderReadingGateway {
+            override suspend fun lookup(
+                providerId: ProviderId,
+                request: ProviderReadingLookupRequest,
+            ): ProviderCallResult<ProviderPage<ProviderWorkCandidate>> =
+                error("lookup alone must never trigger ICE discovery")
+
+            override suspend fun chapters(
+                providerId: ProviderId,
+                request: ProviderReadingChaptersRequest,
+            ): ProviderCallResult<ProviderPage<ProviderChapterObservation>> =
+                error("missing chapters must not be invoked")
+
+            override suspend fun pages(
+                providerId: ProviderId,
+                request: ProviderReadingPagesRequest,
+            ): ProviderCallResult<ProviderReadingDelivery> =
+                error("ICE must never request Reader pages")
+        }
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry,
+            gateway = gateway,
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+
+        val result = collector.execute(title.id)
+        result.complete shouldBe true
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+        collector.configurationTokens() shouldBe emptyList()
+    }
+
     private fun titleRepository(title: CanonicalTitle) = object : CanonicalTitleRepository {
         override suspend fun getById(id: String): CanonicalTitle? = title.takeIf { it.id == id }
         override fun getByIdAsFlow(id: String): Flow<CanonicalTitle?> = flowOf(title.takeIf { it.id == id })
