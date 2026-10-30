@@ -12,4 +12,5 @@
     <string name="tsuzuki_edition_conflict">Já há outra edição vinculada. A troca exige migração segura separada.</string>
     <string name="tsuzuki_edition_stale">A ficha mudou. Pesquise novamente antes de confirmar.</string>
     <string name="tsuzuki_edition_unavailable">Provider indisponível ou permissões alteradas.</string>
+    <string name="tsuzuki_edition_open_source">Abrir ficha na fonte</string>
 </resources>
