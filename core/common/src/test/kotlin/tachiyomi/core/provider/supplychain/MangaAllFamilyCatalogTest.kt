@@ -55,7 +55,7 @@ class MangaAllFamilyCatalogTest {
     }
 
     @Test
-    fun `MangaAll groups only three exact source identities from one repository`() {
+    fun `MangaAll groups only active source identities from one repository`() {
         val entries = MangaAllFamilyCatalog.sourceProviderIds.map { entry(it) } +
             entry("app.tsuzuki.mangafire")
         val groups = MangaAllFamilyCatalog.discoverGroups(entries)
@@ -63,7 +63,7 @@ class MangaAllFamilyCatalogTest {
         val family = groups.single()
         family.familyId shouldBe "app.tsuzuki.mangaall"
         family.repositoryId shouldBe "repo.one"
-        family.entries.map { it.descriptor.providerId } shouldBe MangaAllFamilyCatalog.sourceProviderIds
+        family.entries.map { it.descriptor.providerId } shouldBe MangaAllFamilyCatalog.activeSourceProviderIds
         family.canInstall shouldBe true
         family.isComplete shouldBe true
         MangaAllFamilyCatalog.ordinaryEntries(entries).map { it.descriptor.providerId } shouldBe listOf(
@@ -79,7 +79,7 @@ class MangaAllFamilyCatalogTest {
         incomplete.canInstall shouldBe false
         val revoked = MangaAllFamilyCatalog.discoverGroups(
             ids.mapIndexed { index, id ->
-                val status = if (index == 1) {
+                val status = if (index == 2) {
                     ProviderRepositoryEntryStatus.REVOKED
                 } else {
                     ProviderRepositoryEntryStatus.AVAILABLE
@@ -89,7 +89,7 @@ class MangaAllFamilyCatalogTest {
         ).single()
         revoked.isComplete shouldBe true
         revoked.canInstall shouldBe false
-        revoked.entries.size shouldBe 3
+        revoked.entries.size shouldBe 2
     }
 
     @Test
@@ -98,8 +98,8 @@ class MangaAllFamilyCatalogTest {
         val groups = MangaAllFamilyCatalog.discoverGroups(
             listOf(
                 entry(ids[0], "repo.one"),
-                entry(ids[1], "repo.two"),
-                entry(ids[2], "repo.one"),
+                entry(ids[1], "repo.one"),
+                entry(ids[2], "repo.two"),
                 entry("app.tsuzuki.mangaall.evil", "repo.one"),
             ),
         )
@@ -129,7 +129,7 @@ class MangaAllFamilyCatalogTest {
         )
         val family = groups.single()
         family.canInstall shouldBe true
-        family.installableIds shouldBe listOf(ids[1])
+        family.installableIds shouldBe listOf(ids[2])
         val complete = MangaAllFamilyCatalog.discoverGroups(
             ids.map { entry(it, status = ProviderRepositoryEntryStatus.INSTALLED) },
         ).single()
