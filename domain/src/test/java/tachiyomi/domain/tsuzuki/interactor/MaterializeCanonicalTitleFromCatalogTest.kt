@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
+import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.metadata.ReportedChapterCount
 import tachiyomi.domain.tsuzuki.metadata.repository.ReportedChapterCountRepository
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
@@ -45,6 +46,28 @@ class MaterializeCanonicalTitleFromCatalogTest {
         identity.provider shouldBe "kitsu"
         identity.externalId shouldBe "999"
         identity.verified shouldBe true
+    }
+
+
+    @Test
+    fun `materializing a new manga chooses published romanized name without changing external identity`() = runTest {
+        val repository = FakeCanonicalTitleRepository()
+        val materializer = MaterializeCanonicalTitle(
+            repository = repository,
+            idFactory = { "uuid-romaji" },
+            clock = { 5000L },
+        )
+        val title = MaterializeCanonicalTitleFromCatalog(materializer).execute(
+            CatalogItem(
+                provider = "kitsu",
+                providerId = "123",
+                title = "Attack on Titan",
+                format = CatalogItemFormat.MANGA,
+                titles = mapOf("en" to "Attack on Titan", "en_jp" to "Shingeki no Kyojin"),
+            ),
+        )
+        title.displayTitle shouldBe "Shingeki no Kyojin"
+        repository.identities.single().externalId shouldBe "123"
     }
 
     @Test
