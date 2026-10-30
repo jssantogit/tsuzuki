@@ -603,6 +603,7 @@ class CollectProviderReadingEvidenceTest {
         bindings.getByTitle(canonicalTitle.id) shouldBe listOf(old)
     }
 
+    // Cross-module regression: the persisted slot is reserved by only one edition.
     @Test
     fun `manual edition selection loses a concurrent binding reservation without overwriting it`() = runBlocking<Unit> {
         val bindings = MemoryBindingRepository()
