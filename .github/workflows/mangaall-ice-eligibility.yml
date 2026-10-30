@@ -26,4 +26,4 @@ jobs:
         with:
           cache-read-only: true
       - name: Execute focused MangaAll ICE eligibility tests
-        run: ./gradlew :domain:testDebugUnitTest --tests '*CollectProviderReadingEvidenceEligibilityTest'
+        run: ./gradlew :domain:testDebugUnitTest --tests '*MangaAllChapterEvidenceEligibilityTest'
