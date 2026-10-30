@@ -153,11 +153,15 @@ fun harmonizeCatalogTitlesAcrossSections(sections: List<List<CatalogItem>>): Lis
     return sections.map { rows ->
         rows.map { item ->
             val shared = item.identityKeys().firstNotNullOfOrNull { sharedById[it] }
-            if (shared == null) item else item.copy(
-                titles = shared.titles + item.titles,
-                format = if (item.format == CatalogItemFormat.UNKNOWN) shared.format else item.format,
-                country = item.country ?: shared.country,
-            )
+            if (shared == null) {
+                item
+            } else {
+                item.copy(
+                    titles = shared.titles + item.titles,
+                    format = if (item.format == CatalogItemFormat.UNKNOWN) shared.format else item.format,
+                    country = item.country ?: shared.country,
+                )
+            }
         }
     }
 }
