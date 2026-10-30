@@ -146,6 +146,10 @@ class SelectProviderReadingEdition(
                 ProviderEditionConfirmation.STALE
             }
         }
+        // A grant, registration or package version revoked during the lookup cannot authorize a write.
+        if (providerRegistry.registration(candidate.ref.providerId) != registration) {
+            return ProviderEditionConfirmation.UNAVAILABLE
+        }
         val current = bindingRepository.get(
             canonicalTitleId,
             candidate.ref.providerId,
