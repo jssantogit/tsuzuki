@@ -179,6 +179,15 @@ internal class ProviderHttpPageLoader(
                                         "Provider Reader HTTP response was not successful",
                                     )
                                 }
+                                // Challenge pages and JSON errors often use HTTP 200.
+                                // Never cache these as decoded images or mark them Ready.
+                                val mediaType = value.header("Content-Type")
+                                    ?.substringBefore(';')
+                                    ?.trim()
+                                    ?.lowercase()
+                                if (mediaType in NON_IMAGE_MEDIA_TYPES) {
+                                    throw ProviderHttpPageException("Provider Reader received non-image HTTP content")
+                                }
                                 val declaredLength = value.body.contentLength()
                                 if (declaredLength > maxImageBytes) {
                                     throw ProviderHttpPageException(
@@ -186,7 +195,18 @@ internal class ProviderHttpPageLoader(
                                     )
                                 }
 
-                                value.body.byteStream().use { input ->
+                                value.body.byteStream().buffered().use { input ->
+                                    // Some upstreams return HTML/JSON with no Content-Type.
+                                    // Inspect only a small prefix, then rewind to keep
+                                    // legitimate image bytes unchanged (including unknown
+                                    // image media types served as octet-stream).
+                                    input.mark(RESPONSE_PREFIX_BYTES)
+                                    val prefix = ByteArray(RESPONSE_PREFIX_BYTES)
+                                    val sampled = input.read(prefix)
+                                    input.reset()
+                                    if (looksLikeNonImage(prefix, sampled)) {
+                                        throw ProviderHttpPageException("Provider Reader received non-image HTTP content")
+                                    }
                                     FileOutputStream(target).use { output ->
                                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                                         var total = 0L
@@ -234,11 +254,31 @@ internal class ProviderHttpPageLoader(
         }
     }
 
+    private fun looksLikeNonImage(prefix: ByteArray, count: Int): Boolean {
+        if (count <= 0) return true
+        val text = String(prefix, 0, count, Charsets.UTF_8)
+            .trimStart('\uFEFF', ' ', '\n', '\r', '\t')
+            .lowercase()
+        return text.startsWith("<!doctype html") ||
+            text.startsWith("<html") ||
+            text.startsWith("<head") ||
+            text.startsWith("<body") ||
+            text.startsWith("{") ||
+            text.startsWith("[")
+    }
+
     private fun pageFile(index: Int): File =
         File(directory, "page-$index.bin")
 
     private companion object {
         const val DEFAULT_MAX_IMAGE_BYTES = 16L * 1024L * 1024L
+        const val RESPONSE_PREFIX_BYTES = 512
+        val NON_IMAGE_MEDIA_TYPES = setOf(
+            "text/html",
+            "application/xhtml+xml",
+            "application/json",
+            "text/plain",
+        )
     }
 }
 
