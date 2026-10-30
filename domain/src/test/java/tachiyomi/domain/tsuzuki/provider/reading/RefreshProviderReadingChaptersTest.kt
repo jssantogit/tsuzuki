@@ -196,6 +196,41 @@ class RefreshProviderReadingChaptersTest {
         invoked shouldBe false
     }
 
+    @Test
+    fun `successful pages report safe progress before a later page fails without publishing inventory`() = runBlocking {
+        val pageProgress = mutableListOf<Pair<Int, Int>>()
+        var published = false
+        val refresher = RefreshProviderReadingChapters(
+            gateway = gateway { request ->
+                if (request.cursor == null) {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderChapterObservation("c1", "Chapter 1", rawNumber = 1.0),
+                                ProviderChapterObservation("c2", "Chapter 2", rawNumber = 2.0),
+                            ),
+                            nextCursor = ProviderCursor("second"),
+                        ),
+                    )
+                } else {
+                    ProviderCallResult.Failure(
+                        ProviderError(ProviderErrorCode.NETWORK_ERROR, retryable = true),
+                    )
+                }
+            },
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            publishSnapshot = { _, _, _, _ -> published = true },
+            clock = { 42L },
+            onPageObserved = { pages, observations -> pageProgress += pages to observations },
+        )
+
+        refresher.execute(binding) shouldBe ProviderCallResult.Failure(
+            ProviderError(ProviderErrorCode.NETWORK_ERROR, retryable = true),
+        )
+        pageProgress shouldBe listOf(1 to 2)
+        published shouldBe false
+    }
+
     private fun gateway(
         chapters: suspend (
             ProviderReadingChaptersRequest,
