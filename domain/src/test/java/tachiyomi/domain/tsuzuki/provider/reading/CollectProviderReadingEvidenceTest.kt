@@ -362,7 +362,10 @@ class CollectProviderReadingEvidenceTest {
         lookup.attributes["provider_id"] shouldBe DiagnosticAttributeValue.Text("app.tsuzuki.mangafire")
         lookup.attributes["candidate_count"] shouldBe DiagnosticAttributeValue.Number(1)
         lookup.attributes["accepted_count"] shouldBe DiagnosticAttributeValue.Number(1)
-        val chapters = recorder.events.single { it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE && it.stage == DiagnosticStage.READ }
+        val chapters = recorder.events.single {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.READ
+        }
         chapters.attributes["observation_count"] shouldBe DiagnosticAttributeValue.Number(1)
         chapters.attributes["chapter_count"] shouldBe DiagnosticAttributeValue.Number(1)
         val dump = recorder.events.joinToString()
@@ -407,7 +410,10 @@ class CollectProviderReadingEvidenceTest {
         val lookup = recorder.events.single { it.stage == DiagnosticStage.LOOKUP }
         lookup.attributes["candidate_count"] shouldBe DiagnosticAttributeValue.Number(1)
         lookup.attributes["binding_count"] shouldBe DiagnosticAttributeValue.Number(1)
-        val chapters = recorder.events.single { it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE && it.stage == DiagnosticStage.READ }
+        val chapters = recorder.events.single {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.READ
+        }
         chapters.outcome shouldBe DiagnosticOutcome.EMPTY
         chapters.attributes["observation_count"] shouldBe DiagnosticAttributeValue.Number(0)
         chapters.attributes["chapter_count"] shouldBe DiagnosticAttributeValue.Number(0)
