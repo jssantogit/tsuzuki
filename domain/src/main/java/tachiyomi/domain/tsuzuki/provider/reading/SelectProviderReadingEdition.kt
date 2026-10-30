@@ -164,18 +164,31 @@ class SelectProviderReadingEdition(
         }
         val now = System.currentTimeMillis().coerceAtLeast(0L)
         return try {
-            bindingRepository.upsert(
-                ProviderReadingBinding(
-                    id = "confirmed:" + UUID.randomUUID(),
-                    canonicalTitleId = canonicalTitleId,
-                    ref = candidate.ref,
-                    verification = ProviderBindingVerification.USER_CONFIRMED,
-                    availability = ProviderBindingAvailability.AVAILABLE,
-                    createdAt = now,
-                    updatedAt = now,
-                ),
+            val newBinding = ProviderReadingBinding(
+                id = "confirmed:" + UUID.randomUUID(),
+                canonicalTitleId = canonicalTitleId,
+                ref = candidate.ref,
+                verification = ProviderBindingVerification.USER_CONFIRMED,
+                availability = ProviderBindingAvailability.AVAILABLE,
+                createdAt = now,
+                updatedAt = now,
             )
-            ProviderEditionConfirmation.BOUND
+            if (bindingRepository.insertIfAbsent(newBinding)) {
+                ProviderEditionConfirmation.BOUND
+            } else {
+                val concurrent = bindingRepository.get(
+                    canonicalTitleId,
+                    candidate.ref.providerId,
+                    candidate.ref.facetId,
+                )
+                if (concurrent?.ref == candidate.ref &&
+                    concurrent.availability == ProviderBindingAvailability.AVAILABLE
+                ) {
+                    ProviderEditionConfirmation.ALREADY_BOUND
+                } else {
+                    ProviderEditionConfirmation.BLOCKED
+                }
+            }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
