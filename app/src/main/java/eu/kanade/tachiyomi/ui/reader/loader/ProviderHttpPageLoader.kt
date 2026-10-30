@@ -205,7 +205,9 @@ internal class ProviderHttpPageLoader(
                                     val sampled = input.read(prefix)
                                     input.reset()
                                     if (looksLikeNonImage(prefix, sampled)) {
-                                        throw ProviderHttpPageException("Provider Reader received non-image HTTP content")
+                                        throw ProviderHttpPageException(
+                                            "Provider Reader received non-image HTTP content",
+                                        )
                                     }
                                     FileOutputStream(target).use { output ->
                                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
