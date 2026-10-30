@@ -1,9 +1,10 @@
 package tachiyomi.core.provider.supplychain
 
 /**
- * User-facing MangaAll is one product. These are three separate Host SCRIPT
- * identities because grants, reading bindings and evidence producer IDs must
- * never be shared between the source adapters.
+ * User-facing MangaAll is one product. Its three reviewed SCRIPT source identities
+ * remain distinct for network grants, bindings and evidence producer IDs.
+ * MangaBall is paused pending independent API authorization, so the current
+ * installable family consists only of MangaDex and MangaDot.
  *
  * Do not infer membership from a prefix: other signed packages must not be
  * able to impersonate a MangaAll source by choosing a similar Provider ID.
@@ -17,7 +18,15 @@ object MangaAllFamilyCatalog {
         "$FAMILY_ID.mangadot",
     )
 
+    // Do not erase the reserved MangaBall identity or silently install it.
+    // The family is currently complete with only the two authorized-for-work sources.
+    val activeSourceProviderIds: List<String> = listOf(
+        "$FAMILY_ID.mangadex",
+        "$FAMILY_ID.mangadot",
+    )
+
     private val ids = sourceProviderIds.toSet()
+    private val activeIds = activeSourceProviderIds.toSet()
     private val installable = setOf(
         ProviderRepositoryEntryStatus.AVAILABLE,
         ProviderRepositoryEntryStatus.UPDATE_AVAILABLE,
@@ -30,8 +39,8 @@ object MangaAllFamilyCatalog {
     fun contains(providerId: String): Boolean = providerId in ids
 
     fun requireExactInstallSet(providerIds: List<String>) {
-        require(providerIds.size == ids.size && providerIds.toSet() == ids) {
-            "MangaAll requires exactly the three reviewed source identities"
+        require(providerIds.size == activeIds.size && providerIds.toSet() == activeIds) {
+            "MangaAll install requires exactly the two currently active source identities"
         }
     }
 
@@ -46,11 +55,12 @@ object MangaAllFamilyCatalog {
             .map { (repositoryId, members) ->
                 // Duplicate entries for the same source are ambiguous, even if
                 // their signatures happen to match; never pick one implicitly.
-                val distinct = members.map { it.descriptor.providerId }.toSet()
-                val ordered = sourceProviderIds.mapNotNull { id ->
+                val ordered = activeSourceProviderIds.mapNotNull { id ->
                     members.singleOrNull { it.descriptor.providerId == id }
                 }
-                val complete = distinct == ids && ordered.size == ids.size && members.size == ids.size
+                // Paused source entries are recognized but excluded. Duplicate
+                // active identities still fail closed via singleOrNull.
+                val complete = ordered.size == activeIds.size
                 MangaAllFamilyGroup(
                     repositoryId = repositoryId,
                     entries = ordered,
