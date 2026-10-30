@@ -3,7 +3,7 @@
     <string name="tsuzuki_edition_choose">Choose reading edition</string>
     <string name="tsuzuki_edition_title">Choose edition</string>
     <string name="tsuzuki_edition_description">Select the work published by this source. This does not certify editorial completeness.</string>
-    <string name="tsuzuki_edition_search">Search another title</string>
+    <string name="tsuzuki_edition_search">Title or source link (if supported)</string>
     <string name="tsuzuki_edition_find">Search</string>
     <string name="tsuzuki_edition_none">No editions found for this search.</string>
     <string name="tsuzuki_edition_loading">Searching providers…</string>
