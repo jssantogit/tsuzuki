@@ -695,7 +695,7 @@ class ProviderRepositoryManagerTest {
     }
 
     @Test
-    fun `MangaAll stages trusted packages before activation and preserves repository`() = runBlocking {
+    fun `MangaAll stages trusted packages before activation and preserves repository`() = runBlocking<Unit> {
         val keyPair = ecKeyPair()
         val repositoryId = "repo.example"
         val enrollmentStore = FileProviderRepositoryEnrollmentStore(
@@ -818,7 +818,7 @@ class ProviderRepositoryManagerTest {
     }
 
     @Test
-    fun `MangaAll incomplete signed index fails before contacting a source server`() = runBlocking {
+    fun `MangaAll incomplete signed index fails before contacting a source server`() = runBlocking<Unit> {
         val keyPair = ecKeyPair()
         val enrollmentStore = FileProviderRepositoryEnrollmentStore(
             tempDir.resolve("mangaall-missing-enrollments").toFile(),
