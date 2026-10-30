@@ -13,6 +13,7 @@ class RefreshProviderReadingChapters internal constructor(
         evidence: List<ChapterEvidence>,
     ) -> Unit,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val onPageObserved: suspend (pageCount: Int, observationCount: Int) -> Unit = { _, _ -> },
 ) {
 
     constructor(
@@ -66,6 +67,13 @@ class RefreshProviderReadingChapters internal constructor(
             }
 
             val next = page.nextCursor
+            if (next != null && !seenCursors.add(next.value)) {
+                return failure(ProviderErrorCode.MALFORMED_RESULT)
+            }
+            // These are diagnostic counts only. Never publish a canonical snapshot until
+            // the final page is verified, so a stalled or failed later page cannot detach
+            // previously recorded chapters or pretend the inventory is complete.
+            onPageObserved(it + 1, observations.size)
             if (next == null) {
                 val evidence = evidenceAdapter.toEvidence(
                     canonicalTitleId = binding.canonicalTitleId,
@@ -80,9 +88,6 @@ class RefreshProviderReadingChapters internal constructor(
                     evidence,
                 )
                 return ProviderCallResult.Success(observations.size)
-            }
-            if (!seenCursors.add(next.value)) {
-                return failure(ProviderErrorCode.MALFORMED_RESULT)
             }
             cursor = next
         }
