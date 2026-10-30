@@ -354,7 +354,12 @@ class CollectProviderReadingEvidence private constructor(
             createdAt = now,
             updatedAt = now,
         )
-        bindingRepository.upsert(binding)
+        if (!bindingRepository.insertIfAbsent(binding)) {
+            // A user-confirmed edition or another discovery won the same slot.
+            // Never create a second Provider identity or fetch chapters using this stale result.
+            trace(canonicalTitleId, target, DiagnosticStage.BINDING, DiagnosticOutcome.REJECTED)
+            return ProviderCallResult.Success(null)
+        }
         return ProviderCallResult.Success(binding)
     }
 
