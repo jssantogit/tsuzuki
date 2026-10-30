@@ -135,6 +135,29 @@ fun mergeCatalogItemsByVerifiedIdentity(items: List<CatalogItem>): List<CatalogI
     }
 }
 
+/**
+ * Reuses only source-published identity mappings to harmonize a work's display aliases across
+ * independently fetched Discover shelves. The shelf rows, ordering, editions and source IDs stay intact.
+ */
+fun harmonizeCatalogTitlesAcrossSections(sections: List<List<CatalogItem>>): List<List<CatalogItem>> {
+    val merged = mergeCatalogItemsByVerifiedIdentity(sections.flatten())
+    val sharedById = buildMap {
+        merged.forEach { item ->
+            item.identityKeys().forEach { key -> put(key, item) }
+        }
+    }
+    return sections.map { rows ->
+        rows.map { item ->
+            val shared = item.identityKeys().firstNotNullOfOrNull { sharedById[it] }
+            if (shared == null) item else item.copy(
+                titles = shared.titles + item.titles,
+                format = if (item.format == CatalogItemFormat.UNKNOWN) shared.format else item.format,
+                country = item.country ?: shared.country,
+            )
+        }
+    }
+}
+
 private fun CatalogItem.identityKeys(): Set<Pair<String, String>> = buildSet {
     add(provider to providerId)
     externalIds.forEach { (providerId, externalId) ->
