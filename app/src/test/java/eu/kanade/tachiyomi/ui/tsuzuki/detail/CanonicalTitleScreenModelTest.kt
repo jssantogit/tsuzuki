@@ -13,6 +13,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -416,6 +417,36 @@ class CanonicalTitleScreenModelTest {
         val after = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
         after.description shouldBe null
         after.ratings shouldBe emptyList()
+    }
+
+    @Test
+    fun `metadata network stall cannot keep details progress active beyond refresh budget`() = runTest(dispatcher) {
+        val neverReturns = CompletableDeferred<Unit>()
+        val cachedMetadata = ResolvedMetadata(
+            synopsis = ProvenancedMetadata("Stored description", IntegrationId("kitsu")),
+        )
+        val metadata = mockk<ResolveCanonicalMetadata>()
+        coEvery { metadata.cached("title") } returns cachedMetadata
+        coEvery { metadata.execute("title", any()) } coAnswers {
+            neverReturns.await()
+            Result.success(cachedMetadata)
+        }
+        val model = readingModel(metadata = metadata)
+
+        val operation = model.start("title")
+        runCurrent()
+        val waiting = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        waiting.description shouldBe "Stored description"
+        waiting.isRefreshing shouldBe true
+
+        advanceTimeBy(30_000)
+        runCurrent()
+
+        val final = model.state.value.shouldBeInstanceOf<CanonicalTitleScreenState.Loaded>()
+        final.isRefreshing shouldBe false
+        final.description shouldBe "Stored description"
+        (final.refreshError != null) shouldBe true
+        operation.isCompleted shouldBe true
     }
 
     @Test
