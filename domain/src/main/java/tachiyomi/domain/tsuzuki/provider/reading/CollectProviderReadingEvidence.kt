@@ -237,6 +237,17 @@ class CollectProviderReadingEvidence private constructor(
                     )
                 },
                 clock = clock,
+                onPageObserved = { pages, observations ->
+                    trace(
+                        canonicalTitleId,
+                        target,
+                        DiagnosticStage.READ,
+                        DiagnosticOutcome.PARTIAL,
+                        observed = observations,
+                        pageCount = pages,
+                        name = DiagnosticEventName.PROVIDER_READING_PAGE,
+                    )
+                },
             )
             when (val result = refresher.execute(binding)) {
                 is ProviderCallResult.Failure -> {
@@ -423,8 +434,10 @@ class CollectProviderReadingEvidence private constructor(
         bindings: Int? = null,
         observed: Int? = null,
         accepted: Int? = null,
+        pageCount: Int? = null,
         completed: Boolean? = null,
         errorCode: ProviderErrorCode? = null,
+        name: DiagnosticEventName = DiagnosticEventName.PROVIDER_READING_EVIDENCE,
     ) {
         runCatching {
             val attributes = buildMap<String, DiagnosticAttributeValue> {
@@ -437,6 +450,7 @@ class CollectProviderReadingEvidence private constructor(
                 exactMatches?.let { put("accepted_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 bindings?.let { put("binding_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 observed?.let { put("observation_count", DiagnosticAttributeValue.Number(it.toLong())) }
+                pageCount?.let { put("page_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 accepted?.let { put("chapter_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 completed?.let { put("completed", DiagnosticAttributeValue.Flag(it)) }
                 errorCode?.let { put("provider_error_code", DiagnosticAttributeValue.Text(it.name)) }
@@ -450,7 +464,7 @@ class CollectProviderReadingEvidence private constructor(
                         DiagnosticSeverity.INFO
                     },
                     subsystem = DiagnosticSubsystem.CHAPTER,
-                    name = DiagnosticEventName.PROVIDER_READING_EVIDENCE,
+                    name = name,
                     sessionId = diagnostics.sessionId,
                     operationId = null,
                     stage = stage,
