@@ -27,8 +27,8 @@ import eu.kanade.presentation.tsuzuki.integration.ratingScaleLabel
 import eu.kanade.tachiyomi.R
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
-import tachiyomi.domain.tsuzuki.catalog.model.preferredDisplayTitle
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogScore
+import tachiyomi.domain.tsuzuki.catalog.model.preferredDisplayTitle
 import tachiyomi.domain.tsuzuki.integration.model.TsuzukiRating
 import java.util.Locale
 
