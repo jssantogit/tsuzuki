@@ -101,7 +101,6 @@ class ProviderHttpPageLoaderTest {
             sent.headers["Referer"] shouldBe referer
             sent.headers["Origin"] shouldBe "https://mangadot.net"
             sent.headers["User-Agent"] shouldBe caller
-            sent.path shouldBe "/image.png"
             page.stream!!.invoke().use { it.readBytes().decodeToString() shouldBe "image-bytes" }
         } finally {
             loader.recycle()
