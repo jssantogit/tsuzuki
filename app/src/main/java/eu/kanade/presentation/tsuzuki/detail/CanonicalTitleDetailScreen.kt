@@ -430,7 +430,8 @@ private fun LoadedDetails(
                             selectedEdition = null
                             onEditionSearch(editionQuery)
                         },
-                        enabled = !editionPicker.searching && !editionPicker.confirming && editionQuery.isNotBlank(),
+                        enabled = !editionPicker.searching &&
+                            !editionPicker.confirming && editionQuery.isNotBlank(),
                     )
                     if (editionPicker.searching || editionPicker.confirming) {
                         CircularProgressIndicator(color = colors.accent)
