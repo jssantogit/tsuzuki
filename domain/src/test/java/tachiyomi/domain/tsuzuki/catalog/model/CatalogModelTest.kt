@@ -93,4 +93,82 @@ class CatalogModelTest {
         bothFailed.isDegraded shouldBe true
         bothFailed.isCompleteFailure shouldBe true
     }
+
+    @Test
+    fun `japanese manga use attested romanized title instead of english translation`() {
+        val manga = CatalogItem(
+            provider = "kitsu",
+            providerId = "attack-on-titan",
+            title = "Attack on Titan",
+            format = CatalogItemFormat.MANGA,
+            titles = mapOf(
+                "en" to "Attack on Titan",
+                "en_jp" to "Shingeki no Kyojin",
+                "ja_jp" to "進撃の巨人",
+            ),
+        )
+
+        manga.preferredDisplayTitle() shouldBe "Shingeki no Kyojin"
+        // Presentation must never rewrite the original provider title/identity.
+        manga.title shouldBe "Attack on Titan"
+        manga.providerId shouldBe "attack-on-titan"
+    }
+
+    @Test
+    fun `korean manhwa and chinese manhua use supplied english titles`() {
+        listOf(CatalogItemFormat.MANHWA, CatalogItemFormat.MANHUA).forEach { format ->
+            val work = CatalogItem(
+                provider = "kitsu",
+                providerId = "work",
+                title = "Localized source title",
+                format = format,
+                titles = mapOf(
+                    "en" to "English Title",
+                    "en_jp" to "Another Romanized Title",
+                ),
+            )
+            work.preferredDisplayTitle() shouldBe "English Title"
+        }
+    }
+
+    @Test
+    fun `title preference does not fabricate transliterations or combine unverified works`() {
+        val japanese = CatalogItem(
+            provider = "kitsu",
+            providerId = "j1",
+            title = "English Only",
+            format = CatalogItemFormat.MANGA,
+            titles = mapOf("ja_jp" to "進撃の巨人", "en" to "English Only"),
+        )
+        val unrelated = CatalogItem(
+            provider = "mal",
+            providerId = "m9",
+            title = "English Only",
+            format = CatalogItemFormat.MANGA,
+        )
+        japanese.preferredDisplayTitle() shouldBe "English Only"
+        mergeCatalogItemsByVerifiedIdentity(listOf(japanese, unrelated)).size shouldBe 2
+    }
+
+    @Test
+    fun `verified cross provider aliases can supply a romanized display title`() {
+        val first = CatalogItem(
+            provider = "mal",
+            providerId = "10",
+            title = "Attack on Titan",
+            format = CatalogItemFormat.MANGA,
+        )
+        val second = CatalogItem(
+            provider = "kitsu",
+            providerId = "20",
+            title = "Shingeki no Kyojin",
+            format = CatalogItemFormat.MANGA,
+            titles = mapOf("en_jp" to "Shingeki no Kyojin"),
+            externalIds = mapOf("mal" to "10"),
+        )
+        val merged = mergeCatalogItemsByVerifiedIdentity(listOf(first, second))
+        merged.size shouldBe 1
+        merged.single().preferredDisplayTitle() shouldBe "Shingeki no Kyojin"
+    }
+
 }
