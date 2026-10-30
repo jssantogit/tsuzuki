@@ -7,6 +7,8 @@ on:
     paths:
       - 'core/common/src/main/kotlin/tachiyomi/core/provider/supplychain/MangaAllFamilyCatalog.kt'
       - 'core/common/src/test/kotlin/tachiyomi/core/provider/supplychain/MangaAllFamilyCatalogTest.kt'
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/supplychain/ProviderRepositoryManager.kt'
+      - 'core/common/src/test/kotlin/tachiyomi/core/provider/supplychain/ProviderRepositoryManagerTest.kt'
       - '.github/workflows/mangaall-active-sources.yml'
 
 permissions:
@@ -27,4 +29,4 @@ jobs:
         with:
           cache-read-only: true
       - name: Execute focused MangaAll family grouping tests
-        run: ./gradlew :core:common:testDebugUnitTest --tests '*MangaAllFamilyCatalogTest'
+        run: ./gradlew :core:common:testDebugUnitTest --tests '*MangaAllFamilyCatalogTest' --tests '*ProviderRepositoryManagerTest'
