@@ -118,6 +118,7 @@ class ProviderReadingBindingRepositoryImplTest {
             )
     }
 
+    // RED control: this test requires the not-yet-existing atomic repository contract.
     @Test
     fun `edition selection cannot insert a second work into the same title provider facet`() = runBlocking<Unit> {
         val original = binding()
