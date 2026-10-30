@@ -171,4 +171,37 @@ class CatalogModelTest {
         merged.single().preferredDisplayTitle() shouldBe "Shingeki no Kyojin"
     }
 
+
+    @Test
+    fun `discovery sections share verified romanized aliases without collapsing distinct rows`() {
+        val english = CatalogItem(
+            provider = "mal",
+            providerId = "77",
+            title = "Attack on Titan",
+            format = CatalogItemFormat.MANGA,
+        )
+        val romanized = CatalogItem(
+            provider = "kitsu",
+            providerId = "99",
+            title = "Shingeki no Kyojin",
+            format = CatalogItemFormat.MANGA,
+            titles = mapOf("en_jp" to "Shingeki no Kyojin"),
+            externalIds = mapOf("mal" to "77"),
+        )
+        val differentEdition = CatalogItem(
+            provider = "mal",
+            providerId = "78",
+            title = "Attack on Titan: Edition",
+            format = CatalogItemFormat.MANGA,
+        )
+        val result = harmonizeCatalogTitlesAcrossSections(
+            listOf(listOf(english, differentEdition), listOf(romanized)),
+        )
+        result.map(List<CatalogItem>::size) shouldBe listOf(2, 1)
+        result[0][0].preferredDisplayTitle() shouldBe "Shingeki no Kyojin"
+        result[1][0].preferredDisplayTitle() shouldBe "Shingeki no Kyojin"
+        result[0][1].preferredDisplayTitle() shouldBe "Attack on Titan: Edition"
+        result[0][0].providerId shouldBe "77"
+    }
+
 }
