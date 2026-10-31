@@ -261,9 +261,9 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
                         operationKeys = operations,
                         onInstall = { selections ->
                             val selected = selections.first()
-                            val isMangaAll = selections.size == MangaAllFamilyCatalog.sourceProviderIds.size &&
-                                selections.map { it.descriptor.providerId }.toSet() ==
-                                MangaAllFamilyCatalog.sourceProviderIds.toSet()
+                            val isMangaAll = MangaAllFamilyCatalog.isActiveInstallSet(
+                                selections.map { it.descriptor.providerId },
+                            )
                             val key = if (isMangaAll) {
                                 "install:${selected.repositoryId}:mangaall"
                             } else {
@@ -473,7 +473,7 @@ private fun InstalledProviderCards(
                     if (family.isNotEmpty()) {
                         val repositoryId = (family.first().descriptor.origin as ProviderOrigin.Repository).repositoryId
                         Text(
-                            text = "MangaAll · ${family.size}/3 sources · $repositoryId",
+                            text = "MangaAll · ${family.size}/${MangaAllFamilyCatalog.activeSourceProviderIds.size} sources · $repositoryId",
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
                             color = colors.foreground,
@@ -635,7 +635,7 @@ private fun DiscoverProviderCards(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = "MangaDex · MangaBall · MangaDot",
+                            text = "MangaDex · MangaDot",
                             color = colors.secondary,
                             style = MaterialTheme.typography.bodySmall,
                         )
@@ -646,7 +646,7 @@ private fun DiscoverProviderCards(
                         )
                         if (!family.isComplete) {
                             Text(
-                                text = "The signed repository does not contain all three MangaAll sources.",
+                                text = "The signed repository does not contain both active MangaAll sources.",
                                 color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodySmall,
                             )
