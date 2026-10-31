@@ -160,6 +160,51 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `detailed capture records bounded MangaFire page sample and chapter number range`(): Unit = runBlocking {
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderWorkCandidate("main", "Dandadan", language = "en")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderChapterObservation("1595", "Chapter 1.5", rawNumber = 1.5),
+                                ProviderChapterObservation("1598", "Chapter 2", rawNumber = 2.0),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+        val result = collector.execute(canonicalTitle.id)
+
+        result.evidence.shouldHaveSize(2)
+        val page = recorder.events.single { it.name == DiagnosticEventName.PROVIDER_READING_PAGE_DETAIL }
+        page.attributes["page_index"] shouldBe DiagnosticAttributeValue.Number(1)
+        page.attributes["item_count"] shouldBe DiagnosticAttributeValue.Number(2)
+        page.attributes["chapter_number_min_milli"] shouldBe DiagnosticAttributeValue.Number(1500)
+        page.attributes["chapter_number_max_milli"] shouldBe DiagnosticAttributeValue.Number(2000)
+        page.attributes["provider_chapter_first_id"] shouldBe DiagnosticAttributeValue.Text("1595")
+        page.attributes["provider_chapter_last_id"] shouldBe DiagnosticAttributeValue.Text("1598")
+        (StructuredDiagnosticSanitizer.sanitize(page) != null) shouldBe true
+    }
+
+    @Test
     fun `unique exact lookup creates binding and returns provider chapter evidence`(): Unit = runBlocking {
         val bindings = MemoryBindingRepository()
         var lookupCalls = 0
