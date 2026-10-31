@@ -216,6 +216,92 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `automatic lookup tries active integration English title when canonical romaji has no exact match`(): Unit =
+        runBlocking {
+            val nanatsu = canonicalTitle.copy(displayTitle = "Nanatsu no Taizai")
+            val names = object : TitleNameObservationRepository {
+                override suspend fun getByTitle(canonicalTitleId: String): List<TitleNameObservation> = listOf(
+                    TitleNameObservation(
+                        canonicalTitleId = nanatsu.id,
+                        provider = "mal",
+                        sourceKey = "english",
+                        value = "The Seven Deadly Sins",
+                        updatedAt = 42L,
+                    ),
+                )
+                override suspend fun upsert(observation: TitleNameObservation) = error("not used")
+            }
+            val integrations = mockk<IntegrationRegistry>(relaxed = true)
+            every {
+                integrations.isGlobalCapabilityActive(IntegrationId("mal"), IntegrationCapability.METADATA_BASIC)
+            } returns true
+            val queries = mutableListOf<String>()
+            val bindings = MemoryBindingRepository()
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(nanatsu),
+                providerRegistry = registry(),
+                gateway = gateway(
+                    lookupHandler = { request ->
+                        val query = request.titles.single()
+                        queries += query
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = if (query == "The Seven Deadly Sins") {
+                                    listOf(ProviderWorkCandidate("seven-deadly-sins", query, language = "en"))
+                                } else {
+                                    emptyList()
+                                },
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                    chaptersHandler = {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(ProviderChapterObservation("source-chapter-one", "Ch. 1")),
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                ),
+                bindingRepository = bindings,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 42L },
+                titleNameObservationRepository = names,
+                integrationRegistry = integrations,
+            )
+            val result = collector.execute(nanatsu.id)
+
+            queries shouldBe listOf("Nanatsu no Taizai", "The Seven Deadly Sins")
+            result.evidence.map { it.externalChapterKey } shouldBe listOf("source-chapter-one")
+            bindings.getByTitle(nanatsu.id).single().ref.externalWorkId shouldBe "seven-deadly-sins"
+            bindings.getByTitle(nanatsu.id).single().verification shouldBe ProviderBindingVerification.EXACT
+
+            every {
+                integrations.isGlobalCapabilityActive(IntegrationId("mal"), IntegrationCapability.METADATA_BASIC)
+            } returns false
+            val revokedQueries = mutableListOf<String>()
+            val revokedCollector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(nanatsu),
+                providerRegistry = registry(),
+                gateway = gateway(
+                    lookupHandler = { request ->
+                        revokedQueries += request.titles.single()
+                        ProviderCallResult.Success(ProviderPage(emptyList(), nextCursor = null))
+                    },
+                    chaptersHandler = { error("No binding must be created without consented aliases") },
+                ),
+                bindingRepository = MemoryBindingRepository(),
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 43L },
+                titleNameObservationRepository = names,
+                integrationRegistry = integrations,
+            )
+            revokedCollector.execute(nanatsu.id).evidence shouldBe emptyList()
+            revokedQueries shouldBe listOf("Nanatsu no Taizai")
+        }
+
+    @Test
     fun `existing available binding is reused without lookup`(): Unit = runBlocking {
         val bindings = MemoryBindingRepository()
         bindings.upsert(

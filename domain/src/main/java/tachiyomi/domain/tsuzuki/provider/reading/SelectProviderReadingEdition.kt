@@ -3,9 +3,7 @@ package tachiyomi.domain.tsuzuki.provider.reading
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
-import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
-import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
@@ -69,41 +67,16 @@ class SelectProviderReadingEdition(
             ?: return ProviderEditionSearchResult()
         // Observed titles are discovery hints, never binding or editorial proof.
         // Explicit URL/custom searches must stay scoped to the entered query.
-        val queries = buildList {
-            add(query.trim())
-            if (query.trim().equals(canonical.displayTitle.trim(), ignoreCase = true)) {
-                val names = try {
-                    // A title observed by a revoked integration may not trigger
-                    // new outbound Provider searches without active consent.
-                    if (integrationRegistry != null && titleNameObservationRepository != null) {
-                        integrationRegistry.awaitReady()
-                        titleNameObservationRepository.getByTitle(canonicalTitleId)
-                    } else {
-                        emptyList()
-                    }
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (_: Exception) {
-                    emptyList()
-                }
-                names.asSequence()
-                    .filter { observation ->
-                        integrationRegistry?.isGlobalCapabilityActive(
-                            IntegrationId(observation.provider),
-                            IntegrationCapability.METADATA_BASIC,
-                        ) == true
-                    }
-                    .sortedWith(
-                        compareBy(
-                            { if (it.sourceKey.lowercase() in setOf("en", "english")) 0 else 1 },
-                            { if (it.sourceKey.lowercase() in setOf("romaji", "romanized")) 0 else 1 },
-                        ),
-                    )
-                    .map { it.value.trim() }
-                    .filter { it.isNotBlank() && it.length <= MAX_QUERY_CHARS }
-                    .forEach { add(it) }
-            }
-        }.distinctBy { it.lowercase().replace(Regex("\\s+"), " ") }.take(MAX_QUERY_VARIANTS)
+        val queries = if (query.trim().equals(canonical.displayTitle.trim(), ignoreCase = true)) {
+            providerTitleLookupQueries(
+                canonicalTitleId,
+                query,
+                titleNameObservationRepository,
+                integrationRegistry,
+            )
+        } else {
+            listOf(query.trim())
+        }
         providerRegistry.awaitReady()
         val candidates = mutableListOf<ProviderEditionCandidate>()
         var failed = false
@@ -277,7 +250,6 @@ class SelectProviderReadingEdition(
         const val MAX_QUERY_CHARS = 1024
         const val MAX_CANDIDATES_PER_SOURCE = 20
         const val MAX_CANDIDATES_PER_VARIANT = 8
-        const val MAX_QUERY_VARIANTS = 3
         const val LOOKUP_BUDGET_MILLIS = 15_000L
     }
 }

@@ -20,6 +20,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
 import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
+import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
@@ -27,6 +28,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
+import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 import java.security.MessageDigest
 
 /** One complete chapter inventory emitted by one exact Provider binding. */
@@ -83,6 +85,8 @@ class CollectProviderReadingEvidence private constructor(
     private val evidenceAdapter: ProviderChapterEvidenceAdapter,
     private val clock: () -> Long,
     private val diagnostics: StructuredDiagnosticRecorder,
+    private val titleNameObservationRepository: TitleNameObservationRepository?,
+    private val integrationRegistry: IntegrationRegistry?,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit,
 ) {
 
@@ -93,6 +97,8 @@ class CollectProviderReadingEvidence private constructor(
         gateway: ProviderReadingGateway,
         bindingRepository: ProviderReadingBindingRepository,
         diagnostics: StructuredDiagnosticRecorder,
+        titleNameObservationRepository: TitleNameObservationRepository,
+        integrationRegistry: IntegrationRegistry,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         providerRegistry = providerRegistry,
@@ -101,6 +107,8 @@ class CollectProviderReadingEvidence private constructor(
         evidenceAdapter = ProviderChapterEvidenceAdapter(),
         clock = System::currentTimeMillis,
         diagnostics = diagnostics,
+        titleNameObservationRepository = titleNameObservationRepository,
+        integrationRegistry = integrationRegistry,
         constructorMarker = Unit,
     )
 
@@ -112,6 +120,8 @@ class CollectProviderReadingEvidence private constructor(
         evidenceAdapter: ProviderChapterEvidenceAdapter,
         clock: () -> Long,
         diagnostics: StructuredDiagnosticRecorder = NoOpStructuredDiagnosticRecorder,
+        titleNameObservationRepository: TitleNameObservationRepository? = null,
+        integrationRegistry: IntegrationRegistry? = null,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         providerRegistry = providerRegistry,
@@ -120,6 +130,8 @@ class CollectProviderReadingEvidence private constructor(
         evidenceAdapter = evidenceAdapter,
         clock = clock,
         diagnostics = diagnostics,
+        titleNameObservationRepository = titleNameObservationRepository,
+        integrationRegistry = integrationRegistry,
         constructorMarker = Unit,
     )
 
@@ -129,6 +141,12 @@ class CollectProviderReadingEvidence private constructor(
         val canonicalTitle = canonicalTitleRepository.getById(canonicalTitleId)
             ?: return ProviderReadingEvidenceCollection(complete = false)
         val targets = readingTargets()
+        val queryTitles = providerTitleLookupQueries(
+            canonicalTitleId,
+            canonicalTitle.displayTitle,
+            titleNameObservationRepository,
+            integrationRegistry,
+        )
         trace(canonicalTitleId, null, DiagnosticStage.SUMMARY, DiagnosticOutcome.STARTED, targets = targets.size)
 
         val results = coroutineScope {
@@ -142,7 +160,7 @@ class CollectProviderReadingEvidence private constructor(
                         val finished = withTimeoutOrNull(MAX_PROVIDER_COLLECTION_MILLIS) {
                             collectTarget(
                                 canonicalTitleId = canonicalTitleId,
-                                title = canonicalTitle.displayTitle,
+                                titles = queryTitles,
                                 target = target,
                                 onPageCollected = { binding, page, observedAt ->
                                     partial += evidenceAdapter.toEvidence(
@@ -220,7 +238,7 @@ class CollectProviderReadingEvidence private constructor(
 
     private suspend fun collectTarget(
         canonicalTitleId: String,
-        title: String,
+        titles: List<String>,
         target: ReadingTarget,
         onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> Unit,
     ): ProviderReadingEvidenceCollection {
@@ -236,7 +254,7 @@ class CollectProviderReadingEvidence private constructor(
             val binding = existing ?: when (
                 val discovery = discoverBinding(
                     canonicalTitleId = canonicalTitleId,
-                    title = title,
+                    titles = titles,
                     target = target,
                 )
             ) {
@@ -326,79 +344,86 @@ class CollectProviderReadingEvidence private constructor(
 
     private suspend fun discoverBinding(
         canonicalTitleId: String,
-        title: String,
+        titles: List<String>,
         target: ReadingTarget,
     ): ProviderCallResult<ProviderReadingBinding?> {
-        val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
-            is ProviderCallResult.Failure -> {
-                trace(
-                    canonicalTitleId,
-                    target,
-                    DiagnosticStage.LOOKUP,
-                    DiagnosticOutcome.FAILED,
-                    errorCode = result.error.code,
-                )
-                return result
+        for (title in titles) {
+            val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
+                is ProviderCallResult.Failure -> {
+                    trace(
+                        canonicalTitleId,
+                        target,
+                        DiagnosticStage.LOOKUP,
+                        DiagnosticOutcome.FAILED,
+                        errorCode = result.error.code,
+                    )
+                    return result
+                }
+                is ProviderCallResult.Success -> result.value
             }
-            is ProviderCallResult.Success -> result.value
-        }
-        val normalizedTitle = normalize(title)
-        val matches = candidates
-            .asSequence()
-            .filter { candidate ->
-                target.facetId == null ||
-                    candidate.language == null ||
-                    candidate.language.equals(target.facetId, ignoreCase = true)
-            }
-            .filter { candidate ->
-                sequenceOf(candidate.title)
-                    .plus(candidate.aliases.asSequence())
-                    .any { normalize(it) == normalizedTitle }
-            }
-            .distinctBy(ProviderWorkCandidate::externalWorkId)
-            .toList()
-        trace(
-            canonicalTitleId,
-            target,
-            DiagnosticStage.LOOKUP,
-            when (matches.size) {
-                0 -> DiagnosticOutcome.EMPTY
-                1 -> DiagnosticOutcome.ACCEPTED
-                else -> DiagnosticOutcome.REJECTED
-            },
-            candidates = candidates.size,
-            exactMatches = matches.size,
-            bindings = if (matches.size == 1) 1 else 0,
-        )
-        if (matches.size != 1) return ProviderCallResult.Success(null)
+            val normalizedTitle = normalize(title)
+            val matches = candidates
+                .asSequence()
+                .filter { candidate ->
+                    target.facetId == null ||
+                        candidate.language == null ||
+                        candidate.language.equals(target.facetId, ignoreCase = true)
+                }
+                .filter { candidate ->
+                    sequenceOf(candidate.title)
+                        .plus(candidate.aliases.asSequence())
+                        .any { normalize(it) == normalizedTitle }
+                }
+                .distinctBy(ProviderWorkCandidate::externalWorkId)
+                .toList()
+            trace(
+                canonicalTitleId,
+                target,
+                DiagnosticStage.LOOKUP,
+                when (matches.size) {
+                    0 -> DiagnosticOutcome.EMPTY
+                    1 -> DiagnosticOutcome.ACCEPTED
+                    else -> DiagnosticOutcome.REJECTED
+                },
+                candidates = candidates.size,
+                exactMatches = matches.size,
+                bindings = if (matches.size == 1) 1 else 0,
+            )
+            // Only the absence of a verified match authorizes trying a second
+            // source-attested title. An ambiguous match must never be bypassed by
+            // treating a translation as proof of the correct reading edition.
+            if (matches.size > 1) return ProviderCallResult.Success(null)
+            if (matches.isEmpty()) continue
 
-        val now = clock()
-        val candidate = matches.single()
-        val binding = ProviderReadingBinding(
-            id = bindingId(
+            val now = clock()
+            val candidate = matches.single()
+            val binding = ProviderReadingBinding(
+                id = bindingId(
+                    canonicalTitleId = canonicalTitleId,
+                    providerId = target.registration.descriptor.id,
+                    facetId = target.facetId,
+                    externalWorkId = candidate.externalWorkId,
+                ),
                 canonicalTitleId = canonicalTitleId,
-                providerId = target.registration.descriptor.id,
-                facetId = target.facetId,
-                externalWorkId = candidate.externalWorkId,
-            ),
-            canonicalTitleId = canonicalTitleId,
-            ref = ProviderBindingRef(
-                providerId = target.registration.descriptor.id,
-                facetId = target.facetId,
-                externalWorkId = candidate.externalWorkId,
-            ),
-            verification = ProviderBindingVerification.EXACT,
-            availability = ProviderBindingAvailability.AVAILABLE,
-            createdAt = now,
-            updatedAt = now,
-        )
-        if (!bindingRepository.insertIfAbsent(binding)) {
-            // A user-confirmed edition or another discovery won the same slot.
-            // Never create a second Provider identity or fetch chapters using this stale result.
-            trace(canonicalTitleId, target, DiagnosticStage.BINDING, DiagnosticOutcome.REJECTED)
-            return ProviderCallResult.Success(null)
+                ref = ProviderBindingRef(
+                    providerId = target.registration.descriptor.id,
+                    facetId = target.facetId,
+                    externalWorkId = candidate.externalWorkId,
+                ),
+                verification = ProviderBindingVerification.EXACT,
+                availability = ProviderBindingAvailability.AVAILABLE,
+                createdAt = now,
+                updatedAt = now,
+            )
+            if (!bindingRepository.insertIfAbsent(binding)) {
+                // A user-confirmed edition or another discovery won the same slot.
+                // Never create a second Provider identity or fetch chapters using this stale result.
+                trace(canonicalTitleId, target, DiagnosticStage.BINDING, DiagnosticOutcome.REJECTED)
+                return ProviderCallResult.Success(null)
+            }
+            return ProviderCallResult.Success(binding)
         }
-        return ProviderCallResult.Success(binding)
+        return ProviderCallResult.Success(null)
     }
 
     private suspend fun collectLookup(
