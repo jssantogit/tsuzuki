@@ -49,7 +49,7 @@ class StructuredDiagnosticEventTest {
             ) shouldBe emptyMap()
         }
         sanitizeCandidate(
-            mapOf("provider_work_title" to DiagnosticAttributeValue.Text("Bad\\nAuthorization: Bearer secret")),
+            mapOf("provider_work_title" to DiagnosticAttributeValue.Text("Bad\nAuthorization: Bearer secret")),
         ) shouldBe emptyMap()
     }
 
