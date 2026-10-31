@@ -15,6 +15,7 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
@@ -373,10 +374,77 @@ class CollectProviderReadingEvidenceTest {
 
         val result = bridge.execute(canonicalTitle.id)
 
-        result.complete shouldBe true
+        result.complete shouldBe false
         result.bindingCount shouldBe 0
         result.evidence shouldBe emptyList()
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+    }
+
+    @Test
+    fun `no source title match remains a fully checked empty lookup`(): Unit = runBlocking {
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderWorkCandidate("unrelated", "Naruto", language = "en")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("No binding must fetch no chapters") },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+        result.complete shouldBe true
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+    }
+
+    @Test
+    fun `ambiguous MangaFire lookup diagnostics include query text and final unresolved decision`(): Unit = runBlocking {
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate("work-1", "Dandadan", language = "en"),
+                                ProviderWorkCandidate("work-2", "Dandadan", language = "en"),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Ambiguous lookup must not fetch chapters") },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+        val result = collector.execute(canonicalTitle.id)
+
+        result.complete shouldBe false
+        val candidates = recorder.events.filter { it.name == DiagnosticEventName.PROVIDER_READING_CANDIDATE }
+        candidates.shouldHaveSize(2)
+        candidates[0].attributes["provider_lookup_title"] shouldBe DiagnosticAttributeValue.Text("Dandadan")
+        val rejected = recorder.events.last {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.LOOKUP && it.outcome == DiagnosticOutcome.REJECTED
+        }
+        rejected.attributes["lookup_decision"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderLookupDecision.MULTIPLE_PRIMARY_IDENTITIES,
+        )
     }
 
     @Test
