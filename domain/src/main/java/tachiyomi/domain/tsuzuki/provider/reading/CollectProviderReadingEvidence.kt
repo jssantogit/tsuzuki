@@ -61,6 +61,8 @@ data class ProviderReadingEvidenceCollection(
     val snapshots: List<ProviderReadingEvidenceSnapshot> = emptyList(),
     val bindingCount: Int = 0,
     val complete: Boolean = true,
+    /** Source-attested pages from an incomplete inventory; additive only, never a snapshot. */
+    val partialEvidence: List<ChapterEvidence> = emptyList(),
 ) {
     val evidence: List<ChapterEvidence>
         get() = snapshots.flatMap(ProviderReadingEvidenceSnapshot::evidence)
@@ -134,16 +136,25 @@ class CollectProviderReadingEvidence private constructor(
             targets.map { target ->
                 async {
                     gate.withPermit {
-                        // A hanging or paginated remote Provider must not keep the entire
-                        // canonical refresh (and Details spinner) waiting indefinitely.
-                        // Incomplete inventories never detach previously observed support.
-                        withTimeoutOrNull(MAX_PROVIDER_COLLECTION_MILLIS) {
+                        // Keep accepted pages across the bounded coroutine cancellation. They
+                        // remain additive evidence only, not an authoritative full inventory.
+                        val partial = mutableListOf<ChapterEvidence>()
+                        val finished = withTimeoutOrNull(MAX_PROVIDER_COLLECTION_MILLIS) {
                             collectTarget(
                                 canonicalTitleId = canonicalTitleId,
                                 title = canonicalTitle.displayTitle,
                                 target = target,
+                                onPageCollected = { binding, page, observedAt ->
+                                    partial += evidenceAdapter.toEvidence(
+                                        canonicalTitleId = canonicalTitleId,
+                                        binding = binding,
+                                        observations = page,
+                                        observedAt = observedAt,
+                                    )
+                                },
                             )
-                        } ?: ProviderReadingEvidenceCollection(complete = false).also {
+                        }
+                        if (finished == null) {
                             trace(
                                 canonicalTitleId,
                                 target,
@@ -151,6 +162,17 @@ class CollectProviderReadingEvidence private constructor(
                                 DiagnosticOutcome.TIMEOUT,
                             )
                         }
+                        // Preserve valid pages only for a genuine timeout. A malformed result,
+                        // identity error or resource violation must not salvage untrusted pages.
+                        val stillEnabled = providerRegistry.registration(target.registration.descriptor.id) ==
+                            target.registration
+                        (finished ?: ProviderReadingEvidenceCollection(complete = false)).copy(
+                            partialEvidence = if (finished == null && stillEnabled) {
+                                partial.toList()
+                            } else {
+                                emptyList()
+                            },
+                        )
                     }
                 }
             }.awaitAll()
@@ -159,6 +181,7 @@ class CollectProviderReadingEvidence private constructor(
         val collection = ProviderReadingEvidenceCollection(
             snapshots = results.flatMap(ProviderReadingEvidenceCollection::snapshots),
             bindingCount = results.sumOf(ProviderReadingEvidenceCollection::bindingCount),
+            partialEvidence = results.flatMap(ProviderReadingEvidenceCollection::partialEvidence),
             complete = results.all(ProviderReadingEvidenceCollection::complete),
         )
         val acceptedChapters = collection.snapshots.sumOf { it.evidence.size }
@@ -199,6 +222,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalTitleId: String,
         title: String,
         target: ReadingTarget,
+        onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> Unit,
     ): ProviderReadingEvidenceCollection {
         return try {
             val existing = bindingRepository.get(
@@ -237,6 +261,20 @@ class CollectProviderReadingEvidence private constructor(
                     )
                 },
                 clock = clock,
+                onPageCollected = { page, observedAt ->
+                    onPageCollected(binding.ref, page, observedAt)
+                },
+                onPageObserved = { pages, observations ->
+                    trace(
+                        canonicalTitleId,
+                        target,
+                        DiagnosticStage.READ,
+                        DiagnosticOutcome.PARTIAL,
+                        observed = observations,
+                        pageCount = pages,
+                        name = DiagnosticEventName.PROVIDER_READING_PAGE,
+                    )
+                },
             )
             when (val result = refresher.execute(binding)) {
                 is ProviderCallResult.Failure -> {
@@ -354,7 +392,12 @@ class CollectProviderReadingEvidence private constructor(
             createdAt = now,
             updatedAt = now,
         )
-        bindingRepository.upsert(binding)
+        if (!bindingRepository.insertIfAbsent(binding)) {
+            // A user-confirmed edition or another discovery won the same slot.
+            // Never create a second Provider identity or fetch chapters using this stale result.
+            trace(canonicalTitleId, target, DiagnosticStage.BINDING, DiagnosticOutcome.REJECTED)
+            return ProviderCallResult.Success(null)
+        }
         return ProviderCallResult.Success(binding)
     }
 
@@ -418,8 +461,10 @@ class CollectProviderReadingEvidence private constructor(
         bindings: Int? = null,
         observed: Int? = null,
         accepted: Int? = null,
+        pageCount: Int? = null,
         completed: Boolean? = null,
         errorCode: ProviderErrorCode? = null,
+        name: DiagnosticEventName = DiagnosticEventName.PROVIDER_READING_EVIDENCE,
     ) {
         runCatching {
             val attributes = buildMap<String, DiagnosticAttributeValue> {
@@ -432,6 +477,7 @@ class CollectProviderReadingEvidence private constructor(
                 exactMatches?.let { put("accepted_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 bindings?.let { put("binding_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 observed?.let { put("observation_count", DiagnosticAttributeValue.Number(it.toLong())) }
+                pageCount?.let { put("page_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 accepted?.let { put("chapter_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 completed?.let { put("completed", DiagnosticAttributeValue.Flag(it)) }
                 errorCode?.let { put("provider_error_code", DiagnosticAttributeValue.Text(it.name)) }
@@ -445,7 +491,7 @@ class CollectProviderReadingEvidence private constructor(
                         DiagnosticSeverity.INFO
                     },
                     subsystem = DiagnosticSubsystem.CHAPTER,
-                    name = DiagnosticEventName.PROVIDER_READING_EVIDENCE,
+                    name = name,
                     sessionId = diagnostics.sessionId,
                     operationId = null,
                     stage = stage,

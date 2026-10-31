@@ -74,6 +74,8 @@ data class CanonicalTitleScreen(
         val inventoryModel = metroViewModel<NativeInventoryRefreshScreenModel>()
         val inventoryState by inventoryModel.state.collectAsStateWithLifecycle()
         val adoptionModel = metroViewModel<UserAdoptionReviewScreenModel>()
+        val editionModel = metroViewModel<ProviderEditionPickerScreenModel>()
+        val editionState by editionModel.state.collectAsStateWithLifecycle()
         val adoptionState by adoptionModel.state.collectAsStateWithLifecycle()
         val selectedEpubLauncher = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.OpenDocument(),
@@ -112,6 +114,7 @@ data class CanonicalTitleScreen(
             // catalog bootstrap and no release-to-chapter promotion.
             inventoryModel.discoverAndRefreshAutomatically(canonicalTitleId)
             adoptionModel.start(canonicalTitleId)
+            editionModel.start(canonicalTitleId)
             if (
                 shouldAutoOpenSourceBindingFlow(
                     canonicalTitleId,
@@ -129,6 +132,7 @@ data class CanonicalTitleScreen(
             onDispose {
                 inventoryModel.cancel()
                 adoptionModel.dismiss()
+                editionModel.dismiss()
             }
         }
         LaunchedEffect(canonicalTitleId, inventoryState.revision) {
@@ -137,6 +141,10 @@ data class CanonicalTitleScreen(
 
         LaunchedEffect(canonicalTitleId, adoptionState.revision) {
             if (adoptionState.revision > 0) screenModel.reloadReconciledChapters()?.join()
+        }
+
+        LaunchedEffect(canonicalTitleId, editionState.revision) {
+            if (editionState.revision > 0) screenModel.refresh()?.join()
         }
 
         CanonicalTitleDetailScreen(
@@ -154,6 +162,13 @@ data class CanonicalTitleScreen(
                 selectedCandidates = emptySet()
             },
             inventoryRefresh = inventoryState,
+            editionPicker = editionState,
+            onChooseEdition = {
+                loaded?.let { editionModel.open(canonicalTitleId, it.title.displayTitle) }
+            },
+            onEditionSearch = editionModel::search,
+            onEditionConfirm = editionModel::confirm,
+            onEditionDismiss = editionModel::dismiss,
             onReadTitle = { screenModel.startReading(openReader) },
             onBaixarChapter = { canonicalChapterId ->
                 screenModel.requestDownload(canonicalChapterId)

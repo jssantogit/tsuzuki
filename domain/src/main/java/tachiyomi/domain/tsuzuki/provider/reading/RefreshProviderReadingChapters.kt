@@ -13,6 +13,8 @@ class RefreshProviderReadingChapters internal constructor(
         evidence: List<ChapterEvidence>,
     ) -> Unit,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val onPageObserved: suspend (pageCount: Int, observationCount: Int) -> Unit = { _, _ -> },
+    private val onPageCollected: suspend (List<ProviderChapterObservation>, Long) -> Unit = { _, _ -> },
 ) {
 
     constructor(
@@ -66,6 +68,17 @@ class RefreshProviderReadingChapters internal constructor(
             }
 
             val next = page.nextCursor
+            if (next != null && !seenCursors.add(next.value)) {
+                return failure(ProviderErrorCode.MALFORMED_RESULT)
+            }
+            // These are sanitized page-level diagnostics only, not partial chapter inventory.
+            // Never publish a canonical snapshot until the final page is verified, so a
+            // stalled or failed later page cannot detach previously recorded chapters.
+            // The incomplete result must not pretend that the inventory is complete.
+            onPageObserved(it + 1, observations.size)
+            // Observed chapters may be used additively if a later page stalls. This is
+            // not a complete snapshot and must never detach older Provider support.
+            onPageCollected(page.items, snapshotObservedAt)
             if (next == null) {
                 val evidence = evidenceAdapter.toEvidence(
                     canonicalTitleId = binding.canonicalTitleId,
@@ -80,9 +93,6 @@ class RefreshProviderReadingChapters internal constructor(
                     evidence,
                 )
                 return ProviderCallResult.Success(observations.size)
-            }
-            if (!seenCursors.add(next.value)) {
-                return failure(ProviderErrorCode.MALFORMED_RESULT)
             }
             cursor = next
         }

@@ -118,6 +118,22 @@ class ProviderReadingBindingRepositoryImplTest {
             )
     }
 
+    @Test
+    fun `edition selection cannot insert a second work into the same title provider facet`() = runBlocking<Unit> {
+        val original = binding()
+        val competing = original.copy(
+            id = "competing-edition",
+            ref = original.ref.copy(externalWorkId = "work-colored"),
+            verification = ProviderBindingVerification.USER_CONFIRMED,
+            updatedAt = 101L,
+        )
+
+        repository.insertIfAbsent(original) shouldBe true
+        repository.insertIfAbsent(competing) shouldBe false
+        repository.get("title", ProviderId("org.example.reader"), "en") shouldBe original
+        repository.getByTitle("title") shouldBe listOf(original)
+    }
+
     private fun binding() = ProviderReadingBinding(
         id = "binding",
         canonicalTitleId = "title",

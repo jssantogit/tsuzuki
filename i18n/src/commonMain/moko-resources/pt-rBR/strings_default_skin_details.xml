@@ -1,3 +1,16 @@
 <resources>
     <string name="tsuzuki_details_tsuzuki_rating">Tsuzuki Rating</string>
+    <string name="tsuzuki_edition_choose">Escolher edição de leitura</string>
+    <string name="tsuzuki_edition_title">Selecionar edição</string>
+    <string name="tsuzuki_edition_description">Escolha a ficha apresentada pela fonte. Isso não comprova completude editorial.</string>
+    <string name="tsuzuki_edition_search">Título ou link da fonte (se suportado)</string>
+    <string name="tsuzuki_edition_find">Buscar</string>
+    <string name="tsuzuki_edition_none">Nenhuma edição encontrada nesta busca.</string>
+    <string name="tsuzuki_edition_loading">Consultando providers…</string>
+    <string name="tsuzuki_edition_error">Não foi possível consultar todas as fontes.</string>
+    <string name="tsuzuki_edition_confirm">Usar esta edição</string>
+    <string name="tsuzuki_edition_conflict">Já há outra edição vinculada. A troca exige migração segura separada.</string>
+    <string name="tsuzuki_edition_stale">A ficha mudou. Pesquise novamente antes de confirmar.</string>
+    <string name="tsuzuki_edition_unavailable">Provider indisponível ou permissões alteradas.</string>
+    <string name="tsuzuki_edition_open_source">Abrir ficha na fonte</string>
 </resources>
