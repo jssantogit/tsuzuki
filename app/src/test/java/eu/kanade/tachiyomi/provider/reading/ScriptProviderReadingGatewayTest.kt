@@ -127,6 +127,30 @@ class ScriptProviderReadingGatewayTest {
     }
 
     @Test
+    fun `legacy reading candidates without detail provenance are accepted`() = runBlocking {
+        val gateway = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success(
+                """
+                {
+                  "items": [
+                    {"externalWorkId":"legacy-work","title":"Vagabond","aliases":[],"language":"en"}
+                  ],
+                  "nextCursor":null
+                }
+                """.trimIndent(),
+            )
+        }
+        val result = gateway.lookup(
+            providerId,
+            ProviderReadingLookupRequest(titles = listOf("Vagabond")),
+        )
+        val candidate = (result as ProviderCallResult.Success).value.items.single()
+        candidate.externalWorkId shouldBe "legacy-work"
+        candidate.detailOutcome shouldBe null
+        candidate.detailHttpStatus shouldBe null
+    }
+
+    @Test
     fun `chapters require matching provider binding and preserve observations as provider data`() = runBlocking {
         var invocations = 0
         val gateway = gateway { request, _, _, _ ->
