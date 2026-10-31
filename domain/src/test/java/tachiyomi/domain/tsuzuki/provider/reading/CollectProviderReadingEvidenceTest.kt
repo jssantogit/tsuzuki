@@ -349,6 +349,7 @@ class CollectProviderReadingEvidenceTest {
 
     @Test
     fun `existing available binding is reused without lookup`(): Unit = runBlocking {
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
         val bindings = MemoryBindingRepository()
         bindings.upsert(
             ProviderReadingBinding(
@@ -382,6 +383,7 @@ class CollectProviderReadingEvidenceTest {
             bindingRepository = bindings,
             evidenceAdapter = ProviderChapterEvidenceAdapter(),
             clock = { 2L },
+            diagnostics = recorder,
         )
 
         val result = bridge.execute(canonicalTitle.id)
@@ -390,6 +392,10 @@ class CollectProviderReadingEvidenceTest {
         result.bindingCount shouldBe 1
         result.evidence.single().externalChapterKey shouldBe "chapter-2"
         lookupCalls shouldBe 0
+        val reused = recorder.events.single { it.name == DiagnosticEventName.PROVIDER_READING_BINDING }
+        reused.outcome shouldBe DiagnosticOutcome.REUSED
+        reused.attributes["provider_work_id"] shouldBe DiagnosticAttributeValue.Text("dandadan-1")
+        (StructuredDiagnosticSanitizer.sanitize(reused) != null) shouldBe true
     }
 
     @Test
