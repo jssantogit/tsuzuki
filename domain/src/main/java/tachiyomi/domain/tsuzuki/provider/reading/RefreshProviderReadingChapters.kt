@@ -15,6 +15,8 @@ class RefreshProviderReadingChapters internal constructor(
     private val clock: () -> Long = System::currentTimeMillis,
     private val onPageObserved: suspend (pageCount: Int, observationCount: Int) -> Unit = { _, _ -> },
     private val onPageCollected: suspend (List<ProviderChapterObservation>, Long) -> Unit = { _, _ -> },
+    private val onPageStarted: suspend (Int) -> Unit = {},
+    private val onPageFinished: suspend (Int, Int?, ProviderErrorCode?, Long) -> Unit = { _, _, _, _ -> },
 ) {
 
     constructor(
@@ -45,6 +47,9 @@ class RefreshProviderReadingChapters internal constructor(
         var cursor: ProviderCursor? = null
 
         repeat(MAX_PAGES) {
+            val pageIndex = it + 1
+            onPageStarted(pageIndex)
+            val startedNanos = System.nanoTime()
             val result = gateway.chapters(
                 providerId = binding.ref.providerId,
                 request = ProviderReadingChaptersRequest(
@@ -52,9 +57,16 @@ class RefreshProviderReadingChapters internal constructor(
                     cursor = cursor,
                 ),
             )
+            val elapsedMillis = (System.nanoTime() - startedNanos) / 1_000_000L
             val page = when (result) {
-                is ProviderCallResult.Success -> result.value
-                is ProviderCallResult.Failure -> return result
+                is ProviderCallResult.Success -> {
+                    onPageFinished(pageIndex, result.value.items.size, null, elapsedMillis)
+                    result.value
+                }
+                is ProviderCallResult.Failure -> {
+                    onPageFinished(pageIndex, null, result.error.code, elapsedMillis)
+                    return result
+                }
             }
 
             page.items.forEach { observation ->

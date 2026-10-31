@@ -75,6 +75,7 @@ class RefreshProviderReadingChaptersTest {
     @Test
     fun `later page failure never publishes a partial canonical inventory`() = runBlocking {
         var published = false
+        val attemptedPages = mutableListOf<String>()
         var calls = 0
         val interactor = RefreshProviderReadingChapters(
             gateway = gateway { request ->
@@ -95,12 +96,23 @@ class RefreshProviderReadingChaptersTest {
             evidenceAdapter = ProviderChapterEvidenceAdapter(),
             publishSnapshot = { _, _, _, _ -> published = true },
             clock = { 1L },
+            onPageStarted = { page -> attemptedPages += "started:$page" },
+            onPageFinished = { page, itemCount, error, elapsed ->
+                (elapsed >= 0L) shouldBe true
+                attemptedPages += "finished:$page:${itemCount ?: "none"}:${error?.name ?: "OK"}"
+            },
         )
 
         interactor.execute(binding) shouldBe ProviderCallResult.Failure(
             ProviderError(ProviderErrorCode.TIMEOUT, retryable = true),
         )
         calls shouldBe 2
+        attemptedPages shouldBe listOf(
+            "started:1",
+            "finished:1:1:OK",
+            "started:2",
+            "finished:2:none:TIMEOUT",
+        )
         published shouldBe false
     }
 

@@ -53,6 +53,23 @@ fun ProviderBindingRef.evidenceProducerId(): String {
     return "provider-binding:$digest"
 }
 
+/**
+ * Optional, source-reported lookup enrichment provenance. Describes how the Provider
+ * obtained candidate metadata, never whether the Host accepted the editorial edition.
+ * No URLs, free-text errors, cookies or tokens may cross this contract.
+ */
+enum class ProviderWorkDetailOutcome {
+    NOT_NEEDED,
+    SKIPPED_IRRELEVANT,
+    BUDGET_EXHAUSTED,
+    VERIFIED_WITH_ALIASES,
+    VERIFIED_NO_ALIASES,
+    IDENTITY_MISMATCH,
+    INVALID_RESPONSE,
+    CHALLENGE_BLOCKED,
+    DETAIL_FAILED,
+}
+
 data class ProviderWorkCandidate(
     val externalWorkId: String,
     val title: String,
@@ -61,12 +78,22 @@ data class ProviderWorkCandidate(
     val language: String? = null,
     /** Source-reported count only. Null means not attested; never infer a total from lookup hits. */
     val chapterCount: Int? = null,
+    val detailOutcome: ProviderWorkDetailOutcome? = null,
+    /** HTTP status is disclosed only when a detail request itself failed with an explicit status. */
+    val detailHttpStatus: Int? = null,
 ) {
     init {
         require(externalWorkId.isNotBlank()) { "Provider work candidate ID must not be blank" }
         require(chapterCount == null || chapterCount in 0..1_000_000) {
             "Provider work candidate chapter count is invalid"
         }
+        require(detailHttpStatus == null || detailHttpStatus in 100..599) {
+            "Provider lookup detail HTTP status is invalid"
+        }
+        require(
+            detailHttpStatus == null || detailOutcome == ProviderWorkDetailOutcome.DETAIL_FAILED ||
+                detailOutcome == ProviderWorkDetailOutcome.CHALLENGE_BLOCKED,
+        ) { "HTTP status must represent a failed Provider detail request" }
         require(title.isNotBlank()) { "Provider work candidate title must not be blank" }
         require(aliases.size <= MAX_ALIASES) { "Provider work candidate has too many aliases" }
         require(aliases.all { it.isNotBlank() && it.length <= MAX_TEXT_CHARS }) {
@@ -230,6 +257,12 @@ data class ProviderReadingPagesRequest(
 
 enum class ProviderErrorCode {
     UNAVAILABLE,
+    HOST_ERROR,
+    PACKAGE_INVALID,
+    MALFORMED_REQUEST,
+    SOURCE_TOO_LARGE,
+    SOURCE_READ_ERROR,
+    INVOCATION_CONFLICT,
     PERMISSION_DENIED,
     HOST_API_UNSUPPORTED,
     SCRIPT_ERROR,

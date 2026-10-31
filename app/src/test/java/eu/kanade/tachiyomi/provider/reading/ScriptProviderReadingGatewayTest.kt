@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationPolicy
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
@@ -35,6 +36,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingDelivery
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkDetailOutcome
 
 class ScriptProviderReadingGatewayTest {
 
@@ -87,7 +89,9 @@ class ScriptProviderReadingGatewayTest {
                       "aliases": ["Tsuzuki Alt"],
                       "url": "https://reader.example/title/42",
                       "language": "en",
-                      "chapterCount": 123
+                      "chapterCount": 123,
+                      "detailOutcome": "DETAIL_FAILED",
+                      "detailHttpStatus": 503
                     }
                   ],
                   "nextCursor": "next"
@@ -105,6 +109,8 @@ class ScriptProviderReadingGatewayTest {
         success.value.items.single().externalWorkId shouldBe "work-42"
         success.value.items.single().title shouldBe "Tsuzuki"
         success.value.items.single().chapterCount shouldBe 123
+        success.value.items.single().detailOutcome shouldBe ProviderWorkDetailOutcome.DETAIL_FAILED
+        success.value.items.single().detailHttpStatus shouldBe 503
         success.value.nextCursor?.value shouldBe "next"
 
         captured?.capabilityId shouldBe "reading.lookup"
@@ -117,6 +123,31 @@ class ScriptProviderReadingGatewayTest {
         val input = Json.parseToJsonElement(requireNotNull(capturedInput)).jsonObject
         input["titles"]!!.toString() shouldBe """["Tsuzuki"]"""
         input["cursor"] shouldBe null
+        input["diagnosticsVersion"]?.jsonPrimitive?.int shouldBe 1
+    }
+
+    @Test
+    fun `legacy reading candidates without detail provenance are accepted`() = runBlocking {
+        val gateway = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success(
+                """
+                {
+                  "items": [
+                    {"externalWorkId":"legacy-work","title":"Vagabond","aliases":[],"language":"en"}
+                  ],
+                  "nextCursor":null
+                }
+                """.trimIndent(),
+            )
+        }
+        val result = gateway.lookup(
+            providerId,
+            ProviderReadingLookupRequest(titles = listOf("Vagabond")),
+        )
+        val candidate = (result as ProviderCallResult.Success).value.items.single()
+        candidate.externalWorkId shouldBe "legacy-work"
+        candidate.detailOutcome shouldBe null
+        candidate.detailHttpStatus shouldBe null
     }
 
     @Test
@@ -383,6 +414,28 @@ class ScriptProviderReadingGatewayTest {
             ),
         )
         invoked shouldBe false
+    }
+
+    @Test
+    fun `runtime error categories survive the reading gateway without losing cause`() = runBlocking {
+        val cases = listOf(
+            Triple(ProviderRuntimeFailureCode.SCRIPT_ERROR, ProviderErrorCode.SCRIPT_ERROR, false),
+            Triple(ProviderRuntimeFailureCode.PACKAGE_INVALID, ProviderErrorCode.PACKAGE_INVALID, false),
+            Triple(ProviderRuntimeFailureCode.MALFORMED_REQUEST, ProviderErrorCode.MALFORMED_REQUEST, false),
+            Triple(ProviderRuntimeFailureCode.SOURCE_TOO_LARGE, ProviderErrorCode.SOURCE_TOO_LARGE, false),
+            Triple(ProviderRuntimeFailureCode.SOURCE_READ_ERROR, ProviderErrorCode.SOURCE_READ_ERROR, false),
+            Triple(ProviderRuntimeFailureCode.INVOCATION_CONFLICT, ProviderErrorCode.INVOCATION_CONFLICT, true),
+            Triple(ProviderRuntimeFailureCode.HOST_ERROR, ProviderErrorCode.HOST_ERROR, true),
+        )
+        for ((runtimeCode, expectedCode, retryable) in cases) {
+            val reader = gateway { _, _, _, _ ->
+                ProviderRuntimeInvocationResponse.failure(runtimeCode)
+            }
+            reader.lookup(providerId, ProviderReadingLookupRequest(listOf("Vagabond"))) shouldBe
+                ProviderCallResult.Failure(
+                    tachiyomi.domain.tsuzuki.provider.reading.ProviderError(expectedCode, retryable),
+                )
+        }
     }
 
     @Test

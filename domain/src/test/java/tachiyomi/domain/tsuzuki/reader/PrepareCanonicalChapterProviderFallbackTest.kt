@@ -157,7 +157,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
                     providerId: ProviderId,
                     request: ProviderReadingPagesRequest,
                 ): ReadingProviderCallResult<ProviderReadingDelivery> = ReadingProviderCallResult.Failure(
-                    ProviderError(ProviderErrorCode.UNAVAILABLE, retryable = false),
+                    ProviderError(ProviderErrorCode.PACKAGE_INVALID, retryable = false),
                 )
             },
             managedResources = ProviderManagedResourceResolver.DenyAll,
@@ -230,6 +230,10 @@ class PrepareCanonicalChapterProviderFallbackTest {
         )
         result.usedFallback shouldBe true
         torrentArtifactCalls shouldBe 1
+        diagnostics.events.any { event ->
+            event.name == DiagnosticEventName.READER_PAGES_READY &&
+                event.attributes["provider_error_code"] == DiagnosticAttributeValue.Text("PACKAGE_INVALID")
+        } shouldBe true
         diagnostics.events.any { event ->
             event.name == DiagnosticEventName.CONTENT_BINDING_LOOKUP &&
                 event.stage == DiagnosticStage.SEARCH &&
