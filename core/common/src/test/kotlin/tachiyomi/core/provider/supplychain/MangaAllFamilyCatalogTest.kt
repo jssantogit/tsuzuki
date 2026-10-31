@@ -25,6 +25,19 @@ class MangaAllFamilyCatalogTest {
         )
 
     @Test
+    fun `one MangaAll install action requires exactly both active identities`() {
+        val active = MangaAllFamilyCatalog.activeSourceProviderIds
+        MangaAllFamilyCatalog.isActiveInstallSet(active) shouldBe true
+        MangaAllFamilyCatalog.isActiveInstallSet(active.reversed()) shouldBe true
+        MangaAllFamilyCatalog.isActiveInstallSet(active.take(1)) shouldBe false
+        MangaAllFamilyCatalog.isActiveInstallSet(active + active.first()) shouldBe false
+        MangaAllFamilyCatalog.isActiveInstallSet(
+            listOf("app.tsuzuki.mangaall.mangadex", "app.tsuzuki.mangaall.mangaball"),
+        ) shouldBe false
+        MangaAllFamilyCatalog.isActiveInstallSet(emptyList()) shouldBe false
+    }
+
+    @Test
     fun `paused MangaBall must not block the active MangaDex and MangaDot family installation`() {
         val active = listOf(
             "app.tsuzuki.mangaall.mangadex",
