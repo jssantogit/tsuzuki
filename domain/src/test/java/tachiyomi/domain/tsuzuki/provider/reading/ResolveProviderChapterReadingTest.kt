@@ -88,6 +88,43 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `Reader refuses a stale Provider chapter key mapped to a different canonical chapter number`() = runBlocking {
+        var pagesCalls = 0
+        val stale = evidence(binding, "source-chapter-84", mappedChapterId = chapter.id).copy(
+            evidence = providerEvidence(
+                producerId = binding.ref.evidenceProducerId(),
+                externalChapterKey = "source-chapter-84",
+            ).copy(
+                rawLabel = "Ch. 84",
+                rawNumber = 84.0,
+            ),
+        )
+        val resolver = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(stale),
+            gateway = gateway {
+                pagesCalls++
+                error("A mismatched chapter must never reach the Provider runtime")
+            },
+        )
+
+        resolver.options(chapter.id) shouldBe emptyList()
+        resolver.delivery(
+            ProviderChapterReadingOption(
+                canonicalChapterId = chapter.id,
+                bindingId = binding.id,
+                providerId = providerId,
+                facetId = "en",
+                externalWorkId = "work-1",
+                providerChapterId = "source-chapter-84",
+            ),
+        ) shouldBe ProviderCallResult.Failure(
+            ProviderError(ProviderErrorCode.UNAVAILABLE, retryable = false),
+        )
+        pagesCalls shouldBe 0
+    }
+
+    @Test
     fun `unavailable binding and stale unmatched Provider evidence are excluded`() = runBlocking {
         val unavailable = binding.copy(
             availability = ProviderBindingAvailability.UNAVAILABLE,
