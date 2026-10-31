@@ -13,6 +13,8 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
@@ -163,6 +165,35 @@ class ResolveProviderChapterReadingTest {
             resolver.options(canonical.id).map { it.providerChapterId } shouldBe
                 listOf("source-" + canonical.id)
         }
+    }
+
+    @Test
+    fun `Reader accepts source decimal matching the precise canonical v2 numbering`() = runBlocking {
+        val exact = chapter.copy(
+            id = "exact-decimal",
+            displayNumber = "0.1",
+            baseNumber = 0,
+            part = 1,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction.parse("1"),
+        )
+        val observed = evidence(
+            binding = binding,
+            providerChapterId = "source-exact-decimal",
+            mappedChapterId = exact.id,
+        ).copy(
+            evidence = providerEvidence(
+                producerId = binding.ref.evidenceProducerId(),
+                externalChapterKey = "source-exact-decimal",
+            ).copy(rawLabel = "Ch. 0.1", rawNumber = 0.1),
+        )
+        val resolver = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(observed),
+            canonicalChapter = exact,
+        )
+
+        resolver.options(exact.id).map { it.providerChapterId } shouldBe listOf("source-exact-decimal")
     }
 
     @Test
