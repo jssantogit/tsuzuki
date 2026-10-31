@@ -417,6 +417,28 @@ class ScriptProviderReadingGatewayTest {
     }
 
     @Test
+    fun `runtime error categories survive the reading gateway without losing cause`() = runBlocking {
+        val cases = listOf(
+            Triple(ProviderRuntimeFailureCode.SCRIPT_ERROR, ProviderErrorCode.SCRIPT_ERROR, false),
+            Triple(ProviderRuntimeFailureCode.PACKAGE_INVALID, ProviderErrorCode.PACKAGE_INVALID, false),
+            Triple(ProviderRuntimeFailureCode.MALFORMED_REQUEST, ProviderErrorCode.MALFORMED_REQUEST, false),
+            Triple(ProviderRuntimeFailureCode.SOURCE_TOO_LARGE, ProviderErrorCode.SOURCE_TOO_LARGE, false),
+            Triple(ProviderRuntimeFailureCode.SOURCE_READ_ERROR, ProviderErrorCode.SOURCE_READ_ERROR, false),
+            Triple(ProviderRuntimeFailureCode.INVOCATION_CONFLICT, ProviderErrorCode.INVOCATION_CONFLICT, true),
+            Triple(ProviderRuntimeFailureCode.HOST_ERROR, ProviderErrorCode.HOST_ERROR, true),
+        )
+        for ((runtimeCode, expectedCode, retryable) in cases) {
+            val reader = gateway { _, _, _, _ ->
+                ProviderRuntimeInvocationResponse.failure(runtimeCode)
+            }
+            reader.lookup(providerId, ProviderReadingLookupRequest(listOf("Vagabond"))) shouldBe
+                ProviderCallResult.Failure(
+                    tachiyomi.domain.tsuzuki.provider.reading.ProviderError(expectedCode, retryable),
+                )
+        }
+    }
+
+    @Test
     fun `disabled stale or runtime-failed providers fail closed with typed domain errors`() = runBlocking {
         var invoked = false
         val disabled = gateway(
