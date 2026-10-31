@@ -354,7 +354,7 @@ class ScriptProviderReadingGateway internal constructor(
                 ProviderError(
                     code = ProviderErrorCode.SOURCE_READ_ERROR,
                     retryable = error.kind == ProviderLookupFailureCode.CHALLENGE_BLOCKED ||
-                        (error.kind == ProviderLookupFailureCode.HTTP_ERROR && error.httpStatus in 500..599),
+                        (error.kind == ProviderLookupFailureCode.HTTP_ERROR && error.httpStatus?.let { it in 500..599 } == true),
                     sourceFailureCode = error.kind,
                     httpStatus = error.httpStatus,
                 ),
