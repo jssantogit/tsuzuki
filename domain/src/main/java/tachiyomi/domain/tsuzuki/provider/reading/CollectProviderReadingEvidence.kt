@@ -347,6 +347,9 @@ class CollectProviderReadingEvidence private constructor(
         titles: List<String>,
         target: ReadingTarget,
     ): ProviderCallResult<ProviderReadingBinding?> {
+        // Work IDs are private to this Provider and are only used to narrow
+        // earlier matches. They never cross a source, title, edition or facet.
+        var ambiguousWorkIds: Set<String>? = null
         for (title in titles) {
             val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
                 is ProviderCallResult.Failure -> {
@@ -376,27 +379,39 @@ class CollectProviderReadingEvidence private constructor(
                 }
                 .distinctBy(ProviderWorkCandidate::externalWorkId)
                 .toList()
+            val sourcePrimaryMatches = matches.filter { normalize(it.title) == normalizedTitle }
+            val candidate = when {
+                // After an ambiguous search, another trusted title can only
+                // corroborate a work already seen. Never bind an unrelated HID.
+                ambiguousWorkIds != null -> sourcePrimaryMatches.singleOrNull {
+                    it.externalWorkId in ambiguousWorkIds
+                }
+                matches.size == 1 -> matches.single()
+                // A source-declared main title outranks another edition which
+                // only lists that title as an alias (colored, omnibus, etc).
+                sourcePrimaryMatches.size == 1 -> sourcePrimaryMatches.single()
+                matches.size > 1 -> {
+                    ambiguousWorkIds = matches.mapTo(mutableSetOf()) { it.externalWorkId }
+                    null
+                }
+                else -> null
+            }
             trace(
                 canonicalTitleId,
                 target,
                 DiagnosticStage.LOOKUP,
-                when (matches.size) {
-                    0 -> DiagnosticOutcome.EMPTY
-                    1 -> DiagnosticOutcome.ACCEPTED
+                when {
+                    candidate != null -> DiagnosticOutcome.ACCEPTED
+                    matches.isEmpty() -> DiagnosticOutcome.EMPTY
                     else -> DiagnosticOutcome.REJECTED
                 },
                 candidates = candidates.size,
                 exactMatches = matches.size,
-                bindings = if (matches.size == 1) 1 else 0,
+                bindings = if (candidate != null) 1 else 0,
             )
-            // Only the absence of a verified match authorizes trying a second
-            // source-attested title. An ambiguous match must never be bypassed by
-            // treating a translation as proof of the correct reading edition.
-            if (matches.size > 1) return ProviderCallResult.Success(null)
-            if (matches.isEmpty()) continue
+            if (candidate == null) continue
 
             val now = clock()
-            val candidate = matches.single()
             val binding = ProviderReadingBinding(
                 id = bindingId(
                     canonicalTitleId = canonicalTitleId,
