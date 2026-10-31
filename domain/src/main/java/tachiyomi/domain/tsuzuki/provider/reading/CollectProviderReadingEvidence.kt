@@ -220,7 +220,7 @@ class CollectProviderReadingEvidence private constructor(
             targets = targets.size,
             bindings = collection.bindingCount,
             accepted = acceptedChapters,
-            partialCount = collection.partialEvidence.size,
+            partialCount = collection.partialEvidence.size.takeIf { it > 0 },
             completed = collection.complete,
         )
         return collection
@@ -409,13 +409,14 @@ class CollectProviderReadingEvidence private constructor(
                 // editorial variant: title similarity and chapter count alone
                 // cannot establish canonical edition identity.
                 priorAmbiguous != null -> primary?.takeIf { selected ->
-                    priorAmbiguous.any { it.externalWorkId == selected.externalWorkId } &&
+                    !isSourceAttestedAlternateEdition(selected, title) &&
+                        priorAmbiguous.any { it.externalWorkId == selected.externalWorkId } &&
                         priorAmbiguous
                             .filter { it.externalWorkId != selected.externalWorkId }
                             .all { isSourceAttestedAlternateEdition(it, selected.title) }
                 }
                 matches.size == 1 && !isSourceAttestedAlternateEdition(matches.single(), title) -> matches.single()
-                primary != null && matches
+                primary != null && !isSourceAttestedAlternateEdition(primary, title) && matches
                     .filter { it.externalWorkId != primary.externalWorkId }
                     .all { isSourceAttestedAlternateEdition(it, primary.title) } -> primary
                 // Two work IDs may carry the same primary title, while only
