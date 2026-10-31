@@ -257,6 +257,7 @@ class CollectProviderReadingEvidence private constructor(
             )?.takeIf { it.availability == ProviderBindingAvailability.AVAILABLE }
             if (existing != null) {
                 trace(canonicalTitleId, target, DiagnosticStage.BINDING, DiagnosticOutcome.REUSED, bindings = 1)
+                traceBoundWork(canonicalTitleId, target, existing, DiagnosticOutcome.REUSED)
             }
             val binding = existing ?: when (
                 val discovery = discoverBinding(
@@ -271,6 +272,9 @@ class CollectProviderReadingEvidence private constructor(
                         ?: return ProviderReadingEvidenceCollection(complete = !discovery.value.unresolved)
             }
 
+            if (existing == null) {
+                traceBoundWork(canonicalTitleId, target, binding, DiagnosticOutcome.ACCEPTED)
+            }
             onStageChanged(DiagnosticStage.READ)
             var published: ProviderReadingEvidenceSnapshot? = null
             var lastPageNumber = 0
@@ -616,6 +620,41 @@ class CollectProviderReadingEvidence private constructor(
                     ),
                 )
             }
+        }
+    }
+
+    /** The selected HID must remain observable even when lookup was skipped for an existing binding. */
+    private fun traceBoundWork(
+        titleId: String,
+        target: ReadingTarget,
+        binding: ProviderReadingBinding,
+        outcome: DiagnosticOutcome,
+    ) {
+        if (!diagnostics.detailedCaptureActive || target.registration.descriptor.id.value != "app.tsuzuki.mangafire") {
+            return
+        }
+        runCatching {
+            val attributes = buildMap<String, DiagnosticAttributeValue> {
+                put("provider_id", DiagnosticAttributeValue.Text(target.registration.descriptor.id.value))
+                put("provider_work_id", DiagnosticAttributeValue.Text(binding.ref.externalWorkId))
+                binding.ref.facetId?.let { put("language", DiagnosticAttributeValue.Text(it)) }
+                diagnostics.canonicalTitleReference(titleId)?.let {
+                    put("canonical_title_ref", DiagnosticAttributeValue.Text(it))
+                }
+            }
+            diagnostics.record(
+                StructuredDiagnosticEvent(
+                    timestampMillis = clock().coerceAtLeast(0L),
+                    severity = DiagnosticSeverity.DEBUG,
+                    subsystem = DiagnosticSubsystem.CHAPTER,
+                    name = DiagnosticEventName.PROVIDER_READING_BINDING,
+                    sessionId = diagnostics.sessionId,
+                    operationId = null,
+                    stage = DiagnosticStage.BINDING,
+                    outcome = outcome,
+                    attributes = attributes,
+                ),
+            )
         }
     }
 
