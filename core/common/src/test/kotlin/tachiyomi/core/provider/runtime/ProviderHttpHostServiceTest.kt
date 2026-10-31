@@ -105,6 +105,9 @@ class ProviderHttpHostServiceTest {
             val recorded = server.takeRequest()
             recorded.method shouldBe "POST"
             recorded.headers["Authorization"] shouldBe "Bearer provider-secret"
+            // Keiyoushi MangaBall's JSON API rejects charset-suffixed media
+            // types. Host must transmit the Provider's explicit declaration.
+            recorded.headers["Content-Type"] shouldBe "application/json"
             recorded.body?.utf8() shouldBe """{"magnet":"magnet:?xt=urn:btih:abc"}"""
         } finally {
             server.close()

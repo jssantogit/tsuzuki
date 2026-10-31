@@ -694,6 +694,185 @@ class ProviderRepositoryManagerTest {
             ProviderRepositoryEntryStatus.AVAILABLE
     }
 
+    @Test
+    fun `MangaAll stages trusted packages before activation and preserves repository`() = runBlocking<Unit> {
+        val keyPair = ecKeyPair()
+        val repositoryId = "repo.example"
+        val enrollmentStore = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("mangaall-enrollments").toFile(),
+        )
+        enrollmentStore.save(
+            EnrolledProviderRepository(
+                "Existing repository",
+                ProviderRepositoryEnrollment(
+                    repositoryId = repositoryId,
+                    indexUrl = "https://repo.example/index.json",
+                    signingKey = ProviderRepositorySigningKey(
+                        keyId = "root-1",
+                        publicKeyBase64 = Base64.getEncoder().encodeToString(keyPair.public.encoded),
+                    ),
+                ),
+            ),
+        )
+        val artifactStore = ProviderArtifactStore(tempDir.resolve("mangaall-artifacts").toFile())
+        val transport = FakeTransport()
+        val manager = manager(
+            enrollmentStore = enrollmentStore,
+            trustStore = FileProviderRepositoryTrustStore(tempDir.resolve("mangaall-trust").toFile()),
+            artifactStore = artifactStore,
+            transport = transport,
+        )
+        val sourceArtifacts = MangaAllFamilyCatalog.activeSourceProviderIds.associateWith { id ->
+            tsz(versionCode = 1, providerId = id)
+        }
+        val descriptors = sourceArtifacts.map { (id, bytes) ->
+            ProviderArtifactDescriptor(
+                providerId = id,
+                versionName = "1.0.1",
+                versionCode = 1,
+                artifactUrl = "https://repo.example/$id.tsz",
+                sha256 = sha256Hex(bytes),
+                minHostApi = 1,
+            )
+        }
+        // A signed repository may carry a dormant MangaBall descriptor. Its
+        // package is deliberately absent from transport, so installation must
+        // never try to download it.
+        val pausedBytes = tsz(versionCode = 1, providerId = "app.tsuzuki.mangaall.mangaball")
+        val pausedDescriptor = ProviderArtifactDescriptor(
+            providerId = "app.tsuzuki.mangaall.mangaball",
+            versionName = "1.0.1",
+            versionCode = 1,
+            artifactUrl = "https://repo.example/mangaball-paused.tsz",
+            sha256 = sha256Hex(pausedBytes),
+            minHostApi = 1,
+        )
+        val index = ProviderRepositoryIndex(
+            schemaVersion = 1,
+            repositoryId = repositoryId,
+            sequence = 1,
+            providers = descriptors + pausedDescriptor,
+        )
+        val signed = signedIndex(keyPair, index)
+        transport.publishMany(
+            signed,
+            descriptors.take(1).associate { descriptor ->
+                descriptor.artifactUrl to sourceArtifacts.getValue(descriptor.providerId)
+            },
+        )
+        manager.refresh(repositoryId)
+        shouldThrow<NoSuchElementException> {
+            manager.installMangaAll(repositoryId)
+        }
+        manager.installed() shouldBe emptyList()
+        manager.repositories().map { it.enrollment.repositoryId } shouldBe listOf(repositoryId)
+
+        transport.publishMany(
+            signed,
+            descriptors.associate { descriptor ->
+                descriptor.artifactUrl to sourceArtifacts.getValue(descriptor.providerId)
+            },
+        )
+        manager.installMangaAll(repositoryId).size shouldBe 2
+        manager.installed().map { it.providerId } shouldBe
+            MangaAllFamilyCatalog.activeSourceProviderIds.sorted()
+        // Re-running the one-click install preserves all exact version IDs.
+        manager.installMangaAll(repositoryId).size shouldBe 0
+        manager.installed().size shouldBe 2
+        transport.requestedArtifactUrls.none { it.contains("mangaball") } shouldBe true
+        artifactStore.current("app.tsuzuki.mangaall.mangaball") shouldBe null
+        // A revoked old source can recover only through a NEW verified signed
+        // release from its existing trust origin, without dropping family state.
+        val v2SourceArtifacts = MangaAllFamilyCatalog.activeSourceProviderIds.associateWith { id ->
+            tsz(versionCode = 2, providerId = id)
+        }
+        val v2Descriptors = v2SourceArtifacts.map { (id, bytes) ->
+            ProviderArtifactDescriptor(
+                providerId = id,
+                versionName = "1.0.2",
+                versionCode = 2,
+                artifactUrl = "https://repo.example/$id-2.tsz",
+                sha256 = sha256Hex(bytes),
+                minHostApi = 1,
+            )
+        }
+        val v2Index = ProviderRepositoryIndex(
+            schemaVersion = 1,
+            repositoryId = repositoryId,
+            sequence = 2,
+            providers = v2Descriptors + pausedDescriptor,
+            revokedArtifactSha256 = setOf(
+                sha256Hex(sourceArtifacts.getValue(MangaAllFamilyCatalog.activeSourceProviderIds[0])),
+            ),
+        )
+        transport.publishMany(
+            signedIndex(keyPair, v2Index),
+            v2Descriptors.associate { descriptor ->
+                descriptor.artifactUrl to v2SourceArtifacts.getValue(descriptor.providerId)
+            },
+        )
+        manager.refresh(repositoryId)
+        artifactStore.current(MangaAllFamilyCatalog.activeSourceProviderIds[0])?.revoked shouldBe true
+        manager.installMangaAll(repositoryId).size shouldBe 2
+        manager.installed().all { !it.revoked && it.versionCode == 2L } shouldBe true
+    }
+
+    @Test
+    fun `MangaAll incomplete signed index fails before contacting a source server`() = runBlocking<Unit> {
+        val keyPair = ecKeyPair()
+        val enrollmentStore = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("mangaall-missing-enrollments").toFile(),
+        )
+        enrollmentStore.save(
+            EnrolledProviderRepository(
+                "Existing repository",
+                ProviderRepositoryEnrollment(
+                    repositoryId = "repo.example",
+                    indexUrl = "https://repo.example/index.json",
+                    signingKey = ProviderRepositorySigningKey(
+                        keyId = "root-1",
+                        publicKeyBase64 = Base64.getEncoder().encodeToString(keyPair.public.encoded),
+                    ),
+                ),
+            ),
+        )
+        val store = ProviderArtifactStore(tempDir.resolve("mangaall-missing-artifacts").toFile())
+        val transport = FakeTransport()
+        val onlyDex = MangaAllFamilyCatalog.sourceProviderIds.first()
+        val bytes = tsz(versionCode = 1, providerId = onlyDex)
+        val incompleteIndex = ProviderRepositoryIndex(
+            schemaVersion = 1,
+            repositoryId = "repo.example",
+            sequence = 1,
+            providers = listOf(
+                ProviderArtifactDescriptor(
+                    providerId = onlyDex,
+                    versionName = "1.0.1",
+                    versionCode = 1,
+                    artifactUrl = "https://repo.example/dex.tsz",
+                    sha256 = sha256Hex(bytes),
+                    minHostApi = 1,
+                ),
+            ),
+        )
+        transport.publishMany(
+            signedIndex(keyPair, incompleteIndex),
+            mapOf("https://repo.example/dex.tsz" to bytes),
+        )
+        val manager = manager(
+            enrollmentStore = enrollmentStore,
+            trustStore = FileProviderRepositoryTrustStore(tempDir.resolve("mangaall-missing-trust").toFile()),
+            artifactStore = store,
+            transport = transport,
+        )
+        manager.refresh("repo.example")
+        shouldThrow<ProviderSupplyChainException> {
+            manager.installMangaAll("repo.example")
+        }
+        transport.requestedArtifactUrls shouldBe emptyList()
+        manager.installed() shouldBe emptyList()
+    }
+
     private fun manager(
         enrollmentStore: ProviderRepositoryEnrollmentStore,
         trustStore: ProviderRepositoryTrustStore,
@@ -767,11 +946,11 @@ class ProviderRepositoryManagerTest {
         )
     }
 
-    private fun tsz(versionCode: Long): ByteArray {
+    private fun tsz(versionCode: Long, providerId: String = "reader.example"): ByteArray {
         val manifest = """
             {
               "manifestVersion": 1,
-              "id": "reader.example",
+              "id": "$providerId",
               "name": "Reader Example",
               "version": {"name": "1.0.$versionCode", "code": $versionCode},
               "minHostApi": 1,
@@ -821,6 +1000,14 @@ class ProviderRepositoryManagerTest {
             )
             val descriptor = index.providers.single()
             artifacts[descriptor.artifactUrl] = artifactBytes
+        }
+
+        fun publishMany(
+            signed: SignedProviderRepositoryIndex,
+            artifactBytes: Map<String, ByteArray>,
+        ) {
+            this.signed = signed
+            artifacts.putAll(artifactBytes)
         }
 
         override suspend fun fetchIndex(indexUrl: String): SignedProviderRepositoryIndex {

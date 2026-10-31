@@ -66,6 +66,49 @@ class ProviderHttpPageLoaderTest {
     }
 
     @Test
+    fun `MangaAll Reader forwards approved Origin and caller identity for image requests`() = runTest {
+        val server = MockWebServer()
+        server.start()
+        server.enqueue(
+            MockResponse.Builder()
+                .addHeader("Content-Type", "image/png")
+                .body("image-bytes")
+                .build(),
+        )
+        val referer = "https://mangadot.net/chapter/8001?source=user"
+        val caller = "Tsuzuki-MangaAll/0.1 (+https://github.com/jssantogit/providers-tsuzuki)"
+        val loader = ProviderHttpPageLoader(
+            requests = listOf(
+                PreparedHttpPage(
+                    url = server.url("/image.png").toString(),
+                    headers = mapOf(
+                        "Referer" to referer,
+                        "Origin" to "https://mangadot.net",
+                        "User-Agent" to caller,
+                    ),
+                    allowedOrigins = setOf(server.origin()),
+                    allowLocalNetwork = true,
+                ),
+            ),
+            cacheRoot = tempDir.toFile(),
+        )
+
+        try {
+            val page = loader.getPages().single()
+            loader.loadPage(page)
+            page.status shouldBe Page.State.Ready
+            val sent = server.takeRequest()
+            sent.headers["Referer"] shouldBe referer
+            sent.headers["Origin"] shouldBe "https://mangadot.net"
+            sent.headers["User-Agent"] shouldBe caller
+            page.stream!!.invoke().use { it.readBytes().decodeToString() shouldBe "image-bytes" }
+        } finally {
+            loader.recycle()
+            server.close()
+        }
+    }
+
+    @Test
     fun `reader cancellation remains cancellation instead of becoming page failure`() = runTest {
         val server = MockWebServer()
         server.start()
@@ -219,6 +262,46 @@ class ProviderHttpPageLoaderTest {
                 .filter { it.isFile }
                 .toList()
                 .isEmpty() shouldBe true
+        } finally {
+            loader.recycle()
+            server.close()
+        }
+    }
+
+    @Test
+    fun `HTTP 200 HTML and JSON error bodies must not become ready Reader pages`() = runTest {
+        val server = MockWebServer()
+        server.start()
+        val responses = listOf(
+            "<html><body>access denied</body></html>" to "text/html; charset=utf-8",
+            """{"error":"blocked"}""" to "application/json",
+            "  " + "\n" + "<!DOCTYPE html><html>challenge</html>" to null,
+        )
+        responses.forEach { (body, contentType) ->
+            val builder = MockResponse.Builder().body(body)
+            if (contentType != null) builder.addHeader("Content-Type", contentType)
+            server.enqueue(builder.build())
+        }
+        val loader = ProviderHttpPageLoader(
+            requests = responses.indices.map { index ->
+                PreparedHttpPage(
+                    url = server.url("/page-${index + 1}.jpg").toString(),
+                    allowedOrigins = setOf(server.origin()),
+                    allowLocalNetwork = true,
+                )
+            },
+            cacheRoot = tempDir.toFile(),
+        )
+
+        try {
+            loader.getPages().forEach { page ->
+                shouldThrow<ProviderHttpPageException> {
+                    loader.loadPage(page)
+                }
+                (page.status is Page.State.Error) shouldBe true
+            }
+            server.requestCount shouldBe responses.size
+            tempDir.toFile().walkTopDown().filter { it.isFile }.toList().isEmpty() shouldBe true
         } finally {
             loader.recycle()
             server.close()

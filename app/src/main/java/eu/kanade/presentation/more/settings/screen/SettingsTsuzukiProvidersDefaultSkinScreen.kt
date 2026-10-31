@@ -74,6 +74,7 @@ import mihon.app.di.appGraph
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.automirroredrounded.ArrowRight
 import tachiyomi.core.provider.supplychain.EnrolledProviderRepository
+import tachiyomi.core.provider.supplychain.MangaAllFamilyCatalog
 import tachiyomi.core.provider.supplychain.ProviderRepositoryCatalogEntry
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEnrollment
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEntryStatus
@@ -258,14 +259,25 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
                     DiscoverProviderCards(
                         snapshots = snapshots.values.toList(),
                         operationKeys = operations,
-                        onInstall = { entry ->
-                            runProviderOperation(
-                                "install:${entry.repositoryId}:${entry.descriptor.providerId}",
-                            ) {
-                                manager.install(
-                                    repositoryId = entry.repositoryId,
-                                    providerId = entry.descriptor.providerId,
-                                )
+                        onInstall = { selections ->
+                            val selected = selections.first()
+                            val isMangaAll = MangaAllFamilyCatalog.isActiveInstallSet(
+                                selections.map { it.descriptor.providerId },
+                            )
+                            val key = if (isMangaAll) {
+                                "install:${selected.repositoryId}:mangaall"
+                            } else {
+                                "install:${selected.repositoryId}:${selected.descriptor.providerId}"
+                            }
+                            runProviderOperation(key) {
+                                if (isMangaAll) {
+                                    manager.installMangaAll(selected.repositoryId)
+                                } else {
+                                    manager.install(
+                                        repositoryId = selected.repositoryId,
+                                        providerId = selected.descriptor.providerId,
+                                    )
+                                }
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -425,6 +437,22 @@ private fun InstalledProviderCards(
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
+    val candidates = registrations.filter { MangaAllFamilyCatalog.contains(it.descriptor.id.value) }
+    // Group only when every member has the same installed trust origin.
+    // A partial or mixed-repository state must never look like a complete
+    // approved MangaAll installation.
+    val sameRepository = candidates.mapNotNull { registration ->
+        (registration.descriptor.origin as? ProviderOrigin.Repository)?.repositoryId
+    }.toSet().size == 1
+    val family = if (candidates.isNotEmpty() && sameRepository &&
+        candidates.map { it.descriptor.id.value }.distinct().size == candidates.size
+    ) {
+        candidates.sortedBy { MangaAllFamilyCatalog.sourceProviderIds.indexOf(it.descriptor.id.value) }
+    } else {
+        emptyList()
+    }
+    val others = registrations.filterNot { it in family }
+    val displayOrder = family + others
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(top = 18.dp, bottom = 32.dp),
@@ -442,7 +470,17 @@ private fun InstalledProviderCards(
         if (registrations.isNotEmpty()) {
             item(key = "installed_group") {
                 SettingsGroup {
-                    registrations.forEachIndexed { index, registration ->
+                    if (family.isNotEmpty()) {
+                        val repositoryId = (family.first().descriptor.origin as ProviderOrigin.Repository).repositoryId
+                        val totalSources = MangaAllFamilyCatalog.activeSourceProviderIds.size
+                        Text(
+                            text = "MangaAll · ${family.size}/$totalSources sources · $repositoryId",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
+                            color = colors.foreground,
+                        )
+                    }
+                    displayOrder.forEachIndexed { index, registration ->
                         val providerId = registration.descriptor.id.value
                         InstalledProviderRow(
                             registration = registration,
@@ -452,7 +490,7 @@ private fun InstalledProviderCards(
                             onEnabledChange = { onEnabledChange(registration, it) },
                             onRollback = { onRollback(providerId) },
                         )
-                        if (index < registrations.lastIndex) SettingsGroupDivider()
+                        if (index < displayOrder.lastIndex) SettingsGroupDivider()
                     }
                 }
             }
@@ -557,11 +595,13 @@ private fun InstalledProviderRow(
 private fun DiscoverProviderCards(
     snapshots: List<ProviderRepositorySnapshot>,
     operationKeys: Set<String>,
-    onInstall: (ProviderRepositoryCatalogEntry) -> Unit,
+    onInstall: (List<ProviderRepositoryCatalogEntry>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
-    val entries = snapshots.flatMap { it.entries }
+    val catalog = snapshots.flatMap { it.entries }
+    val families = MangaAllFamilyCatalog.discoverGroups(catalog)
+    val entries = MangaAllFamilyCatalog.ordinaryEntries(catalog)
         .sortedWith(compareBy({ it.descriptor.providerId }, { it.repositoryId }))
 
     LazyColumn(
@@ -569,7 +609,7 @@ private fun DiscoverProviderCards(
         contentPadding = PaddingValues(top = 18.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (entries.isEmpty()) {
+        if (entries.isEmpty() && families.isEmpty()) {
             item(key = "empty") {
                 Text(
                     text = stringResource(MR.strings.tsuzuki_providers_no_discover),
@@ -577,6 +617,52 @@ private fun DiscoverProviderCards(
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(horizontal = DefaultSkinSpacing.PageHorizontal, vertical = 24.dp),
                 )
+            }
+        }
+        if (families.isNotEmpty()) {
+            items(items = families, key = { "mangaall:${it.repositoryId}" }) { family ->
+                val operationKey = "install:${family.repositoryId}:mangaall"
+                DefaultSkinCard(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = DefaultSkinSpacing.PageHorizontal),
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            text = "MangaAll",
+                            color = colors.foreground,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "MangaDex · MangaDot",
+                            color = colors.secondary,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            text = family.repositoryId,
+                            color = colors.secondary,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        if (!family.isComplete) {
+                            Text(
+                                text = "The signed repository does not contain both active MangaAll sources.",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        } else if (family.canInstall) {
+                            DefaultSkinPrimaryButton(
+                                text = stringResource(MR.strings.tsuzuki_providers_install),
+                                enabled = operationKey !in operationKeys,
+                                modifier = Modifier.padding(top = 4.dp).heightIn(min = 40.dp),
+                                minimumHeight = 40.dp,
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                                onClick = { onInstall(family.entries) },
+                            )
+                        }
+                    }
+                }
             }
         }
         if (entries.isNotEmpty()) {
@@ -628,7 +714,7 @@ private fun DiscoverProviderCards(
                                 modifier = Modifier.padding(top = 4.dp).heightIn(min = 40.dp),
                                 minimumHeight = 40.dp,
                                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-                                onClick = { onInstall(entry) },
+                                onClick = { onInstall(listOf(entry)) },
                             )
                         }
                     }

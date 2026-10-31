@@ -350,10 +350,13 @@ class CollectProviderReadingEvidence private constructor(
     )
 
     private companion object {
+        // Chapter evidence is independent from Reader delivery. Providers
+        // may contribute verified release observations before image grants
+        // and reading.pages@1 are approved; the Reader still requires pages
+        // at its own capability boundary.
         val REQUIRED_CAPABILITIES = setOf(
             ProviderCapabilities.ReadingLookupV1,
             ProviderCapabilities.ReadingChaptersV1,
-            ProviderCapabilities.ReadingPagesV1,
         )
         val WHITESPACE = Regex("\\s+")
         const val MAX_CONCURRENT_PROVIDERS = 4

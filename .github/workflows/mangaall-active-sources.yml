@@ -1,0 +1,32 @@
+name: MangaAll active sources regression (PR #167)
+
+on:
+  push:
+    branches:
+      - tsuzuki/issue-166-mangaall-family
+    paths:
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/supplychain/MangaAllFamilyCatalog.kt'
+      - 'core/common/src/test/kotlin/tachiyomi/core/provider/supplychain/MangaAllFamilyCatalogTest.kt'
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/supplychain/ProviderRepositoryManager.kt'
+      - 'core/common/src/test/kotlin/tachiyomi/core/provider/supplychain/ProviderRepositoryManagerTest.kt'
+      - '.github/workflows/mangaall-active-sources.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  active-source-grouping:
+    name: Two active sources; MangaBall paused
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Execute focused MangaAll family grouping tests
+        run: ./gradlew :core:common:testDebugUnitTest --tests '*MangaAllFamilyCatalogTest' --tests '*ProviderRepositoryManagerTest'
