@@ -1,5 +1,8 @@
-Tsuzuki #176 / PR #181: signed update-in-place Release APK smoke trigger.
-Functional source tree equals CI full GREEN b97f2b0a0dc19e9140ce2f38453cc956fcd15dbc.
-Provider Platform Android instrumentation #41217344228 SUCCESS on functionally identical tree.
-Capture MangaFire candidates using Logs -> Start logs BEFORE opening each title.
-Do not merge main or reset provider settings, grants, library, reader progress or backup.
+Tsuzuki #176 — secure MangaFire identity + forensic trace integration smoke, 31 October 2026.
+Host correction PR #182: source-qualified edition match, unresolved inventories not complete, chapter page ranges and reused HID.
+Host forensic upgrade: negotiated diagnosticsVersion=1, per-HID detail outcome (closed reason), HTTP status, lookup query start/stop/duration.
+Existing installed code7 Provider must continue returning acceptable results with optional fields omitted.
+Provider #54 code8 negotiates diagnostics fields: legacy Host gets no new keys, while new Host requests them.
+Compatibility contract: Provider source attested aliases are unchanged by the diagnostic feature flag; never auto-bind first or based on chapter count.
+Do not merge main or publish a Provider without end-to-end acceptance. No reset of app.tsuzuki install, library, Reader, or provider repository.
+Smoke branch from tsuzuki/issue-176-source-identity-stabilization-20261031.
