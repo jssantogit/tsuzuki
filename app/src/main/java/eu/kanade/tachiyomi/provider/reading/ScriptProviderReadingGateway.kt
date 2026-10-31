@@ -40,6 +40,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkCandidate
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkDetailOutcome
 import java.util.UUID
 
 data class ActiveProviderScriptPackage(
@@ -143,6 +144,8 @@ class ScriptProviderReadingGateway internal constructor(
                         url = item.url,
                         language = item.language,
                         chapterCount = item.chapterCount,
+                        detailOutcome = item.detailOutcome?.let(ProviderWorkDetailOutcome::valueOf),
+                        detailHttpStatus = item.detailHttpStatus,
                     )
                 },
                 nextCursor = decoded.nextCursor?.let(::ProviderCursor),
@@ -464,6 +467,8 @@ class ScriptProviderReadingGateway internal constructor(
         val url: String? = null,
         val language: String? = null,
         val chapterCount: Int? = null,
+        val detailOutcome: String? = null,
+        val detailHttpStatus: Int? = null,
     )
 
     @Serializable
