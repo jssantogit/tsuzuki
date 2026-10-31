@@ -347,6 +347,9 @@ class CollectProviderReadingEvidence private constructor(
         titles: List<String>,
         target: ReadingTarget,
     ): ProviderCallResult<ProviderReadingBinding?> {
+        // Work IDs are private to this Provider and are only used to narrow
+        // earlier matches. They never cross a source, title, edition or facet.
+        var ambiguousCandidates: List<ProviderWorkCandidate>? = null
         for (title in titles) {
             val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
                 is ProviderCallResult.Failure -> {
@@ -376,27 +379,45 @@ class CollectProviderReadingEvidence private constructor(
                 }
                 .distinctBy(ProviderWorkCandidate::externalWorkId)
                 .toList()
+            val sourcePrimaryMatches = matches.filter { normalize(it.title) == normalizedTitle }
+            val priorAmbiguous = ambiguousCandidates
+            val primary = sourcePrimaryMatches.singleOrNull()
+            val candidate = when {
+                // An ambiguous first lookup may only be narrowed to a work
+                // already seen, and only when all competing source titles
+                // explicitly identify a different editorial variant.
+                priorAmbiguous != null -> primary?.takeIf { selected ->
+                    priorAmbiguous.any { it.externalWorkId == selected.externalWorkId } &&
+                        priorAmbiguous
+                            .filter { it.externalWorkId != selected.externalWorkId }
+                            .all { isExplicitEditionVariant(it.title, selected.title) }
+                }
+                matches.size == 1 -> matches.single()
+                primary != null && matches
+                    .filter { it.externalWorkId != primary.externalWorkId }
+                    .all { isExplicitEditionVariant(it.title, primary.title) } -> primary
+                matches.size > 1 -> {
+                    ambiguousCandidates = matches
+                    null
+                }
+                else -> null
+            }
             trace(
                 canonicalTitleId,
                 target,
                 DiagnosticStage.LOOKUP,
-                when (matches.size) {
-                    0 -> DiagnosticOutcome.EMPTY
-                    1 -> DiagnosticOutcome.ACCEPTED
+                when {
+                    candidate != null -> DiagnosticOutcome.ACCEPTED
+                    matches.isEmpty() -> DiagnosticOutcome.EMPTY
                     else -> DiagnosticOutcome.REJECTED
                 },
                 candidates = candidates.size,
                 exactMatches = matches.size,
-                bindings = if (matches.size == 1) 1 else 0,
+                bindings = if (candidate != null) 1 else 0,
             )
-            // Only the absence of a verified match authorizes trying a second
-            // source-attested title. An ambiguous match must never be bypassed by
-            // treating a translation as proof of the correct reading edition.
-            if (matches.size > 1) return ProviderCallResult.Success(null)
-            if (matches.isEmpty()) continue
+            if (candidate == null) continue
 
             val now = clock()
-            val candidate = matches.single()
             val binding = ProviderReadingBinding(
                 id = bindingId(
                     canonicalTitleId = canonicalTitleId,
@@ -532,6 +553,22 @@ class CollectProviderReadingEvidence private constructor(
         .lowercase()
         .replace(WHITESPACE, " ")
 
+    /** An explicit edition label is evidence of a variant, not a fuzzy title mismatch. */
+    private fun isExplicitEditionVariant(candidateTitle: String, baseTitle: String): Boolean {
+        val base = normalize(baseTitle)
+        val candidate = normalize(candidateTitle)
+        if (candidate == base || !candidate.startsWith(base)) return false
+        val suffix = candidate.removePrefix(base).trim()
+        if (suffix.none { it.isLetterOrDigit() }) return false
+        val explicitlyQualified = suffix.startsWith("(") ||
+            suffix.startsWith("[") ||
+            suffix.startsWith("-") ||
+            suffix.startsWith(":")
+        return explicitlyQualified && EXPLICIT_ALTERNATE_EDITION_HINTS.any { hint ->
+            suffix.contains(hint)
+        }
+    }
+
     private fun bindingId(
         canonicalTitleId: String,
         providerId: ProviderId,
@@ -570,6 +607,16 @@ class CollectProviderReadingEvidence private constructor(
             ProviderCapabilities.ReadingChaptersV1,
         )
         val WHITESPACE = Regex("\\s+")
+        val EXPLICIT_ALTERNATE_EDITION_HINTS = listOf(
+            "colored",
+            "coloured",
+            "full color",
+            "full colour",
+            "omnibus",
+            "one shot",
+            "oneshot",
+            "special edition",
+        )
         const val MAX_CONCURRENT_PROVIDERS = 4
         const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
         const val MAX_LOOKUP_PAGES = 8

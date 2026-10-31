@@ -380,6 +380,227 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `unique primary title beats secondary colored alias without choosing a random work`(): Unit = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "Vagabond")
+        val bindings = MemoryBindingRepository()
+        val requests = mutableListOf<String>()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    requests += request.titles.single()
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate("main", "Vagabond", language = "en"),
+                                ProviderWorkCandidate(
+                                    "colored",
+                                    "Vagabond (Colored)",
+                                    aliases = listOf("Vagabond"),
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    request.binding.externalWorkId shouldBe "main"
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation("main-chapter-1", "Ch. 1", rawNumber = 1.0)),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+
+        val collected = collector.execute(title.id)
+
+        requests shouldBe listOf("Vagabond")
+        collected.evidence.map { it.externalChapterKey } shouldBe listOf("main-chapter-1")
+        bindings.getByTitle(title.id).single().ref.externalWorkId shouldBe "main"
+        bindings.getByTitle(title.id).single().verification shouldBe ProviderBindingVerification.EXACT
+    }
+
+    @Test
+    fun `alternative consented title narrows ambiguous aliases only to a previously seen work`(): Unit = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "Nanatsu no Taizai")
+        val observations = object : TitleNameObservationRepository {
+            override suspend fun getByTitle(canonicalTitleId: String): List<TitleNameObservation> = listOf(
+                TitleNameObservation(
+                    canonicalTitleId = title.id,
+                    provider = "mal",
+                    sourceKey = "english",
+                    value = "The Seven Deadly Sins",
+                    updatedAt = 42L,
+                ),
+            )
+            override suspend fun upsert(observation: TitleNameObservation) = error("not used")
+        }
+        val integrations = mockk<IntegrationRegistry>(relaxed = true)
+        every {
+            integrations.isGlobalCapabilityActive(IntegrationId("mal"), IntegrationCapability.METADATA_BASIC)
+        } returns true
+        val lookups = mutableListOf<String>()
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    val search = request.titles.single()
+                    lookups += search
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    "main",
+                                    "The Seven Deadly Sins",
+                                    aliases = listOf("Nanatsu no Taizai"),
+                                    language = "en",
+                                ),
+                                ProviderWorkCandidate(
+                                    "colored",
+                                    "The Seven Deadly Sins (Colored)",
+                                    aliases = listOf("Nanatsu no Taizai"),
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    request.binding.externalWorkId shouldBe "main"
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation("main-1", "Ch. 1", rawNumber = 1.0)),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            titleNameObservationRepository = observations,
+            integrationRegistry = integrations,
+        )
+
+        val collected = collector.execute(title.id)
+
+        lookups shouldBe listOf("Nanatsu no Taizai", "The Seven Deadly Sins")
+        collected.evidence.map { it.externalChapterKey } shouldBe listOf("main-1")
+        bindings.getByTitle(title.id).single().ref.externalWorkId shouldBe "main"
+    }
+
+    @Test
+    fun `alias search must not select an unrelated work outside the original ambiguous set`(): Unit = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "Nanatsu no Taizai")
+        val names = object : TitleNameObservationRepository {
+            override suspend fun getByTitle(canonicalTitleId: String): List<TitleNameObservation> = listOf(
+                TitleNameObservation(title.id, "mal", "english", "The Seven Deadly Sins", 42L),
+            )
+            override suspend fun upsert(observation: TitleNameObservation) = error("not used")
+        }
+        val integrations = mockk<IntegrationRegistry>(relaxed = true)
+        every {
+            integrations.isGlobalCapabilityActive(IntegrationId("mal"), IntegrationCapability.METADATA_BASIC)
+        } returns true
+        val bindings = MemoryBindingRepository()
+        val queries = mutableListOf<String>()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    val query = request.titles.single()
+                    queries += query
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = if (query == "Nanatsu no Taizai") {
+                                listOf(
+                                    ProviderWorkCandidate(
+                                        "existing-a",
+                                        "An Edition",
+                                        aliases = listOf(query),
+                                        language = "en",
+                                    ),
+                                    ProviderWorkCandidate(
+                                        "existing-b",
+                                        "Another Edition",
+                                        aliases = listOf(query),
+                                        language = "en",
+                                    ),
+                                )
+                            } else {
+                                listOf(ProviderWorkCandidate("foreign-id", query, language = "en"))
+                            },
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Unrelated alternate work may not load chapters") },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            titleNameObservationRepository = names,
+            integrationRegistry = integrations,
+        )
+
+        val result = collector.execute(title.id)
+
+        queries shouldBe listOf("Nanatsu no Taizai", "The Seven Deadly Sins")
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+        bindings.getByTitle(title.id) shouldBe emptyList()
+    }
+
+    @Test
+    fun `unique primary title must not override another unmarked exact alias edition`(): Unit = runBlocking {
+        val bindings = MemoryBindingRepository()
+        val bridge = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate("main", "Dandadan", language = "en"),
+                                ProviderWorkCandidate(
+                                    "unclear-edition",
+                                    "Dandadan II",
+                                    aliases = listOf("Dandadan"),
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("An unmarked competing edition must not be auto-bound") },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+
+        val result = bridge.execute(canonicalTitle.id)
+
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+    }
+
+    @Test
     fun `lookup failure marks collection incomplete`(): Unit = runBlocking {
         val recorder = CapturingProviderDiagnostics()
         val bridge = CollectProviderReadingEvidence(
