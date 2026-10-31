@@ -104,6 +104,7 @@ enum class DiagnosticEventName {
     CHAPTER_REFRESH_COMPLETED,
     PROVIDER_READING_EVIDENCE,
     PROVIDER_READING_PAGE,
+    PROVIDER_READING_PAGE_DETAIL,
     PROVIDER_READING_CANDIDATE,
 
     READER_OPEN_STARTED,
@@ -196,6 +197,11 @@ enum class DiagnosticAttribute {
     PROVIDER_WORK_ALIASES,
     PROVIDER_LOOKUP_TITLE,
     LOOKUP_DECISION,
+    PROVIDER_CHAPTER_FIRST_ID,
+    PROVIDER_CHAPTER_LAST_ID,
+    CHAPTER_NUMBER_MIN_MILLI,
+    CHAPTER_NUMBER_MAX_MILLI,
+    PARTIAL_EVIDENCE_COUNT,
     PROVIDER_WORK_CHAPTER_COUNT,
     PROVIDER_CANDIDATE_REASON,
     BROADENED,
@@ -528,6 +534,9 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.CANDIDATE_INDEX,
         DiagnosticAttribute.QUERY_INDEX,
         DiagnosticAttribute.PROVIDER_WORK_CHAPTER_COUNT,
+        DiagnosticAttribute.CHAPTER_NUMBER_MIN_MILLI,
+        DiagnosticAttribute.CHAPTER_NUMBER_MAX_MILLI,
+        DiagnosticAttribute.PARTIAL_EVIDENCE_COUNT,
         DiagnosticAttribute.OBSERVATION_COUNT,
         DiagnosticAttribute.ITEM_COUNT,
         DiagnosticAttribute.ACCEPTED_COUNT,
@@ -611,6 +620,10 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { isSafeP2pLine(it.value) }
         DiagnosticAttribute.PROVIDER_WORK_ID -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { providerWorkIdPattern.matches(it.value) }
+        DiagnosticAttribute.PROVIDER_CHAPTER_FIRST_ID,
+        DiagnosticAttribute.PROVIDER_CHAPTER_LAST_ID,
+        -> (value as? DiagnosticAttributeValue.Text)
+            ?.takeIf { it.value.matches(Regex("^[0-9]{1,32}$")) }
         DiagnosticAttribute.PROVIDER_WORK_URL -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { providerWorkUrlPattern.matches(it.value) }
         DiagnosticAttribute.PROVIDER_WORK_TITLE,
