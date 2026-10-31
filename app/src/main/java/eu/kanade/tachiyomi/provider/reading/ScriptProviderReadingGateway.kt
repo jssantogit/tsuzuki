@@ -142,6 +142,7 @@ class ScriptProviderReadingGateway internal constructor(
                         aliases = item.aliases,
                         url = item.url,
                         language = item.language,
+                        chapterCount = item.chapterCount,
                     )
                 },
                 nextCursor = decoded.nextCursor?.let(::ProviderCursor),
@@ -462,6 +463,7 @@ class ScriptProviderReadingGateway internal constructor(
         val aliases: List<String> = emptyList(),
         val url: String? = null,
         val language: String? = null,
+        val chapterCount: Int? = null,
     )
 
     @Serializable
