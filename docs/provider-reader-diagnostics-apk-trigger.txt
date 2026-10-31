@@ -1,5 +1,9 @@
-Tsuzuki #176 / PR #181: signed update-in-place Release APK smoke trigger.
-Functional source tree equals CI full GREEN b97f2b0a0dc19e9140ce2f38453cc956fcd15dbc.
-Provider Platform Android instrumentation #41217344228 SUCCESS on functionally identical tree.
-Capture MangaFire candidates using Logs -> Start logs BEFORE opening each title.
-Do not merge main or reset provider settings, grants, library, reader progress or backup.
+Tsuzuki issue #176 — signed ARM64 release smoke for source-qualified edition + extended diagnostics.
+Functional source: 57fe3a9f815921e2adc8e2fef4835f28838c728c (updated by style-only commits on this smoke branch).
+CI full 41223734656 SUCCESS on this branch before this documentation trigger.
+Android instrumentation 41223734589 launched on equivalent functional tree; physical acceptance still required.
+Provider MangaFire package remains code 7 on the installed device; Provider PR #54/code8 is NOT published.
+Start opt-in Logs before opening titles; verify Vagabond, Fullmetal, Bleach, Naruto, Neverland, Chainsaw Man.
+Capture provider candidate IDs, exact search text, binding HID, page number ranges, incomplete inventory and reader events.
+Preserve app.tsuzuki signing lineage, installed providers, library, reader progress, accounts and settings.
+Do not merge this smoke branch or draft PRs into main before physical verification.
