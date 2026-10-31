@@ -4,6 +4,8 @@ import dev.zacsweers.metro.Inject
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
+import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
+import tachiyomi.domain.tsuzuki.chapter.interactor.hasConflictingIntegerChapterHint
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
@@ -44,6 +46,7 @@ class ResolveProviderChapterReading(
     private val providerRegistry: ProviderRegistry,
     private val gateway: ProviderReadingGateway,
     private val managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
+    private val chapterLabelParser: ParseCanonicalChapterLabel = ParseCanonicalChapterLabel(),
 ) {
 
     suspend fun options(canonicalChapterId: String): List<ProviderChapterReadingOption> {
@@ -66,6 +69,18 @@ class ResolveProviderChapterReading(
                 persisted.mappedCanonicalChapterId == canonicalChapterId &&
                     persisted.evidence.producerKind == ProducerKind.PROVIDER &&
                     persisted.evidence.authority == ChapterEvidenceAuthority.PROVIDER_PROVISIONAL
+            }
+            .filter { persisted ->
+                // A persisted mapping can outlive a source correction or legacy
+                // migration. Recheck chapter semantics at the Reader boundary:
+                // a source chapter 84 must not open canonical chapter 1.
+                val evidence = persisted.evidence
+                val parsed = chapterLabelParser.execute(evidence.rawLabel, evidence.rawNumber)
+                parsed.identity.isSpecific &&
+                    parsed.confidence >= MIN_READING_IDENTITY_CONFIDENCE &&
+                    parsed.identity == chapter.identity &&
+                    !hasConflictingIntegerChapterHint(parsed, evidence.rawNumber) &&
+                    (evidence.volume == null || chapter.volume == null || evidence.volume == chapter.volume)
             }
             .mapNotNull { persisted ->
                 val providerChapterId = persisted.evidence.externalChapterKey ?: return@mapNotNull null
@@ -162,6 +177,8 @@ class ResolveProviderChapterReading(
             }
 
     private companion object {
+        const val MIN_READING_IDENTITY_CONFIDENCE = 0.90
+
         val REQUIRED_READING_CAPABILITIES = setOf(
             ProviderCapabilities.ReadingLookupV1,
             ProviderCapabilities.ReadingChaptersV1,
