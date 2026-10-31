@@ -27,6 +27,10 @@ class StructuredDiagnosticEventTest {
                 "provider_work_title" to DiagnosticAttributeValue.Text("Vagabond"),
                 "provider_work_url" to DiagnosticAttributeValue.Text("https://mangafire.to/title/qnlvj-vagabond22"),
                 "provider_work_chapter_count" to DiagnosticAttributeValue.Number(327),
+                "provider_detail_outcome" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderDetailOutcome.DETAIL_FAILED,
+                ),
+                "http_status" to DiagnosticAttributeValue.Number(503),
                 "provider_candidate_reason" to DiagnosticAttributeValue.Code(
                     DiagnosticProviderCandidateReason.ALIAS_MATCH_BLOCKED,
                 ),
@@ -37,6 +41,9 @@ class StructuredDiagnosticEventTest {
         safe[DiagnosticAttribute.PROVIDER_WORK_URL] shouldBe
             DiagnosticAttributeValue.Text("https://mangafire.to/title/qnlvj-vagabond22")
         safe[DiagnosticAttribute.PROVIDER_WORK_CHAPTER_COUNT] shouldBe DiagnosticAttributeValue.Number(327)
+        safe[DiagnosticAttribute.PROVIDER_DETAIL_OUTCOME] shouldBe
+            DiagnosticAttributeValue.Code(DiagnosticProviderDetailOutcome.DETAIL_FAILED)
+        safe[DiagnosticAttribute.HTTP_STATUS] shouldBe DiagnosticAttributeValue.Number(503)
 
         listOf(
             "https://mangafire.to/title/qnlvj-vagabond22?token=secret",
@@ -50,6 +57,12 @@ class StructuredDiagnosticEventTest {
         }
         sanitizeCandidate(
             mapOf("provider_work_title" to DiagnosticAttributeValue.Text("Bad\nAuthorization: Bearer secret")),
+        ) shouldBe emptyMap()
+        sanitizeCandidate(
+            mapOf(
+                "provider_detail_outcome" to DiagnosticAttributeValue.Text("Authorization: Bearer secret"),
+                "http_status" to DiagnosticAttributeValue.Number(999),
+            ),
         ) shouldBe emptyMap()
     }
 
