@@ -12,8 +12,8 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
-import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
