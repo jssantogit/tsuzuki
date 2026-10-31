@@ -267,7 +267,7 @@ private fun LoadedDetails(
                                 onOpenChapter,
                                 onProviders,
                                 onAll = {},
-                                )
+                            )
                         }
                     }
                     items(chapters, key = { it.chapter.id }) { item ->
