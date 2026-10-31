@@ -405,6 +405,7 @@ object StructuredDiagnosticSanitizer {
     private val providerIdPattern = Regex("^[a-zA-Z0-9._-]{1,64}$")
     private val providerVersionPattern = Regex("^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$")
     private val providerErrorCodePattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
+
     // Detailed capture accepts only bounded MangaFire public title paths, never query strings or credentials.
     private val providerWorkIdPattern = Regex("^[A-Za-z0-9_-]{1,80}$")
     private val providerWorkUrlPattern = Regex("^https://mangafire\\.to/title/[A-Za-z0-9-]{2,160}/?$")
