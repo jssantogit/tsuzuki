@@ -9,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
@@ -136,7 +137,7 @@ class CollectProviderReadingEvidenceTest {
         result.evidence shouldBe emptyList()
         result.snapshots shouldBe emptyList()
         result.partialEvidence.map { it.externalChapterKey } shouldBe listOf("chapter-one")
-        result.partialEvidence.all { it.authority == tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority.PROVIDER_PROVISIONAL } shouldBe true
+        result.partialEvidence.all { it.authority == ChapterEvidenceAuthority.PROVIDER_PROVISIONAL } shouldBe true
         val page = recorder.events.single { it.name == DiagnosticEventName.PROVIDER_READING_PAGE }
         page.stage shouldBe DiagnosticStage.READ
         page.outcome shouldBe DiagnosticOutcome.PARTIAL
