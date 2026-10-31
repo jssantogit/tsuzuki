@@ -142,6 +142,29 @@ class ScriptProviderReadingGatewayTest {
     }
 
     @Test
+    fun `source 503 remains retryable and invalid status fails closed`() = runBlocking {
+        val serverFailure = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success(
+                """{"items":[],"lookupFailureCode":"HTTP_ERROR","lookupHttpStatus":503}""",
+            )
+        }
+        val failed = serverFailure.lookup(providerId, ProviderReadingLookupRequest(listOf("Vagabond")))
+        (failed as ProviderCallResult.Failure).error.apply {
+            code shouldBe ProviderErrorCode.SOURCE_READ_ERROR
+            sourceFailureCode shouldBe ProviderLookupFailureCode.HTTP_ERROR
+            retryable shouldBe true
+            httpStatus shouldBe 503
+        }
+        val tampered = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success(
+                """{"items":[],"lookupFailureCode":"CHALLENGE_BLOCKED","lookupHttpStatus":999}""",
+            )
+        }
+        val invalid = tampered.lookup(providerId, ProviderReadingLookupRequest(listOf("Vagabond")))
+        (invalid as ProviderCallResult.Failure).error.code shouldBe ProviderErrorCode.MALFORMED_RESULT
+    }
+
+    @Test
     fun `legacy empty lookup stays complete but malformed provenance fails closed`() = runBlocking {
         val empty = gateway { _, _, _, _ ->
             ProviderRuntimeInvocationResponse.success("""{"items":[],"nextCursor":null}""")
