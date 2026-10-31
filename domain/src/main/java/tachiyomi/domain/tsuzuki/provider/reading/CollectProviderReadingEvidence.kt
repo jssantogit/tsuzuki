@@ -139,7 +139,7 @@ class CollectProviderReadingEvidence private constructor(
                         // Keep accepted pages across the bounded coroutine cancellation. They
                         // remain additive evidence only, not an authoritative full inventory.
                         val partial = mutableListOf<ChapterEvidence>()
-                        val result = withTimeoutOrNull(MAX_PROVIDER_COLLECTION_MILLIS) {
+                        val finished = withTimeoutOrNull(MAX_PROVIDER_COLLECTION_MILLIS) {
                             collectTarget(
                                 canonicalTitleId = canonicalTitleId,
                                 title = canonicalTitle.displayTitle,
@@ -153,7 +153,8 @@ class CollectProviderReadingEvidence private constructor(
                                     )
                                 },
                             )
-                        } ?: ProviderReadingEvidenceCollection(complete = false).also {
+                        }
+                        if (finished == null) {
                             trace(
                                 canonicalTitleId,
                                 target,
@@ -161,11 +162,16 @@ class CollectProviderReadingEvidence private constructor(
                                 DiagnosticOutcome.TIMEOUT,
                             )
                         }
-                        // A disabled/reconfigured Provider cannot publish newly observed support.
+                        // Preserve valid pages only for a genuine timeout. A malformed result,
+                        // identity error or resource violation must not salvage untrusted pages.
                         val stillEnabled = providerRegistry.registration(target.registration.descriptor.id) ==
                             target.registration
-                        result.copy(
-                            partialEvidence = if (!result.complete && stillEnabled) partial.toList() else emptyList(),
+                        (finished ?: ProviderReadingEvidenceCollection(complete = false)).copy(
+                            partialEvidence = if (finished == null && stillEnabled) {
+                                partial.toList()
+                            } else {
+                                emptyList()
+                            },
                         )
                     }
                 }
