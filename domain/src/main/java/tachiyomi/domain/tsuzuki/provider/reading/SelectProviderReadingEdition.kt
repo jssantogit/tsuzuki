@@ -3,6 +3,9 @@ package tachiyomi.domain.tsuzuki.provider.reading
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
+import tachiyomi.domain.tsuzuki.integration.IntegrationId
+import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
+import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
@@ -49,6 +52,7 @@ class SelectProviderReadingEdition(
     private val gateway: ProviderReadingGateway,
     private val bindingRepository: ProviderReadingBindingRepository,
     private val titleNameObservationRepository: TitleNameObservationRepository? = null,
+    private val integrationRegistry: IntegrationRegistry? = null,
 ) {
     suspend fun search(canonicalTitleId: String, query: String): ProviderEditionSearchResult =
         searchScoped(canonicalTitleId, query, selectedRef = null)
@@ -69,13 +73,32 @@ class SelectProviderReadingEdition(
             add(query.trim())
             if (query.trim().equals(canonical.displayTitle.trim(), ignoreCase = true)) {
                 val names = try {
-                    titleNameObservationRepository?.getByTitle(canonicalTitleId).orEmpty()
+                    // A title observed by a revoked integration may not trigger
+                    // new outbound Provider searches without active consent.
+                    if (integrationRegistry != null && titleNameObservationRepository != null) {
+                        integrationRegistry.awaitReady()
+                        titleNameObservationRepository.getByTitle(canonicalTitleId)
+                    } else {
+                        emptyList()
+                    }
                 } catch (error: CancellationException) {
                     throw error
                 } catch (_: Exception) {
                     emptyList()
                 }
                 names.asSequence()
+                    .filter { observation ->
+                        integrationRegistry?.isGlobalCapabilityActive(
+                            IntegrationId(observation.provider),
+                            IntegrationCapability.METADATA_BASIC,
+                        ) == true
+                    }
+                    .sortedWith(
+                        compareBy(
+                            { if (it.sourceKey.lowercase() in setOf("en", "english")) 0 else 1 },
+                            { if (it.sourceKey.lowercase() in setOf("romaji", "romanized")) 0 else 1 },
+                        ),
+                    )
                     .map { it.value.trim() }
                     .filter { it.isNotBlank() && it.length <= MAX_QUERY_CHARS }
                     .forEach { add(it) }
