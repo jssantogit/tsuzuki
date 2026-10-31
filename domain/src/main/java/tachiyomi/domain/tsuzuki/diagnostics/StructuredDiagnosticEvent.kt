@@ -356,7 +356,6 @@ enum class DiagnosticTorrentCandidateMatchReason : DiagnosticSafeCode {
     VOLUME_NOT_PROVEN,
 }
 
-/** Detailed-capture-only classification; never use title similarity as binding authorization. */
 /** Source identity is unresolved even when lookup HTTP/API completed successfully. */
 enum class DiagnosticProviderLookupDecision : DiagnosticSafeCode {
     SELECTED,
@@ -365,6 +364,7 @@ enum class DiagnosticProviderLookupDecision : DiagnosticSafeCode {
     AMBIGUOUS_EDITION,
 }
 
+/** Detailed-capture-only classification; never use title similarity as binding authorization. */
 enum class DiagnosticProviderCandidateReason : DiagnosticSafeCode {
     SELECTED,
     PRIMARY_MATCH_BLOCKED,
