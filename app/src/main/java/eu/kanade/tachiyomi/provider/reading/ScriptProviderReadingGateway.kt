@@ -393,23 +393,26 @@ class ScriptProviderReadingGateway internal constructor(
             failure(ProviderErrorCode.TIMEOUT, retryable = true)
         ProviderRuntimeFailureCode.RUNTIME_DIED ->
             failure(ProviderErrorCode.RUNTIME_DIED, retryable = true)
-        ProviderRuntimeFailureCode.RESOURCE_LIMIT,
-        ProviderRuntimeFailureCode.INVOCATION_CONFLICT,
-        ->
+        ProviderRuntimeFailureCode.RESOURCE_LIMIT ->
             failure(ProviderErrorCode.RESOURCE_LIMIT, retryable = true)
+        ProviderRuntimeFailureCode.INVOCATION_CONFLICT ->
+            failure(ProviderErrorCode.INVOCATION_CONFLICT, retryable = true)
         ProviderRuntimeFailureCode.MALFORMED_RESULT ->
             malformed()
         ProviderRuntimeFailureCode.CANCELLED ->
             throw CancellationException("Provider reading invocation cancelled")
         ProviderRuntimeFailureCode.HOST_ERROR ->
-            unavailable(retryable = true)
-        ProviderRuntimeFailureCode.SCRIPT_ERROR,
-        ProviderRuntimeFailureCode.PACKAGE_INVALID,
-        ProviderRuntimeFailureCode.MALFORMED_REQUEST,
-        ProviderRuntimeFailureCode.SOURCE_TOO_LARGE,
-        ProviderRuntimeFailureCode.SOURCE_READ_ERROR,
-        ->
+            failure(ProviderErrorCode.HOST_ERROR, retryable = true)
+        ProviderRuntimeFailureCode.SCRIPT_ERROR ->
             failure(ProviderErrorCode.SCRIPT_ERROR, retryable = false)
+        ProviderRuntimeFailureCode.PACKAGE_INVALID ->
+            failure(ProviderErrorCode.PACKAGE_INVALID, retryable = false)
+        ProviderRuntimeFailureCode.MALFORMED_REQUEST ->
+            failure(ProviderErrorCode.MALFORMED_REQUEST, retryable = false)
+        ProviderRuntimeFailureCode.SOURCE_TOO_LARGE ->
+            failure(ProviderErrorCode.SOURCE_TOO_LARGE, retryable = false)
+        ProviderRuntimeFailureCode.SOURCE_READ_ERROR ->
+            failure(ProviderErrorCode.SOURCE_READ_ERROR, retryable = false)
     }
 
     private fun unavailable(retryable: Boolean = false) =
