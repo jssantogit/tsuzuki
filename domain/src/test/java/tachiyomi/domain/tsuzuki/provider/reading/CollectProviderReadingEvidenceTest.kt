@@ -1221,6 +1221,35 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `lookup timeout is distinguished from a chapter read timeout`() = runTest {
+        val recorder = CapturingProviderDiagnostics()
+        val neverCompletes = CompletableDeferred<Unit>()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    neverCompletes.await()
+                    error("unreachable")
+                },
+                chaptersHandler = { error("Lookup never selected a binding") },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+        val result = withTimeoutOrNull(21_000) { collector.execute(canonicalTitle.id) }
+        result!!.complete shouldBe false
+        recorder.events.any {
+            it.stage == DiagnosticStage.LOOKUP && it.outcome == DiagnosticOutcome.TIMEOUT
+        } shouldBe true
+        recorder.events.none {
+            it.stage == DiagnosticStage.READ && it.outcome == DiagnosticOutcome.TIMEOUT
+        } shouldBe true
+    }
+
+    @Test
     fun `detailed capture records real candidate identities and rejection reasons`(): Unit = runBlocking {
         val recorder = CapturingProviderDiagnostics(captureActive = true)
         val collector = CollectProviderReadingEvidence(
