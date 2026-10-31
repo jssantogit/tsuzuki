@@ -146,6 +146,7 @@ class RefreshChapterEvidence private constructor(
         registry: IntegrationRegistry,
         reconcileChapterEvidence: ReconcileChapterEvidence,
         providerReadingEvidence: CollectProviderReadingEvidence,
+        structuredDiagnostics: StructuredDiagnosticRecorder = NoOpStructuredDiagnosticRecorder,
     ) : this(
         registry = registry,
         reconcileChapterEvidence = reconcileChapterEvidence,
@@ -155,7 +156,7 @@ class RefreshChapterEvidence private constructor(
         inFlightContentResolution = null,
         diagnostics = NoOpChapterInventoryDiagnostics,
         discoverReadableTitle = null,
-        structuredDiagnostics = NoOpStructuredDiagnosticRecorder,
+        structuredDiagnostics = structuredDiagnostics,
         refreshSnapshots = null,
         providerReadingEvidence = providerReadingEvidence,
         clock = { Clock.System.now().toEpochMilliseconds() },
