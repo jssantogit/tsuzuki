@@ -666,6 +666,57 @@ class CollectProviderReadingEvidenceTest {
         bindings.getByTitle(canonicalTitle.id) shouldBe listOf(old)
     }
 
+    @Test
+    fun `edition confirmation revalidates only the chosen Provider instead of unrelated sources`(): Unit = runBlocking {
+        val mangaFire = registry().providers().single()
+        val unrelatedId = ProviderId("app.tsuzuki.unrelated")
+        val unrelated = mangaFire.copy(
+            descriptor = mangaFire.descriptor.copy(id = unrelatedId, name = "Unrelated source"),
+            facets = listOf(ProviderFacetRef(unrelatedId, "en")),
+        )
+        val activeProviders = DefaultProviderRegistry(registrations = { listOf(mangaFire, unrelated) })
+        val lookups = mutableListOf<ProviderId>()
+        val editionGateway = object : ProviderReadingGateway {
+            override suspend fun lookup(
+                providerId: ProviderId,
+                request: ProviderReadingLookupRequest,
+            ): ProviderCallResult<ProviderPage<ProviderWorkCandidate>> {
+                lookups += providerId
+                return ProviderCallResult.Success(
+                    ProviderPage(
+                        items = if (providerId == this@CollectProviderReadingEvidenceTest.providerId) {
+                            listOf(ProviderWorkCandidate("manga-standard", "Dandadan", language = "en"))
+                        } else {
+                            emptyList()
+                        },
+                        nextCursor = null,
+                    ),
+                )
+            }
+
+            override suspend fun chapters(
+                providerId: ProviderId,
+                request: ProviderReadingChaptersRequest,
+            ): ProviderCallResult<ProviderPage<ProviderChapterObservation>> = error("not used")
+
+            override suspend fun pages(
+                providerId: ProviderId,
+                request: ProviderReadingPagesRequest,
+            ): ProviderCallResult<ProviderReadingDelivery> = error("not used")
+        }
+        val picker = SelectProviderReadingEdition(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = activeProviders,
+            gateway = editionGateway,
+            bindingRepository = MemoryBindingRepository(),
+        )
+        val selected = picker.search(canonicalTitle.id, "Dandadan").candidates.single()
+        lookups.clear()
+
+        picker.confirm(canonicalTitle.id, selected) shouldBe ProviderEditionConfirmation.BOUND
+        lookups shouldBe listOf(providerId)
+    }
+
     // Cross-module regression: the persisted slot is reserved by only one edition.
     @Test
     fun `manual edition selection loses a concurrent binding reservation without overwriting it`() = runBlocking<Unit> {
