@@ -370,8 +370,19 @@ class CollectProviderReadingEvidence private constructor(
         var ambiguousCandidates: List<ProviderWorkCandidate>? = null
         var unresolved = false
         for ((queryIndex, title) in titles.withIndex()) {
+            val queryStarted = System.nanoTime()
+            traceLookupAttempt(canonicalTitleId, target, queryIndex, title, DiagnosticOutcome.STARTED)
             val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
                 is ProviderCallResult.Failure -> {
+                    traceLookupAttempt(
+                        canonicalTitleId,
+                        target,
+                        queryIndex,
+                        title,
+                        DiagnosticOutcome.FAILED,
+                        elapsedMillis = (System.nanoTime() - queryStarted) / 1_000_000L,
+                        errorCode = result.error.code,
+                    )
                     trace(
                         canonicalTitleId,
                         target,
@@ -381,7 +392,18 @@ class CollectProviderReadingEvidence private constructor(
                     )
                     return result
                 }
-                is ProviderCallResult.Success -> result.value
+                is ProviderCallResult.Success -> {
+                    traceLookupAttempt(
+                        canonicalTitleId,
+                        target,
+                        queryIndex,
+                        title,
+                        DiagnosticOutcome.SUCCEEDED,
+                        elapsedMillis = (System.nanoTime() - queryStarted) / 1_000_000L,
+                        candidateCount = result.value.size,
+                    )
+                    result.value
+                }
             }
             val normalizedTitle = normalize(title)
             val matches = candidates
@@ -547,6 +569,56 @@ class CollectProviderReadingEvidence private constructor(
             ),
         )
         .toList()
+
+    /**
+     * Source requests that never return still leave an unmatched STARTED event,
+     * followed by the collector's timeout event. This records the exact query
+     * index at which the budget expired without logging upstream error text.
+     */
+    private fun traceLookupAttempt(
+        titleId: String,
+        target: ReadingTarget,
+        queryIndex: Int,
+        queryTitle: String,
+        outcome: DiagnosticOutcome,
+        elapsedMillis: Long? = null,
+        candidateCount: Int? = null,
+        errorCode: ProviderErrorCode? = null,
+    ) {
+        if (!diagnostics.detailedCaptureActive) return
+        runCatching {
+            val attributes = buildMap<String, DiagnosticAttributeValue> {
+                put("provider_id", DiagnosticAttributeValue.Text(target.registration.descriptor.id.value))
+                put(
+                    "provider_version_code",
+                    DiagnosticAttributeValue.Number(target.registration.descriptor.version.code.toLong()),
+                )
+                diagnostics.canonicalTitleReference(titleId)?.let {
+                    put("canonical_title_ref", DiagnosticAttributeValue.Text(it))
+                }
+                put("query_index", DiagnosticAttributeValue.Number((queryIndex + 1).toLong()))
+                if (target.registration.descriptor.id.value == "app.tsuzuki.mangafire") {
+                    put("provider_lookup_title", DiagnosticAttributeValue.Text(queryTitle.take(256)))
+                }
+                candidateCount?.let { put("candidate_count", DiagnosticAttributeValue.Number(it.toLong())) }
+                errorCode?.let { put("provider_error_code", DiagnosticAttributeValue.Text(it.name)) }
+            }
+            diagnostics.record(
+                StructuredDiagnosticEvent(
+                    timestampMillis = clock().coerceAtLeast(0L),
+                    severity = DiagnosticSeverity.DEBUG,
+                    subsystem = DiagnosticSubsystem.CHAPTER,
+                    name = DiagnosticEventName.PROVIDER_READING_LOOKUP_ATTEMPT,
+                    sessionId = diagnostics.sessionId,
+                    operationId = null,
+                    stage = DiagnosticStage.LOOKUP,
+                    outcome = outcome,
+                    durationMillis = elapsedMillis?.coerceIn(0L, 86_400_000L),
+                    attributes = attributes,
+                ),
+            )
+        }
+    }
 
     /**
      * Intentionally includes public MangaFire identifiers and names ONLY during a user-triggered
