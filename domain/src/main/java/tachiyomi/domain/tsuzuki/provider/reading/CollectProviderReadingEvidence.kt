@@ -293,6 +293,21 @@ class CollectProviderReadingEvidence private constructor(
                     )
                 },
                 clock = clock,
+                onPageStarted = { pageIndex ->
+                    traceChapterRequest(canonicalTitleId, target, binding.ref, pageIndex, DiagnosticOutcome.STARTED)
+                },
+                onPageFinished = { pageIndex, count, errorCode, elapsedMillis ->
+                    traceChapterRequest(
+                        canonicalTitleId,
+                        target,
+                        binding.ref,
+                        pageIndex,
+                        if (errorCode == null) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.FAILED,
+                        itemCount = count,
+                        errorCode = errorCode,
+                        elapsedMillis = elapsedMillis,
+                    )
+                },
                 onPageCollected = { page, observedAt ->
                     if (diagnostics.detailedCaptureActive) {
                         traceReadingPageDetail(canonicalTitleId, target, lastPageNumber, page)
@@ -711,6 +726,55 @@ class CollectProviderReadingEvidence private constructor(
                     ),
                 )
             }
+        }
+    }
+
+    /**
+     * A missing finish event plus a READ timeout identifies the exact chapter
+     * page where the source stopped responding. No cursor or HTTP body is logged.
+     */
+    private fun traceChapterRequest(
+        titleId: String,
+        target: ReadingTarget,
+        ref: ProviderBindingRef,
+        pageIndex: Int,
+        outcome: DiagnosticOutcome,
+        itemCount: Int? = null,
+        errorCode: ProviderErrorCode? = null,
+        elapsedMillis: Long? = null,
+    ) {
+        if (!diagnostics.detailedCaptureActive) return
+        runCatching {
+            val attributes = buildMap<String, DiagnosticAttributeValue> {
+                put("provider_id", DiagnosticAttributeValue.Text(target.registration.descriptor.id.value))
+                put(
+                    "provider_version_code",
+                    DiagnosticAttributeValue.Number(target.registration.descriptor.version.code.toLong()),
+                )
+                diagnostics.canonicalTitleReference(titleId)?.let {
+                    put("canonical_title_ref", DiagnosticAttributeValue.Text(it))
+                }
+                put("page_index", DiagnosticAttributeValue.Number(pageIndex.toLong()))
+                if (target.registration.descriptor.id.value == "app.tsuzuki.mangafire") {
+                    put("provider_work_id", DiagnosticAttributeValue.Text(ref.externalWorkId))
+                }
+                itemCount?.let { put("item_count", DiagnosticAttributeValue.Number(it.toLong())) }
+                errorCode?.let { put("provider_error_code", DiagnosticAttributeValue.Text(it.name)) }
+            }
+            diagnostics.record(
+                StructuredDiagnosticEvent(
+                    timestampMillis = clock().coerceAtLeast(0L),
+                    severity = DiagnosticSeverity.DEBUG,
+                    subsystem = DiagnosticSubsystem.CHAPTER,
+                    name = DiagnosticEventName.PROVIDER_READING_CHAPTER_ATTEMPT,
+                    sessionId = diagnostics.sessionId,
+                    operationId = null,
+                    stage = DiagnosticStage.READ,
+                    outcome = outcome,
+                    durationMillis = elapsedMillis?.coerceIn(0L, 86_400_000L),
+                    attributes = attributes,
+                ),
+            )
         }
     }
 
