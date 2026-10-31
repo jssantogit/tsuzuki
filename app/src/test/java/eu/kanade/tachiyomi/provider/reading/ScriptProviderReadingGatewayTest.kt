@@ -35,6 +35,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingDelivery
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkDetailOutcome
 
 class ScriptProviderReadingGatewayTest {
 
@@ -87,7 +88,9 @@ class ScriptProviderReadingGatewayTest {
                       "aliases": ["Tsuzuki Alt"],
                       "url": "https://reader.example/title/42",
                       "language": "en",
-                      "chapterCount": 123
+                      "chapterCount": 123,
+                      "detailOutcome": "DETAIL_FAILED",
+                      "detailHttpStatus": 503
                     }
                   ],
                   "nextCursor": "next"
@@ -105,6 +108,8 @@ class ScriptProviderReadingGatewayTest {
         success.value.items.single().externalWorkId shouldBe "work-42"
         success.value.items.single().title shouldBe "Tsuzuki"
         success.value.items.single().chapterCount shouldBe 123
+        success.value.items.single().detailOutcome shouldBe ProviderWorkDetailOutcome.DETAIL_FAILED
+        success.value.items.single().detailHttpStatus shouldBe 503
         success.value.nextCursor?.value shouldBe "next"
 
         captured?.capabilityId shouldBe "reading.lookup"
