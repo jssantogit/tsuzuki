@@ -459,7 +459,8 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `ambiguous MangaFire lookup diagnostics include query text and final unresolved decision`(): Unit = runBlocking {
+    fun `ambiguous MangaFire lookup diagnostics include query text and final unresolved decision`(): Unit =
+        runBlocking {
         val recorder = CapturingProviderDiagnostics(captureActive = true)
         val collector = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
