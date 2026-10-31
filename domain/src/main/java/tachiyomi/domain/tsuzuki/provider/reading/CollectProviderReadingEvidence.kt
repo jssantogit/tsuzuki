@@ -384,8 +384,9 @@ class CollectProviderReadingEvidence private constructor(
             val primary = sourcePrimaryMatches.singleOrNull()
             val candidate = when {
                 // An ambiguous first lookup may only be narrowed to a work
-                // already seen, and only when all competing source titles
-                // explicitly identify a different editorial variant.
+                // already seen. All rivals must explicitly identify a different
+                // editorial variant: title similarity and chapter count alone
+                // cannot establish canonical edition identity.
                 priorAmbiguous != null -> primary?.takeIf { selected ->
                     priorAmbiguous.any { it.externalWorkId == selected.externalWorkId } &&
                         priorAmbiguous
