@@ -548,6 +548,82 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `source attested colored alias distinguishes an otherwise identical work title`(): Unit = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "Vagabond")
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    externalWorkId = "colored",
+                                    title = "Vagabond",
+                                    aliases = listOf("Vagabond (Official Colored)"),
+                                    language = "en",
+                                ),
+                                ProviderWorkCandidate("regular", "Vagabond", language = "en"),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    request.binding.externalWorkId shouldBe "regular"
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation("ch-1", "Ch. 1", rawNumber = 1.0)),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+        val result = collector.execute(title.id)
+        result.complete shouldBe true
+        result.evidence.shouldHaveSize(1)
+        bindings.getByTitle(title.id).single().ref.externalWorkId shouldBe "regular"
+    }
+
+    @Test
+    fun `colored alias cannot disambiguate more than one unqualified primary`(): Unit = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "Bleach")
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate("colored", "Bleach", aliases = listOf("Bleach (Colored)")),
+                                ProviderWorkCandidate("unmarked-a", "Bleach"),
+                                ProviderWorkCandidate("unmarked-b", "Bleach"),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Ambiguous source must not fetch chapters") },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+        val result = collector.execute(title.id)
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        bindings.getByTitle(title.id) shouldBe emptyList()
+    }
+
+    @Test
     fun `alternative consented title narrows ambiguous aliases only to a previously seen work`(): Unit = runBlocking {
         val title = canonicalTitle.copy(displayTitle = "Nanatsu no Taizai")
         val observations = object : TitleNameObservationRepository {
