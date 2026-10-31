@@ -6,3 +6,7 @@ Provider #54 code8 negotiates diagnostics fields: legacy Host gets no new keys, 
 Compatibility contract: Provider source attested aliases are unchanged by the diagnostic feature flag; never auto-bind first or based on chapter count.
 Do not merge main or publish a Provider without end-to-end acceptance. No reset of app.tsuzuki install, library, Reader, or provider repository.
 Smoke branch from tsuzuki/issue-176-source-identity-stabilization-20261031.
+
+31/10/2026: release/update-in-place smoke requested after functional tree f9401091389bf09875df6dee8a794c3ef56d01da passed CI full #41237847053 and Android instrumentation #41237847032.
+This commit changes only the APK trigger document, not production code. Build package app.tsuzuki (arm64 Release, updater enabled) with persistent signing lineage; compare apksigner certificate against prior 578c48213dc08e54761444eb581bb586cec6a3c9c0760149c5831e795fb18f92.
+Provider code8 remains unpublished; verify new APK with currently installed code7 and then use controlled provider rollout only after validating compatibility and source identity. Preserve local library, progress, repository identity, permissions, and existing provider installs.
