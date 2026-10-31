@@ -501,6 +501,69 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `alias search must not select an unrelated work outside the original ambiguous set`(): Unit = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "Nanatsu no Taizai")
+        val names = object : TitleNameObservationRepository {
+            override suspend fun getByTitle(canonicalTitleId: String): List<TitleNameObservation> = listOf(
+                TitleNameObservation(title.id, "mal", "english", "The Seven Deadly Sins", 42L),
+            )
+            override suspend fun upsert(observation: TitleNameObservation) = error("not used")
+        }
+        val integrations = mockk<IntegrationRegistry>(relaxed = true)
+        every {
+            integrations.isGlobalCapabilityActive(IntegrationId("mal"), IntegrationCapability.METADATA_BASIC)
+        } returns true
+        val bindings = MemoryBindingRepository()
+        val queries = mutableListOf<String>()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    val query = request.titles.single()
+                    queries += query
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = if (query == "Nanatsu no Taizai") {
+                                listOf(
+                                    ProviderWorkCandidate(
+                                        "existing-a",
+                                        "An Edition",
+                                        aliases = listOf(query),
+                                        language = "en",
+                                    ),
+                                    ProviderWorkCandidate(
+                                        "existing-b",
+                                        "Another Edition",
+                                        aliases = listOf(query),
+                                        language = "en",
+                                    ),
+                                )
+                            } else {
+                                listOf(ProviderWorkCandidate("foreign-id", query, language = "en"))
+                            },
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Unrelated alternate work may not load chapters") },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            titleNameObservationRepository = names,
+            integrationRegistry = integrations,
+        )
+
+        val result = collector.execute(title.id)
+
+        queries shouldBe listOf("Nanatsu no Taizai", "The Seven Deadly Sins")
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+        bindings.getByTitle(title.id) shouldBe emptyList()
+    }
+
+    @Test
     fun `lookup failure marks collection incomplete`(): Unit = runBlocking {
         val recorder = CapturingProviderDiagnostics()
         val bridge = CollectProviderReadingEvidence(
