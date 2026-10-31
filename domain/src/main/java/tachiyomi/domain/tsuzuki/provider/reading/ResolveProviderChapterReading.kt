@@ -76,9 +76,16 @@ class ResolveProviderChapterReading(
                 // a source chapter 84 must not open canonical chapter 1.
                 val evidence = persisted.evidence
                 val parsed = chapterLabelParser.execute(evidence.rawLabel, evidence.rawNumber)
-                parsed.identity.isSpecific &&
+                // Exact decimal/part v2 identities contain additional precision
+                // that the legacy parser deliberately cannot represent.
+                val observedIdentity = if (chapter.numberingKind == null) {
+                    parsed.identity
+                } else {
+                    chapterLabelParser.previewExactNumbering(evidence.rawLabel)
+                }
+                observedIdentity?.isSpecific == true &&
                     parsed.confidence >= MIN_READING_IDENTITY_CONFIDENCE &&
-                    parsed.identity == chapter.identity &&
+                    observedIdentity == chapter.identity &&
                     !hasConflictingIntegerChapterHint(parsed, evidence.rawNumber) &&
                     (evidence.volume == null || chapter.volume == null || evidence.volume == chapter.volume)
             }
