@@ -592,6 +592,42 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `sole source candidate explicitly colored cannot stand in for unqualified canonical edition`(): Unit =
+        runBlocking {
+            val title = canonicalTitle.copy(displayTitle = "Vagabond")
+            val bindings = MemoryBindingRepository()
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(title),
+                providerRegistry = registry(),
+                gateway = gateway(
+                    lookupHandler = {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(
+                                    ProviderWorkCandidate(
+                                        "only-colored",
+                                        "Vagabond",
+                                        aliases = listOf("Vagabond (Official Colored)"),
+                                        language = "en",
+                                    ),
+                                ),
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                    chaptersHandler = { error("A colored-only source must not create an unqualified binding") },
+                ),
+                bindingRepository = bindings,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 42L },
+            )
+            val result = collector.execute(title.id)
+            result.complete shouldBe false
+            result.bindingCount shouldBe 0
+            bindings.getByTitle(title.id) shouldBe emptyList()
+        }
+
+    @Test
     fun `colored alias cannot disambiguate more than one unqualified primary`(): Unit = runBlocking {
         val title = canonicalTitle.copy(displayTitle = "Bleach")
         val bindings = MemoryBindingRepository()
