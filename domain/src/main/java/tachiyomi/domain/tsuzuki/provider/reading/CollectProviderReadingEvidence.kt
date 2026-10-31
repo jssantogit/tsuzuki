@@ -555,6 +555,11 @@ class CollectProviderReadingEvidence private constructor(
                     .joinToString(" | ")
                 val attributes = buildMap<String, DiagnosticAttributeValue> {
                     put("provider_id", DiagnosticAttributeValue.Text(target.registration.descriptor.id.value))
+                    put(
+                        "provider_version_code",
+                        DiagnosticAttributeValue.Number(target.registration.descriptor.version.code.toLong()),
+                    )
+                    work.language?.let { put("language", DiagnosticAttributeValue.Text(it)) }
                     diagnostics.canonicalTitleReference(canonicalTitleId)?.let {
                         put("canonical_title_ref", DiagnosticAttributeValue.Text(it))
                     }
