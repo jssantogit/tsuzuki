@@ -233,7 +233,6 @@ private fun LoadedDetails(
                             onOpenChapter,
                             onProviders,
                             onAll = { moveMode(CanonicalDetailsLowerAction.VIEW_ALL) },
-                            onChooseEdition = onChooseEdition,
                         )
                     }
                 }
@@ -268,7 +267,6 @@ private fun LoadedDetails(
                                 onOpenChapter,
                                 onProviders,
                                 onAll = {},
-                                onChooseEdition = onChooseEdition,
                             )
                         }
                     }
@@ -304,6 +302,7 @@ private fun LoadedDetails(
             },
             onSources = if (state.metadataSources.isNotEmpty()) ({ sheet = DetailsSheet.SOURCES }) else null,
             onInventory = { sheet = DetailsSheet.INVENTORY },
+            onChooseEdition = onChooseEdition,
         )
     }
     sheet?.let { current ->
@@ -884,6 +883,7 @@ private fun DetailsToolbar(
     background: Color = Color.Transparent,
     onSources: (() -> Unit)? = null,
     onInventory: (() -> Unit)? = null,
+    onChooseEdition: (() -> Unit)? = null,
     onImportEpub: (() -> Unit)? = null,
 ) {
     val colors = defaultSkinColors()
@@ -937,6 +937,17 @@ private fun DetailsToolbar(
                         false
                     onProviders()
                 })
+                onChooseEdition?.let { action ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(stringResource(MR.strings.tsuzuki_edition_choose), color = colors.foreground)
+                        },
+                        onClick = {
+                            expanded = false
+                            action()
+                        },
+                    )
+                }
                 onImportEpub?.let { action ->
                     DropdownMenuItem(
                         text = {

@@ -49,7 +49,6 @@ internal fun ContextualChapterRail(
     onOpen: (String) -> Unit,
     onProviders: () -> Unit,
     onAll: () -> Unit,
-    onChooseEdition: () -> Unit = {},
 ) {
     val chapters = contextualChapters(state.chapters, state.activeChapterId)
     Column(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -72,11 +71,6 @@ internal fun ContextualChapterRail(
                 Text(
                     stringResource(MR.strings.tsuzuki_details_no_chapters),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                DefaultSkinTextAction(
-                    text = stringResource(MR.strings.tsuzuki_edition_choose),
-                    onClick = onChooseEdition,
-                    modifier = Modifier.heightIn(min = 48.dp),
                 )
                 DefaultSkinTextAction(
                     text = stringResource(MR.strings.tsuzuki_details_providers),
