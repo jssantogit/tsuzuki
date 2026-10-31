@@ -31,6 +31,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderLookupFailureCode
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceResolver
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingDelivery
@@ -124,6 +125,37 @@ class ScriptProviderReadingGatewayTest {
         input["titles"]!!.toString() shouldBe """["Tsuzuki"]"""
         input["cursor"] shouldBe null
         input["diagnosticsVersion"]?.jsonPrimitive?.int shouldBe 1
+    }
+
+    @Test
+    fun `lookup source failure stays failure with a classified HTTP challenge`() = runBlocking {
+        val gateway = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success(
+                """{"items":[],"nextCursor":null,"lookupFailureCode":"CHALLENGE_BLOCKED","lookupHttpStatus":403}""",
+            )
+        }
+        val result = gateway.lookup(providerId, ProviderReadingLookupRequest(titles = listOf("Vagabond")))
+        val failure = result as ProviderCallResult.Failure
+        failure.error.code shouldBe ProviderErrorCode.SOURCE_READ_ERROR
+        failure.error.sourceFailureCode shouldBe ProviderLookupFailureCode.CHALLENGE_BLOCKED
+        failure.error.httpStatus shouldBe 403
+    }
+
+    @Test
+    fun `legacy empty lookup stays complete but malformed provenance fails closed`() = runBlocking {
+        val empty = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success("""{"items":[],"nextCursor":null}""")
+        }
+        ((empty.lookup(providerId, ProviderReadingLookupRequest(listOf("Vagabond")))) as ProviderCallResult.Success)
+            .value.items shouldBe emptyList()
+
+        val invalid = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success(
+                """{"items":[{"externalWorkId":"work","title":"Title"}],"lookupFailureCode":"HTTP_ERROR","lookupHttpStatus":503}""",
+            )
+        }
+        val invalidResult = invalid.lookup(providerId, ProviderReadingLookupRequest(listOf("Vagabond")))
+        (invalidResult as ProviderCallResult.Failure).error.code shouldBe ProviderErrorCode.MALFORMED_RESULT
     }
 
     @Test
