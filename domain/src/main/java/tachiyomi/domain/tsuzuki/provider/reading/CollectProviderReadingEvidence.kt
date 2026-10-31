@@ -32,6 +32,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 import java.security.MessageDigest
+import kotlin.math.roundToLong
 
 /** One complete chapter inventory emitted by one exact Provider binding. */
 data class ProviderReadingEvidenceSnapshot(
@@ -219,6 +220,7 @@ class CollectProviderReadingEvidence private constructor(
             targets = targets.size,
             bindings = collection.bindingCount,
             accepted = acceptedChapters,
+            partialCount = collection.partialEvidence.size,
             completed = collection.complete,
         )
         return collection
@@ -271,6 +273,7 @@ class CollectProviderReadingEvidence private constructor(
 
             onStageChanged(DiagnosticStage.READ)
             var published: ProviderReadingEvidenceSnapshot? = null
+            var lastPageNumber = 0
             val refresher = RefreshProviderReadingChapters(
                 gateway = gateway,
                 evidenceAdapter = evidenceAdapter,
@@ -286,9 +289,13 @@ class CollectProviderReadingEvidence private constructor(
                 },
                 clock = clock,
                 onPageCollected = { page, observedAt ->
+                    if (diagnostics.detailedCaptureActive) {
+                        traceReadingPageDetail(canonicalTitleId, target, lastPageNumber, page)
+                    }
                     onPageCollected(binding.ref, page, observedAt)
                 },
                 onPageObserved = { pages, observations ->
+                    lastPageNumber = pages
                     trace(
                         canonicalTitleId,
                         target,
@@ -612,6 +619,60 @@ class CollectProviderReadingEvidence private constructor(
         }
     }
 
+    /**
+     * User-triggered capture only. Source chapter identities are numeric (MangaFire),
+     * never recorded as unbounded URLs/labels, and range is encoded in thousandths
+     * to preserve decimal specials (e.g. 0.5). These are observations, not chapters
+     * guaranteed to be canonical.
+     */
+    private fun traceReadingPageDetail(
+        titleId: String,
+        target: ReadingTarget,
+        pageNumber: Int,
+        page: List<ProviderChapterObservation>,
+    ) {
+        if (!diagnostics.detailedCaptureActive || target.registration.descriptor.id.value != "app.tsuzuki.mangafire") {
+            return
+        }
+        runCatching {
+            val numbers = page.mapNotNull { observation ->
+                observation.rawNumber
+                    ?.takeIf { it.isFinite() && it >= 0.0 && it <= 1_000_000.0 }
+                    ?.times(1_000.0)
+                    ?.roundToLong()
+            }
+            val firstId = page.firstOrNull()?.providerChapterId?.takeIf { it.matches(NUMERIC_CHAPTER_ID) }
+            val lastId = page.lastOrNull()?.providerChapterId?.takeIf { it.matches(NUMERIC_CHAPTER_ID) }
+            val attributes = buildMap<String, DiagnosticAttributeValue> {
+                put("provider_id", DiagnosticAttributeValue.Text(target.registration.descriptor.id.value))
+                diagnostics.canonicalTitleReference(titleId)?.let {
+                    put("canonical_title_ref", DiagnosticAttributeValue.Text(it))
+                }
+                put("page_index", DiagnosticAttributeValue.Number(pageNumber.toLong()))
+                put("item_count", DiagnosticAttributeValue.Number(page.size.toLong()))
+                if (numbers.isNotEmpty()) {
+                    put("chapter_number_min_milli", DiagnosticAttributeValue.Number(numbers.min()))
+                    put("chapter_number_max_milli", DiagnosticAttributeValue.Number(numbers.max()))
+                }
+                firstId?.let { put("provider_chapter_first_id", DiagnosticAttributeValue.Text(it)) }
+                lastId?.let { put("provider_chapter_last_id", DiagnosticAttributeValue.Text(it)) }
+            }
+            diagnostics.record(
+                StructuredDiagnosticEvent(
+                    timestampMillis = clock().coerceAtLeast(0L),
+                    severity = DiagnosticSeverity.DEBUG,
+                    subsystem = DiagnosticSubsystem.CHAPTER,
+                    name = DiagnosticEventName.PROVIDER_READING_PAGE_DETAIL,
+                    sessionId = diagnostics.sessionId,
+                    operationId = null,
+                    stage = DiagnosticStage.READ,
+                    outcome = DiagnosticOutcome.PARTIAL,
+                    attributes = attributes,
+                ),
+            )
+        }
+    }
+
     /** Sanitized counters only; no title, alias, URL, external work ID, or chapter labels. */
     private fun trace(
         titleId: String,
@@ -625,6 +686,7 @@ class CollectProviderReadingEvidence private constructor(
         lookupDecision: DiagnosticProviderLookupDecision? = null,
         observed: Int? = null,
         accepted: Int? = null,
+        partialCount: Int? = null,
         pageCount: Int? = null,
         completed: Boolean? = null,
         errorCode: ProviderErrorCode? = null,
@@ -644,6 +706,7 @@ class CollectProviderReadingEvidence private constructor(
                 observed?.let { put("observation_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 pageCount?.let { put("page_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 accepted?.let { put("chapter_count", DiagnosticAttributeValue.Number(it.toLong())) }
+                partialCount?.let { put("partial_evidence_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 completed?.let { put("completed", DiagnosticAttributeValue.Flag(it)) }
                 errorCode?.let { put("provider_error_code", DiagnosticAttributeValue.Text(it.name)) }
             }
@@ -731,6 +794,7 @@ class CollectProviderReadingEvidence private constructor(
             ProviderCapabilities.ReadingChaptersV1,
         )
         val WHITESPACE = Regex("\\s+")
+        val NUMERIC_CHAPTER_ID = Regex("^[0-9]{1,32}$")
         val EXPLICIT_ALTERNATE_EDITION_HINTS = listOf(
             "colored",
             "coloured",
