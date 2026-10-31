@@ -1498,12 +1498,15 @@ class CollectProviderReadingEvidenceTest {
                                     url = "https://mangafire.to/title/original-123-dandadan",
                                     language = "en",
                                     chapterCount = 151,
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_WITH_ALIASES,
                                 ),
                                 ProviderWorkCandidate(
                                     externalWorkId = "other-456",
                                     title = "Dandadan",
                                     url = "https://mangafire.to/title/other-456-dandadan",
                                     language = "en",
+                                    detailOutcome = ProviderWorkDetailOutcome.DETAIL_FAILED,
+                                    detailHttpStatus = 503,
                                 ),
                             ),
                             nextCursor = null,
@@ -1530,6 +1533,13 @@ class CollectProviderReadingEvidenceTest {
         candidates[0].attributes["provider_work_aliases"] shouldBe DiagnosticAttributeValue.Text("Dan Da Dan")
         candidates[0].attributes["provider_work_chapter_count"] shouldBe DiagnosticAttributeValue.Number(151)
         candidates[0].attributes["query_index"] shouldBe DiagnosticAttributeValue.Number(1)
+        candidates[0].attributes["provider_detail_outcome"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderDetailOutcome.VERIFIED_WITH_ALIASES,
+        )
+        candidates[1].attributes["provider_detail_outcome"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderDetailOutcome.DETAIL_FAILED,
+        )
+        candidates[1].attributes["http_status"] shouldBe DiagnosticAttributeValue.Number(503)
         candidates.all { StructuredDiagnosticSanitizer.sanitize(it) != null } shouldBe true
         candidates[1].attributes.containsKey("provider_work_chapter_count") shouldBe false
     }
