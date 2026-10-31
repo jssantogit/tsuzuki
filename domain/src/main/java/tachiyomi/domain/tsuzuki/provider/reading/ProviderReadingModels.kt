@@ -257,6 +257,12 @@ data class ProviderReadingPagesRequest(
 
 enum class ProviderErrorCode {
     UNAVAILABLE,
+    HOST_ERROR,
+    PACKAGE_INVALID,
+    MALFORMED_REQUEST,
+    SOURCE_TOO_LARGE,
+    SOURCE_READ_ERROR,
+    INVOCATION_CONFLICT,
     PERMISSION_DENIED,
     HOST_API_UNSUPPORTED,
     SCRIPT_ERROR,
