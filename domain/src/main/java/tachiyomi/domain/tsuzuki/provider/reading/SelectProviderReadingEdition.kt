@@ -3,11 +3,15 @@ package tachiyomi.domain.tsuzuki.provider.reading
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
+import tachiyomi.domain.tsuzuki.integration.IntegrationId
+import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
+import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
+import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 import java.util.UUID
 
 /** A source-provided work, not a canonical chapter or editorial certification. */
@@ -47,6 +51,8 @@ class SelectProviderReadingEdition(
     private val providerRegistry: ProviderRegistry,
     private val gateway: ProviderReadingGateway,
     private val bindingRepository: ProviderReadingBindingRepository,
+    private val titleNameObservationRepository: TitleNameObservationRepository? = null,
+    private val integrationRegistry: IntegrationRegistry? = null,
 ) {
     suspend fun search(canonicalTitleId: String, query: String): ProviderEditionSearchResult =
         searchScoped(canonicalTitleId, query, selectedRef = null)
@@ -59,7 +65,45 @@ class SelectProviderReadingEdition(
         if (canonicalTitleId.isBlank() || query.isBlank() || query.length > MAX_QUERY_CHARS) {
             return ProviderEditionSearchResult()
         }
-        if (canonicalTitleRepository.getById(canonicalTitleId) == null) return ProviderEditionSearchResult()
+        val canonical = canonicalTitleRepository.getById(canonicalTitleId)
+            ?: return ProviderEditionSearchResult()
+        // Observed titles are discovery hints, never binding or editorial proof.
+        // Explicit URL/custom searches must stay scoped to the entered query.
+        val queries = buildList {
+            add(query.trim())
+            if (query.trim().equals(canonical.displayTitle.trim(), ignoreCase = true)) {
+                val names = try {
+                    // A title observed by a revoked integration may not trigger
+                    // new outbound Provider searches without active consent.
+                    if (integrationRegistry != null && titleNameObservationRepository != null) {
+                        integrationRegistry.awaitReady()
+                        titleNameObservationRepository.getByTitle(canonicalTitleId)
+                    } else {
+                        emptyList()
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                names.asSequence()
+                    .filter { observation ->
+                        integrationRegistry?.isGlobalCapabilityActive(
+                            IntegrationId(observation.provider),
+                            IntegrationCapability.METADATA_BASIC,
+                        ) == true
+                    }
+                    .sortedWith(
+                        compareBy(
+                            { if (it.sourceKey.lowercase() in setOf("en", "english")) 0 else 1 },
+                            { if (it.sourceKey.lowercase() in setOf("romaji", "romanized")) 0 else 1 },
+                        ),
+                    )
+                    .map { it.value.trim() }
+                    .filter { it.isNotBlank() && it.length <= MAX_QUERY_CHARS }
+                    .forEach { add(it) }
+            }
+        }.distinctBy { it.lowercase().replace(Regex("\\s+"), " ") }.take(MAX_QUERY_VARIANTS)
         providerRegistry.awaitReady()
         val candidates = mutableListOf<ProviderEditionCandidate>()
         var failed = false
@@ -76,45 +120,68 @@ class SelectProviderReadingEdition(
                 val facets = registration.facets.map { it.facetId }.ifEmpty { listOf(null) }
                     .filter { selectedRef == null || it == selectedRef.facetId }
                 facets.forEach { facetId ->
-                    val response = try {
+                    // All aliases share one request budget per Provider/facet. A slow name
+                    // must not multiply the picker timeout or silently bind an edition.
+                    val completed = try {
                         withTimeoutOrNull(LOOKUP_BUDGET_MILLIS) {
-                            gateway.lookup(
-                                registration.descriptor.id,
-                                ProviderReadingLookupRequest(listOf(query.trim())),
-                            )
+                            var seen = 0
+                            for (searchTitle in queries) {
+                                if (seen >= MAX_CANDIDATES_PER_SOURCE) break
+                                val response = try {
+                                    gateway.lookup(
+                                        registration.descriptor.id,
+                                        ProviderReadingLookupRequest(listOf(searchTitle)),
+                                    )
+                                } catch (error: CancellationException) {
+                                    throw error
+                                } catch (_: Exception) {
+                                    null
+                                }
+                                when (response) {
+                                    is ProviderCallResult.Success -> {
+                                        val perQueryLimit = if (queries.size == 1) {
+                                            MAX_CANDIDATES_PER_SOURCE
+                                        } else {
+                                            MAX_CANDIDATES_PER_VARIANT
+                                        }
+                                        response.value.items
+                                            .take(minOf(perQueryLimit, MAX_CANDIDATES_PER_SOURCE - seen))
+                                            .forEach { item ->
+                                                seen++
+                                                if (
+                                                    facetId == null ||
+                                                    item.language == null ||
+                                                    item.language.equals(facetId, ignoreCase = true)
+                                                ) {
+                                                    candidates += ProviderEditionCandidate(
+                                                        ref = ProviderBindingRef(
+                                                            providerId = registration.descriptor.id,
+                                                            facetId = facetId,
+                                                            externalWorkId = item.externalWorkId,
+                                                        ),
+                                                        providerName = registration.descriptor.name,
+                                                        title = item.title,
+                                                        url = item.url,
+                                                        query = searchTitle,
+                                                        providerVersionCode = registration.descriptor.version.code,
+                                                        configurationFingerprint =
+                                                        registration.configurationFingerprint,
+                                                    )
+                                                }
+                                            }
+                                        if (response.value.nextCursor != null) failed = true
+                                    }
+                                    else -> failed = true
+                                }
+                            }
+                            true
                         }
                     } catch (error: CancellationException) {
                         throw error
                     } catch (_: Exception) {
                         null
                     }
-                    when (response) {
-                        is ProviderCallResult.Success -> {
-                            response.value.items.take(MAX_CANDIDATES_PER_SOURCE).forEach { item ->
-                                if (
-                                    facetId == null ||
-                                    item.language == null ||
-                                    item.language.equals(facetId, ignoreCase = true)
-                                ) {
-                                    candidates += ProviderEditionCandidate(
-                                        ref = ProviderBindingRef(
-                                            providerId = registration.descriptor.id,
-                                            facetId = facetId,
-                                            externalWorkId = item.externalWorkId,
-                                        ),
-                                        providerName = registration.descriptor.name,
-                                        title = item.title,
-                                        url = item.url,
-                                        query = query.trim(),
-                                        providerVersionCode = registration.descriptor.version.code,
-                                        configurationFingerprint = registration.configurationFingerprint,
-                                    )
-                                }
-                            }
-                            if (response.value.nextCursor != null) failed = true
-                        }
-                        else -> failed = true
-                    }
+                    if (completed != true) failed = true
                 }
             }
 
@@ -209,6 +276,8 @@ class SelectProviderReadingEdition(
     private companion object {
         const val MAX_QUERY_CHARS = 1024
         const val MAX_CANDIDATES_PER_SOURCE = 20
+        const val MAX_CANDIDATES_PER_VARIANT = 8
+        const val MAX_QUERY_VARIANTS = 3
         const val LOOKUP_BUDGET_MILLIS = 15_000L
     }
 }
