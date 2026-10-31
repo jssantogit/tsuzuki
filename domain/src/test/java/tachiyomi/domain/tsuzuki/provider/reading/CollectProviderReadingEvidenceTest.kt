@@ -13,6 +13,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticErrorCategory
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderDetailOutcome
@@ -52,6 +53,42 @@ class CollectProviderReadingEvidenceTest {
         createdAt = 1L,
         updatedAt = 1L,
     )
+
+    @Test
+    fun `opt-in lookup failures preserve HTTP challenge instead of generic error`(): Unit = runBlocking {
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Failure(
+                        ProviderError(
+                            code = ProviderErrorCode.SOURCE_READ_ERROR,
+                            retryable = true,
+                            sourceFailureCode = ProviderLookupFailureCode.CHALLENGE_BLOCKED,
+                            httpStatus = 403,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Failed lookup must never request chapters") },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+        val result = collector.execute(canonicalTitle.id)
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        val failure = recorder.events.single {
+            it.name == DiagnosticEventName.PROVIDER_READING_LOOKUP_ATTEMPT &&
+                it.outcome == DiagnosticOutcome.FAILED
+        }
+        failure.attributes["error_category"] shouldBe DiagnosticAttributeValue.Code(DiagnosticErrorCategory.CAPTCHA)
+        failure.attributes["http_status"] shouldBe DiagnosticAttributeValue.Number(403)
+        (StructuredDiagnosticSanitizer.sanitize(failure) != null) shouldBe true
+    }
 
     @Test
     fun `stalled provider chapters stop before deadline without reporting a complete empty inventory`() = runTest {
