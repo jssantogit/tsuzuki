@@ -1329,7 +1329,8 @@ class CollectProviderReadingEvidenceTest {
         )
         collector.execute(canonicalTitle.id)
         recorder.events.none { it.name == DiagnosticEventName.PROVIDER_READING_CANDIDATE } shouldBe true
-        recorder.events.any { it.stage == DiagnosticStage.LOOKUP && it.outcome == DiagnosticOutcome.REJECTED } shouldBe true
+        recorder.events.any { it.stage == DiagnosticStage.LOOKUP && it.outcome == DiagnosticOutcome.REJECTED } shouldBe
+            true
     }
 
     private class CapturingProviderDiagnostics(
