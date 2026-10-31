@@ -1332,7 +1332,9 @@ class CollectProviderReadingEvidenceTest {
         recorder.events.any { it.stage == DiagnosticStage.LOOKUP && it.outcome == DiagnosticOutcome.REJECTED } shouldBe true
     }
 
-    private class CapturingProviderDiagnostics(private val captureActive: Boolean = false) : StructuredDiagnosticRecorder {
+    private class CapturingProviderDiagnostics(
+        private val captureActive: Boolean = false,
+    ) : StructuredDiagnosticRecorder {
         override val sessionId: String = "00000000-0000-0000-0000-000000000000"
         override val detailedCaptureActive: Boolean get() = captureActive
         val events = mutableListOf<StructuredDiagnosticEvent>()
