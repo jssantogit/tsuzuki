@@ -1525,6 +1525,15 @@ class CollectProviderReadingEvidenceTest {
         result.bindingCount shouldBe 0
         val candidates = recorder.events.filter { it.name == DiagnosticEventName.PROVIDER_READING_CANDIDATE }
         candidates.shouldHaveSize(2)
+        val lookupSteps = recorder.events.filter {
+            it.name == DiagnosticEventName.PROVIDER_READING_LOOKUP_ATTEMPT
+        }
+        lookupSteps.shouldHaveSize(2)
+        lookupSteps[0].outcome shouldBe DiagnosticOutcome.STARTED
+        lookupSteps[1].outcome shouldBe DiagnosticOutcome.SUCCEEDED
+        lookupSteps[0].attributes["query_index"] shouldBe DiagnosticAttributeValue.Number(1)
+        lookupSteps[0].attributes["provider_lookup_title"] shouldBe DiagnosticAttributeValue.Text("Dandadan")
+        lookupSteps[1].attributes["candidate_count"] shouldBe DiagnosticAttributeValue.Number(2)
         candidates[0].attributes["provider_work_id"] shouldBe DiagnosticAttributeValue.Text("original-123")
         candidates[0].attributes["provider_work_title"] shouldBe DiagnosticAttributeValue.Text("Dandadan")
         candidates[0].attributes["language"] shouldBe DiagnosticAttributeValue.Text("en")
