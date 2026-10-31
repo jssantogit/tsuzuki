@@ -383,6 +383,7 @@ enum class DiagnosticProviderDetailOutcome : DiagnosticSafeCode {
     VERIFIED_WITH_ALIASES,
     VERIFIED_NO_ALIASES,
     IDENTITY_MISMATCH,
+    INVALID_RESPONSE,
     CHALLENGE_BLOCKED,
     DETAIL_FAILED,
 }
