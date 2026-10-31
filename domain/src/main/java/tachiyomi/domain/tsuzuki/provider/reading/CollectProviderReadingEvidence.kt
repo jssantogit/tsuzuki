@@ -400,6 +400,9 @@ class CollectProviderReadingEvidence private constructor(
             val sourcePrimaryMatches = matches.filter { normalize(it.title) == normalizedTitle }
             val priorAmbiguous = ambiguousCandidates
             val primary = sourcePrimaryMatches.singleOrNull()
+            val unqualifiedPrimary = sourcePrimaryMatches
+                .filterNot { isSourceAttestedAlternateEdition(it, title) }
+                .singleOrNull()
             val candidate = when {
                 // An ambiguous first lookup may only be narrowed to a work
                 // already seen. All rivals must explicitly identify a different
@@ -409,12 +412,19 @@ class CollectProviderReadingEvidence private constructor(
                     priorAmbiguous.any { it.externalWorkId == selected.externalWorkId } &&
                         priorAmbiguous
                             .filter { it.externalWorkId != selected.externalWorkId }
-                            .all { isExplicitEditionVariant(it.title, selected.title) }
+                            .all { isSourceAttestedAlternateEdition(it, selected.title) }
                 }
                 matches.size == 1 -> matches.single()
                 primary != null && matches
                     .filter { it.externalWorkId != primary.externalWorkId }
-                    .all { isExplicitEditionVariant(it.title, primary.title) } -> primary
+                    .all { isSourceAttestedAlternateEdition(it, primary.title) } -> primary
+                // Two work IDs may carry the same primary title, while only
+                // one source entry explicitly declares itself a special edition
+                // in its own alternative names. This is affirmative source
+                // metadata, not a popularity/rank/chapter-count guess.
+                unqualifiedPrimary != null && matches
+                    .filter { it.externalWorkId != unqualifiedPrimary.externalWorkId }
+                    .all { isSourceAttestedAlternateEdition(it, unqualifiedPrimary.title) } -> unqualifiedPrimary
                 matches.size > 1 -> {
                     ambiguousCandidates = matches
                     null
@@ -773,6 +783,15 @@ class CollectProviderReadingEvidence private constructor(
         .trim()
         .lowercase()
         .replace(WHITESPACE, " ")
+
+    /**
+     * The Provider's own explicit alternate title may qualify a work as colored,
+     * omnibus or another editorial variant even when its primary title is shared.
+     * Ignore unqualified synonyms; they never prove edition uniqueness.
+     */
+    private fun isSourceAttestedAlternateEdition(candidate: ProviderWorkCandidate, base: String): Boolean =
+        isExplicitEditionVariant(candidate.title, base) ||
+            candidate.aliases.any { isExplicitEditionVariant(it, base) }
 
     /** An explicit edition label is evidence of a variant, not a fuzzy title mismatch. */
     private fun isExplicitEditionVariant(candidateTitle: String, baseTitle: String): Boolean {
