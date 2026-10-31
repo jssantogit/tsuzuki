@@ -205,6 +205,7 @@ enum class DiagnosticAttribute {
     PARTIAL_EVIDENCE_COUNT,
     PROVIDER_WORK_CHAPTER_COUNT,
     PROVIDER_CANDIDATE_REASON,
+    PROVIDER_DETAIL_OUTCOME,
     BROADENED,
     MAPPING_REUSED,
     LANGUAGE,
@@ -372,6 +373,18 @@ enum class DiagnosticProviderCandidateReason : DiagnosticSafeCode {
     ALTERNATE_EDITION,
     FACET_MISMATCH,
     TITLE_MISMATCH,
+}
+
+/** Closed source-enrichment outcomes: no upstream response text or secrets. */
+enum class DiagnosticProviderDetailOutcome : DiagnosticSafeCode {
+    NOT_NEEDED,
+    SKIPPED_IRRELEVANT,
+    BUDGET_EXHAUSTED,
+    VERIFIED_WITH_ALIASES,
+    VERIFIED_NO_ALIASES,
+    IDENTITY_MISMATCH,
+    CHALLENGE_BLOCKED,
+    DETAIL_FAILED,
 }
 
 enum class DiagnosticCacheStatus : DiagnosticSafeCode {
@@ -618,6 +631,8 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticTorrentCandidateMatchReason }
         DiagnosticAttribute.PROVIDER_CANDIDATE_REASON -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderCandidateReason }
+        DiagnosticAttribute.PROVIDER_DETAIL_OUTCOME -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderDetailOutcome }
         DiagnosticAttribute.LOOKUP_DECISION -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderLookupDecision }
 
