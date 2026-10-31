@@ -90,8 +90,9 @@ data class ProviderWorkCandidate(
         require(detailHttpStatus == null || detailHttpStatus in 100..599) {
             "Provider lookup detail HTTP status is invalid"
         }
-        require(detailHttpStatus == null || detailOutcome == ProviderWorkDetailOutcome.DETAIL_FAILED ||
-            detailOutcome == ProviderWorkDetailOutcome.CHALLENGE_BLOCKED
+        require(
+            detailHttpStatus == null || detailOutcome == ProviderWorkDetailOutcome.DETAIL_FAILED ||
+                detailOutcome == ProviderWorkDetailOutcome.CHALLENGE_BLOCKED,
         ) { "HTTP status must represent a failed Provider detail request" }
         require(title.isNotBlank()) { "Provider work candidate title must not be blank" }
         require(aliases.size <= MAX_ALIASES) { "Provider work candidate has too many aliases" }
