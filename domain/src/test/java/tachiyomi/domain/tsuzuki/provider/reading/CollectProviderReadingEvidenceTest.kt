@@ -564,6 +564,43 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `unique primary title must not override another unmarked exact alias edition`(): Unit = runBlocking {
+        val bindings = MemoryBindingRepository()
+        val bridge = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate("main", "Dandadan", language = "en"),
+                                ProviderWorkCandidate(
+                                    "unclear-edition",
+                                    "Dandadan II",
+                                    aliases = listOf("Dandadan"),
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("An unmarked competing edition must not be auto-bound") },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+
+        val result = bridge.execute(canonicalTitle.id)
+
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+    }
+
+    @Test
     fun `lookup failure marks collection incomplete`(): Unit = runBlocking {
         val recorder = CapturingProviderDiagnostics()
         val bridge = CollectProviderReadingEvidence(
