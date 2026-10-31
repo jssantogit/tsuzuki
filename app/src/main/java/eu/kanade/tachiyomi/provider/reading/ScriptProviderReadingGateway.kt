@@ -439,6 +439,8 @@ class ScriptProviderReadingGateway internal constructor(
     internal data class LookupRequestDto(
         val titles: List<String>,
         val cursor: String? = null,
+        /** V1 Provider ignores this; upgraded Provider emits extra diagnostic keys only when requested. */
+        val diagnosticsVersion: Int = 1,
     )
 
     @Serializable
