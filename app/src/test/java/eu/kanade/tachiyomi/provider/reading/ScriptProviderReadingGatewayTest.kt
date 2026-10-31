@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationPolicy
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
@@ -122,6 +123,7 @@ class ScriptProviderReadingGatewayTest {
         val input = Json.parseToJsonElement(requireNotNull(capturedInput)).jsonObject
         input["titles"]!!.toString() shouldBe """["Tsuzuki"]"""
         input["cursor"] shouldBe null
+        input["diagnosticsVersion"]?.jsonPrimitive?.int shouldBe 1
     }
 
     @Test
