@@ -194,6 +194,12 @@ class CollectProviderReadingEvidenceTest {
         val result = collector.execute(canonicalTitle.id)
 
         result.evidence.shouldHaveSize(2)
+        val attempts = recorder.events.filter { it.name == DiagnosticEventName.PROVIDER_READING_CHAPTER_ATTEMPT }
+        attempts.shouldHaveSize(2)
+        attempts[0].outcome shouldBe DiagnosticOutcome.STARTED
+        attempts[1].outcome shouldBe DiagnosticOutcome.SUCCEEDED
+        attempts[0].attributes["page_index"] shouldBe DiagnosticAttributeValue.Number(1)
+        attempts[1].attributes["item_count"] shouldBe DiagnosticAttributeValue.Number(2)
         val page = recorder.events.single { it.name == DiagnosticEventName.PROVIDER_READING_PAGE_DETAIL }
         page.attributes["page_index"] shouldBe DiagnosticAttributeValue.Number(1)
         page.attributes["item_count"] shouldBe DiagnosticAttributeValue.Number(2)
