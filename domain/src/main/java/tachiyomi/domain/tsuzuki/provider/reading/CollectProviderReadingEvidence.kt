@@ -20,6 +20,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
 import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
+import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
@@ -28,7 +29,6 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
-import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import java.security.MessageDigest
 
 /** One complete chapter inventory emitted by one exact Provider binding. */
@@ -348,80 +348,80 @@ class CollectProviderReadingEvidence private constructor(
         target: ReadingTarget,
     ): ProviderCallResult<ProviderReadingBinding?> {
         for (title in titles) {
-        val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
-            is ProviderCallResult.Failure -> {
-                trace(
-                    canonicalTitleId,
-                    target,
-                    DiagnosticStage.LOOKUP,
-                    DiagnosticOutcome.FAILED,
-                    errorCode = result.error.code,
-                )
-                return result
+            val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
+                is ProviderCallResult.Failure -> {
+                    trace(
+                        canonicalTitleId,
+                        target,
+                        DiagnosticStage.LOOKUP,
+                        DiagnosticOutcome.FAILED,
+                        errorCode = result.error.code,
+                    )
+                    return result
+                }
+                is ProviderCallResult.Success -> result.value
             }
-            is ProviderCallResult.Success -> result.value
-        }
-        val normalizedTitle = normalize(title)
-        val matches = candidates
-            .asSequence()
-            .filter { candidate ->
-                target.facetId == null ||
-                    candidate.language == null ||
-                    candidate.language.equals(target.facetId, ignoreCase = true)
-            }
-            .filter { candidate ->
-                sequenceOf(candidate.title)
-                    .plus(candidate.aliases.asSequence())
-                    .any { normalize(it) == normalizedTitle }
-            }
-            .distinctBy(ProviderWorkCandidate::externalWorkId)
-            .toList()
-        trace(
-            canonicalTitleId,
-            target,
-            DiagnosticStage.LOOKUP,
-            when (matches.size) {
-                0 -> DiagnosticOutcome.EMPTY
-                1 -> DiagnosticOutcome.ACCEPTED
-                else -> DiagnosticOutcome.REJECTED
-            },
-            candidates = candidates.size,
-            exactMatches = matches.size,
-            bindings = if (matches.size == 1) 1 else 0,
-        )
-        // Only the absence of a verified match authorizes trying a second
-        // source-attested title. An ambiguous match must never be bypassed by
-        // treating a translation as proof of the correct reading edition.
-        if (matches.size > 1) return ProviderCallResult.Success(null)
-        if (matches.isEmpty()) continue
+            val normalizedTitle = normalize(title)
+            val matches = candidates
+                .asSequence()
+                .filter { candidate ->
+                    target.facetId == null ||
+                        candidate.language == null ||
+                        candidate.language.equals(target.facetId, ignoreCase = true)
+                }
+                .filter { candidate ->
+                    sequenceOf(candidate.title)
+                        .plus(candidate.aliases.asSequence())
+                        .any { normalize(it) == normalizedTitle }
+                }
+                .distinctBy(ProviderWorkCandidate::externalWorkId)
+                .toList()
+            trace(
+                canonicalTitleId,
+                target,
+                DiagnosticStage.LOOKUP,
+                when (matches.size) {
+                    0 -> DiagnosticOutcome.EMPTY
+                    1 -> DiagnosticOutcome.ACCEPTED
+                    else -> DiagnosticOutcome.REJECTED
+                },
+                candidates = candidates.size,
+                exactMatches = matches.size,
+                bindings = if (matches.size == 1) 1 else 0,
+            )
+            // Only the absence of a verified match authorizes trying a second
+            // source-attested title. An ambiguous match must never be bypassed by
+            // treating a translation as proof of the correct reading edition.
+            if (matches.size > 1) return ProviderCallResult.Success(null)
+            if (matches.isEmpty()) continue
 
-        val now = clock()
-        val candidate = matches.single()
-        val binding = ProviderReadingBinding(
-            id = bindingId(
+            val now = clock()
+            val candidate = matches.single()
+            val binding = ProviderReadingBinding(
+                id = bindingId(
+                    canonicalTitleId = canonicalTitleId,
+                    providerId = target.registration.descriptor.id,
+                    facetId = target.facetId,
+                    externalWorkId = candidate.externalWorkId,
+                ),
                 canonicalTitleId = canonicalTitleId,
-                providerId = target.registration.descriptor.id,
-                facetId = target.facetId,
-                externalWorkId = candidate.externalWorkId,
-            ),
-            canonicalTitleId = canonicalTitleId,
-            ref = ProviderBindingRef(
-                providerId = target.registration.descriptor.id,
-                facetId = target.facetId,
-                externalWorkId = candidate.externalWorkId,
-            ),
-            verification = ProviderBindingVerification.EXACT,
-            availability = ProviderBindingAvailability.AVAILABLE,
-            createdAt = now,
-            updatedAt = now,
-        )
-        if (!bindingRepository.insertIfAbsent(binding)) {
-            // A user-confirmed edition or another discovery won the same slot.
-            // Never create a second Provider identity or fetch chapters using this stale result.
-            trace(canonicalTitleId, target, DiagnosticStage.BINDING, DiagnosticOutcome.REJECTED)
-            return ProviderCallResult.Success(null)
-        }
-        return ProviderCallResult.Success(binding)
+                ref = ProviderBindingRef(
+                    providerId = target.registration.descriptor.id,
+                    facetId = target.facetId,
+                    externalWorkId = candidate.externalWorkId,
+                ),
+                verification = ProviderBindingVerification.EXACT,
+                availability = ProviderBindingAvailability.AVAILABLE,
+                createdAt = now,
+                updatedAt = now,
+            )
+            if (!bindingRepository.insertIfAbsent(binding)) {
+                // A user-confirmed edition or another discovery won the same slot.
+                // Never create a second Provider identity or fetch chapters using this stale result.
+                trace(canonicalTitleId, target, DiagnosticStage.BINDING, DiagnosticOutcome.REJECTED)
+                return ProviderCallResult.Success(null)
+            }
+            return ProviderCallResult.Success(binding)
         }
         return ProviderCallResult.Success(null)
     }
