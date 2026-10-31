@@ -38,8 +38,11 @@ object MangaAllFamilyCatalog {
 
     fun contains(providerId: String): Boolean = providerId in ids
 
+    fun isActiveInstallSet(providerIds: List<String>): Boolean =
+        providerIds.size == activeIds.size && providerIds.toSet() == activeIds
+
     fun requireExactInstallSet(providerIds: List<String>) {
-        require(providerIds.size == activeIds.size && providerIds.toSet() == activeIds) {
+        require(isActiveInstallSet(providerIds)) {
             "MangaAll install requires exactly the two currently active source identities"
         }
     }
