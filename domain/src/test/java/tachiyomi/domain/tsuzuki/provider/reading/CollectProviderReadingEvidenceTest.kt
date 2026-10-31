@@ -799,7 +799,13 @@ class CollectProviderReadingEvidenceTest {
                         ProviderPage(
                             items = listOf(
                                 ProviderWorkCandidate(
-                                    externalWorkId = if (query == "The Seven Deadly Sins") "seven-deadly-sins" else "other",
+                                    externalWorkId = if (query ==
+                                        "The Seven Deadly Sins"
+                                    ) {
+                                        "seven-deadly-sins"
+                                    } else {
+                                        "other"
+                                    },
                                     title = query,
                                     language = "en",
                                 ),
