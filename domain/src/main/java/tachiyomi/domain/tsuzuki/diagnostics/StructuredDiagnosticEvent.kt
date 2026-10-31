@@ -425,6 +425,7 @@ object StructuredDiagnosticSanitizer {
 
     // Detailed capture accepts only bounded MangaFire public title paths, never query strings or credentials.
     private val providerWorkIdPattern = Regex("^[A-Za-z0-9_-]{1,80}$")
+    private val providerChapterIdPattern = Regex("^[0-9]{1,32}$")
     private val providerWorkUrlPattern = Regex("^https://mangafire\\.to/title/[A-Za-z0-9-]{2,160}/?$")
     private val p2pEventPattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
     private val p2pOperationPattern = Regex("^opRef=[0-9a-f]{16}$")
@@ -535,8 +536,6 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.CANDIDATE_INDEX,
         DiagnosticAttribute.QUERY_INDEX,
         DiagnosticAttribute.PROVIDER_WORK_CHAPTER_COUNT,
-        DiagnosticAttribute.CHAPTER_NUMBER_MIN_MILLI,
-        DiagnosticAttribute.CHAPTER_NUMBER_MAX_MILLI,
         DiagnosticAttribute.PARTIAL_EVIDENCE_COUNT,
         DiagnosticAttribute.OBSERVATION_COUNT,
         DiagnosticAttribute.ITEM_COUNT,
@@ -588,6 +587,11 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.TORRENT_CANDIDATE_METADATA_UNAVAILABLE_COUNT,
         -> (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..MAX_COUNT }
 
+        // 1000x scales decimal source chapter numbers without collapsing 1180.5 to 1180.
+        DiagnosticAttribute.CHAPTER_NUMBER_MIN_MILLI,
+        DiagnosticAttribute.CHAPTER_NUMBER_MAX_MILLI,
+        -> (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..1_000_000_000L }
+
         DiagnosticAttribute.PROVIDER_VERSION_CODE -> (value as? DiagnosticAttributeValue.Number)
             ?.takeIf { it.value in 1..MAX_COUNT }
 
@@ -624,7 +628,7 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.PROVIDER_CHAPTER_FIRST_ID,
         DiagnosticAttribute.PROVIDER_CHAPTER_LAST_ID,
         -> (value as? DiagnosticAttributeValue.Text)
-            ?.takeIf { it.value.matches(Regex("^[0-9]{1,32}$")) }
+            ?.takeIf { providerChapterIdPattern.matches(it.value) }
         DiagnosticAttribute.PROVIDER_WORK_URL -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { providerWorkUrlPattern.matches(it.value) }
         DiagnosticAttribute.PROVIDER_WORK_TITLE,
