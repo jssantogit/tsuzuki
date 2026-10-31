@@ -380,11 +380,12 @@ class CollectProviderReadingEvidence private constructor(
                 .distinctBy(ProviderWorkCandidate::externalWorkId)
                 .toList()
             val sourcePrimaryMatches = matches.filter { normalize(it.title) == normalizedTitle }
+            val priorAmbiguous = ambiguousWorkIds
             val candidate = when {
                 // After an ambiguous search, another trusted title can only
                 // corroborate a work already seen. Never bind an unrelated HID.
-                ambiguousWorkIds != null -> sourcePrimaryMatches.singleOrNull {
-                    it.externalWorkId in ambiguousWorkIds
+                priorAmbiguous != null -> sourcePrimaryMatches.singleOrNull {
+                    it.externalWorkId in priorAmbiguous
                 }
                 matches.size == 1 -> matches.single()
                 // A source-declared main title outranks another edition which
