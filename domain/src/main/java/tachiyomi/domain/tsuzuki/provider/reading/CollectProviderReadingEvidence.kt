@@ -15,6 +15,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCandidateReason
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
@@ -264,8 +265,8 @@ class CollectProviderReadingEvidence private constructor(
             ) {
                 is ProviderCallResult.Failure -> return ProviderReadingEvidenceCollection(complete = false)
                 is ProviderCallResult.Success ->
-                    discovery.value
-                        ?: return ProviderReadingEvidenceCollection()
+                    discovery.value.binding
+                        ?: return ProviderReadingEvidenceCollection(complete = !discovery.value.unresolved)
             }
 
             onStageChanged(DiagnosticStage.READ)
@@ -351,10 +352,11 @@ class CollectProviderReadingEvidence private constructor(
         canonicalTitleId: String,
         titles: List<String>,
         target: ReadingTarget,
-    ): ProviderCallResult<ProviderReadingBinding?> {
+    ): ProviderCallResult<BindingDiscovery> {
         // Work IDs are private to this Provider and are only used to narrow
         // earlier matches. They never cross a source, title, edition or facet.
         var ambiguousCandidates: List<ProviderWorkCandidate>? = null
+        var unresolved = false
         for ((queryIndex, title) in titles.withIndex()) {
             val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
                 is ProviderCallResult.Failure -> {
@@ -408,6 +410,17 @@ class CollectProviderReadingEvidence private constructor(
                 }
                 else -> null
             }
+            val decision = when {
+                candidate != null -> DiagnosticProviderLookupDecision.SELECTED
+                sourcePrimaryMatches.size > 1 -> DiagnosticProviderLookupDecision.MULTIPLE_PRIMARY_IDENTITIES
+                matches.isNotEmpty() -> DiagnosticProviderLookupDecision.AMBIGUOUS_EDITION
+                else -> DiagnosticProviderLookupDecision.NO_MATCH
+            }
+            if (decision == DiagnosticProviderLookupDecision.MULTIPLE_PRIMARY_IDENTITIES ||
+                decision == DiagnosticProviderLookupDecision.AMBIGUOUS_EDITION
+            ) {
+                unresolved = true
+            }
             traceLookupCandidates(
                 canonicalTitleId = canonicalTitleId,
                 target = target,
@@ -430,6 +443,7 @@ class CollectProviderReadingEvidence private constructor(
                 candidates = candidates.size,
                 exactMatches = matches.size,
                 bindings = if (candidate != null) 1 else 0,
+                lookupDecision = decision,
             )
             if (candidate == null) continue
 
@@ -456,11 +470,11 @@ class CollectProviderReadingEvidence private constructor(
                 // A user-confirmed edition or another discovery won the same slot.
                 // Never create a second Provider identity or fetch chapters using this stale result.
                 trace(canonicalTitleId, target, DiagnosticStage.BINDING, DiagnosticOutcome.REJECTED)
-                return ProviderCallResult.Success(null)
+                return ProviderCallResult.Success(BindingDiscovery(unresolved = true))
             }
-            return ProviderCallResult.Success(binding)
+            return ProviderCallResult.Success(BindingDiscovery(binding = binding))
         }
-        return ProviderCallResult.Success(null)
+        return ProviderCallResult.Success(BindingDiscovery(unresolved = unresolved))
     }
 
     private suspend fun collectLookup(
@@ -564,6 +578,7 @@ class CollectProviderReadingEvidence private constructor(
                         put("canonical_title_ref", DiagnosticAttributeValue.Text(it))
                     }
                     put("query_index", DiagnosticAttributeValue.Number((queryIndex + 1).toLong()))
+                    put("provider_lookup_title", DiagnosticAttributeValue.Text(queryTitle.take(256)))
                     put("candidate_index", DiagnosticAttributeValue.Number(index.toLong()))
                     put("provider_work_id", DiagnosticAttributeValue.Text(work.externalWorkId))
                     put("provider_work_title", DiagnosticAttributeValue.Text(work.title.take(256)))
@@ -607,6 +622,7 @@ class CollectProviderReadingEvidence private constructor(
         candidates: Int? = null,
         exactMatches: Int? = null,
         bindings: Int? = null,
+        lookupDecision: DiagnosticProviderLookupDecision? = null,
         observed: Int? = null,
         accepted: Int? = null,
         pageCount: Int? = null,
@@ -624,6 +640,7 @@ class CollectProviderReadingEvidence private constructor(
                 candidates?.let { put("candidate_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 exactMatches?.let { put("accepted_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 bindings?.let { put("binding_count", DiagnosticAttributeValue.Number(it.toLong())) }
+                lookupDecision?.let { put("lookup_decision", DiagnosticAttributeValue.Code(it)) }
                 observed?.let { put("observation_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 pageCount?.let { put("page_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 accepted?.let { put("chapter_count", DiagnosticAttributeValue.Number(it.toLong())) }
@@ -694,6 +711,11 @@ class CollectProviderReadingEvidence private constructor(
             code = ProviderErrorCode.MALFORMED_RESULT,
             retryable = false,
         ),
+    )
+
+    private data class BindingDiscovery(
+        val binding: ProviderReadingBinding? = null,
+        val unresolved: Boolean = false,
     )
 
     private data class ReadingTarget(
