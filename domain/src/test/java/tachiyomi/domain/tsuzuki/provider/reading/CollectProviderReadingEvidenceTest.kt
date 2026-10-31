@@ -1293,6 +1293,7 @@ class CollectProviderReadingEvidenceTest {
         candidates.shouldHaveSize(2)
         candidates[0].attributes["provider_work_id"] shouldBe DiagnosticAttributeValue.Text("original-123")
         candidates[0].attributes["provider_work_title"] shouldBe DiagnosticAttributeValue.Text("Dandadan")
+        candidates[0].attributes["language"] shouldBe DiagnosticAttributeValue.Text("en")
         candidates[0].attributes["provider_work_url"] shouldBe
             DiagnosticAttributeValue.Text("https://mangafire.to/title/original-123-dandadan")
         candidates[0].attributes["provider_work_aliases"] shouldBe DiagnosticAttributeValue.Text("Dan Da Dan")
