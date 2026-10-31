@@ -412,6 +412,7 @@ class CollectProviderReadingEvidence private constructor(
                 canonicalTitleId = canonicalTitleId,
                 target = target,
                 queryIndex = queryIndex,
+                queryTitle = title,
                 candidates = candidates,
                 matches = matches,
                 selected = candidate,
@@ -520,6 +521,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalTitleId: String,
         target: ReadingTarget,
         queryIndex: Int,
+        queryTitle: String,
         candidates: List<ProviderWorkCandidate>,
         matches: List<ProviderWorkCandidate>,
         selected: ProviderWorkCandidate?,
@@ -537,7 +539,7 @@ class CollectProviderReadingEvidence private constructor(
                 val reason = when {
                     selected?.externalWorkId == work.externalWorkId -> DiagnosticProviderCandidateReason.SELECTED
                     !facetMatches -> DiagnosticProviderCandidateReason.FACET_MISMATCH
-                    exactMatch && primary?.externalWorkId == work.externalWorkId ->
+                    exactMatch && normalize(work.title) == normalize(queryTitle) ->
                         DiagnosticProviderCandidateReason.PRIMARY_MATCH_BLOCKED
                     exactMatch -> DiagnosticProviderCandidateReason.ALIAS_MATCH_BLOCKED
                     primary != null && isExplicitEditionVariant(work.title, primary.title) ->
