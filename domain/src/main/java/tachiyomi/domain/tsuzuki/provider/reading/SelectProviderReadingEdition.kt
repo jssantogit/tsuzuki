@@ -48,7 +48,14 @@ class SelectProviderReadingEdition(
     private val gateway: ProviderReadingGateway,
     private val bindingRepository: ProviderReadingBindingRepository,
 ) {
-    suspend fun search(canonicalTitleId: String, query: String): ProviderEditionSearchResult {
+    suspend fun search(canonicalTitleId: String, query: String): ProviderEditionSearchResult =
+        searchScoped(canonicalTitleId, query, selectedRef = null)
+
+    private suspend fun searchScoped(
+        canonicalTitleId: String,
+        query: String,
+        selectedRef: ProviderBindingRef?,
+    ): ProviderEditionSearchResult {
         if (canonicalTitleId.isBlank() || query.isBlank() || query.length > MAX_QUERY_CHARS) {
             return ProviderEditionSearchResult()
         }
@@ -58,6 +65,7 @@ class SelectProviderReadingEdition(
         var failed = false
 
         providerRegistry.providers()
+            .filter { selectedRef == null || it.descriptor.id == selectedRef.providerId }
             .filter { it.lifecycleStatus == ProviderLifecycleStatus.ENABLED }
             .filter { it.descriptor.runtime == ProviderRuntimeKind.SCRIPT }
             .filter {
@@ -66,6 +74,7 @@ class SelectProviderReadingEdition(
             }
             .forEach { registration ->
                 val facets = registration.facets.map { it.facetId }.ifEmpty { listOf(null) }
+                    .filter { selectedRef == null || it == selectedRef.facetId }
                 facets.forEach { facetId ->
                     val response = try {
                         withTimeoutOrNull(LOOKUP_BUDGET_MILLIS) {
@@ -138,7 +147,7 @@ class SelectProviderReadingEdition(
         }
 
         // Re-query under the current grants/version, never trust a stale selection.
-        val refreshed = search(canonicalTitleId, candidate.query)
+        val refreshed = searchScoped(canonicalTitleId, candidate.query, selectedRef = candidate.ref)
         if (refreshed.candidates.none { it == candidate }) {
             return if (refreshed.hadFailures) {
                 ProviderEditionConfirmation.UNAVAILABLE
