@@ -15,6 +15,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCandidateReason
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderDetailOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
@@ -610,6 +611,13 @@ class CollectProviderReadingEvidence private constructor(
                         put("provider_work_chapter_count", DiagnosticAttributeValue.Number(it.toLong()))
                     }
                     put("provider_candidate_reason", DiagnosticAttributeValue.Code(reason))
+                    work.detailOutcome?.let {
+                        put(
+                            "provider_detail_outcome",
+                            DiagnosticAttributeValue.Code(DiagnosticProviderDetailOutcome.valueOf(it.name)),
+                        )
+                    }
+                    work.detailHttpStatus?.let { put("http_status", DiagnosticAttributeValue.Number(it.toLong())) }
                 }
                 diagnostics.record(
                     StructuredDiagnosticEvent(
