@@ -67,6 +67,43 @@ class RefreshChapterEvidenceProviderReadingTest {
     }
 
     @Test
+    fun `incomplete Provider pages reconcile only additive provisional evidence without detaching support`() = runTest {
+        val canonicalTitleId = "title-1"
+        val evidence = ChapterEvidence(
+            id = "provider-partial-1",
+            canonicalTitleId = canonicalTitleId,
+            producerKind = ProducerKind.PROVIDER,
+            producerId = "provider-binding:fixture",
+            externalChapterKey = "chapter-1",
+            rawLabel = "Chapter 1",
+            rawNumber = 1.0,
+            volume = null,
+            title = null,
+            observedAt = 42L,
+            confidence = 0.95,
+            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+        )
+        val collector = mockk<CollectProviderReadingEvidence>()
+        coEvery { collector.execute(canonicalTitleId) } returns ProviderReadingEvidenceCollection(
+            partialEvidence = listOf(evidence),
+            bindingCount = 1,
+            complete = false,
+        )
+        val registry = mockk<IntegrationRegistry>(relaxed = true)
+        coEvery { registry.awaitReady() } returns Unit
+        every { registry.chapterEvidenceProviders() } returns emptyList()
+        val reconcile = mockk<ReconcileChapterEvidence>(relaxed = true)
+        val refresh = RefreshChapterEvidence(registry, reconcile, collector)
+
+        refresh.execute(canonicalTitleId).isSuccess shouldBe true
+
+        coVerify(exactly = 1) { reconcile.execute(canonicalTitleId, listOf(evidence)) }
+        coVerify(exactly = 0) {
+            reconcile.executeProviderSnapshot(any(), any(), any(), any())
+        }
+    }
+
+    @Test
     fun `empty complete Provider snapshot is still published so stale support can detach`() = runTest {
         val canonicalTitleId = "title-1"
         val producerId = "provider-binding:fixture"
