@@ -29,6 +29,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterObservation
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCursor
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderError
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderLookupFailureCode
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedFileFormat
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceResolver
@@ -134,6 +135,17 @@ class ScriptProviderReadingGateway internal constructor(
             ),
         ) { value, active ->
             val decoded = json.decodeFromString<LookupPageDto>(value)
+            if (decoded.lookupFailureCode != null) {
+                require(decoded.items.isEmpty() && decoded.nextCursor == null) {
+                    "Source failure cannot carry successful candidates"
+                }
+                require(decoded.lookupHttpStatus == null || decoded.lookupHttpStatus in 100..599)
+                throw SourceLookupFailure(
+                    ProviderLookupFailureCode.valueOf(decoded.lookupFailureCode),
+                    decoded.lookupHttpStatus,
+                )
+            }
+            require(decoded.lookupHttpStatus == null) { "HTTP status requires a source lookup failure" }
             ProviderPage(
                 items = decoded.items.map { item ->
                     item.url?.let { validateResultUrl(active, it, browserAllowed = true) }
@@ -337,10 +349,25 @@ class ScriptProviderReadingGateway internal constructor(
             ProviderCallResult.Success(decode(value, active))
         } catch (error: CancellationException) {
             throw error
+        } catch (error: SourceLookupFailure) {
+            ProviderCallResult.Failure(
+                ProviderError(
+                    code = ProviderErrorCode.SOURCE_READ_ERROR,
+                    retryable = error.kind == ProviderLookupFailureCode.CHALLENGE_BLOCKED ||
+                        (error.kind == ProviderLookupFailureCode.HTTP_ERROR && error.httpStatus in 500..599),
+                    sourceFailureCode = error.kind,
+                    httpStatus = error.httpStatus,
+                ),
+            )
         } catch (_: Throwable) {
             malformed()
         }
     }
+
+    private class SourceLookupFailure(
+        val kind: ProviderLookupFailureCode,
+        val httpStatus: Int?,
+    ) : RuntimeException()
 
     private fun matchesRegistration(
         registration: ProviderRegistration,
@@ -462,6 +489,8 @@ class ScriptProviderReadingGateway internal constructor(
     internal data class LookupPageDto(
         val items: List<WorkCandidateDto>,
         val nextCursor: String? = null,
+        val lookupFailureCode: String? = null,
+        val lookupHttpStatus: Int? = null,
     )
 
     @Serializable
