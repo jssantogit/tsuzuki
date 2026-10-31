@@ -349,7 +349,7 @@ class CollectProviderReadingEvidence private constructor(
     ): ProviderCallResult<ProviderReadingBinding?> {
         // Work IDs are private to this Provider and are only used to narrow
         // earlier matches. They never cross a source, title, edition or facet.
-        var ambiguousWorkIds: Set<String>? = null
+        var ambiguousCandidates: List<ProviderWorkCandidate>? = null
         for (title in titles) {
             val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
                 is ProviderCallResult.Failure -> {
@@ -380,19 +380,24 @@ class CollectProviderReadingEvidence private constructor(
                 .distinctBy(ProviderWorkCandidate::externalWorkId)
                 .toList()
             val sourcePrimaryMatches = matches.filter { normalize(it.title) == normalizedTitle }
-            val priorAmbiguous = ambiguousWorkIds
+            val priorAmbiguous = ambiguousCandidates
+            val primary = sourcePrimaryMatches.singleOrNull()
             val candidate = when {
-                // After an ambiguous search, another trusted title can only
-                // corroborate a work already seen. Never bind an unrelated HID.
-                priorAmbiguous != null -> sourcePrimaryMatches.singleOrNull()?.takeIf {
-                    it.externalWorkId in priorAmbiguous
+                // An ambiguous first lookup may only be narrowed to a work
+                // already seen, and only when all competing source titles
+                // explicitly identify a different editorial variant.
+                priorAmbiguous != null -> primary?.takeIf { selected ->
+                    priorAmbiguous.any { it.externalWorkId == selected.externalWorkId } &&
+                        priorAmbiguous
+                            .filter { it.externalWorkId != selected.externalWorkId }
+                            .all { isExplicitEditionVariant(it.title, selected.title) }
                 }
                 matches.size == 1 -> matches.single()
-                // A source-declared main title outranks another edition which
-                // only lists that title as an alias (colored, omnibus, etc).
-                sourcePrimaryMatches.size == 1 -> sourcePrimaryMatches.single()
+                primary != null && matches
+                    .filter { it.externalWorkId != primary.externalWorkId }
+                    .all { isExplicitEditionVariant(it.title, primary.title) } -> primary
                 matches.size > 1 -> {
-                    ambiguousWorkIds = matches.mapTo(mutableSetOf()) { it.externalWorkId }
+                    ambiguousCandidates = matches
                     null
                 }
                 else -> null
@@ -548,6 +553,22 @@ class CollectProviderReadingEvidence private constructor(
         .lowercase()
         .replace(WHITESPACE, " ")
 
+    /** An explicit edition label is evidence of a variant, not a fuzzy title mismatch. */
+    private fun isExplicitEditionVariant(candidateTitle: String, baseTitle: String): Boolean {
+        val base = normalize(baseTitle)
+        val candidate = normalize(candidateTitle)
+        if (candidate == base || !candidate.startsWith(base)) return false
+        val suffix = candidate.removePrefix(base).trim()
+        if (suffix.none { it.isLetterOrDigit() }) return false
+        val explicitlyQualified = suffix.startsWith("(") ||
+            suffix.startsWith("[") ||
+            suffix.startsWith("-") ||
+            suffix.startsWith(":")
+        return explicitlyQualified && EXPLICIT_ALTERNATE_EDITION_HINTS.any { hint ->
+            suffix.contains(hint)
+        }
+    }
+
     private fun bindingId(
         canonicalTitleId: String,
         providerId: ProviderId,
@@ -586,6 +607,16 @@ class CollectProviderReadingEvidence private constructor(
             ProviderCapabilities.ReadingChaptersV1,
         )
         val WHITESPACE = Regex("\\s+")
+        val EXPLICIT_ALTERNATE_EDITION_HINTS = listOf(
+            "colored",
+            "coloured",
+            "full color",
+            "full colour",
+            "omnibus",
+            "one shot",
+            "oneshot",
+            "special edition",
+        )
         const val MAX_CONCURRENT_PROVIDERS = 4
         const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
         const val MAX_LOOKUP_PAGES = 8
