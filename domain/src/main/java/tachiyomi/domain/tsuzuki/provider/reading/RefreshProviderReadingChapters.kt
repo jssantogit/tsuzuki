@@ -14,6 +14,7 @@ class RefreshProviderReadingChapters internal constructor(
     ) -> Unit,
     private val clock: () -> Long = System::currentTimeMillis,
     private val onPageObserved: suspend (pageCount: Int, observationCount: Int) -> Unit = { _, _ -> },
+    private val onPageCollected: suspend (List<ProviderChapterObservation>, Long) -> Unit = { _, _ -> },
 ) {
 
     constructor(
@@ -75,6 +76,9 @@ class RefreshProviderReadingChapters internal constructor(
             // stalled or failed later page cannot detach previously recorded chapters.
             // The incomplete result must not pretend that the inventory is complete.
             onPageObserved(it + 1, observations.size)
+            // Observed chapters may be used additively if a later page stalls. This is
+            // not a complete snapshot and must never detach older Provider support.
+            onPageCollected(page.items, snapshotObservedAt)
             if (next == null) {
                 val evidence = evidenceAdapter.toEvidence(
                     canonicalTitleId = binding.canonicalTitleId,
