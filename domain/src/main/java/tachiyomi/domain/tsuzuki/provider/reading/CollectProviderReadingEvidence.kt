@@ -12,6 +12,7 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticErrorCategory
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCandidateReason
@@ -397,6 +398,8 @@ class CollectProviderReadingEvidence private constructor(
                         DiagnosticOutcome.FAILED,
                         elapsedMillis = (System.nanoTime() - queryStarted) / 1_000_000L,
                         errorCode = result.error.code,
+                        sourceFailureCode = result.error.sourceFailureCode,
+                        httpStatus = result.error.httpStatus,
                     )
                     trace(
                         canonicalTitleId,
@@ -599,6 +602,8 @@ class CollectProviderReadingEvidence private constructor(
         elapsedMillis: Long? = null,
         candidateCount: Int? = null,
         errorCode: ProviderErrorCode? = null,
+        sourceFailureCode: ProviderLookupFailureCode? = null,
+        httpStatus: Int? = null,
     ) {
         if (!diagnostics.detailedCaptureActive) return
         runCatching {
@@ -617,6 +622,16 @@ class CollectProviderReadingEvidence private constructor(
                 }
                 candidateCount?.let { put("candidate_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 errorCode?.let { put("provider_error_code", DiagnosticAttributeValue.Text(it.name)) }
+                sourceFailureCode?.let { reason ->
+                    val category = when (reason) {
+                        ProviderLookupFailureCode.CHALLENGE_BLOCKED -> DiagnosticErrorCategory.CAPTCHA
+                        ProviderLookupFailureCode.HTTP_ERROR -> DiagnosticErrorCategory.HTTP
+                        ProviderLookupFailureCode.INVALID_RESPONSE -> DiagnosticErrorCategory.MALFORMED_RESPONSE
+                        ProviderLookupFailureCode.UNCLASSIFIED_ERROR -> DiagnosticErrorCategory.UNKNOWN
+                    }
+                    put("error_category", DiagnosticAttributeValue.Code(category))
+                }
+                httpStatus?.let { put("http_status", DiagnosticAttributeValue.Number(it.toLong())) }
             }
             diagnostics.record(
                 StructuredDiagnosticEvent(
