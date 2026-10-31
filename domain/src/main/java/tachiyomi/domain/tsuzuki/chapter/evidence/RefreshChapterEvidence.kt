@@ -344,6 +344,12 @@ class RefreshChapterEvidence private constructor(
                 val providerEvidence = async {
                     val collected = providerReadingEvidence?.execute(canonicalTitleId)
                         ?: ProviderReadingEvidenceCollection()
+                    // An interrupted paginated source still provides real provisional
+                    // observations. Reconcile them additively: never use the snapshot
+                    // replacement path until the source proves completeness.
+                    if (collected.partialEvidence.isNotEmpty()) {
+                        reconcileStage(collected.partialEvidence)
+                    }
                     collected.snapshots.forEach { snapshot ->
                         reconcileProviderSnapshot(snapshot)
                     }
