@@ -472,8 +472,9 @@ private fun InstalledProviderCards(
                 SettingsGroup {
                     if (family.isNotEmpty()) {
                         val repositoryId = (family.first().descriptor.origin as ProviderOrigin.Repository).repositoryId
+                        val totalSources = MangaAllFamilyCatalog.activeSourceProviderIds.size
                         Text(
-                            text = "MangaAll · ${family.size}/${MangaAllFamilyCatalog.activeSourceProviderIds.size} sources · $repositoryId",
+                            text = "MangaAll · ${family.size}/$totalSources sources · $repositoryId",
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
                             color = colors.foreground,
