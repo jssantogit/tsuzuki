@@ -418,12 +418,10 @@ class RefreshChapterEvidence private constructor(
                     collections.provider.evidence
                 ).distinctBy(ChapterEvidence::id)
 
-            if (
-                collections.integration.complete &&
+            val allSourcesComplete = collections.integration.complete &&
                 collections.addon.complete &&
-                collections.provider.complete &&
-                refreshSnapshots != null
-            ) {
+                collections.provider.complete
+            if (allSourcesComplete && refreshSnapshots != null) {
                 val now = clock()
                 refreshSnapshots.upsertIfNewer(
                     ChapterRefreshSnapshot(
@@ -451,10 +449,11 @@ class RefreshChapterEvidence private constructor(
                 subsystem = DiagnosticSubsystem.CHAPTER,
                 name = DiagnosticEventName.CHAPTER_REFRESH_COMPLETED,
                 stage = DiagnosticStage.COMPLETE,
-                outcome = DiagnosticOutcome.SUCCEEDED,
+                outcome = if (allSourcesComplete) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
                 durationMillis = started.elapsedNow().inWholeMilliseconds.coerceAtLeast(0),
                 attributes = mapOf(
                     DiagnosticAttribute.ITEM_COUNT to DiagnosticAttributeValue.Number(evidence.size.toLong()),
+                    DiagnosticAttribute.COMPLETED to DiagnosticAttributeValue.Flag(allSourcesComplete),
                 ),
             )
             Result.success(Unit)
