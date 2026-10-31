@@ -414,7 +414,7 @@ class CollectProviderReadingEvidence private constructor(
                             .filter { it.externalWorkId != selected.externalWorkId }
                             .all { isSourceAttestedAlternateEdition(it, selected.title) }
                 }
-                matches.size == 1 -> matches.single()
+                matches.size == 1 && !isSourceAttestedAlternateEdition(matches.single(), title) -> matches.single()
                 primary != null && matches
                     .filter { it.externalWorkId != primary.externalWorkId }
                     .all { isSourceAttestedAlternateEdition(it, primary.title) } -> primary
