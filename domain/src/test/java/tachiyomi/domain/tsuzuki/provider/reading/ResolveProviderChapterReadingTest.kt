@@ -125,6 +125,47 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `Reader retains exact prologue and decimal chapter evidence without merging identities`() = runBlocking {
+        val prologue = chapter.copy(
+            id = "prologue-1",
+            displayNumber = "Prologue 1",
+            type = CanonicalChapterType.PROLOGUE,
+        )
+        val decimal = chapter.copy(
+            id = "decimal-0-1",
+            displayNumber = "0.1",
+            baseNumber = 0,
+            part = 1,
+        )
+        val cases = listOf(
+            Triple(prologue, "Prologue 1", 1.0),
+            Triple(decimal, "Ch. 0.1", 0.1),
+        )
+        cases.forEach { (canonical, rawLabel, rawNumber) ->
+            val observed = evidence(
+                binding,
+                "source-" + canonical.id,
+                mappedChapterId = canonical.id,
+            ).copy(
+                evidence = providerEvidence(
+                    producerId = binding.ref.evidenceProducerId(),
+                    externalChapterKey = "source-" + canonical.id,
+                ).copy(
+                    rawLabel = rawLabel,
+                    rawNumber = rawNumber,
+                ),
+            )
+            val resolver = resolver(
+                bindings = listOf(binding),
+                evidence = listOf(observed),
+                canonicalChapter = canonical,
+            )
+            resolver.options(canonical.id).map { it.providerChapterId } shouldBe
+                listOf("source-" + canonical.id)
+        }
+    }
+
+    @Test
     fun `unavailable binding and stale unmatched Provider evidence are excluded`() = runBlocking {
         val unavailable = binding.copy(
             availability = ProviderBindingAvailability.UNAVAILABLE,
@@ -451,8 +492,9 @@ class ResolveProviderChapterReadingTest {
         },
         managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
         providerRegistry: ProviderRegistry = DefaultProviderRegistry(registrations = { listOf(readingRegistration()) }),
+        canonicalChapter: CanonicalChapter = chapter,
     ) = ResolveProviderChapterReading(
-        canonicalChapterRepository = canonicalChapterRepository(chapter),
+        canonicalChapterRepository = canonicalChapterRepository(canonicalChapter),
         evidenceRepository = evidenceRepository(evidence),
         bindingRepository = bindingRepository(bindings),
         providerRegistry = providerRegistry,
