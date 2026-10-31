@@ -574,11 +574,11 @@ class CollectProviderReadingEvidence private constructor(
                 val reason = when {
                     selected?.externalWorkId == work.externalWorkId -> DiagnosticProviderCandidateReason.SELECTED
                     !facetMatches -> DiagnosticProviderCandidateReason.FACET_MISMATCH
+                    isSourceAttestedAlternateEdition(work, selected?.title ?: primary?.title ?: queryTitle) ->
+                        DiagnosticProviderCandidateReason.ALTERNATE_EDITION
                     exactMatch && normalize(work.title) == normalize(queryTitle) ->
                         DiagnosticProviderCandidateReason.PRIMARY_MATCH_BLOCKED
                     exactMatch -> DiagnosticProviderCandidateReason.ALIAS_MATCH_BLOCKED
-                    primary != null && isExplicitEditionVariant(work.title, primary.title) ->
-                        DiagnosticProviderCandidateReason.ALTERNATE_EDITION
                     else -> DiagnosticProviderCandidateReason.TITLE_MISMATCH
                 }
                 val aliases = work.aliases
