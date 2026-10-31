@@ -277,10 +277,25 @@ enum class ProviderErrorCode {
     ACQUISITION_FAILED,
 }
 
+/** Closed lookup failure categories; do not propagate source text, URLs or response bodies. */
+enum class ProviderLookupFailureCode {
+    CHALLENGE_BLOCKED,
+    HTTP_ERROR,
+    INVALID_RESPONSE,
+    UNCLASSIFIED_ERROR,
+}
+
 data class ProviderError(
     val code: ProviderErrorCode,
     val retryable: Boolean,
-)
+    val sourceFailureCode: ProviderLookupFailureCode? = null,
+    val httpStatus: Int? = null,
+) {
+    init {
+        require(httpStatus == null || httpStatus in 100..599)
+        require(httpStatus == null || sourceFailureCode != null)
+    }
+}
 
 sealed interface ProviderCallResult<out T> {
     data class Success<T>(val value: T) : ProviderCallResult<T>
