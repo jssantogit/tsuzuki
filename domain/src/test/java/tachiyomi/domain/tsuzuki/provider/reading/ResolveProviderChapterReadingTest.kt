@@ -12,7 +12,9 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
@@ -85,6 +87,113 @@ class ResolveProviderChapterReadingTest {
                 providerChapterId = "provider-chapter-1",
             ),
         )
+    }
+
+    @Test
+    fun `Reader refuses a stale Provider chapter key mapped to a different canonical chapter number`() = runBlocking {
+        var pagesCalls = 0
+        val stale = evidence(binding, "source-chapter-84", mappedChapterId = chapter.id).copy(
+            evidence = providerEvidence(
+                producerId = binding.ref.evidenceProducerId(),
+                externalChapterKey = "source-chapter-84",
+            ).copy(
+                rawLabel = "Ch. 84",
+                rawNumber = 84.0,
+            ),
+        )
+        val resolver = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(stale),
+            gateway = gateway {
+                pagesCalls++
+                error("A mismatched chapter must never reach the Provider runtime")
+            },
+        )
+
+        resolver.options(chapter.id) shouldBe emptyList()
+        resolver.delivery(
+            ProviderChapterReadingOption(
+                canonicalChapterId = chapter.id,
+                bindingId = binding.id,
+                providerId = providerId,
+                facetId = "en",
+                externalWorkId = "work-1",
+                providerChapterId = "source-chapter-84",
+            ),
+        ) shouldBe ProviderCallResult.Failure(
+            ProviderError(ProviderErrorCode.UNAVAILABLE, retryable = false),
+        )
+        pagesCalls shouldBe 0
+    }
+
+    @Test
+    fun `Reader retains exact prologue and decimal chapter evidence without merging identities`() = runBlocking {
+        val prologue = chapter.copy(
+            id = "prologue-1",
+            displayNumber = "Prologue 1",
+            type = CanonicalChapterType.PROLOGUE,
+        )
+        val decimal = chapter.copy(
+            id = "decimal-0-1",
+            displayNumber = "0.1",
+            baseNumber = 0,
+            part = 1,
+        )
+        val cases = listOf(
+            Triple(prologue, "Prologue 1", 1.0),
+            Triple(decimal, "Ch. 0.1", 0.1),
+        )
+        cases.forEach { (canonical, rawLabel, rawNumber) ->
+            val observed = evidence(
+                binding,
+                "source-" + canonical.id,
+                mappedChapterId = canonical.id,
+            ).copy(
+                evidence = providerEvidence(
+                    producerId = binding.ref.evidenceProducerId(),
+                    externalChapterKey = "source-" + canonical.id,
+                ).copy(
+                    rawLabel = rawLabel,
+                    rawNumber = rawNumber,
+                ),
+            )
+            val resolver = resolver(
+                bindings = listOf(binding),
+                evidence = listOf(observed),
+                canonicalChapter = canonical,
+            )
+            resolver.options(canonical.id).map { it.providerChapterId } shouldBe
+                listOf("source-" + canonical.id)
+        }
+    }
+
+    @Test
+    fun `Reader accepts source decimal matching the precise canonical v2 numbering`() = runBlocking {
+        val exact = chapter.copy(
+            id = "exact-decimal",
+            displayNumber = "0.1",
+            baseNumber = 0,
+            part = 1,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction.parse("1"),
+        )
+        val observed = evidence(
+            binding = binding,
+            providerChapterId = "source-exact-decimal",
+            mappedChapterId = exact.id,
+        ).copy(
+            evidence = providerEvidence(
+                producerId = binding.ref.evidenceProducerId(),
+                externalChapterKey = "source-exact-decimal",
+            ).copy(rawLabel = "Ch. 0.1", rawNumber = 0.1),
+        )
+        val resolver = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(observed),
+            canonicalChapter = exact,
+        )
+
+        resolver.options(exact.id).map { it.providerChapterId } shouldBe listOf("source-exact-decimal")
     }
 
     @Test
@@ -414,8 +523,9 @@ class ResolveProviderChapterReadingTest {
         },
         managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
         providerRegistry: ProviderRegistry = DefaultProviderRegistry(registrations = { listOf(readingRegistration()) }),
+        canonicalChapter: CanonicalChapter = chapter,
     ) = ResolveProviderChapterReading(
-        canonicalChapterRepository = canonicalChapterRepository(chapter),
+        canonicalChapterRepository = canonicalChapterRepository(canonicalChapter),
         evidenceRepository = evidenceRepository(evidence),
         bindingRepository = bindingRepository(bindings),
         providerRegistry = providerRegistry,
