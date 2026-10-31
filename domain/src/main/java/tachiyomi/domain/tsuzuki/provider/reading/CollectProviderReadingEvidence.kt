@@ -384,7 +384,7 @@ class CollectProviderReadingEvidence private constructor(
             val candidate = when {
                 // After an ambiguous search, another trusted title can only
                 // corroborate a work already seen. Never bind an unrelated HID.
-                priorAmbiguous != null -> sourcePrimaryMatches.singleOrNull {
+                priorAmbiguous != null -> sourcePrimaryMatches.singleOrNull()?.takeIf {
                     it.externalWorkId in priorAmbiguous
                 }
                 matches.size == 1 -> matches.single()
