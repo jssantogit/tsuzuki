@@ -20,6 +20,8 @@ import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
+import tachiyomi.domain.tsuzuki.model.TitleNameObservation
+import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
@@ -758,6 +760,61 @@ class CollectProviderReadingEvidenceTest {
 
         picker.confirm(canonicalTitle.id, selected) shouldBe ProviderEditionConfirmation.BOUND
         lookups shouldBe listOf(providerId)
+    }
+
+    @Test
+    fun `edition picker includes recorded English alias but keeps binding explicitly user confirmed`() = runBlocking {
+        val nanatsu = canonicalTitle.copy(displayTitle = "Nanatsu no Taizai")
+        val requestedNames = mutableListOf<String>()
+        val names = object : TitleNameObservationRepository {
+            override suspend fun getByTitle(canonicalTitleId: String): List<TitleNameObservation> = listOf(
+                TitleNameObservation(
+                    canonicalTitleId = nanatsu.id,
+                    provider = "mal",
+                    sourceKey = "english",
+                    value = "The Seven Deadly Sins",
+                    updatedAt = 42L,
+                ),
+            )
+            override suspend fun upsert(observation: TitleNameObservation) = error("not used")
+        }
+        val bindings = MemoryBindingRepository()
+        val picker = SelectProviderReadingEdition(
+            canonicalTitleRepository = titleRepository(nanatsu),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    val query = request.titles.single()
+                    requestedNames += query
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    externalWorkId = if (query == "The Seven Deadly Sins") "seven-deadly-sins" else "other",
+                                    title = query,
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Search must not fetch chapters") },
+            ),
+            bindingRepository = bindings,
+            titleNameObservationRepository = names,
+        )
+
+        val candidates = picker.search(nanatsu.id, "Nanatsu no Taizai").candidates
+        requestedNames shouldBe listOf("Nanatsu no Taizai", "The Seven Deadly Sins")
+        candidates.map { it.ref.externalWorkId } shouldBe listOf("other", "seven-deadly-sins")
+        bindings.getByTitle(nanatsu.id) shouldBe emptyList()
+
+        requestedNames.clear()
+        picker.confirm(nanatsu.id, candidates.last()) shouldBe ProviderEditionConfirmation.BOUND
+        requestedNames shouldBe listOf("The Seven Deadly Sins")
+        bindings.getByTitle(nanatsu.id).single().ref.externalWorkId shouldBe "seven-deadly-sins"
+        bindings.getByTitle(nanatsu.id).single().verification shouldBe ProviderBindingVerification.USER_CONFIRMED
     }
 
     // Cross-module regression: the persisted slot is reserved by only one edition.
