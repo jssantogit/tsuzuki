@@ -565,6 +565,46 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `malformed follow-up page cannot salvage partial Provider inventory`() = runBlocking {
+        val bridge = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderWorkCandidate("work-1", "Dandadan", language = "en")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    if (request.cursor == null) {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(ProviderChapterObservation("chapter-one", "Chapter 1")),
+                                nextCursor = ProviderCursor("2"),
+                            ),
+                        )
+                    } else {
+                        ProviderCallResult.Failure(
+                            ProviderError(code = ProviderErrorCode.MALFORMED_RESULT, retryable = false),
+                        )
+                    }
+                },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+        val result = bridge.execute(canonicalTitle.id)
+
+        result.complete shouldBe false
+        result.partialEvidence shouldBe emptyList()
+        result.snapshots shouldBe emptyList()
+    }
+
+    @Test
     fun `edition picker shows both exact matches but persists only the user confirmed work`(): Unit = runBlocking {
         val bindings = MemoryBindingRepository()
         val picker = SelectProviderReadingEdition(
