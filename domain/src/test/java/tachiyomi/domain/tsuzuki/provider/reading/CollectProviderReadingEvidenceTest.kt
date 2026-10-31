@@ -9,6 +9,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.jupiter.api.Test
+import io.mockk.every
+import io.mockk.mockk
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
@@ -21,6 +23,9 @@ import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.model.TitleNameObservation
+import tachiyomi.domain.tsuzuki.integration.IntegrationId
+import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
+import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
@@ -779,6 +784,8 @@ class CollectProviderReadingEvidenceTest {
             override suspend fun upsert(observation: TitleNameObservation) = error("not used")
         }
         val bindings = MemoryBindingRepository()
+        val integrations = mockk<IntegrationRegistry>(relaxed = true)
+        every { integrations.isGlobalCapabilityActive(IntegrationId("mal"), IntegrationCapability.METADATA_BASIC) } returns true
         val picker = SelectProviderReadingEdition(
             canonicalTitleRepository = titleRepository(nanatsu),
             providerRegistry = registry(),
@@ -803,6 +810,7 @@ class CollectProviderReadingEvidenceTest {
             ),
             bindingRepository = bindings,
             titleNameObservationRepository = names,
+            integrationRegistry = integrations,
         )
 
         val candidates = picker.search(nanatsu.id, "Nanatsu no Taizai").candidates
