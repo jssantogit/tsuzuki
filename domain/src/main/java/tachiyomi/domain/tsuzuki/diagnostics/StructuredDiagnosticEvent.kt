@@ -194,6 +194,8 @@ enum class DiagnosticAttribute {
     PROVIDER_WORK_TITLE,
     PROVIDER_WORK_URL,
     PROVIDER_WORK_ALIASES,
+    PROVIDER_LOOKUP_TITLE,
+    LOOKUP_DECISION,
     PROVIDER_WORK_CHAPTER_COUNT,
     PROVIDER_CANDIDATE_REASON,
     BROADENED,
@@ -348,6 +350,14 @@ enum class DiagnosticTorrentCandidateMatchReason : DiagnosticSafeCode {
 }
 
 /** Detailed-capture-only classification; never use title similarity as binding authorization. */
+/** Source identity is unresolved even when lookup HTTP/API completed successfully. */
+enum class DiagnosticProviderLookupDecision : DiagnosticSafeCode {
+    SELECTED,
+    NO_MATCH,
+    MULTIPLE_PRIMARY_IDENTITIES,
+    AMBIGUOUS_EDITION,
+}
+
 enum class DiagnosticProviderCandidateReason : DiagnosticSafeCode {
     SELECTED,
     PRIMARY_MATCH_BLOCKED,
@@ -594,6 +604,8 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticTorrentCandidateMatchReason }
         DiagnosticAttribute.PROVIDER_CANDIDATE_REASON -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderCandidateReason }
+        DiagnosticAttribute.LOOKUP_DECISION -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderLookupDecision }
 
         DiagnosticAttribute.PROVIDER_P2P_LINE -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { isSafeP2pLine(it.value) }
@@ -603,6 +615,7 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { providerWorkUrlPattern.matches(it.value) }
         DiagnosticAttribute.PROVIDER_WORK_TITLE,
         DiagnosticAttribute.PROVIDER_WORK_ALIASES,
+        DiagnosticAttribute.PROVIDER_LOOKUP_TITLE,
         -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { text ->
                 text.value.length in 1..512 &&
