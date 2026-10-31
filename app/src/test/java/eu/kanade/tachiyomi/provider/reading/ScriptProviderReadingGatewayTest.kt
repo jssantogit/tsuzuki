@@ -86,7 +86,8 @@ class ScriptProviderReadingGatewayTest {
                       "title": "Tsuzuki",
                       "aliases": ["Tsuzuki Alt"],
                       "url": "https://reader.example/title/42",
-                      "language": "en"
+                      "language": "en",
+                      "chapterCount": 123
                     }
                   ],
                   "nextCursor": "next"
@@ -103,6 +104,7 @@ class ScriptProviderReadingGatewayTest {
         val success = result as ProviderCallResult.Success
         success.value.items.single().externalWorkId shouldBe "work-42"
         success.value.items.single().title shouldBe "Tsuzuki"
+        success.value.items.single().chapterCount shouldBe 123
         success.value.nextCursor?.value shouldBe "next"
 
         captured?.capabilityId shouldBe "reading.lookup"

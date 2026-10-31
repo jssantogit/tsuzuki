@@ -1220,8 +1220,125 @@ class CollectProviderReadingEvidenceTest {
         bindings.getByTitle(canonicalTitle.id).map { it.ref.externalWorkId } shouldBe listOf("manga-colored")
     }
 
-    private class CapturingProviderDiagnostics : StructuredDiagnosticRecorder {
+    @Test
+    fun `lookup timeout is distinguished from a chapter read timeout`() = runTest {
+        val recorder = CapturingProviderDiagnostics()
+        val neverCompletes = CompletableDeferred<Unit>()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    neverCompletes.await()
+                    error("unreachable")
+                },
+                chaptersHandler = { error("Lookup never selected a binding") },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+        val result = withTimeoutOrNull(21_000) { collector.execute(canonicalTitle.id) }
+        result!!.complete shouldBe false
+        recorder.events.any {
+            it.stage == DiagnosticStage.LOOKUP && it.outcome == DiagnosticOutcome.TIMEOUT
+        } shouldBe true
+        recorder.events.none {
+            it.stage == DiagnosticStage.READ && it.outcome == DiagnosticOutcome.TIMEOUT
+        } shouldBe true
+    }
+
+    @Test
+    fun `detailed capture records real candidate identities and rejection reasons`(): Unit = runBlocking {
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    externalWorkId = "original-123",
+                                    title = "Dandadan",
+                                    aliases = listOf("Dan Da Dan"),
+                                    url = "https://mangafire.to/title/original-123-dandadan",
+                                    language = "en",
+                                    chapterCount = 151,
+                                ),
+                                ProviderWorkCandidate(
+                                    externalWorkId = "other-456",
+                                    title = "Dandadan",
+                                    url = "https://mangafire.to/title/other-456-dandadan",
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Ambiguous work must not load chapters") },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+        result.bindingCount shouldBe 0
+        val candidates = recorder.events.filter { it.name == DiagnosticEventName.PROVIDER_READING_CANDIDATE }
+        candidates.shouldHaveSize(2)
+        candidates[0].attributes["provider_work_id"] shouldBe DiagnosticAttributeValue.Text("original-123")
+        candidates[0].attributes["provider_work_title"] shouldBe DiagnosticAttributeValue.Text("Dandadan")
+        candidates[0].attributes["language"] shouldBe DiagnosticAttributeValue.Text("en")
+        candidates[0].attributes["provider_work_url"] shouldBe
+            DiagnosticAttributeValue.Text("https://mangafire.to/title/original-123-dandadan")
+        candidates[0].attributes["provider_work_aliases"] shouldBe DiagnosticAttributeValue.Text("Dan Da Dan")
+        candidates[0].attributes["provider_work_chapter_count"] shouldBe DiagnosticAttributeValue.Number(151)
+        candidates[0].attributes["query_index"] shouldBe DiagnosticAttributeValue.Number(1)
+        candidates.all { StructuredDiagnosticSanitizer.sanitize(it) != null } shouldBe true
+        candidates[1].attributes.containsKey("provider_work_chapter_count") shouldBe false
+    }
+
+    @Test
+    fun `normal diagnostics never emit raw provider candidates`(): Unit = runBlocking {
+        val recorder = CapturingProviderDiagnostics()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate("a", "Dandadan", language = "en"),
+                                ProviderWorkCandidate("b", "Dandadan", language = "en"),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Ambiguous work must not load chapters") },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+        collector.execute(canonicalTitle.id)
+        recorder.events.none { it.name == DiagnosticEventName.PROVIDER_READING_CANDIDATE } shouldBe true
+        recorder.events.any { it.stage == DiagnosticStage.LOOKUP && it.outcome == DiagnosticOutcome.REJECTED } shouldBe
+            true
+    }
+
+    private class CapturingProviderDiagnostics(
+        private val captureActive: Boolean = false,
+    ) : StructuredDiagnosticRecorder {
         override val sessionId: String = "00000000-0000-0000-0000-000000000000"
+        override val detailedCaptureActive: Boolean get() = captureActive
         val events = mutableListOf<StructuredDiagnosticEvent>()
         override fun canonicalTitleReference(canonicalTitleId: String): String? = null
         override fun mihonMangaReference(mihonMangaId: Long): String? = null

@@ -5,6 +5,55 @@ import org.junit.jupiter.api.Test
 
 class StructuredDiagnosticEventTest {
     @Test
+    fun `provider candidate diagnostics accept only public bounded source identifiers`() {
+        fun sanitizeCandidate(attributes: Map<String, DiagnosticAttributeValue>) =
+            StructuredDiagnosticSanitizer.sanitize(
+                StructuredDiagnosticEvent(
+                    timestampMillis = 1_790_755_200_000,
+                    severity = DiagnosticSeverity.DEBUG,
+                    subsystem = DiagnosticSubsystem.CHAPTER,
+                    name = DiagnosticEventName.PROVIDER_READING_CANDIDATE,
+                    sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                    operationId = null,
+                    stage = DiagnosticStage.LOOKUP,
+                    outcome = DiagnosticOutcome.REJECTED,
+                    attributes = attributes,
+                ),
+            )?.attributes.orEmpty()
+
+        val safe = sanitizeCandidate(
+            mapOf(
+                "provider_work_id" to DiagnosticAttributeValue.Text("qnlvj"),
+                "provider_work_title" to DiagnosticAttributeValue.Text("Vagabond"),
+                "provider_work_url" to DiagnosticAttributeValue.Text("https://mangafire.to/title/qnlvj-vagabond22"),
+                "provider_work_chapter_count" to DiagnosticAttributeValue.Number(327),
+                "provider_candidate_reason" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderCandidateReason.ALIAS_MATCH_BLOCKED,
+                ),
+            ),
+        )
+        safe[DiagnosticAttribute.PROVIDER_WORK_ID] shouldBe DiagnosticAttributeValue.Text("qnlvj")
+        safe[DiagnosticAttribute.PROVIDER_WORK_TITLE] shouldBe DiagnosticAttributeValue.Text("Vagabond")
+        safe[DiagnosticAttribute.PROVIDER_WORK_URL] shouldBe
+            DiagnosticAttributeValue.Text("https://mangafire.to/title/qnlvj-vagabond22")
+        safe[DiagnosticAttribute.PROVIDER_WORK_CHAPTER_COUNT] shouldBe DiagnosticAttributeValue.Number(327)
+
+        listOf(
+            "https://mangafire.to/title/qnlvj-vagabond22?token=secret",
+            "https://user:pass@mangafire.to/title/qnlvj-vagabond22",
+            "https://evil.example/title/qnlvj-vagabond22",
+            "http://mangafire.to/title/qnlvj-vagabond22",
+        ).forEach { unsafe ->
+            sanitizeCandidate(
+                mapOf("provider_work_url" to DiagnosticAttributeValue.Text(unsafe)),
+            ) shouldBe emptyMap()
+        }
+        sanitizeCandidate(
+            mapOf("provider_work_title" to DiagnosticAttributeValue.Text("Bad\nAuthorization: Bearer secret")),
+        ) shouldBe emptyMap()
+    }
+
+    @Test
     fun `sanitizer keeps typed safe fields and drops unknown keys and unsafe values`() {
         val event = StructuredDiagnosticEvent(
             timestampMillis = 1_790_755_200_000,

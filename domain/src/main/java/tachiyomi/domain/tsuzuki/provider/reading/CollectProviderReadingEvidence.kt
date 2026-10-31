@@ -14,6 +14,7 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCandidateReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
@@ -157,11 +158,13 @@ class CollectProviderReadingEvidence private constructor(
                         // Keep accepted pages across the bounded coroutine cancellation. They
                         // remain additive evidence only, not an authoritative full inventory.
                         val partial = mutableListOf<ChapterEvidence>()
+                        var activeStage = DiagnosticStage.LOOKUP
                         val finished = withTimeoutOrNull(MAX_PROVIDER_COLLECTION_MILLIS) {
                             collectTarget(
                                 canonicalTitleId = canonicalTitleId,
                                 titles = queryTitles,
                                 target = target,
+                                onStageChanged = { activeStage = it },
                                 onPageCollected = { binding, page, observedAt ->
                                     partial += evidenceAdapter.toEvidence(
                                         canonicalTitleId = canonicalTitleId,
@@ -176,7 +179,7 @@ class CollectProviderReadingEvidence private constructor(
                             trace(
                                 canonicalTitleId,
                                 target,
-                                DiagnosticStage.READ,
+                                activeStage,
                                 DiagnosticOutcome.TIMEOUT,
                             )
                         }
@@ -240,6 +243,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalTitleId: String,
         titles: List<String>,
         target: ReadingTarget,
+        onStageChanged: (DiagnosticStage) -> Unit,
         onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> Unit,
     ): ProviderReadingEvidenceCollection {
         return try {
@@ -264,6 +268,7 @@ class CollectProviderReadingEvidence private constructor(
                         ?: return ProviderReadingEvidenceCollection()
             }
 
+            onStageChanged(DiagnosticStage.READ)
             var published: ProviderReadingEvidenceSnapshot? = null
             val refresher = RefreshProviderReadingChapters(
                 gateway = gateway,
@@ -350,7 +355,7 @@ class CollectProviderReadingEvidence private constructor(
         // Work IDs are private to this Provider and are only used to narrow
         // earlier matches. They never cross a source, title, edition or facet.
         var ambiguousCandidates: List<ProviderWorkCandidate>? = null
-        for (title in titles) {
+        for ((queryIndex, title) in titles.withIndex()) {
             val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
                 is ProviderCallResult.Failure -> {
                     trace(
@@ -403,6 +408,16 @@ class CollectProviderReadingEvidence private constructor(
                 }
                 else -> null
             }
+            traceLookupCandidates(
+                canonicalTitleId = canonicalTitleId,
+                target = target,
+                queryIndex = queryIndex,
+                queryTitle = title,
+                candidates = candidates,
+                matches = matches,
+                selected = candidate,
+                primary = primary,
+            )
             trace(
                 canonicalTitleId,
                 target,
@@ -495,6 +510,92 @@ class CollectProviderReadingEvidence private constructor(
             ),
         )
         .toList()
+
+    /**
+     * Intentionally includes public MangaFire identifiers and names ONLY during a user-triggered
+     * detailed capture. The normal diagnostic stream remains pseudonymized. The sanitizer limits
+     * IDs/text and only permits public HTTPS MangaFire title paths (no tokens/query/fragment).
+     * Chapter counts are emitted only when explicitly attested by the Provider.
+     */
+    private fun traceLookupCandidates(
+        canonicalTitleId: String,
+        target: ReadingTarget,
+        queryIndex: Int,
+        queryTitle: String,
+        candidates: List<ProviderWorkCandidate>,
+        matches: List<ProviderWorkCandidate>,
+        selected: ProviderWorkCandidate?,
+        primary: ProviderWorkCandidate?,
+    ) {
+        if (!diagnostics.detailedCaptureActive || target.registration.descriptor.id.value != "app.tsuzuki.mangafire") {
+            return
+        }
+        runCatching {
+            candidates.take(MAX_DIAGNOSTIC_CANDIDATES).forEachIndexed { index, work ->
+                val facetMatches = target.facetId == null ||
+                    work.language == null ||
+                    work.language.equals(target.facetId, ignoreCase = true)
+                val exactMatch = matches.any { it.externalWorkId == work.externalWorkId }
+                val reason = when {
+                    selected?.externalWorkId == work.externalWorkId -> DiagnosticProviderCandidateReason.SELECTED
+                    !facetMatches -> DiagnosticProviderCandidateReason.FACET_MISMATCH
+                    exactMatch && normalize(work.title) == normalize(queryTitle) ->
+                        DiagnosticProviderCandidateReason.PRIMARY_MATCH_BLOCKED
+                    exactMatch -> DiagnosticProviderCandidateReason.ALIAS_MATCH_BLOCKED
+                    primary != null && isExplicitEditionVariant(work.title, primary.title) ->
+                        DiagnosticProviderCandidateReason.ALTERNATE_EDITION
+                    else -> DiagnosticProviderCandidateReason.TITLE_MISMATCH
+                }
+                val aliases = work.aliases
+                    .asSequence()
+                    .map(String::trim)
+                    .filter { it.isNotEmpty() }
+                    .take(3)
+                    .map { it.take(128) }
+                    .joinToString(" | ")
+                val attributes = buildMap<String, DiagnosticAttributeValue> {
+                    put("provider_id", DiagnosticAttributeValue.Text(target.registration.descriptor.id.value))
+                    put(
+                        "provider_version_code",
+                        DiagnosticAttributeValue.Number(target.registration.descriptor.version.code.toLong()),
+                    )
+                    work.language?.let { put("language", DiagnosticAttributeValue.Text(it)) }
+                    diagnostics.canonicalTitleReference(canonicalTitleId)?.let {
+                        put("canonical_title_ref", DiagnosticAttributeValue.Text(it))
+                    }
+                    put("query_index", DiagnosticAttributeValue.Number((queryIndex + 1).toLong()))
+                    put("candidate_index", DiagnosticAttributeValue.Number(index.toLong()))
+                    put("provider_work_id", DiagnosticAttributeValue.Text(work.externalWorkId))
+                    put("provider_work_title", DiagnosticAttributeValue.Text(work.title.take(256)))
+                    work.url?.let { put("provider_work_url", DiagnosticAttributeValue.Text(it)) }
+                    if (aliases.isNotEmpty()) put("provider_work_aliases", DiagnosticAttributeValue.Text(aliases))
+                    work.chapterCount?.let {
+                        put("provider_work_chapter_count", DiagnosticAttributeValue.Number(it.toLong()))
+                    }
+                    put("provider_candidate_reason", DiagnosticAttributeValue.Code(reason))
+                }
+                diagnostics.record(
+                    StructuredDiagnosticEvent(
+                        timestampMillis = clock().coerceAtLeast(0L),
+                        severity = DiagnosticSeverity.DEBUG,
+                        subsystem = DiagnosticSubsystem.CHAPTER,
+                        name = DiagnosticEventName.PROVIDER_READING_CANDIDATE,
+                        sessionId = diagnostics.sessionId,
+                        operationId = null,
+                        stage = DiagnosticStage.LOOKUP,
+                        outcome = if (selected?.externalWorkId == work.externalWorkId) {
+                            DiagnosticOutcome.ACCEPTED
+                        } else if (exactMatch) {
+                            DiagnosticOutcome.REJECTED
+                        } else {
+                            DiagnosticOutcome.SKIPPED
+                        },
+                        attributes = attributes,
+                    ),
+                )
+            }
+        }
+    }
 
     /** Sanitized counters only; no title, alias, URL, external work ID, or chapter labels. */
     private fun trace(
@@ -622,5 +723,6 @@ class CollectProviderReadingEvidence private constructor(
         const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
         const val MAX_LOOKUP_PAGES = 8
         const val MAX_LOOKUP_ITEMS = 2_000
+        const val MAX_DIAGNOSTIC_CANDIDATES = 20
     }
 }

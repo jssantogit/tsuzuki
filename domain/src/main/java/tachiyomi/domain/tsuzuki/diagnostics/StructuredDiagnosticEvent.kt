@@ -104,6 +104,7 @@ enum class DiagnosticEventName {
     CHAPTER_REFRESH_COMPLETED,
     PROVIDER_READING_EVIDENCE,
     PROVIDER_READING_PAGE,
+    PROVIDER_READING_CANDIDATE,
 
     READER_OPEN_STARTED,
     READER_SOURCE_SELECTED,
@@ -188,6 +189,13 @@ enum class DiagnosticAttribute {
     TARGET_SOURCE_COUNT,
     CANDIDATE_COUNT,
     CANDIDATE_INDEX,
+    QUERY_INDEX,
+    PROVIDER_WORK_ID,
+    PROVIDER_WORK_TITLE,
+    PROVIDER_WORK_URL,
+    PROVIDER_WORK_ALIASES,
+    PROVIDER_WORK_CHAPTER_COUNT,
+    PROVIDER_CANDIDATE_REASON,
     BROADENED,
     MAPPING_REUSED,
     LANGUAGE,
@@ -339,6 +347,16 @@ enum class DiagnosticTorrentCandidateMatchReason : DiagnosticSafeCode {
     VOLUME_NOT_PROVEN,
 }
 
+/** Detailed-capture-only classification; never use title similarity as binding authorization. */
+enum class DiagnosticProviderCandidateReason : DiagnosticSafeCode {
+    SELECTED,
+    PRIMARY_MATCH_BLOCKED,
+    ALIAS_MATCH_BLOCKED,
+    ALTERNATE_EDITION,
+    FACET_MISMATCH,
+    TITLE_MISMATCH,
+}
+
 enum class DiagnosticCacheStatus : DiagnosticSafeCode {
     HIT,
     MISS,
@@ -387,6 +405,10 @@ object StructuredDiagnosticSanitizer {
     private val providerIdPattern = Regex("^[a-zA-Z0-9._-]{1,64}$")
     private val providerVersionPattern = Regex("^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$")
     private val providerErrorCodePattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
+
+    // Detailed capture accepts only bounded MangaFire public title paths, never query strings or credentials.
+    private val providerWorkIdPattern = Regex("^[A-Za-z0-9_-]{1,80}$")
+    private val providerWorkUrlPattern = Regex("^https://mangafire\\.to/title/[A-Za-z0-9-]{2,160}/?$")
     private val p2pEventPattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
     private val p2pOperationPattern = Regex("^opRef=[0-9a-f]{16}$")
     private val p2pProviderIdPattern = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -494,6 +516,8 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.TARGET_SOURCE_COUNT,
         DiagnosticAttribute.CANDIDATE_COUNT,
         DiagnosticAttribute.CANDIDATE_INDEX,
+        DiagnosticAttribute.QUERY_INDEX,
+        DiagnosticAttribute.PROVIDER_WORK_CHAPTER_COUNT,
         DiagnosticAttribute.OBSERVATION_COUNT,
         DiagnosticAttribute.ITEM_COUNT,
         DiagnosticAttribute.ACCEPTED_COUNT,
@@ -568,9 +592,22 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticTorrentNoMatchReason }
         DiagnosticAttribute.TORRENT_CANDIDATE_MATCH_REASON -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticTorrentCandidateMatchReason }
+        DiagnosticAttribute.PROVIDER_CANDIDATE_REASON -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderCandidateReason }
 
         DiagnosticAttribute.PROVIDER_P2P_LINE -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { isSafeP2pLine(it.value) }
+        DiagnosticAttribute.PROVIDER_WORK_ID -> (value as? DiagnosticAttributeValue.Text)
+            ?.takeIf { providerWorkIdPattern.matches(it.value) }
+        DiagnosticAttribute.PROVIDER_WORK_URL -> (value as? DiagnosticAttributeValue.Text)
+            ?.takeIf { providerWorkUrlPattern.matches(it.value) }
+        DiagnosticAttribute.PROVIDER_WORK_TITLE,
+        DiagnosticAttribute.PROVIDER_WORK_ALIASES,
+        -> (value as? DiagnosticAttributeValue.Text)
+            ?.takeIf { text ->
+                text.value.length in 1..512 &&
+                    text.value.all { char -> char.code >= 32 && char.code != 127 && char.code != 0x2028 }
+            }
 
         DiagnosticAttribute.LANGUAGE -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { languageTagPattern.matches(it.value) }

@@ -59,9 +59,14 @@ data class ProviderWorkCandidate(
     val aliases: List<String> = emptyList(),
     val url: String? = null,
     val language: String? = null,
+    /** Source-reported count only. Null means not attested; never infer a total from lookup hits. */
+    val chapterCount: Int? = null,
 ) {
     init {
         require(externalWorkId.isNotBlank()) { "Provider work candidate ID must not be blank" }
+        require(chapterCount == null || chapterCount in 0..1_000_000) {
+            "Provider work candidate chapter count is invalid"
+        }
         require(title.isNotBlank()) { "Provider work candidate title must not be blank" }
         require(aliases.size <= MAX_ALIASES) { "Provider work candidate has too many aliases" }
         require(aliases.all { it.isNotBlank() && it.length <= MAX_TEXT_CHARS }) {
