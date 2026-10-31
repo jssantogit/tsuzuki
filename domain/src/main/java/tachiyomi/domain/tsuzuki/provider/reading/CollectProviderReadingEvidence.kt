@@ -61,6 +61,8 @@ data class ProviderReadingEvidenceCollection(
     val snapshots: List<ProviderReadingEvidenceSnapshot> = emptyList(),
     val bindingCount: Int = 0,
     val complete: Boolean = true,
+    /** Source-attested pages from an incomplete inventory; additive only, never a snapshot. */
+    val partialEvidence: List<ChapterEvidence> = emptyList(),
 ) {
     val evidence: List<ChapterEvidence>
         get() = snapshots.flatMap(ProviderReadingEvidenceSnapshot::evidence)
@@ -134,14 +136,22 @@ class CollectProviderReadingEvidence private constructor(
             targets.map { target ->
                 async {
                     gate.withPermit {
-                        // A hanging or paginated remote Provider must not keep the entire
-                        // canonical refresh (and Details spinner) waiting indefinitely.
-                        // Incomplete inventories never detach previously observed support.
-                        withTimeoutOrNull(MAX_PROVIDER_COLLECTION_MILLIS) {
+                        // Keep accepted pages across the bounded coroutine cancellation. They
+                        // remain additive evidence only, not an authoritative full inventory.
+                        val partial = mutableListOf<ChapterEvidence>()
+                        val result = withTimeoutOrNull(MAX_PROVIDER_COLLECTION_MILLIS) {
                             collectTarget(
                                 canonicalTitleId = canonicalTitleId,
                                 title = canonicalTitle.displayTitle,
                                 target = target,
+                                onPageCollected = { binding, page, observedAt ->
+                                    partial += evidenceAdapter.toEvidence(
+                                        canonicalTitleId = canonicalTitleId,
+                                        binding = binding,
+                                        observations = page,
+                                        observedAt = observedAt,
+                                    )
+                                },
                             )
                         } ?: ProviderReadingEvidenceCollection(complete = false).also {
                             trace(
@@ -151,6 +161,12 @@ class CollectProviderReadingEvidence private constructor(
                                 DiagnosticOutcome.TIMEOUT,
                             )
                         }
+                        // A disabled/reconfigured Provider cannot publish newly observed support.
+                        val stillEnabled = providerRegistry.registration(target.registration.descriptor.id) ==
+                            target.registration
+                        result.copy(
+                            partialEvidence = if (!result.complete && stillEnabled) partial.toList() else emptyList(),
+                        )
                     }
                 }
             }.awaitAll()
@@ -159,6 +175,7 @@ class CollectProviderReadingEvidence private constructor(
         val collection = ProviderReadingEvidenceCollection(
             snapshots = results.flatMap(ProviderReadingEvidenceCollection::snapshots),
             bindingCount = results.sumOf(ProviderReadingEvidenceCollection::bindingCount),
+            partialEvidence = results.flatMap(ProviderReadingEvidenceCollection::partialEvidence),
             complete = results.all(ProviderReadingEvidenceCollection::complete),
         )
         val acceptedChapters = collection.snapshots.sumOf { it.evidence.size }
@@ -199,6 +216,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalTitleId: String,
         title: String,
         target: ReadingTarget,
+        onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> Unit,
     ): ProviderReadingEvidenceCollection {
         return try {
             val existing = bindingRepository.get(
@@ -237,6 +255,9 @@ class CollectProviderReadingEvidence private constructor(
                     )
                 },
                 clock = clock,
+                onPageCollected = { page, observedAt ->
+                    onPageCollected(binding.ref, page, observedAt)
+                },
                 onPageObserved = { pages, observations ->
                     trace(
                         canonicalTitleId,
