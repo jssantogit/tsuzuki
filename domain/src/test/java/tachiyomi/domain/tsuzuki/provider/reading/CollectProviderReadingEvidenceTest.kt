@@ -823,6 +823,18 @@ class CollectProviderReadingEvidenceTest {
         requestedNames shouldBe listOf("The Seven Deadly Sins")
         bindings.getByTitle(nanatsu.id).single().ref.externalWorkId shouldBe "seven-deadly-sins"
         bindings.getByTitle(nanatsu.id).single().verification shouldBe ProviderBindingVerification.USER_CONFIRMED
+
+        // Revoking the metadata integration prevents automatic reuse of its old
+        // aliases, without blocking an explicitly typed user search.
+        every {
+            integrations.isGlobalCapabilityActive(IntegrationId("mal"), IntegrationCapability.METADATA_BASIC)
+        } returns false
+        requestedNames.clear()
+        picker.search(nanatsu.id, "Nanatsu no Taizai")
+        requestedNames shouldBe listOf("Nanatsu no Taizai")
+        requestedNames.clear()
+        picker.search(nanatsu.id, "The Seven Deadly Sins")
+        requestedNames shouldBe listOf("The Seven Deadly Sins")
     }
 
     // Cross-module regression: the persisted slot is reserved by only one edition.
