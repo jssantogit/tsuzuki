@@ -957,7 +957,9 @@ private fun InstalledProvidersList(
                     headlineContent = { Text("MangaAll") },
                     supportingContent = {
                         val repository = (display.first().descriptor.origin as ProviderOrigin.Repository).repositoryId
-                        Text("MangaDex · MangaDot · $repository · ${candidates.size}/${MangaAllFamilyCatalog.activeSourceProviderIds.size} installed")
+                        Text(
+                            "MangaDex · MangaDot · $repository · ${candidates.size}/${MangaAllFamilyCatalog.activeSourceProviderIds.size} installed",
+                        )
                     },
                 )
                 HorizontalDivider()
