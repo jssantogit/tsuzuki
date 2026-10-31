@@ -867,6 +867,7 @@ class CollectProviderReadingEvidence private constructor(
         const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
         const val MAX_LOOKUP_PAGES = 8
         const val MAX_LOOKUP_ITEMS = 2_000
+
         // Smoke #176: preserve ambiguous source identities and retain bounded diagnostics.
         const val MAX_DIAGNOSTIC_CANDIDATES = 20
     }
