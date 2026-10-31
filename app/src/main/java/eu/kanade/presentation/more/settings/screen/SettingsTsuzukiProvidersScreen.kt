@@ -300,9 +300,9 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                         operationKeys = operations,
                         onInstall = { selections ->
                             val entry = selections.first()
-                            val isMangaAll = selections.size == MangaAllFamilyCatalog.sourceProviderIds.size &&
-                                selections.map { it.descriptor.providerId }.toSet() ==
-                                MangaAllFamilyCatalog.sourceProviderIds.toSet()
+                            val isMangaAll = MangaAllFamilyCatalog.isActiveInstallSet(
+                                selections.map { it.descriptor.providerId },
+                            )
                             runProviderOperation(
                                 "install:${entry.repositoryId}:" +
                                     (if (isMangaAll) "mangaall" else entry.descriptor.providerId),
@@ -957,7 +957,7 @@ private fun InstalledProvidersList(
                     headlineContent = { Text("MangaAll") },
                     supportingContent = {
                         val repository = (display.first().descriptor.origin as ProviderOrigin.Repository).repositoryId
-                        Text("MangaDex · MangaBall · MangaDot · $repository · ${candidates.size}/3 installed")
+                        Text("MangaDex · MangaDot · $repository · ${candidates.size}/${MangaAllFamilyCatalog.activeSourceProviderIds.size} installed")
                     },
                 )
                 HorizontalDivider()
@@ -1045,7 +1045,7 @@ private fun DiscoverProvidersList(
                 supportingContent = {
                     Text(
                         if (family.isComplete) {
-                            "MangaDex · MangaBall · MangaDot · ${family.repositoryId}"
+                            "MangaDex · MangaDot · ${family.repositoryId}"
                         } else {
                             "Incomplete signed MangaAll source set · ${family.repositoryId}"
                         },
