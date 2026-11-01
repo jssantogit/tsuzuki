@@ -67,6 +67,14 @@ import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
 import tachiyomi.domain.tsuzuki.content.TorrentArtifactEngine
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderRuntimePhase
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
@@ -328,10 +336,52 @@ object AppBindings {
     fun providesProviderRuntimeClient(
         context: Context,
         hostInvocationFactory: ProviderHostInvocationFactory,
+        diagnosticRecorder: StructuredDiagnosticRecorder,
     ): ProviderRuntimeClient =
         ProviderRuntimeClient(
             context = context,
             hostInvocationFactory = hostInvocationFactory,
+            bindingObserver = { phase ->
+                if (diagnosticRecorder.detailedCaptureActive) {
+                    // A chapter-page START without an HTTP START can mean Binder
+                    // bind, QuickJS boot or script execution. Preserve the exact
+                    // closed stage under opt-in capture, never Provider content.
+                    runCatching {
+                        diagnosticRecorder.record(
+                            StructuredDiagnosticEvent(
+                                timestampMillis = System.currentTimeMillis(),
+                                severity = DiagnosticSeverity.DEBUG,
+                                subsystem = DiagnosticSubsystem.NETWORK,
+                                name = DiagnosticEventName.PROVIDER_RUNTIME_STAGE,
+                                sessionId = diagnosticRecorder.sessionId,
+                                operationId = null,
+                                stage = if (phase.name.startsWith("BIND_")) {
+                                    DiagnosticStage.BINDING
+                                } else {
+                                    DiagnosticStage.READ
+                                },
+                                outcome = when (phase) {
+                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.BIND_STARTED,
+                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.INVOKE_STARTED ->
+                                        DiagnosticOutcome.STARTED
+                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.BIND_CONNECTED,
+                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.INVOKE_COMPLETED ->
+                                        DiagnosticOutcome.SUCCEEDED
+                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.BIND_REUSED ->
+                                        DiagnosticOutcome.REUSED
+                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.BIND_INVALIDATED ->
+                                        DiagnosticOutcome.SKIPPED
+                                },
+                                attributes = mapOf(
+                                    "provider_runtime_phase" to DiagnosticAttributeValue.Code(
+                                        DiagnosticProviderRuntimePhase.valueOf(phase.name),
+                                    ),
+                                ),
+                            ),
+                        )
+                    }
+                }
+            },
         )
 
     @Provides
