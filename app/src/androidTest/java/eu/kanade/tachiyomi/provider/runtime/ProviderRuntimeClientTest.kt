@@ -79,7 +79,7 @@ class ProviderRuntimeClientTest {
         val client = ProviderRuntimeClient(
             context = context,
             hostInvocationFactory = ProviderHostInvocationFactory(context = context),
-            bindingObserver = events::add,
+            bindingObserver = { events.add(it) },
             bindingIdleTimeoutMs = 1_000L,
         )
 
