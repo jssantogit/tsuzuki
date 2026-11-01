@@ -1,6 +1,7 @@
 package tachiyomi.domain.tsuzuki.provider.reading
 
 import io.kotest.matchers.shouldBe
+import tachiyomi.domain.tsuzuki.provider.ProviderId
 import org.junit.jupiter.api.Test
 
 class ProviderWorkSourcePortfolioTest {
@@ -20,6 +21,8 @@ class ProviderWorkSourcePortfolioTest {
     @Test
     fun `same work with two readable HIDs preserves both identities without choosing an edition`() {
         val portfolio = ProviderWorkSourcePortfolio.assess(
+            providerId = ProviderId("app.tsuzuki.mangafire"),
+            facetId = "en",
             queryTitle = "Chainsaw Man",
             independentlyVerifiedAuthors = setOf("Tatsuki Fujimoto"),
             candidates = listOf(
@@ -45,6 +48,8 @@ class ProviderWorkSourcePortfolioTest {
     @Test
     fun `matching titles and coverage never compensate missing or conflicting verified authors`() {
         val portfolio = ProviderWorkSourcePortfolio.assess(
+            providerId = ProviderId("app.tsuzuki.mangafire"),
+            facetId = "en",
             queryTitle = "Naruto",
             independentlyVerifiedAuthors = setOf("Kishimoto Masashi"),
             candidates = listOf(
@@ -64,6 +69,8 @@ class ProviderWorkSourcePortfolioTest {
     @Test
     fun `colored variant remains distinct even when its author and title match`() {
         val portfolio = ProviderWorkSourcePortfolio.assess(
+            providerId = ProviderId("app.tsuzuki.mangafire"),
+            facetId = "en",
             queryTitle = "Vagabond",
             independentlyVerifiedAuthors = setOf("Takehiko Inoue"),
             candidates = listOf(
@@ -91,6 +98,8 @@ class ProviderWorkSourcePortfolioTest {
     @Test
     fun `without independently verified canonical authors no source can be work corroborated`() {
         val portfolio = ProviderWorkSourcePortfolio.assess(
+            providerId = ProviderId("app.tsuzuki.mangafire"),
+            facetId = "en",
             queryTitle = "Bleach",
             independentlyVerifiedAuthors = null,
             candidates = listOf(
@@ -107,6 +116,8 @@ class ProviderWorkSourcePortfolioTest {
     @Test
     fun `duplicate HID does not become a separate provider work association`() {
         val portfolio = ProviderWorkSourcePortfolio.assess(
+            providerId = ProviderId("app.tsuzuki.mangafire"),
+            facetId = "en",
             queryTitle = "Chainsaw Man",
             independentlyVerifiedAuthors = setOf("Fujimoto Tatsuki"),
             candidates = listOf(original, original.copy(coverageObservedCount = 101)),
