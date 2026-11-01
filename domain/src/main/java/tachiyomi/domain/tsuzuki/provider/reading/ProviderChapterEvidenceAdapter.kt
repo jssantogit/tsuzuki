@@ -62,13 +62,20 @@ class ProviderChapterEvidenceAdapter(
             append('\u0000')
             append(providerChapterId)
         }
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest(identity.encodeToByteArray())
-            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xFF) }
-        return "provider:$digest"
+        val digest = MessageDigest.getInstance("SHA-256").digest(identity.encodeToByteArray())
+        // Avoid allocating a Formatter and temporary string for every hash byte.
+        // This must preserve the exact lowercase hexadecimal ID already persisted.
+        val hex = CharArray(digest.size * 2)
+        digest.forEachIndexed { index, byte ->
+            val unsigned = byte.toInt() and 0xFF
+            hex[index * 2] = HEX_DIGITS[unsigned ushr 4]
+            hex[index * 2 + 1] = HEX_DIGITS[unsigned and 0x0F]
+        }
+        return "provider:${String(hex)}"
     }
 
     private companion object {
         const val PROVIDER_OBSERVATION_CONFIDENCE = 0.95
+        val HEX_DIGITS = "0123456789abcdef".toCharArray()
     }
 }
