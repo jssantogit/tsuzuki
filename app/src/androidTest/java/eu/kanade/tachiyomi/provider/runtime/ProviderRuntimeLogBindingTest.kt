@@ -13,6 +13,15 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
+import java.util.concurrent.CopyOnWriteArrayList
 
 @RunWith(AndroidJUnit4::class)
 class ProviderRuntimeLogBindingTest {
@@ -39,6 +48,7 @@ class ProviderRuntimeLogBindingTest {
                 managedFiles = managedFiles,
                 p2pJobs = p2pJobs,
                 logSink = logSink,
+                diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
             )
             factory.create(
                 ProviderHostInvocationPolicy(
@@ -89,6 +99,7 @@ class ProviderRuntimeLogBindingTest {
                 managedFiles = managedFiles,
                 p2pJobs = p2pJobs,
                 logSink = logSink,
+                diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
             )
             val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
             factory.create(
@@ -122,6 +133,92 @@ class ProviderRuntimeLogBindingTest {
             )
             assertTrue(observed.none { (_, message) -> message.contains("secret-title") })
             assertTrue(observed.none { (_, message) -> message.contains("one-piece") })
+        } finally {
+            server.close()
+            p2pJobs.close()
+            managedFiles.clearAll()
+        }
+    }
+
+    @Test
+    fun productionHostBindingEmitsSanitizedHttpEventsOnlyDuringUserCapture() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val managedFiles = AppBindings.providesProviderManagedFileStore(context)
+        val p2pJobs = AppBindings.providesProviderP2pJobManager(
+            context = context,
+            managedFiles = managedFiles,
+            verifiedMetadata = AppBindings.providesHostVerifiedTorrentMetadataCache(),
+            registry = DefaultProviderRegistry(registrations = { emptyList() }),
+            torrentPreferences = ProviderTorrentPreferences(InMemoryPreferenceStore()),
+        )
+        val recorder = object : StructuredDiagnosticRecorder {
+            override val sessionId = "35d4ea34-f729-4336-b6ce-d6277ec3ac7c"
+            @Volatile var enabled = false
+            override val detailedCaptureActive: Boolean get() = enabled
+            val events = CopyOnWriteArrayList<StructuredDiagnosticEvent>()
+            override fun canonicalTitleReference(canonicalTitleId: String): String? = null
+            override fun mihonMangaReference(mihonMangaId: Long): String? = null
+            override fun record(event: StructuredDiagnosticEvent) { events += event }
+        }
+        val server = MockWebServer()
+        server.enqueue(MockResponse.Builder().body("first").build())
+        server.enqueue(MockResponse.Builder().body("second").build())
+        server.start()
+        try {
+            val factory = AppBindings.providesProviderHostInvocationFactory(
+                context = context,
+                managedFiles = managedFiles,
+                p2pJobs = p2pJobs,
+                logSink = ProviderRuntimeLogSink { _, _ -> },
+                diagnosticRecorder = recorder,
+            )
+            val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+            factory.create(
+                policy = ProviderHostInvocationPolicy(
+                    providerId = "app.tsuzuki.mangafire",
+                    invocationId = "no-capture-http-probe",
+                    networkOrigins = setOf(origin),
+                    allowLocalNetwork = true,
+                ),
+                invocationTimeoutMs = 1_500,
+            ).use { invocation ->
+                assertEquals(
+                    "first",
+                    invocation.bridge.httpGet(server.url("/secret-chapters?vrf=must-not-leak").toString()),
+                )
+            }
+            assertTrue("HTTP trace is opt-in", recorder.events.isEmpty())
+
+            recorder.enabled = true
+            factory.create(
+                policy = ProviderHostInvocationPolicy(
+                    providerId = "app.tsuzuki.mangafire",
+                    invocationId = "capture-http-probe",
+                    networkOrigins = setOf(origin),
+                    allowLocalNetwork = true,
+                ),
+                invocationTimeoutMs = 1_500,
+            ).use { invocation ->
+                assertEquals(
+                    "second",
+                    invocation.bridge.httpGet(server.url("/secret-chapters?vrf=must-not-leak").toString()),
+                )
+            }
+            val observed = recorder.events.mapNotNull(StructuredDiagnosticSanitizer::sanitize)
+            assertEquals(2, observed.size)
+            assertTrue(observed.all { it.name == DiagnosticEventName.PROVIDER_HTTP_REQUEST })
+            assertTrue(observed.any { it.outcome == DiagnosticOutcome.STARTED })
+            assertTrue(observed.any { it.outcome == DiagnosticOutcome.SUCCEEDED })
+            assertTrue(observed.all {
+                it.attributes[DiagnosticAttribute.PROVIDER_ID] ==
+                    DiagnosticAttributeValue.Text("app.tsuzuki.mangafire")
+            })
+            assertTrue(observed.any {
+                it.attributes[DiagnosticAttribute.HTTP_STATUS] == DiagnosticAttributeValue.Number(200)
+            })
+            assertTrue(observed.all { event ->
+                event.attributes.keys.all { it in setOf(DiagnosticAttribute.PROVIDER_ID, DiagnosticAttribute.HTTP_STATUS) }
+            })
         } finally {
             server.close()
             p2pJobs.close()
