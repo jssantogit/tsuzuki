@@ -111,6 +111,7 @@ enum class DiagnosticEventName {
     PROVIDER_READING_CANDIDATE,
     PROVIDER_READING_SOURCE_ASSOCIATION,
     PROVIDER_HTTP_REQUEST,
+    PROVIDER_RUNTIME_STAGE,
     PROVIDER_BROWSER_REQUEST,
 
     READER_OPEN_STARTED,
@@ -217,6 +218,7 @@ enum class DiagnosticAttribute {
     PROVIDER_WORK_VERIFICATION,
     PROVIDER_EDITION_QUALIFICATION,
     PROVIDER_HTTP_FAILURE,
+    PROVIDER_RUNTIME_PHASE,
     PROVIDER_BROWSER_FAILURE,
     BROADENED,
     MAPPING_REUSED,
@@ -412,6 +414,16 @@ enum class DiagnosticProviderHttpFailure : DiagnosticSafeCode {
     HTTP_STATUS,
     RESPONSE_LIMIT,
     UNKNOWN,
+}
+
+/** Closed Binder lifecycle stages; no provider payload, URI, error message or token. */
+enum class DiagnosticProviderRuntimePhase : DiagnosticSafeCode {
+    BIND_STARTED,
+    BIND_CONNECTED,
+    BIND_REUSED,
+    BIND_INVALIDATED,
+    INVOKE_STARTED,
+    INVOKE_COMPLETED,
 }
 
 enum class DiagnosticProviderCoverageOutcome : DiagnosticSafeCode {
@@ -706,6 +718,8 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticProviderEditionQualification }
         DiagnosticAttribute.PROVIDER_HTTP_FAILURE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderHttpFailure }
+        DiagnosticAttribute.PROVIDER_RUNTIME_PHASE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderRuntimePhase }
         DiagnosticAttribute.PROVIDER_BROWSER_FAILURE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderBrowserFailure }
         DiagnosticAttribute.LOOKUP_DECISION -> (value as? DiagnosticAttributeValue.Code)
