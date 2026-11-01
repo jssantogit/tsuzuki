@@ -89,8 +89,14 @@ object ProviderWorkSourcePortfolio {
     private val WHITESPACE = Regex("\\s+")
     private val CREATOR_SEPARATORS = Regex("[^\\p{L}\\p{N}]+")
     private val EDITION_MARKERS = listOf(
-        "colored", "coloured", "full color", "full colour",
-        "omnibus", "one shot", "oneshot", "special edition",
+        "colored",
+        "coloured",
+        "full color",
+        "full colour",
+        "omnibus",
+        "one shot",
+        "oneshot",
+        "special edition",
     )
 }
 
