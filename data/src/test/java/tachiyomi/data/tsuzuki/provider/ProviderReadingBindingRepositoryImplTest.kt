@@ -21,6 +21,9 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBinding
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderSourceEditionQualification
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkSourceAssociation
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkVerification
 import java.nio.file.Files
 
 class ProviderReadingBindingRepositoryImplTest {
