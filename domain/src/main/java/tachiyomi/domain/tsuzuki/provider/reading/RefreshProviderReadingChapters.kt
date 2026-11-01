@@ -6,12 +6,14 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
 class RefreshProviderReadingChapters internal constructor(
     private val gateway: ProviderReadingGateway,
     private val evidenceAdapter: ProviderChapterEvidenceAdapter,
-    private val publishSnapshot: (suspend (
-        canonicalTitleId: String,
-        producerId: String,
-        snapshotObservedAt: Long,
-        evidence: List<ChapterEvidence>,
-    ) -> Unit)?,
+    private val publishSnapshot: (
+        suspend (
+            canonicalTitleId: String,
+            producerId: String,
+            snapshotObservedAt: Long,
+            evidence: List<ChapterEvidence>,
+        ) -> Unit
+    )?,
     private val clock: () -> Long = System::currentTimeMillis,
     private val onPageObserved: suspend (pageCount: Int, observationCount: Int) -> Unit = { _, _ -> },
     private val onPageCollected: suspend (List<ProviderChapterObservation>, Long) -> Unit = { _, _ -> },
