@@ -137,9 +137,8 @@ class ProviderReadingBindingRepositoryImplTest {
         repository.getByTitle("title") shouldBe listOf(original)
     }
 
-
     @Test
-    fun `multi HID portfolio keeps preferred edition untouched and binds each HID to one canonical work`() = runBlocking<Unit> {
+    fun `multi HID observations do not replace the preferred edition`() = runBlocking<Unit> {
         val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
         val preferred = binding()
         repository.insertIfAbsent(preferred) shouldBe true
