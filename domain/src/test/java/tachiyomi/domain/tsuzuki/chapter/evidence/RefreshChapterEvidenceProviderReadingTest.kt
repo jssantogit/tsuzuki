@@ -113,6 +113,7 @@ class RefreshChapterEvidenceProviderReadingTest {
         val completed = events.single { it.name == DiagnosticEventName.CHAPTER_REFRESH_COMPLETED }
         completed.outcome shouldBe DiagnosticOutcome.PARTIAL
         completed.attributes["completed"] shouldBe DiagnosticAttributeValue.Flag(false)
+        completed.attributes["item_count"] shouldBe DiagnosticAttributeValue.Number(1L)
 
         coVerify(exactly = 1) { reconcile.execute(canonicalTitleId, listOf(evidence)) }
         coVerify(exactly = 0) {
