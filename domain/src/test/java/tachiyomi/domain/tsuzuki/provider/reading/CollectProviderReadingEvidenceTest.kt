@@ -2124,6 +2124,13 @@ class CollectProviderReadingEvidenceTest {
         result.partialEvidence.map { it.externalChapterKey }.toSet() shouldBe
             setOf("chapter-id-first-hid", "chapter-id-second-hid")
         readHids.toSet() shouldBe setOf("first-hid", "second-hid")
+        recorder.events
+            .filter { it.name == DiagnosticEventName.PROVIDER_READING_PAGE_DETAIL }
+            .map { it.attributes["provider_work_id"] }
+            .toSet() shouldBe setOf(
+            DiagnosticAttributeValue.Text("first-hid"),
+            DiagnosticAttributeValue.Text("second-hid"),
+        )
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
         observations.getByTitle(canonicalTitle.id).size shouldBe 3
         val sourceEvents = recorder.events.filter {
