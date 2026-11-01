@@ -134,6 +134,67 @@ class ProviderReadingBindingRepositoryImplTest {
         repository.getByTitle("title") shouldBe listOf(original)
     }
 
+
+    @Test
+    fun `multi HID portfolio keeps preferred edition untouched and binds each HID to one canonical work`() = runBlocking<Unit> {
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val preferred = binding()
+        repository.insertIfAbsent(preferred) shouldBe true
+        val first = workSource("work-42")
+        val second = workSource("work-232")
+
+        portfolio.observe(first) shouldBe true
+        portfolio.observe(second) shouldBe true
+
+        portfolio.getByTitle("title") shouldBe listOf(first, second)
+        repository.getByTitle("title") shouldBe listOf(preferred)
+        repository.insertIfAbsent(preferred.copy(
+            id = "different",
+            ref = preferred.ref.copy(externalWorkId = "work-232"),
+        )) shouldBe false
+    }
+
+    @Test
+    fun `same provider HID cannot be stolen by another canonical work or stale refresh`() = runBlocking<Unit> {
+        database.tsuzuki_titlesQueries.insertTsuzukiTitle(
+            id = "different-title",
+            displayTitle = "Unrelated",
+            identityState = "SOURCE_ONLY",
+            createdAt = 1L,
+            updatedAt = 1L,
+        )
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val source = workSource("same-hid")
+        portfolio.observe(source) shouldBe true
+
+        portfolio.observe(source.copy(canonicalTitleId = "different-title", observedAt = 300L)) shouldBe false
+        portfolio.observe(source.copy(
+            workVerification = ProviderWorkVerification.AUTHOR_CONFLICT,
+            observedAt = 99L,
+        )) shouldBe true
+        portfolio.get(source.ref) shouldBe source
+
+        val changed = source.copy(
+            workVerification = ProviderWorkVerification.SOURCE_DETAIL_UNVERIFIED,
+            observedAt = 301L,
+        )
+        portfolio.observe(changed) shouldBe true
+        portfolio.get(source.ref) shouldBe changed
+        portfolio.getByTitle("different-title") shouldBe emptyList()
+    }
+
+    private fun workSource(hid: String) = ProviderWorkSourceAssociation(
+        canonicalTitleId = "title",
+        ref = ProviderBindingRef(
+            providerId = ProviderId("org.example.reader"),
+            facetId = "en",
+            externalWorkId = hid,
+        ),
+        workVerification = ProviderWorkVerification.AUTHOR_CORROBORATED,
+        editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+        observedAt = 100L,
+    )
+
     private fun binding() = ProviderReadingBinding(
         id = "binding",
         canonicalTitleId = "title",
