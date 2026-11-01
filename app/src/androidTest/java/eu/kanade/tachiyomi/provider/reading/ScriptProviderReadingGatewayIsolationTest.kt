@@ -251,7 +251,7 @@ class ScriptProviderReadingGatewayIsolationTest {
 
         try {
             val binding = ProviderBindingRef(PROVIDER_ID, "en", "long-work")
-            val result = withTimeout(15_000) {
+            val result = withTimeout(10_000) {
                 RefreshProviderReadingChapters(
                     gateway = gateway,
                     evidenceAdapter = ProviderChapterEvidenceAdapter(),
