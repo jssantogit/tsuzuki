@@ -131,6 +131,37 @@ class ScriptProviderReadingGatewayTest {
     }
 
     @Test
+    fun `opt in candidate coverage decodes source page evidence without treating it as canonical total`() = runBlocking {
+        var requestJson: String? = null
+        val gateway = gateway { _, _, input, _ ->
+            requestJson = input
+            ProviderRuntimeInvocationResponse.success(
+                """
+                {"items":[{"externalWorkId":"0w5k","title":"Chainsaw Man",
+                  "coverageOutcome":"OBSERVED","coverageObservedCount":101,
+                  "coverageMinMilli":1000,"coverageMaxMilli":101000,
+                  "coverageHasMore":true}],"nextCursor":null}
+                """.trimIndent(),
+            )
+        }
+        val response = gateway.lookup(
+            providerId,
+            ProviderReadingLookupRequest(
+                titles = listOf("Chainsaw Man"),
+                coverageEvidenceVersion = 1,
+            ),
+        ) as ProviderCallResult.Success
+        val item = response.value.items.single()
+        item.coverageOutcome shouldBe tachiyomi.domain.tsuzuki.provider.reading.ProviderCoverageOutcome.OBSERVED
+        item.coverageObservedCount shouldBe 101
+        item.coverageMinMilli shouldBe 1000
+        item.coverageMaxMilli shouldBe 101000
+        item.coverageHasMore shouldBe true
+        val json = Json.parseToJsonElement(requireNotNull(requestJson)).jsonObject
+        json["coverageEvidenceVersion"]?.jsonPrimitive?.int shouldBe 1
+    }
+
+    @Test
     fun `lookup source failure stays failure with a classified HTTP challenge`() = runBlocking {
         val gateway = gateway { _, _, _, _ ->
             ProviderRuntimeInvocationResponse.success(
