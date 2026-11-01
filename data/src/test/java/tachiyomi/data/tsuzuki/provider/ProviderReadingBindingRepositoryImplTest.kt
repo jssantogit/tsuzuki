@@ -151,10 +151,12 @@ class ProviderReadingBindingRepositoryImplTest {
         portfolio.getByTitle("title").associateBy { it.ref.externalWorkId } shouldBe
             mapOf("work-42" to first, "work-232" to second)
         repository.getByTitle("title") shouldBe listOf(preferred)
-        repository.insertIfAbsent(preferred.copy(
-            id = "different",
-            ref = preferred.ref.copy(externalWorkId = "work-232"),
-        )) shouldBe false
+        repository.insertIfAbsent(
+            preferred.copy(
+                id = "different",
+                ref = preferred.ref.copy(externalWorkId = "work-232"),
+            ),
+        ) shouldBe false
     }
 
     @Test
@@ -171,10 +173,12 @@ class ProviderReadingBindingRepositoryImplTest {
         portfolio.observe(source) shouldBe true
 
         portfolio.observe(source.copy(canonicalTitleId = "different-title", observedAt = 300L)) shouldBe false
-        portfolio.observe(source.copy(
-            workVerification = ProviderWorkVerification.AUTHOR_CONFLICT,
-            observedAt = 99L,
-        )) shouldBe true
+        portfolio.observe(
+            source.copy(
+                workVerification = ProviderWorkVerification.AUTHOR_CONFLICT,
+                observedAt = 99L,
+            ),
+        ) shouldBe true
         portfolio.get(source.ref) shouldBe source
 
         val changed = source.copy(
