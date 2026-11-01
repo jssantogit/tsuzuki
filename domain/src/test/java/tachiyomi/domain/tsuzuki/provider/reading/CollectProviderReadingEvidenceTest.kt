@@ -2,6 +2,7 @@ package tachiyomi.domain.tsuzuki.provider.reading
 
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
@@ -22,6 +23,10 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
+import tachiyomi.domain.tsuzuki.integration.model.ProvenancedMetadata
+import tachiyomi.domain.tsuzuki.integration.model.ResolvedMetadata
+import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshot
+import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshotRepository
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
@@ -443,6 +448,117 @@ class CollectProviderReadingEvidenceTest {
         reused.outcome shouldBe DiagnosticOutcome.REUSED
         reused.attributes["provider_work_id"] shouldBe DiagnosticAttributeValue.Text("dandadan-1")
         (StructuredDiagnosticSanitizer.sanitize(reused) != null) shouldBe true
+    }
+
+    @Test
+    fun `creator attestation auto binds only the uniquely corroborated source identity`(): Unit = runBlocking {
+        val id = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), id, externalId = "mal-verified"),
+                externalIds = mapOf(id to "mal-verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    "verified-work",
+                                    "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Arakawa Hiromu"),
+                                ),
+                                ProviderWorkCandidate(
+                                    "different-work",
+                                    "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Different Creator"),
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = {
+                    it.binding.externalWorkId shouldBe "verified-work"
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation("one", "Chapter 1")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+        )
+        val result = collector.execute(canonicalTitle.id)
+        result.complete shouldBe true
+        result.bindingCount shouldBe 1
+        result.evidence.shouldHaveSize(1)
+        bindings.getByTitle(canonicalTitle.id).single().ref.externalWorkId shouldBe "verified-work"
+    }
+
+    @Test
+    fun `identical or missing creator attestation never resolves an ambiguous HID`(): Unit = runBlocking {
+        val id = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), id, externalId = "mal-verified"),
+                externalIds = mapOf(id to "mal-verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        for (rivalAuthors in listOf(listOf("Arakawa Hiromu"), emptyList())) {
+            val bindings = MemoryBindingRepository()
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(canonicalTitle),
+                providerRegistry = registry(),
+                gateway = gateway(
+                    lookupHandler = {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                listOf(
+                                    ProviderWorkCandidate(
+                                        "main", "Dandadan", language = "en",
+                                        authors = listOf("Hiromu Arakawa"),
+                                    ),
+                                    ProviderWorkCandidate(
+                                        "rival", "Dandadan", language = "en",
+                                        authors = rivalAuthors,
+                                    ),
+                                ),
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                    chaptersHandler = { error("No author-ambiguous work may request chapters") },
+                ),
+                bindingRepository = bindings,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 42L },
+                canonicalMetadataSnapshotRepository = metadata,
+            )
+            val result = collector.execute(canonicalTitle.id)
+            result.complete shouldBe false
+            result.bindingCount shouldBe 0
+            bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        }
     }
 
     @Test
