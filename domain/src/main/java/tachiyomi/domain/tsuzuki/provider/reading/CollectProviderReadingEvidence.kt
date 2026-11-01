@@ -708,6 +708,123 @@ class CollectProviderReadingEvidence private constructor(
         return retained
     }
 
+    /**
+     * A work can have more than one author-corroborated source HID. Collect
+     * separately from each bounded source without declaring any edition
+     * canonical, overriding a preferred binding or publishing an authoritative
+     * snapshot. Source chapter IDs remain scoped to their own HID.
+     */
+    private suspend fun collectUnresolvedWorkSources(
+        canonicalTitleId: String,
+        target: ReadingTarget,
+        sources: List<ProviderWorkSourceAssessment>,
+        onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> Unit,
+    ): ProviderReadingEvidenceCollection {
+        val evidence = mutableListOf<ChapterEvidence>()
+        for (source in sources.take(MAX_COVERAGE_CONTENDERS)) {
+            if (!source.canCollectProvisionalChapters) continue
+            val observedAt = clock()
+            val sourceBinding = ProviderReadingBinding(
+                // Only an ephemeral transport to the existing paginated fetcher.
+                // It is NEVER inserted into ProviderReadingBindingRepository.
+                id = bindingId(
+                    canonicalTitleId,
+                    source.ref.providerId,
+                    source.ref.facetId,
+                    source.ref.externalWorkId,
+                ),
+                canonicalTitleId = canonicalTitleId,
+                ref = source.ref,
+                verification = ProviderBindingVerification.EXACT,
+                availability = ProviderBindingAvailability.AVAILABLE,
+                createdAt = observedAt,
+                updatedAt = observedAt,
+            )
+            val trustedPages = mutableListOf<Pair<List<ProviderChapterObservation>, Long>>()
+            var lastPage = 0
+            val result = withTimeoutOrNull(MAX_WORK_SOURCE_COLLECTION_MILLIS) {
+                RefreshProviderReadingChapters(
+                    gateway = gateway,
+                    evidenceAdapter = evidenceAdapter,
+                    // A complete technical page sequence is not an editorial
+                    // snapshot. Never detach chapters from an unverified edition.
+                    publishSnapshot = { _, _, _, _ -> },
+                    clock = clock,
+                    onPageStarted = { index ->
+                        traceChapterRequest(canonicalTitleId, target, source.ref, index, DiagnosticOutcome.STARTED)
+                    },
+                    onPageFinished = { index, count, errorCode, elapsedMillis ->
+                        traceChapterRequest(
+                            canonicalTitleId,
+                            target,
+                            source.ref,
+                            index,
+                            if (errorCode == null) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.FAILED,
+                            itemCount = count,
+                            errorCode = errorCode,
+                            elapsedMillis = elapsedMillis,
+                        )
+                    },
+                    onPageCollected = { page, pageObservedAt ->
+                        trustedPages += page.toList() to pageObservedAt
+                        if (diagnostics.detailedCaptureActive) {
+                            traceReadingPageDetail(canonicalTitleId, target, lastPage, page)
+                        }
+                    },
+                    onPageObserved = { pageCount, observations ->
+                        lastPage = pageCount
+                        trace(
+                            canonicalTitleId,
+                            target,
+                            DiagnosticStage.READ,
+                            DiagnosticOutcome.PARTIAL,
+                            observed = observations,
+                            pageCount = pageCount,
+                            name = DiagnosticEventName.PROVIDER_READING_PAGE,
+                        )
+                    },
+                ).execute(sourceBinding)
+            }
+            if (result is ProviderCallResult.Failure &&
+                result.error.code in setOf(ProviderErrorCode.MALFORMED_RESULT, ProviderErrorCode.RESOURCE_LIMIT)
+            ) {
+                // A structural error invalidates this HID's pending pages.
+                trustedPages.clear()
+            }
+            when (result) {
+                null -> trace(canonicalTitleId, target, DiagnosticStage.READ, DiagnosticOutcome.TIMEOUT)
+                is ProviderCallResult.Failure -> trace(
+                    canonicalTitleId,
+                    target,
+                    DiagnosticStage.READ,
+                    DiagnosticOutcome.FAILED,
+                    errorCode = result.error.code,
+                )
+                is ProviderCallResult.Success -> trace(
+                    canonicalTitleId,
+                    target,
+                    DiagnosticStage.READ,
+                    DiagnosticOutcome.PARTIAL,
+                    observed = result.value,
+                )
+            }
+            trustedPages.forEach { (page, pageObservedAt) ->
+                onPageCollected(source.ref, page, pageObservedAt)
+                evidence += evidenceAdapter.toEvidence(
+                    canonicalTitleId = canonicalTitleId,
+                    binding = source.ref,
+                    observations = page,
+                    observedAt = pageObservedAt,
+                )
+            }
+        }
+        return ProviderReadingEvidenceCollection(
+            bindingCount = 0,
+            complete = false,
+            partialEvidence = evidence,
+        )
+    }
+
     private suspend fun collectLookup(
         providerId: ProviderId,
         title: String,
@@ -1223,6 +1340,7 @@ class CollectProviderReadingEvidence private constructor(
             "special edition",
         )
         const val MAX_COVERAGE_CONTENDERS = 3
+        const val MAX_WORK_SOURCE_COLLECTION_MILLIS = 5_000L
         const val MAX_CONCURRENT_PROVIDERS = 4
         const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
         const val MAX_LOOKUP_PAGES = 8
