@@ -43,6 +43,8 @@ class ResolveProviderChapterReading(
     private val canonicalChapterRepository: CanonicalChapterRepository,
     private val evidenceRepository: ChapterEvidenceRepository,
     private val bindingRepository: ProviderReadingBindingRepository,
+    private val workSourceAssociationRepository: ProviderWorkSourceAssociationRepository =
+        ProviderWorkSourceAssociationRepository.NoOp,
     private val providerRegistry: ProviderRegistry,
     private val gateway: ProviderReadingGateway,
     private val managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
@@ -57,11 +59,33 @@ class ResolveProviderChapterReading(
             .asSequence()
             .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
             .filter { binding ->
-                val registration = registrations[binding.ref.providerId]
-                registration != null && registration.isEligibleForReading(binding.ref.facetId)
+                registrations[binding.ref.providerId]?.isEligibleForReading(binding.ref.facetId) == true
             }
             .associateBy { it.ref.evidenceProducerId() }
-        if (bindings.isEmpty()) return emptyList()
+        val sourceAssociations = workSourceAssociationRepository.getByTitle(chapter.canonicalTitleId)
+            .asSequence()
+            // Matching canonical *work* alone never licenses editorial variants.
+            // For a provisional Reader option, require an independently
+            // corroborated author, the exact source HID, and a persisted
+            // source chapter whose number/volume matches below.
+            .filter { it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED }
+            .filter { it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED }
+            .filter { source ->
+                registrations[source.ref.providerId]?.isEligibleForReading(source.ref.facetId) == true
+            }
+            .toList()
+        val sources = buildMap<String, Pair<String, ProviderBindingRef>> {
+            bindings.forEach { (producerId, binding) ->
+                put(producerId, binding.id to binding.ref)
+            }
+            sourceAssociations.forEach { source ->
+                val producerId = source.ref.evidenceProducerId()
+                if (producerId !in this) {
+                    put(producerId, "work-source:$producerId" to source.ref)
+                }
+            }
+        }
+        if (sources.isEmpty()) return emptyList()
 
         return evidenceRepository.getByCanonicalTitleId(chapter.canonicalTitleId)
             .asSequence()
@@ -91,13 +115,13 @@ class ResolveProviderChapterReading(
             }
             .mapNotNull { persisted ->
                 val providerChapterId = persisted.evidence.externalChapterKey ?: return@mapNotNull null
-                val binding = bindings[persisted.evidence.producerId] ?: return@mapNotNull null
+                val (bindingId, ref) = sources[persisted.evidence.producerId] ?: return@mapNotNull null
                 ProviderChapterReadingOption(
                     canonicalChapterId = canonicalChapterId,
-                    bindingId = binding.id,
-                    providerId = binding.ref.providerId,
-                    facetId = binding.ref.facetId,
-                    externalWorkId = binding.ref.externalWorkId,
+                    bindingId = bindingId,
+                    providerId = ref.providerId,
+                    facetId = ref.facetId,
+                    externalWorkId = ref.externalWorkId,
                     providerChapterId = providerChapterId,
                 )
             }
