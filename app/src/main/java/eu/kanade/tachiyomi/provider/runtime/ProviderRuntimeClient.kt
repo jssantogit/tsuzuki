@@ -25,9 +25,20 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+/** The isolated process bridge must expose where a chapter-page invocation stalls. */
+enum class ProviderRuntimeBindingPhase {
+    BIND_STARTED,
+    BIND_CONNECTED,
+    BIND_REUSED,
+    BIND_INVALIDATED,
+    INVOKE_STARTED,
+    INVOKE_COMPLETED,
+}
+
 class ProviderRuntimeClient(
     context: Context,
     private val hostInvocationFactory: ProviderHostInvocationFactory,
+    private val bindingObserver: (ProviderRuntimeBindingPhase) -> Unit = {},
 ) {
 
     private val context = context.applicationContext
@@ -163,7 +174,9 @@ class ProviderRuntimeClient(
             descriptor: ParcelFileDescriptor,
         ) -> T,
     ): T {
+        bindingObserver(ProviderRuntimeBindingPhase.BIND_STARTED)
         val boundRuntime = bindRuntime()
+        bindingObserver(ProviderRuntimeBindingPhase.BIND_CONNECTED)
         val file = File.createTempFile(
             ".provider-runtime-",
             suffix,
