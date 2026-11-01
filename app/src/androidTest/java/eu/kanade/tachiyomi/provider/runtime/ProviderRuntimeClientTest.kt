@@ -71,7 +71,6 @@ class ProviderRuntimeClientTest {
         Unit
     }
 
-
     @Test
     fun consecutivePages_reuseBinderButIdleBindingEventuallyCloses() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
