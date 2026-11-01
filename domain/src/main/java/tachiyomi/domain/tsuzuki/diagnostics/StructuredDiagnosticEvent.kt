@@ -370,6 +370,7 @@ enum class DiagnosticTorrentCandidateMatchReason : DiagnosticSafeCode {
 enum class DiagnosticProviderLookupDecision : DiagnosticSafeCode {
     SELECTED,
     AUTHOR_CORROBORATED,
+    UNIQUE_READABLE_SOURCE,
     NO_MATCH,
     MULTIPLE_PRIMARY_IDENTITIES,
     AMBIGUOUS_EDITION,

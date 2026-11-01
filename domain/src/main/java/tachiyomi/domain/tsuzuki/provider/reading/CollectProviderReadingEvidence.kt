@@ -494,7 +494,30 @@ class CollectProviderReadingEvidence private constructor(
                             rival.authors.none { normalizedCreator(it) in canonicalAuthors }
                     }
             }
+            // Only one currently readable English source may be selected when
+            // independently verified canonical authors match *every* exact HID
+            // and all other HIDs explicitly attest a completely empty English
+            // first page. An unknown, failed, unprobed, colored or also-readable
+            // alternative remains ambiguous. This is a reading-source decision,
+            // not a claim of unique canonical edition or chapter total.
+            val uniqueReadable = matches
+                .takeIf { priorAmbiguous == null && it.size in 2..MAX_COVERAGE_CONTENDERS }
+                ?.takeIf { canonicalAuthors != null && it.all { work ->
+                    !isSourceAttestedAlternateEdition(work, title) &&
+                        work.authors.isNotEmpty() &&
+                        work.authors.any { normalizedCreator(it) in canonicalAuthors }
+                } }
+                ?.singleOrNull { work ->
+                    work.coverageOutcome == ProviderCoverageOutcome.OBSERVED &&
+                        work.coverageObservedCount?.let { it > 0 } == true &&
+                        matches.filter { it.externalWorkId != work.externalWorkId }.all { rival ->
+                            rival.coverageOutcome == ProviderCoverageOutcome.EMPTY &&
+                                rival.coverageObservedCount == 0 &&
+                                rival.coverageHasMore == false
+                        }
+                }
             val candidate = when {
+                uniqueReadable != null -> uniqueReadable
                 priorAmbiguous == null && matches.size > 1 && authorCorroborated != null ->
                     authorCorroborated
                 // An ambiguous first lookup may only be narrowed to a work
@@ -526,6 +549,8 @@ class CollectProviderReadingEvidence private constructor(
                 else -> null
             }
             val decision = when {
+                candidate != null && candidate == uniqueReadable ->
+                    DiagnosticProviderLookupDecision.UNIQUE_READABLE_SOURCE
                 candidate != null && candidate == authorCorroborated ->
                     DiagnosticProviderLookupDecision.AUTHOR_CORROBORATED
                 candidate != null -> DiagnosticProviderLookupDecision.SELECTED
@@ -1107,6 +1132,7 @@ class CollectProviderReadingEvidence private constructor(
             "oneshot",
             "special edition",
         )
+        const val MAX_COVERAGE_CONTENDERS = 3
         const val MAX_CONCURRENT_PROVIDERS = 4
         const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
         const val MAX_LOOKUP_PAGES = 8
