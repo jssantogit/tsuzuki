@@ -6,12 +6,12 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
 class RefreshProviderReadingChapters internal constructor(
     private val gateway: ProviderReadingGateway,
     private val evidenceAdapter: ProviderChapterEvidenceAdapter,
-    private val publishSnapshot: suspend (
+    private val publishSnapshot: (suspend (
         canonicalTitleId: String,
         producerId: String,
         snapshotObservedAt: Long,
         evidence: List<ChapterEvidence>,
-    ) -> Unit,
+    ) -> Unit)?,
     private val clock: () -> Long = System::currentTimeMillis,
     private val onPageObserved: suspend (pageCount: Int, observationCount: Int) -> Unit = { _, _ -> },
     private val onPageCollected: suspend (List<ProviderChapterObservation>, Long) -> Unit = { _, _ -> },
@@ -92,18 +92,23 @@ class RefreshProviderReadingChapters internal constructor(
             // not a complete snapshot and must never detach older Provider support.
             onPageCollected(page.items, snapshotObservedAt)
             if (next == null) {
-                val evidence = evidenceAdapter.toEvidence(
-                    canonicalTitleId = binding.canonicalTitleId,
-                    binding = binding.ref,
-                    observations = observations,
-                    observedAt = snapshotObservedAt,
-                )
-                publishSnapshot(
-                    binding.canonicalTitleId,
-                    binding.ref.evidenceProducerId(),
-                    snapshotObservedAt,
-                    evidence,
-                )
+                // A source-only portfolio scan must verify every page, cursor and
+                // chapter identity but must not build a redundant canonical
+                // snapshot. Only a preferred binding can publish one.
+                if (publishSnapshot != null) {
+                    val evidence = evidenceAdapter.toEvidence(
+                        canonicalTitleId = binding.canonicalTitleId,
+                        binding = binding.ref,
+                        observations = observations,
+                        observedAt = snapshotObservedAt,
+                    )
+                    publishSnapshot(
+                        binding.canonicalTitleId,
+                        binding.ref.evidenceProducerId(),
+                        snapshotObservedAt,
+                        evidence,
+                    )
+                }
                 return ProviderCallResult.Success(observations.size)
             }
             cursor = next
