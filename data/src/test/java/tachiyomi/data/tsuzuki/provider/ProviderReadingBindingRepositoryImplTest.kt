@@ -149,7 +149,8 @@ class ProviderReadingBindingRepositoryImplTest {
         portfolio.observe(first) shouldBe true
         portfolio.observe(second) shouldBe true
 
-        portfolio.getByTitle("title") shouldBe listOf(first, second)
+        portfolio.getByTitle("title").associateBy { it.ref.externalWorkId } shouldBe
+            mapOf("work-42" to first, "work-232" to second)
         repository.getByTitle("title") shouldBe listOf(preferred)
         repository.insertIfAbsent(preferred.copy(
             id = "different",
@@ -184,6 +185,29 @@ class ProviderReadingBindingRepositoryImplTest {
         portfolio.observe(changed) shouldBe true
         portfolio.get(source.ref) shouldBe changed
         portfolio.getByTitle("different-title") shouldBe emptyList()
+    }
+
+    @Test
+    fun `shadow association cannot take a HID already preferred by another canonical work`() = runBlocking<Unit> {
+        database.tsuzuki_titlesQueries.insertTsuzukiTitle(
+            id = "other-title",
+            displayTitle = "Different Work",
+            identityState = "SOURCE_ONLY",
+            createdAt = 1L,
+            updatedAt = 1L,
+        )
+        val foreign = binding().copy(
+            id = "foreign-preferred",
+            canonicalTitleId = "other-title",
+            ref = binding().ref.copy(externalWorkId = "foreign-hid"),
+        )
+        repository.insertIfAbsent(foreign) shouldBe true
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+
+        portfolio.observe(workSource("foreign-hid")) shouldBe false
+        portfolio.get(foreign.ref) shouldBe null
+        portfolio.getByTitle("title") shouldBe emptyList()
+        repository.getByTitle("other-title") shouldBe listOf(foreign)
     }
 
     private fun workSource(hid: String) = ProviderWorkSourceAssociation(
