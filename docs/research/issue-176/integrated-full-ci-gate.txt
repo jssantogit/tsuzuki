@@ -1,0 +1,4 @@
+Issue #176 staging branch full-verification marker for the multi-HID provisional chapter and Reader integration.
+This marker deliberately has a non-Markdown extension so the CI v2.1 push path filter executes.
+Fast CI on Host PR must also pass before the branch can be accepted for a physical release smoke.
+No PR merge or publication is authorized by this marker.
