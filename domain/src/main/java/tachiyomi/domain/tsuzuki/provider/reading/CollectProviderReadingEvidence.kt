@@ -191,7 +191,12 @@ class CollectProviderReadingEvidence private constructor(
                         // identity error or resource violation must not salvage untrusted pages.
                         val stillEnabled = providerRegistry.registration(target.registration.descriptor.id) ==
                             target.registration
-                        (finished ?: ProviderReadingEvidenceCollection(complete = false)).copy(
+                        (finished ?: ProviderReadingEvidenceCollection(
+                            // READ is entered only after a verified binding was selected
+                            // and persisted. A later timeout cannot erase that fact.
+                            bindingCount = if (activeStage == DiagnosticStage.READ) 1 else 0,
+                            complete = false,
+                        )).copy(
                             partialEvidence = if (finished == null && stillEnabled) {
                                 partial.toList()
                             } else {
