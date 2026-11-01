@@ -55,7 +55,11 @@ class ProviderWorkSourcePortfolioTest {
             candidates = listOf(
                 original.copy(externalWorkId = "missing", title = "Naruto", authors = emptyList()),
                 original.copy(externalWorkId = "conflict", title = "Naruto", authors = listOf("Different Author")),
-                original.copy(externalWorkId = "unknown-detail", title = "Naruto", detailOutcome = ProviderWorkDetailOutcome.DETAIL_FAILED),
+                original.copy(
+                    externalWorkId = "unknown-detail",
+                    title = "Naruto",
+                    detailOutcome = ProviderWorkDetailOutcome.DETAIL_FAILED,
+                ),
             ),
         )
         portfolio.map { it.workVerification } shouldBe listOf(
