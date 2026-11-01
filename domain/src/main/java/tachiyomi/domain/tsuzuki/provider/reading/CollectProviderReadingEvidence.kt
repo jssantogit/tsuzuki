@@ -502,11 +502,13 @@ class CollectProviderReadingEvidence private constructor(
             // not a claim of unique canonical edition or chapter total.
             val uniqueReadable = matches
                 .takeIf { priorAmbiguous == null && it.size in 2..MAX_COVERAGE_CONTENDERS }
-                ?.takeIf { canonicalAuthors != null && it.all { work ->
-                    !isSourceAttestedAlternateEdition(work, title) &&
-                        work.authors.isNotEmpty() &&
-                        work.authors.any { normalizedCreator(it) in canonicalAuthors }
-                } }
+                ?.takeIf {
+                    canonicalAuthors != null && it.all { work ->
+                        !isSourceAttestedAlternateEdition(work, title) &&
+                            work.authors.isNotEmpty() &&
+                            work.authors.any { normalizedCreator(it) in canonicalAuthors }
+                    }
+                }
                 ?.singleOrNull { work ->
                     work.coverageOutcome == ProviderCoverageOutcome.OBSERVED &&
                         work.coverageObservedCount?.let { it > 0 } == true &&

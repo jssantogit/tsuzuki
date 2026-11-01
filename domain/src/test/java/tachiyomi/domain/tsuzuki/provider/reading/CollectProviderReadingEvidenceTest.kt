@@ -614,6 +614,7 @@ class CollectProviderReadingEvidenceTest {
             ProviderCoverageOutcome.UNKNOWN,
             ProviderCoverageOutcome.FAILED,
         )) {
+            val rivalIsObserved = rival == ProviderCoverageOutcome.OBSERVED
             val bindings = MemoryBindingRepository()
             val collector = CollectProviderReadingEvidence(
                 canonicalTitleRepository = titleRepository(canonicalTitle),
@@ -639,9 +640,9 @@ class CollectProviderReadingEvidenceTest {
                                         language = "en",
                                         authors = listOf("Hiromu Arakawa"),
                                         coverageOutcome = rival,
-                                        coverageObservedCount = if (rival == ProviderCoverageOutcome.OBSERVED) 50 else null,
-                                        coverageMinMilli = if (rival == ProviderCoverageOutcome.OBSERVED) 1000 else null,
-                                        coverageMaxMilli = if (rival == ProviderCoverageOutcome.OBSERVED) 50000 else null,
+                                        coverageObservedCount = if (rivalIsObserved) 50 else null,
+                                        coverageMinMilli = if (rivalIsObserved) 1000 else null,
+                                        coverageMaxMilli = if (rivalIsObserved) 50000 else null,
                                     ),
                                 ),
                                 nextCursor = null,
