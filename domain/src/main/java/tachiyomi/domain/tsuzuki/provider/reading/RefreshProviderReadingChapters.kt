@@ -95,14 +95,15 @@ class RefreshProviderReadingChapters internal constructor(
                 // A source-only portfolio scan must verify every page, cursor and
                 // chapter identity but must not build a redundant canonical
                 // snapshot. Only a preferred binding can publish one.
-                if (publishSnapshot != null) {
+                val publisher = publishSnapshot
+                if (publisher != null) {
                     val evidence = evidenceAdapter.toEvidence(
                         canonicalTitleId = binding.canonicalTitleId,
                         binding = binding.ref,
                         observations = observations,
                         observedAt = snapshotObservedAt,
                     )
-                    publishSnapshot(
+                    publisher(
                         binding.canonicalTitleId,
                         binding.ref.evidenceProducerId(),
                         snapshotObservedAt,
