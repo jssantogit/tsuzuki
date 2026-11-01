@@ -193,6 +193,7 @@ class CollectProviderReadingEvidence private constructor(
                         // remain additive evidence only, not an authoritative full inventory.
                         val partial = mutableListOf<ChapterEvidence>()
                         var activeStage = DiagnosticStage.LOOKUP
+                        var preferredBindingSelected = false
                         val finished = withTimeoutOrNull(MAX_PROVIDER_COLLECTION_MILLIS) {
                             collectTarget(
                                 canonicalTitleId = canonicalTitleId,
@@ -200,6 +201,7 @@ class CollectProviderReadingEvidence private constructor(
                                 target = target,
                                 canonicalAuthors = canonicalAuthors,
                                 onStageChanged = { activeStage = it },
+                                onPreferredBindingSelected = { preferredBindingSelected = true },
                                 onPageCollected = { binding, page, observedAt ->
                                     partial += evidenceAdapter.toEvidence(
                                         canonicalTitleId = canonicalTitleId,
@@ -226,7 +228,7 @@ class CollectProviderReadingEvidence private constructor(
                             finished ?: ProviderReadingEvidenceCollection(
                                 // READ is entered only after a verified binding was selected
                                 // and persisted. A later timeout cannot erase that fact.
-                                bindingCount = if (activeStage == DiagnosticStage.READ) 1 else 0,
+                                bindingCount = if (preferredBindingSelected) 1 else 0,
                                 complete = false,
                             )
                             ).copy(
@@ -288,6 +290,7 @@ class CollectProviderReadingEvidence private constructor(
         target: ReadingTarget,
         canonicalAuthors: Set<String>?,
         onStageChanged: (DiagnosticStage) -> Unit,
+        onPreferredBindingSelected: () -> Unit,
         onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> Unit,
     ): ProviderReadingEvidenceCollection {
         return try {
@@ -310,13 +313,23 @@ class CollectProviderReadingEvidence private constructor(
             ) {
                 is ProviderCallResult.Failure -> return ProviderReadingEvidenceCollection(complete = false)
                 is ProviderCallResult.Success ->
-                    discovery.value.binding
-                        ?: return ProviderReadingEvidenceCollection(complete = !discovery.value.unresolved)
+                    discovery.value.binding ?: return if (discovery.value.workSources.size >= 2) {
+                        onStageChanged(DiagnosticStage.READ)
+                        collectUnresolvedWorkSources(
+                            canonicalTitleId = canonicalTitleId,
+                            target = target,
+                            sources = discovery.value.workSources,
+                            onPageCollected = onPageCollected,
+                        )
+                    } else {
+                        ProviderReadingEvidenceCollection(complete = !discovery.value.unresolved)
+                    }
             }
 
             if (existing == null) {
                 traceBoundWork(canonicalTitleId, target, binding, DiagnosticOutcome.ACCEPTED)
             }
+            onPreferredBindingSelected()
             onStageChanged(DiagnosticStage.READ)
             var published: ProviderReadingEvidenceSnapshot? = null
             var lastPageNumber = 0
@@ -426,6 +439,7 @@ class CollectProviderReadingEvidence private constructor(
         // earlier matches. They never cross a source, title, edition or facet.
         var ambiguousCandidates: List<ProviderWorkCandidate>? = null
         var unresolved = false
+        val collectedWorkSources = linkedMapOf<ProviderBindingRef, ProviderWorkSourceAssessment>()
         for ((queryIndex, title) in titles.withIndex()) {
             val queryStarted = System.nanoTime()
             traceLookupAttempt(canonicalTitleId, target, queryIndex, title, DiagnosticOutcome.STARTED)
@@ -483,6 +497,7 @@ class CollectProviderReadingEvidence private constructor(
             // Multiple corroborated HIDs never become one preferred edition or
             // Reader authority merely because their authors/title match.
             observeSourcePortfolio(canonicalTitleId, title, target, canonicalAuthors, matches)
+                .forEach { assessment -> collectedWorkSources[assessment.ref] = assessment }
             val sourcePrimaryMatches = matches.filter { normalize(it.title) == normalizedTitle }
             val priorAmbiguous = ambiguousCandidates
             val primary = sourcePrimaryMatches.singleOrNull()
@@ -598,7 +613,21 @@ class CollectProviderReadingEvidence private constructor(
                 bindings = if (candidate != null) 1 else 0,
                 lookupDecision = decision,
             )
-            if (candidate == null) continue
+            if (candidate == null) {
+                // A verified work may be represented by multiple distinct HIDs.
+                // Do not waste the remaining 20-second deadline on unrelated
+                // alias lookups once at least two live, author-corroborated,
+                // non-variant source chapter pages are independently attested.
+                // Neither source becomes the preferred edition.
+                val confirmedSources = collectedWorkSources.values
+                    .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
+                if (confirmedSources.size >= 2) {
+                    return ProviderCallResult.Success(
+                        BindingDiscovery(unresolved = true, workSources = confirmedSources.take(MAX_COVERAGE_CONTENDERS)),
+                    )
+                }
+                continue
+            }
 
             val now = clock()
             val binding = ProviderReadingBinding(
@@ -636,11 +665,13 @@ class CollectProviderReadingEvidence private constructor(
         target: ReadingTarget,
         canonicalAuthors: Set<String>?,
         matches: List<ProviderWorkCandidate>,
-    ) {
-        val repository = workSourceAssociationRepository ?: return
+    ): List<ProviderWorkSourceAssessment> {
+        val repository = workSourceAssociationRepository ?: return emptyList()
         // Author evidence has a verified source-detail contract only for MangaFire
         // code9. Never grant this privilege to arbitrary third-party Provider DTOs.
-        if (target.registration.descriptor.id.value != "app.tsuzuki.mangafire" || matches.isEmpty()) return
+        if (target.registration.descriptor.id.value != "app.tsuzuki.mangafire" || matches.isEmpty()) {
+            return emptyList()
+        }
         val assessed = ProviderWorkSourcePortfolio.assess(
             providerId = target.registration.descriptor.id,
             facetId = target.facetId,
@@ -648,6 +679,7 @@ class CollectProviderReadingEvidence private constructor(
             independentlyVerifiedAuthors = canonicalAuthors,
             candidates = matches,
         )
+        val retained = mutableListOf<ProviderWorkSourceAssessment>()
         for (assessment in assessed) {
             try {
                 val recorded = repository.observe(
@@ -659,6 +691,7 @@ class CollectProviderReadingEvidence private constructor(
                         observedAt = clock(),
                     ),
                 )
+                if (recorded) retained += assessment
                 if (!recorded) {
                     // The same HID was already associated with another canonical
                     // work. Do not overwrite that independent identity.
@@ -672,6 +705,7 @@ class CollectProviderReadingEvidence private constructor(
                 trace(canonicalTitleId, target, DiagnosticStage.BINDING, DiagnosticOutcome.FAILED)
             }
         }
+        return retained
     }
 
     private suspend fun collectLookup(
@@ -1160,6 +1194,7 @@ class CollectProviderReadingEvidence private constructor(
     private data class BindingDiscovery(
         val binding: ProviderReadingBinding? = null,
         val unresolved: Boolean = false,
+        val workSources: List<ProviderWorkSourceAssessment> = emptyList(),
     )
 
     private data class ReadingTarget(
