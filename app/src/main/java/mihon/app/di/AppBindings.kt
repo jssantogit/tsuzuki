@@ -305,6 +305,21 @@ object AppBindings {
                     }
                 }
             },
+            browserDiagnosticSink = { providerId, detail ->
+                if (diagnosticRecorder.detailedCaptureActive) {
+                    // WebView fallback event records a closed failure family and duration,
+                    // not navigation URL, selector, body or upstream exception message.
+                    runCatching {
+                        diagnosticRecorder.record(
+                            detail.toStructuredDiagnosticEvent(
+                                providerId = providerId,
+                                sessionId = diagnosticRecorder.sessionId,
+                                timestampMillis = System.currentTimeMillis(),
+                            ),
+                        )
+                    }
+                }
+            },
             managedFiles = managedFiles,
         )
 
