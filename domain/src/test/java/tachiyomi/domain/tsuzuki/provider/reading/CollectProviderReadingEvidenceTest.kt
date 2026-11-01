@@ -574,6 +574,79 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `ambiguous source profiles probe first chapters without creating a binding or canonical evidence`(): Unit =
+        runBlocking {
+            val title = canonicalTitle.copy(displayTitle = "Chainsaw Man")
+            val recorder = CapturingProviderDiagnostics(captureActive = true)
+            val bindings = MemoryBindingRepository()
+            val examined = mutableListOf<String>()
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(title),
+                providerRegistry = registry(),
+                gateway = gateway(
+                    lookupHandler = {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(
+                                    ProviderWorkCandidate("kx1p6", "Chainsaw Man", language = "en"),
+                                    ProviderWorkCandidate("kkyzv", "Chainsaw Man", language = "en"),
+                                    ProviderWorkCandidate("0w5k", "Chainsaw Man", language = "en"),
+                                ),
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                    chaptersHandler = { request ->
+                        examined += request.binding.externalWorkId
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(
+                                    ProviderChapterObservation(
+                                        providerChapterId = "100",
+                                        rawLabel = "Chapter 1",
+                                        rawNumber = 1.0,
+                                    ),
+                                    ProviderChapterObservation(
+                                        providerChapterId = "105",
+                                        rawLabel = "Chapter 5",
+                                        rawNumber = 5.0,
+                                    ),
+                                ),
+                                nextCursor = ProviderCursor("next"),
+                            ),
+                        )
+                    },
+                ),
+                bindingRepository = bindings,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 42L },
+                diagnostics = recorder,
+            )
+
+            val result = collector.execute(title.id)
+            examined shouldBe listOf("kx1p6", "kkyzv", "0w5k")
+            result.bindingCount shouldBe 0
+            result.evidence shouldBe emptyList()
+            result.partialEvidence shouldBe emptyList()
+            bindings.getByTitle(title.id) shouldBe emptyList()
+
+            val profiles = recorder.events.filter {
+                it.name == DiagnosticEventName.PROVIDER_READING_CANDIDATE_PROFILE &&
+                    it.outcome == DiagnosticOutcome.PARTIAL
+            }
+            profiles.shouldHaveSize(3)
+            profiles.map { it.attributes["provider_work_id"] } shouldBe listOf(
+                DiagnosticAttributeValue.Text("kx1p6"),
+                DiagnosticAttributeValue.Text("kkyzv"),
+                DiagnosticAttributeValue.Text("0w5k"),
+            )
+            profiles.all {
+                it.attributes["chapter_number_min_milli"] == DiagnosticAttributeValue.Number(1000L) &&
+                    it.attributes["chapter_number_max_milli"] == DiagnosticAttributeValue.Number(5000L)
+            } shouldBe true
+        }
+
+    @Test
     fun `ambiguous exact lookup does not auto bind`(): Unit = runBlocking {
         val bindings = MemoryBindingRepository()
         val bridge = CollectProviderReadingEvidence(
