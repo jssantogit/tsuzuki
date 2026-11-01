@@ -234,10 +234,10 @@ class CollectProviderReadingEvidence private constructor(
                                 complete = false,
                             )
                             ).copy(
-                            partialEvidence = if (finished == null && stillEnabled) {
-                                partial.toList()
-                            } else {
-                                emptyList()
+                            partialEvidence = when {
+                                !stillEnabled -> emptyList()
+                                finished == null -> partial.toList()
+                                else -> finished.partialEvidence
                             },
                         )
                     }
