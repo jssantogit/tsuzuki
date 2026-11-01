@@ -241,7 +241,12 @@ class ScriptProviderReadingGatewayIsolationTest {
                     lookup: async () => ({items: [], nextCursor: null}),
                     chapters: async (request) => {
                       const page = request.cursor ?? "1";
-                      return JSON.parse(await tsuzuki.http.get(origin + "/chapters?page=" + page));
+                      const wire = await tsuzuki.http.request(
+                        "GET",
+                        origin + "/chapters?page=" + page,
+                        JSON.stringify({ Accept: "application/json" })
+                      );
+                      return JSON.parse(JSON.parse(wire).body);
                     },
                     pages: async () => ({type: "page_list", pages: []})
                   }
