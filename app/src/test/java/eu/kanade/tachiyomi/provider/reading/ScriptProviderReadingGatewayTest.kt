@@ -131,7 +131,7 @@ class ScriptProviderReadingGatewayTest {
     }
 
     @Test
-    fun `opt in candidate coverage decodes source page evidence without treating it as canonical total`() = runBlocking {
+    fun `candidate coverage keeps source page facts separate from canonical totals`() = runBlocking {
         var requestJson: String? = null
         val gateway = gateway { _, _, input, _ ->
             requestJson = input
