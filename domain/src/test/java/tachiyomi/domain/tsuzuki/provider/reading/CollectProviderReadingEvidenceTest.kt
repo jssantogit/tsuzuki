@@ -2023,6 +2023,107 @@ class CollectProviderReadingEvidenceTest {
         } shouldBe true
     }
 
+    @Test
+    fun `corroborated work HIDs collect independently scoped chapter observations without selecting edition`() = runBlocking<Unit> {
+        val id = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), id, externalId = "mal-verified"),
+                externalIds = mapOf(id to "mal-verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val observations = MemoryWorkSourceAssociationRepository()
+        val bindings = MemoryBindingRepository()
+        val readHids = mutableListOf<String>()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    "first-hid",
+                                    "Dandadan",
+                                    authors = listOf("Arakawa Hiromu"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                    coverageMinMilli = 1_000,
+                                    coverageMaxMilli = 1_000,
+                                    coverageHasMore = false,
+                                ),
+                                ProviderWorkCandidate(
+                                    "second-hid",
+                                    "Dandadan",
+                                    authors = listOf("Hiromu Arakawa"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                    coverageMinMilli = 2_000,
+                                    coverageMaxMilli = 2_000,
+                                    coverageHasMore = false,
+                                ),
+                                ProviderWorkCandidate(
+                                    "colored-hid",
+                                    "Dandadan",
+                                    aliases = listOf("Dandadan (Official Colored)"),
+                                    authors = listOf("Arakawa Hiromu"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_WITH_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                    coverageMinMilli = 1_000,
+                                    coverageMaxMilli = 1_000,
+                                    coverageHasMore = false,
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    readHids += request.binding.externalWorkId
+                    val number = if (request.binding.externalWorkId == "first-hid") 1.0 else 2.0
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderChapterObservation(
+                                    providerChapterId = "chapter-id-${request.binding.externalWorkId}",
+                                    rawLabel = "Chapter ${number.toInt()}",
+                                    rawNumber = number,
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = observations,
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+
+        result.complete shouldBe false
+        result.snapshots shouldBe emptyList()
+        result.bindingCount shouldBe 0
+        result.partialEvidence.size shouldBe 2
+        result.partialEvidence.map { it.producerId }.distinct().size shouldBe 2
+        result.partialEvidence.map { it.externalChapterKey }.toSet() shouldBe
+            setOf("chapter-id-first-hid", "chapter-id-second-hid")
+        readHids.toSet() shouldBe setOf("first-hid", "second-hid")
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        observations.getByTitle(canonicalTitle.id).size shouldBe 3
+    }
+
     private class CapturingProviderDiagnostics(
         private val captureActive: Boolean = false,
     ) : StructuredDiagnosticRecorder {
