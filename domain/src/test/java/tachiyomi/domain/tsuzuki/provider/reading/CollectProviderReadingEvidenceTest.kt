@@ -520,6 +520,149 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `one corroborated readable source can recover an empty competing edition`(): Unit = runBlocking {
+        val mal = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), mal, externalId = "mal-verified"),
+                externalIds = mapOf(mal to "mal-verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val bindings = MemoryBindingRepository()
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(
+                                ProviderWorkCandidate(
+                                    externalWorkId = "fullmetal-readable",
+                                    title = "Dandadan",
+                                    authors = listOf("Arakawa Hiromu"),
+                                    language = "en",
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 101,
+                                    coverageMinMilli = 1000,
+                                    coverageMaxMilli = 101000,
+                                    coverageHasMore = true,
+                                ),
+                                ProviderWorkCandidate(
+                                    externalWorkId = "fullmetal-empty",
+                                    title = "Dandadan",
+                                    authors = listOf("Arakawa Hiromu"),
+                                    language = "en",
+                                    coverageOutcome = ProviderCoverageOutcome.EMPTY,
+                                    coverageObservedCount = 0,
+                                    coverageHasMore = false,
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = {
+                    it.binding.externalWorkId shouldBe "fullmetal-readable"
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation("chapter-1", "Chapter 1")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            diagnostics = recorder,
+        )
+        val result = collector.execute(canonicalTitle.id)
+        result.complete shouldBe true
+        result.bindingCount shouldBe 1
+        result.evidence.shouldHaveSize(1)
+        bindings.getByTitle(canonicalTitle.id).single().ref.externalWorkId shouldBe "fullmetal-readable"
+        recorder.events.last {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.LOOKUP
+        }.attributes["lookup_decision"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderLookupDecision.UNIQUE_READABLE_SOURCE,
+        )
+    }
+
+    @Test
+    fun `multiple readable or unknown rivals cannot authorize source binding`(): Unit = runBlocking {
+        val mal = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), mal, externalId = "mal-verified"),
+                externalIds = mapOf(mal to "mal-verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        for (rival in listOf(
+            ProviderCoverageOutcome.OBSERVED,
+            ProviderCoverageOutcome.UNKNOWN,
+            ProviderCoverageOutcome.FAILED,
+        )) {
+            val bindings = MemoryBindingRepository()
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(canonicalTitle),
+                providerRegistry = registry(),
+                gateway = gateway(
+                    lookupHandler = {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                listOf(
+                                    ProviderWorkCandidate(
+                                        "source-one",
+                                        "Dandadan",
+                                        language = "en",
+                                        authors = listOf("Hiromu Arakawa"),
+                                        coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                        coverageObservedCount = 50,
+                                        coverageMinMilli = 1000,
+                                        coverageMaxMilli = 50000,
+                                    ),
+                                    ProviderWorkCandidate(
+                                        "source-two",
+                                        "Dandadan",
+                                        language = "en",
+                                        authors = listOf("Hiromu Arakawa"),
+                                        coverageOutcome = rival,
+                                        coverageObservedCount = if (rival == ProviderCoverageOutcome.OBSERVED) 50 else null,
+                                        coverageMinMilli = if (rival == ProviderCoverageOutcome.OBSERVED) 1000 else null,
+                                        coverageMaxMilli = if (rival == ProviderCoverageOutcome.OBSERVED) 50000 else null,
+                                    ),
+                                ),
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                    chaptersHandler = { error("Ambiguous or failed source must not be read") },
+                ),
+                bindingRepository = bindings,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 42L },
+                canonicalMetadataSnapshotRepository = metadata,
+            )
+            val result = collector.execute(canonicalTitle.id)
+            result.complete shouldBe false
+            result.bindingCount shouldBe 0
+            bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        }
+    }
+
+    @Test
     fun `identical or missing creator attestation never resolves an ambiguous HID`(): Unit = runBlocking {
         val id = IntegrationId("mal")
         val metadata = mockk<CanonicalMetadataSnapshotRepository>()
