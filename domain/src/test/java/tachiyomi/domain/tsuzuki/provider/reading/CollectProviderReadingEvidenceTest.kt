@@ -1948,7 +1948,6 @@ class CollectProviderReadingEvidenceTest {
             true
     }
 
-
     @Test
     fun `ambiguous same-work HIDs are observed independently but cannot become Reader bindings`() = runBlocking<Unit> {
         val id = IntegrationId("mal")
@@ -2104,7 +2103,6 @@ class CollectProviderReadingEvidenceTest {
         override suspend fun insert(title: CanonicalTitle) = error("not used")
         override suspend fun addExternalIdentity(identity: ExternalIdentity) = error("not used")
     }
-
 
     private class MemoryWorkSourceAssociationRepository : ProviderWorkSourceAssociationRepository {
         private val values = linkedMapOf<ProviderBindingRef, ProviderWorkSourceAssociation>()
