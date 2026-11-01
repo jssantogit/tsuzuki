@@ -231,6 +231,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 .build(),
         )
 
+        // GREEN: consecutive pages keep one live, isolated, bounded Binder lease.
         val bindingPhases = mutableListOf<ProviderRuntimeBindingPhase>()
         val gateway = gateway(
             networkOrigins = setOf(origin),
