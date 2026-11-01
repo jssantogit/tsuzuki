@@ -12,7 +12,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
-import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
@@ -21,6 +20,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
+import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import java.util.concurrent.CopyOnWriteArrayList
 
 @RunWith(AndroidJUnit4::class)
@@ -153,12 +153,15 @@ class ProviderRuntimeLogBindingTest {
         )
         val recorder = object : StructuredDiagnosticRecorder {
             override val sessionId = "35d4ea34-f729-4336-b6ce-d6277ec3ac7c"
+
             @Volatile var enabled = false
             override val detailedCaptureActive: Boolean get() = enabled
             val events = CopyOnWriteArrayList<StructuredDiagnosticEvent>()
             override fun canonicalTitleReference(canonicalTitleId: String): String? = null
             override fun mihonMangaReference(mihonMangaId: Long): String? = null
-            override fun record(event: StructuredDiagnosticEvent) { events += event }
+            override fun record(event: StructuredDiagnosticEvent) {
+                events += event
+            }
         }
         val server = MockWebServer()
         server.enqueue(MockResponse.Builder().body("first").build())
@@ -209,16 +212,12 @@ class ProviderRuntimeLogBindingTest {
             assertTrue(observed.all { it.name == DiagnosticEventName.PROVIDER_HTTP_REQUEST })
             assertTrue(observed.any { it.outcome == DiagnosticOutcome.STARTED })
             assertTrue(observed.any { it.outcome == DiagnosticOutcome.SUCCEEDED })
-            assertTrue(observed.all {
-                it.attributes[DiagnosticAttribute.PROVIDER_ID] ==
-                    DiagnosticAttributeValue.Text("app.tsuzuki.mangafire")
-            })
-            assertTrue(observed.any {
-                it.attributes[DiagnosticAttribute.HTTP_STATUS] == DiagnosticAttributeValue.Number(200)
-            })
-            assertTrue(observed.all { event ->
-                event.attributes.keys.all { it in setOf(DiagnosticAttribute.PROVIDER_ID, DiagnosticAttribute.HTTP_STATUS) }
-            })
+            val providerIds = observed.map { it.attributes[DiagnosticAttribute.PROVIDER_ID] }
+            val httpStatuses = observed.map { it.attributes[DiagnosticAttribute.HTTP_STATUS] }
+            val permittedKeys = setOf(DiagnosticAttribute.PROVIDER_ID, DiagnosticAttribute.HTTP_STATUS)
+            assertTrue(providerIds.all { it == DiagnosticAttributeValue.Text("app.tsuzuki.mangafire") })
+            assertTrue(httpStatuses.contains(DiagnosticAttributeValue.Number(200)))
+            assertTrue(observed.all { event -> event.attributes.keys.all(permittedKeys::contains) })
         } finally {
             server.close()
             p2pJobs.close()
