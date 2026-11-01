@@ -18,6 +18,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okio.Buffer
@@ -180,6 +181,102 @@ class ScriptProviderReadingGatewayIsolationTest {
             assertEquals("/lookup", server.takeRequest().url.encodedPath)
             assertEquals("/chapters", server.takeRequest().url.encodedPath)
             assertEquals("/pages/001.jpg", server.takeRequest().url.encodedPath)
+        } finally {
+            server.close()
+        }
+    }
+
+
+    @Test
+    fun chapterPagination_invokesSecondPageThroughIsolatedRuntimeBeforeDeadline() = runBlocking {
+        val server = MockWebServer()
+        server.start()
+        val origin = server.origin()
+        server.enqueue(
+            MockResponse.Builder()
+                .body(
+                    """
+                    {
+                      "items": [
+                        {
+                          "providerChapterId": "chapter-100",
+                          "rawLabel": "Ch. 100",
+                          "rawNumber": 100.0,
+                          "language": "en"
+                        }
+                      ],
+                      "nextCursor": "2"
+                    }
+                    """.trimIndent(),
+                )
+                .build(),
+        )
+        server.enqueue(
+            MockResponse.Builder()
+                .body(
+                    """
+                    {
+                      "items": [
+                        {
+                          "providerChapterId": "chapter-101",
+                          "rawLabel": "Ch. 101",
+                          "rawNumber": 101.0,
+                          "language": "en"
+                        }
+                      ],
+                      "nextCursor": null
+                    }
+                    """.trimIndent(),
+                )
+                .build(),
+        )
+
+        val gateway = gateway(
+            networkOrigins = setOf(origin),
+            localNetwork = true,
+            main = """
+                const origin = "$origin";
+                export default {
+                  reading: {
+                    lookup: async () => ({items: [], nextCursor: null}),
+                    chapters: async (request) => {
+                      const page = request.cursor ?? "1";
+                      return JSON.parse(await tsuzuki.http.get(origin + "/chapters?page=" + page));
+                    },
+                    pages: async () => ({type: "page_list", pages: []})
+                  }
+                };
+            """.trimIndent(),
+        )
+
+        try {
+            val binding = ProviderBindingRef(PROVIDER_ID, "en", "long-work")
+            val result = withTimeout(15_000) {
+                RefreshProviderReadingChapters(
+                    gateway = gateway,
+                    evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                    reconcileChapterEvidence = ReconcileChapterEvidence(
+                        parser = ParseCanonicalChapterLabel(),
+                        canonicalChapterRepository = InMemoryCanonicalChapterRepository(),
+                        evidenceRepository = InMemoryChapterEvidenceRepository(),
+                    ),
+                ).execute(
+                    ProviderReadingBinding(
+                        id = "preferred-long-work",
+                        canonicalTitleId = "long-title",
+                        ref = binding,
+                        verification = ProviderBindingVerification.EXACT,
+                        availability = ProviderBindingAvailability.AVAILABLE,
+                        createdAt = 1L,
+                        updatedAt = 1L,
+                    ),
+                )
+            }
+            assertTrue(result is ProviderCallResult.Success)
+            assertEquals(2, (result as ProviderCallResult.Success).value)
+            assertEquals("1", server.takeRequest().url.queryParameter("page"))
+            assertEquals("2", server.takeRequest().url.queryParameter("page"))
+            assertEquals(2, server.requestCount)
         } finally {
             server.close()
         }
