@@ -623,7 +623,10 @@ class CollectProviderReadingEvidence private constructor(
                     .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
                 if (confirmedSources.size >= 2) {
                     return ProviderCallResult.Success(
-                        BindingDiscovery(unresolved = true, workSources = confirmedSources.take(MAX_COVERAGE_CONTENDERS)),
+                        BindingDiscovery(
+                            unresolved = true,
+                            workSources = confirmedSources.take(MAX_COVERAGE_CONTENDERS),
+                        ),
                     )
                 }
                 continue
