@@ -53,6 +53,8 @@ object ProviderWorkSourcePortfolio {
                     externalWorkId = candidate.externalWorkId,
                 ),
                 workVerification = verification,
+                sourceChapterPageAttested = candidate.coverageOutcome == ProviderCoverageOutcome.OBSERVED &&
+                    candidate.coverageObservedCount?.let { it > 0 } == true,
                 editionQualification = if (qualified) {
                     ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT
                 } else {
@@ -119,7 +121,17 @@ data class ProviderWorkSourceAssessment(
     val ref: ProviderBindingRef,
     val workVerification: ProviderWorkVerification,
     val editionQualification: ProviderSourceEditionQualification,
+    val sourceChapterPageAttested: Boolean = false,
 ) {
+    /**
+     * A first page with source IDs and numerically valid chapter labels permits
+     * *provisional, per-HID* observation only. No editorial equivalence is asserted.
+     */
+    val canCollectProvisionalChapters: Boolean
+        get() = workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED &&
+            editionQualification == ProviderSourceEditionQualification.UNRESOLVED &&
+            sourceChapterPageAttested
+
     /**
      * Explicitly fail closed: work identity is not the authority to create
      * canonical chapters or open Reader pages. Those require independently
