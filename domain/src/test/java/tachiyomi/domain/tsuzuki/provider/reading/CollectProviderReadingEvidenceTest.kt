@@ -464,6 +464,7 @@ class CollectProviderReadingEvidenceTest {
             refreshedAt = 42L,
         )
         val bindings = MemoryBindingRepository()
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
         val collector = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
             providerRegistry = registry(),
@@ -503,12 +504,19 @@ class CollectProviderReadingEvidenceTest {
             evidenceAdapter = ProviderChapterEvidenceAdapter(),
             clock = { 42L },
             canonicalMetadataSnapshotRepository = metadata,
+            diagnostics = recorder,
         )
         val result = collector.execute(canonicalTitle.id)
         result.complete shouldBe true
         result.bindingCount shouldBe 1
         result.evidence.shouldHaveSize(1)
         bindings.getByTitle(canonicalTitle.id).single().ref.externalWorkId shouldBe "verified-work"
+        recorder.events.last {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.LOOKUP
+        }.attributes["lookup_decision"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderLookupDecision.AUTHOR_CORROBORATED,
+        )
     }
 
     @Test

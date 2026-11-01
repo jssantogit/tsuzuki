@@ -485,7 +485,7 @@ class CollectProviderReadingEvidence private constructor(
             // only when every rival supplies positive, contradictory authors.
             // A missing creator, two same-author HIDs, or an explicit edition
             // qualifier remains unresolved.
-            val authorCorroborated = matches.singleOrNull { contender ->
+            val authorCorroborated = matches.takeIf { it.size > 1 }?.singleOrNull { contender ->
                 canonicalAuthors != null &&
                     !isSourceAttestedAlternateEdition(contender, title) &&
                     contender.authors.any { normalizedCreator(it) in canonicalAuthors } &&
@@ -526,6 +526,8 @@ class CollectProviderReadingEvidence private constructor(
                 else -> null
             }
             val decision = when {
+                candidate != null && candidate == authorCorroborated ->
+                    DiagnosticProviderLookupDecision.AUTHOR_CORROBORATED
                 candidate != null -> DiagnosticProviderLookupDecision.SELECTED
                 sourcePrimaryMatches.size > 1 -> DiagnosticProviderLookupDecision.MULTIPLE_PRIMARY_IDENTITIES
                 matches.isNotEmpty() -> DiagnosticProviderLookupDecision.AMBIGUOUS_EDITION
