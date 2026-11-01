@@ -198,7 +198,7 @@ class CollectProviderReadingEvidence private constructor(
                                 bindingCount = if (activeStage == DiagnosticStage.READ) 1 else 0,
                                 complete = false,
                             )
-                        ).copy(
+                            ).copy(
                             partialEvidence = if (finished == null && stillEnabled) {
                                 partial.toList()
                             } else {
