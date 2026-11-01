@@ -8,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.data.database.models.ChapterImpl
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
+import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.CanonicalLocalReaderFormat
@@ -230,9 +231,11 @@ class ScriptProviderReadingGatewayIsolationTest {
                 .build(),
         )
 
+        val bindingPhases = mutableListOf<ProviderRuntimeBindingPhase>()
         val gateway = gateway(
             networkOrigins = setOf(origin),
             localNetwork = true,
+            onBindingPhase = bindingPhases::add,
             main = """
                 const origin = "$origin";
                 export default {
@@ -276,6 +279,8 @@ class ScriptProviderReadingGatewayIsolationTest {
             assertEquals("1", server.takeRequest().url.queryParameter("page"))
             assertEquals("2", server.takeRequest().url.queryParameter("page"))
             assertEquals(2, server.requestCount)
+            assertEquals(1, bindingPhases.count { it == ProviderRuntimeBindingPhase.BIND_STARTED })
+            assertEquals(1, bindingPhases.count { it == ProviderRuntimeBindingPhase.BIND_REUSED })
         } finally {
             server.close()
         }
@@ -951,6 +956,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         localNetwork: Boolean,
         managedFiles: ProviderManagedFileStore? = null,
         includePages: Boolean = true,
+        onBindingPhase: (ProviderRuntimeBindingPhase) -> Unit = {},
         onRegistry: (DefaultProviderRegistry) -> Unit = {},
     ): ScriptProviderReadingGateway {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -1008,6 +1014,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 storageRoot = storageRoot,
                 managedFiles = managedFileStore,
             ),
+            bindingObserver = onBindingPhase,
         )
 
         return ScriptProviderReadingGateway(
