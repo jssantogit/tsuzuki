@@ -236,7 +236,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         val gateway = gateway(
             networkOrigins = setOf(origin),
             localNetwork = true,
-            onBindingPhase = bindingPhases::add,
+            onBindingPhase = { bindingPhases.add(it) },
             main = """
                 const origin = "$origin";
                 export default {
