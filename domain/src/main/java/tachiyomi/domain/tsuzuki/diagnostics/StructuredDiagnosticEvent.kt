@@ -109,6 +109,7 @@ enum class DiagnosticEventName {
     PROVIDER_READING_PAGE_DETAIL,
     PROVIDER_READING_BINDING,
     PROVIDER_READING_CANDIDATE,
+    PROVIDER_HTTP_REQUEST,
 
     READER_OPEN_STARTED,
     READER_SOURCE_SELECTED,
@@ -208,6 +209,7 @@ enum class DiagnosticAttribute {
     PROVIDER_WORK_CHAPTER_COUNT,
     PROVIDER_CANDIDATE_REASON,
     PROVIDER_DETAIL_OUTCOME,
+    PROVIDER_HTTP_FAILURE,
     BROADENED,
     MAPPING_REUSED,
     LANGUAGE,
@@ -378,6 +380,19 @@ enum class DiagnosticProviderCandidateReason : DiagnosticSafeCode {
 }
 
 /** Closed source-enrichment outcomes: no upstream response text or secrets. */
+enum class DiagnosticProviderHttpFailure : DiagnosticSafeCode {
+    DNS,
+    CONNECT,
+    TLS,
+    READ_TIMEOUT,
+    HOST_DEADLINE,
+    CANCELLED,
+    NETWORK_POLICY,
+    HTTP_STATUS,
+    RESPONSE_LIMIT,
+    UNKNOWN,
+}
+
 enum class DiagnosticProviderDetailOutcome : DiagnosticSafeCode {
     NOT_NEEDED,
     SKIPPED_IRRELEVANT,
@@ -636,6 +651,8 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticProviderCandidateReason }
         DiagnosticAttribute.PROVIDER_DETAIL_OUTCOME -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderDetailOutcome }
+        DiagnosticAttribute.PROVIDER_HTTP_FAILURE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderHttpFailure }
         DiagnosticAttribute.LOOKUP_DECISION -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderLookupDecision }
 
