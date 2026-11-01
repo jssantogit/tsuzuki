@@ -366,7 +366,7 @@ class CollectProviderReadingEvidence private constructor(
                 },
                 onPageCollected = { page, observedAt ->
                     if (diagnostics.detailedCaptureActive) {
-                        traceReadingPageDetail(canonicalTitleId, target, lastPageNumber, page)
+                        traceReadingPageDetail(canonicalTitleId, target, binding.ref, lastPageNumber, page)
                     }
                     onPageCollected(binding.ref, page, observedAt)
                 },
@@ -779,7 +779,7 @@ class CollectProviderReadingEvidence private constructor(
                     onPageCollected = { page, pageObservedAt ->
                         trustedPages += page.toList() to pageObservedAt
                         if (diagnostics.detailedCaptureActive) {
-                            traceReadingPageDetail(canonicalTitleId, target, lastPage, page)
+                            traceReadingPageDetail(canonicalTitleId, target, source.ref, lastPage, page)
                         }
                     },
                     onPageObserved = { pageCount, observations ->
@@ -1202,6 +1202,7 @@ class CollectProviderReadingEvidence private constructor(
     private fun traceReadingPageDetail(
         titleId: String,
         target: ReadingTarget,
+        sourceRef: ProviderBindingRef,
         pageNumber: Int,
         page: List<ProviderChapterObservation>,
     ) {
@@ -1219,6 +1220,7 @@ class CollectProviderReadingEvidence private constructor(
             val lastId = page.lastOrNull()?.providerChapterId?.takeIf { it.matches(NUMERIC_CHAPTER_ID) }
             val attributes = buildMap<String, DiagnosticAttributeValue> {
                 put("provider_id", DiagnosticAttributeValue.Text(target.registration.descriptor.id.value))
+                put("provider_work_id", DiagnosticAttributeValue.Text(sourceRef.externalWorkId))
                 diagnostics.canonicalTitleReference(titleId)?.let {
                     put("canonical_title_ref", DiagnosticAttributeValue.Text(it))
                 }
