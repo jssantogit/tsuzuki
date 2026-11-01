@@ -29,8 +29,8 @@ internal fun ProviderHttpDiagnostic.toStructuredDiagnosticEvent(
     }
     val details = buildMap<String, DiagnosticAttributeValue> {
         put("provider_id", DiagnosticAttributeValue.Text(providerId))
-        if (statusCode != null && statusCode in 100..599) {
-            put("http_status", DiagnosticAttributeValue.Number(statusCode.toLong()))
+        statusCode?.takeIf { it in 100..599 }?.let { code ->
+            put("http_status", DiagnosticAttributeValue.Number(code.toLong()))
         }
         if (category != null) {
             put("provider_http_failure", DiagnosticAttributeValue.Code(category))
