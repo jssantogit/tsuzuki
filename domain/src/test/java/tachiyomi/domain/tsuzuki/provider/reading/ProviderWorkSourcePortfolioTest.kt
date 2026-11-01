@@ -19,6 +19,28 @@ class ProviderWorkSourcePortfolioTest {
     )
 
     @Test
+    fun `unknown coverage cannot authorize multi HID chapter collection despite matching author`() {
+        val assessed = ProviderWorkSourcePortfolio.assess(
+            providerId = ProviderId("app.tsuzuki.mangafire"),
+            facetId = "en",
+            queryTitle = "Chainsaw Man",
+            independentlyVerifiedAuthors = setOf("Tatsuki Fujimoto"),
+            candidates = listOf(
+                original.copy(
+                    coverageOutcome = ProviderCoverageOutcome.UNKNOWN,
+                    coverageObservedCount = null,
+                    coverageMinMilli = null,
+                    coverageMaxMilli = null,
+                    coverageHasMore = null,
+                ),
+            ),
+        )
+        assessed.single().workVerification shouldBe ProviderWorkVerification.AUTHOR_CORROBORATED
+        assessed.single().canCollectProvisionalChapters shouldBe false
+        assessed.single().canOpenReader shouldBe false
+    }
+
+    @Test
     fun `same work with two readable HIDs preserves both identities without choosing an edition`() {
         val portfolio = ProviderWorkSourcePortfolio.assess(
             providerId = ProviderId("app.tsuzuki.mangafire"),
