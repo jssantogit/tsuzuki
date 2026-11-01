@@ -610,6 +610,7 @@ class CollectProviderReadingEvidence private constructor(
                     request = ProviderReadingLookupRequest(
                         titles = listOf(title),
                         cursor = cursor,
+                        coverageEvidenceVersion = if (providerId.value == "app.tsuzuki.mangafire") 1 else null,
                     ),
                 )
             ) {
@@ -765,6 +766,23 @@ class CollectProviderReadingEvidence private constructor(
                     if (aliases.isNotEmpty()) put("provider_work_aliases", DiagnosticAttributeValue.Text(aliases))
                     work.chapterCount?.let {
                         put("provider_work_chapter_count", DiagnosticAttributeValue.Number(it.toLong()))
+                    }
+                    work.coverageOutcome?.let {
+                        put("provider_coverage_outcome", DiagnosticAttributeValue.Code(
+                            tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCoverageOutcome.valueOf(it.name),
+                        ))
+                    }
+                    work.coverageObservedCount?.let {
+                        put("provider_coverage_observed_count", DiagnosticAttributeValue.Number(it.toLong()))
+                    }
+                    work.coverageHasMore?.let {
+                        put("provider_coverage_has_more", DiagnosticAttributeValue.Flag(it))
+                    }
+                    work.coverageMinMilli?.let {
+                        put("chapter_number_min_milli", DiagnosticAttributeValue.Number(it.toLong()))
+                    }
+                    work.coverageMaxMilli?.let {
+                        put("chapter_number_max_milli", DiagnosticAttributeValue.Number(it.toLong()))
                     }
                     put("provider_candidate_reason", DiagnosticAttributeValue.Code(reason))
                     work.detailOutcome?.let {

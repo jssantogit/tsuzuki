@@ -131,6 +131,7 @@ class ScriptProviderReadingGateway internal constructor(
                 LookupRequestDto(
                     titles = request.titles,
                     cursor = request.cursor?.value,
+                    coverageEvidenceVersion = request.coverageEvidenceVersion,
                 ),
             ),
         ) { value, active ->
@@ -157,6 +158,13 @@ class ScriptProviderReadingGateway internal constructor(
                         language = item.language,
                         chapterCount = item.chapterCount,
                         authors = item.authors,
+                        coverageOutcome = item.coverageOutcome?.let(
+                            tachiyomi.domain.tsuzuki.provider.reading.ProviderCoverageOutcome::valueOf,
+                        ),
+                        coverageObservedCount = item.coverageObservedCount,
+                        coverageMinMilli = item.coverageMinMilli,
+                        coverageMaxMilli = item.coverageMaxMilli,
+                        coverageHasMore = item.coverageHasMore,
                         detailOutcome = item.detailOutcome?.let(ProviderWorkDetailOutcome::valueOf),
                         detailHttpStatus = item.detailHttpStatus,
                     )
@@ -477,6 +485,7 @@ class ScriptProviderReadingGateway internal constructor(
         val diagnosticsVersion: Int = 1,
         /** Optional editorial evidence; ignored by Providers lacking this extension. */
         val editorialEvidenceVersion: Int = 1,
+        val coverageEvidenceVersion: Int? = null,
     )
 
     @Serializable
@@ -508,6 +517,11 @@ class ScriptProviderReadingGateway internal constructor(
         val language: String? = null,
         val chapterCount: Int? = null,
         val authors: List<String> = emptyList(),
+        val coverageOutcome: String? = null,
+        val coverageObservedCount: Int? = null,
+        val coverageMinMilli: Int? = null,
+        val coverageMaxMilli: Int? = null,
+        val coverageHasMore: Boolean? = null,
         val detailOutcome: String? = null,
         val detailHttpStatus: Int? = null,
     )

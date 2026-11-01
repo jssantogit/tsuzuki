@@ -70,6 +70,16 @@ enum class ProviderWorkDetailOutcome {
     DETAIL_FAILED,
 }
 
+/** First English source page only. These values do not prove canonical or edition identity. */
+enum class ProviderCoverageOutcome {
+    OBSERVED,
+    EMPTY,
+    UNKNOWN,
+    INVALID_RESPONSE,
+    CHALLENGE_BLOCKED,
+    FAILED,
+}
+
 data class ProviderWorkCandidate(
     val externalWorkId: String,
     val title: String,
@@ -80,11 +90,32 @@ data class ProviderWorkCandidate(
     val chapterCount: Int? = null,
     /** Source-verified creator names for optional editorial corroboration, never a ranking. */
     val authors: List<String> = emptyList(),
+    val coverageOutcome: ProviderCoverageOutcome? = null,
+    val coverageObservedCount: Int? = null,
+    val coverageMinMilli: Int? = null,
+    val coverageMaxMilli: Int? = null,
+    val coverageHasMore: Boolean? = null,
     val detailOutcome: ProviderWorkDetailOutcome? = null,
     /** HTTP status is disclosed only when a detail request itself failed with an explicit status. */
     val detailHttpStatus: Int? = null,
 ) {
     init {
+        require(coverageObservedCount == null || coverageObservedCount in 0..200) {
+            "Provider coverage observation count is invalid"
+        }
+        require(coverageMinMilli == null || coverageMinMilli in 0..1_000_000_000)
+        require(coverageMaxMilli == null || coverageMaxMilli in 0..1_000_000_000)
+        require(coverageMinMilli == null || coverageMaxMilli == null || coverageMinMilli <= coverageMaxMilli)
+        require(coverageOutcome != null || listOf(
+            coverageObservedCount, coverageMinMilli, coverageMaxMilli, coverageHasMore,
+        ).all { it == null }) { "Provider coverage needs a source outcome" }
+        if (coverageOutcome == ProviderCoverageOutcome.OBSERVED) {
+            require(coverageObservedCount != null && coverageObservedCount > 0 &&
+                coverageMinMilli != null && coverageMaxMilli != null)
+        }
+        if (coverageOutcome == ProviderCoverageOutcome.EMPTY) {
+            require(coverageObservedCount == 0 && coverageHasMore == false)
+        }
         require(externalWorkId.isNotBlank()) { "Provider work candidate ID must not be blank" }
         require(chapterCount == null || chapterCount in 0..1_000_000) {
             "Provider work candidate chapter count is invalid"
@@ -230,8 +261,11 @@ sealed interface ProviderReadingDelivery {
 data class ProviderReadingLookupRequest(
     val titles: List<String>,
     val cursor: ProviderCursor? = null,
+    /** Optional read-only source coverage preview, only for providers that explicitly support it. */
+    val coverageEvidenceVersion: Int? = null,
 ) {
     init {
+        require(coverageEvidenceVersion == null || coverageEvidenceVersion == 1)
         require(titles.isNotEmpty()) { "Provider lookup requires at least one title" }
         require(titles.size <= MAX_TITLES) { "Provider lookup has too many titles" }
         require(titles.all { it.isNotBlank() && it.length <= MAX_TITLE_CHARS }) {

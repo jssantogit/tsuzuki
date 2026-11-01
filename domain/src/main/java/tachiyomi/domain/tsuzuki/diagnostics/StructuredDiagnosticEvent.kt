@@ -210,6 +210,9 @@ enum class DiagnosticAttribute {
     PROVIDER_WORK_CHAPTER_COUNT,
     PROVIDER_CANDIDATE_REASON,
     PROVIDER_DETAIL_OUTCOME,
+    PROVIDER_COVERAGE_OUTCOME,
+    PROVIDER_COVERAGE_OBSERVED_COUNT,
+    PROVIDER_COVERAGE_HAS_MORE,
     PROVIDER_HTTP_FAILURE,
     PROVIDER_BROWSER_FAILURE,
     BROADENED,
@@ -407,6 +410,15 @@ enum class DiagnosticProviderHttpFailure : DiagnosticSafeCode {
     UNKNOWN,
 }
 
+enum class DiagnosticProviderCoverageOutcome : DiagnosticSafeCode {
+    OBSERVED,
+    EMPTY,
+    UNKNOWN,
+    INVALID_RESPONSE,
+    CHALLENGE_BLOCKED,
+    FAILED,
+}
+
 enum class DiagnosticProviderDetailOutcome : DiagnosticSafeCode {
     NOT_NEEDED,
     SKIPPED_IRRELEVANT,
@@ -581,6 +593,7 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.CANDIDATE_INDEX,
         DiagnosticAttribute.QUERY_INDEX,
         DiagnosticAttribute.PROVIDER_WORK_CHAPTER_COUNT,
+        DiagnosticAttribute.PROVIDER_COVERAGE_OBSERVED_COUNT,
         DiagnosticAttribute.PARTIAL_EVIDENCE_COUNT,
         DiagnosticAttribute.OBSERVATION_COUNT,
         DiagnosticAttribute.ITEM_COUNT,
@@ -645,6 +658,7 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.AUTO_CONFIRM_ATTEMPTED,
         DiagnosticAttribute.AMBIGUOUS,
         DiagnosticAttribute.COVER_PRESENT,
+        DiagnosticAttribute.PROVIDER_COVERAGE_HAS_MORE,
         DiagnosticAttribute.SOURCE_ARTWORK_PRESENT,
         DiagnosticAttribute.CANONICAL_ARTWORK_PRESENT,
         DiagnosticAttribute.REQUEST_DATA_PRESENT,
@@ -665,6 +679,8 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticProviderCandidateReason }
         DiagnosticAttribute.PROVIDER_DETAIL_OUTCOME -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderDetailOutcome }
+        DiagnosticAttribute.PROVIDER_COVERAGE_OUTCOME -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderCoverageOutcome }
         DiagnosticAttribute.PROVIDER_HTTP_FAILURE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderHttpFailure }
         DiagnosticAttribute.PROVIDER_BROWSER_FAILURE -> (value as? DiagnosticAttributeValue.Code)
