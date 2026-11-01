@@ -18,6 +18,8 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCandidateReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderDetailOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderWorkVerification
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderEditionQualification
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
@@ -695,6 +697,12 @@ class CollectProviderReadingEvidence private constructor(
                     ),
                 )
                 if (recorded) retained += assessment
+                traceWorkSourceAssociation(
+                    canonicalTitleId,
+                    target,
+                    assessment,
+                    if (recorded) DiagnosticOutcome.ACCEPTED else DiagnosticOutcome.REJECTED,
+                )
                 if (!recorded) {
                     // The same HID was already associated with another canonical
                     // work. Do not overwrite that independent identity.
@@ -1096,6 +1104,54 @@ class CollectProviderReadingEvidence private constructor(
                     stage = DiagnosticStage.READ,
                     outcome = outcome,
                     durationMillis = elapsedMillis?.coerceIn(0L, 86_400_000L),
+                    attributes = attributes,
+                ),
+            )
+        }
+    }
+
+    /**
+     * Only an explicitly activated detailed capture can disclose a public HID.
+     * Typed reason codes distinguish an unverified work, conflicting creator,
+     * source-attested variant and a valid work with unresolved edition.
+     */
+    private fun traceWorkSourceAssociation(
+        titleId: String,
+        target: ReadingTarget,
+        assessment: ProviderWorkSourceAssessment,
+        outcome: DiagnosticOutcome,
+    ) {
+        if (!diagnostics.detailedCaptureActive) return
+        runCatching {
+            val attributes = buildMap<String, DiagnosticAttributeValue> {
+                put("provider_id", DiagnosticAttributeValue.Text(target.registration.descriptor.id.value))
+                put("provider_work_id", DiagnosticAttributeValue.Text(assessment.ref.externalWorkId))
+                put(
+                    "provider_work_verification",
+                    DiagnosticAttributeValue.Code(
+                        DiagnosticProviderWorkVerification.valueOf(assessment.workVerification.name),
+                    ),
+                )
+                put(
+                    "provider_edition_qualification",
+                    DiagnosticAttributeValue.Code(
+                        DiagnosticProviderEditionQualification.valueOf(assessment.editionQualification.name),
+                    ),
+                )
+                diagnostics.canonicalTitleReference(titleId)?.let {
+                    put("canonical_title_ref", DiagnosticAttributeValue.Text(it))
+                }
+            }
+            diagnostics.record(
+                StructuredDiagnosticEvent(
+                    timestampMillis = clock().coerceAtLeast(0L),
+                    severity = DiagnosticSeverity.DEBUG,
+                    subsystem = DiagnosticSubsystem.CHAPTER,
+                    name = DiagnosticEventName.PROVIDER_READING_SOURCE_ASSOCIATION,
+                    sessionId = diagnostics.sessionId,
+                    operationId = null,
+                    stage = DiagnosticStage.BINDING,
+                    outcome = outcome,
                     attributes = attributes,
                 ),
             )
