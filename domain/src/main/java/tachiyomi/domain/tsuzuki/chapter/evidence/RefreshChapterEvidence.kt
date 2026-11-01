@@ -447,7 +447,8 @@ class RefreshChapterEvidence private constructor(
                 stage = DiagnosticStage.RECONCILE,
                 outcome = DiagnosticOutcome.SUCCEEDED,
                 attributes = mapOf(
-                    DiagnosticAttribute.ITEM_COUNT to DiagnosticAttributeValue.Number(reconciledObservationCount.toLong()),
+                    DiagnosticAttribute.ITEM_COUNT to
+                        DiagnosticAttributeValue.Number(reconciledObservationCount.toLong()),
                 ),
             )
             trace.event(
@@ -457,7 +458,8 @@ class RefreshChapterEvidence private constructor(
                 outcome = if (allSourcesComplete) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
                 durationMillis = started.elapsedNow().inWholeMilliseconds.coerceAtLeast(0),
                 attributes = mapOf(
-                    DiagnosticAttribute.ITEM_COUNT to DiagnosticAttributeValue.Number(reconciledObservationCount.toLong()),
+                    DiagnosticAttribute.ITEM_COUNT to
+                        DiagnosticAttributeValue.Number(reconciledObservationCount.toLong()),
                     DiagnosticAttribute.COMPLETED to DiagnosticAttributeValue.Flag(allSourcesComplete),
                 ),
             )
