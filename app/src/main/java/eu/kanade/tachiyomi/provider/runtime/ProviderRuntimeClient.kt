@@ -42,9 +42,14 @@ class ProviderRuntimeClient(
     context: Context,
     private val hostInvocationFactory: ProviderHostInvocationFactory,
     private val bindingObserver: (ProviderRuntimeBindingPhase) -> Unit = {},
+    private val bindingIdleTimeoutMs: Long = 8_000L,
 ) {
 
     private val context = context.applicationContext
+
+    init {
+        require(bindingIdleTimeoutMs in 50..60_000) { "Provider Binder idle timeout is invalid" }
+    }
 
     // This client is App-scoped. Rebinding an isolated Android service for every
     // chapter page races its teardown on physical devices. Retain only the
@@ -118,7 +123,7 @@ class ProviderRuntimeClient(
                         }
                     }
                 },
-                BINDING_IDLE_TIMEOUT_MS,
+                bindingIdleTimeoutMs,
                 TimeUnit.MILLISECONDS,
             )
         }
@@ -442,7 +447,6 @@ class ProviderRuntimeClient(
     }
 
     private companion object {
-        private const val BINDING_IDLE_TIMEOUT_MS = 8_000L
         private val BINDING_IDLE_EXECUTOR = Executors.newSingleThreadScheduledExecutor { runnable ->
             Thread(runnable, "tsuzuki-provider-runtime-binding-idle").apply { isDaemon = true }
         }
