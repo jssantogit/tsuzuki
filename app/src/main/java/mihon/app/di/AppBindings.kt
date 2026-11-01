@@ -362,10 +362,12 @@ object AppBindings {
                                 },
                                 outcome = when (phase) {
                                     eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.BIND_STARTED,
-                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.INVOKE_STARTED ->
+                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.INVOKE_STARTED,
+                                    ->
                                         DiagnosticOutcome.STARTED
                                     eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.BIND_CONNECTED,
-                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.INVOKE_COMPLETED ->
+                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.INVOKE_COMPLETED,
+                                    ->
                                         DiagnosticOutcome.SUCCEEDED
                                     eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.BIND_REUSED ->
                                         DiagnosticOutcome.REUSED
