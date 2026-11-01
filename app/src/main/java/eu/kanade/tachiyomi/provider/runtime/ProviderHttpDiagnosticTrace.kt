@@ -38,7 +38,13 @@ internal fun ProviderHttpDiagnostic.toStructuredDiagnosticEvent(
     }
     return StructuredDiagnosticEvent(
         timestampMillis = timestampMillis.coerceAtLeast(0),
-        severity = if (phase == ProviderHttpDiagnosticPhase.FAILED) DiagnosticSeverity.WARN else DiagnosticSeverity.DEBUG,
+        severity = if (phase ==
+            ProviderHttpDiagnosticPhase.FAILED
+        ) {
+            DiagnosticSeverity.WARN
+        } else {
+            DiagnosticSeverity.DEBUG
+        },
         subsystem = DiagnosticSubsystem.NETWORK,
         name = DiagnosticEventName.PROVIDER_HTTP_REQUEST,
         sessionId = sessionId,
