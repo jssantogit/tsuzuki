@@ -39,7 +39,7 @@ INSERT INTO tsuzuki_provider_work_sources(
     edition_qualification,
     observed_at
 )
-VALUES (
+SELECT
     :canonicalTitleId,
     :providerId,
     :facetId,
@@ -47,6 +47,12 @@ VALUES (
     :workVerification,
     :editionQualification,
     :observedAt
+WHERE NOT EXISTS (
+    SELECT 1 FROM tsuzuki_provider_bindings
+    WHERE provider_id = :providerId
+      AND facet_id = :facetId
+      AND external_work_id = :externalWorkId
+      AND canonical_title_id <> :canonicalTitleId
 )
 ON CONFLICT(provider_id, facet_id, external_work_id) DO UPDATE SET
     work_verification = excluded.work_verification,
