@@ -94,6 +94,7 @@ class CollectProviderReadingEvidence private constructor(
     private val titleNameObservationRepository: TitleNameObservationRepository?,
     private val integrationRegistry: IntegrationRegistry?,
     private val canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository?,
+    private val workSourceAssociationRepository: ProviderWorkSourceAssociationRepository?,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit,
 ) {
 
@@ -107,6 +108,7 @@ class CollectProviderReadingEvidence private constructor(
         titleNameObservationRepository: TitleNameObservationRepository,
         integrationRegistry: IntegrationRegistry,
         canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository,
+        workSourceAssociationRepository: ProviderWorkSourceAssociationRepository,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         providerRegistry = providerRegistry,
@@ -118,6 +120,7 @@ class CollectProviderReadingEvidence private constructor(
         titleNameObservationRepository = titleNameObservationRepository,
         integrationRegistry = integrationRegistry,
         canonicalMetadataSnapshotRepository = canonicalMetadataSnapshotRepository,
+        workSourceAssociationRepository = workSourceAssociationRepository,
         constructorMarker = Unit,
     )
 
@@ -132,6 +135,7 @@ class CollectProviderReadingEvidence private constructor(
         titleNameObservationRepository: TitleNameObservationRepository? = null,
         integrationRegistry: IntegrationRegistry? = null,
         canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository? = null,
+        workSourceAssociationRepository: ProviderWorkSourceAssociationRepository? = null,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         providerRegistry = providerRegistry,
@@ -143,6 +147,7 @@ class CollectProviderReadingEvidence private constructor(
         titleNameObservationRepository = titleNameObservationRepository,
         integrationRegistry = integrationRegistry,
         canonicalMetadataSnapshotRepository = canonicalMetadataSnapshotRepository,
+        workSourceAssociationRepository = workSourceAssociationRepository,
         constructorMarker = Unit,
     )
 
@@ -474,6 +479,10 @@ class CollectProviderReadingEvidence private constructor(
                 }
                 .distinctBy(ProviderWorkCandidate::externalWorkId)
                 .toList()
+            // Source association is deliberately a shadow work-level portfolio.
+            // Multiple corroborated HIDs never become one preferred edition or
+            // Reader authority merely because their authors/title match.
+            observeSourcePortfolio(canonicalTitleId, title, target, canonicalAuthors, matches)
             val sourcePrimaryMatches = matches.filter { normalize(it.title) == normalizedTitle }
             val priorAmbiguous = ambiguousCandidates
             val primary = sourcePrimaryMatches.singleOrNull()
@@ -619,6 +628,50 @@ class CollectProviderReadingEvidence private constructor(
             return ProviderCallResult.Success(BindingDiscovery(binding = binding))
         }
         return ProviderCallResult.Success(BindingDiscovery(unresolved = unresolved))
+    }
+
+    private suspend fun observeSourcePortfolio(
+        canonicalTitleId: String,
+        queryTitle: String,
+        target: ReadingTarget,
+        canonicalAuthors: Set<String>?,
+        matches: List<ProviderWorkCandidate>,
+    ) {
+        val repository = workSourceAssociationRepository ?: return
+        // Author evidence has a verified source-detail contract only for MangaFire
+        // code9. Never grant this privilege to arbitrary third-party Provider DTOs.
+        if (target.registration.descriptor.id.value != "app.tsuzuki.mangafire" || matches.isEmpty()) return
+        val assessed = ProviderWorkSourcePortfolio.assess(
+            providerId = target.registration.descriptor.id,
+            facetId = target.facetId,
+            queryTitle = queryTitle,
+            independentlyVerifiedAuthors = canonicalAuthors,
+            candidates = matches,
+        )
+        for (assessment in assessed) {
+            try {
+                val recorded = repository.observe(
+                    ProviderWorkSourceAssociation(
+                        canonicalTitleId = canonicalTitleId,
+                        ref = assessment.ref,
+                        workVerification = assessment.workVerification,
+                        editionQualification = assessment.editionQualification,
+                        observedAt = clock(),
+                    ),
+                )
+                if (!recorded) {
+                    // The same HID was already associated with another canonical
+                    // work. Do not overwrite that independent identity.
+                    trace(canonicalTitleId, target, DiagnosticStage.BINDING, DiagnosticOutcome.REJECTED)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // Local shadow observation failure cannot invalidate existing
+                // chapters, user-selected edition, or the Reader's current sources.
+                trace(canonicalTitleId, target, DiagnosticStage.BINDING, DiagnosticOutcome.FAILED)
+            }
+        }
     }
 
     private suspend fun collectLookup(
