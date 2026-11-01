@@ -1948,6 +1948,82 @@ class CollectProviderReadingEvidenceTest {
             true
     }
 
+
+    @Test
+    fun `ambiguous same-work HIDs are observed independently but cannot become Reader bindings`() = runBlocking<Unit> {
+        val id = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), id, externalId = "mal-verified"),
+                externalIds = mapOf(id to "mal-verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val observations = MemoryWorkSourceAssociationRepository()
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    "first-hid",
+                                    "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Arakawa Hiromu"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 97,
+                                    coverageMinMilli = 1000,
+                                    coverageMaxMilli = 97000,
+                                    coverageHasMore = false,
+                                ),
+                                ProviderWorkCandidate(
+                                    "second-hid",
+                                    "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Hiromu Arakawa"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 101,
+                                    coverageMinMilli = 1000,
+                                    coverageMaxMilli = 232000,
+                                    coverageHasMore = true,
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Same-work multi HID is not permission to read chapters yet") },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = observations,
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        observations.getByTitle(canonicalTitle.id).map { it.ref.externalWorkId } shouldBe
+            listOf("first-hid", "second-hid")
+        observations.getByTitle(canonicalTitle.id).map { it.workVerification } shouldBe
+            listOf(ProviderWorkVerification.AUTHOR_CORROBORATED, ProviderWorkVerification.AUTHOR_CORROBORATED)
+        observations.getByTitle(canonicalTitle.id).all {
+            it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED
+        } shouldBe true
+    }
+
     private class CapturingProviderDiagnostics(
         private val captureActive: Boolean = false,
     ) : StructuredDiagnosticRecorder {
@@ -2027,6 +2103,23 @@ class CollectProviderReadingEvidenceTest {
         ): CanonicalTitle = error("not used")
         override suspend fun insert(title: CanonicalTitle) = error("not used")
         override suspend fun addExternalIdentity(identity: ExternalIdentity) = error("not used")
+    }
+
+
+    private class MemoryWorkSourceAssociationRepository : ProviderWorkSourceAssociationRepository {
+        private val values = linkedMapOf<ProviderBindingRef, ProviderWorkSourceAssociation>()
+
+        override suspend fun observe(association: ProviderWorkSourceAssociation): Boolean {
+            val current = values[association.ref]
+            if (current != null && current.canonicalTitleId != association.canonicalTitleId) return false
+            if (current == null || association.observedAt > current.observedAt) values[association.ref] = association
+            return true
+        }
+
+        override suspend fun get(ref: ProviderBindingRef): ProviderWorkSourceAssociation? = values[ref]
+
+        override suspend fun getByTitle(canonicalTitleId: String): List<ProviderWorkSourceAssociation> =
+            values.values.filter { it.canonicalTitleId == canonicalTitleId }
     }
 
     private class MemoryBindingRepository : ProviderReadingBindingRepository {
