@@ -186,7 +186,6 @@ class ScriptProviderReadingGatewayIsolationTest {
         }
     }
 
-
     @Test
     fun chapterPagination_invokesSecondPageThroughIsolatedRuntimeBeforeDeadline() = runBlocking {
         val server = MockWebServer()
