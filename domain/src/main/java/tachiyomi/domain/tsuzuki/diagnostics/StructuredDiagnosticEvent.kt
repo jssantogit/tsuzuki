@@ -109,6 +109,7 @@ enum class DiagnosticEventName {
     PROVIDER_READING_PAGE_DETAIL,
     PROVIDER_READING_BINDING,
     PROVIDER_READING_CANDIDATE,
+    PROVIDER_READING_SOURCE_ASSOCIATION,
     PROVIDER_HTTP_REQUEST,
     PROVIDER_BROWSER_REQUEST,
 
@@ -213,6 +214,8 @@ enum class DiagnosticAttribute {
     PROVIDER_COVERAGE_OUTCOME,
     PROVIDER_COVERAGE_OBSERVED_COUNT,
     PROVIDER_COVERAGE_HAS_MORE,
+    PROVIDER_WORK_VERIFICATION,
+    PROVIDER_EDITION_QUALIFICATION,
     PROVIDER_HTTP_FAILURE,
     PROVIDER_BROWSER_FAILURE,
     BROADENED,
@@ -430,6 +433,21 @@ enum class DiagnosticProviderDetailOutcome : DiagnosticSafeCode {
     INVALID_RESPONSE,
     CHALLENGE_BLOCKED,
     DETAIL_FAILED,
+}
+
+/** Sanitized per-HID work/edition assessment codes, not source-authored text. */
+enum class DiagnosticProviderWorkVerification : DiagnosticSafeCode {
+    AUTHOR_CORROBORATED,
+    CANONICAL_METADATA_UNVERIFIED,
+    SOURCE_DETAIL_UNVERIFIED,
+    MISSING_AUTHOR_EVIDENCE,
+    AUTHOR_CONFLICT,
+    TITLE_UNVERIFIED,
+}
+
+enum class DiagnosticProviderEditionQualification : DiagnosticSafeCode {
+    UNRESOLVED,
+    SOURCE_ATTESTED_VARIANT,
 }
 
 enum class DiagnosticCacheStatus : DiagnosticSafeCode {
@@ -682,6 +700,10 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticProviderDetailOutcome }
         DiagnosticAttribute.PROVIDER_COVERAGE_OUTCOME -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderCoverageOutcome }
+        DiagnosticAttribute.PROVIDER_WORK_VERIFICATION -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderWorkVerification }
+        DiagnosticAttribute.PROVIDER_EDITION_QUALIFICATION -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderEditionQualification }
         DiagnosticAttribute.PROVIDER_HTTP_FAILURE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderHttpFailure }
         DiagnosticAttribute.PROVIDER_BROWSER_FAILURE -> (value as? DiagnosticAttributeValue.Code)
