@@ -90,6 +90,7 @@ class ProviderHostInvocationFactory(
     private val storageRoot: File = File(context.filesDir, "provider-storage"),
     private val secretResolver: suspend (providerId: String, key: String) -> String? = { _, _ -> null },
     private val logSink: (providerId: String, message: String) -> Unit = { _, _ -> },
+    private val httpDiagnosticSink: (providerId: String, detail: ProviderHttpDiagnostic) -> Unit = { _, _ -> },
     private val httpSessions: ProviderHttpSessionStore = ProviderHttpSessionStore(),
     private val p2pServiceFactory: (String) -> ProviderP2pHostService? = { null },
     private val approvedP2pServiceFactory: ((String, ProviderP2pAcquireRequest?) -> ProviderP2pHostService?)? = null,
@@ -122,6 +123,9 @@ class ProviderHostInvocationFactory(
                     invocationTimeoutMs = invocationTimeoutMs,
                     diagnosticSink = { diagnostic ->
                         logSink(policy.providerId, diagnostic.toRuntimeLogMessage())
+                        // Structured recorder receives the typed, sanitized counterpart only
+                        // during an explicitly started diagnostic capture.
+                        runCatching { httpDiagnosticSink(policy.providerId, diagnostic) }
                     },
                 )
             }
