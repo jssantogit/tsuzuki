@@ -23,13 +23,13 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
+import tachiyomi.domain.tsuzuki.integration.IntegrationId
+import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
+import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.integration.model.ProvenancedMetadata
 import tachiyomi.domain.tsuzuki.integration.model.ResolvedMetadata
 import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshot
 import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshotRepository
-import tachiyomi.domain.tsuzuki.integration.IntegrationId
-import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
-import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
@@ -535,11 +535,15 @@ class CollectProviderReadingEvidenceTest {
                             ProviderPage(
                                 listOf(
                                     ProviderWorkCandidate(
-                                        "main", "Dandadan", language = "en",
+                                        "main",
+                                        "Dandadan",
+                                        language = "en",
                                         authors = listOf("Hiromu Arakawa"),
                                     ),
                                     ProviderWorkCandidate(
-                                        "rival", "Dandadan", language = "en",
+                                        "rival",
+                                        "Dandadan",
+                                        language = "en",
                                         authors = rivalAuthors,
                                     ),
                                 ),
