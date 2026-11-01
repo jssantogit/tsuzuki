@@ -28,6 +28,7 @@ import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import eu.kanade.tachiyomi.provider.runtime.ProviderP2pJobManager
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeLogSink
+import eu.kanade.tachiyomi.provider.runtime.toStructuredDiagnosticEvent
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderCapabilityExecutor
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderPackageSource
 import eu.kanade.tachiyomi.provider.runtime.StoredScriptProviderPackageSource
@@ -282,12 +283,28 @@ object AppBindings {
         managedFiles: ProviderManagedFileStore,
         p2pJobs: ProviderP2pJobManager,
         logSink: ProviderRuntimeLogSink,
+        diagnosticRecorder: StructuredDiagnosticRecorder,
     ): ProviderHostInvocationFactory =
         ProviderHostInvocationFactory(
             context = context,
             p2pServiceFactory = p2pJobs::service,
             approvedP2pServiceFactory = p2pJobs::service,
             logSink = logSink::info,
+            httpDiagnosticSink = { providerId, detail ->
+                if (diagnosticRecorder.detailedCaptureActive) {
+                    // The raw upstream host, URLs, paths, VRF, headers and bodies never
+                    // enter structured history. Only allowlisted HTTP outcomes do.
+                    runCatching {
+                        diagnosticRecorder.record(
+                            detail.toStructuredDiagnosticEvent(
+                                providerId = providerId,
+                                sessionId = diagnosticRecorder.sessionId,
+                                timestampMillis = System.currentTimeMillis(),
+                            ),
+                        )
+                    }
+                }
+            },
             managedFiles = managedFiles,
         )
 

@@ -125,6 +125,8 @@ class CollectProviderReadingEvidenceTest {
 
         (result != null) shouldBe true
         result!!.complete shouldBe false
+        // A selected, persisted binding still exists when chapter page 1 times out.
+        result.bindingCount shouldBe 1
         result.evidence shouldBe emptyList()
         result.snapshots shouldBe emptyList()
         bindings.getByTitle(canonicalTitle.id).shouldHaveSize(1)
@@ -138,6 +140,7 @@ class CollectProviderReadingEvidenceTest {
         summary.outcome shouldBe DiagnosticOutcome.PARTIAL
         summary.attributes["completed"] shouldBe DiagnosticAttributeValue.Flag(false)
         summary.attributes["chapter_count"] shouldBe DiagnosticAttributeValue.Number(0)
+        summary.attributes["binding_count"] shouldBe DiagnosticAttributeValue.Number(1)
         recorder.events.none { it.outcome == DiagnosticOutcome.CANCELLED } shouldBe true
     }
 
