@@ -18,6 +18,7 @@ import java.net.ConnectException
 import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -150,12 +151,14 @@ class DefaultProviderHttpHostService(
                 ),
             )
             val startedNanos = System.nanoTime()
+            val operationId = UUID.randomUUID().toString()
             emitDiagnostic(
                 ProviderHttpDiagnostic(
                     phase = ProviderHttpDiagnosticPhase.STARTED,
                     host = currentUrl.host,
                     elapsedMs = 0,
                     timeoutMs = invocationTimeoutMs,
+                    operationId = operationId,
                 ),
             )
 
@@ -204,6 +207,7 @@ class DefaultProviderHttpHostService(
                         host = received.request.url.host,
                         startedNanos = startedNanos,
                         statusCode = received.code,
+                        operationId = operationId,
                     )
                     continue
                 }
@@ -217,6 +221,7 @@ class DefaultProviderHttpHostService(
                     host = received.request.url.host,
                     startedNanos = startedNanos,
                     statusCode = received.code,
+                    operationId = operationId,
                 )
                 return result
             } catch (error: Exception) {
@@ -225,6 +230,7 @@ class DefaultProviderHttpHostService(
                     host = currentUrl.host,
                     startedNanos = startedNanos,
                     statusCode = statusCode,
+                    operationId = operationId,
                     failureFamily = classifyFailure(error, call),
                 )
                 when (error) {
@@ -245,6 +251,7 @@ class DefaultProviderHttpHostService(
         host: String,
         startedNanos: Long,
         statusCode: Int?,
+        operationId: String,
         failureFamily: ProviderHttpFailureFamily? = null,
     ) {
         emitDiagnostic(
@@ -257,6 +264,7 @@ class DefaultProviderHttpHostService(
                 timeoutMs = invocationTimeoutMs,
                 statusCode = statusCode,
                 failureFamily = failureFamily,
+                operationId = operationId,
             ),
         )
     }

@@ -48,7 +48,7 @@ internal fun ProviderHttpDiagnostic.toStructuredDiagnosticEvent(
         subsystem = DiagnosticSubsystem.NETWORK,
         name = DiagnosticEventName.PROVIDER_HTTP_REQUEST,
         sessionId = sessionId,
-        operationId = null,
+        operationId = operationId,
         stage = DiagnosticStage.READ,
         outcome = when (phase) {
             ProviderHttpDiagnosticPhase.STARTED -> DiagnosticOutcome.STARTED

@@ -24,6 +24,7 @@ class ProviderHttpDiagnosticTraceTest {
             timeoutMs = 20000,
             statusCode = null,
             failureFamily = ProviderHttpFailureFamily.HOST_DEADLINE,
+            operationId = "5af72325-6771-4599-8d20-1e72fd79e375",
         )
         val event = diagnostic.toStructuredDiagnosticEvent(
             providerId = "app.tsuzuki.mangafire",
@@ -32,6 +33,7 @@ class ProviderHttpDiagnosticTraceTest {
         )
         val sanitized = requireNotNull(StructuredDiagnosticSanitizer.sanitize(event))
         sanitized.name shouldBe DiagnosticEventName.PROVIDER_HTTP_REQUEST
+        sanitized.operationId shouldBe "5af72325-6771-4599-8d20-1e72fd79e375"
         sanitized.outcome shouldBe DiagnosticOutcome.FAILED
         sanitized.durationMillis shouldBe 19675
         sanitized.attributes[DiagnosticAttribute.PROVIDER_ID] shouldBe

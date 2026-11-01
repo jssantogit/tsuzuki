@@ -49,6 +49,7 @@ class ProviderHttpDiagnosticsTest {
                 started.timeoutMs shouldBe 250L
                 started.statusCode shouldBe null
                 started.failureFamily shouldBe null
+                (started.operationId?.matches(Regex("[0-9a-f-]{36}")) == true) shouldBe true
             }
             diagnostics.last().let { failed ->
                 failed.phase shouldBe ProviderHttpDiagnosticPhase.FAILED
@@ -57,6 +58,7 @@ class ProviderHttpDiagnosticsTest {
                 (failed.elapsedMs >= 0L) shouldBe true
                 failed.statusCode shouldBe 200
                 failed.failureFamily shouldBe ProviderHttpFailureFamily.HOST_DEADLINE
+                failed.operationId shouldBe diagnostics.first().operationId
             }
 
             diagnostics.joinToString().shouldNotContain("secret-title")
