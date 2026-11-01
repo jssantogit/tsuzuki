@@ -2026,7 +2026,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `corroborated work HIDs collect independently scoped chapter observations without selecting edition`() = runBlocking<Unit> {
+    fun `corroborated work HIDs collect separate provisional chapters without selecting an edition`() = runBlocking<Unit> {
         val id = IntegrationId("mal")
         val metadata = mockk<CanonicalMetadataSnapshotRepository>()
         coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
