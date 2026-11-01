@@ -106,12 +106,19 @@ data class ProviderWorkCandidate(
         require(coverageMinMilli == null || coverageMinMilli in 0..1_000_000_000)
         require(coverageMaxMilli == null || coverageMaxMilli in 0..1_000_000_000)
         require(coverageMinMilli == null || coverageMaxMilli == null || coverageMinMilli <= coverageMaxMilli)
-        require(coverageOutcome != null || listOf(
-            coverageObservedCount, coverageMinMilli, coverageMaxMilli, coverageHasMore,
-        ).all { it == null }) { "Provider coverage needs a source outcome" }
+        require(
+            coverageOutcome != null || listOf(
+                coverageObservedCount,
+                coverageMinMilli,
+                coverageMaxMilli,
+                coverageHasMore,
+            ).all { it == null },
+        ) { "Provider coverage needs a source outcome" }
         if (coverageOutcome == ProviderCoverageOutcome.OBSERVED) {
-            require(coverageObservedCount != null && coverageObservedCount > 0 &&
-                coverageMinMilli != null && coverageMaxMilli != null)
+            require(
+                coverageObservedCount != null && coverageObservedCount > 0 &&
+                    coverageMinMilli != null && coverageMaxMilli != null,
+            )
         }
         if (coverageOutcome == ProviderCoverageOutcome.EMPTY) {
             require(coverageObservedCount == 0 && coverageHasMore == false)

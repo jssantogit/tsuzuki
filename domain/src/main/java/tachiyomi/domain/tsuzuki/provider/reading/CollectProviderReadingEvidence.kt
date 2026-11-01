@@ -768,9 +768,12 @@ class CollectProviderReadingEvidence private constructor(
                         put("provider_work_chapter_count", DiagnosticAttributeValue.Number(it.toLong()))
                     }
                     work.coverageOutcome?.let {
-                        put("provider_coverage_outcome", DiagnosticAttributeValue.Code(
-                            tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCoverageOutcome.valueOf(it.name),
-                        ))
+                        put(
+                            "provider_coverage_outcome",
+                            DiagnosticAttributeValue.Code(
+                                tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCoverageOutcome.valueOf(it.name),
+                            ),
+                        )
                     }
                     work.coverageObservedCount?.let {
                         put("provider_coverage_observed_count", DiagnosticAttributeValue.Number(it.toLong()))
