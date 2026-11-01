@@ -31,4 +31,10 @@ interface ProviderWorkSourceAssociationRepository {
     suspend fun get(ref: ProviderBindingRef): ProviderWorkSourceAssociation?
 
     suspend fun getByTitle(canonicalTitleId: String): List<ProviderWorkSourceAssociation>
+
+    object NoOp : ProviderWorkSourceAssociationRepository {
+        override suspend fun observe(association: ProviderWorkSourceAssociation): Boolean = false
+        override suspend fun get(ref: ProviderBindingRef): ProviderWorkSourceAssociation? = null
+        override suspend fun getByTitle(canonicalTitleId: String): List<ProviderWorkSourceAssociation> = emptyList()
+    }
 }
