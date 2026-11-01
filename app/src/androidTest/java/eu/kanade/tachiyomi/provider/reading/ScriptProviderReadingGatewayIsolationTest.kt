@@ -231,6 +231,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 .build(),
         )
 
+        // RED: a paginated fetch must not tear down its isolated process between pages.
         val bindingPhases = mutableListOf<ProviderRuntimeBindingPhase>()
         val gateway = gateway(
             networkOrigins = setOf(origin),
