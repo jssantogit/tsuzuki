@@ -4,6 +4,43 @@ import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
 class StructuredDiagnosticEventTest {
+
+    @Test
+    fun `isolated runtime phases remain closed and cannot accept arbitrary source diagnostics`() {
+        fun sanitize(attributes: Map<String, DiagnosticAttributeValue>) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000,
+                severity = DiagnosticSeverity.DEBUG,
+                subsystem = DiagnosticSubsystem.NETWORK,
+                name = DiagnosticEventName.PROVIDER_RUNTIME_STAGE,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.BINDING,
+                outcome = DiagnosticOutcome.REUSED,
+                attributes = attributes,
+            ),
+        )?.attributes.orEmpty()
+
+        sanitize(
+            mapOf(
+                "provider_runtime_phase" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderRuntimePhase.BIND_REUSED,
+                ),
+            ),
+        ) shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_RUNTIME_PHASE to DiagnosticAttributeValue.Code(
+                DiagnosticProviderRuntimePhase.BIND_REUSED,
+            ),
+        )
+
+        sanitize(
+            mapOf(
+                "provider_runtime_phase" to DiagnosticAttributeValue.Text("BIND_REUSED; cookie=secret"),
+                "request_url" to DiagnosticAttributeValue.Text("https://example.org/?token=secret"),
+            ),
+        ) shouldBe emptyMap()
+    }
+
     @Test
     fun `provider candidate diagnostics accept only public bounded source identifiers`() {
         fun sanitizeCandidate(attributes: Map<String, DiagnosticAttributeValue>) =
