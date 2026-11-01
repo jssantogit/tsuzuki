@@ -1,8 +1,8 @@
 package tachiyomi.domain.tsuzuki.provider.reading
 
 import io.kotest.matchers.shouldBe
-import tachiyomi.domain.tsuzuki.provider.ProviderId
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.provider.ProviderId
 
 class ProviderWorkSourcePortfolioTest {
 
