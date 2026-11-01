@@ -19,6 +19,8 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderDetailOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderWorkVerification
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderEditionQualification
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
@@ -2039,6 +2041,7 @@ class CollectProviderReadingEvidenceTest {
         val observations = MemoryWorkSourceAssociationRepository()
         val bindings = MemoryBindingRepository()
         val readHids = mutableListOf<String>()
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
         val collector = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
             providerRegistry = registry(),
@@ -2108,6 +2111,7 @@ class CollectProviderReadingEvidenceTest {
             clock = { 42L },
             canonicalMetadataSnapshotRepository = metadata,
             workSourceAssociationRepository = observations,
+            diagnostics = recorder,
         )
 
         val result = collector.execute(canonicalTitle.id)
@@ -2122,6 +2126,16 @@ class CollectProviderReadingEvidenceTest {
         readHids.toSet() shouldBe setOf("first-hid", "second-hid")
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
         observations.getByTitle(canonicalTitle.id).size shouldBe 3
+        val sourceEvents = recorder.events.filter {
+            it.name == DiagnosticEventName.PROVIDER_READING_SOURCE_ASSOCIATION
+        }
+        sourceEvents.size shouldBe 3
+        sourceEvents.map { it.attributes["provider_work_verification"] }.toSet() shouldBe
+            setOf(DiagnosticAttributeValue.Code(DiagnosticProviderWorkVerification.AUTHOR_CORROBORATED))
+        sourceEvents.count {
+            it.attributes["provider_edition_qualification"] ==
+                DiagnosticAttributeValue.Code(DiagnosticProviderEditionQualification.SOURCE_ATTESTED_VARIANT)
+        } shouldBe 1
     }
 
     private class CapturingProviderDiagnostics(
