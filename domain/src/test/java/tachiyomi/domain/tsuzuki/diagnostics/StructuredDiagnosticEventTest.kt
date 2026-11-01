@@ -27,6 +27,13 @@ class StructuredDiagnosticEventTest {
                 "provider_work_title" to DiagnosticAttributeValue.Text("Vagabond"),
                 "provider_work_url" to DiagnosticAttributeValue.Text("https://mangafire.to/title/qnlvj-vagabond22"),
                 "provider_work_chapter_count" to DiagnosticAttributeValue.Number(327),
+                "provider_coverage_outcome" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderCoverageOutcome.OBSERVED,
+                ),
+                "provider_coverage_observed_count" to DiagnosticAttributeValue.Number(101),
+                "provider_coverage_has_more" to DiagnosticAttributeValue.Flag(true),
+                "chapter_number_min_milli" to DiagnosticAttributeValue.Number(1000),
+                "chapter_number_max_milli" to DiagnosticAttributeValue.Number(101000),
                 "provider_detail_outcome" to DiagnosticAttributeValue.Code(
                     DiagnosticProviderDetailOutcome.DETAIL_FAILED,
                 ),
@@ -41,6 +48,12 @@ class StructuredDiagnosticEventTest {
         safe[DiagnosticAttribute.PROVIDER_WORK_URL] shouldBe
             DiagnosticAttributeValue.Text("https://mangafire.to/title/qnlvj-vagabond22")
         safe[DiagnosticAttribute.PROVIDER_WORK_CHAPTER_COUNT] shouldBe DiagnosticAttributeValue.Number(327)
+        safe[DiagnosticAttribute.PROVIDER_COVERAGE_OUTCOME] shouldBe
+            DiagnosticAttributeValue.Code(DiagnosticProviderCoverageOutcome.OBSERVED)
+        safe[DiagnosticAttribute.PROVIDER_COVERAGE_OBSERVED_COUNT] shouldBe DiagnosticAttributeValue.Number(101)
+        safe[DiagnosticAttribute.PROVIDER_COVERAGE_HAS_MORE] shouldBe DiagnosticAttributeValue.Flag(true)
+        safe[DiagnosticAttribute.CHAPTER_NUMBER_MIN_MILLI] shouldBe DiagnosticAttributeValue.Number(1000)
+        safe[DiagnosticAttribute.CHAPTER_NUMBER_MAX_MILLI] shouldBe DiagnosticAttributeValue.Number(101000)
         safe[DiagnosticAttribute.PROVIDER_DETAIL_OUTCOME] shouldBe
             DiagnosticAttributeValue.Code(DiagnosticProviderDetailOutcome.DETAIL_FAILED)
         safe[DiagnosticAttribute.HTTP_STATUS] shouldBe DiagnosticAttributeValue.Number(503)
