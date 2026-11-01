@@ -28,10 +28,10 @@ import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import eu.kanade.tachiyomi.provider.runtime.ProviderP2pJobManager
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeLogSink
-import eu.kanade.tachiyomi.provider.runtime.toStructuredDiagnosticEvent
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderCapabilityExecutor
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderPackageSource
 import eu.kanade.tachiyomi.provider.runtime.StoredScriptProviderPackageSource
+import eu.kanade.tachiyomi.provider.runtime.toStructuredDiagnosticEvent
 import eu.kanade.tachiyomi.provider.torrent.HttpProviderTorrentMetadataInspector
 import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentArtifactEngine
 import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentHttpFileMaterializer
