@@ -9,13 +9,13 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 
-internal enum class ProviderBrowserDiagnosticPhase {
+enum class ProviderBrowserDiagnosticPhase {
     STARTED,
     SUCCEEDED,
     FAILED,
 }
 
-internal enum class ProviderBrowserFailure {
+enum class ProviderBrowserFailure {
     TIMEOUT,
     NAVIGATION,
     TLS,
@@ -26,7 +26,7 @@ internal enum class ProviderBrowserFailure {
     UNKNOWN,
 }
 
-internal data class ProviderBrowserDiagnostic(
+data class ProviderBrowserDiagnostic(
     val phase: ProviderBrowserDiagnosticPhase,
     val elapsedMs: Long,
     val operationId: String,
