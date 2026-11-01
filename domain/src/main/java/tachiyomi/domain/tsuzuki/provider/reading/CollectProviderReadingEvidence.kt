@@ -205,12 +205,12 @@ class CollectProviderReadingEvidence private constructor(
                                 onStageChanged = { activeStage = it },
                                 onPreferredBindingSelected = { preferredBindingSelected = true },
                                 onPageCollected = { binding, page, observedAt ->
-                                    partial += evidenceAdapter.toEvidence(
+                                    evidenceAdapter.toEvidence(
                                         canonicalTitleId = canonicalTitleId,
                                         binding = binding,
                                         observations = page,
                                         observedAt = observedAt,
-                                    )
+                                    ).also { partial += it }
                                 },
                             )
                         }
@@ -293,7 +293,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalAuthors: Set<String>?,
         onStageChanged: (DiagnosticStage) -> Unit,
         onPreferredBindingSelected: () -> Unit,
-        onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> Unit,
+        onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
     ): ProviderReadingEvidenceCollection {
         return try {
             val existing = bindingRepository.get(
@@ -729,7 +729,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalTitleId: String,
         target: ReadingTarget,
         sources: List<ProviderWorkSourceAssessment>,
-        onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> Unit,
+        onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
     ): ProviderReadingEvidenceCollection {
         val evidence = mutableListOf<ChapterEvidence>()
         for (source in sources.take(MAX_COVERAGE_CONTENDERS)) {
@@ -759,7 +759,7 @@ class CollectProviderReadingEvidence private constructor(
                     evidenceAdapter = evidenceAdapter,
                     // A complete technical page sequence is not an editorial
                     // snapshot. Never detach chapters from an unverified edition.
-                    publishSnapshot = { _, _, _, _ -> },
+                    publishSnapshot = null,
                     clock = clock,
                     onPageStarted = { index ->
                         traceChapterRequest(canonicalTitleId, target, source.ref, index, DiagnosticOutcome.STARTED)
@@ -820,13 +820,9 @@ class CollectProviderReadingEvidence private constructor(
                 )
             }
             trustedPages.forEach { (page, pageObservedAt) ->
-                onPageCollected(source.ref, page, pageObservedAt)
-                evidence += evidenceAdapter.toEvidence(
-                    canonicalTitleId = canonicalTitleId,
-                    binding = source.ref,
-                    observations = page,
-                    observedAt = pageObservedAt,
-                )
+                // Reuse the provisional evidence already built for timeout salvage.
+                // Rehashing the same chapter IDs would allocate a second copy.
+                evidence += onPageCollected(source.ref, page, pageObservedAt)
             }
         }
         return ProviderReadingEvidenceCollection(
