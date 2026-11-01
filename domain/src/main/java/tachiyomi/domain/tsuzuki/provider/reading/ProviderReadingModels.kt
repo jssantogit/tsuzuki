@@ -78,6 +78,8 @@ data class ProviderWorkCandidate(
     val language: String? = null,
     /** Source-reported count only. Null means not attested; never infer a total from lookup hits. */
     val chapterCount: Int? = null,
+    /** Source-verified creator names for optional editorial corroboration, never a ranking. */
+    val authors: List<String> = emptyList(),
     val detailOutcome: ProviderWorkDetailOutcome? = null,
     /** HTTP status is disclosed only when a detail request itself failed with an explicit status. */
     val detailHttpStatus: Int? = null,
@@ -101,6 +103,9 @@ data class ProviderWorkCandidate(
         }
         require(language == null || (language.isNotBlank() && language.length <= 32)) {
             "Provider work candidate language is invalid"
+        }
+        require(authors.size <= 8 && authors.all { it.isNotBlank() && it.length <= 128 }) {
+            "Provider work candidate authors are invalid"
         }
     }
 

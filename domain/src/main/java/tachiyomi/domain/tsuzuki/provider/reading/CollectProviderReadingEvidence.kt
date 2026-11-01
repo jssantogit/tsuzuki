@@ -25,6 +25,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
+import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshotRepository
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
@@ -92,6 +93,7 @@ class CollectProviderReadingEvidence private constructor(
     private val diagnostics: StructuredDiagnosticRecorder,
     private val titleNameObservationRepository: TitleNameObservationRepository?,
     private val integrationRegistry: IntegrationRegistry?,
+    private val canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository?,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit,
 ) {
 
@@ -104,6 +106,7 @@ class CollectProviderReadingEvidence private constructor(
         diagnostics: StructuredDiagnosticRecorder,
         titleNameObservationRepository: TitleNameObservationRepository,
         integrationRegistry: IntegrationRegistry,
+        canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         providerRegistry = providerRegistry,
@@ -114,6 +117,7 @@ class CollectProviderReadingEvidence private constructor(
         diagnostics = diagnostics,
         titleNameObservationRepository = titleNameObservationRepository,
         integrationRegistry = integrationRegistry,
+        canonicalMetadataSnapshotRepository = canonicalMetadataSnapshotRepository,
         constructorMarker = Unit,
     )
 
@@ -127,6 +131,7 @@ class CollectProviderReadingEvidence private constructor(
         diagnostics: StructuredDiagnosticRecorder = NoOpStructuredDiagnosticRecorder,
         titleNameObservationRepository: TitleNameObservationRepository? = null,
         integrationRegistry: IntegrationRegistry? = null,
+        canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository? = null,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         providerRegistry = providerRegistry,
@@ -137,6 +142,7 @@ class CollectProviderReadingEvidence private constructor(
         diagnostics = diagnostics,
         titleNameObservationRepository = titleNameObservationRepository,
         integrationRegistry = integrationRegistry,
+        canonicalMetadataSnapshotRepository = canonicalMetadataSnapshotRepository,
         constructorMarker = Unit,
     )
 
@@ -152,6 +158,25 @@ class CollectProviderReadingEvidence private constructor(
             titleNameObservationRepository,
             integrationRegistry,
         )
+        // Editorial author corroboration is additive, not a title-score heuristic.
+        // Only a snapshot tied to its own verified external ID is eligible.
+        val canonicalAuthors = try {
+            canonicalMetadataSnapshotRepository?.get(canonicalTitleId)?.metadata?.let { metadata ->
+                metadata.authors
+                    ?.takeIf { author ->
+                        author.externalId != null &&
+                            metadata.externalIds[author.providerId] == author.externalId
+                    }
+                    ?.value
+                    ?.mapNotNull(::normalizedCreator)
+                    ?.toSet()
+                    ?.takeIf { it.isNotEmpty() }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        }
         trace(canonicalTitleId, null, DiagnosticStage.SUMMARY, DiagnosticOutcome.STARTED, targets = targets.size)
 
         val results = coroutineScope {
@@ -168,6 +193,7 @@ class CollectProviderReadingEvidence private constructor(
                                 canonicalTitleId = canonicalTitleId,
                                 titles = queryTitles,
                                 target = target,
+                                canonicalAuthors = canonicalAuthors,
                                 onStageChanged = { activeStage = it },
                                 onPageCollected = { binding, page, observedAt ->
                                     partial += evidenceAdapter.toEvidence(
@@ -255,6 +281,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalTitleId: String,
         titles: List<String>,
         target: ReadingTarget,
+        canonicalAuthors: Set<String>?,
         onStageChanged: (DiagnosticStage) -> Unit,
         onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> Unit,
     ): ProviderReadingEvidenceCollection {
@@ -273,6 +300,7 @@ class CollectProviderReadingEvidence private constructor(
                     canonicalTitleId = canonicalTitleId,
                     titles = titles,
                     target = target,
+                    canonicalAuthors = canonicalAuthors,
                 )
             ) {
                 is ProviderCallResult.Failure -> return ProviderReadingEvidenceCollection(complete = false)
@@ -387,6 +415,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalTitleId: String,
         titles: List<String>,
         target: ReadingTarget,
+        canonicalAuthors: Set<String>?,
     ): ProviderCallResult<BindingDiscovery> {
         // Work IDs are private to this Provider and are only used to narrow
         // earlier matches. They never cross a source, title, edition or facet.
@@ -451,7 +480,23 @@ class CollectProviderReadingEvidence private constructor(
             val unqualifiedPrimary = sourcePrimaryMatches
                 .filterNot { isSourceAttestedAlternateEdition(it, title) }
                 .singleOrNull()
+            // An exact name does not identify an edition. An independent
+            // catalog author may eliminate a homonymous *different work*
+            // only when every rival supplies positive, contradictory authors.
+            // A missing creator, two same-author HIDs, or an explicit edition
+            // qualifier remains unresolved.
+            val authorCorroborated = matches.takeIf { it.size > 1 }?.singleOrNull { contender ->
+                canonicalAuthors != null &&
+                    !isSourceAttestedAlternateEdition(contender, title) &&
+                    contender.authors.any { normalizedCreator(it) in canonicalAuthors } &&
+                    matches.filter { it.externalWorkId != contender.externalWorkId }.all { rival ->
+                        rival.authors.isNotEmpty() &&
+                            rival.authors.none { normalizedCreator(it) in canonicalAuthors }
+                    }
+            }
             val candidate = when {
+                priorAmbiguous == null && matches.size > 1 && authorCorroborated != null ->
+                    authorCorroborated
                 // An ambiguous first lookup may only be narrowed to a work
                 // already seen. All rivals must explicitly identify a different
                 // editorial variant: title similarity and chapter count alone
@@ -481,6 +526,8 @@ class CollectProviderReadingEvidence private constructor(
                 else -> null
             }
             val decision = when {
+                candidate != null && candidate == authorCorroborated ->
+                    DiagnosticProviderLookupDecision.AUTHOR_CORROBORATED
                 candidate != null -> DiagnosticProviderLookupDecision.SELECTED
                 sourcePrimaryMatches.size > 1 -> DiagnosticProviderLookupDecision.MULTIPLE_PRIMARY_IDENTITIES
                 matches.isNotEmpty() -> DiagnosticProviderLookupDecision.AMBIGUOUS_EDITION
@@ -946,6 +993,14 @@ class CollectProviderReadingEvidence private constructor(
         }
     }
 
+    private fun normalizedCreator(value: String): String? {
+        // Author order can differ across sources (e.g. ARAKAWA Hiromu).
+        // The complete token multiset must match; surname-only fuzzy guesses
+        // must never authorize a work/edition binding.
+        val tokens = value.trim().lowercase().split(CREATOR_SEPARATORS).filter(String::isNotBlank)
+        return tokens.takeIf { it.isNotEmpty() }?.sorted()?.joinToString(" ")
+    }
+
     private fun normalize(value: String): String = value
         .trim()
         .lowercase()
@@ -1019,6 +1074,7 @@ class CollectProviderReadingEvidence private constructor(
             ProviderCapabilities.ReadingChaptersV1,
         )
         val WHITESPACE = Regex("\\s+")
+        val CREATOR_SEPARATORS = Regex("[^\\p{L}\\p{N}]+")
         val NUMERIC_CHAPTER_ID = Regex("^[0-9]{1,32}$")
         val EXPLICIT_ALTERNATE_EDITION_HINTS = listOf(
             "colored",

@@ -91,6 +91,7 @@ class ScriptProviderReadingGatewayTest {
                       "url": "https://reader.example/title/42",
                       "language": "en",
                       "chapterCount": 123,
+                      "authors": ["Hiromu Arakawa"],
                       "detailOutcome": "DETAIL_FAILED",
                       "detailHttpStatus": 503
                     }
@@ -110,6 +111,7 @@ class ScriptProviderReadingGatewayTest {
         success.value.items.single().externalWorkId shouldBe "work-42"
         success.value.items.single().title shouldBe "Tsuzuki"
         success.value.items.single().chapterCount shouldBe 123
+        success.value.items.single().authors shouldBe listOf("Hiromu Arakawa")
         success.value.items.single().detailOutcome shouldBe ProviderWorkDetailOutcome.DETAIL_FAILED
         success.value.items.single().detailHttpStatus shouldBe 503
         success.value.nextCursor?.value shouldBe "next"
@@ -125,6 +127,7 @@ class ScriptProviderReadingGatewayTest {
         input["titles"]!!.toString() shouldBe """["Tsuzuki"]"""
         input["cursor"] shouldBe null
         input["diagnosticsVersion"]?.jsonPrimitive?.int shouldBe 1
+        input["editorialEvidenceVersion"]?.jsonPrimitive?.int shouldBe 1
     }
 
     @Test

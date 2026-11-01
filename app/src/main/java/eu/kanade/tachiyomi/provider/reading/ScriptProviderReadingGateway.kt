@@ -156,6 +156,7 @@ class ScriptProviderReadingGateway internal constructor(
                         url = item.url,
                         language = item.language,
                         chapterCount = item.chapterCount,
+                        authors = item.authors,
                         detailOutcome = item.detailOutcome?.let(ProviderWorkDetailOutcome::valueOf),
                         detailHttpStatus = item.detailHttpStatus,
                     )
@@ -474,6 +475,8 @@ class ScriptProviderReadingGateway internal constructor(
         val cursor: String? = null,
         /** V1 Provider ignores this; upgraded Provider emits extra diagnostic keys only when requested. */
         val diagnosticsVersion: Int = 1,
+        /** Optional editorial evidence; ignored by Providers lacking this extension. */
+        val editorialEvidenceVersion: Int = 1,
     )
 
     @Serializable
@@ -504,6 +507,7 @@ class ScriptProviderReadingGateway internal constructor(
         val url: String? = null,
         val language: String? = null,
         val chapterCount: Int? = null,
+        val authors: List<String> = emptyList(),
         val detailOutcome: String? = null,
         val detailHttpStatus: Int? = null,
     )

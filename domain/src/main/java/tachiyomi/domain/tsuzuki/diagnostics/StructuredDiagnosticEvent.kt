@@ -366,6 +366,7 @@ enum class DiagnosticTorrentCandidateMatchReason : DiagnosticSafeCode {
 /** Source identity is unresolved even when lookup HTTP/API completed successfully. */
 enum class DiagnosticProviderLookupDecision : DiagnosticSafeCode {
     SELECTED,
+    AUTHOR_CORROBORATED,
     NO_MATCH,
     MULTIPLE_PRIMARY_IDENTITIES,
     AMBIGUOUS_EDITION,
