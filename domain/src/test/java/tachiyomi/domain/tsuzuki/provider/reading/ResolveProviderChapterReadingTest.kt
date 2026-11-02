@@ -299,7 +299,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `source attested colored edition revokes stale automatic Reader binding but retains explicit user choice`() = runBlocking {
+    fun `source variant blocks automatic Reader but honors confirmed edition`() = runBlocking {
         val colorAssociation = ProviderWorkSourceAssociation(
             canonicalTitleId = chapter.canonicalTitleId,
             ref = binding.ref,
