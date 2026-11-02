@@ -248,7 +248,11 @@ class PrepareCanonicalChapterForReader(
                             DiagnosticAttributeValue.Code(DiagnosticProviderLookupDecision.AMBIGUOUS_EDITION),
                     ) + capturedCanonicalIdentity,
                 )
-                return CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+                // An ambiguous HTTP identity is not authority to choose one
+                // candidate, but it must not suppress a separately verified
+                // torrent archive. That fallback runs its own chapter/volume
+                // identity checks and can still fail closed when ambiguous.
+                return prepareProviderTorrentFallback(canonicalChapterId, trace)
             }
 
             val option = options.singleOrNull()
