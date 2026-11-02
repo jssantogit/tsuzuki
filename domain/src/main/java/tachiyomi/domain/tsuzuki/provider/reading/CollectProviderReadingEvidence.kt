@@ -504,7 +504,13 @@ class CollectProviderReadingEvidence private constructor(
             val priorAmbiguous = ambiguousCandidates
             val primary = sourcePrimaryMatches.singleOrNull()
             val unqualifiedPrimary = sourcePrimaryMatches
-                .filterNot { ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, it, title) }
+                .filterNot {
+                    ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
+                        target.registration.descriptor.id,
+                        it,
+                        title,
+                    )
+                }
                 .singleOrNull()
             // An exact name does not identify an edition. An independent
             // catalog author may eliminate a homonymous *different work*
@@ -513,7 +519,11 @@ class CollectProviderReadingEvidence private constructor(
             // qualifier remains unresolved.
             val authorCorroborated = matches.takeIf { it.size > 1 }?.singleOrNull { contender ->
                 canonicalAuthors != null &&
-                    !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, contender, title) &&
+                    !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
+                        target.registration.descriptor.id,
+                        contender,
+                        title,
+                    ) &&
                     contender.authors.any { normalizedCreator(it) in canonicalAuthors } &&
                     matches.filter { it.externalWorkId != contender.externalWorkId }.all { rival ->
                         rival.authors.isNotEmpty() &&
@@ -530,7 +540,11 @@ class CollectProviderReadingEvidence private constructor(
                 .takeIf { priorAmbiguous == null && it.size in 2..MAX_COVERAGE_CONTENDERS }
                 ?.takeIf {
                     canonicalAuthors != null && it.all { work ->
-                        !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, work, title) &&
+                        !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
+                            target.registration.descriptor.id,
+                            work,
+                            title,
+                        ) &&
                             work.authors.isNotEmpty() &&
                             work.authors.any { normalizedCreator(it) in canonicalAuthors }
                     }
@@ -553,23 +567,56 @@ class CollectProviderReadingEvidence private constructor(
                 // editorial variant: title similarity and chapter count alone
                 // cannot establish canonical edition identity.
                 priorAmbiguous != null -> primary?.takeIf { selected ->
-                    !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, selected, title) &&
+                    !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
+                        target.registration.descriptor.id,
+                        selected,
+                        title,
+                    ) &&
                         priorAmbiguous.any { it.externalWorkId == selected.externalWorkId } &&
                         priorAmbiguous
                             .filter { it.externalWorkId != selected.externalWorkId }
-                            .all { ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, it, selected.title) }
+                            .all {
+                                ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
+                                    target.registration.descriptor.id,
+                                    it,
+                                    selected.title,
+                                )
+                            }
                 }
-                matches.size == 1 && !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, matches.single(), title) -> matches.single()
-                primary != null && !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, primary, title) && matches
-                    .filter { it.externalWorkId != primary.externalWorkId }
-                    .all { ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, it, primary.title) } -> primary
+                matches.size == 1 &&
+                    !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
+                        target.registration.descriptor.id,
+                        matches.single(),
+                        title,
+                    ) -> matches.single()
+                primary != null &&
+                    !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
+                        target.registration.descriptor.id,
+                        primary,
+                        title,
+                    ) &&
+                    matches
+                        .filter { it.externalWorkId != primary.externalWorkId }
+                        .all {
+                            ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
+                                target.registration.descriptor.id,
+                                it,
+                                primary.title,
+                            )
+                        } -> primary
                 // Two work IDs may carry the same primary title, while only
                 // one source entry explicitly declares itself a special edition
                 // in its own alternative names. This is affirmative source
                 // metadata, not a popularity/rank/chapter-count guess.
                 unqualifiedPrimary != null && matches
                     .filter { it.externalWorkId != unqualifiedPrimary.externalWorkId }
-                    .all { ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, it, unqualifiedPrimary.title) } -> unqualifiedPrimary
+                    .all {
+                        ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
+                            target.registration.descriptor.id,
+                            it,
+                            unqualifiedPrimary.title,
+                        )
+                    } -> unqualifiedPrimary
                 matches.size > 1 -> {
                     ambiguousCandidates = matches
                     null
@@ -971,7 +1018,11 @@ class CollectProviderReadingEvidence private constructor(
                 val reason = when {
                     selected?.externalWorkId == work.externalWorkId -> DiagnosticProviderCandidateReason.SELECTED
                     !facetMatches -> DiagnosticProviderCandidateReason.FACET_MISMATCH
-                    ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, work, selected?.title ?: primary?.title ?: queryTitle) ->
+                    ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
+                        target.registration.descriptor.id,
+                        work,
+                        selected?.title ?: primary?.title ?: queryTitle,
+                    ) ->
                         DiagnosticProviderCandidateReason.ALTERNATE_EDITION
                     exactMatch && normalize(work.title) == normalize(queryTitle) ->
                         DiagnosticProviderCandidateReason.PRIMARY_MATCH_BLOCKED
