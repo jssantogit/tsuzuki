@@ -504,7 +504,7 @@ class CollectProviderReadingEvidence private constructor(
             val priorAmbiguous = ambiguousCandidates
             val primary = sourcePrimaryMatches.singleOrNull()
             val unqualifiedPrimary = sourcePrimaryMatches
-                .filterNot { isSourceAttestedAlternateEdition(it, title) }
+                .filterNot { ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, it, title) }
                 .singleOrNull()
             // An exact name does not identify an edition. An independent
             // catalog author may eliminate a homonymous *different work*
@@ -513,7 +513,7 @@ class CollectProviderReadingEvidence private constructor(
             // qualifier remains unresolved.
             val authorCorroborated = matches.takeIf { it.size > 1 }?.singleOrNull { contender ->
                 canonicalAuthors != null &&
-                    !isSourceAttestedAlternateEdition(contender, title) &&
+                    !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, contender, title) &&
                     contender.authors.any { normalizedCreator(it) in canonicalAuthors } &&
                     matches.filter { it.externalWorkId != contender.externalWorkId }.all { rival ->
                         rival.authors.isNotEmpty() &&
@@ -530,7 +530,7 @@ class CollectProviderReadingEvidence private constructor(
                 .takeIf { priorAmbiguous == null && it.size in 2..MAX_COVERAGE_CONTENDERS }
                 ?.takeIf {
                     canonicalAuthors != null && it.all { work ->
-                        !isSourceAttestedAlternateEdition(work, title) &&
+                        !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, work, title) &&
                             work.authors.isNotEmpty() &&
                             work.authors.any { normalizedCreator(it) in canonicalAuthors }
                     }
@@ -553,23 +553,23 @@ class CollectProviderReadingEvidence private constructor(
                 // editorial variant: title similarity and chapter count alone
                 // cannot establish canonical edition identity.
                 priorAmbiguous != null -> primary?.takeIf { selected ->
-                    !isSourceAttestedAlternateEdition(selected, title) &&
+                    !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, selected, title) &&
                         priorAmbiguous.any { it.externalWorkId == selected.externalWorkId } &&
                         priorAmbiguous
                             .filter { it.externalWorkId != selected.externalWorkId }
-                            .all { isSourceAttestedAlternateEdition(it, selected.title) }
+                            .all { ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, it, selected.title) }
                 }
-                matches.size == 1 && !isSourceAttestedAlternateEdition(matches.single(), title) -> matches.single()
-                primary != null && !isSourceAttestedAlternateEdition(primary, title) && matches
+                matches.size == 1 && !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, matches.single(), title) -> matches.single()
+                primary != null && !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, primary, title) && matches
                     .filter { it.externalWorkId != primary.externalWorkId }
-                    .all { isSourceAttestedAlternateEdition(it, primary.title) } -> primary
+                    .all { ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, it, primary.title) } -> primary
                 // Two work IDs may carry the same primary title, while only
                 // one source entry explicitly declares itself a special edition
                 // in its own alternative names. This is affirmative source
                 // metadata, not a popularity/rank/chapter-count guess.
                 unqualifiedPrimary != null && matches
                     .filter { it.externalWorkId != unqualifiedPrimary.externalWorkId }
-                    .all { isSourceAttestedAlternateEdition(it, unqualifiedPrimary.title) } -> unqualifiedPrimary
+                    .all { ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, it, unqualifiedPrimary.title) } -> unqualifiedPrimary
                 matches.size > 1 -> {
                     ambiguousCandidates = matches
                     null
@@ -971,7 +971,7 @@ class CollectProviderReadingEvidence private constructor(
                 val reason = when {
                     selected?.externalWorkId == work.externalWorkId -> DiagnosticProviderCandidateReason.SELECTED
                     !facetMatches -> DiagnosticProviderCandidateReason.FACET_MISMATCH
-                    isSourceAttestedAlternateEdition(work, selected?.title ?: primary?.title ?: queryTitle) ->
+                    ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(target.registration.descriptor.id, work, selected?.title ?: primary?.title ?: queryTitle) ->
                         DiagnosticProviderCandidateReason.ALTERNATE_EDITION
                     exactMatch && normalize(work.title) == normalize(queryTitle) ->
                         DiagnosticProviderCandidateReason.PRIMARY_MATCH_BLOCKED
@@ -1315,31 +1315,6 @@ class CollectProviderReadingEvidence private constructor(
         .lowercase()
         .replace(WHITESPACE, " ")
 
-    /**
-     * The Provider's own explicit alternate title may qualify a work as colored,
-     * omnibus or another editorial variant even when its primary title is shared.
-     * Ignore unqualified synonyms; they never prove edition uniqueness.
-     */
-    private fun isSourceAttestedAlternateEdition(candidate: ProviderWorkCandidate, base: String): Boolean =
-        isExplicitEditionVariant(candidate.title, base) ||
-            candidate.aliases.any { isExplicitEditionVariant(it, base) }
-
-    /** An explicit edition label is evidence of a variant, not a fuzzy title mismatch. */
-    private fun isExplicitEditionVariant(candidateTitle: String, baseTitle: String): Boolean {
-        val base = normalize(baseTitle)
-        val candidate = normalize(candidateTitle)
-        if (candidate == base || !candidate.startsWith(base)) return false
-        val suffix = candidate.removePrefix(base).trim()
-        if (suffix.none { it.isLetterOrDigit() }) return false
-        val explicitlyQualified = suffix.startsWith("(") ||
-            suffix.startsWith("[") ||
-            suffix.startsWith("-") ||
-            suffix.startsWith(":")
-        return explicitlyQualified && EXPLICIT_ALTERNATE_EDITION_HINTS.any { hint ->
-            suffix.contains(hint)
-        }
-    }
-
     private fun bindingId(
         canonicalTitleId: String,
         providerId: ProviderId,
@@ -1386,16 +1361,6 @@ class CollectProviderReadingEvidence private constructor(
         val WHITESPACE = Regex("\\s+")
         val CREATOR_SEPARATORS = Regex("[^\\p{L}\\p{N}]+")
         val NUMERIC_CHAPTER_ID = Regex("^[0-9]{1,32}$")
-        val EXPLICIT_ALTERNATE_EDITION_HINTS = listOf(
-            "colored",
-            "coloured",
-            "full color",
-            "full colour",
-            "omnibus",
-            "one shot",
-            "oneshot",
-            "special edition",
-        )
         const val MAX_COVERAGE_CONTENDERS = 3
         const val MAX_WORK_SOURCE_COLLECTION_MILLIS = 5_000L
         const val MAX_CONCURRENT_PROVIDERS = 4
