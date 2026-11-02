@@ -195,16 +195,22 @@ class ResolveProviderChapterReading(
                     (
                         observedVolume == null ||
                             observedVolume == chapter.volume ||
-                            // Vol. 1 Ch. 1 is a defensible first-volume
-                            // identity even if the catalogue has not learned
-                            // its volume yet. This does NOT license Vol. 112
-                            // Ch. 1 or arbitrary source volume mismatches.
+                            // Missing catalog volume must not make every ordinary numbered
+                            // chapter unreadable. An attested source volume cannot be
+                            // later than its global chapter number (e.g. Vol 112 Ch 1).
+                            // This is only a conservative eligibility check, not
+                            // independent evidence for the source edition or chapter.
                             (
                                 chapter.type == CanonicalChapterType.REGULAR &&
-                                    chapter.baseNumber == 1 &&
-                                    chapter.part == null &&
                                     chapter.volume == null &&
-                                    observedVolume == 1
+                                    chapter.part == null &&
+                                    chapter.alphaSuffix == null &&
+                                    chapter.decimalFraction == null &&
+                                    chapter.baseNumber != null &&
+                                    chapter.baseNumber >= 1 &&
+                                    observedVolume != null &&
+                                    observedVolume >= 1 &&
+                                    observedVolume <= chapter.baseNumber
                                 )
                         )
             }
