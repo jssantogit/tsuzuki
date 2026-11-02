@@ -95,7 +95,9 @@ class ResolveProviderChapterReading(
         // HID is a colored/omnibus variant. Never silently keep serving it as
         // the base edition. An explicit user-confirmed edition remains intact.
         val attestedVariantProducers = associations.asSequence()
-            .filter { it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED }
+            // Source-attested negative edition evidence does not need author
+            // corroboration: it cannot prove an alternate HID, only disqualify
+            // an automatic base-edition assumption for this exact source.
             .filter { it.editionQualification == ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT }
             .map { it.ref.evidenceProducerId() }
             .toSet()
@@ -225,7 +227,9 @@ class ResolveProviderChapterReading(
         val registrations = providerRegistry.providers().associateBy { it.descriptor.id }
         val associations = workSourceAssociationRepository.getByTitle(chapter.canonicalTitleId)
         val attestedVariantProducers = associations.asSequence()
-            .filter { it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED }
+            // Source-attested negative edition evidence does not need author
+            // corroboration: it cannot prove an alternate HID, only disqualify
+            // an automatic base-edition assumption for this exact source.
             .filter { it.editionQualification == ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT }
             .map { it.ref.evidenceProducerId() }
             .toSet()
