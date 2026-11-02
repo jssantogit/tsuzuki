@@ -218,6 +218,7 @@ enum class DiagnosticAttribute {
     PROVIDER_READER_MAPPED_EVIDENCE_COUNT,
     PROVIDER_READER_ELIGIBLE_MAPPED_COUNT,
     PROVIDER_READER_NO_MATCH_REASON,
+    PROVIDER_READER_IDENTITY_REJECTION_REASON,
 
     // Source-attested chapter structure for an opt-in selected Reader option.
     PROVIDER_READER_SOURCE_NUMBER_MILLI,
@@ -513,6 +514,20 @@ enum class DiagnosticProviderReaderNoMatchReason : DiagnosticSafeCode {
     IDENTITY_REJECTED,
 }
 
+/** First failing Reader identity invariant for a mapped source (no source-authored text). */
+enum class DiagnosticProviderReaderIdentityRejectionReason : DiagnosticSafeCode {
+    UNPARSEABLE_SOURCE_IDENTITY,
+    UNVERIFIED_EARLY_TITLE,
+    LOW_CONFIDENCE,
+    CHAPTER_IDENTITY_MISMATCH,
+    SOURCE_VOLUME_BUNDLE,
+    CONFLICTING_NUMBER_HINT,
+    MALFORMED_VOLUME_LABEL,
+    SOURCE_VOLUME_CONFLICT,
+    CANONICAL_VOLUME_CONFLICT,
+    MIXED_REJECTIONS,
+}
+
 enum class DiagnosticCacheStatus : DiagnosticSafeCode {
     HIT,
     MISS,
@@ -784,6 +799,8 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticProviderEditionQualification }
         DiagnosticAttribute.PROVIDER_READER_NO_MATCH_REASON -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderReaderNoMatchReason }
+        DiagnosticAttribute.PROVIDER_READER_IDENTITY_REJECTION_REASON -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderReaderIdentityRejectionReason }
         DiagnosticAttribute.PROVIDER_HTTP_FAILURE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderHttpFailure }
         DiagnosticAttribute.PROVIDER_RUNTIME_PHASE -> (value as? DiagnosticAttributeValue.Code)
