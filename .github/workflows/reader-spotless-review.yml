@@ -42,8 +42,9 @@ jobs:
           for path, before, after in cases:
               file = Path(path)
               contents = file.read_text()
-              assert before in contents
-              file.write_text(contents.replace(before, after))
+              assert before in contents or after in contents
+              if before in contents:
+                  file.write_text(contents.replace(before, after))
           PY
       - name: Apply canonical formatter in disposable checkout
         run: ./gradlew :domain:spotlessApply
