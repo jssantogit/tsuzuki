@@ -107,6 +107,28 @@ class StructuredDiagnosticEventTest {
     }
 
     @Test
+    fun `Reader chapter diagnostics accept only bounded numeric public source chapter IDs`() {
+        fun sanitizeChapter(value: String) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000,
+                severity = DiagnosticSeverity.INFO,
+                subsystem = DiagnosticSubsystem.READER,
+                name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.READER,
+                outcome = DiagnosticOutcome.SUCCEEDED,
+                attributes = mapOf("provider_chapter_id" to DiagnosticAttributeValue.Text(value)),
+            ),
+        )?.attributes.orEmpty()
+
+        sanitizeChapter("7540238")[DiagnosticAttribute.PROVIDER_CHAPTER_ID] shouldBe
+            DiagnosticAttributeValue.Text("7540238")
+        listOf("secret:chapter", "https://example.com?token=secret", "12\\nAuthorization: token", "abc", "0".repeat(33))
+            .forEach { unsafe -> sanitizeChapter(unsafe) shouldBe emptyMap() }
+    }
+
+    @Test
     fun `provider candidate diagnostics accept only public bounded source identifiers`() {
         fun sanitizeCandidate(attributes: Map<String, DiagnosticAttributeValue>) =
             StructuredDiagnosticSanitizer.sanitize(
