@@ -3,6 +3,7 @@ name: CI v2.1
 
 on:
   # Temporary review branch: capture real pull_request checks for Host #185.
+  # Round 2: feature base updated with exact Spotless patch; prove all gates.
   # This workflow change must not be merged into Host #185 or main.
   pull_request:
     branches:
