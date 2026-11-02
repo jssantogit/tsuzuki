@@ -210,6 +210,7 @@ enum class DiagnosticAttribute {
     PROVIDER_CHAPTER_ID,
     PROVIDER_CHAPTER_FIRST_ID,
     PROVIDER_CHAPTER_LAST_ID,
+    CANONICAL_CHAPTER_BASE_NUMBER,
     CHAPTER_NUMBER_MIN_MILLI,
     CHAPTER_NUMBER_MAX_MILLI,
     PARTIAL_EVIDENCE_COUNT,
@@ -698,6 +699,9 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.TORRENT_CANDIDATE_AMBIGUOUS_COUNT,
         DiagnosticAttribute.TORRENT_CANDIDATE_METADATA_UNAVAILABLE_COUNT,
         -> (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..MAX_COUNT }
+
+        DiagnosticAttribute.CANONICAL_CHAPTER_BASE_NUMBER ->
+            (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..MAX_COUNT }
 
         // 1000x scales decimal source chapter numbers without collapsing 1180.5 to 1180.
         DiagnosticAttribute.CHAPTER_NUMBER_MIN_MILLI,
