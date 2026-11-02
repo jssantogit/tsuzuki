@@ -169,6 +169,49 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `Reader accepts numerically consistent volume evidence when catalog has no volume`() = runBlocking {
+        listOf(2 to 1, 25 to 4, 100 to 12).forEach { (number, sourceVolume) ->
+            val canonical = chapter.copy(
+                id = "canonical-$number",
+                baseNumber = number,
+                displayNumber = "$number",
+                volume = null,
+            )
+            val observed = evidence(binding, "source-$number", mappedChapterId = canonical.id).copy(
+                evidence = providerEvidence(
+                    producerId = binding.ref.evidenceProducerId(),
+                    externalChapterKey = "source-$number",
+                ).copy(
+                    rawLabel = "Vol. $sourceVolume Ch. $number - Chapter $number",
+                    rawNumber = number.toDouble(),
+                    volume = sourceVolume,
+                ),
+            )
+            resolver(
+                bindings = listOf(binding),
+                evidence = listOf(observed),
+                canonicalChapter = canonical,
+            ).options(canonical.id).map { it.providerChapterId } shouldBe listOf("source-$number")
+        }
+    }
+
+    @Test
+    fun `Reader still blocks volume later than canonical global chapter number`() = runBlocking {
+        val second = chapter.copy(id = "canonical-2", baseNumber = 2, displayNumber = "2", volume = null)
+        val foreign = evidence(binding, "source-late-volume", mappedChapterId = second.id).copy(
+            evidence = providerEvidence(
+                producerId = binding.ref.evidenceProducerId(),
+                externalChapterKey = "source-late-volume",
+            ).copy(rawLabel = "Vol. 112 Ch. 2", rawNumber = 2.0, volume = 112),
+        )
+        resolver(
+            bindings = listOf(binding),
+            evidence = listOf(foreign),
+            canonicalChapter = second,
+        ).options(second.id) shouldBe emptyList()
+    }
+
+    @Test
     fun `Reader quarantines unqualified early-numbered extras but retains genuine prologues`() = runBlocking {
         val chapterZero = chapter.copy(id = "chapter-zero", displayNumber = "0", baseNumber = 0)
         val sourceZero = evidence(binding, "source-zero", mappedChapterId = chapterZero.id)
