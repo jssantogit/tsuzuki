@@ -421,7 +421,6 @@ enum class DiagnosticProviderHttpFailure : DiagnosticSafeCode {
     UNKNOWN,
 }
 
-/** Closed Binder lifecycle stages; no provider payload, URI, error message or token. */
 /** Bounded content-free checkpoints for identifying the expensive part of a canonical refresh. */
 enum class DiagnosticChapterReconcilePhase : DiagnosticSafeCode {
     DELTA_WRITE,
@@ -438,6 +437,7 @@ enum class DiagnosticChapterUiPhase : DiagnosticSafeCode {
     CHAPTER_SORT,
 }
 
+/** Closed Binder lifecycle stages; no provider payload, URI, error message or token. */
 enum class DiagnosticProviderRuntimePhase : DiagnosticSafeCode {
     BIND_STARTED,
     BIND_CONNECTED,
