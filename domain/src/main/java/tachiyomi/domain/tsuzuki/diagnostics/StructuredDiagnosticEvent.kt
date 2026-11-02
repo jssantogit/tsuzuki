@@ -493,6 +493,16 @@ enum class DiagnosticProviderEditionQualification : DiagnosticSafeCode {
     SOURCE_ATTESTED_VARIANT,
 }
 
+/** A closed cause for an empty Reader Provider source lookup; no source text. */
+enum class DiagnosticProviderReaderNoMatchReason : DiagnosticSafeCode {
+    NO_ELIGIBLE_SOURCE,
+    NO_PROVIDER_EVIDENCE,
+    NO_MATCHING_SOURCE_CHAPTER,
+    NO_CANONICAL_MAPPING,
+    NO_ELIGIBLE_MAPPED_SOURCE,
+    IDENTITY_REJECTED,
+}
+
 enum class DiagnosticCacheStatus : DiagnosticSafeCode {
     HIT,
     MISS,
@@ -657,6 +667,11 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.PROVIDER_WORK_CHAPTER_COUNT,
         DiagnosticAttribute.PROVIDER_COVERAGE_OBSERVED_COUNT,
         DiagnosticAttribute.PARTIAL_EVIDENCE_COUNT,
+        DiagnosticAttribute.PROVIDER_READER_ELIGIBLE_SOURCE_COUNT,
+        DiagnosticAttribute.PROVIDER_READER_OBSERVED_EVIDENCE_COUNT,
+        DiagnosticAttribute.PROVIDER_READER_MATCHING_NUMBER_COUNT,
+        DiagnosticAttribute.PROVIDER_READER_MAPPED_EVIDENCE_COUNT,
+        DiagnosticAttribute.PROVIDER_READER_ELIGIBLE_MAPPED_COUNT,
         DiagnosticAttribute.OBSERVATION_COUNT,
         DiagnosticAttribute.ITEM_COUNT,
         DiagnosticAttribute.ACCEPTED_COUNT,
@@ -750,6 +765,8 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticProviderWorkVerification }
         DiagnosticAttribute.PROVIDER_EDITION_QUALIFICATION -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderEditionQualification }
+        DiagnosticAttribute.PROVIDER_READER_NO_MATCH_REASON -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderReaderNoMatchReason }
         DiagnosticAttribute.PROVIDER_HTTP_FAILURE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderHttpFailure }
         DiagnosticAttribute.PROVIDER_RUNTIME_PHASE -> (value as? DiagnosticAttributeValue.Code)
