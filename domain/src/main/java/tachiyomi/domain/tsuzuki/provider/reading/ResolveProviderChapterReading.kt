@@ -91,6 +91,8 @@ class ResolveProviderChapterReading(
         providerRegistry.awaitReady()
         val registrations = providerRegistry.providers().associateBy { it.descriptor.id }
         val associations = workSourceAssociationRepository.getByTitle(chapter.canonicalTitleId)
+        // An editorial variant is negative evidence for automatic matching,
+        // never proof that an alternate source is the original edition.
         // A later verified source lookup may reveal that a previously auto-bound
         // HID is a colored/omnibus variant. Never silently keep serving it as
         // the base edition. An explicit user-confirmed edition remains intact.
