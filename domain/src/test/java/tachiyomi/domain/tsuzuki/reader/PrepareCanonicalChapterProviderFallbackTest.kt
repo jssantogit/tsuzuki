@@ -464,6 +464,8 @@ class PrepareCanonicalChapterProviderFallbackTest {
             )
         }
         var unexpectedHttpCalls = 0
+        var failConfirmationRead = false
+        var bindingReads = 0
         val http = ResolveProviderChapterReading(
             canonicalChapterRepository = chapters,
             evidenceRepository = evidenceRepository(observations),
@@ -478,8 +480,13 @@ class PrepareCanonicalChapterProviderFallbackTest {
                         it.ref.facetId == facetId
                 }
 
-                override suspend fun getByTitle(canonicalTitleId: String): List<ProviderReadingBinding> =
-                    bindings.filter { it.canonicalTitleId == canonicalTitleId }
+                override suspend fun getByTitle(canonicalTitleId: String): List<ProviderReadingBinding> {
+                    bindingReads++
+                    if (failConfirmationRead && bindingReads % 2 == 0) {
+                        error("A secondary confirmed-binding lookup failed")
+                    }
+                    return bindings.filter { it.canonicalTitleId == canonicalTitleId }
+                }
 
                 override suspend fun upsert(binding: ProviderReadingBinding) = Unit
                 override suspend fun markUnavailable(bindingId: String, updatedAt: Long) = Unit
@@ -578,6 +585,14 @@ class PrepareCanonicalChapterProviderFallbackTest {
                 it.outcome == DiagnosticOutcome.READY &&
                 it.attributes["provider_id"] == DiagnosticAttributeValue.Text(torrentProviderId.value)
         } shouldBe true
+        // The optional DB read needed to check user-confirmed preferences may
+        // fail after options() succeeded. It must not throw or hide the
+        // independently verified torrent fallback.
+        failConfirmationRead = true
+        bindingReads = 0
+        reader.execute(chapter.id).shouldBeInstanceOf<CanonicalReaderPreparation.Ready>()
+        unexpectedHttpCalls shouldBe 0
+        torrentArtifactCalls shouldBe 2
     }
 
     @Test
