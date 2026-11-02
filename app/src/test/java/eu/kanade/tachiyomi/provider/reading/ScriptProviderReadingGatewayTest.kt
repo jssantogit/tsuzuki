@@ -330,9 +330,11 @@ class ScriptProviderReadingGatewayTest {
                 """.trimIndent(),
             )
         }
+        // A forbidden CDN is a typed network-policy rejection, not a
+        // generic malformed result. Reader logs need to distinguish them.
         escaped.pages(providerId, request) shouldBe ProviderCallResult.Failure(
             tachiyomi.domain.tsuzuki.provider.reading.ProviderError(
-                ProviderErrorCode.MALFORMED_RESULT,
+                ProviderErrorCode.NETWORK_POLICY,
                 retryable = false,
             ),
         )
