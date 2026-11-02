@@ -249,7 +249,7 @@ class ReconcileChapterEvidenceTest {
     }
 
     @Test
-    fun `MangaFire code13 partial source corrections detach false zero scene mappings without erasing historical IDs`() = runTest {
+    fun `MangaFire code13 partial correction detaches old scene mappings without erasing IDs`() = runTest {
         val fixture = fixture()
         val oldScenes = listOf(
             Triple("5892019", "0", "Darkshine vs Garou"),
