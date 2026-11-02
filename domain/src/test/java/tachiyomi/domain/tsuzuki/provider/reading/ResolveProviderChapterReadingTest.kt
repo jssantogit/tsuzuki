@@ -352,6 +352,42 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `Reader rejects source titled whole volume even if canonical chapter zero has matching volume`() = runBlocking {
+        val zero = chapter.copy(
+            id = "volume-112-zero",
+            displayNumber = "0",
+            baseNumber = 0,
+            volume = 112,
+        )
+        listOf("Volume 112", "Volume 112 Extra", "Vol. 112: Bonus").forEach { title ->
+            val observed = evidence(binding, "volume-bundle", mappedChapterId = zero.id).copy(
+                evidence = providerEvidence(binding.ref.evidenceProducerId(), "volume-bundle").copy(
+                    rawLabel = "Vol. 112 Ch. 0 - $title",
+                    rawNumber = 0.0,
+                    volume = 112,
+                    title = title,
+                ),
+            )
+            val resolver = resolver(
+                bindings = listOf(binding),
+                evidence = listOf(observed),
+                canonicalChapter = zero,
+            )
+            resolver.options(zero.id) shouldBe emptyList()
+            resolver.auditSourceIdentity(
+                ProviderChapterReadingOption(
+                    canonicalChapterId = zero.id,
+                    bindingId = binding.id,
+                    providerId = binding.ref.providerId,
+                    facetId = binding.ref.facetId,
+                    externalWorkId = binding.ref.externalWorkId,
+                    providerChapterId = "volume-bundle",
+                ),
+            )?.sourceTitleIsVolumeContainer shouldBe true
+        }
+    }
+
+    @Test
     fun `Reader preserves large correctly qualified chapter zero and large regular chapters`() = runBlocking {
         val numberedZero = chapter.copy(
             id = "volume-one-zero",
