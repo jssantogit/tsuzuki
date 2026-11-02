@@ -38,6 +38,7 @@ import tachiyomi.domain.tsuzuki.content.interactor.DiscoverReadableTitle
 import tachiyomi.domain.tsuzuki.content.interactor.ResolveContentBinding
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticChapterReconcilePhase
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
@@ -288,6 +289,40 @@ class RefreshChapterEvidence private constructor(
                 )
             }
 
+            // Record only slow, typed local phases during an explicit detailed capture.
+            // HTTP/provider timing alone cannot explain a frozen chapter list.
+            suspend fun timedLocalPhase(
+                phase: DiagnosticChapterReconcilePhase,
+                itemCount: Int,
+                operation: suspend () -> Unit,
+            ) {
+                if (!structuredDiagnostics.detailedCaptureActive) {
+                    operation()
+                    return
+                }
+                val phaseStart = TimeSource.Monotonic.markNow()
+                var succeeded = false
+                try {
+                    operation()
+                    succeeded = true
+                } finally {
+                    val millis = phaseStart.elapsedNow().inWholeMilliseconds.coerceAtLeast(0)
+                    if (millis >= 16L) {
+                        trace.event(
+                            subsystem = DiagnosticSubsystem.CHAPTER,
+                            name = DiagnosticEventName.CHAPTER_RECONCILE_PHASE,
+                            stage = DiagnosticStage.RECONCILE,
+                            outcome = if (succeeded) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.FAILED,
+                            durationMillis = millis.coerceAtMost(86_400_000L),
+                            attributes = mapOf(
+                                DiagnosticAttribute.CHAPTER_RECONCILE_PHASE to DiagnosticAttributeValue.Code(phase),
+                                DiagnosticAttribute.ITEM_COUNT to DiagnosticAttributeValue.Number(itemCount.toLong()),
+                            ),
+                        )
+                    }
+                }
+            }
+
             suspend fun reconcileStage(
                 observations: List<ChapterEvidence>,
                 pendingSnapshots: List<ChapterRefreshSnapshot> = emptyList(),
@@ -298,7 +333,9 @@ class RefreshChapterEvidence private constructor(
                         stagedEvidence[observation.id] != observation
                     }
                     if (delta.isNotEmpty()) {
-                        reconcileChapterEvidence.execute(canonicalTitleId, delta)
+                        timedLocalPhase(DiagnosticChapterReconcilePhase.DELTA_WRITE, delta.size) {
+                            reconcileChapterEvidence.execute(canonicalTitleId, delta)
+                        }
                         delta.forEach { observation -> stagedEvidence[observation.id] = observation }
                     }
                     pendingSnapshots
@@ -307,8 +344,12 @@ class RefreshChapterEvidence private constructor(
                         .forEach { snapshot -> refreshSnapshots?.upsertIfNewer(snapshot) }
 
                     if (delta.isNotEmpty()) {
-                        invalidateTitleContentOptions()
-                        notifyStageReconciled()
+                        timedLocalPhase(DiagnosticChapterReconcilePhase.CACHE_INVALIDATION, delta.size) {
+                            invalidateTitleContentOptions()
+                        }
+                        timedLocalPhase(DiagnosticChapterReconcilePhase.UI_RELOAD_CALLBACK, delta.size) {
+                            notifyStageReconciled()
+                        }
                     }
                 } finally {
                     stageMutex.unlock()
@@ -318,19 +359,25 @@ class RefreshChapterEvidence private constructor(
             suspend fun reconcileProviderSnapshot(snapshot: ProviderReadingEvidenceSnapshot) {
                 stageMutex.lock()
                 try {
-                    reconcileChapterEvidence.executeProviderSnapshot(
-                        canonicalTitleId = canonicalTitleId,
-                        producerId = snapshot.producerId,
-                        snapshotObservedAt = snapshot.observedAt,
-                        evidence = snapshot.evidence,
-                    )
+                    timedLocalPhase(DiagnosticChapterReconcilePhase.PROVIDER_SNAPSHOT_WRITE, snapshot.evidence.size) {
+                        reconcileChapterEvidence.executeProviderSnapshot(
+                            canonicalTitleId = canonicalTitleId,
+                            producerId = snapshot.producerId,
+                            snapshotObservedAt = snapshot.observedAt,
+                            evidence = snapshot.evidence,
+                        )
+                    }
                     snapshot.evidence.forEach { observation ->
                         stagedEvidence[observation.id] = observation
                     }
                     // A complete empty snapshot may detach stale Provider support, so invalidation
                     // and progressive publication must run even when this snapshot has no evidence.
-                    invalidateTitleContentOptions()
-                    notifyStageReconciled()
+                    timedLocalPhase(DiagnosticChapterReconcilePhase.CACHE_INVALIDATION, snapshot.evidence.size) {
+                        invalidateTitleContentOptions()
+                    }
+                    timedLocalPhase(DiagnosticChapterReconcilePhase.UI_RELOAD_CALLBACK, snapshot.evidence.size) {
+                        notifyStageReconciled()
+                    }
                 } finally {
                     stageMutex.unlock()
                 }
