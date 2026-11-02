@@ -223,7 +223,11 @@ class PrepareCanonicalChapterForReader(
                                 ),
                                 DiagnosticAttribute.PROVIDER_ERROR_CODE to
                                     DiagnosticAttributeValue.Text(prepared.error.code.name),
-                            ) + capturedSourceIdentity,
+                            ) + capturedSourceIdentity + (
+                                prepared.error.observedPageCount?.let { count ->
+                                    mapOf(DiagnosticAttribute.PAGE_COUNT to DiagnosticAttributeValue.Number(count.toLong()))
+                                }.orEmpty()
+                                ),
                         )
                     }
                     is ProviderCallResult.Success -> {
@@ -459,6 +463,7 @@ private fun ProviderErrorCode.toDiagnosticCategory(): DiagnosticErrorCategory = 
     ProviderErrorCode.BROWSER_ERROR,
     -> DiagnosticErrorCategory.NETWORK
     ProviderErrorCode.MALFORMED_RESULT -> DiagnosticErrorCategory.MALFORMED_RESPONSE
+    ProviderErrorCode.CHAPTER_IDENTITY_UNVERIFIED -> DiagnosticErrorCategory.CHAPTER_IDENTITY
     ProviderErrorCode.RUNTIME_DIED,
     ProviderErrorCode.SCRIPT_ERROR,
     ProviderErrorCode.PACKAGE_INVALID,
