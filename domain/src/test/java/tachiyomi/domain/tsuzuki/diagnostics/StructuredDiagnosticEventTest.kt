@@ -154,6 +154,31 @@ class StructuredDiagnosticEventTest {
     }
 
     @Test
+    fun `Reader identity rejection reason is a closed diagnostic code`() {
+        fun audited(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000L,
+                severity = DiagnosticSeverity.INFO,
+                subsystem = DiagnosticSubsystem.CONTENT,
+                name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.BINDING,
+                outcome = DiagnosticOutcome.EMPTY,
+                attributes = mapOf("provider_reader_identity_rejection_reason" to value),
+            ),
+        )?.attributes.orEmpty()
+
+        val reason = DiagnosticAttributeValue.Code(
+            DiagnosticProviderReaderIdentityRejectionReason.CANONICAL_VOLUME_CONFLICT,
+        )
+        audited(reason) shouldBe mapOf(DiagnosticAttribute.PROVIDER_READER_IDENTITY_REJECTION_REASON to reason)
+        audited(DiagnosticAttributeValue.Text("unverified text")) shouldBe emptyMap()
+        audited(DiagnosticAttributeValue.Code(DiagnosticProviderReaderNoMatchReason.IDENTITY_REJECTED)) shouldBe
+            emptyMap()
+    }
+
+    @Test
     fun `selected Reader source metadata accepts only numbers and closed flags`() {
         fun attributes(raw: Map<String, DiagnosticAttributeValue>) =
             StructuredDiagnosticSanitizer.sanitize(
