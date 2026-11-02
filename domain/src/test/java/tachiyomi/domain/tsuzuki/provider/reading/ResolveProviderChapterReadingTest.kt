@@ -204,11 +204,14 @@ class ResolveProviderChapterReadingTest {
                 externalChapterKey = "source-late-volume",
             ).copy(rawLabel = "Vol. 112 Ch. 2", rawNumber = 2.0, volume = 112),
         )
-        resolver(
+        val reader = resolver(
             bindings = listOf(binding),
             evidence = listOf(foreign),
             canonicalChapter = second,
-        ).options(second.id) shouldBe emptyList()
+        )
+        reader.options(second.id) shouldBe emptyList()
+        reader.auditNoMatch(second.id).identityRejectionReason shouldBe
+            ProviderReadingIdentityRejectionReason.CANONICAL_VOLUME_CONFLICT
     }
 
     @Test
@@ -410,6 +413,7 @@ class ResolveProviderChapterReadingTest {
             mappedEvidenceCount = 1,
             mappedEligibleSourceEvidenceCount = 1,
             reason = ProviderReadingNoMatchReason.IDENTITY_REJECTED,
+            identityRejectionReason = ProviderReadingIdentityRejectionReason.CANONICAL_VOLUME_CONFLICT,
         )
     }
 
