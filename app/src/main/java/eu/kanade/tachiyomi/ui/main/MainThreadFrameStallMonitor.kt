@@ -51,6 +51,7 @@ internal class MainThreadFrameGapDetector(
  * Starts and stops with the foreground Activity; never stores raw stack traces
  * or adds an uncapped per-frame diagnostic stream. Events are emitted only
  * inside a user-controlled detailed-capture window.
+ * Full Android acceptance must verify this observer on a resumed Activity.
  */
 internal class MainThreadFrameStallMonitor(
     private val recorder: StructuredDiagnosticRecorder,
