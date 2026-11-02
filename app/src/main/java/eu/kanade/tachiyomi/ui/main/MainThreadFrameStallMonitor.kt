@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.ui.main
 
+import android.os.Handler
+import android.os.Looper
 import android.view.Choreographer
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
@@ -58,24 +60,47 @@ internal class MainThreadFrameStallMonitor(
     private val choreographer: Choreographer = Choreographer.getInstance(),
 ) : Choreographer.FrameCallback {
     private val detector = MainThreadFrameGapDetector()
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var running = false
+    private var observingFrames = false
+
+    // Detailed capture is not a Flow. Poll cheaply while the Activity is resumed
+    // rather than requesting every display frame for the application's lifetime.
+    private val checkCapture = object : Runnable {
+        override fun run() {
+            if (!running) return
+            val active = recorder.detailedCaptureActive
+            if (active && !observingFrames) {
+                observingFrames = true
+                detector.reset()
+                choreographer.postFrameCallback(this@MainThreadFrameStallMonitor)
+            } else if (!active && observingFrames) {
+                observingFrames = false
+                choreographer.removeFrameCallback(this@MainThreadFrameStallMonitor)
+                detector.reset()
+            }
+            mainHandler.postDelayed(this, 250L)
+        }
+    }
 
     fun start() {
         if (running) return
         running = true
         detector.reset()
-        choreographer.postFrameCallback(this)
+        checkCapture.run()
     }
 
     fun stop() {
         if (!running) return
         running = false
-        choreographer.removeFrameCallback(this)
+        mainHandler.removeCallbacks(checkCapture)
+        if (observingFrames) choreographer.removeFrameCallback(this)
+        observingFrames = false
         detector.reset()
     }
 
     override fun doFrame(frameTimeNanos: Long) {
-        if (!running) return
+        if (!running || !observingFrames) return
         val capturing = recorder.detailedCaptureActive
         detector.observe(frameTimeNanos, capturing)?.let { gapMillis ->
             runCatching {
