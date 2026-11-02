@@ -35,6 +35,7 @@ class MainThreadFrameStallMonitorAndroidTest {
             monitor.start()
         }
         try {
+            // The opt-in monitor must establish a real frame baseline before blocking the main looper.
             // Give the Choreographer multiple foreground callbacks to establish a baseline.
             Thread.sleep(300L)
             instrumentation.runOnMainSync {
