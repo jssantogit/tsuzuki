@@ -41,6 +41,17 @@ import tachiyomi.domain.tsuzuki.chapter.interactor.isVisibleCanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.inventory.GetIndependentInventorySnapshot
 import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryKnowledge
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticChapterUiPhase
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
+import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.content.ContentOption
@@ -166,6 +177,7 @@ class CanonicalTitleScreenModel(
     private val resolveCanonicalArtwork: ResolveCanonicalArtwork,
     private val resolveCanonicalReadingStart: CanonicalReadingStartResolver,
     private val diagnostics: ChapterInventoryDiagnostics = NoOpChapterInventoryDiagnostics,
+    private val structuredDiagnostics: StructuredDiagnosticRecorder = NoOpStructuredDiagnosticRecorder,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<CanonicalTitleScreenState>(CanonicalTitleScreenState.Loading)
@@ -664,6 +676,40 @@ class CanonicalTitleScreenModel(
         )
     }
 
+    /** Separate slow local chapter loading and main-thread row building from network timing. */
+    private fun traceChapterUiStage(
+        titleId: String,
+        phase: DiagnosticChapterUiPhase,
+        startedNanos: Long,
+        chapterCount: Int,
+    ) {
+        if (!structuredDiagnostics.detailedCaptureActive) return
+        val duration = ((System.nanoTime() - startedNanos) / 1_000_000L).coerceAtLeast(0)
+        if (duration < 16L) return
+        runCatching {
+            structuredDiagnostics.record(
+                StructuredDiagnosticEvent(
+                    timestampMillis = System.currentTimeMillis(),
+                    severity = DiagnosticSeverity.DEBUG,
+                    subsystem = DiagnosticSubsystem.APP,
+                    name = DiagnosticEventName.CHAPTER_UI_PHASE,
+                    sessionId = structuredDiagnostics.sessionId,
+                    operationId = null,
+                    stage = DiagnosticStage.RENDER,
+                    outcome = DiagnosticOutcome.SUCCEEDED,
+                    durationMillis = duration.coerceAtMost(86_400_000L),
+                    attributes = buildMap {
+                        put(DiagnosticAttribute.CHAPTER_UI_PHASE.name.lowercase(), DiagnosticAttributeValue.Code(phase))
+                        put(DiagnosticAttribute.ITEM_COUNT.name.lowercase(), DiagnosticAttributeValue.Number(chapterCount.toLong()))
+                        structuredDiagnostics.canonicalTitleReference(titleId)?.let { ref ->
+                            put(DiagnosticAttribute.CANONICAL_TITLE_REF.name.lowercase(), DiagnosticAttributeValue.Text(ref))
+                        }
+                    },
+                ),
+            )
+        }
+    }
+
     private suspend fun loadLocalState(
         canonicalTitleId: String,
         includeIntegrationMetadata: Boolean,
@@ -675,7 +721,9 @@ class CanonicalTitleScreenModel(
         val title = canonicalTitleRepository.getById(canonicalTitleId)
             ?: throw NoSuchElementException("Canonical title not found: $canonicalTitleId")
         val libraryEntry = canonicalLibraryRepository.get(canonicalTitleId)
+        val chapterQueryStarted = System.nanoTime()
         val chapters = canonicalChapterRepository.getByCanonicalTitleId(canonicalTitleId)
+        traceChapterUiStage(canonicalTitleId, DiagnosticChapterUiPhase.CHAPTERS_QUERY, chapterQueryStarted, chapters.size)
         val supportSnapshot = chapterEvidenceRepository.getSupportSnapshot(canonicalTitleId)
         // Optional inventory metadata must never block an already readable title.
         val independentInventory = try {
@@ -771,6 +819,7 @@ class CanonicalTitleScreenModel(
         } else {
             null
         }
+        val rowBuildStarted = System.nanoTime()
         val details = chapters.mapNotNull { chapter ->
             val progress = progressByChapter[chapter.id]
             val downloaded = chapter.id in canonicalDownloadIds
@@ -812,6 +861,7 @@ class CanonicalTitleScreenModel(
         ).let { local ->
             integrationMetadata?.let { metadata -> local.withIntegrationMetadata(metadata) } ?: local
         }
+        traceChapterUiStage(canonicalTitleId, DiagnosticChapterUiPhase.ROWS_BUILD, rowBuildStarted, chapters.size)
         val cacheReason = if (isRefreshing) {
             ChapterInventoryDiagnosticReason.CACHE_SNAPSHOT
         } else {
