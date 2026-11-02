@@ -13,6 +13,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticErrorCategory
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderIdentityRejectionReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderNoMatchReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
@@ -232,6 +233,14 @@ class PrepareCanonicalChapterForReader(
                                 DiagnosticProviderReaderNoMatchReason.valueOf(audit.reason.name),
                             ),
                         )
+                        audit.identityRejectionReason?.let { rejection ->
+                            put(
+                                DiagnosticAttribute.PROVIDER_READER_IDENTITY_REJECTION_REASON,
+                                DiagnosticAttributeValue.Code(
+                                    DiagnosticProviderReaderIdentityRejectionReason.valueOf(rejection.name),
+                                ),
+                            )
+                        }
                     }
                 } + capturedCanonicalIdentity,
             )
