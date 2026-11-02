@@ -119,7 +119,7 @@ class ResolveProviderChapterReading(
                     // The source's volume may be present only in the label;
                     // reject conflicts or malformed explicit volume markers.
                     (
-                        !volumeParser.hasExplicitVolumePrefix(evidence.rawLabel) ||
+                        !volumeParser.hasExplicitVolumeMarker(evidence.rawLabel) ||
                             explicitLabelVolume != null
                         ) &&
                     (
