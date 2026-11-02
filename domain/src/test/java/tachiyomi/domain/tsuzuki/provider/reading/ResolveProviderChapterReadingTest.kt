@@ -370,6 +370,35 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `detailed Reader source identity is scoped to the exact selected chapter and HID`() = runBlocking {
+        val canonical = chapter.copy(id = "volume-one-chapter-zero", baseNumber = 0, volume = 1)
+        val source = evidence(binding, "source-with-metadata", mappedChapterId = canonical.id).copy(
+            evidence = providerEvidence(binding.ref.evidenceProducerId(), "source-with-metadata").copy(
+                rawLabel = "Vol. 1 Ch. 0 - Opening",
+                rawNumber = 0.0,
+                volume = 1,
+                title = "Opening",
+            ),
+        )
+        val reader = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(source),
+            canonicalChapter = canonical,
+        )
+        val selected = reader.options(canonical.id).single()
+        reader.auditSourceIdentity(selected) shouldBe ProviderReadingSourceIdentityAudit(
+            sourceNumberMilli = 0,
+            sourceVolume = 1,
+            labelHasExplicitVolumeMarker = true,
+            sourceTitleIsVolumeContainer = false,
+            sourceTitlePresent = true,
+        )
+        reader.auditSourceIdentity(selected.copy(providerChapterId = "different-id")) shouldBe null
+        reader.auditSourceIdentity(selected.copy(externalWorkId = "different-hid")) shouldBe null
+        reader.auditSourceIdentity(selected.copy(canonicalChapterId = "different-canonical-chapter")) shouldBe null
+    }
+
+    @Test
     fun `Reader rejects volume explicitly stated in label even when source volume field is missing`() = runBlocking {
         val zero = chapter.copy(id = "chapter-canonical-0", displayNumber = "0", baseNumber = 0)
         val observed = evidence(binding, "volume-112-as-zero", mappedChapterId = zero.id).copy(
