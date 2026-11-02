@@ -100,6 +100,68 @@ class ProviderWorkSourcePortfolioTest {
     }
 
     @Test
+    fun `MangaFire source slug explicitly colored cannot masquerade as unqualified original edition`() {
+        val provider = ProviderId("app.tsuzuki.mangafire")
+        val candidates = listOf(
+            original.copy(
+                externalWorkId = "729pj",
+                title = "One Punch-Man",
+                url = "https://mangafire.to/title/729pj-one-punch-man-fan-coloredd",
+                authors = listOf("ONE"),
+            ),
+            original.copy(
+                externalWorkId = "oo4",
+                title = "One Punch-Man",
+                url = "https://mangafire.to/title/oo4-one-punch-man",
+                authors = listOf("ONE"),
+            ),
+        )
+        val portfolio = ProviderWorkSourcePortfolio.assess(
+            providerId = provider,
+            facetId = "en",
+            queryTitle = "One Punch-Man",
+            independentlyVerifiedAuthors = setOf("ONE"),
+            candidates = candidates,
+        )
+        portfolio.map { it.workVerification } shouldBe listOf(
+            ProviderWorkVerification.AUTHOR_CORROBORATED,
+            ProviderWorkVerification.AUTHOR_CORROBORATED,
+        )
+        portfolio.map { it.editionQualification } shouldBe listOf(
+            ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT,
+            ProviderSourceEditionQualification.UNRESOLVED,
+        )
+        portfolio.map { it.canCollectProvisionalChapters } shouldBe listOf(false, true)
+    }
+
+    @Test
+    fun `source slug qualifier requires exact MangaFire HTTPS work HID and does not guess variants`() {
+        val invalidUrls = listOf(
+            "https://evil.example/title/729pj-one-punch-man-fan-colored",
+            "http://mangafire.to/title/729pj-one-punch-man-fan-colored",
+            "https://mangafire.to/title/foreign-one-punch-man-fan-colored",
+            "https://mangafire.to/read/one-punch-man-fan-colored.729pj",
+            "https://mangafire.to/title/729pj-one-punch-man?variant=colored",
+        )
+        invalidUrls.forEach { url ->
+            val item = original.copy(
+                externalWorkId = "729pj",
+                title = "One Punch-Man",
+                url = url,
+                authors = listOf("ONE"),
+            )
+            val portfolio = ProviderWorkSourcePortfolio.assess(
+                providerId = ProviderId("app.tsuzuki.mangafire"),
+                facetId = "en",
+                queryTitle = "One Punch-Man",
+                independentlyVerifiedAuthors = setOf("ONE"),
+                candidates = listOf(item),
+            )
+            portfolio.single().editionQualification shouldBe ProviderSourceEditionQualification.UNRESOLVED
+        }
+    }
+
+    @Test
     fun `without independently verified canonical authors no source can be work corroborated`() {
         val portfolio = ProviderWorkSourcePortfolio.assess(
             providerId = ProviderId("app.tsuzuki.mangafire"),
