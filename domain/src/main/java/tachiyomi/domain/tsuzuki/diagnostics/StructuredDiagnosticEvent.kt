@@ -217,6 +217,12 @@ enum class DiagnosticAttribute {
     PROVIDER_READER_MAPPED_EVIDENCE_COUNT,
     PROVIDER_READER_ELIGIBLE_MAPPED_COUNT,
     PROVIDER_READER_NO_MATCH_REASON,
+    // Source-attested chapter structure for an opt-in selected Reader option.
+    PROVIDER_READER_SOURCE_NUMBER_MILLI,
+    PROVIDER_READER_SOURCE_VOLUME,
+    PROVIDER_READER_LABEL_HAS_VOLUME_MARKER,
+    PROVIDER_READER_TITLE_IS_VOLUME_CONTAINER,
+    PROVIDER_READER_TITLE_PRESENT,
     CANONICAL_CHAPTER_BASE_NUMBER,
     CHAPTER_NUMBER_MIN_MILLI,
     CHAPTER_NUMBER_MAX_MILLI,
@@ -728,7 +734,11 @@ object StructuredDiagnosticSanitizer {
         // 1000x scales decimal source chapter numbers without collapsing 1180.5 to 1180.
         DiagnosticAttribute.CHAPTER_NUMBER_MIN_MILLI,
         DiagnosticAttribute.CHAPTER_NUMBER_MAX_MILLI,
+        DiagnosticAttribute.PROVIDER_READER_SOURCE_NUMBER_MILLI,
         -> (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..1_000_000_000L }
+
+        DiagnosticAttribute.PROVIDER_READER_SOURCE_VOLUME ->
+            (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..10_000L }
 
         DiagnosticAttribute.PROVIDER_VERSION_CODE -> (value as? DiagnosticAttributeValue.Number)
             ?.takeIf { it.value in 1..MAX_COUNT }
@@ -743,6 +753,9 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.CANONICAL_ARTWORK_PRESENT,
         DiagnosticAttribute.REQUEST_DATA_PRESENT,
         DiagnosticAttribute.INITIALIZED,
+        DiagnosticAttribute.PROVIDER_READER_LABEL_HAS_VOLUME_MARKER,
+        DiagnosticAttribute.PROVIDER_READER_TITLE_IS_VOLUME_CONTAINER,
+        DiagnosticAttribute.PROVIDER_READER_TITLE_PRESENT,
         DiagnosticAttribute.COMPLETED,
         DiagnosticAttribute.IDENTITY_VERIFIED,
         DiagnosticAttribute.RATING_PRESENT,
