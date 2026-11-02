@@ -215,19 +215,24 @@ class PrepareCanonicalChapterForReader(
                             stage = DiagnosticStage.READER,
                             outcome = DiagnosticOutcome.TYPED_FAILURE,
                             severity = DiagnosticSeverity.WARN,
-                            attributes = mapOf(
-                                DiagnosticAttribute.PROVIDER_ID to
+                            attributes = buildMap {
+                                put(
+                                    DiagnosticAttribute.PROVIDER_ID,
                                     DiagnosticAttributeValue.Text(option.providerId.value),
-                                DiagnosticAttribute.ERROR_CATEGORY to DiagnosticAttributeValue.Code(
-                                    prepared.error.code.toDiagnosticCategory(),
-                                ),
-                                DiagnosticAttribute.PROVIDER_ERROR_CODE to
+                                )
+                                put(
+                                    DiagnosticAttribute.ERROR_CATEGORY,
+                                    DiagnosticAttributeValue.Code(prepared.error.code.toDiagnosticCategory()),
+                                )
+                                put(
+                                    DiagnosticAttribute.PROVIDER_ERROR_CODE,
                                     DiagnosticAttributeValue.Text(prepared.error.code.name),
-                            ) + capturedSourceIdentity + (
+                                )
+                                putAll(capturedSourceIdentity)
                                 prepared.error.observedPageCount?.let { count ->
-                                    mapOf(DiagnosticAttribute.PAGE_COUNT to DiagnosticAttributeValue.Number(count.toLong()))
-                                }.orEmpty()
-                                ),
+                                    put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(count.toLong()))
+                                }
+                            },
                         )
                     }
                     is ProviderCallResult.Success -> {
