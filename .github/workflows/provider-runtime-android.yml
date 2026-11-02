@@ -1,5 +1,6 @@
 name: Provider Platform Android gate
 # #176 editorial variants and title volumes: run current Host Draft full/Android gates.
+# Physical release candidate after green CI: retain installed app and Provider configuration.
 
 on:
   push:
