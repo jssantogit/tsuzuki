@@ -255,7 +255,9 @@ class ResolveProviderChapterReading(
         const val MIN_READING_IDENTITY_CONFIDENCE = 0.90
 
         // Only a delivery shape safety limit, not a chapter-count/identity inference.
-        const val MIN_SUSPECT_VOLUME_PAGE_COUNT = 120
+        // A54 code11 physically exposed a 102-page false Chapter 0 (One Punch-Man).
+        // This is still a defensive heuristic, not positive proof of source identity.
+        const val MIN_SUSPECT_VOLUME_PAGE_COUNT = 100
 
         val REQUIRED_READING_CAPABILITIES = setOf(
             ProviderCapabilities.ReadingLookupV1,
