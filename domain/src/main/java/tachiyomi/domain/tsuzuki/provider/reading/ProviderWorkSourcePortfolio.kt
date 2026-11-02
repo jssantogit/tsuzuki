@@ -45,7 +45,8 @@ object ProviderWorkSourcePortfolio {
             }
             val qualified = sequenceOf(candidate.title)
                 .plus(candidate.aliases.asSequence())
-                .any { explicitlyQualifiedEdition(it, normalizedQuery) }
+                .any { explicitlyQualifiedEdition(it, normalizedQuery) } ||
+                mangaFireUrlAttestsEditionVariant(providerId, candidate, normalizedQuery)
             ProviderWorkSourceAssessment(
                 ref = ProviderBindingRef(
                     providerId = providerId,
@@ -83,6 +84,49 @@ object ProviderWorkSourcePortfolio {
         if (suffix.firstOrNull() !in listOf('(', '[', '-', ':')) return false
         return EDITION_MARKERS.any(suffix::contains)
     }
+
+    /**
+     * A verified MangaFire title URL may expose an explicit editorial variant
+     * even when the source's primary title and aliases omit the qualifier.
+     * This is only negative edition evidence: never infer that another HID is
+     * the preferred/canonical edition or use a source URL to prove authors.
+     *
+     * Reject foreign hosts, schemes, routes, HIDs, query strings, and slug
+     * translations that do not match the normalized canonical lookup title.
+     */
+    private fun mangaFireUrlAttestsEditionVariant(
+        providerId: ProviderId,
+        candidate: ProviderWorkCandidate,
+        normalizedQuery: String,
+    ): Boolean {
+        if (providerId.value != MANGAFIRE_PROVIDER_ID) return false
+        val canonicalSlug = normalizedQuery
+            .replace(NON_SLUG_CHARACTERS, "-")
+            .trim('-')
+        if (canonicalSlug.isEmpty()) return false
+        val url = candidate.url ?: return false
+        val exactTitleUrl = Regex(
+            "^https://mangafire\\.to/title/${Regex.escape(candidate.externalWorkId)}-([a-z0-9-]+)/?$",
+            RegexOption.IGNORE_CASE,
+        )
+        val pathSlug = exactTitleUrl.matchEntire(url)?.groupValues?.getOrNull(1)?.lowercase()
+            ?: return false
+        val qualifier = pathSlug.removePrefix("$canonicalSlug-")
+        if (qualifier == pathSlug || qualifier.isEmpty()) return false
+        return EDITION_SLUG_MARKERS.any { token ->
+            qualifier == token || qualifier.startsWith("$token-") ||
+                qualifier.endsWith("-$token") || qualifier.contains("-$token-")
+        }
+    }
+
+    private const val MANGAFIRE_PROVIDER_ID = "app.tsuzuki.mangafire"
+    private val NON_SLUG_CHARACTERS = Regex("[^a-z0-9]+")
+    private val EDITION_SLUG_MARKERS = listOf(
+        "fan-colored", "fan-coloredd", "fan-coloured",
+        "colored", "coloredd", "coloured",
+        "full-color", "full-colour", "omnibus", "one-shot", "oneshot",
+        "special-edition",
+    )
 
     private val VERIFIED_SOURCE_DETAILS = setOf(
         ProviderWorkDetailOutcome.VERIFIED_WITH_ALIASES,
