@@ -43,10 +43,11 @@ object ProviderWorkSourcePortfolio {
                 sourceAuthors.none { it in expectedAuthors } -> ProviderWorkVerification.AUTHOR_CONFLICT
                 else -> ProviderWorkVerification.AUTHOR_CORROBORATED
             }
-            val qualified = sequenceOf(candidate.title)
-                .plus(candidate.aliases.asSequence())
-                .any { explicitlyQualifiedEdition(it, normalizedQuery) } ||
-                mangaFireUrlAttestsEditionVariant(providerId, candidate, normalizedQuery)
+            val qualified = hasSourceAttestedAlternateEdition(
+                providerId = providerId,
+                candidate = candidate,
+                baseTitle = queryTitle,
+            )
             ProviderWorkSourceAssessment(
                 ref = ProviderBindingRef(
                     providerId = providerId,
@@ -63,6 +64,24 @@ object ProviderWorkSourcePortfolio {
                 },
             )
         }
+    }
+
+    /**
+     * One closed, shared edition-variant predicate for discovery, shadow source
+     * portfolios and Reader eligibility. Source URL evidence may only exclude
+     * a variant; it must never promote a competing HID by popularity or count.
+     */
+    fun hasSourceAttestedAlternateEdition(
+        providerId: ProviderId,
+        candidate: ProviderWorkCandidate,
+        baseTitle: String,
+    ): Boolean {
+        val normalizedBase = normalizeTitle(baseTitle)
+        if (normalizedBase.isEmpty()) return false
+        return sequenceOf(candidate.title)
+            .plus(candidate.aliases.asSequence())
+            .any { explicitlyQualifiedEdition(it, normalizedBase) } ||
+            mangaFireUrlAttestsEditionVariant(providerId, candidate, normalizedBase)
     }
 
     private fun normalizeCreator(name: String): String? =
