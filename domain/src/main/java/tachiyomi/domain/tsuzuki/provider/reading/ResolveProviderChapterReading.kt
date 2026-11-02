@@ -118,7 +118,10 @@ class ResolveProviderChapterReading(
                     !hasConflictingIntegerChapterHint(parsed, evidence.rawNumber) &&
                     // The source's volume may be present only in the label;
                     // reject conflicts or malformed explicit volume markers.
-                    (!volumeParser.hasExplicitVolumePrefix(evidence.rawLabel) || explicitLabelVolume != null) &&
+                    (
+                        !volumeParser.hasExplicitVolumePrefix(evidence.rawLabel) ||
+                            explicitLabelVolume != null
+                        ) &&
                     (evidence.volume == null || explicitLabelVolume == null || evidence.volume == explicitLabelVolume) &&
                     // Unknown canonical volume is not a wildcard for source-attested volume 112.
                     (observedVolume == null || observedVolume == chapter.volume)
