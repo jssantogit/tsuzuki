@@ -4,6 +4,43 @@ import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
 class StructuredDiagnosticEventTest {
+
+    @Test
+    fun `isolated runtime phases remain closed and cannot accept arbitrary source diagnostics`() {
+        fun sanitize(attributes: Map<String, DiagnosticAttributeValue>) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000,
+                severity = DiagnosticSeverity.DEBUG,
+                subsystem = DiagnosticSubsystem.NETWORK,
+                name = DiagnosticEventName.PROVIDER_RUNTIME_STAGE,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.BINDING,
+                outcome = DiagnosticOutcome.REUSED,
+                attributes = attributes,
+            ),
+        )?.attributes.orEmpty()
+
+        sanitize(
+            mapOf(
+                "provider_runtime_phase" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderRuntimePhase.BIND_REUSED,
+                ),
+            ),
+        ) shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_RUNTIME_PHASE to DiagnosticAttributeValue.Code(
+                DiagnosticProviderRuntimePhase.BIND_REUSED,
+            ),
+        )
+
+        sanitize(
+            mapOf(
+                "provider_runtime_phase" to DiagnosticAttributeValue.Text("BIND_REUSED; cookie=secret"),
+                "request_url" to DiagnosticAttributeValue.Text("https://example.org/?token=secret"),
+            ),
+        ) shouldBe emptyMap()
+    }
+
     @Test
     fun `provider candidate diagnostics accept only public bounded source identifiers`() {
         fun sanitizeCandidate(attributes: Map<String, DiagnosticAttributeValue>) =
@@ -27,6 +64,17 @@ class StructuredDiagnosticEventTest {
                 "provider_work_title" to DiagnosticAttributeValue.Text("Vagabond"),
                 "provider_work_url" to DiagnosticAttributeValue.Text("https://mangafire.to/title/qnlvj-vagabond22"),
                 "provider_work_chapter_count" to DiagnosticAttributeValue.Number(327),
+                "provider_coverage_outcome" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderCoverageOutcome.OBSERVED,
+                ),
+                "provider_coverage_observed_count" to DiagnosticAttributeValue.Number(101),
+                "provider_coverage_has_more" to DiagnosticAttributeValue.Flag(true),
+                "chapter_number_min_milli" to DiagnosticAttributeValue.Number(1000),
+                "chapter_number_max_milli" to DiagnosticAttributeValue.Number(101000),
+                "provider_detail_outcome" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderDetailOutcome.DETAIL_FAILED,
+                ),
+                "http_status" to DiagnosticAttributeValue.Number(503),
                 "provider_candidate_reason" to DiagnosticAttributeValue.Code(
                     DiagnosticProviderCandidateReason.ALIAS_MATCH_BLOCKED,
                 ),
@@ -37,6 +85,15 @@ class StructuredDiagnosticEventTest {
         safe[DiagnosticAttribute.PROVIDER_WORK_URL] shouldBe
             DiagnosticAttributeValue.Text("https://mangafire.to/title/qnlvj-vagabond22")
         safe[DiagnosticAttribute.PROVIDER_WORK_CHAPTER_COUNT] shouldBe DiagnosticAttributeValue.Number(327)
+        safe[DiagnosticAttribute.PROVIDER_COVERAGE_OUTCOME] shouldBe
+            DiagnosticAttributeValue.Code(DiagnosticProviderCoverageOutcome.OBSERVED)
+        safe[DiagnosticAttribute.PROVIDER_COVERAGE_OBSERVED_COUNT] shouldBe DiagnosticAttributeValue.Number(101)
+        safe[DiagnosticAttribute.PROVIDER_COVERAGE_HAS_MORE] shouldBe DiagnosticAttributeValue.Flag(true)
+        safe[DiagnosticAttribute.CHAPTER_NUMBER_MIN_MILLI] shouldBe DiagnosticAttributeValue.Number(1000)
+        safe[DiagnosticAttribute.CHAPTER_NUMBER_MAX_MILLI] shouldBe DiagnosticAttributeValue.Number(101000)
+        safe[DiagnosticAttribute.PROVIDER_DETAIL_OUTCOME] shouldBe
+            DiagnosticAttributeValue.Code(DiagnosticProviderDetailOutcome.DETAIL_FAILED)
+        safe[DiagnosticAttribute.HTTP_STATUS] shouldBe DiagnosticAttributeValue.Number(503)
 
         listOf(
             "https://mangafire.to/title/qnlvj-vagabond22?token=secret",
@@ -50,6 +107,12 @@ class StructuredDiagnosticEventTest {
         }
         sanitizeCandidate(
             mapOf("provider_work_title" to DiagnosticAttributeValue.Text("Bad\nAuthorization: Bearer secret")),
+        ) shouldBe emptyMap()
+        sanitizeCandidate(
+            mapOf(
+                "provider_detail_outcome" to DiagnosticAttributeValue.Text("Authorization: Bearer secret"),
+                "http_status" to DiagnosticAttributeValue.Number(999),
+            ),
         ) shouldBe emptyMap()
     }
 

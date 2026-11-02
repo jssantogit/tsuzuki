@@ -2,6 +2,7 @@ package tachiyomi.domain.tsuzuki.provider.reading
 
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
@@ -13,8 +14,13 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticErrorCategory
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderDetailOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderEditionQualification
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderWorkVerification
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
@@ -22,6 +28,10 @@ import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
+import tachiyomi.domain.tsuzuki.integration.model.ProvenancedMetadata
+import tachiyomi.domain.tsuzuki.integration.model.ResolvedMetadata
+import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshot
+import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshotRepository
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
@@ -50,6 +60,42 @@ class CollectProviderReadingEvidenceTest {
         createdAt = 1L,
         updatedAt = 1L,
     )
+
+    @Test
+    fun `opt-in lookup failures preserve HTTP challenge instead of generic error`(): Unit = runBlocking {
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Failure(
+                        ProviderError(
+                            code = ProviderErrorCode.SOURCE_READ_ERROR,
+                            retryable = true,
+                            sourceFailureCode = ProviderLookupFailureCode.CHALLENGE_BLOCKED,
+                            httpStatus = 403,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Failed lookup must never request chapters") },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+        val result = collector.execute(canonicalTitle.id)
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        val failure = recorder.events.single {
+            it.name == DiagnosticEventName.PROVIDER_READING_LOOKUP_ATTEMPT &&
+                it.outcome == DiagnosticOutcome.FAILED
+        }
+        failure.attributes["error_category"] shouldBe DiagnosticAttributeValue.Code(DiagnosticErrorCategory.CAPTCHA)
+        failure.attributes["http_status"] shouldBe DiagnosticAttributeValue.Number(403)
+        (StructuredDiagnosticSanitizer.sanitize(failure) != null) shouldBe true
+    }
 
     @Test
     fun `stalled provider chapters stop before deadline without reporting a complete empty inventory`() = runTest {
@@ -86,6 +132,8 @@ class CollectProviderReadingEvidenceTest {
 
         (result != null) shouldBe true
         result!!.complete shouldBe false
+        // A selected, persisted binding still exists when chapter page 1 times out.
+        result.bindingCount shouldBe 1
         result.evidence shouldBe emptyList()
         result.snapshots shouldBe emptyList()
         bindings.getByTitle(canonicalTitle.id).shouldHaveSize(1)
@@ -99,6 +147,7 @@ class CollectProviderReadingEvidenceTest {
         summary.outcome shouldBe DiagnosticOutcome.PARTIAL
         summary.attributes["completed"] shouldBe DiagnosticAttributeValue.Flag(false)
         summary.attributes["chapter_count"] shouldBe DiagnosticAttributeValue.Number(0)
+        summary.attributes["binding_count"] shouldBe DiagnosticAttributeValue.Number(1)
         recorder.events.none { it.outcome == DiagnosticOutcome.CANCELLED } shouldBe true
     }
 
@@ -156,6 +205,57 @@ class CollectProviderReadingEvidenceTest {
             it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
                 it.stage == DiagnosticStage.READ && it.outcome == DiagnosticOutcome.TIMEOUT
         } shouldBe true
+    }
+
+    @Test
+    fun `detailed capture records bounded MangaFire page sample and chapter number range`(): Unit = runBlocking {
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderWorkCandidate("main", "Dandadan", language = "en")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderChapterObservation("1595", "Chapter 1.5", rawNumber = 1.5),
+                                ProviderChapterObservation("1598", "Chapter 2", rawNumber = 2.0),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+        val result = collector.execute(canonicalTitle.id)
+
+        result.evidence.shouldHaveSize(2)
+        val attempts = recorder.events.filter { it.name == DiagnosticEventName.PROVIDER_READING_CHAPTER_ATTEMPT }
+        attempts.shouldHaveSize(2)
+        attempts[0].outcome shouldBe DiagnosticOutcome.STARTED
+        attempts[1].outcome shouldBe DiagnosticOutcome.SUCCEEDED
+        attempts[0].attributes["page_index"] shouldBe DiagnosticAttributeValue.Number(1)
+        attempts[1].attributes["item_count"] shouldBe DiagnosticAttributeValue.Number(2)
+        val page = recorder.events.single { it.name == DiagnosticEventName.PROVIDER_READING_PAGE_DETAIL }
+        page.attributes["page_index"] shouldBe DiagnosticAttributeValue.Number(1)
+        page.attributes["item_count"] shouldBe DiagnosticAttributeValue.Number(2)
+        page.attributes["chapter_number_min_milli"] shouldBe DiagnosticAttributeValue.Number(1500)
+        page.attributes["chapter_number_max_milli"] shouldBe DiagnosticAttributeValue.Number(2000)
+        page.attributes["provider_chapter_first_id"] shouldBe DiagnosticAttributeValue.Text("1595")
+        page.attributes["provider_chapter_last_id"] shouldBe DiagnosticAttributeValue.Text("1598")
+        (StructuredDiagnosticSanitizer.sanitize(page) != null) shouldBe true
     }
 
     @Test
@@ -303,6 +403,7 @@ class CollectProviderReadingEvidenceTest {
 
     @Test
     fun `existing available binding is reused without lookup`(): Unit = runBlocking {
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
         val bindings = MemoryBindingRepository()
         bindings.upsert(
             ProviderReadingBinding(
@@ -336,6 +437,7 @@ class CollectProviderReadingEvidenceTest {
             bindingRepository = bindings,
             evidenceAdapter = ProviderChapterEvidenceAdapter(),
             clock = { 2L },
+            diagnostics = recorder,
         )
 
         val result = bridge.execute(canonicalTitle.id)
@@ -344,6 +446,322 @@ class CollectProviderReadingEvidenceTest {
         result.bindingCount shouldBe 1
         result.evidence.single().externalChapterKey shouldBe "chapter-2"
         lookupCalls shouldBe 0
+        val reused = recorder.events.single { it.name == DiagnosticEventName.PROVIDER_READING_BINDING }
+        reused.outcome shouldBe DiagnosticOutcome.REUSED
+        reused.attributes["provider_work_id"] shouldBe DiagnosticAttributeValue.Text("dandadan-1")
+        (StructuredDiagnosticSanitizer.sanitize(reused) != null) shouldBe true
+    }
+
+    @Test
+    fun `creator attestation auto binds only the uniquely corroborated source identity`(): Unit = runBlocking {
+        val id = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), id, externalId = "mal-verified"),
+                externalIds = mapOf(id to "mal-verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val bindings = MemoryBindingRepository()
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    "verified-work",
+                                    "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Arakawa Hiromu"),
+                                ),
+                                ProviderWorkCandidate(
+                                    "different-work",
+                                    "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Different Creator"),
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = {
+                    it.binding.externalWorkId shouldBe "verified-work"
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation("one", "Chapter 1")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            diagnostics = recorder,
+        )
+        val result = collector.execute(canonicalTitle.id)
+        result.complete shouldBe true
+        result.bindingCount shouldBe 1
+        result.evidence.shouldHaveSize(1)
+        bindings.getByTitle(canonicalTitle.id).single().ref.externalWorkId shouldBe "verified-work"
+        recorder.events.last {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.LOOKUP
+        }.attributes["lookup_decision"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderLookupDecision.AUTHOR_CORROBORATED,
+        )
+    }
+
+    @Test
+    fun `one corroborated readable source can recover an empty competing edition`(): Unit = runBlocking {
+        val mal = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), mal, externalId = "mal-verified"),
+                externalIds = mapOf(mal to "mal-verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val bindings = MemoryBindingRepository()
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(
+                                ProviderWorkCandidate(
+                                    externalWorkId = "fullmetal-readable",
+                                    title = "Dandadan",
+                                    authors = listOf("Arakawa Hiromu"),
+                                    language = "en",
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 101,
+                                    coverageMinMilli = 1000,
+                                    coverageMaxMilli = 101000,
+                                    coverageHasMore = true,
+                                ),
+                                ProviderWorkCandidate(
+                                    externalWorkId = "fullmetal-empty",
+                                    title = "Dandadan",
+                                    authors = listOf("Arakawa Hiromu"),
+                                    language = "en",
+                                    coverageOutcome = ProviderCoverageOutcome.EMPTY,
+                                    coverageObservedCount = 0,
+                                    coverageHasMore = false,
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = {
+                    it.binding.externalWorkId shouldBe "fullmetal-readable"
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation("chapter-1", "Chapter 1")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            diagnostics = recorder,
+        )
+        val result = collector.execute(canonicalTitle.id)
+        result.complete shouldBe true
+        result.bindingCount shouldBe 1
+        result.evidence.shouldHaveSize(1)
+        bindings.getByTitle(canonicalTitle.id).single().ref.externalWorkId shouldBe "fullmetal-readable"
+        recorder.events.last {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.LOOKUP
+        }.attributes["lookup_decision"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderLookupDecision.UNIQUE_READABLE_SOURCE,
+        )
+    }
+
+    @Test
+    fun `multiple readable or unknown rivals cannot authorize source binding`(): Unit = runBlocking {
+        val mal = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), mal, externalId = "mal-verified"),
+                externalIds = mapOf(mal to "mal-verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        for (rival in listOf(
+            ProviderCoverageOutcome.OBSERVED,
+            ProviderCoverageOutcome.UNKNOWN,
+            ProviderCoverageOutcome.FAILED,
+        )) {
+            val rivalIsObserved = rival == ProviderCoverageOutcome.OBSERVED
+            val bindings = MemoryBindingRepository()
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(canonicalTitle),
+                providerRegistry = registry(),
+                gateway = gateway(
+                    lookupHandler = {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                listOf(
+                                    ProviderWorkCandidate(
+                                        "source-one",
+                                        "Dandadan",
+                                        language = "en",
+                                        authors = listOf("Hiromu Arakawa"),
+                                        coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                        coverageObservedCount = 50,
+                                        coverageMinMilli = 1000,
+                                        coverageMaxMilli = 50000,
+                                    ),
+                                    ProviderWorkCandidate(
+                                        "source-two",
+                                        "Dandadan",
+                                        language = "en",
+                                        authors = listOf("Hiromu Arakawa"),
+                                        coverageOutcome = rival,
+                                        coverageObservedCount = if (rivalIsObserved) 50 else null,
+                                        coverageMinMilli = if (rivalIsObserved) 1000 else null,
+                                        coverageMaxMilli = if (rivalIsObserved) 50000 else null,
+                                    ),
+                                ),
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                    chaptersHandler = { error("Ambiguous or failed source must not be read") },
+                ),
+                bindingRepository = bindings,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 42L },
+                canonicalMetadataSnapshotRepository = metadata,
+            )
+            val result = collector.execute(canonicalTitle.id)
+            result.complete shouldBe false
+            result.bindingCount shouldBe 0
+            bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        }
+    }
+
+    @Test
+    fun `identical or missing creator attestation never resolves an ambiguous HID`(): Unit = runBlocking {
+        val id = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), id, externalId = "mal-verified"),
+                externalIds = mapOf(id to "mal-verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        for (rivalAuthors in listOf(listOf("Arakawa Hiromu"), emptyList())) {
+            val bindings = MemoryBindingRepository()
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(canonicalTitle),
+                providerRegistry = registry(),
+                gateway = gateway(
+                    lookupHandler = {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                listOf(
+                                    ProviderWorkCandidate(
+                                        "main",
+                                        "Dandadan",
+                                        language = "en",
+                                        authors = listOf("Hiromu Arakawa"),
+                                    ),
+                                    ProviderWorkCandidate(
+                                        "rival",
+                                        "Dandadan",
+                                        language = "en",
+                                        authors = rivalAuthors,
+                                    ),
+                                ),
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                    chaptersHandler = { error("No author-ambiguous work may request chapters") },
+                ),
+                bindingRepository = bindings,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 42L },
+                canonicalMetadataSnapshotRepository = metadata,
+            )
+            val result = collector.execute(canonicalTitle.id)
+            result.complete shouldBe false
+            result.bindingCount shouldBe 0
+            bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        }
+    }
+
+    @Test
+    fun `three same title HIDs remain unbound even under detailed capture`(): Unit = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "Chainsaw Man")
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate("kx1p6", "Chainsaw Man", language = "en"),
+                                ProviderWorkCandidate("kkyzv", "Chainsaw Man", language = "en"),
+                                ProviderWorkCandidate("0w5k", "Chainsaw Man", language = "en"),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Unverified HIDs must not reach reading.chapters") },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+        val result = collector.execute(title.id)
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+        result.partialEvidence shouldBe emptyList()
+        bindings.getByTitle(title.id) shouldBe emptyList()
+        val candidates = recorder.events.filter {
+            it.name == DiagnosticEventName.PROVIDER_READING_CANDIDATE
+        }
+        candidates.shouldHaveSize(3)
+        candidates.map { it.attributes["provider_work_id"] } shouldBe listOf(
+            DiagnosticAttributeValue.Text("kx1p6"),
+            DiagnosticAttributeValue.Text("kkyzv"),
+            DiagnosticAttributeValue.Text("0w5k"),
+        )
     }
 
     @Test
@@ -373,10 +791,77 @@ class CollectProviderReadingEvidenceTest {
 
         val result = bridge.execute(canonicalTitle.id)
 
-        result.complete shouldBe true
+        result.complete shouldBe false
         result.bindingCount shouldBe 0
         result.evidence shouldBe emptyList()
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+    }
+
+    @Test
+    fun `no source title match remains a fully checked empty lookup`(): Unit = runBlocking {
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderWorkCandidate("unrelated", "Naruto", language = "en")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("No binding must fetch no chapters") },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+        result.complete shouldBe true
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+    }
+
+    @Test
+    fun `ambiguous lookup logs query and decision`(): Unit = runBlocking {
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate("work-1", "Dandadan", language = "en"),
+                                ProviderWorkCandidate("work-2", "Dandadan", language = "en"),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Ambiguous lookup must not fetch chapters") },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+        val result = collector.execute(canonicalTitle.id)
+
+        result.complete shouldBe false
+        val candidates = recorder.events.filter { it.name == DiagnosticEventName.PROVIDER_READING_CANDIDATE }
+        candidates.shouldHaveSize(2)
+        candidates[0].attributes["provider_lookup_title"] shouldBe DiagnosticAttributeValue.Text("Dandadan")
+        val rejected = recorder.events.last {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.LOOKUP && it.outcome == DiagnosticOutcome.REJECTED
+        }
+        rejected.attributes["lookup_decision"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderLookupDecision.MULTIPLE_PRIMARY_IDENTITIES,
+        )
     }
 
     @Test
@@ -426,6 +911,118 @@ class CollectProviderReadingEvidenceTest {
         collected.evidence.map { it.externalChapterKey } shouldBe listOf("main-chapter-1")
         bindings.getByTitle(title.id).single().ref.externalWorkId shouldBe "main"
         bindings.getByTitle(title.id).single().verification shouldBe ProviderBindingVerification.EXACT
+    }
+
+    @Test
+    fun `source attested colored alias distinguishes an otherwise identical work title`(): Unit = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "Vagabond")
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    externalWorkId = "colored",
+                                    title = "Vagabond",
+                                    aliases = listOf("Vagabond (Official Colored)"),
+                                    language = "en",
+                                ),
+                                ProviderWorkCandidate("regular", "Vagabond", language = "en"),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    request.binding.externalWorkId shouldBe "regular"
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation("ch-1", "Ch. 1", rawNumber = 1.0)),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+        val result = collector.execute(title.id)
+        result.complete shouldBe true
+        result.evidence.shouldHaveSize(1)
+        bindings.getByTitle(title.id).single().ref.externalWorkId shouldBe "regular"
+    }
+
+    @Test
+    fun `sole source candidate explicitly colored cannot stand in for unqualified canonical edition`(): Unit =
+        runBlocking {
+            val title = canonicalTitle.copy(displayTitle = "Vagabond")
+            val bindings = MemoryBindingRepository()
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(title),
+                providerRegistry = registry(),
+                gateway = gateway(
+                    lookupHandler = {
+                        ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(
+                                    ProviderWorkCandidate(
+                                        "only-colored",
+                                        "Vagabond",
+                                        aliases = listOf("Vagabond (Official Colored)"),
+                                        language = "en",
+                                    ),
+                                ),
+                                nextCursor = null,
+                            ),
+                        )
+                    },
+                    chaptersHandler = { error("A colored-only source must not create an unqualified binding") },
+                ),
+                bindingRepository = bindings,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 42L },
+            )
+            val result = collector.execute(title.id)
+            result.complete shouldBe false
+            result.bindingCount shouldBe 0
+            bindings.getByTitle(title.id) shouldBe emptyList()
+        }
+
+    @Test
+    fun `colored alias cannot disambiguate more than one unqualified primary`(): Unit = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "Bleach")
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate("colored", "Bleach", aliases = listOf("Bleach (Colored)")),
+                                ProviderWorkCandidate("unmarked-a", "Bleach"),
+                                ProviderWorkCandidate("unmarked-b", "Bleach"),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Ambiguous source must not fetch chapters") },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+        val result = collector.execute(title.id)
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        bindings.getByTitle(title.id) shouldBe emptyList()
     }
 
     @Test
@@ -1267,12 +1864,15 @@ class CollectProviderReadingEvidenceTest {
                                     url = "https://mangafire.to/title/original-123-dandadan",
                                     language = "en",
                                     chapterCount = 151,
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_WITH_ALIASES,
                                 ),
                                 ProviderWorkCandidate(
                                     externalWorkId = "other-456",
                                     title = "Dandadan",
                                     url = "https://mangafire.to/title/other-456-dandadan",
                                     language = "en",
+                                    detailOutcome = ProviderWorkDetailOutcome.DETAIL_FAILED,
+                                    detailHttpStatus = 503,
                                 ),
                             ),
                             nextCursor = null,
@@ -1291,6 +1891,15 @@ class CollectProviderReadingEvidenceTest {
         result.bindingCount shouldBe 0
         val candidates = recorder.events.filter { it.name == DiagnosticEventName.PROVIDER_READING_CANDIDATE }
         candidates.shouldHaveSize(2)
+        val lookupSteps = recorder.events.filter {
+            it.name == DiagnosticEventName.PROVIDER_READING_LOOKUP_ATTEMPT
+        }
+        lookupSteps.shouldHaveSize(2)
+        lookupSteps[0].outcome shouldBe DiagnosticOutcome.STARTED
+        lookupSteps[1].outcome shouldBe DiagnosticOutcome.SUCCEEDED
+        lookupSteps[0].attributes["query_index"] shouldBe DiagnosticAttributeValue.Number(1)
+        lookupSteps[0].attributes["provider_lookup_title"] shouldBe DiagnosticAttributeValue.Text("Dandadan")
+        lookupSteps[1].attributes["candidate_count"] shouldBe DiagnosticAttributeValue.Number(2)
         candidates[0].attributes["provider_work_id"] shouldBe DiagnosticAttributeValue.Text("original-123")
         candidates[0].attributes["provider_work_title"] shouldBe DiagnosticAttributeValue.Text("Dandadan")
         candidates[0].attributes["language"] shouldBe DiagnosticAttributeValue.Text("en")
@@ -1299,6 +1908,13 @@ class CollectProviderReadingEvidenceTest {
         candidates[0].attributes["provider_work_aliases"] shouldBe DiagnosticAttributeValue.Text("Dan Da Dan")
         candidates[0].attributes["provider_work_chapter_count"] shouldBe DiagnosticAttributeValue.Number(151)
         candidates[0].attributes["query_index"] shouldBe DiagnosticAttributeValue.Number(1)
+        candidates[0].attributes["provider_detail_outcome"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderDetailOutcome.VERIFIED_WITH_ALIASES,
+        )
+        candidates[1].attributes["provider_detail_outcome"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderDetailOutcome.DETAIL_FAILED,
+        )
+        candidates[1].attributes["http_status"] shouldBe DiagnosticAttributeValue.Number(503)
         candidates.all { StructuredDiagnosticSanitizer.sanitize(it) != null } shouldBe true
         candidates[1].attributes.containsKey("provider_work_chapter_count") shouldBe false
     }
@@ -1332,6 +1948,201 @@ class CollectProviderReadingEvidenceTest {
         recorder.events.none { it.name == DiagnosticEventName.PROVIDER_READING_CANDIDATE } shouldBe true
         recorder.events.any { it.stage == DiagnosticStage.LOOKUP && it.outcome == DiagnosticOutcome.REJECTED } shouldBe
             true
+    }
+
+    @Test
+    fun `ambiguous same-work HIDs are observed independently but cannot become Reader bindings`() = runBlocking<Unit> {
+        val id = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), id, externalId = "mal-verified"),
+                externalIds = mapOf(id to "mal-verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val observations = MemoryWorkSourceAssociationRepository()
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    "first-hid",
+                                    "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Arakawa Hiromu"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.UNKNOWN,
+                                    coverageObservedCount = 97,
+                                    coverageMinMilli = 1000,
+                                    coverageMaxMilli = 97000,
+                                    coverageHasMore = false,
+                                ),
+                                ProviderWorkCandidate(
+                                    "second-hid",
+                                    "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Hiromu Arakawa"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.UNKNOWN,
+                                    coverageObservedCount = 101,
+                                    coverageMinMilli = 1000,
+                                    coverageMaxMilli = 232000,
+                                    coverageHasMore = true,
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Unknown chapter coverage must not trigger source reads") },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = observations,
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        observations.getByTitle(canonicalTitle.id).map { it.ref.externalWorkId } shouldBe
+            listOf("first-hid", "second-hid")
+        observations.getByTitle(canonicalTitle.id).map { it.workVerification } shouldBe
+            listOf(ProviderWorkVerification.AUTHOR_CORROBORATED, ProviderWorkVerification.AUTHOR_CORROBORATED)
+        observations.getByTitle(canonicalTitle.id).all {
+            it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED
+        } shouldBe true
+    }
+
+    @Test
+    fun `multi HIDs yield separate provisional chapter evidence`() = runBlocking<Unit> {
+        val id = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), id, externalId = "mal-verified"),
+                externalIds = mapOf(id to "mal-verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val observations = MemoryWorkSourceAssociationRepository()
+        val bindings = MemoryBindingRepository()
+        val readHids = mutableListOf<String>()
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    "first-hid",
+                                    "Dandadan",
+                                    authors = listOf("Arakawa Hiromu"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                    coverageMinMilli = 1_000,
+                                    coverageMaxMilli = 1_000,
+                                    coverageHasMore = false,
+                                ),
+                                ProviderWorkCandidate(
+                                    "second-hid",
+                                    "Dandadan",
+                                    authors = listOf("Hiromu Arakawa"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                    coverageMinMilli = 2_000,
+                                    coverageMaxMilli = 2_000,
+                                    coverageHasMore = false,
+                                ),
+                                ProviderWorkCandidate(
+                                    "colored-hid",
+                                    "Dandadan",
+                                    aliases = listOf("Dandadan (Official Colored)"),
+                                    authors = listOf("Arakawa Hiromu"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_WITH_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                    coverageMinMilli = 1_000,
+                                    coverageMaxMilli = 1_000,
+                                    coverageHasMore = false,
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    readHids += request.binding.externalWorkId
+                    val number = if (request.binding.externalWorkId == "first-hid") 1.0 else 2.0
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderChapterObservation(
+                                    providerChapterId = "chapter-id-${request.binding.externalWorkId}",
+                                    rawLabel = "Chapter ${number.toInt()}",
+                                    rawNumber = number,
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = observations,
+            diagnostics = recorder,
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+
+        result.complete shouldBe false
+        result.snapshots shouldBe emptyList()
+        result.bindingCount shouldBe 0
+        result.partialEvidence.size shouldBe 2
+        result.partialEvidence.map { it.producerId }.distinct().size shouldBe 2
+        result.partialEvidence.map { it.externalChapterKey }.toSet() shouldBe
+            setOf("chapter-id-first-hid", "chapter-id-second-hid")
+        readHids.toSet() shouldBe setOf("first-hid", "second-hid")
+        recorder.events
+            .filter { it.name == DiagnosticEventName.PROVIDER_READING_PAGE_DETAIL }
+            .map { it.attributes["provider_work_id"] }
+            .toSet() shouldBe setOf(
+            DiagnosticAttributeValue.Text("first-hid"),
+            DiagnosticAttributeValue.Text("second-hid"),
+        )
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        observations.getByTitle(canonicalTitle.id).size shouldBe 3
+        val sourceEvents = recorder.events.filter {
+            it.name == DiagnosticEventName.PROVIDER_READING_SOURCE_ASSOCIATION
+        }
+        sourceEvents.size shouldBe 3
+        sourceEvents.map { it.attributes["provider_work_verification"] }.toSet() shouldBe
+            setOf(DiagnosticAttributeValue.Code(DiagnosticProviderWorkVerification.AUTHOR_CORROBORATED))
+        sourceEvents.count {
+            it.attributes["provider_edition_qualification"] ==
+                DiagnosticAttributeValue.Code(DiagnosticProviderEditionQualification.SOURCE_ATTESTED_VARIANT)
+        } shouldBe 1
     }
 
     private class CapturingProviderDiagnostics(
@@ -1413,6 +2224,22 @@ class CollectProviderReadingEvidenceTest {
         ): CanonicalTitle = error("not used")
         override suspend fun insert(title: CanonicalTitle) = error("not used")
         override suspend fun addExternalIdentity(identity: ExternalIdentity) = error("not used")
+    }
+
+    private class MemoryWorkSourceAssociationRepository : ProviderWorkSourceAssociationRepository {
+        private val values = linkedMapOf<ProviderBindingRef, ProviderWorkSourceAssociation>()
+
+        override suspend fun observe(association: ProviderWorkSourceAssociation): Boolean {
+            val current = values[association.ref]
+            if (current != null && current.canonicalTitleId != association.canonicalTitleId) return false
+            if (current == null || association.observedAt > current.observedAt) values[association.ref] = association
+            return true
+        }
+
+        override suspend fun get(ref: ProviderBindingRef): ProviderWorkSourceAssociation? = values[ref]
+
+        override suspend fun getByTitle(canonicalTitleId: String): List<ProviderWorkSourceAssociation> =
+            values.values.filter { it.canonicalTitleId == canonicalTitleId }
     }
 
     private class MemoryBindingRepository : ProviderReadingBindingRepository {

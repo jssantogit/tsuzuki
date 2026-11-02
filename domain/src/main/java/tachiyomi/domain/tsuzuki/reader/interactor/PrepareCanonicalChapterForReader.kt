@@ -205,6 +205,8 @@ class PrepareCanonicalChapterForReader(
                                 DiagnosticAttribute.ERROR_CATEGORY to DiagnosticAttributeValue.Code(
                                     prepared.error.code.toDiagnosticCategory(),
                                 ),
+                                DiagnosticAttribute.PROVIDER_ERROR_CODE to
+                                    DiagnosticAttributeValue.Text(prepared.error.code.name),
                             ),
                         )
                     }
@@ -442,6 +444,12 @@ private fun ProviderErrorCode.toDiagnosticCategory(): DiagnosticErrorCategory = 
     ProviderErrorCode.MALFORMED_RESULT -> DiagnosticErrorCategory.MALFORMED_RESPONSE
     ProviderErrorCode.RUNTIME_DIED,
     ProviderErrorCode.SCRIPT_ERROR,
+    ProviderErrorCode.PACKAGE_INVALID,
+    ProviderErrorCode.MALFORMED_REQUEST,
+    ProviderErrorCode.SOURCE_TOO_LARGE,
+    ProviderErrorCode.SOURCE_READ_ERROR,
+    ProviderErrorCode.INVOCATION_CONFLICT,
+    ProviderErrorCode.HOST_ERROR,
     ProviderErrorCode.HOST_API_UNSUPPORTED,
     ProviderErrorCode.RESOURCE_LIMIT,
     -> DiagnosticErrorCategory.EXTENSION

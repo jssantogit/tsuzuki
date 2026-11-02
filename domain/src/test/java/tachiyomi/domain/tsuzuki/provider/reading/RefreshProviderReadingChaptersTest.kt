@@ -73,8 +73,48 @@ class RefreshProviderReadingChaptersTest {
     }
 
     @Test
+    fun `shadow source collection validates every page without publishing a canonical snapshot`() = runBlocking {
+        val observed = mutableListOf<String>()
+        val cursors = mutableListOf<String?>()
+        val interactor = RefreshProviderReadingChapters(
+            gateway = gateway { request ->
+                cursors += request.cursor?.value
+                when (request.cursor?.value) {
+                    null -> ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation("c100", "Chapter 100")),
+                            nextCursor = ProviderCursor("next"),
+                        ),
+                    )
+                    "next" -> ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation("c101", "Chapter 101")),
+                            nextCursor = null,
+                        ),
+                    )
+                    else -> error("unexpected cursor")
+                }
+            },
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            // The same validated pages can feed provisional evidence, but must
+            // not materialize or publish a second authoritative snapshot.
+            publishSnapshot = null,
+            clock = { 42L },
+            onPageCollected = { page, observedAt ->
+                observedAt shouldBe 42L
+                observed += page.map(ProviderChapterObservation::providerChapterId)
+            },
+        )
+
+        interactor.execute(binding) shouldBe ProviderCallResult.Success(2)
+        cursors shouldBe listOf(null, "next")
+        observed shouldBe listOf("c100", "c101")
+    }
+
+    @Test
     fun `later page failure never publishes a partial canonical inventory`() = runBlocking {
         var published = false
+        val attemptedPages = mutableListOf<String>()
         var calls = 0
         val interactor = RefreshProviderReadingChapters(
             gateway = gateway { request ->
@@ -95,12 +135,23 @@ class RefreshProviderReadingChaptersTest {
             evidenceAdapter = ProviderChapterEvidenceAdapter(),
             publishSnapshot = { _, _, _, _ -> published = true },
             clock = { 1L },
+            onPageStarted = { page -> attemptedPages += "started:$page" },
+            onPageFinished = { page, itemCount, error, elapsed ->
+                (elapsed >= 0L) shouldBe true
+                attemptedPages += "finished:$page:${itemCount ?: "none"}:${error?.name ?: "OK"}"
+            },
         )
 
         interactor.execute(binding) shouldBe ProviderCallResult.Failure(
             ProviderError(ProviderErrorCode.TIMEOUT, retryable = true),
         )
         calls shouldBe 2
+        attemptedPages shouldBe listOf(
+            "started:1",
+            "finished:1:1:OK",
+            "started:2",
+            "finished:2:none:TIMEOUT",
+        )
         published shouldBe false
     }
 

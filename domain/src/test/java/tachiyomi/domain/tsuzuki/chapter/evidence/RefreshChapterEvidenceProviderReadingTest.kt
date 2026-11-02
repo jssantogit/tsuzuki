@@ -7,6 +7,11 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.provider.reading.CollectProviderReadingEvidence
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingEvidenceCollection
@@ -93,9 +98,22 @@ class RefreshChapterEvidenceProviderReadingTest {
         coEvery { registry.awaitReady() } returns Unit
         every { registry.chapterEvidenceProviders() } returns emptyList()
         val reconcile = mockk<ReconcileChapterEvidence>(relaxed = true)
-        val refresh = RefreshChapterEvidence(registry, reconcile, collector)
+        val events = mutableListOf<StructuredDiagnosticEvent>()
+        val recorder = object : StructuredDiagnosticRecorder {
+            override val sessionId = "00000000-0000-0000-0000-000000000001"
+            override fun canonicalTitleReference(canonicalTitleId: String): String = "title-ref"
+            override fun mihonMangaReference(mihonMangaId: Long): String = "manga-ref"
+            override fun record(event: StructuredDiagnosticEvent) {
+                events += event
+            }
+        }
+        val refresh = RefreshChapterEvidence(registry, reconcile, collector, recorder)
 
         refresh.execute(canonicalTitleId).isSuccess shouldBe true
+        val completed = events.single { it.name == DiagnosticEventName.CHAPTER_REFRESH_COMPLETED }
+        completed.outcome shouldBe DiagnosticOutcome.PARTIAL
+        completed.attributes["completed"] shouldBe DiagnosticAttributeValue.Flag(false)
+        completed.attributes["item_count"] shouldBe DiagnosticAttributeValue.Number(1L)
 
         coVerify(exactly = 1) { reconcile.execute(canonicalTitleId, listOf(evidence)) }
         coVerify(exactly = 0) {

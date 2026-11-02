@@ -103,8 +103,16 @@ enum class DiagnosticEventName {
     CHAPTER_EVIDENCE_RECONCILED,
     CHAPTER_REFRESH_COMPLETED,
     PROVIDER_READING_EVIDENCE,
+    PROVIDER_READING_LOOKUP_ATTEMPT,
+    PROVIDER_READING_CHAPTER_ATTEMPT,
     PROVIDER_READING_PAGE,
+    PROVIDER_READING_PAGE_DETAIL,
+    PROVIDER_READING_BINDING,
     PROVIDER_READING_CANDIDATE,
+    PROVIDER_READING_SOURCE_ASSOCIATION,
+    PROVIDER_HTTP_REQUEST,
+    PROVIDER_RUNTIME_STAGE,
+    PROVIDER_BROWSER_REQUEST,
 
     READER_OPEN_STARTED,
     READER_SOURCE_SELECTED,
@@ -194,8 +202,24 @@ enum class DiagnosticAttribute {
     PROVIDER_WORK_TITLE,
     PROVIDER_WORK_URL,
     PROVIDER_WORK_ALIASES,
+    PROVIDER_LOOKUP_TITLE,
+    LOOKUP_DECISION,
+    PROVIDER_CHAPTER_FIRST_ID,
+    PROVIDER_CHAPTER_LAST_ID,
+    CHAPTER_NUMBER_MIN_MILLI,
+    CHAPTER_NUMBER_MAX_MILLI,
+    PARTIAL_EVIDENCE_COUNT,
     PROVIDER_WORK_CHAPTER_COUNT,
     PROVIDER_CANDIDATE_REASON,
+    PROVIDER_DETAIL_OUTCOME,
+    PROVIDER_COVERAGE_OUTCOME,
+    PROVIDER_COVERAGE_OBSERVED_COUNT,
+    PROVIDER_COVERAGE_HAS_MORE,
+    PROVIDER_WORK_VERIFICATION,
+    PROVIDER_EDITION_QUALIFICATION,
+    PROVIDER_HTTP_FAILURE,
+    PROVIDER_RUNTIME_PHASE,
+    PROVIDER_BROWSER_FAILURE,
     BROADENED,
     MAPPING_REUSED,
     LANGUAGE,
@@ -347,6 +371,16 @@ enum class DiagnosticTorrentCandidateMatchReason : DiagnosticSafeCode {
     VOLUME_NOT_PROVEN,
 }
 
+/** Source identity is unresolved even when lookup HTTP/API completed successfully. */
+enum class DiagnosticProviderLookupDecision : DiagnosticSafeCode {
+    SELECTED,
+    AUTHOR_CORROBORATED,
+    UNIQUE_READABLE_SOURCE,
+    NO_MATCH,
+    MULTIPLE_PRIMARY_IDENTITIES,
+    AMBIGUOUS_EDITION,
+}
+
 /** Detailed-capture-only classification; never use title similarity as binding authorization. */
 enum class DiagnosticProviderCandidateReason : DiagnosticSafeCode {
     SELECTED,
@@ -355,6 +389,77 @@ enum class DiagnosticProviderCandidateReason : DiagnosticSafeCode {
     ALTERNATE_EDITION,
     FACET_MISMATCH,
     TITLE_MISMATCH,
+}
+
+/** Closed source-enrichment outcomes: no upstream response text or secrets. */
+enum class DiagnosticProviderBrowserFailure : DiagnosticSafeCode {
+    TIMEOUT,
+    NAVIGATION,
+    TLS,
+    RENDERER_GONE,
+    WEBVIEW_UNSUPPORTED,
+    SELECTOR_MISSING,
+    CANCELLED,
+    UNKNOWN,
+}
+
+enum class DiagnosticProviderHttpFailure : DiagnosticSafeCode {
+    DNS,
+    CONNECT,
+    TLS,
+    READ_TIMEOUT,
+    HOST_DEADLINE,
+    CANCELLED,
+    NETWORK_POLICY,
+    HTTP_STATUS,
+    RESPONSE_LIMIT,
+    UNKNOWN,
+}
+
+/** Closed Binder lifecycle stages; no provider payload, URI, error message or token. */
+enum class DiagnosticProviderRuntimePhase : DiagnosticSafeCode {
+    BIND_STARTED,
+    BIND_CONNECTED,
+    BIND_REUSED,
+    BIND_INVALIDATED,
+    INVOKE_STARTED,
+    INVOKE_COMPLETED,
+}
+
+enum class DiagnosticProviderCoverageOutcome : DiagnosticSafeCode {
+    OBSERVED,
+    EMPTY,
+    UNKNOWN,
+    INVALID_RESPONSE,
+    CHALLENGE_BLOCKED,
+    FAILED,
+}
+
+enum class DiagnosticProviderDetailOutcome : DiagnosticSafeCode {
+    NOT_NEEDED,
+    SKIPPED_IRRELEVANT,
+    BUDGET_EXHAUSTED,
+    VERIFIED_WITH_ALIASES,
+    VERIFIED_NO_ALIASES,
+    IDENTITY_MISMATCH,
+    INVALID_RESPONSE,
+    CHALLENGE_BLOCKED,
+    DETAIL_FAILED,
+}
+
+/** Sanitized per-HID work/edition assessment codes, not source-authored text. */
+enum class DiagnosticProviderWorkVerification : DiagnosticSafeCode {
+    AUTHOR_CORROBORATED,
+    CANONICAL_METADATA_UNVERIFIED,
+    SOURCE_DETAIL_UNVERIFIED,
+    MISSING_AUTHOR_EVIDENCE,
+    AUTHOR_CONFLICT,
+    TITLE_UNVERIFIED,
+}
+
+enum class DiagnosticProviderEditionQualification : DiagnosticSafeCode {
+    UNRESOLVED,
+    SOURCE_ATTESTED_VARIANT,
 }
 
 enum class DiagnosticCacheStatus : DiagnosticSafeCode {
@@ -408,6 +513,7 @@ object StructuredDiagnosticSanitizer {
 
     // Detailed capture accepts only bounded MangaFire public title paths, never query strings or credentials.
     private val providerWorkIdPattern = Regex("^[A-Za-z0-9_-]{1,80}$")
+    private val providerChapterIdPattern = Regex("^[0-9]{1,32}$")
     private val providerWorkUrlPattern = Regex("^https://mangafire\\.to/title/[A-Za-z0-9-]{2,160}/?$")
     private val p2pEventPattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
     private val p2pOperationPattern = Regex("^opRef=[0-9a-f]{16}$")
@@ -518,6 +624,8 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.CANDIDATE_INDEX,
         DiagnosticAttribute.QUERY_INDEX,
         DiagnosticAttribute.PROVIDER_WORK_CHAPTER_COUNT,
+        DiagnosticAttribute.PROVIDER_COVERAGE_OBSERVED_COUNT,
+        DiagnosticAttribute.PARTIAL_EVIDENCE_COUNT,
         DiagnosticAttribute.OBSERVATION_COUNT,
         DiagnosticAttribute.ITEM_COUNT,
         DiagnosticAttribute.ACCEPTED_COUNT,
@@ -568,6 +676,11 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.TORRENT_CANDIDATE_METADATA_UNAVAILABLE_COUNT,
         -> (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..MAX_COUNT }
 
+        // 1000x scales decimal source chapter numbers without collapsing 1180.5 to 1180.
+        DiagnosticAttribute.CHAPTER_NUMBER_MIN_MILLI,
+        DiagnosticAttribute.CHAPTER_NUMBER_MAX_MILLI,
+        -> (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..1_000_000_000L }
+
         DiagnosticAttribute.PROVIDER_VERSION_CODE -> (value as? DiagnosticAttributeValue.Number)
             ?.takeIf { it.value in 1..MAX_COUNT }
 
@@ -576,6 +689,7 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.AUTO_CONFIRM_ATTEMPTED,
         DiagnosticAttribute.AMBIGUOUS,
         DiagnosticAttribute.COVER_PRESENT,
+        DiagnosticAttribute.PROVIDER_COVERAGE_HAS_MORE,
         DiagnosticAttribute.SOURCE_ARTWORK_PRESENT,
         DiagnosticAttribute.CANONICAL_ARTWORK_PRESENT,
         DiagnosticAttribute.REQUEST_DATA_PRESENT,
@@ -594,15 +708,36 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticTorrentCandidateMatchReason }
         DiagnosticAttribute.PROVIDER_CANDIDATE_REASON -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderCandidateReason }
+        DiagnosticAttribute.PROVIDER_DETAIL_OUTCOME -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderDetailOutcome }
+        DiagnosticAttribute.PROVIDER_COVERAGE_OUTCOME -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderCoverageOutcome }
+        DiagnosticAttribute.PROVIDER_WORK_VERIFICATION -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderWorkVerification }
+        DiagnosticAttribute.PROVIDER_EDITION_QUALIFICATION -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderEditionQualification }
+        DiagnosticAttribute.PROVIDER_HTTP_FAILURE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderHttpFailure }
+        DiagnosticAttribute.PROVIDER_RUNTIME_PHASE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderRuntimePhase }
+        DiagnosticAttribute.PROVIDER_BROWSER_FAILURE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderBrowserFailure }
+        DiagnosticAttribute.LOOKUP_DECISION -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderLookupDecision }
 
         DiagnosticAttribute.PROVIDER_P2P_LINE -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { isSafeP2pLine(it.value) }
         DiagnosticAttribute.PROVIDER_WORK_ID -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { providerWorkIdPattern.matches(it.value) }
+        DiagnosticAttribute.PROVIDER_CHAPTER_FIRST_ID,
+        DiagnosticAttribute.PROVIDER_CHAPTER_LAST_ID,
+        -> (value as? DiagnosticAttributeValue.Text)
+            ?.takeIf { providerChapterIdPattern.matches(it.value) }
         DiagnosticAttribute.PROVIDER_WORK_URL -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { providerWorkUrlPattern.matches(it.value) }
         DiagnosticAttribute.PROVIDER_WORK_TITLE,
         DiagnosticAttribute.PROVIDER_WORK_ALIASES,
+        DiagnosticAttribute.PROVIDER_LOOKUP_TITLE,
         -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { text ->
                 text.value.length in 1..512 &&

@@ -146,6 +146,7 @@ class RefreshChapterEvidence private constructor(
         registry: IntegrationRegistry,
         reconcileChapterEvidence: ReconcileChapterEvidence,
         providerReadingEvidence: CollectProviderReadingEvidence,
+        structuredDiagnostics: StructuredDiagnosticRecorder = NoOpStructuredDiagnosticRecorder,
     ) : this(
         registry = registry,
         reconcileChapterEvidence = reconcileChapterEvidence,
@@ -155,7 +156,7 @@ class RefreshChapterEvidence private constructor(
         inFlightContentResolution = null,
         diagnostics = NoOpChapterInventoryDiagnostics,
         discoverReadableTitle = null,
-        structuredDiagnostics = NoOpStructuredDiagnosticRecorder,
+        structuredDiagnostics = structuredDiagnostics,
         refreshSnapshots = null,
         providerReadingEvidence = providerReadingEvidence,
         clock = { Clock.System.now().toEpochMilliseconds() },
@@ -416,13 +417,16 @@ class RefreshChapterEvidence private constructor(
                     collections.addon.evidence +
                     collections.provider.evidence
                 ).distinctBy(ChapterEvidence::id)
+            // Incomplete Provider pages were already reconciled additively.
+            // Count them in diagnostics, never in full-refresh snapshots.
+            val reconciledObservationCount = (
+                evidence + collections.provider.partialEvidence
+                ).distinctBy(ChapterEvidence::id).size
 
-            if (
-                collections.integration.complete &&
+            val allSourcesComplete = collections.integration.complete &&
                 collections.addon.complete &&
-                collections.provider.complete &&
-                refreshSnapshots != null
-            ) {
+                collections.provider.complete
+            if (allSourcesComplete && refreshSnapshots != null) {
                 val now = clock()
                 refreshSnapshots.upsertIfNewer(
                     ChapterRefreshSnapshot(
@@ -443,17 +447,20 @@ class RefreshChapterEvidence private constructor(
                 stage = DiagnosticStage.RECONCILE,
                 outcome = DiagnosticOutcome.SUCCEEDED,
                 attributes = mapOf(
-                    DiagnosticAttribute.ITEM_COUNT to DiagnosticAttributeValue.Number(evidence.size.toLong()),
+                    DiagnosticAttribute.ITEM_COUNT to
+                        DiagnosticAttributeValue.Number(reconciledObservationCount.toLong()),
                 ),
             )
             trace.event(
                 subsystem = DiagnosticSubsystem.CHAPTER,
                 name = DiagnosticEventName.CHAPTER_REFRESH_COMPLETED,
                 stage = DiagnosticStage.COMPLETE,
-                outcome = DiagnosticOutcome.SUCCEEDED,
+                outcome = if (allSourcesComplete) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
                 durationMillis = started.elapsedNow().inWholeMilliseconds.coerceAtLeast(0),
                 attributes = mapOf(
-                    DiagnosticAttribute.ITEM_COUNT to DiagnosticAttributeValue.Number(evidence.size.toLong()),
+                    DiagnosticAttribute.ITEM_COUNT to
+                        DiagnosticAttributeValue.Number(reconciledObservationCount.toLong()),
+                    DiagnosticAttribute.COMPLETED to DiagnosticAttributeValue.Flag(allSourcesComplete),
                 ),
             )
             Result.success(Unit)

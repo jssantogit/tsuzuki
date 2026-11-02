@@ -1,0 +1,62 @@
+-- Derived work/HID observations are distinct from the unique preferred
+-- reading binding. No row in this table is authority for chapters or Reader.
+CREATE TABLE tsuzuki_provider_work_sources(
+    canonical_title_id TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    facet_id TEXT NOT NULL,
+    external_work_id TEXT NOT NULL,
+    work_verification TEXT NOT NULL,
+    edition_qualification TEXT NOT NULL,
+    observed_at INTEGER NOT NULL,
+    PRIMARY KEY(provider_id, facet_id, external_work_id),
+    FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
+);
+
+CREATE INDEX tsuzuki_provider_work_sources_title_index
+ON tsuzuki_provider_work_sources(canonical_title_id);
+
+getTsuzukiProviderWorkSource:
+SELECT *
+FROM tsuzuki_provider_work_sources
+WHERE provider_id = :providerId
+AND facet_id = :facetId
+AND external_work_id = :externalWorkId
+LIMIT 1;
+
+getTsuzukiProviderWorkSourcesByTitle:
+SELECT *
+FROM tsuzuki_provider_work_sources
+WHERE canonical_title_id = :canonicalTitleId
+ORDER BY provider_id, facet_id, external_work_id;
+
+observeTsuzukiProviderWorkSource:
+INSERT INTO tsuzuki_provider_work_sources(
+    canonical_title_id,
+    provider_id,
+    facet_id,
+    external_work_id,
+    work_verification,
+    edition_qualification,
+    observed_at
+)
+SELECT
+    :canonicalTitleId,
+    :providerId,
+    :facetId,
+    :externalWorkId,
+    :workVerification,
+    :editionQualification,
+    :observedAt
+WHERE NOT EXISTS (
+    SELECT 1 FROM tsuzuki_provider_bindings
+    WHERE provider_id = :providerId
+      AND facet_id = :facetId
+      AND external_work_id = :externalWorkId
+      AND canonical_title_id <> :canonicalTitleId
+)
+ON CONFLICT(provider_id, facet_id, external_work_id) DO UPDATE SET
+    work_verification = excluded.work_verification,
+    edition_qualification = excluded.edition_qualification,
+    observed_at = excluded.observed_at
+WHERE tsuzuki_provider_work_sources.canonical_title_id = excluded.canonical_title_id
+AND excluded.observed_at > tsuzuki_provider_work_sources.observed_at;

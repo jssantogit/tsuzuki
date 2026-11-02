@@ -8,6 +8,7 @@ import android.os.DeadObjectException
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
 import tachiyomi.core.provider.packageformat.ParsedProviderPackage
 import tachiyomi.core.provider.packageformat.ProviderPackageContractValidator
 import tachiyomi.core.provider.runtime.ProviderPackageValidationRequest
@@ -21,16 +22,118 @@ import java.io.FileOutputStream
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+/** The isolated process bridge must expose where a chapter-page invocation stalls. */
+enum class ProviderRuntimeBindingPhase {
+    BIND_STARTED,
+    BIND_CONNECTED,
+    BIND_REUSED,
+    BIND_INVALIDATED,
+    INVOKE_STARTED,
+    INVOKE_COMPLETED,
+}
+
 class ProviderRuntimeClient(
     context: Context,
     private val hostInvocationFactory: ProviderHostInvocationFactory,
+    private val bindingObserver: (ProviderRuntimeBindingPhase) -> Unit = {},
+    private val bindingIdleTimeoutMs: Long = 8_000L,
 ) {
 
     private val context = context.applicationContext
+
+    init {
+        require(bindingIdleTimeoutMs in 50..60_000) { "Provider Binder idle timeout is invalid" }
+    }
+
+    // This client is App-scoped. Rebinding an isolated Android service for every
+    // chapter page races its teardown on physical devices. Retain only the
+    // Binder connection briefly: each invocation still has fresh QuickJS,
+    // permissions, HTTP broker, resource owner and cancellation identity.
+    private val bindingMutex = Mutex()
+    private val bindingLock = Any()
+    private var cachedBinding: RuntimeLease? = null
+
+    private fun reportBinding(phase: ProviderRuntimeBindingPhase) {
+        runCatching { bindingObserver(phase) }
+    }
+
+    private fun borrowLiveBinding(): RuntimeLease? = synchronized(bindingLock) {
+        val existing = cachedBinding ?: return@synchronized null
+        if (existing.bound.remote.asBinder().isBinderAlive) {
+            existing.expiration?.cancel(false)
+            existing.expiration = null
+            existing.users += 1
+            return@synchronized existing
+        }
+        cachedBinding = null
+        existing.expiration?.cancel(false)
+        existing.expiration = null
+        if (existing.users == 0) existing.bound.close()
+        null
+    }
+
+    private suspend fun acquireRuntime(): RuntimeLease {
+        borrowLiveBinding()?.let {
+            reportBinding(ProviderRuntimeBindingPhase.BIND_REUSED)
+            return it
+        }
+
+        // Serialize cold connects. Parallel invocations borrow one live Binder
+        // without making competing isolated-process bindService requests.
+        bindingMutex.lock()
+        try {
+            borrowLiveBinding()?.let {
+                reportBinding(ProviderRuntimeBindingPhase.BIND_REUSED)
+                return it
+            }
+            reportBinding(ProviderRuntimeBindingPhase.BIND_STARTED)
+            val bound = bindRuntime()
+            reportBinding(ProviderRuntimeBindingPhase.BIND_CONNECTED)
+            return RuntimeLease(bound, users = 1).also { lease ->
+                synchronized(bindingLock) { cachedBinding = lease }
+            }
+        } finally {
+            bindingMutex.unlock()
+        }
+    }
+
+    private fun releaseRuntime(lease: RuntimeLease) {
+        synchronized(bindingLock) {
+            check(lease.users > 0) { "Provider runtime binding lease underflow" }
+            lease.users -= 1
+            if (lease.users != 0) return
+            if (cachedBinding !== lease) {
+                lease.bound.close()
+                return
+            }
+            lease.expiration?.cancel(false)
+            lease.expiration = BINDING_IDLE_EXECUTOR.schedule(
+                {
+                    synchronized(bindingLock) {
+                        if (cachedBinding === lease && lease.users == 0) {
+                            cachedBinding = null
+                            lease.bound.close()
+                            reportBinding(ProviderRuntimeBindingPhase.BIND_INVALIDATED)
+                        }
+                    }
+                },
+                bindingIdleTimeoutMs,
+                TimeUnit.MILLISECONDS,
+            )
+        }
+    }
+
+    private class RuntimeLease(
+        val bound: BoundRuntime,
+        var users: Int,
+        var expiration: ScheduledFuture<*>? = null,
+    )
 
     suspend fun invoke(
         request: ProviderRuntimeInvocationRequest,
@@ -163,7 +266,6 @@ class ProviderRuntimeClient(
             descriptor: ParcelFileDescriptor,
         ) -> T,
     ): T {
-        val boundRuntime = bindRuntime()
         val file = File.createTempFile(
             ".provider-runtime-",
             suffix,
@@ -177,16 +279,23 @@ class ProviderRuntimeClient(
                 output.fd.sync()
             }
 
-            val descriptor = ParcelFileDescriptor.open(
-                file,
-                ParcelFileDescriptor.MODE_READ_ONLY,
-            )
-            return descriptor.use {
-                block(boundRuntime.remote, it)
+            val lease = acquireRuntime()
+            try {
+                val descriptor = ParcelFileDescriptor.open(
+                    file,
+                    ParcelFileDescriptor.MODE_READ_ONLY,
+                )
+                reportBinding(ProviderRuntimeBindingPhase.INVOKE_STARTED)
+                return descriptor.use {
+                    block(lease.bound.remote, it)
+                }.also {
+                    reportBinding(ProviderRuntimeBindingPhase.INVOKE_COMPLETED)
+                }
+            } finally {
+                runCatching { lease.bound.remote.cancel(invocationId) }
+                releaseRuntime(lease)
             }
         } finally {
-            runCatching { boundRuntime.remote.cancel(invocationId) }
-            boundRuntime.close()
             file.delete()
         }
     }
@@ -337,6 +446,10 @@ class ProviderRuntimeClient(
     }
 
     private companion object {
+        private val BINDING_IDLE_EXECUTOR = Executors.newSingleThreadScheduledExecutor { runnable ->
+            Thread(runnable, "tsuzuki-provider-runtime-binding-idle").apply { isDaemon = true }
+        }
+
         val BINDER_EXECUTOR = Executors.newCachedThreadPool { runnable ->
             Thread(runnable, "tsuzuki-provider-runtime-client").apply {
                 isDaemon = true

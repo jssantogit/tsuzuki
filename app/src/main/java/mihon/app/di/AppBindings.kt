@@ -31,6 +31,7 @@ import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeLogSink
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderCapabilityExecutor
 import eu.kanade.tachiyomi.provider.runtime.ScriptProviderPackageSource
 import eu.kanade.tachiyomi.provider.runtime.StoredScriptProviderPackageSource
+import eu.kanade.tachiyomi.provider.runtime.toStructuredDiagnosticEvent
 import eu.kanade.tachiyomi.provider.torrent.HttpProviderTorrentMetadataInspector
 import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentArtifactEngine
 import eu.kanade.tachiyomi.provider.torrent.ProviderTorrentHttpFileMaterializer
@@ -66,6 +67,14 @@ import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
 import tachiyomi.domain.tsuzuki.content.TorrentArtifactEngine
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderRuntimePhase
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
 import tachiyomi.domain.tsuzuki.integration.repository.IntegrationSettingsRepository
@@ -282,12 +291,43 @@ object AppBindings {
         managedFiles: ProviderManagedFileStore,
         p2pJobs: ProviderP2pJobManager,
         logSink: ProviderRuntimeLogSink,
+        diagnosticRecorder: StructuredDiagnosticRecorder,
     ): ProviderHostInvocationFactory =
         ProviderHostInvocationFactory(
             context = context,
             p2pServiceFactory = p2pJobs::service,
             approvedP2pServiceFactory = p2pJobs::service,
             logSink = logSink::info,
+            httpDiagnosticSink = { providerId, detail ->
+                if (diagnosticRecorder.detailedCaptureActive) {
+                    // The raw upstream host, URLs, paths, VRF, headers and bodies never
+                    // enter structured history. Only allowlisted HTTP outcomes do.
+                    runCatching {
+                        diagnosticRecorder.record(
+                            detail.toStructuredDiagnosticEvent(
+                                providerId = providerId,
+                                sessionId = diagnosticRecorder.sessionId,
+                                timestampMillis = System.currentTimeMillis(),
+                            ),
+                        )
+                    }
+                }
+            },
+            browserDiagnosticSink = { providerId, detail ->
+                if (diagnosticRecorder.detailedCaptureActive) {
+                    // WebView fallback event records a closed failure family and duration,
+                    // not navigation URL, selector, body or upstream exception message.
+                    runCatching {
+                        diagnosticRecorder.record(
+                            detail.toStructuredDiagnosticEvent(
+                                providerId = providerId,
+                                sessionId = diagnosticRecorder.sessionId,
+                                timestampMillis = System.currentTimeMillis(),
+                            ),
+                        )
+                    }
+                }
+            },
             managedFiles = managedFiles,
         )
 
@@ -296,10 +336,54 @@ object AppBindings {
     fun providesProviderRuntimeClient(
         context: Context,
         hostInvocationFactory: ProviderHostInvocationFactory,
+        diagnosticRecorder: StructuredDiagnosticRecorder,
     ): ProviderRuntimeClient =
         ProviderRuntimeClient(
             context = context,
             hostInvocationFactory = hostInvocationFactory,
+            bindingObserver = { phase ->
+                if (diagnosticRecorder.detailedCaptureActive) {
+                    // A chapter-page START without an HTTP START can mean Binder
+                    // bind, QuickJS boot or script execution. Preserve the exact
+                    // closed stage under opt-in capture, never Provider content.
+                    runCatching {
+                        diagnosticRecorder.record(
+                            StructuredDiagnosticEvent(
+                                timestampMillis = System.currentTimeMillis(),
+                                severity = DiagnosticSeverity.DEBUG,
+                                subsystem = DiagnosticSubsystem.NETWORK,
+                                name = DiagnosticEventName.PROVIDER_RUNTIME_STAGE,
+                                sessionId = diagnosticRecorder.sessionId,
+                                operationId = null,
+                                stage = if (phase.name.startsWith("BIND_")) {
+                                    DiagnosticStage.BINDING
+                                } else {
+                                    DiagnosticStage.READ
+                                },
+                                outcome = when (phase) {
+                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.BIND_STARTED,
+                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.INVOKE_STARTED,
+                                    ->
+                                        DiagnosticOutcome.STARTED
+                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.BIND_CONNECTED,
+                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.INVOKE_COMPLETED,
+                                    ->
+                                        DiagnosticOutcome.SUCCEEDED
+                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.BIND_REUSED ->
+                                        DiagnosticOutcome.REUSED
+                                    eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase.BIND_INVALIDATED ->
+                                        DiagnosticOutcome.SKIPPED
+                                },
+                                attributes = mapOf(
+                                    "provider_runtime_phase" to DiagnosticAttributeValue.Code(
+                                        DiagnosticProviderRuntimePhase.valueOf(phase.name),
+                                    ),
+                                ),
+                            ),
+                        )
+                    }
+                }
+            },
         )
 
     @Provides

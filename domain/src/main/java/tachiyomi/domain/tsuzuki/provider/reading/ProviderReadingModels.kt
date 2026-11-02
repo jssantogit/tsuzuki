@@ -53,6 +53,33 @@ fun ProviderBindingRef.evidenceProducerId(): String {
     return "provider-binding:$digest"
 }
 
+/**
+ * Optional, source-reported lookup enrichment provenance. Describes how the Provider
+ * obtained candidate metadata, never whether the Host accepted the editorial edition.
+ * No URLs, free-text errors, cookies or tokens may cross this contract.
+ */
+enum class ProviderWorkDetailOutcome {
+    NOT_NEEDED,
+    SKIPPED_IRRELEVANT,
+    BUDGET_EXHAUSTED,
+    VERIFIED_WITH_ALIASES,
+    VERIFIED_NO_ALIASES,
+    IDENTITY_MISMATCH,
+    INVALID_RESPONSE,
+    CHALLENGE_BLOCKED,
+    DETAIL_FAILED,
+}
+
+/** First English source page only. These values do not prove canonical or edition identity. */
+enum class ProviderCoverageOutcome {
+    OBSERVED,
+    EMPTY,
+    UNKNOWN,
+    INVALID_RESPONSE,
+    CHALLENGE_BLOCKED,
+    FAILED,
+}
+
 data class ProviderWorkCandidate(
     val externalWorkId: String,
     val title: String,
@@ -61,12 +88,52 @@ data class ProviderWorkCandidate(
     val language: String? = null,
     /** Source-reported count only. Null means not attested; never infer a total from lookup hits. */
     val chapterCount: Int? = null,
+    /** Source-verified creator names for optional editorial corroboration, never a ranking. */
+    val authors: List<String> = emptyList(),
+    val coverageOutcome: ProviderCoverageOutcome? = null,
+    val coverageObservedCount: Int? = null,
+    val coverageMinMilli: Int? = null,
+    val coverageMaxMilli: Int? = null,
+    val coverageHasMore: Boolean? = null,
+    val detailOutcome: ProviderWorkDetailOutcome? = null,
+    /** HTTP status is disclosed only when a detail request itself failed with an explicit status. */
+    val detailHttpStatus: Int? = null,
 ) {
     init {
+        require(coverageObservedCount == null || coverageObservedCount in 0..200) {
+            "Provider coverage observation count is invalid"
+        }
+        require(coverageMinMilli == null || coverageMinMilli in 0..1_000_000_000)
+        require(coverageMaxMilli == null || coverageMaxMilli in 0..1_000_000_000)
+        require(coverageMinMilli == null || coverageMaxMilli == null || coverageMinMilli <= coverageMaxMilli)
+        require(
+            coverageOutcome != null || listOf(
+                coverageObservedCount,
+                coverageMinMilli,
+                coverageMaxMilli,
+                coverageHasMore,
+            ).all { it == null },
+        ) { "Provider coverage needs a source outcome" }
+        if (coverageOutcome == ProviderCoverageOutcome.OBSERVED) {
+            require(
+                coverageObservedCount != null && coverageObservedCount > 0 &&
+                    coverageMinMilli != null && coverageMaxMilli != null,
+            )
+        }
+        if (coverageOutcome == ProviderCoverageOutcome.EMPTY) {
+            require(coverageObservedCount == 0 && coverageHasMore == false)
+        }
         require(externalWorkId.isNotBlank()) { "Provider work candidate ID must not be blank" }
         require(chapterCount == null || chapterCount in 0..1_000_000) {
             "Provider work candidate chapter count is invalid"
         }
+        require(detailHttpStatus == null || detailHttpStatus in 100..599) {
+            "Provider lookup detail HTTP status is invalid"
+        }
+        require(
+            detailHttpStatus == null || detailOutcome == ProviderWorkDetailOutcome.DETAIL_FAILED ||
+                detailOutcome == ProviderWorkDetailOutcome.CHALLENGE_BLOCKED,
+        ) { "HTTP status must represent a failed Provider detail request" }
         require(title.isNotBlank()) { "Provider work candidate title must not be blank" }
         require(aliases.size <= MAX_ALIASES) { "Provider work candidate has too many aliases" }
         require(aliases.all { it.isNotBlank() && it.length <= MAX_TEXT_CHARS }) {
@@ -74,6 +141,9 @@ data class ProviderWorkCandidate(
         }
         require(language == null || (language.isNotBlank() && language.length <= 32)) {
             "Provider work candidate language is invalid"
+        }
+        require(authors.size <= 8 && authors.all { it.isNotBlank() && it.length <= 128 }) {
+            "Provider work candidate authors are invalid"
         }
     }
 
@@ -198,8 +268,11 @@ sealed interface ProviderReadingDelivery {
 data class ProviderReadingLookupRequest(
     val titles: List<String>,
     val cursor: ProviderCursor? = null,
+    /** Optional read-only source coverage preview, only for providers that explicitly support it. */
+    val coverageEvidenceVersion: Int? = null,
 ) {
     init {
+        require(coverageEvidenceVersion == null || coverageEvidenceVersion == 1)
         require(titles.isNotEmpty()) { "Provider lookup requires at least one title" }
         require(titles.size <= MAX_TITLES) { "Provider lookup has too many titles" }
         require(titles.all { it.isNotBlank() && it.length <= MAX_TITLE_CHARS }) {
@@ -230,6 +303,12 @@ data class ProviderReadingPagesRequest(
 
 enum class ProviderErrorCode {
     UNAVAILABLE,
+    HOST_ERROR,
+    PACKAGE_INVALID,
+    MALFORMED_REQUEST,
+    SOURCE_TOO_LARGE,
+    SOURCE_READ_ERROR,
+    INVOCATION_CONFLICT,
     PERMISSION_DENIED,
     HOST_API_UNSUPPORTED,
     SCRIPT_ERROR,
@@ -244,10 +323,25 @@ enum class ProviderErrorCode {
     ACQUISITION_FAILED,
 }
 
+/** Closed lookup failure categories; do not propagate source text, URLs or response bodies. */
+enum class ProviderLookupFailureCode {
+    CHALLENGE_BLOCKED,
+    HTTP_ERROR,
+    INVALID_RESPONSE,
+    UNCLASSIFIED_ERROR,
+}
+
 data class ProviderError(
     val code: ProviderErrorCode,
     val retryable: Boolean,
-)
+    val sourceFailureCode: ProviderLookupFailureCode? = null,
+    val httpStatus: Int? = null,
+) {
+    init {
+        require(httpStatus == null || httpStatus in 100..599)
+        require(httpStatus == null || sourceFailureCode != null)
+    }
+}
 
 sealed interface ProviderCallResult<out T> {
     data class Success<T>(val value: T) : ProviderCallResult<T>

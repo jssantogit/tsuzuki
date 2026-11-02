@@ -486,6 +486,86 @@ class ResolveProviderChapterReadingTest {
         wrongFacet.options(chapter.id) shouldBe emptyList()
     }
 
+    @Test
+    fun `Reader resolves exact chapter evidence from a verified nonpreferred HID`() = runBlocking {
+        val source = ProviderWorkSourceAssociation(
+            canonicalTitleId = chapter.canonicalTitleId,
+            ref = ProviderBindingRef(providerId, "en", "other-readable-hid"),
+            workVerification = ProviderWorkVerification.AUTHOR_CORROBORATED,
+            editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+            observedAt = 100L,
+        )
+        var requests = 0
+        val resolver = resolver(
+            bindings = emptyList(),
+            sourceAssociations = listOf(source),
+            evidence = listOf(
+                PersistedChapterEvidence(
+                    evidence = providerEvidence(source.ref.evidenceProducerId(), "real-chapter-1"),
+                    mappedCanonicalChapterId = chapter.id,
+                ),
+            ),
+            gateway = gateway { request ->
+                requests += 1
+                request.binding shouldBe source.ref
+                request.providerChapterId shouldBe "real-chapter-1"
+                ProviderCallResult.Success(
+                    ProviderReadingDelivery.PageList(
+                        listOf(
+                            ProviderPageRequest(
+                                url = "https://cdn.example/real-1.jpg",
+                                allowedOrigins = setOf("https://cdn.example"),
+                            ),
+                        ),
+                    ),
+                )
+            },
+        )
+        val option = resolver.options(chapter.id).single()
+        option.externalWorkId shouldBe "other-readable-hid"
+        option.providerChapterId shouldBe "real-chapter-1"
+        resolver.delivery(option) shouldBe ProviderCallResult.Success(
+            ProviderReadingDelivery.PageList(
+                listOf(
+                    ProviderPageRequest(
+                        url = "https://cdn.example/real-1.jpg",
+                        allowedOrigins = setOf("https://cdn.example"),
+                    ),
+                ),
+            ),
+        )
+        requests shouldBe 1
+    }
+
+    @Test
+    fun `Reader refuses conflicting author or explicit variant HID even with stale mapped evidence`() = runBlocking {
+        val ref = ProviderBindingRef(providerId, "en", "unverified-edition")
+        val persisted = PersistedChapterEvidence(
+            providerEvidence(ref.evidenceProducerId(), "chapter-1"),
+            mappedCanonicalChapterId = chapter.id,
+        )
+        for ((verification, qualification) in listOf(
+            ProviderWorkVerification.AUTHOR_CONFLICT to ProviderSourceEditionQualification.UNRESOLVED,
+            ProviderWorkVerification.AUTHOR_CORROBORATED to ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT,
+        )) {
+            val resolver = resolver(
+                bindings = emptyList(),
+                sourceAssociations = listOf(
+                    ProviderWorkSourceAssociation(
+                        canonicalTitleId = chapter.canonicalTitleId,
+                        ref = ref,
+                        workVerification = verification,
+                        editionQualification = qualification,
+                        observedAt = 100L,
+                    ),
+                ),
+                evidence = listOf(persisted),
+                gateway = gateway { error("Unsafe source cannot be delivered") },
+            )
+            resolver.options(chapter.id) shouldBe emptyList()
+        }
+    }
+
     private fun readingRegistration(
         lifecycle: ProviderLifecycleStatus = ProviderLifecycleStatus.ENABLED,
         facet: String = "en",
@@ -524,10 +604,12 @@ class ResolveProviderChapterReadingTest {
         managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
         providerRegistry: ProviderRegistry = DefaultProviderRegistry(registrations = { listOf(readingRegistration()) }),
         canonicalChapter: CanonicalChapter = chapter,
+        sourceAssociations: List<ProviderWorkSourceAssociation> = emptyList(),
     ) = ResolveProviderChapterReading(
         canonicalChapterRepository = canonicalChapterRepository(canonicalChapter),
         evidenceRepository = evidenceRepository(evidence),
         bindingRepository = bindingRepository(bindings),
+        workSourceAssociationRepository = sourceAssociationRepository(sourceAssociations),
         providerRegistry = providerRegistry,
         gateway = gateway,
         managedResources = managedResources,
@@ -622,6 +704,18 @@ class ResolveProviderChapterReadingTest {
         override suspend fun upsert(binding: ProviderReadingBinding) = Unit
 
         override suspend fun markUnavailable(bindingId: String, updatedAt: Long) = Unit
+    }
+
+    private fun sourceAssociationRepository(
+        values: List<ProviderWorkSourceAssociation>,
+    ) = object : ProviderWorkSourceAssociationRepository {
+        override suspend fun observe(association: ProviderWorkSourceAssociation): Boolean = false
+
+        override suspend fun get(ref: ProviderBindingRef): ProviderWorkSourceAssociation? =
+            values.firstOrNull { it.ref == ref }
+
+        override suspend fun getByTitle(canonicalTitleId: String): List<ProviderWorkSourceAssociation> =
+            values.filter { it.canonicalTitleId == canonicalTitleId }
     }
 
     private fun evidenceRepository(
