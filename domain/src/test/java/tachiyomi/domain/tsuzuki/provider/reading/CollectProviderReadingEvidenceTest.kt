@@ -994,7 +994,7 @@ class CollectProviderReadingEvidenceTest {
         }
 
     @Test
-    fun `source URL explicitly declaring fan colored cannot be auto bound as canonical base title`(): Unit = runBlocking {
+    fun `source fan colored URL blocks automatic base edition binding`(): Unit = runBlocking {
         val title = canonicalTitle.copy(displayTitle = "One Punch-Man")
         val bindings = MemoryBindingRepository()
         val collector = CollectProviderReadingEvidence(
