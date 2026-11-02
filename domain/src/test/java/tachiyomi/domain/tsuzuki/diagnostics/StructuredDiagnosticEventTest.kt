@@ -107,6 +107,27 @@ class StructuredDiagnosticEventTest {
     }
 
     @Test
+    fun `Reader detailed capture preserves zero as a number but rejects invalid chapter hints`() {
+        fun sanitize(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000,
+                severity = DiagnosticSeverity.INFO,
+                subsystem = DiagnosticSubsystem.READER,
+                name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.READER,
+                outcome = DiagnosticOutcome.SUCCEEDED,
+                attributes = mapOf("canonical_chapter_base_number" to value),
+            ),
+        )?.attributes.orEmpty()
+        sanitize(DiagnosticAttributeValue.Number(0))[DiagnosticAttribute.CANONICAL_CHAPTER_BASE_NUMBER] shouldBe
+            DiagnosticAttributeValue.Number(0)
+        sanitize(DiagnosticAttributeValue.Number(-1)) shouldBe emptyMap()
+        sanitize(DiagnosticAttributeValue.Text("0; Authorization: secret")) shouldBe emptyMap()
+    }
+
+    @Test
     fun `Reader chapter diagnostics accept only bounded numeric public source chapter IDs`() {
         fun sanitizeChapter(value: String) = StructuredDiagnosticSanitizer.sanitize(
             StructuredDiagnosticEvent(
