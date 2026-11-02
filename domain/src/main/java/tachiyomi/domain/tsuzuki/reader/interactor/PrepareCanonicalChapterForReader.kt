@@ -237,6 +237,33 @@ class PrepareCanonicalChapterForReader(
             // Provider-native selection will become a first-class UI model later. Until then, never
             // choose silently when more than one independent Provider/facet can serve the chapter.
             if (options.size > 1) {
+                trace.event(
+                    subsystem = DiagnosticSubsystem.READER,
+                    name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                    stage = DiagnosticStage.READER,
+                    outcome = DiagnosticOutcome.NEEDS_CONFIRMATION,
+                    attributes = mapOf(
+                        DiagnosticAttribute.CANDIDATE_COUNT to DiagnosticAttributeValue.Number(options.size.toLong()),
+                        DiagnosticAttribute.LOOKUP_DECISION to
+                            DiagnosticAttributeValue.Code(DiagnosticProviderLookupDecision.AMBIGUOUS_EDITION),
+                    ) + capturedCanonicalIdentity,
+                )
+                return CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+            }
+
+            val option = options.singleOrNull()
+            if (option != null) {
+                // Public source identities are useful for exact Reader debugging,
+                // but must never enter ordinary logs outside opt-in capture.
+                val capturedSourceIdentity = if (structuredDiagnostics.detailedCaptureActive) {
+                    mapOf(
+                        DiagnosticAttribute.PROVIDER_WORK_ID to DiagnosticAttributeValue.Text(option.externalWorkId),
+                        DiagnosticAttribute.PROVIDER_CHAPTER_ID to
+                            DiagnosticAttributeValue.Text(option.providerChapterId),
+                    )
+                } else {
+                    emptyMap()
+                }
                 val capturedSourceStructure = if (structuredDiagnostics.detailedCaptureActive) {
                     val sourceAudit = try {
                         resolver.auditSourceIdentity(option)
@@ -276,33 +303,6 @@ class PrepareCanonicalChapterForReader(
                             )
                         }
                     }
-                } else {
-                    emptyMap()
-                }
-                trace.event(
-                    subsystem = DiagnosticSubsystem.READER,
-                    name = DiagnosticEventName.READER_SOURCE_SELECTED,
-                    stage = DiagnosticStage.READER,
-                    outcome = DiagnosticOutcome.NEEDS_CONFIRMATION,
-                    attributes = mapOf(
-                        DiagnosticAttribute.CANDIDATE_COUNT to DiagnosticAttributeValue.Number(options.size.toLong()),
-                        DiagnosticAttribute.LOOKUP_DECISION to
-                            DiagnosticAttributeValue.Code(DiagnosticProviderLookupDecision.AMBIGUOUS_EDITION),
-                    ) + capturedCanonicalIdentity,
-                )
-                return CanonicalReaderPreparation.Unavailable(canonicalChapterId)
-            }
-
-            val option = options.singleOrNull()
-            if (option != null) {
-                // Public source identities are useful for exact Reader debugging,
-                // but must never enter ordinary logs outside opt-in capture.
-                val capturedSourceIdentity = if (structuredDiagnostics.detailedCaptureActive) {
-                    mapOf(
-                        DiagnosticAttribute.PROVIDER_WORK_ID to DiagnosticAttributeValue.Text(option.externalWorkId),
-                        DiagnosticAttribute.PROVIDER_CHAPTER_ID to
-                            DiagnosticAttributeValue.Text(option.providerChapterId),
-                    )
                 } else {
                     emptyMap()
                 }
