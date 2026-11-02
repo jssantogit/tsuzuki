@@ -12,6 +12,8 @@ class ProviderRuntimeAndroidGateTest(unittest.TestCase):
         self.assertIn("eu.kanade.tachiyomi.provider.runtime", script)
         self.assertIn("eu.kanade.tachiyomi.provider.reading", script)
         self.assertIn("eu.kanade.tachiyomi.ui.reader.loader", script)
+        # UI freeze coverage must actually run, not just compile in the Android gate.
+        self.assertIn('run_package "eu.kanade.tachiyomi.ui.main" "Canonical UI jank"', script)
         self.assertIn(":app:connectedDebugAndroidTest", script)
 
     def test_workflow_selects_acceptance_branch_and_reader_dependencies(self):
