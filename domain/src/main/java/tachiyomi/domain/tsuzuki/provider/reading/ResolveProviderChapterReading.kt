@@ -70,6 +70,7 @@ enum class ProviderReadingNoMatchReason {
     NO_MATCHING_SOURCE_CHAPTER,
     NO_CANONICAL_MAPPING,
     NO_ELIGIBLE_MAPPED_SOURCE,
+    UNVERIFIED_EARLY_TITLE,
     IDENTITY_REJECTED,
 }
 
@@ -172,11 +173,7 @@ class ResolveProviderChapterReading(
                 // provider is NOT source-authored evidence that this scene is
                 // a canonical prologue. Require an explicit source-title number
                 // or prologue marker when the chapter has no qualified volume.
-                val unqualifiedEarlyScene = chapter.type == CanonicalChapterType.REGULAR &&
-                    chapter.baseNumber == 0 &&
-                    chapter.volume == null &&
-                    !evidence.title.isNullOrBlank() &&
-                    !hasEarlyChapterTitleAttestation(chapter, evidence.title)
+                val unqualifiedEarlyScene = isUnqualifiedEarlyScene(chapter, evidence)
                 observedIdentity?.isSpecific == true &&
                     !unqualifiedEarlyScene &&
                     parsed.confidence >= MIN_READING_IDENTITY_CONFIDENCE &&
@@ -241,6 +238,15 @@ class ResolveProviderChapterReading(
      * explicitly names the same early chapter, or a genuine prologue heading.
      * Keep title-free labels and volume-qualified editions unchanged.
      */
+    private fun isUnqualifiedEarlyScene(
+        chapter: tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter,
+        evidence: tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence,
+    ): Boolean = chapter.type == CanonicalChapterType.REGULAR &&
+        chapter.baseNumber == 0 &&
+        chapter.volume == null &&
+        !evidence.title.isNullOrBlank() &&
+        !hasEarlyChapterTitleAttestation(chapter, evidence.title)
+
     private fun hasEarlyChapterTitleAttestation(
         chapter: tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter,
         title: String,
@@ -357,6 +363,9 @@ class ResolveProviderChapterReading(
             matchingNumberCount == 0 -> ProviderReadingNoMatchReason.NO_MATCHING_SOURCE_CHAPTER
             mapped.isEmpty() -> ProviderReadingNoMatchReason.NO_CANONICAL_MAPPING
             mappedEligible == 0 -> ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE
+            mapped.any { it.evidence.producerId in eligibleProducers &&
+                isUnqualifiedEarlyScene(chapter, it.evidence)
+            } -> ProviderReadingNoMatchReason.UNVERIFIED_EARLY_TITLE
             else -> ProviderReadingNoMatchReason.IDENTITY_REJECTED
         }
 
