@@ -40,6 +40,29 @@ data class ProviderChapterReadingOption(
     )
 }
 
+/**
+ * Causal, count-only audit for a Reader option lookup that returned no source.
+ * Counts describe persisted evidence, not a promise that upstream still serves
+ * every previously observed chapter.
+ */
+data class ProviderReadingNoMatchAudit(
+    val eligibleSourceCount: Int,
+    val providerEvidenceCount: Int,
+    val matchingNumberEvidenceCount: Int,
+    val mappedEvidenceCount: Int,
+    val mappedEligibleSourceEvidenceCount: Int,
+    val reason: ProviderReadingNoMatchReason,
+)
+
+enum class ProviderReadingNoMatchReason {
+    NO_ELIGIBLE_SOURCE,
+    NO_PROVIDER_EVIDENCE,
+    NO_MATCHING_SOURCE_CHAPTER,
+    NO_CANONICAL_MAPPING,
+    NO_ELIGIBLE_MAPPED_SOURCE,
+    IDENTITY_REJECTED,
+}
+
 @Inject
 class ResolveProviderChapterReading(
     private val canonicalChapterRepository: CanonicalChapterRepository,
@@ -152,6 +175,75 @@ class ResolveProviderChapterReading(
                 ),
             )
             .toList()
+    }
+
+    /**
+     * Explain why a canonical chapter has no Reader source without exporting
+     * raw labels, URLs, or IDs. This is invoked only after options() was empty.
+     * It never selects a different HID or mutates canonical evidence.
+     */
+    suspend fun auditNoMatch(canonicalChapterId: String): ProviderReadingNoMatchAudit {
+        val chapter = canonicalChapterRepository.getById(canonicalChapterId)
+            ?: return ProviderReadingNoMatchAudit(
+                eligibleSourceCount = 0,
+                providerEvidenceCount = 0,
+                matchingNumberEvidenceCount = 0,
+                mappedEvidenceCount = 0,
+                mappedEligibleSourceEvidenceCount = 0,
+                reason = ProviderReadingNoMatchReason.NO_ELIGIBLE_SOURCE,
+            )
+
+        providerRegistry.awaitReady()
+        val registrations = providerRegistry.providers().associateBy { it.descriptor.id }
+        val eligibleProducers = buildSet {
+            bindingRepository.getByTitle(chapter.canonicalTitleId)
+                .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
+                .filter { registrations[it.ref.providerId]?.isEligibleForReading(it.ref.facetId) == true }
+                .forEach { add(it.ref.evidenceProducerId()) }
+
+            workSourceAssociationRepository.getByTitle(chapter.canonicalTitleId)
+                .filter { it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED }
+                .filter { it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED }
+                .filter { registrations[it.ref.providerId]?.isEligibleForReading(it.ref.facetId) == true }
+                .forEach { add(it.ref.evidenceProducerId()) }
+        }
+
+        val observations = evidenceRepository.getByCanonicalTitleId(chapter.canonicalTitleId)
+            .filter { it.evidence.producerKind == ProducerKind.PROVIDER }
+            .filter { it.evidence.authority == ChapterEvidenceAuthority.PROVIDER_PROVISIONAL }
+
+        val matchingNumberCount = observations.count { persisted ->
+            val evidence = persisted.evidence
+            val parsed = chapterLabelParser.execute(evidence.rawLabel, evidence.rawNumber)
+            val identity = if (chapter.numberingKind == null) {
+                parsed.identity
+            } else {
+                chapterLabelParser.previewExactNumbering(evidence.rawLabel)
+            }
+            identity?.isSpecific == true &&
+                parsed.confidence >= MIN_READING_IDENTITY_CONFIDENCE &&
+                identity == chapter.identity &&
+                !hasConflictingIntegerChapterHint(parsed, evidence.rawNumber)
+        }
+        val mapped = observations.filter { it.mappedCanonicalChapterId == canonicalChapterId }
+        val mappedEligible = mapped.count { it.evidence.producerId in eligibleProducers }
+        val reason = when {
+            eligibleProducers.isEmpty() -> ProviderReadingNoMatchReason.NO_ELIGIBLE_SOURCE
+            observations.isEmpty() -> ProviderReadingNoMatchReason.NO_PROVIDER_EVIDENCE
+            matchingNumberCount == 0 -> ProviderReadingNoMatchReason.NO_MATCHING_SOURCE_CHAPTER
+            mapped.isEmpty() -> ProviderReadingNoMatchReason.NO_CANONICAL_MAPPING
+            mappedEligible == 0 -> ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE
+            else -> ProviderReadingNoMatchReason.IDENTITY_REJECTED
+        }
+
+        return ProviderReadingNoMatchAudit(
+            eligibleSourceCount = eligibleProducers.size,
+            providerEvidenceCount = observations.size,
+            matchingNumberEvidenceCount = matchingNumberCount,
+            mappedEvidenceCount = mapped.size,
+            mappedEligibleSourceEvidenceCount = mappedEligible,
+            reason = reason,
+        )
     }
 
     suspend fun delivery(
