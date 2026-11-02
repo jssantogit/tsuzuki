@@ -223,6 +223,28 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `Reader rejects a source volume disguised as chapter zero even when the payload is short`() = runBlocking {
+        val zero = chapter.copy(id = "canonical-zero", displayNumber = "0", baseNumber = 0)
+        listOf(
+            "Ch. 0 - Volume 112",
+            "Ch. 0 - Vol. 112",
+            "Chapter 0 - Volume 112",
+        ).forEach { rawLabel ->
+            val observed = evidence(binding, "volume-bundle", mappedChapterId = zero.id).copy(
+                evidence = providerEvidence(
+                    producerId = binding.ref.evidenceProducerId(),
+                    externalChapterKey = "volume-bundle",
+                ).copy(rawLabel = rawLabel, rawNumber = 0.0, volume = null),
+            )
+            resolver(
+                bindings = listOf(binding),
+                evidence = listOf(observed),
+                canonicalChapter = zero,
+            ).options(zero.id) shouldBe emptyList()
+        }
+    }
+
+    @Test
     fun `Reader allows independently volume-qualified regular chapter zero`() = runBlocking {
         val zero = chapter.copy(
             id = "chapter-canonical-vol-0",
