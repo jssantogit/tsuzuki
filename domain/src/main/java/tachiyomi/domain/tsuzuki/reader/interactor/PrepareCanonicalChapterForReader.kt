@@ -13,6 +13,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticErrorCategory
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderNoMatchReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
@@ -215,7 +216,7 @@ class PrepareCanonicalChapterForReader(
                         )
                         put(
                             DiagnosticAttribute.PROVIDER_READER_NO_MATCH_REASON,
-                            DiagnosticAttributeValue.Text(audit.reason.name),
+                            DiagnosticAttributeValue.Code(DiagnosticProviderReaderNoMatchReason.valueOf(audit.reason.name)),
                         )
                     }
                 } + capturedCanonicalIdentity,
