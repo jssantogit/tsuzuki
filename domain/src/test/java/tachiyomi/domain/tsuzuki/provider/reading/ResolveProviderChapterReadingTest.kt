@@ -168,6 +168,65 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `Reader distinguishes no Provider evidence from ineligible source`() = runBlocking {
+        resolver(
+            bindings = listOf(binding),
+            evidence = emptyList(),
+        ).auditNoMatch(chapter.id) shouldBe ProviderReadingNoMatchAudit(
+            eligibleSourceCount = 1,
+            providerEvidenceCount = 0,
+            matchingNumberEvidenceCount = 0,
+            mappedEvidenceCount = 0,
+            mappedEligibleSourceEvidenceCount = 0,
+            reason = ProviderReadingNoMatchReason.NO_PROVIDER_EVIDENCE,
+        )
+    }
+
+    @Test
+    fun `Reader diagnoses mapped chapter evidence only belonging to a different HID`() = runBlocking {
+        val other = binding.copy(
+            id = "binding-other",
+            ref = ProviderBindingRef(providerId, "en", "different-source"),
+        )
+        val observed = evidence(other, "external-ch-1", mappedChapterId = chapter.id)
+        resolver(
+            bindings = listOf(binding),
+            evidence = listOf(observed),
+        ).auditNoMatch(chapter.id) shouldBe ProviderReadingNoMatchAudit(
+            eligibleSourceCount = 1,
+            providerEvidenceCount = 1,
+            matchingNumberEvidenceCount = 1,
+            mappedEvidenceCount = 1,
+            mappedEligibleSourceEvidenceCount = 0,
+            reason = ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE,
+        )
+    }
+
+    @Test
+    fun `Reader reports identity rejection if a mapped source declares a mismatched volume`() = runBlocking {
+        val wronglyMapped = evidence(binding, "wrong-volume", chapter.id).copy(
+            evidence = providerEvidence(binding.ref.evidenceProducerId(), "wrong-volume").copy(
+                rawLabel = "Vol. 112 Ch. 1",
+                rawNumber = 1.0,
+                volume = 112,
+            ),
+        )
+        val resolver = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(wronglyMapped),
+        )
+        resolver.options(chapter.id) shouldBe emptyList()
+        resolver.auditNoMatch(chapter.id) shouldBe ProviderReadingNoMatchAudit(
+            eligibleSourceCount = 1,
+            providerEvidenceCount = 1,
+            matchingNumberEvidenceCount = 1,
+            mappedEvidenceCount = 1,
+            mappedEligibleSourceEvidenceCount = 1,
+            reason = ProviderReadingNoMatchReason.IDENTITY_REJECTED,
+        )
+    }
+
+    @Test
     fun `Reader diagnoses unavailable source association without inventing chapter selection`() = runBlocking {
         resolver(
             bindings = emptyList(),
