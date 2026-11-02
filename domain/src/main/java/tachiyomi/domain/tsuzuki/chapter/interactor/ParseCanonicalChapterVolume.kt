@@ -13,8 +13,15 @@ class ParseCanonicalChapterVolume {
     fun execute(rawLabel: String?): Int? {
         val normalized = normalize(rawLabel.orEmpty())
         val match = LEADING_VOLUME_CHAPTER_PREFIX.find(normalized) ?: return null
-        if (VOLUME_MARKERS.findAll(normalized).take(2).count() != 1) return null
-        return match.groupValues[1].toIntOrNull()
+        val leadingVolume = match.groupValues[1].toIntOrNull() ?: return null
+        // Some providers return "Vol. 1 Ch. 1 - Chapter 1 - Volume 1".
+        // The repeated, identical volume is not a second edition. A second
+        // different, invalid or missing volume is still disqualifying.
+        val volumes = VOLUME_MARKERS.findAll(normalized).take(3).map { marker ->
+            marker.value.filter(Char::isDigit).toIntOrNull()
+        }.toList()
+        if (volumes.isEmpty() || volumes.size > 2 || volumes.any { it != leadingVolume }) return null
+        return leadingVolume
     }
 
     /** True when a label starts with a volume marker, even if its value is unusable. */
