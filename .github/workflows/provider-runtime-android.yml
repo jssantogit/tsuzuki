@@ -1,4 +1,5 @@
 name: Provider Platform Android gate
+# #176 editorial variants and title volumes: run current Host Draft full/Android gates.
 
 on:
   push:
