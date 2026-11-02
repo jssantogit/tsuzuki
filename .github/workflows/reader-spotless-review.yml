@@ -22,6 +22,29 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-read-only: true
+      - name: Shorten two overlong test names in disposable checkout
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          cases = [
+              (
+                  "domain/src/test/java/tachiyomi/domain/tsuzuki/provider/reading/CollectProviderReadingEvidenceTest.kt",
+                  "source URL explicitly declaring fan colored cannot be auto bound as canonical base title",
+                  "source fan colored URL blocks automatic base edition binding",
+              ),
+              (
+                  "domain/src/test/java/tachiyomi/domain/tsuzuki/provider/reading/ResolveProviderChapterReadingTest.kt",
+                  "source attested colored edition revokes stale automatic Reader binding but retains explicit user choice",
+                  "source variant blocks automatic Reader but honors confirmed edition",
+              ),
+          ]
+          for path, before, after in cases:
+              file = Path(path)
+              contents = file.read_text()
+              assert before in contents
+              file.write_text(contents.replace(before, after))
+          PY
       - name: Apply canonical formatter in disposable checkout
         run: ./gradlew :domain:spotlessApply
       - name: Emit only JSON-escaped diff for review
