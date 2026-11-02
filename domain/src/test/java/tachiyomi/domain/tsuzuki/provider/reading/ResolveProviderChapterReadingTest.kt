@@ -167,7 +167,11 @@ class ResolveProviderChapterReadingTest {
             val options = resolver.options(zero.id)
             options.map { it.providerChapterId } shouldBe listOf(sourceId)
             resolver.preparedContent(options.single()) shouldBe ProviderCallResult.Failure(
-                ProviderError(ProviderErrorCode.CHAPTER_IDENTITY_UNVERIFIED, retryable = false),
+                ProviderError(
+                    ProviderErrorCode.CHAPTER_IDENTITY_UNVERIFIED,
+                    retryable = false,
+                    observedPageCount = pageCount,
+                ),
             )
         }
     }
