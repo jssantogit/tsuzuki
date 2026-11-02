@@ -94,6 +94,7 @@ class RefreshProviderReadingChapters internal constructor(
             // not a complete snapshot and must never detach older Provider support.
             onPageCollected(page.items, snapshotObservedAt)
             if (next == null) {
+                // Staged #176 performance smoke: source-only scans still validate every page.
                 // A source-only portfolio scan must verify every page, cursor and
                 // chapter identity but must not build a redundant canonical
                 // snapshot. Only a preferred binding can publish one.
