@@ -326,6 +326,50 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `Reader preserves large correctly qualified chapter zero and large regular chapters`() = runBlocking {
+        val numberedZero = chapter.copy(
+            id = "volume-one-zero",
+            displayNumber = "0",
+            baseNumber = 0,
+            volume = 1,
+        )
+        val ordinaryChapter = chapter.copy(id = "regular-one")
+        val cases = listOf(
+            Triple(numberedZero, "Vol. 1 Ch. 0", 0.0),
+            Triple(ordinaryChapter, "Ch. 1", 1.0),
+        )
+        cases.forEach { (canonical, sourceLabel, number) ->
+            val volume = if (canonical.id == numberedZero.id) 1 else null
+            val observed = evidence(binding, "long-chapter", mappedChapterId = canonical.id).copy(
+                evidence = providerEvidence(binding.ref.evidenceProducerId(), "long-chapter").copy(
+                    rawLabel = sourceLabel,
+                    rawNumber = number,
+                    volume = volume,
+                ),
+            )
+            val reader = resolver(
+                bindings = listOf(binding),
+                evidence = listOf(observed),
+                canonicalChapter = canonical,
+                gateway = gateway {
+                    ProviderCallResult.Success(
+                        ProviderReadingDelivery.PageList(
+                            (1..102).map { pageIndex ->
+                                ProviderPageRequest(
+                                    url = "https://reader.example/pages/$pageIndex.jpg",
+                                    allowedOrigins = setOf("https://reader.example"),
+                                )
+                            },
+                        ),
+                    )
+                },
+            )
+            val option = reader.options(canonical.id).single()
+            (reader.preparedContent(option) is ProviderCallResult.Success) shouldBe true
+        }
+    }
+
+    @Test
     fun `Reader rejects volume explicitly stated in label even when source volume field is missing`() = runBlocking {
         val zero = chapter.copy(id = "chapter-canonical-0", displayNumber = "0", baseNumber = 0)
         val observed = evidence(binding, "volume-112-as-zero", mappedChapterId = zero.id).copy(
