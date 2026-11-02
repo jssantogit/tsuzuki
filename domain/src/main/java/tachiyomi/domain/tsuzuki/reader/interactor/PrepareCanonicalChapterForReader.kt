@@ -228,7 +228,9 @@ class PrepareCanonicalChapterForReader(
                         )
                         put(
                             DiagnosticAttribute.PROVIDER_READER_NO_MATCH_REASON,
-                            DiagnosticAttributeValue.Code(DiagnosticProviderReaderNoMatchReason.valueOf(audit.reason.name)),
+                            DiagnosticAttributeValue.Code(
+                                DiagnosticProviderReaderNoMatchReason.valueOf(audit.reason.name),
+                            ),
                         )
                     }
                 } + capturedCanonicalIdentity,
