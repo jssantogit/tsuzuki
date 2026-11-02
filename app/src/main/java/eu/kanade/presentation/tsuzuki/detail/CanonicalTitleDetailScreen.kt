@@ -105,6 +105,7 @@ fun CanonicalTitleDetailScreen(
     onEditionSearch: (String) -> Unit = {},
     onEditionConfirm: (ProviderEditionCandidate) -> Unit = {},
     onEditionDismiss: () -> Unit = {},
+    onChapterSortMeasured: (Long, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
@@ -141,6 +142,7 @@ fun CanonicalTitleDetailScreen(
                 onReadTitle, onOpenChapter, onBaixarChapter, onOpenProvidersSettings,
                 onImportEpub, onReviewCandidates, inventoryRefresh,
                 editionPicker, onChooseEdition, onEditionSearch, onEditionConfirm, onEditionDismiss,
+                onChapterSortMeasured,
             )
         }
     }
@@ -166,6 +168,7 @@ private fun LoadedDetails(
     onEditionSearch: (String) -> Unit,
     onEditionConfirm: (ProviderEditionCandidate) -> Unit,
     onEditionDismiss: () -> Unit,
+    onChapterSortMeasured: (Long, Int) -> Unit,
 ) {
     var mode by rememberSaveable(state.title.id) { mutableStateOf(CanonicalDetailsLowerMode.COMPACT) }
     var sort by rememberSaveable(state.title.id) { mutableStateOf(CanonicalChapterSort.ORIGINAL) }
@@ -181,7 +184,14 @@ private fun LoadedDetails(
             selectedEdition = null
         }
     }
-    val chapters = remember(state.chapters, sort) { sortDetailChapters(state.chapters, sort) }
+    val (chapters, sortDurationMs) = remember(state.chapters, sort) {
+        val started = System.nanoTime()
+        val sorted = sortDetailChapters(state.chapters, sort)
+        sorted to ((System.nanoTime() - started) / 1_000_000L).coerceAtLeast(0)
+    }
+    LaunchedEffect(chapters, sort) {
+        if (sortDurationMs >= 16L) onChapterSortMeasured(sortDurationMs, chapters.size)
+    }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
