@@ -188,6 +188,107 @@ class PrepareCanonicalChapterProviderFallbackTest {
     }
 
     @Test
+    fun `detailed Reader source trace includes original source structure but never raw chapter labels`() = runTest {
+        val chapter = CanonicalChapter(
+            id = "chapter-zero-volume-one",
+            canonicalTitleId = "title-1",
+            displayNumber = "0",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 0,
+            volume = 1,
+            confidence = 1.0,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val providerId = ProviderId("app.tsuzuki.mangafire")
+        val binding = ProviderReadingBinding(
+            id = "binding-1",
+            canonicalTitleId = chapter.canonicalTitleId,
+            ref = ProviderBindingRef(providerId, "en", "work-1"),
+            verification = ProviderBindingVerification.EXACT,
+            availability = ProviderBindingAvailability.AVAILABLE,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val readingResolver = ResolveProviderChapterReading(
+            canonicalChapterRepository = chapterRepository(chapter),
+            evidenceRepository = evidenceRepository(
+                listOf(
+                    PersistedChapterEvidence(
+                        evidence = ChapterEvidence(
+                            id = "source-chapter",
+                            canonicalTitleId = chapter.canonicalTitleId,
+                            producerKind = ProducerKind.PROVIDER,
+                            producerId = binding.ref.evidenceProducerId(),
+                            externalChapterKey = "12345",
+                            rawLabel = "Vol. 1 Ch. 0 - Opening",
+                            rawNumber = 0.0,
+                            volume = 1,
+                            title = "Opening",
+                            observedAt = 1,
+                            confidence = 0.95,
+                            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+                        ),
+                        mappedCanonicalChapterId = chapter.id,
+                    ),
+                ),
+            ),
+            bindingRepository = bindingRepository(binding),
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { listOf(readingRegistration(providerId, "en")) },
+            ),
+            gateway = object : ProviderReadingGateway {
+                override suspend fun lookup(
+                    providerId: ProviderId,
+                    request: ProviderReadingLookupRequest,
+                ): ReadingProviderCallResult<ProviderPage<ProviderWorkCandidate>> = error("unused")
+
+                override suspend fun chapters(
+                    providerId: ProviderId,
+                    request: ProviderReadingChaptersRequest,
+                ): ReadingProviderCallResult<ProviderPage<ProviderChapterObservation>> = error("unused")
+
+                override suspend fun pages(
+                    providerId: ProviderId,
+                    request: ProviderReadingPagesRequest,
+                ): ReadingProviderCallResult<ProviderReadingDelivery> = ReadingProviderCallResult.Failure(
+                    ProviderError(ProviderErrorCode.PACKAGE_INVALID, retryable = false),
+                )
+            },
+        )
+        val diagnostics = RecordingStructuredDiagnosticRecorder(detailed = true)
+        val reader = PrepareCanonicalChapterForReader(
+            resolveChapterContent = emptyAddonResolver(),
+            canonicalChapterRepository = chapterRepository(chapter),
+            canonicalReadingRepository = readingRepository(),
+            canonicalDownloadRepository = emptyDownloadRepository(),
+            canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+            },
+            chapterContentPreparer = object : ChapterContentPreparer {
+                override suspend fun prepare(
+                    option: ContentOption,
+                    progress: CanonicalChapterProgress?,
+                ): Result<PreparedChapterContent> = error("unused")
+            },
+            structuredDiagnostics = diagnostics,
+            resolveProviderChapterReading = readingResolver,
+        )
+        reader.execute(chapter.id).shouldBeInstanceOf<CanonicalReaderPreparation.Unavailable>()
+
+        val event = diagnostics.events.first {
+            it.name == DiagnosticEventName.READER_SOURCE_SELECTED &&
+                it.outcome == DiagnosticOutcome.SUCCEEDED
+        }
+        event.attributes["provider_reader_source_number_milli"] shouldBe DiagnosticAttributeValue.Number(0)
+        event.attributes["provider_reader_source_volume"] shouldBe DiagnosticAttributeValue.Number(1)
+        event.attributes["provider_reader_label_has_volume_marker"] shouldBe DiagnosticAttributeValue.Flag(true)
+        event.attributes["provider_reader_title_is_volume_container"] shouldBe DiagnosticAttributeValue.Flag(false)
+        event.attributes["provider_reader_title_present"] shouldBe DiagnosticAttributeValue.Flag(true)
+        event.attributes.values.any { it == DiagnosticAttributeValue.Text("Opening") } shouldBe false
+    }
+
+    @Test
     fun `failed Provider HTTP delivery falls through to exact torrent archive`() = runTest {
         val chapter = CanonicalChapter(
             id = "chapter-1",
