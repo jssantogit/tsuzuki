@@ -65,6 +65,7 @@ data class ProviderReadingSourceIdentityAudit(
 
 enum class ProviderReadingNoMatchReason {
     NO_ELIGIBLE_SOURCE,
+    SOURCE_EDITION_EXCLUDED,
     NO_PROVIDER_EVIDENCE,
     NO_MATCHING_SOURCE_CHAPTER,
     NO_CANONICAL_MAPPING,
@@ -301,6 +302,8 @@ class ResolveProviderChapterReading(
         val mapped = observations.filter { it.mappedCanonicalChapterId == canonicalChapterId }
         val mappedEligible = mapped.count { it.evidence.producerId in eligibleProducers }
         val reason = when {
+            eligibleProducers.isEmpty() && attestedVariantProducers.isNotEmpty() ->
+                ProviderReadingNoMatchReason.SOURCE_EDITION_EXCLUDED
             eligibleProducers.isEmpty() -> ProviderReadingNoMatchReason.NO_ELIGIBLE_SOURCE
             observations.isEmpty() -> ProviderReadingNoMatchReason.NO_PROVIDER_EVIDENCE
             matchingNumberCount == 0 -> ProviderReadingNoMatchReason.NO_MATCHING_SOURCE_CHAPTER
