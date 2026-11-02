@@ -207,6 +207,7 @@ enum class DiagnosticAttribute {
     PROVIDER_WORK_ALIASES,
     PROVIDER_LOOKUP_TITLE,
     LOOKUP_DECISION,
+    PROVIDER_CHAPTER_ID,
     PROVIDER_CHAPTER_FIRST_ID,
     PROVIDER_CHAPTER_LAST_ID,
     CHAPTER_NUMBER_MIN_MILLI,
@@ -754,6 +755,7 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { isSafeP2pLine(it.value) }
         DiagnosticAttribute.PROVIDER_WORK_ID -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { providerWorkIdPattern.matches(it.value) }
+        DiagnosticAttribute.PROVIDER_CHAPTER_ID,
         DiagnosticAttribute.PROVIDER_CHAPTER_FIRST_ID,
         DiagnosticAttribute.PROVIDER_CHAPTER_LAST_ID,
         -> (value as? DiagnosticAttributeValue.Text)
