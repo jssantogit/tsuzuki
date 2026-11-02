@@ -177,16 +177,48 @@ class PrepareCanonicalChapterForReader(
 
         if (resolver != null) {
             val options = resolver.options(canonicalChapterId)
+            // An empty result could mean genuinely absent source chapter,
+            // missing canonical mapping, ineligible HID, or rejected identity.
+            // Log count-only causes rather than hiding every case as no source.
+            val noMatchAudit = if (options.isEmpty()) resolver.auditNoMatch(canonicalChapterId) else null
             trace.event(
                 subsystem = DiagnosticSubsystem.CONTENT,
                 name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
                 stage = DiagnosticStage.BINDING,
                 outcome = if (options.isEmpty()) DiagnosticOutcome.EMPTY else DiagnosticOutcome.CANDIDATES,
-                attributes = mapOf(
-                    DiagnosticAttribute.CANDIDATE_TYPE to
+                attributes = buildMap {
+                    put(
+                        DiagnosticAttribute.CANDIDATE_TYPE,
                         DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
-                    DiagnosticAttribute.CANDIDATE_COUNT to DiagnosticAttributeValue.Number(options.size.toLong()),
-                ) + capturedCanonicalIdentity,
+                    )
+                    put(DiagnosticAttribute.CANDIDATE_COUNT, DiagnosticAttributeValue.Number(options.size.toLong()))
+                    noMatchAudit?.let { audit ->
+                        put(
+                            DiagnosticAttribute.PROVIDER_READER_ELIGIBLE_SOURCE_COUNT,
+                            DiagnosticAttributeValue.Number(audit.eligibleSourceCount.toLong()),
+                        )
+                        put(
+                            DiagnosticAttribute.PROVIDER_READER_OBSERVED_EVIDENCE_COUNT,
+                            DiagnosticAttributeValue.Number(audit.providerEvidenceCount.toLong()),
+                        )
+                        put(
+                            DiagnosticAttribute.PROVIDER_READER_MATCHING_NUMBER_COUNT,
+                            DiagnosticAttributeValue.Number(audit.matchingNumberEvidenceCount.toLong()),
+                        )
+                        put(
+                            DiagnosticAttribute.PROVIDER_READER_MAPPED_EVIDENCE_COUNT,
+                            DiagnosticAttributeValue.Number(audit.mappedEvidenceCount.toLong()),
+                        )
+                        put(
+                            DiagnosticAttribute.PROVIDER_READER_ELIGIBLE_MAPPED_COUNT,
+                            DiagnosticAttributeValue.Number(audit.mappedEligibleSourceEvidenceCount.toLong()),
+                        )
+                        put(
+                            DiagnosticAttribute.PROVIDER_READER_NO_MATCH_REASON,
+                            DiagnosticAttributeValue.Text(audit.reason.name),
+                        )
+                    }
+                } + capturedCanonicalIdentity,
             )
 
             // Provider-native selection will become a first-class UI model later. Until then, never
