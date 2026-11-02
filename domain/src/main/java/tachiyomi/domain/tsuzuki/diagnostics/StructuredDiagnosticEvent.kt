@@ -509,6 +509,7 @@ enum class DiagnosticProviderReaderNoMatchReason : DiagnosticSafeCode {
     NO_MATCHING_SOURCE_CHAPTER,
     NO_CANONICAL_MAPPING,
     NO_ELIGIBLE_MAPPED_SOURCE,
+    UNVERIFIED_EARLY_TITLE,
     IDENTITY_REJECTED,
 }
 
