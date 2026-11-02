@@ -50,7 +50,7 @@ class PrepareCanonicalChapterForReader(
         canonicalChapterId: String,
         selectedOption: ContentOption? = null,
     ): CanonicalReaderPreparation {
-        val trace = DiagnosticTrace.start(
+        var trace = DiagnosticTrace.start(
             recorder = structuredDiagnostics,
             workflow = DiagnosticWorkflow.READER_OPEN,
             subsystem = DiagnosticSubsystem.READER,
@@ -70,6 +70,11 @@ class PrepareCanonicalChapterForReader(
                     started,
                     CanonicalReaderPreparation.Unavailable(canonicalChapterId),
                 )
+            // Bind subsequent Reader events to the same pseudonymous title
+            // reference used by chapter discovery and reconciliation logs.
+            trace = trace.copy(
+                canonicalTitleRef = structuredDiagnostics.canonicalTitleReference(chapter.canonicalTitleId),
+            )
 
             if (selectedOption == null) {
                 val artifact = canonicalDownloadRepository.get(canonicalChapterId)
@@ -188,6 +193,10 @@ class PrepareCanonicalChapterForReader(
                         DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text(option.providerId.value),
                         DiagnosticAttribute.CANDIDATE_TYPE to
                             DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
+                        DiagnosticAttribute.PROVIDER_WORK_ID to
+                            DiagnosticAttributeValue.Text(option.externalWorkId),
+                        DiagnosticAttribute.PROVIDER_CHAPTER_ID to
+                            DiagnosticAttributeValue.Text(option.providerChapterId),
                     ),
                 )
 
@@ -207,6 +216,10 @@ class PrepareCanonicalChapterForReader(
                                 ),
                                 DiagnosticAttribute.PROVIDER_ERROR_CODE to
                                     DiagnosticAttributeValue.Text(prepared.error.code.name),
+                                DiagnosticAttribute.PROVIDER_WORK_ID to
+                                    DiagnosticAttributeValue.Text(option.externalWorkId),
+                                DiagnosticAttribute.PROVIDER_CHAPTER_ID to
+                                    DiagnosticAttributeValue.Text(option.providerChapterId),
                             ),
                         )
                     }
@@ -221,6 +234,11 @@ class PrepareCanonicalChapterForReader(
                                 put(
                                     DiagnosticAttribute.PROVIDER_ID,
                                     DiagnosticAttributeValue.Text(option.providerId.value),
+                                )
+                                put(DiagnosticAttribute.PROVIDER_WORK_ID, DiagnosticAttributeValue.Text(option.externalWorkId))
+                                put(
+                                    DiagnosticAttribute.PROVIDER_CHAPTER_ID,
+                                    DiagnosticAttributeValue.Text(option.providerChapterId),
                                 )
                                 pageCount?.let {
                                     put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(it.toLong()))
