@@ -249,7 +249,7 @@ class ReconcileChapterEvidenceTest {
     }
 
     @Test
-    fun `MangaFire code13 source corrections detach false zero scene mappings without erasing historical chapter IDs`() = runTest {
+    fun `MangaFire code13 partial correction detaches old scene mappings without erasing IDs`() = runTest {
         val fixture = fixture()
         val oldScenes = listOf(
             Triple("5892019", "0", "Darkshine vs Garou"),
@@ -272,12 +272,9 @@ class ReconcileChapterEvidenceTest {
                 authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
             )
         }
-        fixture.reconciler.executeProviderSnapshot(
-            canonicalTitleId = "title",
-            producerId = "mangafire-729pj-en",
-            snapshotObservedAt = 10L,
-            evidence = code12,
-        )
+        // The two ambiguous One Punch Man HIDs produce partialEvidence;
+        // no complete-provider snapshot can safely replace either inventory.
+        fixture.reconciler.execute("title", code12)
         val historicalIds = fixture.chapterRepository.getByCanonicalTitleId("title").map { it.id }.toSet()
         historicalIds.size shouldBe 3
         oldScenes.forEach { (key, _, _) ->
@@ -296,12 +293,7 @@ class ReconcileChapterEvidenceTest {
                 observedAt = 20L,
             )
         }
-        fixture.reconciler.executeProviderSnapshot(
-            canonicalTitleId = "title",
-            producerId = "mangafire-729pj-en",
-            snapshotObservedAt = 20L,
-            evidence = corrected,
-        )
+        fixture.reconciler.execute("title", corrected)
 
         // Historical chapter rows remain to protect progress and sync IDs;
         // neither a previous Ch.0 nor Ch.0.2 nor Ch.0.3 remains mapped.
