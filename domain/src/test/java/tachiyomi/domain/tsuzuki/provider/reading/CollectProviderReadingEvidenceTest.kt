@@ -994,6 +994,84 @@ class CollectProviderReadingEvidenceTest {
         }
 
     @Test
+    fun `source URL explicitly declaring fan colored cannot be auto bound as canonical base title`(): Unit = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "One Punch-Man")
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    externalWorkId = "729pj",
+                                    title = "One Punch-Man",
+                                    url = "https://mangafire.to/title/729pj-one-punch-man-fan-coloredd",
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("An explicitly colored edition cannot auto feed the base") },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+        val result = collector.execute(title.id)
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+        bindings.getByTitle(title.id) shouldBe emptyList()
+    }
+
+    @Test
+    fun `only plain source URL can auto bind beside a colored URL with the same primary title`(): Unit = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "One Punch-Man")
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    externalWorkId = "729pj",
+                                    title = "One Punch-Man",
+                                    url = "https://mangafire.to/title/729pj-one-punch-man-fan-coloredd",
+                                    language = "en",
+                                ),
+                                ProviderWorkCandidate(
+                                    externalWorkId = "oo4",
+                                    title = "One Punch-Man",
+                                    url = "https://mangafire.to/title/oo4-one-punch-man",
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    request.binding.externalWorkId shouldBe "oo4"
+                    ProviderCallResult.Success(ProviderPage(items = emptyList(), nextCursor = null))
+                },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+        )
+        val result = collector.execute(title.id)
+        result.bindingCount shouldBe 1
+        bindings.getByTitle(title.id).single().ref.externalWorkId shouldBe "oo4"
+    }
+
+    @Test
     fun `colored alias cannot disambiguate more than one unqualified primary`(): Unit = runBlocking {
         val title = canonicalTitle.copy(displayTitle = "Bleach")
         val bindings = MemoryBindingRepository()
