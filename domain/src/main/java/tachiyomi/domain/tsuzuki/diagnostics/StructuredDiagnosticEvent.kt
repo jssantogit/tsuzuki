@@ -435,6 +435,7 @@ enum class DiagnosticChapterUiPhase : DiagnosticSafeCode {
     CHAPTERS_QUERY,
     ROWS_BUILD,
     METADATA_ROW_MERGE,
+    CHAPTER_SORT,
 }
 
 enum class DiagnosticProviderRuntimePhase : DiagnosticSafeCode {
