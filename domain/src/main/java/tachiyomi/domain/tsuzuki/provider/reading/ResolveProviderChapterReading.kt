@@ -54,6 +54,15 @@ data class ProviderReadingNoMatchAudit(
     val reason: ProviderReadingNoMatchReason,
 )
 
+/** Closed structural chapter metadata for an explicitly selected source, never source-written text. */
+data class ProviderReadingSourceIdentityAudit(
+    val sourceNumberMilli: Long?,
+    val sourceVolume: Int?,
+    val labelHasExplicitVolumeMarker: Boolean,
+    val sourceTitleIsVolumeContainer: Boolean,
+    val sourceTitlePresent: Boolean,
+)
+
 enum class ProviderReadingNoMatchReason {
     NO_ELIGIBLE_SOURCE,
     NO_PROVIDER_EVIDENCE,
@@ -246,6 +255,42 @@ class ResolveProviderChapterReading(
         )
     }
 
+    /**
+     * Read a single exact persisted Provider chapter for opt-in Reader diagnostics.
+     * The source HID and mapped chapter must match the already selected option.
+     * Never include a raw title, label, source URL, or provider payload in logs.
+     */
+    suspend fun auditSourceIdentity(
+        option: ProviderChapterReadingOption,
+    ): ProviderReadingSourceIdentityAudit? {
+        val persisted = evidenceRepository.getByProducerExternalKey(
+            producerKind = ProducerKind.PROVIDER,
+            producerId = option.bindingRef().evidenceProducerId(),
+            externalChapterKey = option.providerChapterId,
+        ) ?: return null
+        val evidence = persisted.evidence
+        if (
+            persisted.mappedCanonicalChapterId != option.canonicalChapterId ||
+            evidence.producerKind != ProducerKind.PROVIDER ||
+            evidence.authority != ChapterEvidenceAuthority.PROVIDER_PROVISIONAL ||
+            evidence.producerId != option.bindingRef().evidenceProducerId() ||
+            evidence.externalChapterKey != option.providerChapterId
+        ) {
+            return null
+        }
+
+        val sourceNumberMilli = evidence.rawNumber
+            ?.takeIf { it.isFinite() && it >= 0.0 && it <= 1_000_000.0 }
+            ?.let { kotlin.math.round(it * 1000).toLong() }
+        return ProviderReadingSourceIdentityAudit(
+            sourceNumberMilli = sourceNumberMilli,
+            sourceVolume = evidence.volume?.takeIf { it in 0..10_000 },
+            labelHasExplicitVolumeMarker = volumeParser.hasExplicitVolumeMarker(evidence.rawLabel),
+            sourceTitleIsVolumeContainer = evidence.title?.trim()?.matches(SOURCE_VOLUME_TITLE) == true,
+            sourceTitlePresent = !evidence.title.isNullOrBlank(),
+        )
+    }
+
     suspend fun delivery(
         option: ProviderChapterReadingOption,
     ): ProviderCallResult<ProviderReadingDelivery> {
@@ -344,6 +389,7 @@ class ResolveProviderChapterReading(
             }
 
     private companion object {
+        val SOURCE_VOLUME_TITLE = Regex("^vol(?:ume)?\\.?\\s*[0-9]+$", RegexOption.IGNORE_CASE)
         const val MIN_READING_IDENTITY_CONFIDENCE = 0.90
 
         // Only a delivery shape safety limit, not a chapter-count/identity inference.
