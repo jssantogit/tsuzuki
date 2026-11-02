@@ -407,12 +407,14 @@ class PrepareCanonicalChapterProviderFallbackTest {
         resolver.options(chapter.id).size shouldBe 2
         val result = reader.execute(chapter.id).shouldBeInstanceOf<CanonicalReaderPreparation.Ready>()
         result.target.shouldBeInstanceOf<PreparedChapterContent.HttpPages>().pages.size shouldBe 1
-        recorder.events.any { it.name == DiagnosticEventName.READER_SOURCE_SELECTED &&
-            it.outcome == DiagnosticOutcome.SUCCEEDED &&
-            it.attributes["provider_id"] == DiagnosticAttributeValue.Text(sourceIds.first().value)
+        recorder.events.any {
+            it.name == DiagnosticEventName.READER_SOURCE_SELECTED &&
+                it.outcome == DiagnosticOutcome.SUCCEEDED &&
+                it.attributes["provider_id"] == DiagnosticAttributeValue.Text(sourceIds.first().value)
         } shouldBe true
-        recorder.events.none { it.name == DiagnosticEventName.READER_SOURCE_SELECTED &&
-            it.outcome == DiagnosticOutcome.NEEDS_CONFIRMATION
+        recorder.events.none {
+            it.name == DiagnosticEventName.READER_SOURCE_SELECTED &&
+                it.outcome == DiagnosticOutcome.NEEDS_CONFIRMATION
         } shouldBe true
     }
 
