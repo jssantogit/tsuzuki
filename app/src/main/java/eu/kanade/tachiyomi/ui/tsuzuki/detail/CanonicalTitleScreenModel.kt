@@ -691,9 +691,23 @@ class CanonicalTitleScreenModel(
         startedNanos: Long,
         chapterCount: Int,
     ) {
-        if (!structuredDiagnostics.detailedCaptureActive) return
         val duration = ((System.nanoTime() - startedNanos) / 1_000_000L).coerceAtLeast(0)
-        if (duration < 16L) return
+        traceChapterUiDuration(titleId, phase, duration, chapterCount)
+    }
+
+    fun recordChapterSortDuration(durationMillis: Long, chapterCount: Int) {
+        canonicalTitleId?.let { titleId ->
+            traceChapterUiDuration(titleId, DiagnosticChapterUiPhase.CHAPTER_SORT, durationMillis, chapterCount)
+        }
+    }
+
+    private fun traceChapterUiDuration(
+        titleId: String,
+        phase: DiagnosticChapterUiPhase,
+        duration: Long,
+        chapterCount: Int,
+    ) {
+        if (!structuredDiagnostics.detailedCaptureActive || duration < 16L) return
         runCatching {
             structuredDiagnostics.record(
                 StructuredDiagnosticEvent(
