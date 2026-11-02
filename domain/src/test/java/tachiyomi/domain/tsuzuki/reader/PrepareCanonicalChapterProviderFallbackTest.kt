@@ -34,6 +34,7 @@ import tachiyomi.domain.tsuzuki.content.repository.ContentPreferenceRepository
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderNoMatchReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
@@ -115,14 +116,14 @@ class PrepareCanonicalChapterProviderFallbackTest {
             updatedAt = 1,
         )
 
-        listOf(false, true).forEach { detailed ->
+        listOf(false to false, true to false, true to true).forEach { (detailed, failAudit) ->
             var evidenceReads = 0
             val localEvidence = object : ChapterEvidenceRepository by evidenceRepository(emptyList()) {
                 override suspend fun getByCanonicalTitleId(
                     canonicalTitleId: String,
                 ): List<PersistedChapterEvidence> {
                     evidenceReads++
-                    if (evidenceReads > 1) error("diagnostic-only repository failure")
+                    if (evidenceReads > 1 && failAudit) error("diagnostic-only repository failure")
                     return emptyList()
                 }
             }
@@ -177,6 +178,12 @@ class PrepareCanonicalChapterProviderFallbackTest {
                     event.outcome == DiagnosticOutcome.EMPTY &&
                     event.attributes["candidate_count"] == DiagnosticAttributeValue.Number(0)
             } shouldBe true
+            recorder.events.any { event ->
+                event.name == DiagnosticEventName.CONTENT_BINDING_LOOKUP &&
+                    event.attributes["provider_reader_no_match_reason"] == DiagnosticAttributeValue.Code(
+                        DiagnosticProviderReaderNoMatchReason.NO_PROVIDER_EVIDENCE,
+                    )
+            } shouldBe (detailed && !failAudit)
         }
     }
 
