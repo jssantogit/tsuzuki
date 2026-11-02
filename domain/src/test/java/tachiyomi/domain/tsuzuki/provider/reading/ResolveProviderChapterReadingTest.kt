@@ -179,11 +179,14 @@ class ResolveProviderChapterReadingTest {
                 title = "Darkshine vs Garou",
             ),
         )
-        resolver(
+        val quarantine = resolver(
             bindings = listOf(binding),
             evidence = listOf(ambiguous),
             canonicalChapter = chapterZero,
-        ).options(chapterZero.id) shouldBe emptyList()
+        )
+        quarantine.options(chapterZero.id) shouldBe emptyList()
+        quarantine.auditNoMatch(chapterZero.id).reason shouldBe
+            ProviderReadingNoMatchReason.UNVERIFIED_EARLY_TITLE
         val prologue = ambiguous.copy(
             evidence = ambiguous.evidence.copy(
                 rawLabel = "Ch. 0 - Prologue",
