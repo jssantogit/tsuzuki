@@ -156,9 +156,16 @@ class ResolveProviderChapterReading(
                 }
                 val explicitLabelVolume = volumeParser.execute(evidence.rawLabel)
                 val observedVolume = evidence.volume ?: explicitLabelVolume
+                // MangaFire can report a complete volume as numbered chapter 0.
+                // A positive, source-authored "Volume N [Extra]" title is a
+                // disqualifier even if the source and canonical volume agree.
+                val sourceIsVolumeBundle = chapter.type == CanonicalChapterType.REGULAR &&
+                    chapter.baseNumber == 0 &&
+                    evidence.title?.trim()?.matches(SOURCE_VOLUME_TITLE) == true
                 observedIdentity?.isSpecific == true &&
                     parsed.confidence >= MIN_READING_IDENTITY_CONFIDENCE &&
                     observedIdentity == chapter.identity &&
+                    !sourceIsVolumeBundle &&
                     !hasConflictingIntegerChapterHint(parsed, evidence.rawNumber) &&
                     // The source's volume may be present only in the label;
                     // reject conflicts or malformed explicit volume markers.
@@ -411,7 +418,7 @@ class ResolveProviderChapterReading(
             }
 
     private companion object {
-        val SOURCE_VOLUME_TITLE = Regex("^vol(?:ume)?\\.?\\s*[0-9]+$", RegexOption.IGNORE_CASE)
+        val SOURCE_VOLUME_TITLE = Regex("^vol(?:ume)?\\.?\\s*[0-9]+(?:$|[\\s:.-].*)$", RegexOption.IGNORE_CASE)
         const val MIN_READING_IDENTITY_CONFIDENCE = 0.90
 
         // Only a delivery shape safety limit, not a chapter-count/identity inference.
