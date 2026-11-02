@@ -127,17 +127,20 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader never routes unqualified chapter zero to a source volume by numeric coincidence`() = runBlocking {
+    fun `Reader rejects volume-sized page deliveries for unqualified regular chapter zero`() = runBlocking {
         val zero = chapter.copy(
             id = "chapter-canonical-0",
             displayNumber = "0",
             baseNumber = 0,
         )
-        // Physical #176: these three MangaFire source IDs delivered 182,
-        // 186 and 191 pages when the canonical Reader requested chapter 0.
-        // The underlying evidence gives only 'Ch. 0', not the volume of
-        // that bundled content. Such identity is insufficient for delivery.
-        listOf("9324579", "7336925", "7422102").forEach { sourceId ->
+        // Physical #176: source IDs served 182, 186 and 191 pages for
+        // canonical Chapter 0. A long bundled volume can be advertised as
+        // numeric zero while lacking independent volume identity.
+        listOf(
+            "9324579" to 182,
+            "7336925" to 186,
+            "7422102" to 191,
+        ).forEach { (sourceId, pageCount) ->
             val observed = evidence(binding, sourceId, mappedChapterId = zero.id).copy(
                 evidence = providerEvidence(
                     producerId = binding.ref.evidenceProducerId(),
@@ -148,9 +151,71 @@ class ResolveProviderChapterReadingTest {
                 bindings = listOf(binding),
                 evidence = listOf(observed),
                 canonicalChapter = zero,
+                gateway = gateway {
+                    ProviderCallResult.Success(
+                        ProviderReadingDelivery.PageList(
+                            (1..pageCount).map { index ->
+                                ProviderPageRequest(
+                                    url = "https://reader.example/pages/$index.jpg",
+                                    allowedOrigins = setOf("https://reader.example"),
+                                )
+                            },
+                        ),
+                    )
+                },
             )
-            resolver.options(zero.id) shouldBe emptyList()
+            val options = resolver.options(zero.id)
+            options.map { it.providerChapterId } shouldBe listOf(sourceId)
+            resolver.preparedContent(options.single()) shouldBe ProviderCallResult.Failure(
+                ProviderError(ProviderErrorCode.CHAPTER_IDENTITY_UNVERIFIED, retryable = false),
+            )
         }
+    }
+
+    @Test
+    fun `Reader preserves genuine short chapter zero and does not ban prologues or fractions`() = runBlocking {
+        val zero = chapter.copy(id = "regular-zero", displayNumber = "0", baseNumber = 0)
+        val observed = evidence(binding, "real-short-zero", mappedChapterId = zero.id).copy(
+            evidence = providerEvidence(
+                producerId = binding.ref.evidenceProducerId(),
+                externalChapterKey = "real-short-zero",
+            ).copy(rawLabel = "Ch. 0", rawNumber = 0.0, volume = null),
+        )
+        val resolver = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(observed),
+            canonicalChapter = zero,
+            gateway = gateway {
+                ProviderCallResult.Success(
+                    ProviderReadingDelivery.PageList(
+                        (1..24).map { index ->
+                            ProviderPageRequest(
+                                url = "https://reader.example/pages/$index.jpg",
+                                allowedOrigins = setOf("https://reader.example"),
+                            )
+                        },
+                    ),
+                )
+            },
+        )
+        val option = resolver.options(zero.id).single()
+        (resolver.preparedContent(option) is ProviderCallResult.Success) shouldBe true
+    }
+
+    @Test
+    fun `Reader rejects volume explicitly stated in label even when source volume field is missing`() = runBlocking {
+        val zero = chapter.copy(id = "chapter-canonical-0", displayNumber = "0", baseNumber = 0)
+        val observed = evidence(binding, "volume-112-as-zero", mappedChapterId = zero.id).copy(
+            evidence = providerEvidence(
+                producerId = binding.ref.evidenceProducerId(),
+                externalChapterKey = "volume-112-as-zero",
+            ).copy(rawLabel = "Vol. 112 Ch. 0", rawNumber = 0.0, volume = null),
+        )
+        resolver(
+            bindings = listOf(binding),
+            evidence = listOf(observed),
+            canonicalChapter = zero,
+        ).options(zero.id) shouldBe emptyList()
     }
 
     @Test
