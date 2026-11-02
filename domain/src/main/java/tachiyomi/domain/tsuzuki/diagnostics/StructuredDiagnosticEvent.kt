@@ -328,6 +328,7 @@ sealed interface DiagnosticAttributeValue {
 sealed interface DiagnosticSafeCode
 
 enum class DiagnosticErrorCategory : DiagnosticSafeCode {
+    CHAPTER_IDENTITY,
     NETWORK,
     TIMEOUT,
     HTTP,
