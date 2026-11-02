@@ -52,6 +52,7 @@ data class ProviderReadingNoMatchAudit(
     val mappedEvidenceCount: Int,
     val mappedEligibleSourceEvidenceCount: Int,
     val reason: ProviderReadingNoMatchReason,
+    val identityRejectionReason: ProviderReadingIdentityRejectionReason? = null,
 )
 
 /** Closed structural chapter metadata for an explicitly selected source, never source-written text. */
@@ -72,6 +73,20 @@ enum class ProviderReadingNoMatchReason {
     NO_ELIGIBLE_MAPPED_SOURCE,
     UNVERIFIED_EARLY_TITLE,
     IDENTITY_REJECTED,
+}
+
+/** Closed first-failing Reader source-identity invariant, without raw chapter text. */
+enum class ProviderReadingIdentityRejectionReason {
+    UNPARSEABLE_SOURCE_IDENTITY,
+    UNVERIFIED_EARLY_TITLE,
+    LOW_CONFIDENCE,
+    CHAPTER_IDENTITY_MISMATCH,
+    SOURCE_VOLUME_BUNDLE,
+    CONFLICTING_NUMBER_HINT,
+    MALFORMED_VOLUME_LABEL,
+    SOURCE_VOLUME_CONFLICT,
+    CANONICAL_VOLUME_CONFLICT,
+    MIXED_REJECTIONS,
 }
 
 @Inject
@@ -148,71 +163,9 @@ class ResolveProviderChapterReading(
                     persisted.evidence.authority == ChapterEvidenceAuthority.PROVIDER_PROVISIONAL
             }
             .filter { persisted ->
-                // A persisted mapping can outlive a source correction or legacy
-                // migration. Recheck chapter semantics at the Reader boundary:
-                // a source chapter 84 must not open canonical chapter 1.
-                val evidence = persisted.evidence
-                val parsed = chapterLabelParser.execute(evidence.rawLabel, evidence.rawNumber)
-                // Exact decimal/part v2 identities contain additional precision
-                // that the legacy parser deliberately cannot represent.
-                val observedIdentity = if (chapter.numberingKind == null) {
-                    parsed.identity
-                } else {
-                    chapterLabelParser.previewExactNumbering(evidence.rawLabel)
-                }
-                val explicitLabelVolume = volumeParser.execute(evidence.rawLabel)
-                val observedVolume = evidence.volume ?: explicitLabelVolume
-                // MangaFire can report a complete volume as numbered chapter 0.
-                // A positive, source-authored "Volume N [Extra]" title is a
-                // disqualifier even if the source and canonical volume agree.
-                val sourceIsVolumeBundle = chapter.type == CanonicalChapterType.REGULAR &&
-                    chapter.baseNumber == 0 &&
-                    evidence.title?.trim()?.matches(SOURCE_VOLUME_TITLE) == true
-                // A provider can attach an arbitrary scene title to a numeric
-                // zero/zero-fraction. A synthetic "Ch. 0" prefix created by the
-                // provider is NOT source-authored evidence that this scene is
-                // a canonical prologue. Require an explicit source-title number
-                // or prologue marker when the chapter has no qualified volume.
-                val unqualifiedEarlyScene = isUnqualifiedEarlyScene(chapter, evidence)
-                observedIdentity?.isSpecific == true &&
-                    !unqualifiedEarlyScene &&
-                    parsed.confidence >= MIN_READING_IDENTITY_CONFIDENCE &&
-                    observedIdentity == chapter.identity &&
-                    !sourceIsVolumeBundle &&
-                    !hasConflictingIntegerChapterHint(parsed, evidence.rawNumber) &&
-                    // The source's volume may be present only in the label;
-                    // reject conflicts or malformed explicit volume markers.
-                    (
-                        !volumeParser.hasExplicitVolumeMarker(evidence.rawLabel) ||
-                            explicitLabelVolume != null
-                        ) &&
-                    (
-                        evidence.volume == null ||
-                            explicitLabelVolume == null ||
-                            evidence.volume == explicitLabelVolume
-                        ) &&
-                    // Unknown canonical volume is not a wildcard for source-attested volume 112.
-                    (
-                        observedVolume == null ||
-                            observedVolume == chapter.volume ||
-                            // Missing catalog volume must not make every ordinary numbered
-                            // chapter unreadable. An attested source volume cannot be
-                            // later than its global chapter number (e.g. Vol 112 Ch 1).
-                            // This is only a conservative eligibility check, not
-                            // independent evidence for the source edition or chapter.
-                            (
-                                chapter.type == CanonicalChapterType.REGULAR &&
-                                    chapter.volume == null &&
-                                    chapter.part == null &&
-                                    chapter.alphaSuffix == null &&
-                                    chapter.decimalFraction == null &&
-                                    chapter.baseNumber != null &&
-                                    chapter.baseNumber >= 1 &&
-                                    observedVolume != null &&
-                                    observedVolume >= 1 &&
-                                    observedVolume <= chapter.baseNumber
-                                )
-                        )
+                // The same typed validation powers Reader and the no-match
+                // diagnostic. Keep acceptance and rejection attribution aligned.
+                identityRejectionReason(chapter, persisted.evidence) == null
             }
             .mapNotNull { persisted ->
                 val providerChapterId = persisted.evidence.externalChapterKey ?: return@mapNotNull null
@@ -236,6 +189,69 @@ class ResolveProviderChapterReading(
                 ),
             )
             .toList()
+    }
+
+    private fun identityRejectionReason(
+        chapter: tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter,
+        evidence: tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidence,
+    ): ProviderReadingIdentityRejectionReason? {
+        val parsed = chapterLabelParser.execute(evidence.rawLabel, evidence.rawNumber)
+        val observedIdentity = if (chapter.numberingKind == null) {
+            parsed.identity
+        } else {
+            chapterLabelParser.previewExactNumbering(evidence.rawLabel)
+        }
+        if (observedIdentity?.isSpecific != true) {
+            return ProviderReadingIdentityRejectionReason.UNPARSEABLE_SOURCE_IDENTITY
+        }
+        if (isUnqualifiedEarlyScene(chapter, evidence)) {
+            return ProviderReadingIdentityRejectionReason.UNVERIFIED_EARLY_TITLE
+        }
+        if (parsed.confidence < MIN_READING_IDENTITY_CONFIDENCE) {
+            return ProviderReadingIdentityRejectionReason.LOW_CONFIDENCE
+        }
+        if (observedIdentity != chapter.identity) {
+            return ProviderReadingIdentityRejectionReason.CHAPTER_IDENTITY_MISMATCH
+        }
+        if (
+            chapter.type == CanonicalChapterType.REGULAR &&
+            chapter.baseNumber == 0 &&
+            evidence.title?.trim()?.matches(SOURCE_VOLUME_TITLE) == true
+        ) {
+            return ProviderReadingIdentityRejectionReason.SOURCE_VOLUME_BUNDLE
+        }
+        if (hasConflictingIntegerChapterHint(parsed, evidence.rawNumber)) {
+            return ProviderReadingIdentityRejectionReason.CONFLICTING_NUMBER_HINT
+        }
+
+        val explicitLabelVolume = volumeParser.execute(evidence.rawLabel)
+        if (volumeParser.hasExplicitVolumeMarker(evidence.rawLabel) && explicitLabelVolume == null) {
+            return ProviderReadingIdentityRejectionReason.MALFORMED_VOLUME_LABEL
+        }
+        if (evidence.volume != null && explicitLabelVolume != null && evidence.volume != explicitLabelVolume) {
+            return ProviderReadingIdentityRejectionReason.SOURCE_VOLUME_CONFLICT
+        }
+
+        val observedVolume = evidence.volume ?: explicitLabelVolume
+        if (observedVolume == null || observedVolume == chapter.volume) return null
+        // Volume absence in the catalog is not a reason to discard every
+        // numbered chapter: global Ch. N cannot precede the source's
+        // volume number. This conservative check never licenses a Ch. 0
+        // or a high-volume local Ch. 1 as canonical Ch. 1.
+        if (
+            chapter.type == CanonicalChapterType.REGULAR &&
+            chapter.volume == null &&
+            chapter.part == null &&
+            chapter.alphaSuffix == null &&
+            chapter.decimalFraction == null &&
+            chapter.baseNumber != null &&
+            chapter.baseNumber >= 1 &&
+            observedVolume >= 1 &&
+            observedVolume <= chapter.baseNumber
+        ) {
+            return null
+        }
+        return ProviderReadingIdentityRejectionReason.CANONICAL_VOLUME_CONFLICT
     }
 
     /**
@@ -376,6 +392,21 @@ class ResolveProviderChapterReading(
             else -> ProviderReadingNoMatchReason.IDENTITY_REJECTED
         }
 
+        val rejectedIdentityReasons = if (reason == ProviderReadingNoMatchReason.IDENTITY_REJECTED) {
+            mapped.asSequence()
+                .filter { it.evidence.producerId in eligibleProducers }
+                .mapNotNull { identityRejectionReason(chapter, it.evidence) }
+                .distinct()
+                .toList()
+        } else {
+            emptyList()
+        }
+        val identityRejectionReason = when (rejectedIdentityReasons.size) {
+            0 -> null
+            1 -> rejectedIdentityReasons.single()
+            else -> ProviderReadingIdentityRejectionReason.MIXED_REJECTIONS
+        }
+
         return ProviderReadingNoMatchAudit(
             eligibleSourceCount = eligibleProducers.size,
             providerEvidenceCount = observations.size,
@@ -383,6 +414,7 @@ class ResolveProviderChapterReading(
             mappedEvidenceCount = mapped.size,
             mappedEligibleSourceEvidenceCount = mappedEligible,
             reason = reason,
+            identityRejectionReason = identityRejectionReason,
         )
     }
 
