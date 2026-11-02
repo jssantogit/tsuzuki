@@ -41,6 +41,9 @@ import tachiyomi.domain.tsuzuki.chapter.interactor.isVisibleCanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.inventory.GetIndependentInventorySnapshot
 import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryKnowledge
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
+import tachiyomi.domain.tsuzuki.content.ContentOption
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticChapterUiPhase
@@ -52,9 +55,6 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
 import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
-import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
-import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
-import tachiyomi.domain.tsuzuki.content.ContentOption
 import tachiyomi.domain.tsuzuki.download.interactor.DownloadCanonicalChapter
 import tachiyomi.domain.tsuzuki.download.interactor.GetCanonicalChapterDownloadState
 import tachiyomi.domain.tsuzuki.download.model.CanonicalDownloadPreparation
@@ -722,9 +722,15 @@ class CanonicalTitleScreenModel(
                     durationMillis = duration.coerceAtMost(86_400_000L),
                     attributes = buildMap {
                         put(DiagnosticAttribute.CHAPTER_UI_PHASE.name.lowercase(), DiagnosticAttributeValue.Code(phase))
-                        put(DiagnosticAttribute.ITEM_COUNT.name.lowercase(), DiagnosticAttributeValue.Number(chapterCount.toLong()))
+                        put(
+                            DiagnosticAttribute.ITEM_COUNT.name.lowercase(),
+                            DiagnosticAttributeValue.Number(chapterCount.toLong()),
+                        )
                         structuredDiagnostics.canonicalTitleReference(titleId)?.let { ref ->
-                            put(DiagnosticAttribute.CANONICAL_TITLE_REF.name.lowercase(), DiagnosticAttributeValue.Text(ref))
+                            put(
+                                DiagnosticAttribute.CANONICAL_TITLE_REF.name.lowercase(),
+                                DiagnosticAttributeValue.Text(ref),
+                            )
                         }
                     },
                 ),
@@ -745,7 +751,12 @@ class CanonicalTitleScreenModel(
         val libraryEntry = canonicalLibraryRepository.get(canonicalTitleId)
         val chapterQueryStarted = System.nanoTime()
         val chapters = canonicalChapterRepository.getByCanonicalTitleId(canonicalTitleId)
-        traceChapterUiStage(canonicalTitleId, DiagnosticChapterUiPhase.CHAPTERS_QUERY, chapterQueryStarted, chapters.size)
+        traceChapterUiStage(
+            canonicalTitleId,
+            DiagnosticChapterUiPhase.CHAPTERS_QUERY,
+            chapterQueryStarted,
+            chapters.size,
+        )
         val supportSnapshot = chapterEvidenceRepository.getSupportSnapshot(canonicalTitleId)
         // Optional inventory metadata must never block an already readable title.
         val independentInventory = try {
