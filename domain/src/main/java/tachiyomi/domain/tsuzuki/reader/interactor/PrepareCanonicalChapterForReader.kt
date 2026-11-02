@@ -237,6 +237,48 @@ class PrepareCanonicalChapterForReader(
             // Provider-native selection will become a first-class UI model later. Until then, never
             // choose silently when more than one independent Provider/facet can serve the chapter.
             if (options.size > 1) {
+                val capturedSourceStructure = if (structuredDiagnostics.detailedCaptureActive) {
+                    val sourceAudit = try {
+                        resolver.auditSourceIdentity(option)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        // Diagnostics cannot block selection of a validated Reader source.
+                        null
+                    }
+                    if (sourceAudit == null) {
+                        emptyMap()
+                    } else {
+                        buildMap {
+                            sourceAudit.sourceNumberMilli?.let { number ->
+                                put(
+                                    DiagnosticAttribute.PROVIDER_READER_SOURCE_NUMBER_MILLI,
+                                    DiagnosticAttributeValue.Number(number),
+                                )
+                            }
+                            sourceAudit.sourceVolume?.let { volume ->
+                                put(
+                                    DiagnosticAttribute.PROVIDER_READER_SOURCE_VOLUME,
+                                    DiagnosticAttributeValue.Number(volume.toLong()),
+                                )
+                            }
+                            put(
+                                DiagnosticAttribute.PROVIDER_READER_LABEL_HAS_VOLUME_MARKER,
+                                DiagnosticAttributeValue.Flag(sourceAudit.labelHasExplicitVolumeMarker),
+                            )
+                            put(
+                                DiagnosticAttribute.PROVIDER_READER_TITLE_IS_VOLUME_CONTAINER,
+                                DiagnosticAttributeValue.Flag(sourceAudit.sourceTitleIsVolumeContainer),
+                            )
+                            put(
+                                DiagnosticAttribute.PROVIDER_READER_TITLE_PRESENT,
+                                DiagnosticAttributeValue.Flag(sourceAudit.sourceTitlePresent),
+                            )
+                        }
+                    }
+                } else {
+                    emptyMap()
+                }
                 trace.event(
                     subsystem = DiagnosticSubsystem.READER,
                     name = DiagnosticEventName.READER_SOURCE_SELECTED,
@@ -273,7 +315,7 @@ class PrepareCanonicalChapterForReader(
                         DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text(option.providerId.value),
                         DiagnosticAttribute.CANDIDATE_TYPE to
                             DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
-                    ) + capturedCanonicalIdentity + capturedSourceIdentity,
+                    ) + capturedCanonicalIdentity + capturedSourceIdentity + capturedSourceStructure,
                 )
 
                 when (val prepared = resolver.preparedContent(option)) {
