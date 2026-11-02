@@ -234,9 +234,15 @@ class PrepareCanonicalChapterForReader(
                 } + capturedCanonicalIdentity,
             )
 
-            // Provider-native selection will become a first-class UI model later. Until then, never
-            // choose silently when more than one independent Provider/facet can serve the chapter.
-            if (options.size > 1) {
+            // Work-level evidence never licenses an arbitrary source choice.
+            // Only a single chapter option belonging to an edition explicitly
+            // confirmed by the user can outrank other eligible sources.
+            val explicitlyConfirmedOption = if (options.size > 1) {
+                resolver.uniqueUserConfirmedOption(canonicalChapterId, options)
+            } else {
+                null
+            }
+            if (options.size > 1 && explicitlyConfirmedOption == null) {
                 trace.event(
                     subsystem = DiagnosticSubsystem.READER,
                     name = DiagnosticEventName.READER_SOURCE_SELECTED,
@@ -255,7 +261,7 @@ class PrepareCanonicalChapterForReader(
                 return prepareProviderTorrentFallback(canonicalChapterId, trace)
             }
 
-            val option = options.singleOrNull()
+            val option = explicitlyConfirmedOption ?: options.singleOrNull()
             if (option != null) {
                 // Public source identities are useful for exact Reader debugging,
                 // but must never enter ordinary logs outside opt-in capture.
