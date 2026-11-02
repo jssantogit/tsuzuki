@@ -593,13 +593,21 @@ class CanonicalTitleScreenModel(
                     val enriched = metadataResult.getOrNull()
                         ?.let { current.withIntegrationMetadata(it) } ?: current
                     val refreshedCounts = reportedChapterCountRepository.getByTitle(canonicalTitleId)
+                    val rowMergeStarted = System.nanoTime()
+                    val mergedChapters = withMetadataSlots(
+                        canonicalTitleId,
+                        current.chapters.filterNot(CanonicalChapterDetailItem::inferredFromCount),
+                        refreshedCounts,
+                    )
+                    traceChapterUiStage(
+                        canonicalTitleId,
+                        DiagnosticChapterUiPhase.METADATA_ROW_MERGE,
+                        rowMergeStarted,
+                        mergedChapters.size,
+                    )
                     _state.value = enriched.copy(
                         reportedChapterCounts = refreshedCounts,
-                        chapters = withMetadataSlots(
-                            canonicalTitleId,
-                            current.chapters.filterNot(CanonicalChapterDetailItem::inferredFromCount),
-                            refreshedCounts,
-                        ),
+                        chapters = mergedChapters,
                         refreshError = metadataResult.exceptionOrNull(),
                     )
                 }
