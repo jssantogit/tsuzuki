@@ -167,7 +167,18 @@ class ResolveProviderChapterReading(
                 val sourceIsVolumeBundle = chapter.type == CanonicalChapterType.REGULAR &&
                     chapter.baseNumber == 0 &&
                     evidence.title?.trim()?.matches(SOURCE_VOLUME_TITLE) == true
+                // A provider can attach an arbitrary scene title to a numeric
+                // zero/zero-fraction. A synthetic "Ch. 0" prefix created by the
+                // provider is NOT source-authored evidence that this scene is
+                // a canonical prologue. Require an explicit source-title number
+                // or prologue marker when the chapter has no qualified volume.
+                val unqualifiedEarlyScene = chapter.type == CanonicalChapterType.REGULAR &&
+                    chapter.baseNumber == 0 &&
+                    chapter.volume == null &&
+                    !evidence.title.isNullOrBlank() &&
+                    !hasEarlyChapterTitleAttestation(chapter, evidence.title)
                 observedIdentity?.isSpecific == true &&
+                    !unqualifiedEarlyScene &&
                     parsed.confidence >= MIN_READING_IDENTITY_CONFIDENCE &&
                     observedIdentity == chapter.identity &&
                     !sourceIsVolumeBundle &&
@@ -184,7 +195,21 @@ class ResolveProviderChapterReading(
                             evidence.volume == explicitLabelVolume
                         ) &&
                     // Unknown canonical volume is not a wildcard for source-attested volume 112.
-                    (observedVolume == null || observedVolume == chapter.volume)
+                    (
+                        observedVolume == null ||
+                            observedVolume == chapter.volume ||
+                            // Vol. 1 Ch. 1 is a defensible first-volume
+                            // identity even if the catalogue has not learned
+                            // its volume yet. This does NOT license Vol. 112
+                            // Ch. 1 or arbitrary source volume mismatches.
+                            (
+                                chapter.type == CanonicalChapterType.REGULAR &&
+                                    chapter.baseNumber == 1 &&
+                                    chapter.part == null &&
+                                    chapter.volume == null &&
+                                    observedVolume == 1
+                                )
+                        )
             }
             .mapNotNull { persisted ->
                 val providerChapterId = persisted.evidence.externalChapterKey ?: return@mapNotNull null
@@ -208,6 +233,29 @@ class ResolveProviderChapterReading(
                 ),
             )
             .toList()
+    }
+
+    /**
+     * A source number is not independent editorial evidence when a Provider
+     * constructs the chapter prefix. Accept a source-authored title that
+     * explicitly names the same early chapter, or a genuine prologue heading.
+     * Keep title-free labels and volume-qualified editions unchanged.
+     */
+    private fun hasEarlyChapterTitleAttestation(
+        chapter: tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter,
+        title: String,
+    ): Boolean {
+        if (chapter.part == null && chapter.decimalFraction == null &&
+            PROLOGUE_TITLE.matches(title.trim())
+        ) {
+            return true
+        }
+        val sourceIdentity = if (chapter.numberingKind == null) {
+            chapterLabelParser.execute(title).identity
+        } else {
+            chapterLabelParser.previewExactNumbering(title)
+        }
+        return sourceIdentity?.isSpecific == true && sourceIdentity == chapter.identity
     }
 
     /**
@@ -456,6 +504,10 @@ class ResolveProviderChapterReading(
             }
 
     private companion object {
+        val PROLOGUE_TITLE = Regex(
+            "^(?:prologue|prologo|intro|introduction|preface|pilot)(?:\\b|[\\s:.-]).*",
+            RegexOption.IGNORE_CASE,
+        )
         val SOURCE_VOLUME_TITLE = Regex("^vol(?:ume)?\\.?\\s*[0-9]+(?:$|[\\s:.-].*)$", RegexOption.IGNORE_CASE)
         const val MIN_READING_IDENTITY_CONFIDENCE = 0.90
 
