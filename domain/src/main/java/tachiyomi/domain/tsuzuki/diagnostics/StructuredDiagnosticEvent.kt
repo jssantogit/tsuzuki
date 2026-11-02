@@ -502,6 +502,7 @@ enum class DiagnosticProviderEditionQualification : DiagnosticSafeCode {
 /** A closed cause for an empty Reader Provider source lookup; no source text. */
 enum class DiagnosticProviderReaderNoMatchReason : DiagnosticSafeCode {
     NO_ELIGIBLE_SOURCE,
+    SOURCE_EDITION_EXCLUDED,
     NO_PROVIDER_EVIDENCE,
     NO_MATCHING_SOURCE_CHAPTER,
     NO_CANONICAL_MAPPING,
