@@ -258,6 +258,15 @@ class ResolveProviderChapterReadingTest {
         )
         automatic.options(chapter.id) shouldBe emptyList()
         automatic.auditNoMatch(chapter.id).eligibleSourceCount shouldBe 0
+        // Negative source-edition metadata is meaningful even without
+        // independently verified authors of the canonical work.
+        resolver(
+            bindings = listOf(binding),
+            evidence = listOf(observed),
+            sourceAssociations = listOf(
+                colorAssociation.copy(workVerification = ProviderWorkVerification.CANONICAL_METADATA_UNVERIFIED),
+            ),
+        ).options(chapter.id) shouldBe emptyList()
 
         val explicitlyChosen = resolver(
             bindings = listOf(binding.copy(verification = ProviderBindingVerification.USER_CONFIRMED)),
