@@ -5,6 +5,8 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
+import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterVolume
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.interactor.hasConflictingIntegerChapterHint
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
@@ -49,6 +51,7 @@ class ResolveProviderChapterReading(
     private val gateway: ProviderReadingGateway,
     private val managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
     private val chapterLabelParser: ParseCanonicalChapterLabel = ParseCanonicalChapterLabel(),
+    private val volumeParser: ParseCanonicalChapterVolume = ParseCanonicalChapterVolume(),
 ) {
 
     suspend fun options(canonicalChapterId: String): List<ProviderChapterReadingOption> {
@@ -107,14 +110,18 @@ class ResolveProviderChapterReading(
                 } else {
                     chapterLabelParser.previewExactNumbering(evidence.rawLabel)
                 }
+                val explicitLabelVolume = volumeParser.execute(evidence.rawLabel)
+                val observedVolume = evidence.volume ?: explicitLabelVolume
                 observedIdentity?.isSpecific == true &&
                     parsed.confidence >= MIN_READING_IDENTITY_CONFIDENCE &&
                     observedIdentity == chapter.identity &&
                     !hasConflictingIntegerChapterHint(parsed, evidence.rawNumber) &&
-                    // A source-attested volume cannot be treated as a wildcard
-                    // when the canonical volume is unknown. Otherwise chapter
-                    // zero from volume 112 could serve an unrelated chapter zero.
-                    (evidence.volume == null || evidence.volume == chapter.volume)
+                    // The source's volume may be present only in the label;
+                    // reject conflicts or malformed explicit volume markers.
+                    (!volumeParser.hasExplicitVolumePrefix(evidence.rawLabel) || explicitLabelVolume != null) &&
+                    (evidence.volume == null || explicitLabelVolume == null || evidence.volume == explicitLabelVolume) &&
+                    // Unknown canonical volume is not a wildcard for source-attested volume 112.
+                    (observedVolume == null || observedVolume == chapter.volume)
             }
             .mapNotNull { persisted ->
                 val providerChapterId = persisted.evidence.externalChapterKey ?: return@mapNotNull null
@@ -147,13 +154,40 @@ class ResolveProviderChapterReading(
             .firstOrNull { it == option }
             ?: return unavailable()
 
-        return gateway.pages(
+        val result = gateway.pages(
             providerId = current.providerId,
             request = ProviderReadingPagesRequest(
                 binding = current.bindingRef(),
                 providerChapterId = current.providerChapterId,
             ),
         )
+        // A bare numeric 'Ch. 0' can be an incorrectly numbered full-volume
+        // bundle at the source. The 2026 physical smoke observed 182, 186 and
+        // 191 pages on different works. Preserve valid chapter zeros and
+        // fractions; reject only implausibly volume-sized page deliveries when
+        // the canonical regular zero has no independent volume qualification.
+        val chapter = canonicalChapterRepository.getById(current.canonicalChapterId)
+        val pageList = (result as? ProviderCallResult.Success)?.value as? ProviderReadingDelivery.PageList
+        if (
+            chapter != null &&
+            chapter.type == CanonicalChapterType.REGULAR &&
+            chapter.baseNumber == 0 &&
+            chapter.part == null &&
+            chapter.alphaSuffix == null &&
+            chapter.decimalFraction == null &&
+            chapter.volume == null &&
+            pageList != null &&
+            pageList.pages.size >= MIN_SUSPECT_VOLUME_PAGE_COUNT
+        ) {
+            return ProviderCallResult.Failure(
+                ProviderError(
+                    code = ProviderErrorCode.CHAPTER_IDENTITY_UNVERIFIED,
+                    retryable = false,
+                    observedPageCount = pageList.pages.size,
+                ),
+            )
+        }
+        return result
     }
 
     suspend fun preparedContent(
@@ -212,6 +246,8 @@ class ResolveProviderChapterReading(
 
     private companion object {
         const val MIN_READING_IDENTITY_CONFIDENCE = 0.90
+        // Only a delivery shape safety limit, not a chapter-count/identity inference.
+        const val MIN_SUSPECT_VOLUME_PAGE_COUNT = 120
 
         val REQUIRED_READING_CAPABILITIES = setOf(
             ProviderCapabilities.ReadingLookupV1,
