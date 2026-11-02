@@ -6,6 +6,71 @@ import org.junit.jupiter.api.Test
 class StructuredDiagnosticEventTest {
 
     @Test
+    fun `UI stall events preserve duration but never accept free form stack or URL`() {
+        val attributes = mapOf(
+            "untrusted_stack_trace" to DiagnosticAttributeValue.Text("Authorization: secret"),
+            "request_url" to DiagnosticAttributeValue.Text("https://example.invalid/?token=secret"),
+        )
+        val event = StructuredDiagnosticEvent(
+            timestampMillis = 1_790_755_200_000L,
+            severity = DiagnosticSeverity.WARN,
+            subsystem = DiagnosticSubsystem.APP,
+            name = DiagnosticEventName.APP_FRAME_STALL,
+            sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+            operationId = null,
+            stage = DiagnosticStage.RENDER,
+            outcome = DiagnosticOutcome.PARTIAL,
+            durationMillis = 420L,
+            attributes = attributes,
+        )
+        val sanitized = requireNotNull(StructuredDiagnosticSanitizer.sanitize(event))
+        sanitized.durationMillis shouldBe 420L
+        sanitized.attributes shouldBe emptyMap()
+    }
+
+    @Test
+    fun `canonical refresh phases accept typed causes and reject arbitrary strings`() {
+        fun attributes(values: Map<String, DiagnosticAttributeValue>) =
+            requireNotNull(
+                StructuredDiagnosticSanitizer.sanitize(
+                    StructuredDiagnosticEvent(
+                        timestampMillis = 1_790_755_200_000L,
+                        severity = DiagnosticSeverity.DEBUG,
+                        subsystem = DiagnosticSubsystem.CHAPTER,
+                        name = DiagnosticEventName.CHAPTER_RECONCILE_PHASE,
+                        sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                        operationId = null,
+                        stage = DiagnosticStage.RECONCILE,
+                        outcome = DiagnosticOutcome.SUCCEEDED,
+                        durationMillis = 82L,
+                        attributes = values,
+                    ),
+                ),
+            ).attributes
+
+        attributes(
+            mapOf(
+                "chapter_reconcile_phase" to DiagnosticAttributeValue.Code(
+                    DiagnosticChapterReconcilePhase.DELTA_WRITE,
+                ),
+                "chapter_ui_phase" to DiagnosticAttributeValue.Code(DiagnosticChapterUiPhase.ROWS_BUILD),
+                "item_count" to DiagnosticAttributeValue.Number(2231),
+            ),
+        ) shouldBe mapOf(
+            DiagnosticAttribute.CHAPTER_RECONCILE_PHASE to DiagnosticAttributeValue.Code(
+                DiagnosticChapterReconcilePhase.DELTA_WRITE,
+            ),
+            DiagnosticAttribute.CHAPTER_UI_PHASE to DiagnosticAttributeValue.Code(
+                DiagnosticChapterUiPhase.ROWS_BUILD,
+            ),
+            DiagnosticAttribute.ITEM_COUNT to DiagnosticAttributeValue.Number(2231),
+        )
+        attributes(
+            mapOf("chapter_reconcile_phase" to DiagnosticAttributeValue.Text("DELTA_WRITE; cookie=secret")),
+        ) shouldBe emptyMap()
+    }
+
+    @Test
     fun `isolated runtime phases remain closed and cannot accept arbitrary source diagnostics`() {
         fun sanitize(attributes: Map<String, DiagnosticAttributeValue>) = StructuredDiagnosticSanitizer.sanitize(
             StructuredDiagnosticEvent(
