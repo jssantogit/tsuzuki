@@ -169,6 +169,7 @@ data class CanonicalTitleScreen(
             onEditionSearch = editionModel::search,
             onEditionConfirm = editionModel::confirm,
             onEditionDismiss = editionModel::dismiss,
+            onChapterSortMeasured = screenModel::recordChapterSortDuration,
             onReadTitle = { screenModel.startReading(openReader) },
             onBaixarChapter = { canonicalChapterId ->
                 screenModel.requestDownload(canonicalChapterId)
