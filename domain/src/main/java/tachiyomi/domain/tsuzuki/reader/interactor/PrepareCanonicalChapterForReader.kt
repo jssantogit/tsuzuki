@@ -12,6 +12,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticCandidateType
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticErrorCategory
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
@@ -150,6 +151,18 @@ class PrepareCanonicalChapterForReader(
         trace: DiagnosticTrace,
     ): CanonicalReaderPreparation {
         val resolver = resolveProviderChapterReading
+        // Only identify the exact canonical number during voluntary detailed
+        // capture. Without this, Ch. 0 / Ch. 0.1 misroutes look identical.
+        val capturedCanonicalIdentity = if (structuredDiagnostics.detailedCaptureActive) {
+            canonicalChapterRepository.getById(canonicalChapterId)?.baseNumber?.let { number ->
+                mapOf(
+                    DiagnosticAttribute.CANONICAL_CHAPTER_BASE_NUMBER to
+                        DiagnosticAttributeValue.Number(number.toLong()),
+                )
+            }.orEmpty()
+        } else {
+            emptyMap()
+        }
         trace.event(
             subsystem = DiagnosticSubsystem.CONTENT,
             name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
@@ -173,12 +186,23 @@ class PrepareCanonicalChapterForReader(
                     DiagnosticAttribute.CANDIDATE_TYPE to
                         DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
                     DiagnosticAttribute.CANDIDATE_COUNT to DiagnosticAttributeValue.Number(options.size.toLong()),
-                ),
+                ) + capturedCanonicalIdentity,
             )
 
             // Provider-native selection will become a first-class UI model later. Until then, never
             // choose silently when more than one independent Provider/facet can serve the chapter.
             if (options.size > 1) {
+                trace.event(
+                    subsystem = DiagnosticSubsystem.READER,
+                    name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                    stage = DiagnosticStage.READER,
+                    outcome = DiagnosticOutcome.NEEDS_CONFIRMATION,
+                    attributes = mapOf(
+                        DiagnosticAttribute.CANDIDATE_COUNT to DiagnosticAttributeValue.Number(options.size.toLong()),
+                        DiagnosticAttribute.LOOKUP_DECISION to
+                            DiagnosticAttributeValue.Code(DiagnosticProviderLookupDecision.AMBIGUOUS_EDITION),
+                    ) + capturedCanonicalIdentity,
+                )
                 return CanonicalReaderPreparation.Unavailable(canonicalChapterId)
             }
 
@@ -204,7 +228,7 @@ class PrepareCanonicalChapterForReader(
                         DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text(option.providerId.value),
                         DiagnosticAttribute.CANDIDATE_TYPE to
                             DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
-                    ) + capturedSourceIdentity,
+                    ) + capturedCanonicalIdentity + capturedSourceIdentity,
                 )
 
                 when (val prepared = resolver.preparedContent(option)) {
@@ -228,6 +252,7 @@ class PrepareCanonicalChapterForReader(
                                     DiagnosticAttribute.PROVIDER_ERROR_CODE,
                                     DiagnosticAttributeValue.Text(prepared.error.code.name),
                                 )
+                                putAll(capturedCanonicalIdentity)
                                 putAll(capturedSourceIdentity)
                                 prepared.error.observedPageCount?.let { count ->
                                     put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(count.toLong()))
@@ -247,6 +272,7 @@ class PrepareCanonicalChapterForReader(
                                     DiagnosticAttribute.PROVIDER_ID,
                                     DiagnosticAttributeValue.Text(option.providerId.value),
                                 )
+                                putAll(capturedCanonicalIdentity)
                                 putAll(capturedSourceIdentity)
                                 pageCount?.let {
                                     put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(it.toLong()))
