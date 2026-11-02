@@ -13,6 +13,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
  * Detects large main-looper frame gaps, not the root cause of an ANR.
  * A missed frame can be caused by UI work, process scheduling or GC; correlate
  * this timestamp with the separately timed chapter reconciliation/UI phases.
+ * This does not claim that a frame gap alone proves the blocking function.
  */
 internal class MainThreadFrameGapDetector(
     private val thresholdMs: Long = 200L,
