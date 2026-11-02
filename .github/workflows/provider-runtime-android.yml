@@ -78,3 +78,5 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: bash .github/scripts/provider-runtime-android-gate.sh
+
+# Reader volume recovery smoke gate: signed Release APK and full CI; isolated from main.
