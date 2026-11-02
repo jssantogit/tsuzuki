@@ -232,7 +232,8 @@ class ResolveProviderChapterReading(
         return options.filter { option ->
             val binding = confirmed[option.bindingId]
             option.canonicalChapterId == canonicalChapterId &&
-                binding?.canonicalTitleId == chapter.canonicalTitleId &&
+                binding != null &&
+                binding.canonicalTitleId == chapter.canonicalTitleId &&
                 binding.ref == option.bindingRef()
         }.singleOrNull()
     }
