@@ -1,4 +1,5 @@
 name: Provider Platform Android gate
+# #176 code13 / early source Ch0 integrity + first-volume Ch1 signed Release smoke.
 
 on:
   push:
