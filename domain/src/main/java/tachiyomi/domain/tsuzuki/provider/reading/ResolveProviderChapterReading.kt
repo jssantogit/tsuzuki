@@ -210,6 +210,34 @@ class ResolveProviderChapterReading(
     }
 
     /**
+     * Prefer exactly one source from an edition that the user explicitly
+     * confirmed. A source found automatically or a corroborated work-level HID
+     * does not acquire this authority. Multiple chapter variants even inside
+     * that confirmed edition remain ambiguous.
+     *
+     * [options] must be the eligible, identity-checked options for this exact
+     * chapter. Delivery independently revalidates the chosen option.
+     */
+    suspend fun uniqueUserConfirmedOption(
+        canonicalChapterId: String,
+        options: List<ProviderChapterReadingOption>,
+    ): ProviderChapterReadingOption? {
+        if (options.size < 2) return null
+        val chapter = canonicalChapterRepository.getById(canonicalChapterId) ?: return null
+        val confirmed = bindingRepository.getByTitle(chapter.canonicalTitleId)
+            .asSequence()
+            .filter { it.verification == ProviderBindingVerification.USER_CONFIRMED }
+            .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
+            .associateBy { it.id }
+        return options.filter { option ->
+            val binding = confirmed[option.bindingId]
+            option.canonicalChapterId == canonicalChapterId &&
+                binding?.canonicalTitleId == chapter.canonicalTitleId &&
+                binding.ref == option.bindingRef()
+        }.singleOrNull()
+    }
+
+    /**
      * Explain why a canonical chapter has no Reader source without exporting
      * raw labels, URLs, or IDs. This is invoked only after options() was empty.
      * It never selects a different HID or mutates canonical evidence.
