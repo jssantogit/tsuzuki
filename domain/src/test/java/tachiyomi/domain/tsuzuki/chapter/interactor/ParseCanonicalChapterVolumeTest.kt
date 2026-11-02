@@ -23,6 +23,13 @@ class ParseCanonicalChapterVolumeTest {
     }
 
     @Test
+    fun `repeated consistent volume in chapter subtitle is not mistaken for conflicting editions`() {
+        parse.execute("Vol. 1 Ch. 1 - Chapter 1 - Volume 1 (1r0n)") shouldBe 1
+        parse.execute("Vol. 1 Ch. 1 - Chapter 1 - Volume 112").shouldBeNull()
+        parse.execute("Ch. 0 - Volume 112").shouldBeNull()
+    }
+
+    @Test
     fun `ambiguous or out of range volume labels are not guessed`() {
         parse.execute("Vol. 1 Ch. 37 Vol. 2 Ch. 37").shouldBeNull()
         parse.execute("Vol. 1-2 Ch. 37").shouldBeNull()
