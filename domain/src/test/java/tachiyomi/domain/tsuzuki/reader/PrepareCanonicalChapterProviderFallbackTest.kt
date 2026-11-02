@@ -289,6 +289,170 @@ class PrepareCanonicalChapterProviderFallbackTest {
     }
 
     @Test
+    fun `ambiguous HTTP Provider sources never get chosen but allow exact torrent fallback`() = runTest {
+        val chapter = CanonicalChapter(
+            id = "chapter-1",
+            canonicalTitleId = "title-1",
+            displayNumber = "1",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 1,
+            confidence = 1.0,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val chapters = chapterRepository(chapter)
+        val httpProviders = listOf(
+            ProviderId("app.tsuzuki.mangafire"),
+            ProviderId("app.tsuzuki.mangadot"),
+        )
+        val bindings = httpProviders.mapIndexed { index, providerId ->
+            ProviderReadingBinding(
+                id = "binding-$index",
+                canonicalTitleId = chapter.canonicalTitleId,
+                ref = ProviderBindingRef(providerId, "en", "work-$index"),
+                verification = ProviderBindingVerification.EXACT,
+                availability = ProviderBindingAvailability.AVAILABLE,
+                createdAt = 1,
+                updatedAt = 1,
+            )
+        }
+        val observations = bindings.mapIndexed { index, binding ->
+            PersistedChapterEvidence(
+                evidence = ChapterEvidence(
+                    id = "source-$index",
+                    canonicalTitleId = chapter.canonicalTitleId,
+                    producerKind = ProducerKind.PROVIDER,
+                    producerId = binding.ref.evidenceProducerId(),
+                    externalChapterKey = "source-chapter-$index",
+                    rawLabel = "Chapter 1",
+                    rawNumber = 1.0,
+                    volume = null,
+                    title = null,
+                    observedAt = 1,
+                    confidence = 0.95,
+                    authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+                ),
+                mappedCanonicalChapterId = chapter.id,
+            )
+        }
+        var unexpectedHttpCalls = 0
+        val http = ResolveProviderChapterReading(
+            canonicalChapterRepository = chapters,
+            evidenceRepository = evidenceRepository(observations),
+            bindingRepository = object : ProviderReadingBindingRepository {
+                override suspend fun get(
+                    canonicalTitleId: String,
+                    providerId: ProviderId,
+                    facetId: String?,
+                ): ProviderReadingBinding? = bindings.firstOrNull {
+                    it.canonicalTitleId == canonicalTitleId &&
+                        it.ref.providerId == providerId &&
+                        it.ref.facetId == facetId
+                }
+
+                override suspend fun getByTitle(canonicalTitleId: String): List<ProviderReadingBinding> =
+                    bindings.filter { it.canonicalTitleId == canonicalTitleId }
+
+                override suspend fun upsert(binding: ProviderReadingBinding) = Unit
+                override suspend fun markUnavailable(bindingId: String, updatedAt: Long) = Unit
+            },
+            providerRegistry = DefaultProviderRegistry(
+                registrations = {
+                    bindings.map { readingRegistration(it.ref.providerId, it.ref.facetId) }
+                },
+            ),
+            gateway = object : ProviderReadingGateway {
+                override suspend fun lookup(
+                    providerId: ProviderId,
+                    request: ProviderReadingLookupRequest,
+                ): ReadingProviderCallResult<ProviderPage<ProviderWorkCandidate>> = error("unused")
+                override suspend fun chapters(
+                    providerId: ProviderId,
+                    request: ProviderReadingChaptersRequest,
+                ): ReadingProviderCallResult<ProviderPage<ProviderChapterObservation>> = error("unused")
+                override suspend fun pages(
+                    providerId: ProviderId,
+                    request: ProviderReadingPagesRequest,
+                ): ReadingProviderCallResult<ProviderReadingDelivery> {
+                    unexpectedHttpCalls++
+                    error("Ambiguous HTTP selection must never fetch pages")
+                }
+            },
+        )
+        val torrentProviderId = ProviderId("app.tsuzuki.nyaa")
+        var torrentArtifactCalls = 0
+        val torrent = PrepareProviderChapterTorrent(
+            resolver = ResolveProviderChapterTorrent(
+                canonicalChapterRepository = chapters,
+                canonicalTitleRepository = titleRepository(),
+                providerRegistry = DefaultProviderRegistry(
+                    registrations = { listOf(torrentRegistration(torrentProviderId)) },
+                ),
+                gateway = TorrentSearchGateway { _, _ ->
+                    TorrentProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                TorrentCandidate(
+                                    infoHash = "0123456789abcdef0123456789abcdef01234567",
+                                    magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+                                    torrentUrl = null,
+                                    displayName = "Example Manga Chapter 1",
+                                    files = listOf(TorrentCandidateFile(0, "chapter-001.cbz")),
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            prepareTorrentArtifact = PrepareTorrentArtifact(
+                TorrentArtifactEngine {
+                    torrentArtifactCalls++
+                    Result.success(
+                        PreparedTorrentArtifact(
+                            localUri = "content://provider.test/chapter-1.cbz",
+                            format = "CBZ",
+                        ),
+                    )
+                },
+            ),
+        )
+        val recorder = RecordingStructuredDiagnosticRecorder(detailed = true)
+        val reader = PrepareCanonicalChapterForReader(
+            resolveChapterContent = emptyAddonResolver(),
+            canonicalChapterRepository = chapters,
+            canonicalReadingRepository = readingRepository(),
+            canonicalDownloadRepository = emptyDownloadRepository(),
+            canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+            },
+            chapterContentPreparer = object : ChapterContentPreparer {
+                override suspend fun prepare(
+                    option: ContentOption,
+                    progress: CanonicalChapterProgress?,
+                ): Result<PreparedChapterContent> = error("unused")
+            },
+            structuredDiagnostics = recorder,
+            resolveProviderChapterReading = http,
+            prepareProviderChapterTorrent = torrent,
+        )
+        val result = reader.execute(chapter.id).shouldBeInstanceOf<CanonicalReaderPreparation.Ready>()
+        result.target shouldBe PreparedChapterContent.LocalArchive("content://provider.test/chapter-1.cbz")
+        unexpectedHttpCalls shouldBe 0
+        torrentArtifactCalls shouldBe 1
+        recorder.events.any {
+            it.name == DiagnosticEventName.READER_SOURCE_SELECTED &&
+                it.outcome == DiagnosticOutcome.NEEDS_CONFIRMATION &&
+                it.attributes["candidate_count"] == DiagnosticAttributeValue.Number(2)
+        } shouldBe true
+        recorder.events.any {
+            it.name == DiagnosticEventName.READER_PAGES_READY &&
+                it.outcome == DiagnosticOutcome.READY &&
+                it.attributes["provider_id"] == DiagnosticAttributeValue.Text(torrentProviderId.value)
+        } shouldBe true
+    }
+
+    @Test
     fun `failed Provider HTTP delivery falls through to exact torrent archive`() = runTest {
         val chapter = CanonicalChapter(
             id = "chapter-1",
