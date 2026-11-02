@@ -154,6 +154,47 @@ class StructuredDiagnosticEventTest {
     }
 
     @Test
+    fun `selected Reader source metadata accepts only numbers and closed flags`() {
+        fun attributes(raw: Map<String, DiagnosticAttributeValue>) =
+            StructuredDiagnosticSanitizer.sanitize(
+                StructuredDiagnosticEvent(
+                    timestampMillis = 1_790_755_200_000L,
+                    severity = DiagnosticSeverity.INFO,
+                    subsystem = DiagnosticSubsystem.READER,
+                    name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                    sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                    operationId = null,
+                    stage = DiagnosticStage.READER,
+                    outcome = DiagnosticOutcome.SUCCEEDED,
+                    attributes = raw,
+                ),
+            )?.attributes.orEmpty()
+
+        attributes(
+            mapOf(
+                "provider_reader_source_number_milli" to DiagnosticAttributeValue.Number(0),
+                "provider_reader_source_volume" to DiagnosticAttributeValue.Number(1),
+                "provider_reader_label_has_volume_marker" to DiagnosticAttributeValue.Flag(true),
+                "provider_reader_title_is_volume_container" to DiagnosticAttributeValue.Flag(false),
+                "provider_reader_title_present" to DiagnosticAttributeValue.Flag(true),
+            ),
+        ) shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_READER_SOURCE_NUMBER_MILLI to DiagnosticAttributeValue.Number(0),
+            DiagnosticAttribute.PROVIDER_READER_SOURCE_VOLUME to DiagnosticAttributeValue.Number(1),
+            DiagnosticAttribute.PROVIDER_READER_LABEL_HAS_VOLUME_MARKER to DiagnosticAttributeValue.Flag(true),
+            DiagnosticAttribute.PROVIDER_READER_TITLE_IS_VOLUME_CONTAINER to DiagnosticAttributeValue.Flag(false),
+            DiagnosticAttribute.PROVIDER_READER_TITLE_PRESENT to DiagnosticAttributeValue.Flag(true),
+        )
+        attributes(
+            mapOf(
+                "provider_reader_source_number_milli" to DiagnosticAttributeValue.Number(-1),
+                "provider_reader_source_volume" to DiagnosticAttributeValue.Number(11111),
+                "provider_reader_title_present" to DiagnosticAttributeValue.Text("Authorization: secret"),
+            ),
+        ) shouldBe emptyMap()
+    }
+
+    @Test
     fun `Reader detailed capture preserves zero as a number but rejects invalid chapter hints`() {
         fun sanitize(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
             StructuredDiagnosticEvent(
