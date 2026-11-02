@@ -122,7 +122,11 @@ class ResolveProviderChapterReading(
                         !volumeParser.hasExplicitVolumePrefix(evidence.rawLabel) ||
                             explicitLabelVolume != null
                         ) &&
-                    (evidence.volume == null || explicitLabelVolume == null || evidence.volume == explicitLabelVolume) &&
+                    (
+                        evidence.volume == null ||
+                            explicitLabelVolume == null ||
+                            evidence.volume == explicitLabelVolume
+                        ) &&
                     // Unknown canonical volume is not a wildcard for source-attested volume 112.
                     (observedVolume == null || observedVolume == chapter.volume)
             }
