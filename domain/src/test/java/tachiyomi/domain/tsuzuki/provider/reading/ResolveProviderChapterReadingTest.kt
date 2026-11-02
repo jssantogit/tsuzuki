@@ -90,6 +90,63 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `explicitly confirmed edition uniquely outranks unresolved alternative Reader sources`() = runBlocking {
+        val confirmed = binding.copy(verification = ProviderBindingVerification.USER_CONFIRMED)
+        val alternateRef = ProviderBindingRef(providerId, "en", "work-other")
+        val alternate = binding.copy(id = "binding-other", ref = alternateRef)
+        val sourceAssociation = ProviderWorkSourceAssociation(
+            canonicalTitleId = chapter.canonicalTitleId,
+            ref = alternateRef,
+            workVerification = ProviderWorkVerification.AUTHOR_CORROBORATED,
+            editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+            observedAt = 2,
+        )
+        val reader = resolver(
+            bindings = listOf(confirmed),
+            evidence = listOf(
+                evidence(confirmed, "confirmed-chapter-1", mappedChapterId = chapter.id),
+                evidence(alternate, "provisional-chapter-1", mappedChapterId = chapter.id),
+            ),
+            sourceAssociations = listOf(sourceAssociation),
+        )
+        val allOptions = reader.options(chapter.id)
+        allOptions.size shouldBe 2
+        reader.uniqueUserConfirmedOption(chapter.id, allOptions) shouldBe
+            allOptions.single { it.bindingId == confirmed.id }
+
+        val automatic = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(
+                evidence(binding, "confirmed-chapter-1", mappedChapterId = chapter.id),
+                evidence(alternate, "provisional-chapter-1", mappedChapterId = chapter.id),
+            ),
+            sourceAssociations = listOf(sourceAssociation),
+        )
+        val unresolved = automatic.options(chapter.id)
+        unresolved.size shouldBe 2
+        automatic.uniqueUserConfirmedOption(chapter.id, unresolved) shouldBe null
+    }
+
+    @Test
+    fun `two chapter variants under a single confirmed edition remain ambiguous`() = runBlocking {
+        val confirmed = binding.copy(verification = ProviderBindingVerification.USER_CONFIRMED)
+        val reader = resolver(
+            bindings = listOf(confirmed),
+            evidence = listOf(
+                evidence(confirmed, "chapter-variant-one", mappedChapterId = chapter.id),
+                evidence(confirmed, "chapter-variant-two", mappedChapterId = chapter.id),
+            ),
+        )
+        val options = reader.options(chapter.id)
+        options.size shouldBe 2
+        reader.uniqueUserConfirmedOption(chapter.id, options) shouldBe null
+        reader.uniqueUserConfirmedOption(
+            chapter.id,
+            options.map { it.copy(canonicalChapterId = "different-chapter") },
+        ) shouldBe null
+    }
+
+    @Test
     fun `Reader refuses a stale Provider chapter key mapped to a different canonical chapter number`() = runBlocking {
         var pagesCalls = 0
         val stale = evidence(binding, "source-chapter-84", mappedChapterId = chapter.id).copy(
