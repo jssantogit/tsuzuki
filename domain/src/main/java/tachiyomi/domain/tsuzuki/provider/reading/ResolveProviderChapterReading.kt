@@ -90,15 +90,27 @@ class ResolveProviderChapterReading(
         val chapter = canonicalChapterRepository.getById(canonicalChapterId) ?: return emptyList()
         providerRegistry.awaitReady()
         val registrations = providerRegistry.providers().associateBy { it.descriptor.id }
+        val associations = workSourceAssociationRepository.getByTitle(chapter.canonicalTitleId)
+        // A later verified source lookup may reveal that a previously auto-bound
+        // HID is a colored/omnibus variant. Never silently keep serving it as
+        // the base edition. An explicit user-confirmed edition remains intact.
+        val attestedVariantProducers = associations.asSequence()
+            .filter { it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED }
+            .filter { it.editionQualification == ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT }
+            .map { it.ref.evidenceProducerId() }
+            .toSet()
         val bindings = bindingRepository.getByTitle(chapter.canonicalTitleId)
             .asSequence()
             .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
             .filter { binding ->
+                binding.verification == ProviderBindingVerification.USER_CONFIRMED ||
+                    binding.ref.evidenceProducerId() !in attestedVariantProducers
+            }
+            .filter { binding ->
                 registrations[binding.ref.providerId]?.isEligibleForReading(binding.ref.facetId) == true
             }
             .associateBy { it.ref.evidenceProducerId() }
-        val sourceAssociations = workSourceAssociationRepository.getByTitle(chapter.canonicalTitleId)
-            .asSequence()
+        val sourceAssociations = associations.asSequence()
             // Matching canonical *work* alone never licenses editorial variants.
             // For a provisional Reader option, require an independently
             // corroborated author, the exact source HID, and a persisted
