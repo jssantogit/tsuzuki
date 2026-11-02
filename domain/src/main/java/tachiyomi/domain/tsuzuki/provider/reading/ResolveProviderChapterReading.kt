@@ -6,8 +6,8 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterVolume
-import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.interactor.hasConflictingIntegerChapterHint
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
@@ -253,6 +253,7 @@ class ResolveProviderChapterReading(
 
     private companion object {
         const val MIN_READING_IDENTITY_CONFIDENCE = 0.90
+
         // Only a delivery shape safety limit, not a chapter-count/identity inference.
         const val MIN_SUSPECT_VOLUME_PAGE_COUNT = 120
 
