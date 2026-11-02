@@ -315,6 +315,7 @@ enum class ProviderErrorCode {
     TIMEOUT,
     RUNTIME_DIED,
     NETWORK_POLICY,
+    CHAPTER_IDENTITY_UNVERIFIED,
     NETWORK_ERROR,
     BROWSER_ERROR,
     RESOURCE_LIMIT,
@@ -336,10 +337,13 @@ data class ProviderError(
     val retryable: Boolean,
     val sourceFailureCode: ProviderLookupFailureCode? = null,
     val httpStatus: Int? = null,
+    /** Safe, bounded volume-shaped page count for a typed Reader identity rejection. */
+    val observedPageCount: Int? = null,
 ) {
     init {
         require(httpStatus == null || httpStatus in 100..599)
         require(httpStatus == null || sourceFailureCode != null)
+        require(observedPageCount == null || observedPageCount in 0..5000)
     }
 }
 
