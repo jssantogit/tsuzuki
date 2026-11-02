@@ -127,6 +127,56 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `Reader never routes unqualified chapter zero to a source volume by numeric coincidence`() = runBlocking {
+        val zero = chapter.copy(
+            id = "chapter-canonical-0",
+            displayNumber = "0",
+            baseNumber = 0,
+        )
+        // Physical #176: these three MangaFire source IDs delivered 182,
+        // 186 and 191 pages when the canonical Reader requested chapter 0.
+        // The underlying evidence gives only 'Ch. 0', not the volume of
+        // that bundled content. Such identity is insufficient for delivery.
+        listOf("9324579", "7336925", "7422102").forEach { sourceId ->
+            val observed = evidence(binding, sourceId, mappedChapterId = zero.id).copy(
+                evidence = providerEvidence(
+                    producerId = binding.ref.evidenceProducerId(),
+                    externalChapterKey = sourceId,
+                ).copy(rawLabel = "Ch. 0", rawNumber = 0.0, volume = null),
+            )
+            val resolver = resolver(
+                bindings = listOf(binding),
+                evidence = listOf(observed),
+                canonicalChapter = zero,
+            )
+            resolver.options(zero.id) shouldBe emptyList()
+        }
+    }
+
+    @Test
+    fun `Reader allows independently volume-qualified regular chapter zero`() = runBlocking {
+        val zero = chapter.copy(
+            id = "chapter-canonical-vol-0",
+            displayNumber = "0",
+            baseNumber = 0,
+            volume = 1,
+        )
+        val source = evidence(binding, "volume-1-chapter-0", mappedChapterId = zero.id).copy(
+            evidence = providerEvidence(
+                producerId = binding.ref.evidenceProducerId(),
+                externalChapterKey = "volume-1-chapter-0",
+            ).copy(rawLabel = "Vol. 1 Ch. 0", rawNumber = 0.0, volume = 1),
+        )
+        val resolver = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(source),
+            canonicalChapter = zero,
+        )
+        resolver.options(zero.id).map { it.providerChapterId } shouldBe
+            listOf("volume-1-chapter-0")
+    }
+
+    @Test
     fun `Reader rejects an explicitly foreign volume even when the chapter number matches`() = runBlocking {
         val foreign = evidence(binding, "volume-112-chapter-1", mappedChapterId = chapter.id).copy(
             evidence = providerEvidence(
