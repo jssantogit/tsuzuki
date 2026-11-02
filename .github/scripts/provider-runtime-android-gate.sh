@@ -38,5 +38,6 @@ run_package() {
 run_package "eu.kanade.tachiyomi.provider.runtime" "Provider Platform runtime"
 run_package "eu.kanade.tachiyomi.provider.reading" "Provider Reading/ICE"
 run_package "eu.kanade.tachiyomi.ui.reader.loader" "Provider Torrent Reader"
+run_package "eu.kanade.tachiyomi.ui.main" "Canonical UI jank"
 
 exit "$status"
