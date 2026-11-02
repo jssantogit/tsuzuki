@@ -93,6 +93,94 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult as ReadingPr
 class PrepareCanonicalChapterProviderFallbackTest {
 
     @Test
+    fun `empty Provider audit runs only during detailed capture and never breaks Reader fallback`() = runTest {
+        val chapter = CanonicalChapter(
+            id = "chapter-1",
+            canonicalTitleId = "title-1",
+            displayNumber = "1",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 1,
+            confidence = 1.0,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val providerId = ProviderId("app.tsuzuki.mangafire")
+        val binding = ProviderReadingBinding(
+            id = "binding-1",
+            canonicalTitleId = chapter.canonicalTitleId,
+            ref = ProviderBindingRef(providerId, "en", "work-1"),
+            verification = ProviderBindingVerification.EXACT,
+            availability = ProviderBindingAvailability.AVAILABLE,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+
+        listOf(false, true).forEach { detailed ->
+            var evidenceReads = 0
+            val localEvidence = object : ChapterEvidenceRepository by evidenceRepository(emptyList()) {
+                override suspend fun getByCanonicalTitleId(
+                    canonicalTitleId: String,
+                ): List<PersistedChapterEvidence> {
+                    evidenceReads++
+                    if (evidenceReads > 1) error("diagnostic-only repository failure")
+                    return emptyList()
+                }
+            }
+            val resolver = ResolveProviderChapterReading(
+                canonicalChapterRepository = chapterRepository(chapter),
+                evidenceRepository = localEvidence,
+                bindingRepository = bindingRepository(binding),
+                providerRegistry = DefaultProviderRegistry(
+                    registrations = { listOf(readingRegistration(providerId, "en")) },
+                ),
+                gateway = object : ProviderReadingGateway {
+                    override suspend fun lookup(
+                        providerId: ProviderId,
+                        request: ProviderReadingLookupRequest,
+                    ): ReadingProviderCallResult<ProviderPage<ProviderWorkCandidate>> = error("unused")
+
+                    override suspend fun chapters(
+                        providerId: ProviderId,
+                        request: ProviderReadingChaptersRequest,
+                    ): ReadingProviderCallResult<ProviderPage<ProviderChapterObservation>> = error("unused")
+
+                    override suspend fun pages(
+                        providerId: ProviderId,
+                        request: ProviderReadingPagesRequest,
+                    ): ReadingProviderCallResult<ProviderReadingDelivery> = error("unused")
+                },
+            )
+            val recorder = RecordingStructuredDiagnosticRecorder(detailed = detailed)
+            val reader = PrepareCanonicalChapterForReader(
+                resolveChapterContent = emptyAddonResolver(),
+                canonicalChapterRepository = chapterRepository(chapter),
+                canonicalReadingRepository = readingRepository(),
+                canonicalDownloadRepository = emptyDownloadRepository(),
+                canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                    override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+                },
+                chapterContentPreparer = object : ChapterContentPreparer {
+                    override suspend fun prepare(
+                        option: ContentOption,
+                        progress: CanonicalChapterProgress?,
+                    ): Result<PreparedChapterContent> = error("unused")
+                },
+                structuredDiagnostics = recorder,
+                resolveProviderChapterReading = resolver,
+                prepareProviderChapterTorrent = null,
+            )
+
+            reader.execute(chapter.id).shouldBeInstanceOf<CanonicalReaderPreparation.Unavailable>()
+            evidenceReads shouldBe (if (detailed) 2 else 1)
+            recorder.events.any { event ->
+                event.name == DiagnosticEventName.CONTENT_BINDING_LOOKUP &&
+                    event.outcome == DiagnosticOutcome.EMPTY &&
+                    event.attributes["candidate_count"] == DiagnosticAttributeValue.Number(0)
+            } shouldBe true
+        }
+    }
+
+    @Test
     fun `failed Provider HTTP delivery falls through to exact torrent archive`() = runTest {
         val chapter = CanonicalChapter(
             id = "chapter-1",
@@ -395,7 +483,10 @@ class PrepareCanonicalChapterProviderFallbackTest {
         ) = Unit
     }
 
-    private class RecordingStructuredDiagnosticRecorder : StructuredDiagnosticRecorder {
+    private class RecordingStructuredDiagnosticRecorder(
+        private val detailed: Boolean = false,
+    ) : StructuredDiagnosticRecorder {
+        override val detailedCaptureActive: Boolean get() = detailed
         override val sessionId: String = "00000000-0000-0000-0000-000000000001"
         val events = mutableListOf<StructuredDiagnosticEvent>()
 
