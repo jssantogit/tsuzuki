@@ -242,6 +242,32 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `source attested colored edition revokes stale automatic Reader binding but retains explicit user choice`() = runBlocking {
+        val colorAssociation = ProviderWorkSourceAssociation(
+            canonicalTitleId = chapter.canonicalTitleId,
+            ref = binding.ref,
+            workVerification = ProviderWorkVerification.AUTHOR_CORROBORATED,
+            editionQualification = ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT,
+            observedAt = 2L,
+        )
+        val observed = evidence(binding, "source-1", mappedChapterId = chapter.id)
+        val automatic = resolver(
+            bindings = listOf(binding),
+            evidence = listOf(observed),
+            sourceAssociations = listOf(colorAssociation),
+        )
+        automatic.options(chapter.id) shouldBe emptyList()
+        automatic.auditNoMatch(chapter.id).eligibleSourceCount shouldBe 0
+
+        val explicitlyChosen = resolver(
+            bindings = listOf(binding.copy(verification = ProviderBindingVerification.USER_CONFIRMED)),
+            evidence = listOf(observed),
+            sourceAssociations = listOf(colorAssociation),
+        )
+        explicitlyChosen.options(chapter.id).map { it.providerChapterId } shouldBe listOf("source-1")
+    }
+
+    @Test
     fun `Reader rejects volume-sized page deliveries for unqualified regular chapter zero`() = runBlocking {
         val zero = chapter.copy(
             id = "chapter-canonical-0",
