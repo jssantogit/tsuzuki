@@ -107,6 +107,53 @@ class StructuredDiagnosticEventTest {
     }
 
     @Test
+    fun `Reader empty source audit keeps only closed causes and bounded counts`() {
+        fun sanitize(values: Map<String, DiagnosticAttributeValue>) =
+            StructuredDiagnosticSanitizer.sanitize(
+                StructuredDiagnosticEvent(
+                    timestampMillis = 1_790_755_200_000L,
+                    severity = DiagnosticSeverity.INFO,
+                    subsystem = DiagnosticSubsystem.CONTENT,
+                    name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
+                    sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                    operationId = null,
+                    stage = DiagnosticStage.BINDING,
+                    outcome = DiagnosticOutcome.EMPTY,
+                    attributes = values,
+                ),
+            )?.attributes.orEmpty()
+
+        val expectedReason = DiagnosticAttributeValue.Code(
+            DiagnosticProviderReaderNoMatchReason.NO_MATCHING_SOURCE_CHAPTER,
+        )
+        sanitize(
+            mapOf(
+                "provider_reader_no_match_reason" to expectedReason,
+                "provider_reader_eligible_source_count" to DiagnosticAttributeValue.Number(1),
+                "provider_reader_observed_evidence_count" to DiagnosticAttributeValue.Number(1250),
+                "provider_reader_matching_number_count" to DiagnosticAttributeValue.Number(0),
+                "provider_reader_mapped_evidence_count" to DiagnosticAttributeValue.Number(0),
+                "provider_reader_eligible_mapped_count" to DiagnosticAttributeValue.Number(0),
+            ),
+        ) shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_READER_NO_MATCH_REASON to expectedReason,
+            DiagnosticAttribute.PROVIDER_READER_ELIGIBLE_SOURCE_COUNT to DiagnosticAttributeValue.Number(1),
+            DiagnosticAttribute.PROVIDER_READER_OBSERVED_EVIDENCE_COUNT to DiagnosticAttributeValue.Number(1250),
+            DiagnosticAttribute.PROVIDER_READER_MATCHING_NUMBER_COUNT to DiagnosticAttributeValue.Number(0),
+            DiagnosticAttribute.PROVIDER_READER_MAPPED_EVIDENCE_COUNT to DiagnosticAttributeValue.Number(0),
+            DiagnosticAttribute.PROVIDER_READER_ELIGIBLE_MAPPED_COUNT to DiagnosticAttributeValue.Number(0),
+        )
+        sanitize(
+            mapOf(
+                "provider_reader_no_match_reason" to
+                    DiagnosticAttributeValue.Text("NO_MATCHING_SOURCE_CHAPTER; bearer secret"),
+                "provider_reader_observed_evidence_count" to DiagnosticAttributeValue.Number(-1),
+                "provider_reader_matching_number_count" to DiagnosticAttributeValue.Number(2_000_000),
+            ),
+        ) shouldBe emptyMap()
+    }
+
+    @Test
     fun `Reader detailed capture preserves zero as a number but rejects invalid chapter hints`() {
         fun sanitize(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
             StructuredDiagnosticEvent(
