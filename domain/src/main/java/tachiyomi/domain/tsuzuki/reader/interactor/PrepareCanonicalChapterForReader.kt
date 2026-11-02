@@ -184,6 +184,16 @@ class PrepareCanonicalChapterForReader(
 
             val option = options.singleOrNull()
             if (option != null) {
+                // Public source identities are useful for exact Reader debugging,
+                // but must never enter ordinary logs outside opt-in capture.
+                val capturedSourceIdentity = if (structuredDiagnostics.detailedCaptureActive) {
+                    mapOf(
+                        DiagnosticAttribute.PROVIDER_WORK_ID to DiagnosticAttributeValue.Text(option.externalWorkId),
+                        DiagnosticAttribute.PROVIDER_CHAPTER_ID to DiagnosticAttributeValue.Text(option.providerChapterId),
+                    )
+                } else {
+                    emptyMap()
+                }
                 trace.event(
                     subsystem = DiagnosticSubsystem.READER,
                     name = DiagnosticEventName.READER_SOURCE_SELECTED,
@@ -193,11 +203,7 @@ class PrepareCanonicalChapterForReader(
                         DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text(option.providerId.value),
                         DiagnosticAttribute.CANDIDATE_TYPE to
                             DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
-                        DiagnosticAttribute.PROVIDER_WORK_ID to
-                            DiagnosticAttributeValue.Text(option.externalWorkId),
-                        DiagnosticAttribute.PROVIDER_CHAPTER_ID to
-                            DiagnosticAttributeValue.Text(option.providerChapterId),
-                    ),
+                    ) + capturedSourceIdentity,
                 )
 
                 when (val prepared = resolver.preparedContent(option)) {
@@ -216,11 +222,7 @@ class PrepareCanonicalChapterForReader(
                                 ),
                                 DiagnosticAttribute.PROVIDER_ERROR_CODE to
                                     DiagnosticAttributeValue.Text(prepared.error.code.name),
-                                DiagnosticAttribute.PROVIDER_WORK_ID to
-                                    DiagnosticAttributeValue.Text(option.externalWorkId),
-                                DiagnosticAttribute.PROVIDER_CHAPTER_ID to
-                                    DiagnosticAttributeValue.Text(option.providerChapterId),
-                            ),
+                            ) + capturedSourceIdentity,
                         )
                     }
                     is ProviderCallResult.Success -> {
@@ -235,11 +237,7 @@ class PrepareCanonicalChapterForReader(
                                     DiagnosticAttribute.PROVIDER_ID,
                                     DiagnosticAttributeValue.Text(option.providerId.value),
                                 )
-                                put(DiagnosticAttribute.PROVIDER_WORK_ID, DiagnosticAttributeValue.Text(option.externalWorkId))
-                                put(
-                                    DiagnosticAttribute.PROVIDER_CHAPTER_ID,
-                                    DiagnosticAttributeValue.Text(option.providerChapterId),
-                                )
+                                putAll(capturedSourceIdentity)
                                 pageCount?.let {
                                     put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(it.toLong()))
                                 }
