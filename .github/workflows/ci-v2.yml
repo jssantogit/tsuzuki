@@ -2,6 +2,11 @@ name: CI v2.1
 # Resolver PR #140 integration with main: verify the combined tree before merge.
 
 on:
+  # Temporary review branch: capture real pull_request checks for Host #185.
+  # This workflow change must not be merged into Host #185 or main.
+  pull_request:
+    branches:
+      - 'tsuzuki/issue-176-zero-chapter-identity-20261102'
   workflow_dispatch:
     inputs:
       mode:
@@ -122,6 +127,10 @@ jobs:
 
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             mode="${REQUESTED_MODE:-full}"
+          fi
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # On this isolated review PR, test the entire candidate tree.
+            mode="full"
           fi
 
           case "$REF_NAME" in
