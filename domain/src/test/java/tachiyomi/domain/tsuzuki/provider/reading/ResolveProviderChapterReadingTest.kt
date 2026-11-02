@@ -147,6 +147,90 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `Reader accepts first chapter of volume one when the canonical volume is not yet known`() = runBlocking {
+        val observed = evidence(binding, "one-volume-one", mappedChapterId = chapter.id).copy(
+            evidence = providerEvidence(binding.ref.evidenceProducerId(), "one-volume-one").copy(
+                rawLabel = "Vol. 1 Ch. 1 - Chapter 1 - Volume 1 (1r0n)",
+                rawNumber = 1.0,
+                volume = 1,
+                title = "Chapter 1 - Volume 1 (1r0n)",
+            ),
+        )
+        val reader = resolver(bindings = listOf(binding), evidence = listOf(observed))
+        reader.options(chapter.id).map { it.providerChapterId } shouldBe listOf("one-volume-one")
+        val wrong = observed.copy(
+            evidence = observed.evidence.copy(
+                rawLabel = "Vol. 112 Ch. 1 - Chapter 1 - Volume 112",
+                volume = 112,
+            ),
+        )
+        resolver(bindings = listOf(binding), evidence = listOf(wrong))
+            .options(chapter.id) shouldBe emptyList()
+    }
+
+    @Test
+    fun `Reader quarantines unqualified early-numbered extras but retains genuine prologues`() = runBlocking {
+        val chapterZero = chapter.copy(id = "chapter-zero", displayNumber = "0", baseNumber = 0)
+        val sourceZero = evidence(binding, "source-zero", mappedChapterId = chapterZero.id)
+        val ambiguous = sourceZero.copy(
+            evidence = sourceZero.evidence.copy(
+                rawLabel = "Ch. 0 - Darkshine vs Garou",
+                rawNumber = 0.0,
+                title = "Darkshine vs Garou",
+            ),
+        )
+        resolver(
+            bindings = listOf(binding),
+            evidence = listOf(ambiguous),
+            canonicalChapter = chapterZero,
+        ).options(chapterZero.id) shouldBe emptyList()
+        val prologue = ambiguous.copy(
+            evidence = ambiguous.evidence.copy(
+                rawLabel = "Ch. 0 - Prologue",
+                title = "Prologue",
+            ),
+        )
+        resolver(
+            bindings = listOf(binding),
+            evidence = listOf(prologue),
+            canonicalChapter = chapterZero,
+        ).options(chapterZero.id).size shouldBe 1
+
+        val fraction = chapter.copy(
+            id = "chapter-zero-point-two",
+            displayNumber = "0.2",
+            baseNumber = 0,
+            part = 2,
+            numberingKind = CanonicalChapterNumberingKind.DECIMAL,
+            decimalFraction = CanonicalChapterDecimalFraction.parse("2"),
+        )
+        val scene = ambiguous.copy(
+            mappedCanonicalChapterId = fraction.id,
+            evidence = ambiguous.evidence.copy(
+                rawLabel = "Ch. 0.2 - Saitama vs Garou (not full)",
+                rawNumber = 0.2,
+                title = "Saitama vs Garou (not full)",
+            ),
+        )
+        resolver(
+            bindings = listOf(binding),
+            evidence = listOf(scene),
+            canonicalChapter = fraction,
+        ).options(fraction.id) shouldBe emptyList()
+        val explicitlyNumbered = scene.copy(
+            evidence = scene.evidence.copy(
+                rawLabel = "Ch. 0.2 - Chapter 0.2 Bonus",
+                title = "Chapter 0.2 Bonus",
+            ),
+        )
+        resolver(
+            bindings = listOf(binding),
+            evidence = listOf(explicitlyNumbered),
+            canonicalChapter = fraction,
+        ).options(fraction.id).size shouldBe 1
+    }
+
+    @Test
     fun `Reader refuses a stale Provider chapter key mapped to a different canonical chapter number`() = runBlocking {
         var pagesCalls = 0
         val stale = evidence(binding, "source-chapter-84", mappedChapterId = chapter.id).copy(
