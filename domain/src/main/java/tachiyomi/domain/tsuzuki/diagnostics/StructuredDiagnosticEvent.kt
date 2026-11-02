@@ -101,6 +101,9 @@ enum class DiagnosticEventName {
 
     CHAPTER_REFRESH_STARTED,
     CHAPTER_EVIDENCE_RECONCILED,
+    CHAPTER_RECONCILE_PHASE,
+    CHAPTER_UI_PHASE,
+    APP_FRAME_STALL,
     CHAPTER_REFRESH_COMPLETED,
     PROVIDER_READING_EVIDENCE,
     PROVIDER_READING_LOOKUP_ATTEMPT,
@@ -220,6 +223,8 @@ enum class DiagnosticAttribute {
     PROVIDER_HTTP_FAILURE,
     PROVIDER_RUNTIME_PHASE,
     PROVIDER_BROWSER_FAILURE,
+    CHAPTER_RECONCILE_PHASE,
+    CHAPTER_UI_PHASE,
     BROADENED,
     MAPPING_REUSED,
     LANGUAGE,
@@ -414,6 +419,22 @@ enum class DiagnosticProviderHttpFailure : DiagnosticSafeCode {
     HTTP_STATUS,
     RESPONSE_LIMIT,
     UNKNOWN,
+}
+
+/** Bounded content-free checkpoints for identifying the expensive part of a canonical refresh. */
+enum class DiagnosticChapterReconcilePhase : DiagnosticSafeCode {
+    DELTA_WRITE,
+    PROVIDER_SNAPSHOT_WRITE,
+    CACHE_INVALIDATION,
+    UI_RELOAD_CALLBACK,
+}
+
+/** Main-thread chapter UI work; independent from HTTP / Binder timing. */
+enum class DiagnosticChapterUiPhase : DiagnosticSafeCode {
+    CHAPTERS_QUERY,
+    ROWS_BUILD,
+    METADATA_ROW_MERGE,
+    CHAPTER_SORT,
 }
 
 /** Closed Binder lifecycle stages; no provider payload, URI, error message or token. */
@@ -722,6 +743,10 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticProviderRuntimePhase }
         DiagnosticAttribute.PROVIDER_BROWSER_FAILURE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderBrowserFailure }
+        DiagnosticAttribute.CHAPTER_RECONCILE_PHASE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticChapterReconcilePhase }
+        DiagnosticAttribute.CHAPTER_UI_PHASE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticChapterUiPhase }
         DiagnosticAttribute.LOOKUP_DECISION -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderLookupDecision }
 

@@ -108,6 +108,7 @@ import tachiyomi.core.common.Constants
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
@@ -130,6 +131,8 @@ class MainActivity : BaseActivity() {
 
     @Inject private lateinit var chapterCache: ChapterCache
 
+    @Inject private lateinit var structuredDiagnostics: StructuredDiagnosticRecorder
+
     @Inject private lateinit var getIncognitoState: GetIncognitoState
 
     @Inject private lateinit var extensionApi: ExtensionApi
@@ -138,6 +141,7 @@ class MainActivity : BaseActivity() {
     var ready = false
 
     private var navigator: Navigator? = null
+    private val frameStallMonitor by lazy { MainThreadFrameStallMonitor(structuredDiagnostics) }
 
     init {
         registerSecureActivity(this)
@@ -262,6 +266,16 @@ class MainActivity : BaseActivity() {
                 chapterCache.clear()
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        frameStallMonitor.start()
+    }
+
+    override fun onPause() {
+        frameStallMonitor.stop()
+        super.onPause()
     }
 
     override fun onProvideAssistContent(outContent: AssistContent) {
