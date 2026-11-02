@@ -111,7 +111,10 @@ class ResolveProviderChapterReading(
                     parsed.confidence >= MIN_READING_IDENTITY_CONFIDENCE &&
                     observedIdentity == chapter.identity &&
                     !hasConflictingIntegerChapterHint(parsed, evidence.rawNumber) &&
-                    (evidence.volume == null || chapter.volume == null || evidence.volume == chapter.volume)
+                    // A source-attested volume cannot be treated as a wildcard
+                    // when the canonical volume is unknown. Otherwise chapter
+                    // zero from volume 112 could serve an unrelated chapter zero.
+                    (evidence.volume == null || evidence.volume == chapter.volume)
             }
             .mapNotNull { persisted ->
                 val providerChapterId = persisted.evidence.externalChapterKey ?: return@mapNotNull null
