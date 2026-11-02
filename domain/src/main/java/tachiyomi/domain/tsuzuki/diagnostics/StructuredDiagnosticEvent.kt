@@ -210,6 +210,7 @@ enum class DiagnosticAttribute {
     PROVIDER_CHAPTER_ID,
     PROVIDER_CHAPTER_FIRST_ID,
     PROVIDER_CHAPTER_LAST_ID,
+
     // Count-only explanation of why a discovered chapter has no Reader option.
     PROVIDER_READER_ELIGIBLE_SOURCE_COUNT,
     PROVIDER_READER_OBSERVED_EVIDENCE_COUNT,
@@ -217,6 +218,7 @@ enum class DiagnosticAttribute {
     PROVIDER_READER_MAPPED_EVIDENCE_COUNT,
     PROVIDER_READER_ELIGIBLE_MAPPED_COUNT,
     PROVIDER_READER_NO_MATCH_REASON,
+
     // Source-attested chapter structure for an opt-in selected Reader option.
     PROVIDER_READER_SOURCE_NUMBER_MILLI,
     PROVIDER_READER_SOURCE_VOLUME,
