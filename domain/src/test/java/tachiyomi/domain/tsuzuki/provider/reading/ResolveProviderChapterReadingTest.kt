@@ -140,6 +140,10 @@ class ResolveProviderChapterReadingTest {
             "9324579" to 182,
             "7336925" to 186,
             "7422102" to 191,
+            // A54 code11 on 2026-11-02: One Punch-Man chapter 0 was routed
+            // to an unrelated Saitama/Garou section, HID 729pj/id 5892072.
+            // The 102-page delivery escaped the previous 120-page guard.
+            "5892072" to 102,
         ).forEach { (sourceId, pageCount) ->
             val observed = evidence(binding, sourceId, mappedChapterId = zero.id).copy(
                 evidence = providerEvidence(
