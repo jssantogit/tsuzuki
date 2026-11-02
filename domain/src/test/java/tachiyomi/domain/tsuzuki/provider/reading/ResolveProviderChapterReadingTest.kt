@@ -315,6 +315,7 @@ class ResolveProviderChapterReadingTest {
         )
         automatic.options(chapter.id) shouldBe emptyList()
         automatic.auditNoMatch(chapter.id).eligibleSourceCount shouldBe 0
+        automatic.auditNoMatch(chapter.id).reason shouldBe ProviderReadingNoMatchReason.SOURCE_EDITION_EXCLUDED
         // Negative source-edition metadata is meaningful even without
         // independently verified authors of the canonical work.
         resolver(
