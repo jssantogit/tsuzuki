@@ -127,6 +127,62 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `Reader diagnoses a missing source chapter without calling it a provider outage`() = runBlocking {
+        val zero = chapter.copy(id = "chapter-zero", displayNumber = "0", baseNumber = 0)
+        val source = (1..3).map { number ->
+            evidence(binding, "source-$number", mappedChapterId = null).copy(
+                evidence = providerEvidence(binding.ref.evidenceProducerId(), "source-$number").copy(
+                    rawLabel = "Ch. $number",
+                    rawNumber = number.toDouble(),
+                ),
+            )
+        }
+        resolver(
+            bindings = listOf(binding),
+            evidence = source,
+            canonicalChapter = zero,
+        ).auditNoMatch(zero.id) shouldBe ProviderReadingNoMatchAudit(
+            eligibleSourceCount = 1,
+            providerEvidenceCount = 3,
+            matchingNumberEvidenceCount = 0,
+            mappedEvidenceCount = 0,
+            mappedEligibleSourceEvidenceCount = 0,
+            reason = ProviderReadingNoMatchReason.NO_MATCHING_SOURCE_CHAPTER,
+        )
+    }
+
+    @Test
+    fun `Reader distinguishes matching source chapters missing a canonical mapping`() = runBlocking {
+        val noMap = evidence(binding, "source-1", mappedChapterId = null)
+        resolver(
+            bindings = listOf(binding),
+            evidence = listOf(noMap),
+        ).auditNoMatch(chapter.id) shouldBe ProviderReadingNoMatchAudit(
+            eligibleSourceCount = 1,
+            providerEvidenceCount = 1,
+            matchingNumberEvidenceCount = 1,
+            mappedEvidenceCount = 0,
+            mappedEligibleSourceEvidenceCount = 0,
+            reason = ProviderReadingNoMatchReason.NO_CANONICAL_MAPPING,
+        )
+    }
+
+    @Test
+    fun `Reader diagnoses unavailable source association without inventing chapter selection`() = runBlocking {
+        resolver(
+            bindings = emptyList(),
+            evidence = listOf(evidence(binding, "source-1", mappedChapterId = chapter.id)),
+        ).auditNoMatch(chapter.id) shouldBe ProviderReadingNoMatchAudit(
+            eligibleSourceCount = 0,
+            providerEvidenceCount = 1,
+            matchingNumberEvidenceCount = 1,
+            mappedEvidenceCount = 1,
+            mappedEligibleSourceEvidenceCount = 0,
+            reason = ProviderReadingNoMatchReason.NO_ELIGIBLE_SOURCE,
+        )
+    }
+
+    @Test
     fun `Reader rejects volume-sized page deliveries for unqualified regular chapter zero`() = runBlocking {
         val zero = chapter.copy(
             id = "chapter-canonical-0",
