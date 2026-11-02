@@ -181,7 +181,19 @@ class PrepareCanonicalChapterForReader(
             // An empty result could mean genuinely absent source chapter,
             // missing canonical mapping, ineligible HID, or rejected identity.
             // Log count-only causes rather than hiding every case as no source.
-            val noMatchAudit = if (options.isEmpty()) resolver.auditNoMatch(canonicalChapterId) else null
+            val noMatchAudit = if (options.isEmpty() && structuredDiagnostics.detailedCaptureActive) {
+                try {
+                    resolver.auditNoMatch(canonicalChapterId)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    // Detailed logging is best-effort. Its separate database reads
+                    // must never prevent a normal Reader fallback or torrent lookup.
+                    null
+                }
+            } else {
+                null
+            }
             trace.event(
                 subsystem = DiagnosticSubsystem.CONTENT,
                 name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
