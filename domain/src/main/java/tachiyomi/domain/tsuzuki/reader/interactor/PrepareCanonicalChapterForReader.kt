@@ -238,7 +238,15 @@ class PrepareCanonicalChapterForReader(
             // Only a single chapter option belonging to an edition explicitly
             // confirmed by the user can outrank other eligible sources.
             val explicitlyConfirmedOption = if (options.size > 1) {
-                resolver.uniqueUserConfirmedOption(canonicalChapterId, options)
+                try {
+                    resolver.uniqueUserConfirmedOption(canonicalChapterId, options)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    // A supplementary binding read is not license to guess a
+                    // source or to suppress the independent torrent fallback.
+                    null
+                }
             } else {
                 null
             }
