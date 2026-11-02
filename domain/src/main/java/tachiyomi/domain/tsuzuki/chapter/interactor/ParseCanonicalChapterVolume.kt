@@ -21,6 +21,14 @@ class ParseCanonicalChapterVolume {
     fun hasExplicitVolumePrefix(rawLabel: String?): Boolean =
         VOLUME_PREFIX_START.containsMatchIn(normalize(rawLabel.orEmpty()))
 
+    /**
+     * A numeric volume marker anywhere in a chapter label must be accounted for.
+     * "Ch. 0 - Volume 112" is a volume container, not an unqualified chapter 0.
+     * Only [execute] may recognize a qualified leading "Vol. N Ch. M" identity.
+     */
+    fun hasExplicitVolumeMarker(rawLabel: String?): Boolean =
+        VOLUME_MARKERS.containsMatchIn(normalize(rawLabel.orEmpty()))
+
     private fun normalize(value: String): String =
         Normalizer.normalize(value, Normalizer.Form.NFD)
             .replace(COMBINING_MARKS, "")
