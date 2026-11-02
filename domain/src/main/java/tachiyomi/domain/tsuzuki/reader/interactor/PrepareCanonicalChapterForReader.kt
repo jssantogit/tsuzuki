@@ -189,7 +189,8 @@ class PrepareCanonicalChapterForReader(
                 val capturedSourceIdentity = if (structuredDiagnostics.detailedCaptureActive) {
                     mapOf(
                         DiagnosticAttribute.PROVIDER_WORK_ID to DiagnosticAttributeValue.Text(option.externalWorkId),
-                        DiagnosticAttribute.PROVIDER_CHAPTER_ID to DiagnosticAttributeValue.Text(option.providerChapterId),
+                        DiagnosticAttribute.PROVIDER_CHAPTER_ID to
+                            DiagnosticAttributeValue.Text(option.providerChapterId),
                     )
                 } else {
                     emptyMap()
