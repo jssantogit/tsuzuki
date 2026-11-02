@@ -2,6 +2,16 @@ name: CI v2.1
 # Resolver PR #140 integration with main: verify the combined tree before merge.
 
 on:
+  # Temporary review branch: capture real pull_request checks for Host #185.
+  # Round 2: feature base updated with exact Spotless patch; prove all gates.
+  # Round 3: verify unverified early source title diagnostic on updated Host #185.
+  # Round 4: retest e94087b6 Spotless-only formatting correction.
+  # Round 5: verify code12-to-code13 physical OPM Ch0/0.x mapping downgrade; PR gate only.
+  # Round 6: retest accurate PARTIAL evidence path + corrected ktlint 120-col limit.
+  # This workflow change must not be merged into Host #185 or main.
+  pull_request:
+    branches:
+      - 'tsuzuki/issue-176-zero-chapter-identity-20261102'
   workflow_dispatch:
     inputs:
       mode:
@@ -122,6 +132,10 @@ jobs:
 
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             mode="${REQUESTED_MODE:-full}"
+          fi
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # On this isolated review PR, test the entire candidate tree.
+            mode="full"
           fi
 
           case "$REF_NAME" in
