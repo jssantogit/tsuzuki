@@ -1,4 +1,5 @@
 name: Provider Platform Android gate
+# #176 final Reader edition preference and independent torrent fallback validation.
 
 on:
   push:
