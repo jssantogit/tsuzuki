@@ -363,8 +363,9 @@ class ResolveProviderChapterReading(
             matchingNumberCount == 0 -> ProviderReadingNoMatchReason.NO_MATCHING_SOURCE_CHAPTER
             mapped.isEmpty() -> ProviderReadingNoMatchReason.NO_CANONICAL_MAPPING
             mappedEligible == 0 -> ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE
-            mapped.any { it.evidence.producerId in eligibleProducers &&
-                isUnqualifiedEarlyScene(chapter, it.evidence)
+            mapped.any {
+                it.evidence.producerId in eligibleProducers &&
+                    isUnqualifiedEarlyScene(chapter, it.evidence)
             } -> ProviderReadingNoMatchReason.UNVERIFIED_EARLY_TITLE
             else -> ProviderReadingNoMatchReason.IDENTITY_REJECTED
         }
