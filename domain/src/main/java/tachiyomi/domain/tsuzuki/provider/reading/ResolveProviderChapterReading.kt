@@ -216,13 +216,23 @@ class ResolveProviderChapterReading(
 
         providerRegistry.awaitReady()
         val registrations = providerRegistry.providers().associateBy { it.descriptor.id }
+        val associations = workSourceAssociationRepository.getByTitle(chapter.canonicalTitleId)
+        val attestedVariantProducers = associations.asSequence()
+            .filter { it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED }
+            .filter { it.editionQualification == ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT }
+            .map { it.ref.evidenceProducerId() }
+            .toSet()
         val eligibleProducers = buildSet {
             bindingRepository.getByTitle(chapter.canonicalTitleId)
                 .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
+                .filter { binding ->
+                    binding.verification == ProviderBindingVerification.USER_CONFIRMED ||
+                        binding.ref.evidenceProducerId() !in attestedVariantProducers
+                }
                 .filter { registrations[it.ref.providerId]?.isEligibleForReading(it.ref.facetId) == true }
                 .forEach { add(it.ref.evidenceProducerId()) }
 
-            workSourceAssociationRepository.getByTitle(chapter.canonicalTitleId)
+            associations
                 .filter { it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED }
                 .filter { it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED }
                 .filter { registrations[it.ref.providerId]?.isEligibleForReading(it.ref.facetId) == true }
