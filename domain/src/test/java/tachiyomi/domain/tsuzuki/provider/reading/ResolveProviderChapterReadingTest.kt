@@ -127,6 +127,25 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `Reader rejects an explicitly foreign volume even when the chapter number matches`() = runBlocking {
+        val foreign = evidence(binding, "volume-112-chapter-1", mappedChapterId = chapter.id).copy(
+            evidence = providerEvidence(
+                producerId = binding.ref.evidenceProducerId(),
+                externalChapterKey = "volume-112-chapter-1",
+            ).copy(
+                rawLabel = "Vol. 112 Ch. 1",
+                rawNumber = 1.0,
+                volume = 112,
+            ),
+        )
+        val reader = resolver(bindings = listOf(binding), evidence = listOf(foreign))
+
+        // Canonical volume is unknown; volume 112 is a positive, conflicting
+        // assertion, not a wildcard for canonical chapter one.
+        reader.options(chapter.id) shouldBe emptyList()
+    }
+
+    @Test
     fun `Reader retains exact prologue and decimal chapter evidence without merging identities`() = runBlocking {
         val prologue = chapter.copy(
             id = "prologue-1",

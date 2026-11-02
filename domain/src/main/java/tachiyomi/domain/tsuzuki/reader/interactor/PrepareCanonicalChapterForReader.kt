@@ -50,7 +50,7 @@ class PrepareCanonicalChapterForReader(
         canonicalChapterId: String,
         selectedOption: ContentOption? = null,
     ): CanonicalReaderPreparation {
-        val trace = DiagnosticTrace.start(
+        var trace = DiagnosticTrace.start(
             recorder = structuredDiagnostics,
             workflow = DiagnosticWorkflow.READER_OPEN,
             subsystem = DiagnosticSubsystem.READER,
@@ -70,6 +70,11 @@ class PrepareCanonicalChapterForReader(
                     started,
                     CanonicalReaderPreparation.Unavailable(canonicalChapterId),
                 )
+            // Bind subsequent Reader events to the same pseudonymous title
+            // reference used by chapter discovery and reconciliation logs.
+            trace = trace.copy(
+                canonicalTitleRef = structuredDiagnostics.canonicalTitleReference(chapter.canonicalTitleId),
+            )
 
             if (selectedOption == null) {
                 val artifact = canonicalDownloadRepository.get(canonicalChapterId)
@@ -179,6 +184,17 @@ class PrepareCanonicalChapterForReader(
 
             val option = options.singleOrNull()
             if (option != null) {
+                // Public source identities are useful for exact Reader debugging,
+                // but must never enter ordinary logs outside opt-in capture.
+                val capturedSourceIdentity = if (structuredDiagnostics.detailedCaptureActive) {
+                    mapOf(
+                        DiagnosticAttribute.PROVIDER_WORK_ID to DiagnosticAttributeValue.Text(option.externalWorkId),
+                        DiagnosticAttribute.PROVIDER_CHAPTER_ID to
+                            DiagnosticAttributeValue.Text(option.providerChapterId),
+                    )
+                } else {
+                    emptyMap()
+                }
                 trace.event(
                     subsystem = DiagnosticSubsystem.READER,
                     name = DiagnosticEventName.READER_SOURCE_SELECTED,
@@ -188,7 +204,7 @@ class PrepareCanonicalChapterForReader(
                         DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text(option.providerId.value),
                         DiagnosticAttribute.CANDIDATE_TYPE to
                             DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
-                    ),
+                    ) + capturedSourceIdentity,
                 )
 
                 when (val prepared = resolver.preparedContent(option)) {
@@ -207,7 +223,7 @@ class PrepareCanonicalChapterForReader(
                                 ),
                                 DiagnosticAttribute.PROVIDER_ERROR_CODE to
                                     DiagnosticAttributeValue.Text(prepared.error.code.name),
-                            ),
+                            ) + capturedSourceIdentity,
                         )
                     }
                     is ProviderCallResult.Success -> {
@@ -222,6 +238,7 @@ class PrepareCanonicalChapterForReader(
                                     DiagnosticAttribute.PROVIDER_ID,
                                     DiagnosticAttributeValue.Text(option.providerId.value),
                                 )
+                                putAll(capturedSourceIdentity)
                                 pageCount?.let {
                                     put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(it.toLong()))
                                 }

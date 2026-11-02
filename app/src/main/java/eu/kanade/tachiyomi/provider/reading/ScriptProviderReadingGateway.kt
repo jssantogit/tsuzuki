@@ -241,7 +241,15 @@ class ScriptProviderReadingGateway internal constructor(
                     }
                     ProviderReadingDelivery.PageList(
                         pages = decoded.pages.map { page ->
-                            validateResultUrl(active, page.url, browserAllowed = false)
+                            // A CDN outside the Provider's signed permission
+                            // allowlist is a policy failure, not malformed JSON.
+                            try {
+                                validateResultUrl(active, page.url, browserAllowed = false)
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (_: Throwable) {
+                                throw PageOriginPolicyFailure()
+                            }
                             ProviderPageRequest(
                                 url = page.url,
                                 headers = page.headers,
@@ -358,6 +366,8 @@ class ScriptProviderReadingGateway internal constructor(
             ProviderCallResult.Success(decode(value, active))
         } catch (error: CancellationException) {
             throw error
+        } catch (_: PageOriginPolicyFailure) {
+            failure(ProviderErrorCode.NETWORK_POLICY, retryable = false)
         } catch (error: SourceLookupFailure) {
             ProviderCallResult.Failure(
                 ProviderError(
@@ -375,6 +385,8 @@ class ScriptProviderReadingGateway internal constructor(
             malformed()
         }
     }
+
+    private class PageOriginPolicyFailure : RuntimeException()
 
     private class SourceLookupFailure(
         val kind: ProviderLookupFailureCode,

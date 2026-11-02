@@ -240,6 +240,14 @@ class PrepareCanonicalChapterProviderFallbackTest {
                 event.outcome == DiagnosticOutcome.CANDIDATES &&
                 event.attributes["provider_id"] == DiagnosticAttributeValue.Text(torrentProviderId.value)
         } shouldBe true
+        // Reader identity correlation must be opt-in; normal INFO/WARN logs
+        // must not expose public work or exact chapter IDs.
+        diagnostics.events.filter { event ->
+            event.name == DiagnosticEventName.READER_SOURCE_SELECTED ||
+                event.name == DiagnosticEventName.READER_PAGES_READY
+        }.none { event ->
+            "provider_work_id" in event.attributes || "provider_chapter_id" in event.attributes
+        } shouldBe true
     }
 
     private fun emptyAddonResolver() = ResolveChapterContent(
