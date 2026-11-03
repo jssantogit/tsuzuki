@@ -1554,7 +1554,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `malformed follow-up page cannot salvage partial Provider inventory`() = runBlocking {
+    fun `malformed follow-up page cannot salvage partial Provider inventory`(): Unit = runBlocking {
         val bridge = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
             providerRegistry = registry(),
@@ -1750,7 +1750,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `edition picker includes recorded English alias but keeps binding explicitly user confirmed`() = runBlocking {
+    fun `edition picker includes recorded English alias but keeps binding explicitly user confirmed`(): Unit = runBlocking {
         val nanatsu = canonicalTitle.copy(displayTitle = "Nanatsu no Taizai")
         val requestedNames = mutableListOf<String>()
         val names = object : TitleNameObservationRepository {
