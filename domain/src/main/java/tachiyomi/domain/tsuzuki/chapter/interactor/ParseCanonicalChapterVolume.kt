@@ -50,7 +50,8 @@ class ParseCanonicalChapterVolume {
     /**
      * A numeric volume marker anywhere in a chapter label must be accounted for.
      * "Ch. 0 - Volume 112" is a volume container, not an unqualified chapter 0.
-     * [execute] also accepts one consistent suffix volume on a positive chapter,\n     * never a bare volume container on chapter zero.
+     * [execute] also accepts one consistent suffix volume on a positive chapter,
+     * never a bare volume container on chapter zero.
      */
     fun hasExplicitVolumeMarker(rawLabel: String?): Boolean =
         VOLUME_MARKERS.containsMatchIn(normalize(rawLabel.orEmpty()))
