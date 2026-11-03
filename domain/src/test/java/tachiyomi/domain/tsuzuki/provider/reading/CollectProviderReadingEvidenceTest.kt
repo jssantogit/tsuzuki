@@ -2104,6 +2104,90 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `bounded late page is retained and stalled HID timeout names exact page`() = runTest {
+        val id = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), id, externalId = "mal-verified"),
+                externalIds = mapOf(id to "mal-verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val stalled = CompletableDeferred<Unit>()
+        val sources = listOf("first-hid", "late-hid", "stalled-hid")
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = sources.map { workId ->
+                                ProviderWorkCandidate(
+                                    externalWorkId = workId,
+                                    title = "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Hiromu Arakawa"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                    coverageMinMilli = 1_000,
+                                    coverageMaxMilli = 1_000,
+                                    coverageHasMore = false,
+                                )
+                            },
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    val workId = request.binding.externalWorkId
+                    when (workId) {
+                        "late-hid" -> kotlinx.coroutines.delay(5_500)
+                        "stalled-hid" -> stalled.await()
+                    }
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderChapterObservation(
+                                    providerChapterId = "chapter-$workId",
+                                    rawLabel = "Chapter 1",
+                                    rawNumber = 1.0,
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = MemoryWorkSourceAssociationRepository(),
+        )
+
+        val result = withTimeoutOrNull(21_000) { collector.execute(canonicalTitle.id) }
+        (result != null) shouldBe true
+        result!!.complete shouldBe false
+        result.bindingCount shouldBe 0
+        result.snapshots shouldBe emptyList()
+        result.partialEvidence.mapNotNull { it.externalChapterKey }.toSet() shouldBe
+            setOf("chapter-first-hid", "chapter-late-hid")
+        recorder.events.any {
+            it.name == DiagnosticEventName.PROVIDER_READING_CHAPTER_ATTEMPT &&
+                it.outcome == DiagnosticOutcome.TIMEOUT &&
+                it.attributes["provider_work_id"] == DiagnosticAttributeValue.Text("stalled-hid") &&
+                it.attributes["page_index"] == DiagnosticAttributeValue.Number(1)
+        } shouldBe true
+    }
+
+    @Test
     fun `multi HIDs yield separate provisional chapter evidence`() = runBlocking<Unit> {
         val id = IntegrationId("mal")
         val metadata = mockk<CanonicalMetadataSnapshotRepository>()
