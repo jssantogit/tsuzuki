@@ -1436,10 +1436,11 @@ class CollectProviderReadingEvidence private constructor(
         val CREATOR_SEPARATORS = Regex("[^\\p{L}\\p{N}]+")
         val NUMERIC_CHAPTER_ID = Regex("^[0-9]{1,32}$")
         const val MAX_COVERAGE_CONTENDERS = 3
-        // A54 Bleach code13: the eighth page began 30 ms before the old
-        // 5 s deadline after seven valid pages (~0.6 s per HTTP request).
-        // A small final-page grace stays inside the 20 s per-Provider ceiling
-        // for the usual three author-corroborated HIDs; outer timeout still wins.
+
+        // A54 Bleach code13: page eight began 30 ms before the old
+        // 5 s limit after seven successful pages (~0.6 s per request).
+        // This small grace never overrides the outer 20 s Provider deadline;
+        // incomplete work-source collections remain additive and provisional.
         const val MAX_WORK_SOURCE_COLLECTION_MILLIS = 5_800L
         const val MAX_CONCURRENT_PROVIDERS = 4
         const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
