@@ -30,6 +30,15 @@ class ParseCanonicalChapterVolumeTest {
     }
 
     @Test
+    fun `numbered chapter with consistent subtitle volume is parsed`() {
+        (1..6).forEach { chapter ->
+            parse.execute("Ch. $chapter - Chapter $chapter - Volume 1 (1r0n)") shouldBe 1
+        }
+        parse.execute("Ch. 1 - Chapter 2 - Volume 1").shouldBeNull()
+        parse.execute("Ch. 0 - Volume 112").shouldBeNull()
+    }
+
+    @Test
     fun `ambiguous or out of range volume labels are not guessed`() {
         parse.execute("Vol. 1 Ch. 37 Vol. 2 Ch. 37").shouldBeNull()
         parse.execute("Vol. 1-2 Ch. 37").shouldBeNull()
