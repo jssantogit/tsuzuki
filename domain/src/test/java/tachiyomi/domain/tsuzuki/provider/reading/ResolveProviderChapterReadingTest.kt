@@ -361,7 +361,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader refuses a stale Provider chapter key mapped to a different canonical chapter number`(): Unit = runBlocking {
+    fun `Reader rejects stale Provider chapter key mapped to another chapter`(): Unit = runBlocking {
         var pagesCalls = 0
         val stale = evidence(binding, "source-chapter-84", mappedChapterId = chapter.id).copy(
             evidence = providerEvidence(
