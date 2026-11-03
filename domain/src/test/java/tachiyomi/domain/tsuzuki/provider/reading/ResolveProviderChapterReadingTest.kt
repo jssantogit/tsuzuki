@@ -176,6 +176,23 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `Reader rejects inconsistent chapter subtitle even with matching leading volume`() = runBlocking {
+        val observed = evidence(binding, "contradictory-subtitle", mappedChapterId = chapter.id).copy(
+            evidence = providerEvidence(
+                producerId = binding.ref.evidenceProducerId(),
+                externalChapterKey = "contradictory-subtitle",
+            ).copy(
+                rawLabel = "Vol. 1 Ch. 1 - Chapter 2 - Volume 1",
+                rawNumber = 1.0,
+                volume = 1,
+                title = "Chapter 2 - Volume 1",
+            ),
+        )
+        val reader = resolver(bindings = listOf(binding), evidence = listOf(observed))
+        reader.options(chapter.id) shouldBe emptyList()
+    }
+
+    @Test
     fun `Reader rejects a trailing foreign volume without a verified edition`() = runBlocking {
         val observed = evidence(binding, "foreign-subtitle", mappedChapterId = chapter.id).copy(
             evidence = providerEvidence(
