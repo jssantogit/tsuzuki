@@ -2148,7 +2148,7 @@ class CollectProviderReadingEvidenceTest {
                     val workId = request.binding.externalWorkId
                     when (workId) {
                         "late-hid" -> kotlinx.coroutines.delay(5_500)
-                        "stalled-hid" -> stalled.await()
+                        "stalled-hid" -> if (request.cursor != null) stalled.await()
                     }
                     ProviderCallResult.Success(
                         ProviderPage(
@@ -2159,7 +2159,7 @@ class CollectProviderReadingEvidenceTest {
                                     rawNumber = 1.0,
                                 ),
                             ),
-                            nextCursor = null,
+                            nextCursor = if (workId == "stalled-hid") ProviderCursor("more") else null,
                         ),
                     )
                 },
@@ -2178,12 +2178,12 @@ class CollectProviderReadingEvidenceTest {
         result.bindingCount shouldBe 0
         result.snapshots shouldBe emptyList()
         result.partialEvidence.mapNotNull { it.externalChapterKey }.toSet() shouldBe
-            setOf("chapter-first-hid", "chapter-late-hid")
+            setOf("chapter-first-hid", "chapter-late-hid", "chapter-stalled-hid")
         recorder.events.any {
             it.name == DiagnosticEventName.PROVIDER_READING_CHAPTER_ATTEMPT &&
                 it.outcome == DiagnosticOutcome.TIMEOUT &&
                 it.attributes["provider_work_id"] == DiagnosticAttributeValue.Text("stalled-hid") &&
-                it.attributes["page_index"] == DiagnosticAttributeValue.Number(1)
+                it.attributes["page_index"] == DiagnosticAttributeValue.Number(2)
         } shouldBe true
     }
 
