@@ -1750,7 +1750,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `edition picker includes recorded English alias but keeps binding explicitly user confirmed`(): Unit = runBlocking {
+    fun `edition picker uses English alias without implicit binding confirmation`(): Unit = runBlocking {
         val nanatsu = canonicalTitle.copy(displayTitle = "Nanatsu no Taizai")
         val requestedNames = mutableListOf<String>()
         val names = object : TitleNameObservationRepository {
