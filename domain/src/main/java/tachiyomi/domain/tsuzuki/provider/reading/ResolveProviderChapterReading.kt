@@ -83,6 +83,7 @@ enum class ProviderReadingIdentityRejectionReason {
     CHAPTER_IDENTITY_MISMATCH,
     SOURCE_VOLUME_BUNDLE,
     CONFLICTING_NUMBER_HINT,
+    CONFLICTING_CHAPTER_MARKERS,
     MALFORMED_VOLUME_LABEL,
     SOURCE_VOLUME_CONFLICT,
     CANONICAL_VOLUME_CONFLICT,
@@ -222,6 +223,9 @@ class ResolveProviderChapterReading(
         }
         if (hasConflictingIntegerChapterHint(parsed, evidence.rawNumber)) {
             return ProviderReadingIdentityRejectionReason.CONFLICTING_NUMBER_HINT
+        }
+        if (volumeParser.hasConflictingChapterMarkers(evidence.rawLabel)) {
+            return ProviderReadingIdentityRejectionReason.CONFLICTING_CHAPTER_MARKERS
         }
 
         val explicitLabelVolume = volumeParser.execute(evidence.rawLabel)
