@@ -2,6 +2,10 @@ name: CI v2.1
 # Resolver PR #140 integration with main: verify the combined tree before merge.
 
 on:
+  # Temporary #176 red/green regression gate: do not merge this workflow.
+  pull_request:
+    branches:
+      - 'tsuzuki/issue-176-zero-chapter-identity-20261102'
   workflow_dispatch:
     inputs:
       mode:
@@ -122,6 +126,9 @@ jobs:
 
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             mode="${REQUESTED_MODE:-full}"
+          fi
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            mode="full"
           fi
 
           case "$REF_NAME" in
