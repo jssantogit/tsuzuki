@@ -1,4 +1,5 @@
 name: APK Build
+# #176 signed update-over smoke: Host #191, never merge workflow-only trigger.
 
 on:
   workflow_dispatch:
