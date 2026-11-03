@@ -13,6 +13,7 @@ class ParseCanonicalChapterVolumeTest {
         parse.execute("Vol.1 Ch.1") shouldBe 1
         parse.execute("Vol. 12 - Chapter 137") shouldBe 12
         parse.execute("Volume 3: Ch. 37.5") shouldBe 3
+        parse.execute("Volume 3: Capitulo 37") shouldBe 3
     }
 
     @Test
@@ -32,6 +33,8 @@ class ParseCanonicalChapterVolumeTest {
     @Test
     fun `leading volume label rejects conflicting chapter markers`() {
         parse.execute("Vol. 1 Ch. 1 - Chapter 2 - Volume 1").shouldBeNull()
+        parse.hasConflictingChapterMarkers("Vol. 1 Ch. 1 - Chapter 2 - Volume 1") shouldBe true
+        parse.hasConflictingChapterMarkers("Vol. 1 Ch. 1 - Chapter 1 - Volume 1") shouldBe false
         parse.execute("Vol. 1 Ch. 1 - Chapter 2").shouldBeNull()
         parse.execute("Vol. 1 Ch. 1 - Chapter 1 - Volume 1") shouldBe 1
     }
