@@ -147,6 +147,51 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
+    fun `Reader accepts MangaFire subtitle volume on matching early numbered chapters`() = runBlocking {
+        (1..6).forEach { number ->
+            val canonical = chapter.copy(
+                id = "canonical-$number",
+                baseNumber = number,
+                displayNumber = "$number",
+                volume = null,
+            )
+            val observed = evidence(binding, "source-$number", mappedChapterId = canonical.id).copy(
+                evidence = providerEvidence(
+                    producerId = binding.ref.evidenceProducerId(),
+                    externalChapterKey = "source-$number",
+                ).copy(
+                    rawLabel = "Ch. $number - Chapter $number - Volume 1 (1r0n)",
+                    rawNumber = number.toDouble(),
+                    volume = null,
+                    title = "Chapter $number - Volume 1 (1r0n)",
+                ),
+            )
+            val reader = resolver(
+                bindings = listOf(binding),
+                evidence = listOf(observed),
+                canonicalChapter = canonical,
+            )
+            reader.options(canonical.id).map { it.providerChapterId } shouldBe listOf("source-$number")
+        }
+    }
+
+    @Test
+    fun `Reader rejects a trailing foreign volume without a verified edition`() = runBlocking {
+        val observed = evidence(binding, "foreign-subtitle", mappedChapterId = chapter.id).copy(
+            evidence = providerEvidence(
+                producerId = binding.ref.evidenceProducerId(),
+                externalChapterKey = "foreign-subtitle",
+            ).copy(
+                rawLabel = "Ch. 1 - Chapter 1 - Volume 112",
+                rawNumber = 1.0,
+                volume = null,
+            ),
+        )
+        val reader = resolver(bindings = listOf(binding), evidence = listOf(observed))
+        reader.options(chapter.id) shouldBe emptyList()
+    }
+
+    @Test
     fun `Reader accepts first chapter of volume one when the canonical volume is not yet known`() = runBlocking {
         val observed = evidence(binding, "one-volume-one", mappedChapterId = chapter.id).copy(
             evidence = providerEvidence(binding.ref.evidenceProducerId(), "one-volume-one").copy(
