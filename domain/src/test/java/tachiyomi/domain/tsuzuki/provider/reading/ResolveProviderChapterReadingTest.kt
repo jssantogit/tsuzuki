@@ -190,6 +190,17 @@ class ResolveProviderChapterReadingTest {
         )
         val reader = resolver(bindings = listOf(binding), evidence = listOf(observed))
         reader.options(chapter.id) shouldBe emptyList()
+        reader.auditNoMatch(chapter.id).identityRejectionReason shouldBe
+            ProviderReadingIdentityRejectionReason.CONFLICTING_CHAPTER_MARKERS
+
+        val withoutVolume = observed.copy(
+            evidence = observed.evidence.copy(
+                rawLabel = "Ch. 1 - Chapter 2",
+                volume = null,
+            ),
+        )
+        resolver(bindings = listOf(binding), evidence = listOf(withoutVolume))
+            .options(chapter.id) shouldBe emptyList()
     }
 
     @Test
@@ -295,7 +306,15 @@ class ResolveProviderChapterReadingTest {
         quarantine.options(chapterZero.id) shouldBe emptyList()
         quarantine.auditNoMatch(chapterZero.id).reason shouldBe
             ProviderReadingNoMatchReason.UNVERIFIED_EARLY_TITLE
+        // Prologue is a distinct canonical type, not an alias for regular Ch. 0.
+        val prologueChapter = chapter.copy(
+            id = "chapter-prologue",
+            type = CanonicalChapterType.PROLOGUE,
+            baseNumber = null,
+            displayNumber = "Prologue",
+        )
         val prologue = ambiguous.copy(
+            mappedCanonicalChapterId = prologueChapter.id,
             evidence = ambiguous.evidence.copy(
                 rawLabel = "Ch. 0 - Prologue",
                 title = "Prologue",
@@ -304,8 +323,8 @@ class ResolveProviderChapterReadingTest {
         resolver(
             bindings = listOf(binding),
             evidence = listOf(prologue),
-            canonicalChapter = chapterZero,
-        ).options(chapterZero.id).size shouldBe 1
+            canonicalChapter = prologueChapter,
+        ).options(prologueChapter.id).size shouldBe 1
 
         val fraction = chapter.copy(
             id = "chapter-zero-point-two",
