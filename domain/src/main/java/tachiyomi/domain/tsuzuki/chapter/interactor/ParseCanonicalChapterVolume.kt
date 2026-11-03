@@ -35,11 +35,11 @@ class ParseCanonicalChapterVolume {
         val chapterNumbers = CHAPTER_MARKERS.findAll(normalized).take(3).map { marker ->
             marker.groupValues[1].toIntOrNull()
         }.toList()
-        if (chapterNumbers.isEmpty() || chapterNumbers.size > 2 ||
+        if (
+            chapterNumbers.isEmpty() ||
+            chapterNumbers.size > 2 ||
             chapterNumbers.any { it != leadingChapter }
-        ) {
-            return null
-        }
+        ) return null
         return volumes.single()
     }
 
@@ -50,7 +50,7 @@ class ParseCanonicalChapterVolume {
     /**
      * A numeric volume marker anywhere in a chapter label must be accounted for.
      * "Ch. 0 - Volume 112" is a volume container, not an unqualified chapter 0.
-     * Only [execute] may recognize a qualified leading "Vol. N Ch. M" identity.
+     * [execute] also accepts one consistent suffix volume on a positive chapter,\n     * never a bare volume container on chapter zero.
      */
     fun hasExplicitVolumeMarker(rawLabel: String?): Boolean =
         VOLUME_MARKERS.containsMatchIn(normalize(rawLabel.orEmpty()))
