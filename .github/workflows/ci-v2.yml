@@ -2,7 +2,7 @@ name: CI v2.1
 # Resolver PR #140 integration with main: verify the combined tree before merge.
 
 on:
-  # Temporary #176 red/green regression gate: do not merge this workflow.
+  # Temporary #176 GREEN gate: Host parser fix + new Ch1-6 tests; never merge.
   pull_request:
     branches:
       - 'tsuzuki/issue-176-zero-chapter-identity-20261102'
