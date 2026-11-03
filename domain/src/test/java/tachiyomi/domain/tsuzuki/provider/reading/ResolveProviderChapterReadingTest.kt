@@ -634,7 +634,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader rejects source titled whole volume even if canonical chapter zero has matching volume`(): Unit = runBlocking {
+    fun `Reader rejects a whole volume titled source mapped to chapter zero`(): Unit = runBlocking {
         val zero = chapter.copy(
             id = "volume-112-zero",
             displayNumber = "0",
@@ -743,7 +743,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader rejects volume explicitly stated in label even when source volume field is missing`(): Unit = runBlocking {
+    fun `Reader rejects explicit label volume when source metadata omits it`(): Unit = runBlocking {
         val zero = chapter.copy(id = "chapter-canonical-0", displayNumber = "0", baseNumber = 0)
         val observed = evidence(binding, "volume-112-as-zero", mappedChapterId = zero.id).copy(
             evidence = providerEvidence(
@@ -759,7 +759,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader rejects a source volume disguised as chapter zero even when the payload is short`(): Unit = runBlocking {
+    fun `Reader rejects disguised chapter zero volume with short payload`(): Unit = runBlocking {
         val zero = chapter.copy(id = "canonical-zero", displayNumber = "0", baseNumber = 0)
         listOf(
             "Ch. 0 - Volume 112",
@@ -1234,7 +1234,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader refuses conflicting author or explicit variant HID even with stale mapped evidence`(): Unit = runBlocking {
+    fun `Reader refuses stale mapping for author conflict or variant HID`(): Unit = runBlocking {
         val ref = ProviderBindingRef(providerId, "en", "unverified-edition")
         val persisted = PersistedChapterEvidence(
             providerEvidence(ref.evidenceProducerId(), "chapter-1"),
