@@ -1,6 +1,10 @@
 name: Provider Platform Android gate
 
 on:
+  # Temporary #176 Android test gate; never merge into Host.
+  pull_request:
+    branches:
+      - 'tsuzuki/issue-176-zero-chapter-identity-20261102'
   push:
     branches:
       - 'tsuzuki/provider-platform-*'
@@ -49,7 +53,7 @@ concurrency:
 jobs:
   instrumentation:
     name: Provider Platform instrumentation
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[ci-full]')
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[ci-full]')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
