@@ -173,6 +173,12 @@ class StructuredDiagnosticEventTest {
             DiagnosticProviderReaderIdentityRejectionReason.CANONICAL_VOLUME_CONFLICT,
         )
         audited(reason) shouldBe mapOf(DiagnosticAttribute.PROVIDER_READER_IDENTITY_REJECTION_REASON to reason)
+        val conflictingChapter = DiagnosticAttributeValue.Code(
+            DiagnosticProviderReaderIdentityRejectionReason.CONFLICTING_CHAPTER_MARKERS,
+        )
+        audited(conflictingChapter) shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_READER_IDENTITY_REJECTION_REASON to conflictingChapter,
+        )
         audited(DiagnosticAttributeValue.Text("unverified text")) shouldBe emptyMap()
         audited(DiagnosticAttributeValue.Code(DiagnosticProviderReaderNoMatchReason.IDENTITY_REJECTED)) shouldBe
             emptyMap()
