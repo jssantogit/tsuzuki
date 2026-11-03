@@ -800,6 +800,7 @@ class CollectProviderReadingEvidence private constructor(
             )
             val trustedPages = mutableListOf<Pair<List<ProviderChapterObservation>, Long>>()
             var lastPage = 0
+            var activePage = 0
             val result = withTimeoutOrNull(MAX_WORK_SOURCE_COLLECTION_MILLIS) {
                 RefreshProviderReadingChapters(
                     gateway = gateway,
@@ -809,6 +810,7 @@ class CollectProviderReadingEvidence private constructor(
                     publishSnapshot = null,
                     clock = clock,
                     onPageStarted = { index ->
+                        activePage = index
                         traceChapterRequest(canonicalTitleId, target, source.ref, index, DiagnosticOutcome.STARTED)
                     },
                     onPageFinished = { index, count, errorCode, elapsedMillis ->
@@ -850,7 +852,28 @@ class CollectProviderReadingEvidence private constructor(
                 trustedPages.clear()
             }
             when (result) {
-                null -> trace(canonicalTitleId, target, DiagnosticStage.READ, DiagnosticOutcome.TIMEOUT)
+                null -> {
+                    // A bounded partial fetch is technical evidence, never an
+                    // editorial snapshot. Report the exact unfinished page only
+                    // under explicit detailed capture (public MangaFire HID).
+                    if (activePage > 0) {
+                        traceChapterRequest(
+                            canonicalTitleId,
+                            target,
+                            source.ref,
+                            activePage,
+                            DiagnosticOutcome.TIMEOUT,
+                        )
+                    }
+                    trace(
+                        canonicalTitleId,
+                        target,
+                        DiagnosticStage.READ,
+                        DiagnosticOutcome.TIMEOUT,
+                        observed = trustedPages.sumOf { it.first.size },
+                        pageCount = lastPage,
+                    )
+                }
                 is ProviderCallResult.Failure -> trace(
                     canonicalTitleId,
                     target,
@@ -1413,7 +1436,11 @@ class CollectProviderReadingEvidence private constructor(
         val CREATOR_SEPARATORS = Regex("[^\\p{L}\\p{N}]+")
         val NUMERIC_CHAPTER_ID = Regex("^[0-9]{1,32}$")
         const val MAX_COVERAGE_CONTENDERS = 3
-        const val MAX_WORK_SOURCE_COLLECTION_MILLIS = 5_000L
+        // A54 Bleach code13: the eighth page began 30 ms before the old
+        // 5 s deadline after seven valid pages (~0.6 s per HTTP request).
+        // A small final-page grace stays inside the 20 s per-Provider ceiling
+        // for the usual three author-corroborated HIDs; outer timeout still wins.
+        const val MAX_WORK_SOURCE_COLLECTION_MILLIS = 5_800L
         const val MAX_CONCURRENT_PROVIDERS = 4
         const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
         const val MAX_LOOKUP_PAGES = 8
