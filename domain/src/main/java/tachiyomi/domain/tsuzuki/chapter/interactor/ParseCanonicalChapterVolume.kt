@@ -39,7 +39,9 @@ class ParseCanonicalChapterVolume {
             chapterNumbers.isEmpty() ||
             chapterNumbers.size > 2 ||
             chapterNumbers.any { it != leadingChapter }
-        ) return null
+        ) {
+            return null
+        }
         return volumes.single()
     }
 
