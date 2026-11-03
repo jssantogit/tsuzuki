@@ -16,6 +16,15 @@ class ParseCanonicalChapterVolume {
             marker.value.filter(Char::isDigit).toIntOrNull()
         }.toList()
         if (volumes.isEmpty() || volumes.size > 2 || volumes.any { it == null }) return null
+        val chapterNumbers = chapterMarkers(normalized)
+        if (
+            chapterNumbers.isEmpty() ||
+            chapterNumbers.size > 2 ||
+            chapterNumbers.any { it == null } ||
+            chapterNumbers.any { it != chapterNumbers.first() }
+        ) {
+            return null
+        }
 
         // Some providers repeat the same volume in "Vol. 1 Ch. 1 - Chapter 1 - Volume 1".
         val leadingVolume = LEADING_VOLUME_CHAPTER_PREFIX.find(normalized)
@@ -31,19 +40,24 @@ class ParseCanonicalChapterVolume {
         // Ch. 0 - Volume 112 and conflicting chapter numbers stay unqualified.
         val leadingChapter = LEADING_NUMBERED_CHAPTER.find(normalized)
             ?.groupValues?.get(1)?.toIntOrNull() ?: return null
-        if (volumes.size != 1) return null
-        val chapterNumbers = CHAPTER_MARKERS.findAll(normalized).take(3).map { marker ->
-            marker.groupValues[1].toIntOrNull()
-        }.toList()
-        if (
-            chapterNumbers.isEmpty() ||
-            chapterNumbers.size > 2 ||
-            chapterNumbers.any { it != leadingChapter }
-        ) {
-            return null
-        }
+        if (volumes.size != 1 || chapterNumbers.any { it != leadingChapter }) return null
         return volumes.single()
     }
+
+    /**
+     * A source-authored chapter number contradicting another explicit chapter
+     * marker must never silently become a verified volume/chapter identity.
+     * Return a closed diagnostic flag; never export the untrusted source label.
+     */
+    fun hasConflictingChapterMarkers(rawLabel: String?): Boolean {
+        val numbers = chapterMarkers(normalize(rawLabel.orEmpty()))
+        return numbers.size > 1 && (numbers.any { it == null } || numbers.distinct().size > 1)
+    }
+
+    private fun chapterMarkers(normalized: String): List<Int?> =
+        CHAPTER_MARKERS.findAll(normalized).take(3).map { marker ->
+            marker.groupValues[1].toIntOrNull()
+        }.toList()
 
     /** True when a label starts with a volume marker, even if its value is unusable. */
     fun hasExplicitVolumePrefix(rawLabel: String?): Boolean =
@@ -73,7 +87,7 @@ class ParseCanonicalChapterVolume {
         val VOLUME_PREFIX_START = Regex("^vol(?:ume)?(?:\\b|\\.)")
         val VOLUME_MARKERS = Regex("\\bvol(?:ume)?\\.?\\s*(?:\\d+|none)\\b")
         val LEADING_NUMBERED_CHAPTER = Regex("^ch(?:apter)?\\.?\\s*([1-9]\\d*)\\b")
-        val CHAPTER_MARKERS = Regex("\\bch(?:apter)?\\.?\\s*(\\d+)\\b")
+        val CHAPTER_MARKERS = Regex("\\b(?:ch(?:apter)?|capitulo)\\.?\\s*(\\d+)\\b")
         val LEADING_VOLUME_CHAPTER_PREFIX = Regex(
             "^vol(?:ume)?\\.?\\s*(\\d+)\\s*(?:[-:|/]\\s*|\\s+)" +
                 "(?=(?:ch(?:apter)?|capitulo)\\s*\\.?\\s*\\d)",
