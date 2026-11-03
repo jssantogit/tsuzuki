@@ -30,6 +30,13 @@ class ParseCanonicalChapterVolumeTest {
     }
 
     @Test
+    fun `leading volume label rejects conflicting chapter markers`() {
+        parse.execute("Vol. 1 Ch. 1 - Chapter 2 - Volume 1").shouldBeNull()
+        parse.execute("Vol. 1 Ch. 1 - Chapter 2").shouldBeNull()
+        parse.execute("Vol. 1 Ch. 1 - Chapter 1 - Volume 1") shouldBe 1
+    }
+
+    @Test
     fun `numbered chapter with consistent subtitle volume is parsed`() {
         (1..6).forEach { chapter ->
             parse.execute("Ch. $chapter - Chapter $chapter - Volume 1 (1r0n)") shouldBe 1
