@@ -63,7 +63,7 @@ class ResolveProviderChapterReadingTest {
     )
 
     @Test
-    fun `resolves only Provider evidence belonging to an available exact binding`() = runBlocking {
+    fun `resolves only Provider evidence belonging to an available exact binding`(): Unit = runBlocking {
         val otherBinding = binding.copy(
             id = "binding-2",
             ref = ProviderBindingRef(providerId, "pt-br", "work-2"),
@@ -90,7 +90,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `explicitly confirmed edition uniquely outranks unresolved alternative Reader sources`() = runBlocking {
+    fun `explicitly confirmed edition uniquely outranks unresolved alternative Reader sources`(): Unit = runBlocking {
         val confirmed = binding.copy(verification = ProviderBindingVerification.USER_CONFIRMED)
         val alternateRef = ProviderBindingRef(providerId, "en", "work-other")
         val alternate = binding.copy(id = "binding-other", ref = alternateRef)
@@ -128,7 +128,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `two chapter variants under a single confirmed edition remain ambiguous`() = runBlocking {
+    fun `two chapter variants under a single confirmed edition remain ambiguous`(): Unit = runBlocking {
         val confirmed = binding.copy(verification = ProviderBindingVerification.USER_CONFIRMED)
         val reader = resolver(
             bindings = listOf(confirmed),
@@ -147,7 +147,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader accepts MangaFire subtitle volume on matching early numbered chapters`() = runBlocking {
+    fun `Reader accepts MangaFire subtitle volume on matching early numbered chapters`(): Unit = runBlocking {
         (1..6).forEach { number ->
             val canonical = chapter.copy(
                 id = "canonical-$number",
@@ -176,7 +176,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader rejects inconsistent chapter subtitle even with matching leading volume`() = runBlocking {
+    fun `Reader rejects inconsistent chapter subtitle even with matching leading volume`(): Unit = runBlocking {
         val observed = evidence(binding, "contradictory-subtitle", mappedChapterId = chapter.id).copy(
             evidence = providerEvidence(
                 producerId = binding.ref.evidenceProducerId(),
@@ -193,7 +193,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader rejects a trailing foreign volume without a verified edition`() = runBlocking {
+    fun `Reader rejects a trailing foreign volume without a verified edition`(): Unit = runBlocking {
         val observed = evidence(binding, "foreign-subtitle", mappedChapterId = chapter.id).copy(
             evidence = providerEvidence(
                 producerId = binding.ref.evidenceProducerId(),
@@ -209,7 +209,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader accepts first chapter of volume one when the canonical volume is not yet known`() = runBlocking {
+    fun `Reader accepts first chapter of volume one when the canonical volume is not yet known`(): Unit = runBlocking {
         val observed = evidence(binding, "one-volume-one", mappedChapterId = chapter.id).copy(
             evidence = providerEvidence(binding.ref.evidenceProducerId(), "one-volume-one").copy(
                 rawLabel = "Vol. 1 Ch. 1 - Chapter 1 - Volume 1 (1r0n)",
@@ -231,7 +231,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader accepts numerically consistent volume evidence when catalog has no volume`() = runBlocking {
+    fun `Reader accepts numerically consistent volume evidence when catalog has no volume`(): Unit = runBlocking {
         listOf(2 to 1, 25 to 4, 100 to 12).forEach { (number, sourceVolume) ->
             val canonical = chapter.copy(
                 id = "canonical-$number",
@@ -258,7 +258,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader still blocks volume later than canonical global chapter number`() = runBlocking {
+    fun `Reader still blocks volume later than canonical global chapter number`(): Unit = runBlocking {
         val second = chapter.copy(id = "canonical-2", baseNumber = 2, displayNumber = "2", volume = null)
         val foreign = evidence(binding, "source-late-volume", mappedChapterId = second.id).copy(
             evidence = providerEvidence(
@@ -277,7 +277,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader quarantines unqualified early-numbered extras but retains genuine prologues`() = runBlocking {
+    fun `Reader quarantines unqualified early-numbered extras but retains genuine prologues`(): Unit = runBlocking {
         val chapterZero = chapter.copy(id = "chapter-zero", displayNumber = "0", baseNumber = 0)
         val sourceZero = evidence(binding, "source-zero", mappedChapterId = chapterZero.id)
         val ambiguous = sourceZero.copy(
@@ -342,7 +342,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader refuses a stale Provider chapter key mapped to a different canonical chapter number`() = runBlocking {
+    fun `Reader refuses a stale Provider chapter key mapped to a different canonical chapter number`(): Unit = runBlocking {
         var pagesCalls = 0
         val stale = evidence(binding, "source-chapter-84", mappedChapterId = chapter.id).copy(
             evidence = providerEvidence(
@@ -379,7 +379,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader diagnoses a missing source chapter without calling it a provider outage`() = runBlocking {
+    fun `Reader diagnoses a missing source chapter without calling it a provider outage`(): Unit = runBlocking {
         val zero = chapter.copy(id = "chapter-zero", displayNumber = "0", baseNumber = 0)
         val source = (1..3).map { number ->
             evidence(binding, "source-$number", mappedChapterId = null).copy(
@@ -404,7 +404,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader distinguishes matching source chapters missing a canonical mapping`() = runBlocking {
+    fun `Reader distinguishes matching source chapters missing a canonical mapping`(): Unit = runBlocking {
         val noMap = evidence(binding, "source-1", mappedChapterId = null)
         resolver(
             bindings = listOf(binding),
@@ -420,7 +420,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader distinguishes no Provider evidence from ineligible source`() = runBlocking {
+    fun `Reader distinguishes no Provider evidence from ineligible source`(): Unit = runBlocking {
         resolver(
             bindings = listOf(binding),
             evidence = emptyList(),
@@ -435,7 +435,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader diagnoses mapped chapter evidence only belonging to a different HID`() = runBlocking {
+    fun `Reader diagnoses mapped chapter evidence only belonging to a different HID`(): Unit = runBlocking {
         val other = binding.copy(
             id = "binding-other",
             ref = ProviderBindingRef(providerId, "en", "different-source"),
@@ -455,7 +455,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader reports identity rejection if a mapped source declares a mismatched volume`() = runBlocking {
+    fun `Reader reports identity rejection if a mapped source declares a mismatched volume`(): Unit = runBlocking {
         val wronglyMapped = evidence(binding, "wrong-volume", chapter.id).copy(
             evidence = providerEvidence(binding.ref.evidenceProducerId(), "wrong-volume").copy(
                 rawLabel = "Vol. 112 Ch. 1",
@@ -480,7 +480,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader diagnoses unavailable source association without inventing chapter selection`() = runBlocking {
+    fun `Reader diagnoses unavailable source association without inventing chapter selection`(): Unit = runBlocking {
         resolver(
             bindings = emptyList(),
             evidence = listOf(evidence(binding, "source-1", mappedChapterId = chapter.id)),
@@ -495,7 +495,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `source variant blocks automatic Reader but honors confirmed edition`() = runBlocking {
+    fun `source variant blocks automatic Reader but honors confirmed edition`(): Unit = runBlocking {
         val colorAssociation = ProviderWorkSourceAssociation(
             canonicalTitleId = chapter.canonicalTitleId,
             ref = binding.ref,
@@ -531,7 +531,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader rejects volume-sized page deliveries for unqualified regular chapter zero`() = runBlocking {
+    fun `Reader rejects volume-sized page deliveries for unqualified regular chapter zero`(): Unit = runBlocking {
         val zero = chapter.copy(
             id = "chapter-canonical-0",
             displayNumber = "0",
@@ -585,7 +585,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader preserves genuine short chapter zero and does not ban prologues or fractions`() = runBlocking {
+    fun `Reader preserves genuine short chapter zero and does not ban prologues or fractions`(): Unit = runBlocking {
         val zero = chapter.copy(id = "regular-zero", displayNumber = "0", baseNumber = 0)
         val observed = evidence(binding, "real-short-zero", mappedChapterId = zero.id).copy(
             evidence = providerEvidence(
@@ -615,7 +615,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader rejects source titled whole volume even if canonical chapter zero has matching volume`() = runBlocking {
+    fun `Reader rejects source titled whole volume even if canonical chapter zero has matching volume`(): Unit = runBlocking {
         val zero = chapter.copy(
             id = "volume-112-zero",
             displayNumber = "0",
@@ -651,7 +651,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader preserves large correctly qualified chapter zero and large regular chapters`() = runBlocking {
+    fun `Reader preserves large correctly qualified chapter zero and large regular chapters`(): Unit = runBlocking {
         val numberedZero = chapter.copy(
             id = "volume-one-zero",
             displayNumber = "0",
@@ -695,7 +695,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `detailed Reader source identity is scoped to the exact selected chapter and HID`() = runBlocking {
+    fun `detailed Reader source identity is scoped to the exact selected chapter and HID`(): Unit = runBlocking {
         val canonical = chapter.copy(id = "volume-one-chapter-zero", baseNumber = 0, volume = 1)
         val source = evidence(binding, "source-with-metadata", mappedChapterId = canonical.id).copy(
             evidence = providerEvidence(binding.ref.evidenceProducerId(), "source-with-metadata").copy(
@@ -724,7 +724,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader rejects volume explicitly stated in label even when source volume field is missing`() = runBlocking {
+    fun `Reader rejects volume explicitly stated in label even when source volume field is missing`(): Unit = runBlocking {
         val zero = chapter.copy(id = "chapter-canonical-0", displayNumber = "0", baseNumber = 0)
         val observed = evidence(binding, "volume-112-as-zero", mappedChapterId = zero.id).copy(
             evidence = providerEvidence(
@@ -740,7 +740,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader rejects a source volume disguised as chapter zero even when the payload is short`() = runBlocking {
+    fun `Reader rejects a source volume disguised as chapter zero even when the payload is short`(): Unit = runBlocking {
         val zero = chapter.copy(id = "canonical-zero", displayNumber = "0", baseNumber = 0)
         listOf(
             "Ch. 0 - Volume 112",
@@ -762,7 +762,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader allows independently volume-qualified regular chapter zero`() = runBlocking {
+    fun `Reader allows independently volume-qualified regular chapter zero`(): Unit = runBlocking {
         val zero = chapter.copy(
             id = "chapter-canonical-vol-0",
             displayNumber = "0",
@@ -785,7 +785,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader rejects an explicitly foreign volume even when the chapter number matches`() = runBlocking {
+    fun `Reader rejects an explicitly foreign volume even when the chapter number matches`(): Unit = runBlocking {
         val foreign = evidence(binding, "volume-112-chapter-1", mappedChapterId = chapter.id).copy(
             evidence = providerEvidence(
                 producerId = binding.ref.evidenceProducerId(),
@@ -804,7 +804,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader retains exact prologue and decimal chapter evidence without merging identities`() = runBlocking {
+    fun `Reader retains exact prologue and decimal chapter evidence without merging identities`(): Unit = runBlocking {
         val prologue = chapter.copy(
             id = "prologue-1",
             displayNumber = "Prologue 1",
@@ -845,7 +845,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader accepts source decimal matching the precise canonical v2 numbering`() = runBlocking {
+    fun `Reader accepts source decimal matching the precise canonical v2 numbering`(): Unit = runBlocking {
         val exact = chapter.copy(
             id = "exact-decimal",
             displayNumber = "0.1",
@@ -874,7 +874,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `unavailable binding and stale unmatched Provider evidence are excluded`() = runBlocking {
+    fun `unavailable binding and stale unmatched Provider evidence are excluded`(): Unit = runBlocking {
         val unavailable = binding.copy(
             availability = ProviderBindingAvailability.UNAVAILABLE,
         )
@@ -896,7 +896,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `metadata-only chapter provider cannot be selected or invoked by Reader`() = runBlocking {
+    fun `metadata-only chapter provider cannot be selected or invoked by Reader`(): Unit = runBlocking {
         var pagesCalls = 0
         val reader = resolver(
             bindings = listOf(binding),
@@ -934,7 +934,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `selected option is revalidated before requesting Provider pages`() = runBlocking {
+    fun `selected option is revalidated before requesting Provider pages`(): Unit = runBlocking {
         var pagesCalls = 0
         val gateway = gateway { request ->
             pagesCalls += 1
@@ -979,7 +979,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `maps Provider page delivery into provider-neutral Reader content`() = runBlocking {
+    fun `maps Provider page delivery into provider-neutral Reader content`(): Unit = runBlocking {
         val gateway = gateway {
             ProviderCallResult.Success(
                 ProviderReadingDelivery.PageList(
@@ -1022,7 +1022,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `verified managed Provider archive becomes Reader content`() = runBlocking {
+    fun `verified managed Provider archive becomes Reader content`(): Unit = runBlocking {
         val gateway = gateway {
             ProviderCallResult.Success(
                 ProviderReadingDelivery.ManagedFile(
@@ -1058,7 +1058,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `managed Provider files remain fail closed before host-owned promotion`() = runBlocking {
+    fun `managed Provider files remain fail closed before host-owned promotion`(): Unit = runBlocking {
         val gateway = gateway {
             ProviderCallResult.Success(
                 ProviderReadingDelivery.ManagedFile(
@@ -1080,7 +1080,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `missing canonical chapter fails closed without touching Provider runtime`() = runBlocking {
+    fun `missing canonical chapter fails closed without touching Provider runtime`(): Unit = runBlocking {
         var pagesCalls = 0
         val resolver = ResolveProviderChapterReading(
             canonicalChapterRepository = canonicalChapterRepository(chapter = null),
@@ -1110,7 +1110,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `persisted Provider binding is rechecked when Provider becomes disabled`() = runBlocking {
+    fun `persisted Provider binding is rechecked when Provider becomes disabled`(): Unit = runBlocking {
         var lifecycle = ProviderLifecycleStatus.ENABLED
         var pagesCalls = 0
         val registry = DefaultProviderRegistry(registrations = {
@@ -1137,7 +1137,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `persisted binding requires active reading capabilities and facet`() = runBlocking {
+    fun `persisted binding requires active reading capabilities and facet`(): Unit = runBlocking {
         val registrations = listOf(
             readingRegistration(
                 enabledCapabilities = setOf(
@@ -1164,7 +1164,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader resolves exact chapter evidence from a verified nonpreferred HID`() = runBlocking {
+    fun `Reader resolves exact chapter evidence from a verified nonpreferred HID`(): Unit = runBlocking {
         val source = ProviderWorkSourceAssociation(
             canonicalTitleId = chapter.canonicalTitleId,
             ref = ProviderBindingRef(providerId, "en", "other-readable-hid"),
@@ -1215,7 +1215,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `Reader refuses conflicting author or explicit variant HID even with stale mapped evidence`() = runBlocking {
+    fun `Reader refuses conflicting author or explicit variant HID even with stale mapped evidence`(): Unit = runBlocking {
         val ref = ProviderBindingRef(providerId, "en", "unverified-edition")
         val persisted = PersistedChapterEvidence(
             providerEvidence(ref.evidenceProducerId(), "chapter-1"),
