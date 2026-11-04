@@ -15,6 +15,33 @@ import tachiyomi.domain.tsuzuki.provider.ProviderId
  */
 object ProviderWorkSourcePortfolio {
 
+    /**
+     * Only the actual signed MangaFire implementation, standalone or embedded
+     * inside MangaAll, currently supplies detail/coverage evidence strong enough
+     * for the established provisional work-source portfolio.
+     *
+     * MangaDex/MangaDot still contribute lookup/chapter evidence, but their
+     * similarly named records must not borrow MangaFire's author authority.
+     * MangaFire's standalone facet stays English in this version.
+     */
+    fun trustedCandidates(
+        providerId: ProviderId,
+        facetId: String?,
+        candidates: List<ProviderWorkCandidate>,
+    ): List<ProviderWorkCandidate> = when (providerId.value) {
+        MANGAFIRE_PROVIDER_ID -> candidates
+        MANGAALL_PROVIDER_ID -> if (facetId == "en") {
+            candidates.filter { candidate ->
+                val hid = candidate.externalWorkId.removePrefix(MANGAALL_MANGAFIRE_PREFIX)
+                candidate.externalWorkId.startsWith(MANGAALL_MANGAFIRE_PREFIX) &&
+                    MANGAFIRE_HID.matches(hid)
+            }
+        } else {
+            emptyList()
+        }
+        else -> emptyList()
+    }
+
     fun assess(
         providerId: ProviderId,
         facetId: String?,
@@ -118,14 +145,22 @@ object ProviderWorkSourcePortfolio {
         candidate: ProviderWorkCandidate,
         normalizedQuery: String,
     ): Boolean {
-        if (providerId.value != MANGAFIRE_PROVIDER_ID) return false
+        val hid = when (providerId.value) {
+            MANGAFIRE_PROVIDER_ID -> candidate.externalWorkId
+            MANGAALL_PROVIDER_ID -> candidate.externalWorkId
+                .takeIf { it.startsWith(MANGAALL_MANGAFIRE_PREFIX) }
+                ?.removePrefix(MANGAALL_MANGAFIRE_PREFIX)
+                ?: return false
+            else -> return false
+        }
+        if (!MANGAFIRE_HID.matches(hid)) return false
         val canonicalSlug = normalizedQuery
             .replace(NON_SLUG_CHARACTERS, "-")
             .trim('-')
         if (canonicalSlug.isEmpty()) return false
         val url = candidate.url ?: return false
         val exactTitleUrl = Regex(
-            "^https://mangafire\\.to/title/${Regex.escape(candidate.externalWorkId)}-([a-z0-9-]+)/?$",
+            "^https://mangafire\\.to/title/${Regex.escape(hid)}-([a-z0-9-]+)/?$",
             RegexOption.IGNORE_CASE,
         )
         val pathSlug = exactTitleUrl.matchEntire(url)?.groupValues?.getOrNull(1)?.lowercase()
@@ -139,6 +174,9 @@ object ProviderWorkSourcePortfolio {
     }
 
     private const val MANGAFIRE_PROVIDER_ID = "app.tsuzuki.mangafire"
+    private const val MANGAALL_PROVIDER_ID = "app.tsuzuki.mangaall"
+    private const val MANGAALL_MANGAFIRE_PREFIX = "mangafire:"
+    private val MANGAFIRE_HID = Regex("[a-zA-Z0-9_-]{1,128}")
     private val NON_SLUG_CHARACTERS = Regex("[^a-z0-9]+")
     private val EDITION_SLUG_MARKERS = listOf(
         "fan-colored", "fan-coloredd", "fan-coloured",
