@@ -37,11 +37,13 @@ class ResolveMangaAllSelectedReadingOptionTest {
         resolver.select(title, "chapter-1", "en", listOf(first, second)) shouldBe null
         resolver.select(
             title,
+            "chapter-1",
             "en",
             listOf(option(refEn, "mangadot:wrong-source")),
         ) shouldBe null
         resolver.select(
             title,
+            "chapter-1",
             "en",
             listOf(option(refEn.copy(facetId = "pt-br"), "mangafire:first")),
         ) shouldBe null
