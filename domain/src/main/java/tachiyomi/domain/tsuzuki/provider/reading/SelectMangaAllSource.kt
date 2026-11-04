@@ -30,6 +30,7 @@ enum class MangaAllSourceSelectionResult {
     ALREADY_SELECTED,
     UNSUPPORTED,
     NOT_ASSOCIATED,
+    BLOCKED,
     UNAVAILABLE,
 }
 
@@ -54,6 +55,12 @@ class SelectMangaAllSource(
         val association = associations.get(ref)
         if (association?.canonicalTitleId != canonicalTitleId) {
             return MangaAllSourceSelectionResult.NOT_ASSOCIATED
+        }
+        if (
+            association.workVerification == ProviderWorkVerification.AUTHOR_CONFLICT ||
+            association.workVerification == ProviderWorkVerification.TITLE_UNVERIFIED
+        ) {
+            return MangaAllSourceSelectionResult.BLOCKED
         }
         val language = ref.facetId!!.lowercase()
         if (selections.get(canonicalTitleId, language)?.ref == ref) {
