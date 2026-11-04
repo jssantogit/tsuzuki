@@ -193,7 +193,7 @@ class SelectProviderReadingEdition(
                                                         query = searchTitle,
                                                         providerVersionCode = registration.descriptor.version.code,
                                                         configurationFingerprint =
-                                                            registration.configurationFingerprint,
+                                                        registration.configurationFingerprint,
                                                     )
                                                 }
                                             }
