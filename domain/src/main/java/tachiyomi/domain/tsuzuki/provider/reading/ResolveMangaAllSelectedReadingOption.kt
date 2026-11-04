@@ -29,9 +29,10 @@ class ResolveMangaAllSelectedReadingOption(
             return null
         }
         return verifiedOptions.filter { option ->
+            val source = option.contentSourceId
             option.bindingRef() == saved.ref &&
-                MangaAllReadingIdentity.sourceId(option.bindingRef()) != null &&
-                option.providerChapterId.startsWith(option.contentSourceId + ":") &&
+                source != null &&
+                option.providerChapterId.startsWith("$source:") &&
                 option.providerChapterId.substringAfter(':').isNotBlank()
         }.singleOrNull()
     }
