@@ -22,6 +22,9 @@ data class MangaAllSourceSelection(
 interface MangaAllSourceSelectionRepository {
     suspend fun get(canonicalTitleId: String, language: String): MangaAllSourceSelection?
 
+    /** Most recent explicit choice, used only to restore the user's active language. */
+    suspend fun getLatest(canonicalTitleId: String): MangaAllSourceSelection? = null
+
     /** Stores an explicit preference only while the selected work is still associated to this title. */
     suspend fun select(choice: MangaAllSourceSelection): Boolean
 }
