@@ -22,6 +22,7 @@ class ResolveMangaAllSelectedChapter(
         val validated = chapterSources.options(canonicalChapterId)
         return selectedSource.select(
             canonicalTitleId = chapter.canonicalTitleId,
+            canonicalChapterId = canonicalChapterId,
             requestedLanguage = requestedLanguage,
             verifiedOptions = validated,
         )
