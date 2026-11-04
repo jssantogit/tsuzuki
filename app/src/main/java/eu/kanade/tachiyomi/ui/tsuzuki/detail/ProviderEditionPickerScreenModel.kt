@@ -109,6 +109,7 @@ class ProviderEditionPickerScreenModel(
                         open = false,
                         confirming = false,
                         confirmation = null,
+                        activeRequestedLanguage = null,
                         revision = mutableState.value.revision + 1,
                     )
                 } else {
@@ -143,7 +144,13 @@ class ProviderEditionPickerScreenModel(
             return
         }
         operation?.cancel()
-        mutableState.value = current.copy(confirming = true, sourceSelection = null, confirmation = null)
+        // If changing a source fails, do not reopen the old language silently.
+        mutableState.value = current.copy(
+            confirming = true,
+            sourceSelection = null,
+            confirmation = null,
+            activeRequestedLanguage = null,
+        )
         operation = viewModelScope.launch {
             try {
                 val result = selectMangaAllSource.select(
@@ -161,7 +168,7 @@ class ProviderEditionPickerScreenModel(
                     ) {
                         candidate.ref.facetId
                     } else {
-                        mutableState.value.activeRequestedLanguage
+                        null
                     },
                     revision = if (
                         result == MangaAllSourceSelectionResult.SELECTED ||
