@@ -27,7 +27,7 @@ class ResolveMangaAllSelectedReadingOptionTest {
     }
 
     @Test
-    fun `duplicate source chapters and forged source IDs fail closed rather than selecting arbitrarily`() = runBlocking {
+    fun `duplicate chapters and forged source IDs fail closed`() = runBlocking {
         val resolver = ResolveMangaAllSelectedReadingOption(
             fakeSelection(MangaAllSourceSelection(title, refEn, 10)),
         )
