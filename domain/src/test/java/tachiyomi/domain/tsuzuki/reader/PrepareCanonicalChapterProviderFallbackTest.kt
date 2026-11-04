@@ -1,6 +1,8 @@
 package tachiyomi.domain.tsuzuki.reader
 
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
+import io.mockk.mockk
 import io.kotest.matchers.types.shouldBeInstanceOf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,6 +62,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterObservation
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderError
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceResolver
@@ -93,6 +96,49 @@ import tachiyomi.domain.tsuzuki.provider.ProviderCallResult as TorrentProviderCa
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult as ReadingProviderCallResult
 
 class PrepareCanonicalChapterProviderFallbackTest {
+
+    @Test
+    fun `ambiguous reading without an independent source requests a confirmed edition`() = runTest {
+        val chapter = CanonicalChapter(
+            id = "chapter-1",
+            canonicalTitleId = "title-1",
+            displayNumber = "1",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 1,
+            confidence = 1.0,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val options = listOf("work-a", "work-b").map { workId ->
+            ProviderChapterReadingOption(
+                canonicalChapterId = chapter.id,
+                bindingId = "source-$workId",
+                providerId = ProviderId("app.tsuzuki.mangafire"),
+                facetId = "en",
+                externalWorkId = workId,
+                providerChapterId = "chapter-$workId",
+            )
+        }
+        val resolver = mockk<ResolveProviderChapterReading>()
+        coEvery { resolver.options(chapter.id) } returns options
+        coEvery { resolver.uniqueUserConfirmedOption(chapter.id, options) } returns null
+        val reader = PrepareCanonicalChapterForReader(
+            resolveChapterContent = emptyAddonResolver(),
+            canonicalChapterRepository = chapterRepository(chapter),
+            canonicalReadingRepository = readingRepository(),
+            canonicalDownloadRepository = emptyDownloadRepository(),
+            canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+            },
+            chapterContentPreparer = mockk(),
+            structuredDiagnostics = RecordingStructuredDiagnosticRecorder(detailed = true),
+            resolveProviderChapterReading = resolver,
+        )
+        val unresolved = reader.execute(chapter.id)
+            .shouldBeInstanceOf<CanonicalReaderPreparation.ProviderEditionConfirmationRequired>()
+        unresolved.canonicalTitleId shouldBe chapter.canonicalTitleId
+        unresolved.candidateCount shouldBe 2
+    }
 
     @Test
     fun `unresolved work sources have distinct actionable preparation`() {
