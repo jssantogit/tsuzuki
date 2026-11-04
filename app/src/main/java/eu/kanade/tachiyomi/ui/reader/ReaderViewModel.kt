@@ -189,7 +189,7 @@ class ReaderViewModel(
      * resolve these coordinates lazily through the Tsuzuki compatibility bridge.
      */
     private val canonicalChapterId = savedState.get<String>("canonical_chapter")
-    private val canonicalPreferredLanguage = savedState.get<String>("canonical_language")
+    private var canonicalPreferredLanguage = savedState.get<String>("canonical_language")
 
     init {
         viewModelScope.launchIO {
@@ -1019,6 +1019,11 @@ class ReaderViewModel(
                             selectedOption = selection.option,
                             recordPreviousHistory = hadActiveSession,
                         )
+                        // A user-selected different content option supersedes the
+                        // MangaAll language previously requested at launch.
+                        // Adjacent chapters must not silently jump back to it.
+                        canonicalPreferredLanguage = null
+                        savedState.remove<String>("canonical_language")
                         withUIContext {
                             mutableState.update {
                                 it.copy(
