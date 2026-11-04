@@ -1317,6 +1317,7 @@ class ResolveProviderChapterReadingTest {
             "mangadex:verified-work" to "mangadex:201",
             "mangafire:729pj" to "mangafire:101",
         )
+        options.map { it.contentSourceId } shouldBe listOf("mangadex", "mangafire")
         reader.uniqueUserConfirmedOption(chapter.id, options) shouldBe null
         val unsafe = ProviderChapterReadingOption(
             canonicalChapterId = chapter.id,
