@@ -1,0 +1,10 @@
+-- MangaAll: explicit source choice remains independent from the preferred
+-- provider binding and all canonical/progress records. No data is migrated.
+CREATE TABLE tsuzuki_mangaall_source_selections(
+    canonical_title_id TEXT NOT NULL,
+    language TEXT NOT NULL,
+    external_work_id TEXT NOT NULL,
+    selected_at INTEGER NOT NULL,
+    PRIMARY KEY(canonical_title_id, language),
+    FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
+);
