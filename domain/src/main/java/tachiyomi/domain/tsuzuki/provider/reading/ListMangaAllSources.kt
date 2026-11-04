@@ -40,5 +40,4 @@ class ListMangaAllSources(
             )
         }.distinctBy { it.ref }
     }
-
 }
