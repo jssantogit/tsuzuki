@@ -13,6 +13,10 @@ class MangaAllReadingIdentityTest {
     fun `source and chapter IDs must remain paired inside one MangaAll provider`() {
         val fire = ProviderBindingRef(mangaAllId, "en", "mangafire:729pj")
         MangaAllReadingIdentity.accepts(fire, "mangafire:1234", "en") shouldBe true
+        MangaAllReadingIdentity.sourceId(fire) shouldBe "mangafire"
+        MangaAllReadingIdentity.sourceId(
+            ProviderBindingRef(mangaAllId, "en", "mangadex:uuid-1"),
+        ) shouldBe "mangadex"
         MangaAllReadingIdentity.accepts(fire, "mangadex:1234", "en") shouldBe false
         MangaAllReadingIdentity.accepts(fire, "1234", "en") shouldBe false
         MangaAllReadingIdentity.accepts(
@@ -55,6 +59,7 @@ class MangaAllReadingIdentityTest {
     @Test
     fun `legacy providers are not retroactively restricted by MangaAll source rules`() {
         val standalone = ProviderBindingRef(legacyId, "en", "729pj")
+        MangaAllReadingIdentity.sourceId(standalone) shouldBe null
         MangaAllReadingIdentity.accepts(standalone, "1234", null) shouldBe true
         MangaAllReadingIdentity.accepts(standalone, "1234", "en") shouldBe true
     }
