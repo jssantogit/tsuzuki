@@ -190,6 +190,7 @@ class ProviderWorkSourcePortfolioTest {
         )
         portfolio.map { it.ref.externalWorkId } shouldBe listOf("kx1p6")
     }
+
     @Test
     fun `MangaAll accepts only internal MangaFire candidates into verified source portfolio`() {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
