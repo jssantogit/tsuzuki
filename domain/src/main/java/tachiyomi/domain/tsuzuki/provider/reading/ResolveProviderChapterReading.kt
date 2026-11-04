@@ -38,6 +38,10 @@ data class ProviderChapterReadingOption(
         facetId = facetId,
         externalWorkId = externalWorkId,
     )
+
+    /** Name of the MangaAll content source, not a second installed Provider. */
+    val contentSourceId: String?
+        get() = MangaAllReadingIdentity.sourceId(bindingRef())
 }
 
 /**
