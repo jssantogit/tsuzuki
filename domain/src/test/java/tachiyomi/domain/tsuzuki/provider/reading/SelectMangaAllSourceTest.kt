@@ -31,7 +31,15 @@ class SelectMangaAllSourceTest {
         picker.select(title, english, at = 42) shouldBe MangaAllSourceSelectionResult.ALREADY_SELECTED
         selections.writes shouldBe 2
         picker.select(title, foreign, at = 43) shouldBe MangaAllSourceSelectionResult.NOT_ASSOCIATED
-        selections.writes shouldBe 2
+        val alternate = ProviderBindingRef(mangaAll, "en", "mangafire:other-edition")
+        val updatedPicker = SelectMangaAllSource(
+            fakeAssociations(listOf(associated(english), associated(portuguese), associated(alternate))),
+            selections,
+        )
+        updatedPicker.select(title, alternate, at = 44) shouldBe MangaAllSourceSelectionResult.SELECTED
+        selections.get(title, "en")?.ref shouldBe alternate
+        selections.get(title, "pt-br")?.ref shouldBe portuguese
+        selections.writes shouldBe 3
     }
 
     @Test
