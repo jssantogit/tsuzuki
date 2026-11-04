@@ -66,6 +66,6 @@ class ResolveMangaAllSelectedChapterTest {
         coEvery { chapters.getById("missing") } returns null
         ResolveMangaAllSelectedChapter(chapters, sources, selections).execute("missing", "en") shouldBe null
         coVerify(exactly = 0) { sources.options(any()) }
-        coVerify(exactly = 0) { selections.select(any(), any(), any()) }
+        coVerify(exactly = 0) { selections.select(any(), any(), any(), any()) }
     }
 }
