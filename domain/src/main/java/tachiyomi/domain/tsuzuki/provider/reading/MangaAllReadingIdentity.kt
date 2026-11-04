@@ -62,7 +62,10 @@ object MangaAllReadingIdentity {
         if (!supportsRequestedLanguage(ref)) return false
         // MangaDot IDs encode the upstream image endpoint to prevent accidental
         // uploads/chapters ambiguity and malformed IDs reaching the Reader.
-        if (workSource == "mangadot" && !Regex("^(uploads|chapters):[1-9][0-9]{0,15}$").matches(chapterLocalId)) return false
+        if (
+            workSource == "mangadot" &&
+            !Regex("^(uploads|chapters):[1-9][0-9]{0,15}$").matches(chapterLocalId)
+        ) return false
         return reportedLanguage?.lowercase() == language
     }
 }
