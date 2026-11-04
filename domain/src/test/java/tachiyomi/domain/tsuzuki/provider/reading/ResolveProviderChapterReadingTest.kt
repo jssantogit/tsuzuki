@@ -1264,7 +1264,7 @@ class ResolveProviderChapterReadingTest {
     }
 
     @Test
-    fun `MangaAll offers two attested sources in the same language without mixing source chapters`(): Unit = runBlocking {
+    fun `MangaAll keeps source identities separate and hides unreadable metadata-only chapters`(): Unit = runBlocking {
         val mangaAllId = ProviderId("app.tsuzuki.mangaall")
         val fire = binding.copy(
             id = "mangaall-fire",
@@ -1315,9 +1315,9 @@ class ResolveProviderChapterReadingTest {
         val options = reader.options(chapter.id)
         options.map { it.externalWorkId to it.providerChapterId } shouldBe listOf(
             "mangafire:729pj" to "mangafire:101",
-            "mangadex:verified-work" to "mangadex:201",
         )
-        options.map { it.contentSourceId } shouldBe listOf("mangafire", "mangadex")
+        options.map { it.contentSourceId } shouldBe listOf("mangafire")
+        MangaAllReadingIdentity.sourceId(dex.ref) shouldBe "mangadex"
         reader.uniqueUserConfirmedOption(chapter.id, options) shouldBe null
         val unsafe = ProviderChapterReadingOption(
             canonicalChapterId = chapter.id,
