@@ -95,6 +95,17 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult as ReadingPr
 class PrepareCanonicalChapterProviderFallbackTest {
 
     @Test
+    fun `unresolved work sources have distinct actionable preparation`() {
+        val unresolved = CanonicalReaderPreparation.ProviderEditionConfirmationRequired(
+            canonicalTitleId = "title-1",
+            canonicalChapterId = "chapter-1",
+            candidateCount = 3,
+        )
+        unresolved.canonicalTitleId shouldBe "title-1"
+        unresolved.candidateCount shouldBe 3
+    }
+
+    @Test
     fun `empty Provider audit runs only during detailed capture and never breaks Reader fallback`() = runTest {
         val chapter = CanonicalChapter(
             id = "chapter-1",
