@@ -91,6 +91,33 @@ class ProviderEditionPickerScreenModelTest {
     }
 
     @Test
+    fun `failed switch clears previously active Reader language instead of reopening wrong translation`() =
+        runTest(dispatcher) {
+            val pt = candidate.copy(ref = candidate.ref.copy(facetId = "pt-br"))
+            val edition = mockk<SelectProviderReadingEdition>()
+            val preference = mockk<SelectMangaAllSource>()
+            coEvery { edition.search("title-1", "Chainsaw Man") } returns ProviderEditionSearchResult(
+                candidates = listOf(candidate, pt),
+            )
+            coEvery { preference.select("title-1", candidate.ref, any()) } returns
+                MangaAllSourceSelectionResult.SELECTED
+            coEvery { preference.select("title-1", pt.ref, any()) } returns
+                MangaAllSourceSelectionResult.NOT_ASSOCIATED
+
+            val model = ProviderEditionPickerScreenModel(edition, preference)
+            model.start("title-1")
+            model.open("title-1", "Chainsaw Man")
+            advanceUntilIdle()
+            model.selectMangaAllSource(candidate)
+            advanceUntilIdle()
+            model.state.value.activeRequestedLanguage shouldBe "en"
+            model.selectMangaAllSource(pt)
+            advanceUntilIdle()
+            model.state.value.sourceSelection shouldBe MangaAllSourceSelectionResult.NOT_ASSOCIATED
+            model.state.value.activeRequestedLanguage shouldBe null
+        }
+
+    @Test
     fun `failed or unassociated preference cannot claim it was saved`() = runTest(dispatcher) {
         val edition = mockk<SelectProviderReadingEdition>()
         val preference = mockk<SelectMangaAllSource>()
