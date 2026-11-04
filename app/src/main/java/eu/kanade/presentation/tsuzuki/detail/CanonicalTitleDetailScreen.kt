@@ -2,6 +2,7 @@ package eu.kanade.presentation.tsuzuki.detail
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +59,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
@@ -422,6 +424,18 @@ private fun LoadedDetails(
                             label = { Text(stringResource(MR.strings.tsuzuki_edition_search)) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
+                            shape = DefaultSkinShape.Control,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = colors.accent,
+                                unfocusedBorderColor = colors.outline,
+                                focusedTextColor = colors.foreground,
+                                unfocusedTextColor = colors.foreground,
+                                focusedLabelColor = colors.secondary,
+                                unfocusedLabelColor = colors.secondary,
+                                cursorColor = colors.accent,
+                                focusedContainerColor = colors.surfaceMuted,
+                                unfocusedContainerColor = colors.surfaceMuted,
+                            ),
                         )
                         DefaultSkinTextAction(
                             text = stringResource(MR.strings.tsuzuki_edition_find),
@@ -447,8 +461,13 @@ private fun LoadedDetails(
                                 Modifier
                                     .fillMaxWidth()
                                     .background(
-                                        if (selected) colors.surfaceMuted else Color.Transparent,
-                                        DefaultSkinShape.Control,
+                                        if (selected) colors.surfaceMuted else colors.surface,
+                                        DefaultSkinShape.Card,
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (selected) colors.accent else colors.outline,
+                                        DefaultSkinShape.Card,
                                     )
                                     .selectable(
                                         selected = selected,
@@ -508,7 +527,7 @@ private fun LoadedDetails(
                         }
                     }
                     HorizontalDivider(color = colors.outline)
-                    DefaultSkinTextAction(
+                    DefaultSkinPrimaryButton(
                         text = stringResource(MR.strings.tsuzuki_edition_confirm),
                         onClick = { selectedEdition?.let(onEditionConfirm) },
                         modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp),
