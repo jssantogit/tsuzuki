@@ -1,7 +1,5 @@
 package tachiyomi.core.provider.supplychain
 
-// MangaAll GREEN CI trigger; tests and production behavior are unchanged.
-
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
@@ -60,11 +58,14 @@ class MangaAllFamilyCatalogTest {
     @Test
     fun `installed MangaFire is reused while missing MangaAll sources remain installable`() {
         val entries = active.map { id ->
-            entry(id, status = if (id == "app.tsuzuki.mangafire") {
-                ProviderRepositoryEntryStatus.INSTALLED
-            } else {
-                ProviderRepositoryEntryStatus.AVAILABLE
-            })
+            entry(
+                id,
+                status = if (id == "app.tsuzuki.mangafire") {
+                    ProviderRepositoryEntryStatus.INSTALLED
+                } else {
+                    ProviderRepositoryEntryStatus.AVAILABLE
+                },
+            )
         }
         val family = MangaAllFamilyCatalog.discoverGroups(entries).single()
         family.isComplete shouldBe true
