@@ -51,6 +51,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 data class CanonicalTitleScreen(
     val canonicalTitleId: String,
     val openSourceBindingFlow: Boolean = false,
+    val openEditionPicker: Boolean = false,
     val finishOnNavigateUp: Boolean = false,
 ) : Screen() {
 
@@ -94,6 +95,7 @@ data class CanonicalTitleScreen(
         val linkState by linkViewModel.state.collectAsStateWithLifecycle()
         var linkSheetOpen by rememberSaveable(canonicalTitleId) { mutableStateOf(false) }
         var initialLinkFlowOpened by rememberSaveable(canonicalTitleId) { mutableStateOf(false) }
+        var initialEditionPickerOpened by rememberSaveable(canonicalTitleId) { mutableStateOf(false) }
         val state by screenModel.state.collectAsStateWithLifecycle()
         val contentSelectorState by contentSelectorViewModel.state.collectAsStateWithLifecycle()
         val loaded = (state as? CanonicalTitleScreenState.Loaded)
@@ -133,6 +135,19 @@ data class CanonicalTitleScreen(
                 inventoryModel.cancel()
                 adoptionModel.dismiss()
                 editionModel.dismiss()
+            }
+        }
+        LaunchedEffect(canonicalTitleId, openEditionPicker, loaded?.title?.displayTitle) {
+            if (
+                shouldAutoOpenProviderEditionPicker(
+                    canonicalTitleId = canonicalTitleId,
+                    requested = openEditionPicker,
+                    alreadyOpened = initialEditionPickerOpened,
+                    titleLoaded = loaded != null,
+                )
+            ) {
+                initialEditionPickerOpened = true
+                loaded?.let { editionModel.open(canonicalTitleId, it.title.displayTitle) }
             }
         }
         LaunchedEffect(canonicalTitleId, inventoryState.revision) {
@@ -414,3 +429,10 @@ internal fun shouldAutoOpenSourceBindingFlow(
     requested: Boolean,
     alreadyOpened: Boolean,
 ): Boolean = canonicalTitleId.isNotBlank() && requested && !alreadyOpened
+
+internal fun shouldAutoOpenProviderEditionPicker(
+    canonicalTitleId: String,
+    requested: Boolean,
+    alreadyOpened: Boolean,
+    titleLoaded: Boolean,
+): Boolean = canonicalTitleId.isNotBlank() && requested && titleLoaded && !alreadyOpened
