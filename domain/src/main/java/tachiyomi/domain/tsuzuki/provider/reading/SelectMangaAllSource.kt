@@ -21,6 +21,7 @@ data class MangaAllSourceSelection(
 
 interface MangaAllSourceSelectionRepository {
     suspend fun get(canonicalTitleId: String, language: String): MangaAllSourceSelection?
+
     /** Stores an explicit preference only while the selected work is still associated to this title. */
     suspend fun select(choice: MangaAllSourceSelection): Boolean
 }
