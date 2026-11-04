@@ -436,6 +436,14 @@ class ReaderViewModel(
                                 closeReaderOnDismiss = true,
                             )
                         }
+                        is CanonicalReaderPreparation.ProviderEditionConfirmationRequired -> {
+                            showContentSelector(
+                                canonicalTitleId = preparation.canonicalTitleId,
+                                canonicalChapterId = preparation.canonicalChapterId,
+                                closeReaderOnDismiss = true,
+                                recovery = ReaderRecovery.EDITION_CONFIRMATION_REQUIRED,
+                            )
+                        }
                         is CanonicalReaderPreparation.Unavailable -> {
                             val chapter = canonicalChapterRepository.getById(canonicalId)
                                 ?: error("Canonical chapter $canonicalId not found")
@@ -947,11 +955,13 @@ class ReaderViewModel(
         canonicalTitleId: String,
         canonicalChapterId: String,
         closeReaderOnDismiss: Boolean,
+        recovery: ReaderRecovery? = null,
     ) {
         withUIContext {
             mutableState.update {
                 it.copy(
                     canonicalTitleId = canonicalTitleId,
+                    recovery = recovery,
                     sessionPresentation = it.sessionPresentation.dismiss(),
                     dialog = Dialog.ContentSelector(
                         canonicalTitleId = canonicalTitleId,
@@ -1041,6 +1051,14 @@ class ReaderViewModel(
                             canonicalTitleId = preparation.canonicalTitleId,
                             canonicalChapterId = preparation.canonicalChapterId,
                             closeReaderOnDismiss = !hadActiveSession,
+                        )
+                    }
+                    is CanonicalReaderPreparation.ProviderEditionConfirmationRequired -> {
+                        showContentSelector(
+                            canonicalTitleId = preparation.canonicalTitleId,
+                            canonicalChapterId = preparation.canonicalChapterId,
+                            closeReaderOnDismiss = !hadActiveSession,
+                            recovery = ReaderRecovery.EDITION_CONFIRMATION_REQUIRED,
                         )
                     }
                     is CanonicalReaderPreparation.Unavailable -> {
@@ -1591,6 +1609,15 @@ class ReaderViewModel(
                         canonicalTitleId = preparation.canonicalTitleId,
                         canonicalChapterId = preparation.canonicalChapterId,
                         closeReaderOnDismiss = false,
+                    )
+                    false
+                }
+                is CanonicalReaderPreparation.ProviderEditionConfirmationRequired -> {
+                    showContentSelector(
+                        canonicalTitleId = preparation.canonicalTitleId,
+                        canonicalChapterId = preparation.canonicalChapterId,
+                        closeReaderOnDismiss = false,
+                        recovery = ReaderRecovery.EDITION_CONFIRMATION_REQUIRED,
                     )
                     false
                 }
