@@ -277,7 +277,18 @@ class PrepareCanonicalChapterForReader(
                 // candidate, but it must not suppress a separately verified
                 // torrent archive. That fallback runs its own chapter/volume
                 // identity checks and can still fail closed when ambiguous.
-                return prepareProviderTorrentFallback(canonicalChapterId, trace)
+                val alternative = prepareProviderTorrentFallback(canonicalChapterId, trace)
+                if (alternative is CanonicalReaderPreparation.Unavailable) {
+                    val canonicalTitleId = canonicalChapterRepository.getById(canonicalChapterId)?.canonicalTitleId
+                    if (canonicalTitleId != null) {
+                        return CanonicalReaderPreparation.ProviderEditionConfirmationRequired(
+                            canonicalTitleId = canonicalTitleId,
+                            canonicalChapterId = canonicalChapterId,
+                            candidateCount = options.size,
+                        )
+                    }
+                }
+                return alternative
             }
 
             val option = explicitlyConfirmedOption ?: options.singleOrNull()
@@ -552,6 +563,17 @@ class PrepareCanonicalChapterForReader(
                 attributes = mapOf(
                     DiagnosticAttribute.CANDIDATE_COUNT to
                         DiagnosticAttributeValue.Number(result.options.size.toLong()),
+                ),
+            )
+            is CanonicalReaderPreparation.ProviderEditionConfirmationRequired -> trace.event(
+                subsystem = DiagnosticSubsystem.READER,
+                name = DiagnosticEventName.READER_OPEN_COMPLETED,
+                stage = DiagnosticStage.COMPLETE,
+                outcome = DiagnosticOutcome.NEEDS_CONFIRMATION,
+                durationMillis = duration,
+                attributes = mapOf(
+                    DiagnosticAttribute.CANDIDATE_COUNT to
+                        DiagnosticAttributeValue.Number(result.candidateCount.toLong()),
                 ),
             )
             is CanonicalReaderPreparation.Unavailable -> trace.event(
