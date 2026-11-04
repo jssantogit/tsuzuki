@@ -34,6 +34,21 @@ class MangaAllSourceSelectionRepositoryImpl(
             )
         }.awaitAsOneOrNull()
 
+    override suspend fun getLatest(canonicalTitleId: String): MangaAllSourceSelection? =
+        database.tsuzuki_mangaall_source_selectionsQueries.getLatestMangaAllSourceSelection(
+            canonicalTitleId = canonicalTitleId,
+        ) { titleId, facet, workId, selectedAt ->
+            MangaAllSourceSelection(
+                canonicalTitleId = titleId,
+                ref = ProviderBindingRef(
+                    providerId = ProviderId("app.tsuzuki.mangaall"),
+                    facetId = facet,
+                    externalWorkId = workId,
+                ),
+                selectedAt = selectedAt,
+            )
+        }.awaitAsOneOrNull()
+
     override suspend fun select(choice: MangaAllSourceSelection): Boolean {
         val language = choice.ref.facetId ?: return false
         database.tsuzuki_mangaall_source_selectionsQueries.selectMangaAllSource(
