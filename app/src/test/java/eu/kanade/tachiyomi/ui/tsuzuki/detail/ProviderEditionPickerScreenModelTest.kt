@@ -84,7 +84,9 @@ class ProviderEditionPickerScreenModelTest {
         model.open("title-1", "Chainsaw Man")
         advanceUntilIdle()
         model.selectMangaAllSource(candidate.copy(ref = candidate.ref.copy(externalWorkId = "mangafire:other")))
-        model.selectMangaAllSource(candidate.copy(ref = candidate.ref.copy(providerId = ProviderId("app.tsuzuki.mangafire"))))
+        model.selectMangaAllSource(
+            candidate.copy(ref = candidate.ref.copy(providerId = ProviderId("app.tsuzuki.mangafire"))),
+        )
         model.start("title-2")
         model.selectMangaAllSource(candidate)
         coVerify(exactly = 0) { preference.select(any(), any(), any()) }
