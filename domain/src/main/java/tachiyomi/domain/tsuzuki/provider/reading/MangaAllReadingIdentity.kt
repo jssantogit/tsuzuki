@@ -18,6 +18,12 @@ object MangaAllReadingIdentity {
         "mangafire" to setOf("en"),
     )
 
+    // The MangaAll package advertises reading.pages globally, but as of v0.1.0
+    // only MangaFire actually exports verified pages. MangaDex/MangaDot remain
+    // chapter-evidence sources. Update this closed contract only after those
+    // source implementations pass real Reader/permissions/attribution gates.
+    private val readerReadySources = setOf("mangafire")
+
     /** Content source for UI/diagnostics, distinct from the one Provider ID. */
     fun sourceId(ref: ProviderBindingRef): String? {
         if (ref.providerId.value != PROVIDER_ID) return null
@@ -33,6 +39,7 @@ object MangaAllReadingIdentity {
     ): Boolean {
         if (ref.providerId.value != PROVIDER_ID) return true
         val workSource = sourceId(ref) ?: return false
+        if (workSource !in readerReadySources) return false
         val workLocalId = ref.externalWorkId.substringAfter(':', missingDelimiterValue = "")
         val chapterSource = providerChapterId.substringBefore(':', missingDelimiterValue = "")
         val chapterLocalId = providerChapterId.substringAfter(':', missingDelimiterValue = "")
