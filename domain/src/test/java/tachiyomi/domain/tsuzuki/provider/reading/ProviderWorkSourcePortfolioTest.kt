@@ -190,4 +190,69 @@ class ProviderWorkSourcePortfolioTest {
         )
         portfolio.map { it.ref.externalWorkId } shouldBe listOf("kx1p6")
     }
+    @Test
+    fun `MangaAll accepts only internal MangaFire candidates into verified source portfolio`() {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val verified = original.copy(
+            externalWorkId = "mangafire:kx1p6",
+            title = "Chainsaw Man",
+            url = "https://mangafire.to/title/kx1p6-chainsaw-man",
+        )
+        val unverified = original.copy(
+            externalWorkId = "mangadex:11111111-2222-4333-8444-555555555555",
+            url = "https://mangafire.to/title/kx1p6-chainsaw-man",
+        )
+        val fake = original.copy(externalWorkId = "mangafire:", title = "Chainsaw Man")
+        val candidates = ProviderWorkSourcePortfolio.trustedCandidates(
+            providerId = mangaAll,
+            facetId = "en",
+            candidates = listOf(verified, unverified, fake),
+        )
+        candidates shouldBe listOf(verified)
+        ProviderWorkSourcePortfolio.trustedCandidates(mangaAll, "pt-br", listOf(verified)) shouldBe emptyList()
+        ProviderWorkSourcePortfolio.trustedCandidates(
+            ProviderId("org.example.unrelated"),
+            "en",
+            listOf(verified),
+        ) shouldBe emptyList()
+        val assessments = ProviderWorkSourcePortfolio.assess(
+            providerId = mangaAll,
+            facetId = "en",
+            queryTitle = "Chainsaw Man",
+            independentlyVerifiedAuthors = setOf("Fujimoto Tatsuki"),
+            candidates = candidates,
+        )
+        assessments.single().ref.externalWorkId shouldBe "mangafire:kx1p6"
+        assessments.single().workVerification shouldBe ProviderWorkVerification.AUTHOR_CORROBORATED
+        assessments.single().canPromoteChapters shouldBe false
+        assessments.single().canOpenReader shouldBe false
+    }
+
+    @Test
+    fun `MangaAll MangaFire internal HID URL still attests special edition and forbids foreign origin`() {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val colored = original.copy(
+            externalWorkId = "mangafire:729pj",
+            title = "One Punch-Man",
+            url = "https://mangafire.to/title/729pj-one-punch-man-fan-coloredd",
+            authors = listOf("ONE"),
+        )
+        ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
+            mangaAll,
+            colored,
+            "One Punch-Man",
+        ) shouldBe true
+        ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
+            mangaAll,
+            colored.copy(url = "https://mangadot.net/title/729pj-one-punch-man-fan-coloredd"),
+            "One Punch-Man",
+        ) shouldBe false
+        ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
+            mangaAll,
+            colored.copy(externalWorkId = "mangadot:729pj"),
+            "One Punch-Man",
+        ) shouldBe false
+    }
+
+
 }
