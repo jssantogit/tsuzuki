@@ -16,9 +16,8 @@ data class MangaAllSourceAlternative(
     val workVerification: ProviderWorkVerification,
     val editionQualification: ProviderSourceEditionQualification,
 ) {
-    val canReadPages: Boolean get() = false
-    val isPreferred: Boolean get() = false
-    val languageAttested: Boolean get() = false
+    /** Observing a work does not certify a readable chapter or translation. */
+    val isReaderVerified: Boolean get() = false
 }
 
 @Inject
