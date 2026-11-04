@@ -80,6 +80,19 @@ class ProviderEditionPickerScreenModel(
         }
     }
 
+    /**
+     * A Reader launch waits for persisted language restoration, so opening a
+     * chapter during screen startup cannot quietly use the old default source.
+     */
+    suspend fun requestedLanguageForReader(canonicalTitleId: String): String? {
+        restoreJob?.join()
+        return if (titleId == canonicalTitleId) {
+            mutableState.value.activeRequestedLanguage
+        } else {
+            null
+        }
+    }
+
     fun open(canonicalTitleId: String, displayTitle: String) {
         if (canonicalTitleId != titleId || displayTitle.isBlank()) return
         mutableState.value = mutableState.value.copy(open = true, confirmation = null, sourceSelection = null)
