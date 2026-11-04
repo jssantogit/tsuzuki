@@ -251,6 +251,7 @@ class ProviderReadingBindingRepositoryImplTest {
         selections.select(portuguese) shouldBe true
         selections.get("title", "en") shouldBe english
         selections.get("title", "pt-br") shouldBe portuguese
+        selections.getLatest("title") shouldBe portuguese
         repository.getByTitle("title") shouldBe listOf(preferred)
 
         val stale = english.copy(ref = en.copy(externalWorkId = "mangafire:unobserved"), selectedAt = 120)
