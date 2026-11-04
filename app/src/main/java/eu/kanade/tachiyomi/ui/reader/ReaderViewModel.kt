@@ -419,6 +419,7 @@ class ReaderViewModel(
                     when (
                         val preparation = prepareCanonicalChapterForReader.execute(
                             canonicalChapterId = canonicalId,
+                            requestedMangaAllLanguage = canonicalPreferredLanguage,
                         )
                     ) {
                         is CanonicalReaderPreparation.Ready -> {
@@ -1592,6 +1593,7 @@ class ReaderViewModel(
             when (
                 val preparation = prepareCanonicalChapterForReader.execute(
                     canonicalChapterId = adjacent.id,
+                    requestedMangaAllLanguage = canonicalPreferredLanguage,
                 )
             ) {
                 is CanonicalReaderPreparation.Ready -> {
