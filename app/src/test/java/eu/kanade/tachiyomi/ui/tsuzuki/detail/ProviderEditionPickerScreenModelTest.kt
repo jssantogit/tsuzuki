@@ -15,6 +15,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelection
+import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionRepository
 import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionCandidate
@@ -42,6 +44,31 @@ class ProviderEditionPickerScreenModelTest {
     @AfterEach
     fun tearDown() = Dispatchers.resetMain()
 
+    private fun model(
+        edition: SelectProviderReadingEdition,
+        preference: SelectMangaAllSource,
+        restored: MangaAllSourceSelection? = null,
+    ): ProviderEditionPickerScreenModel {
+        val repository = mockk<MangaAllSourceSelectionRepository>()
+        coEvery { repository.getLatest(any()) } returns restored
+        return ProviderEditionPickerScreenModel(edition, preference, repository)
+    }
+
+    @Test
+    fun `a saved MangaAll translation restores its selected language after reentering the title`() =
+        runTest(dispatcher) {
+            val selected = MangaAllSourceSelection("title-1", candidate.ref, 500)
+            val viewModel = model(mockk(), mockk(), restored = selected)
+            viewModel.start("title-1")
+            advanceUntilIdle()
+            viewModel.state.value.activeRequestedLanguage shouldBe "en"
+            viewModel.dismiss()
+            viewModel.state.value.activeRequestedLanguage shouldBe "en"
+            viewModel.start("title-2")
+            advanceUntilIdle()
+            viewModel.state.value.activeRequestedLanguage shouldBe null
+        }
+
     @Test
     fun `explicit MangaAll source choice updates state without confirming or replacing an edition`() =
         runTest(dispatcher) {
@@ -54,7 +81,7 @@ class ProviderEditionPickerScreenModelTest {
                 preference.select("title-1", candidate.ref, any())
             } returns MangaAllSourceSelectionResult.SELECTED
 
-            val model = ProviderEditionPickerScreenModel(edition, preference)
+            val model = model(edition, preference)
             model.start("title-1")
             model.open("title-1", "Chainsaw Man")
             advanceUntilIdle()
@@ -79,7 +106,7 @@ class ProviderEditionPickerScreenModelTest {
         coEvery { edition.search("title-1", "Chainsaw Man") } returns ProviderEditionSearchResult(
             candidates = listOf(candidate),
         )
-        val model = ProviderEditionPickerScreenModel(edition, preference)
+        val model = model(edition, preference)
         model.start("title-1")
         model.open("title-1", "Chainsaw Man")
         advanceUntilIdle()
@@ -106,7 +133,7 @@ class ProviderEditionPickerScreenModelTest {
             coEvery { preference.select("title-1", pt.ref, any()) } returns
                 MangaAllSourceSelectionResult.NOT_ASSOCIATED
 
-            val model = ProviderEditionPickerScreenModel(edition, preference)
+            val model = model(edition, preference)
             model.start("title-1")
             model.open("title-1", "Chainsaw Man")
             advanceUntilIdle()
@@ -129,7 +156,7 @@ class ProviderEditionPickerScreenModelTest {
         coEvery {
             preference.select("title-1", candidate.ref, any())
         } returns MangaAllSourceSelectionResult.NOT_ASSOCIATED
-        val model = ProviderEditionPickerScreenModel(edition, preference)
+        val model = model(edition, preference)
         model.start("title-1")
         model.open("title-1", "Chainsaw Man")
         advanceUntilIdle()
