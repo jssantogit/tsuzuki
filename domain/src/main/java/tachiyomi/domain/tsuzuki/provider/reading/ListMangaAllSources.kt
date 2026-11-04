@@ -30,7 +30,7 @@ class ListMangaAllSources(
             val ref = association.ref
             val source = MangaAllReadingIdentity.sourceId(ref) ?: return@mapNotNull null
             val language = ref.facetId?.lowercase() ?: return@mapNotNull null
-            if (language !in LANGUAGES[source].orEmpty()) return@mapNotNull null
+            if (!MangaAllReadingIdentity.supportsRequestedLanguage(ref)) return@mapNotNull null
             MangaAllSourceAlternative(
                 ref = ref,
                 sourceId = source,
@@ -41,11 +41,4 @@ class ListMangaAllSources(
         }.distinctBy { it.ref }
     }
 
-    private companion object {
-        val LANGUAGES = mapOf(
-            "mangafire" to setOf("en"),
-            "mangadex" to setOf("en", "pt-br"),
-            "mangadot" to setOf("en", "pt-br"),
-        )
-    }
 }
