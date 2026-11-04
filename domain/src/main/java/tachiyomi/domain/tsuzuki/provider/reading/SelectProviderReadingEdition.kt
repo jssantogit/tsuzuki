@@ -23,10 +23,6 @@ data class ProviderEditionCandidate(
     val configurationFingerprint: String,
     /** An exact source language or Provider facet, never inferred from the canonical work. */
     val language: String? = null,
-    /** Internal MangaAll content source, never another installed Provider. */
-    val contentSourceId: String?
-        get() = MangaAllReadingIdentity.sourceId(ref)
-
     /** Source-attested creators; absence means unknown, not a mismatch. */
     val authors: List<String> = emptyList(),
     /** Source-declared chapter count; not a promise of editorial completeness. */
@@ -35,6 +31,10 @@ data class ProviderEditionCandidate(
     val observedChapterCount: Int? = null,
     val coverageHasMore: Boolean? = null,
 ) {
+    /** Internal MangaAll content source, never another installed Provider. */
+    val contentSourceId: String?
+        get() = MangaAllReadingIdentity.sourceId(ref)
+
     /**
      * Metadata may change during the confirmation re-query. Keep the safety
      * check anchored to the same exact source record, language and grants.
