@@ -59,6 +59,21 @@ class SelectMangaAllSourceTest {
         selections.writes shouldBe 0
     }
 
+    @Test
+    fun `author conflict and unverified title cannot be saved as preferred source`() = runBlocking {
+        val associations = fakeAssociations(
+            listOf(
+                associated(english).copy(workVerification = ProviderWorkVerification.AUTHOR_CONFLICT),
+                associated(portuguese).copy(workVerification = ProviderWorkVerification.TITLE_UNVERIFIED),
+            ),
+        )
+        val selections = MemorySelections()
+        val picker = SelectMangaAllSource(associations, selections)
+        picker.select(title, english, 60) shouldBe MangaAllSourceSelectionResult.BLOCKED
+        picker.select(title, portuguese, 60) shouldBe MangaAllSourceSelectionResult.BLOCKED
+        selections.writes shouldBe 0
+    }
+
     private fun associated(
         ref: ProviderBindingRef,
         title: String = this.title,
