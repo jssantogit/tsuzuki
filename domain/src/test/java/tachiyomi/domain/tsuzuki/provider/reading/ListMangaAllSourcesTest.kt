@@ -29,7 +29,10 @@ class ListMangaAllSourcesTest {
             association("mangafire", "en", "fire-2"),
             association("mangadex", "pt-br", "dex-1", ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE),
             association("mangadot", "en", "dot-1", ProviderWorkVerification.AUTHOR_CONFLICT),
-            association("mangafire", "en", "colored", edition = ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT),
+            association(
+                "mangafire", "en", "colored",
+                edition = ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT,
+            ),
             association("mangafire", "fr", "wrong-language"),
             association("mangaball", "en", "unavailable"),
             ProviderWorkSourceAssociation(
@@ -43,7 +46,8 @@ class ListMangaAllSourcesTest {
         val repository = object : ProviderWorkSourceAssociationRepository {
             override suspend fun observe(association: ProviderWorkSourceAssociation) = error("read only")
             override suspend fun get(ref: ProviderBindingRef): ProviderWorkSourceAssociation? = null
-            override suspend fun getByTitle(canonicalTitleId: String) = associations.also { canonicalTitleId shouldBe canonical }
+            override suspend fun getByTitle(canonicalTitleId: String) =
+                associations.also { canonicalTitleId shouldBe canonical }
         }
         val result = ListMangaAllSources(repository).execute(canonical)
         result.map { it.ref.externalWorkId } shouldBe listOf(
