@@ -21,6 +21,15 @@ class CanonicalTitleSourceBindingLaunchTest {
     }
 
     @Test
+    fun `explicit Reader edition recovery opens picker only after title is loaded and only once`() {
+        shouldAutoOpenProviderEditionPicker("title-1", true, false, true) shouldBe true
+        shouldAutoOpenProviderEditionPicker("title-1", true, false, false) shouldBe false
+        shouldAutoOpenProviderEditionPicker("title-1", true, true, true) shouldBe false
+        shouldAutoOpenProviderEditionPicker("title-1", false, false, true) shouldBe false
+        shouldAutoOpenProviderEditionPicker("  ", true, false, true) shouldBe false
+    }
+
+    @Test
     fun `binding flow does not open when request or canonical title is invalid`() {
         shouldAutoOpenSourceBindingFlow(
             canonicalTitleId = "canonical-title-1",
