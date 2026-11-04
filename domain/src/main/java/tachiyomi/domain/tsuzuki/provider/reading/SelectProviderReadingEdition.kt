@@ -21,7 +21,58 @@ data class ProviderEditionCandidate(
     val query: String,
     val providerVersionCode: Long,
     val configurationFingerprint: String,
-)
+    /** An exact source language or Provider facet, never inferred from the canonical work. */
+    val language: String? = null,
+    /** Source-attested creators; absence means unknown, not a mismatch. */
+    val authors: List<String> = emptyList(),
+    /** Source-declared chapter count; not a promise of editorial completeness. */
+    val chapterCount: Int? = null,
+    /** Bounded, observed first-page evidence; never a total chapter count. */
+    val observedChapterCount: Int? = null,
+    val coverageHasMore: Boolean? = null,
+) {
+    /**
+     * Metadata may change during the confirmation re-query. Keep the safety
+     * check anchored to the same exact source record, language and grants.
+     */
+    fun sameSourceIdentityAs(other: ProviderEditionCandidate): Boolean =
+        ref == other.ref &&
+            providerName == other.providerName &&
+            title == other.title &&
+            url == other.url &&
+            query == other.query &&
+            providerVersionCode == other.providerVersionCode &&
+            configurationFingerprint == other.configurationFingerprint &&
+            language == other.language
+}
+
+/** Preserve the Provider's distinct declared and observed evidence in the picker only. */
+internal fun editionCandidateFromLookup(
+    ref: ProviderBindingRef,
+    providerName: String,
+    work: ProviderWorkCandidate,
+    query: String,
+    providerVersionCode: Long,
+    configurationFingerprint: String,
+): ProviderEditionCandidate {
+    require(ref.externalWorkId == work.externalWorkId)
+    return ProviderEditionCandidate(
+        ref = ref,
+        providerName = providerName,
+        title = work.title,
+        url = work.url,
+        query = query,
+        providerVersionCode = providerVersionCode,
+        configurationFingerprint = configurationFingerprint,
+        language = work.language ?: ref.facetId,
+        authors = work.authors,
+        chapterCount = work.chapterCount,
+        observedChapterCount = work.coverageObservedCount
+            .takeIf { work.coverageOutcome == ProviderCoverageOutcome.OBSERVED },
+        coverageHasMore = work.coverageHasMore
+            .takeIf { work.coverageOutcome == ProviderCoverageOutcome.OBSERVED },
+    )
+}
 
 data class ProviderEditionSearchResult(
     val candidates: List<ProviderEditionCandidate> = emptyList(),
@@ -103,7 +154,12 @@ class SelectProviderReadingEdition(
                                 val response = try {
                                     gateway.lookup(
                                         registration.descriptor.id,
-                                        ProviderReadingLookupRequest(listOf(searchTitle)),
+                                        ProviderReadingLookupRequest(
+                                            titles = listOf(searchTitle),
+                                            // The explicit picker may inspect a bounded preview,
+                                            // never infer a canonical or complete inventory.
+                                            coverageEvidenceVersion = if (selectedRef == null) 1 else null,
+                                        ),
                                     )
                                 } catch (error: CancellationException) {
                                     throw error
@@ -126,19 +182,18 @@ class SelectProviderReadingEdition(
                                                     item.language == null ||
                                                     item.language.equals(facetId, ignoreCase = true)
                                                 ) {
-                                                    candidates += ProviderEditionCandidate(
+                                                    candidates += editionCandidateFromLookup(
                                                         ref = ProviderBindingRef(
                                                             providerId = registration.descriptor.id,
                                                             facetId = facetId,
                                                             externalWorkId = item.externalWorkId,
                                                         ),
                                                         providerName = registration.descriptor.name,
-                                                        title = item.title,
-                                                        url = item.url,
+                                                        work = item,
                                                         query = searchTitle,
                                                         providerVersionCode = registration.descriptor.version.code,
                                                         configurationFingerprint =
-                                                        registration.configurationFingerprint,
+                                                            registration.configurationFingerprint,
                                                     )
                                                 }
                                             }
@@ -188,7 +243,7 @@ class SelectProviderReadingEdition(
 
         // Re-query under the current grants/version, never trust a stale selection.
         val refreshed = searchScoped(canonicalTitleId, candidate.query, selectedRef = candidate.ref)
-        if (refreshed.candidates.none { it == candidate }) {
+        if (refreshed.candidates.none { it.sameSourceIdentityAs(candidate) }) {
             return if (refreshed.hadFailures) {
                 ProviderEditionConfirmation.UNAVAILABLE
             } else {
