@@ -14,12 +14,12 @@ internal fun editionCandidateMetadata(candidate: ProviderEditionCandidate): List
     val hasMore = candidate.coverageHasMore
     val chapters = when {
         reported != null && (observed == null || observed <= reported) ->
-            "${reported} informados pela fonte"
+            "$reported informados pela fonte"
         observed != null && reported != null ->
-            "${observed} observados (contagem informada divergente)"
+            "$observed observados (contagem informada divergente)"
         observed != null && hasMore == true ->
-            "ao menos ${observed} observados (parcial)"
-        observed != null -> "${observed} observados"
+            "ao menos $observed observados (parcial)"
+        observed != null -> "$observed observados"
         else -> "não informado"
     }
 
