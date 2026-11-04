@@ -51,8 +51,8 @@ import tachiyomi.presentation.core.i18n.stringResource
 data class CanonicalTitleScreen(
     val canonicalTitleId: String,
     val openSourceBindingFlow: Boolean = false,
-    val openEditionPicker: Boolean = false,
     val finishOnNavigateUp: Boolean = false,
+    val openEditionPicker: Boolean = false,
 ) : Screen() {
 
     @Composable
