@@ -1,4 +1,5 @@
 name: APK Build
+# #176 explicit Reader edition recovery; temporary signed smoke, do not merge.
 
 on:
   workflow_dispatch:
