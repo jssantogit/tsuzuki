@@ -40,7 +40,14 @@ internal fun editionCandidateMetadata(candidate: ProviderEditionCandidate): List
         else -> "Autores: ${authors.take(2).joinToString(", ")} e mais ${authors.size - 2}"
     }
 
-    return listOf(
+    val sourceLabel = when (candidate.contentSourceId) {
+        "mangadex" -> "Fonte: MangaDex"
+        "mangadot" -> "Fonte: MangaDot"
+        "mangafire" -> "Fonte: MangaFire"
+        else -> null
+    }
+    return listOfNotNull(
+        sourceLabel,
         "Capítulos: $chapters",
         "Idioma: $language",
         authorText,
