@@ -35,7 +35,8 @@ object MangaAllReadingIdentity {
     /** A language facet is requested, not evidence that translated pages exist. */
     fun supportsRequestedLanguage(ref: ProviderBindingRef): Boolean {
         val source = sourceId(ref) ?: return false
-        return ref.facetId?.lowercase() in supportedLanguages[source].orEmpty()
+        val language = ref.facetId?.lowercase() ?: return false
+        return language in supportedLanguages[source].orEmpty()
     }
 
     fun accepts(
