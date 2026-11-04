@@ -171,6 +171,9 @@ class ResolveProviderChapterReading(
             .mapNotNull { persisted ->
                 val providerChapterId = persisted.evidence.externalChapterKey ?: return@mapNotNull null
                 val (bindingId, ref) = sources[persisted.evidence.producerId] ?: return@mapNotNull null
+                if (!MangaAllReadingIdentity.accepts(ref, providerChapterId, persisted.evidence.providerMetadata?.language)) {
+                    return@mapNotNull null
+                }
                 ProviderChapterReadingOption(
                     canonicalChapterId = canonicalChapterId,
                     bindingId = bindingId,
@@ -441,7 +444,12 @@ class ResolveProviderChapterReading(
             evidence.producerKind != ProducerKind.PROVIDER ||
             evidence.authority != ChapterEvidenceAuthority.PROVIDER_PROVISIONAL ||
             evidence.producerId != option.bindingRef().evidenceProducerId() ||
-            evidence.externalChapterKey != option.providerChapterId
+            evidence.externalChapterKey != option.providerChapterId ||
+            !MangaAllReadingIdentity.accepts(
+                option.bindingRef(),
+                option.providerChapterId,
+                evidence.providerMetadata?.language,
+            )
         ) {
             return null
         }
