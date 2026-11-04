@@ -18,13 +18,21 @@ object MangaAllReadingIdentity {
         "mangafire" to setOf("en"),
     )
 
+    /** Content source for UI/diagnostics, distinct from the one Provider ID. */
+    fun sourceId(ref: ProviderBindingRef): String? {
+        if (ref.providerId.value != PROVIDER_ID) return null
+        val source = ref.externalWorkId.substringBefore(':', missingDelimiterValue = "")
+        val localId = ref.externalWorkId.substringAfter(':', missingDelimiterValue = "")
+        return source.takeIf { it in supportedLanguages && localId.isNotBlank() }
+    }
+
     fun accepts(
         ref: ProviderBindingRef,
         providerChapterId: String,
         reportedLanguage: String?,
     ): Boolean {
         if (ref.providerId.value != PROVIDER_ID) return true
-        val workSource = ref.externalWorkId.substringBefore(':', missingDelimiterValue = "")
+        val workSource = sourceId(ref) ?: return false
         val workLocalId = ref.externalWorkId.substringAfter(':', missingDelimiterValue = "")
         val chapterSource = providerChapterId.substringBefore(':', missingDelimiterValue = "")
         val chapterLocalId = providerChapterId.substringAfter(':', missingDelimiterValue = "")
