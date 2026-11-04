@@ -80,9 +80,9 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySourceSnap
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchFailureReason
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
+import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionCandidate
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionConfirmation
-import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionResult
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
