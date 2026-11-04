@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionCandidate
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionConfirmation
+import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionResult
+import tachiyomi.domain.tsuzuki.provider.reading.SelectMangaAllSource
 import tachiyomi.domain.tsuzuki.provider.reading.SelectProviderReadingEdition
 
 /** Foreground-only selection; candidate results are not persisted as chapter authority. */
@@ -26,6 +28,7 @@ data class ProviderEditionPickerState(
     val candidates: List<ProviderEditionCandidate> = emptyList(),
     val failed: Boolean = false,
     val confirmation: ProviderEditionConfirmation? = null,
+    val sourceSelection: MangaAllSourceSelectionResult? = null,
     val revision: Int = 0,
 )
 
@@ -34,6 +37,7 @@ data class ProviderEditionPickerState(
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 class ProviderEditionPickerScreenModel(
     private val selectEdition: SelectProviderReadingEdition,
+    private val selectMangaAllSource: SelectMangaAllSource,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(ProviderEditionPickerState())
     val state: StateFlow<ProviderEditionPickerState> = mutableState.asStateFlow()
@@ -50,7 +54,7 @@ class ProviderEditionPickerScreenModel(
 
     fun open(canonicalTitleId: String, displayTitle: String) {
         if (canonicalTitleId != titleId || displayTitle.isBlank()) return
-        mutableState.value = mutableState.value.copy(open = true, confirmation = null)
+        mutableState.value = mutableState.value.copy(open = true, confirmation = null, sourceSelection = null)
         search(displayTitle)
     }
 
@@ -64,6 +68,7 @@ class ProviderEditionPickerScreenModel(
             candidates = emptyList(),
             failed = false,
             confirmation = null,
+            sourceSelection = null,
         )
         operation = viewModelScope.launch {
             try {
@@ -114,6 +119,56 @@ class ProviderEditionPickerScreenModel(
                     mutableState.value = mutableState.value.copy(
                         confirming = false,
                         confirmation = ProviderEditionConfirmation.UNAVAILABLE,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * An explicit source/translation preference, NOT edition confirmation.
+     * The candidate must still be visible and its exact work associated with
+     * this canonical title. No preferred binding, progress or chapter is written.
+     */
+    fun selectMangaAllSource(candidate: ProviderEditionCandidate) {
+        val id = titleId ?: return
+        val current = mutableState.value
+        if (
+            !current.open || current.searching || current.confirming ||
+            candidate !in current.candidates ||
+            candidate.ref.providerId.value != "app.tsuzuki.mangaall"
+        ) {
+            return
+        }
+        operation?.cancel()
+        mutableState.value = current.copy(confirming = true, sourceSelection = null, confirmation = null)
+        operation = viewModelScope.launch {
+            try {
+                val result = selectMangaAllSource.select(
+                    canonicalTitleId = id,
+                    ref = candidate.ref,
+                    at = System.currentTimeMillis().coerceAtLeast(0L),
+                )
+                if (id != titleId || !mutableState.value.open) return@launch
+                mutableState.value = mutableState.value.copy(
+                    confirming = false,
+                    sourceSelection = result,
+                    revision = if (
+                        result == MangaAllSourceSelectionResult.SELECTED ||
+                        result == MangaAllSourceSelectionResult.ALREADY_SELECTED
+                    ) {
+                        mutableState.value.revision + 1
+                    } else {
+                        mutableState.value.revision
+                    },
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                if (id == titleId && mutableState.value.open) {
+                    mutableState.value = mutableState.value.copy(
+                        confirming = false,
+                        sourceSelection = MangaAllSourceSelectionResult.UNAVAILABLE,
                     )
                 }
             }
