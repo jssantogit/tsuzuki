@@ -30,7 +30,9 @@ class ListMangaAllSourcesTest {
             association("mangadex", "pt-br", "dex-1", ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE),
             association("mangadot", "en", "dot-1", ProviderWorkVerification.AUTHOR_CONFLICT),
             association(
-                "mangafire", "en", "colored",
+                "mangafire",
+                "en",
+                "colored",
                 edition = ProviderSourceEditionQualification.SOURCE_ATTESTED_VARIANT,
             ),
             association("mangafire", "fr", "wrong-language"),
@@ -51,11 +53,18 @@ class ListMangaAllSourcesTest {
         }
         val result = ListMangaAllSources(repository).execute(canonical)
         result.map { it.ref.externalWorkId } shouldBe listOf(
-            "mangafire:fire-1", "mangafire:fire-2", "mangadex:dex-1",
-            "mangadot:dot-1", "mangafire:colored",
+            "mangafire:fire-1",
+            "mangafire:fire-2",
+            "mangadex:dex-1",
+            "mangadot:dot-1",
+            "mangafire:colored",
         )
         result.map { it.sourceId } shouldBe listOf(
-            "mangafire", "mangafire", "mangadex", "mangadot", "mangafire",
+            "mangafire",
+            "mangafire",
+            "mangadex",
+            "mangadot",
+            "mangafire",
         )
         result.map { it.requestedLanguage } shouldBe listOf("en", "en", "pt-br", "en", "en")
         result.map { it.workVerification } shouldBe listOf(
