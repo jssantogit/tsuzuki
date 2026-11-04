@@ -694,6 +694,153 @@ class ProviderRepositoryManagerTest {
             ProviderRepositoryEntryStatus.AVAILABLE
     }
 
+    @Test
+    fun `MangaAll stages two missing sources and reuses installed working MangaFire`() = runBlocking<Unit> {
+        val keyPair = ecKeyPair()
+        val repositoryId = "repo.example"
+        val enrollmentStore = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("mangaall-enrollments").toFile(),
+        )
+        enrollmentStore.save(
+            EnrolledProviderRepository(
+                "Existing repository",
+                ProviderRepositoryEnrollment(
+                    repositoryId = repositoryId,
+                    indexUrl = "https://repo.example/index.json",
+                    signingKey = ProviderRepositorySigningKey(
+                        keyId = "root-1",
+                        publicKeyBase64 = Base64.getEncoder().encodeToString(keyPair.public.encoded),
+                    ),
+                ),
+            ),
+        )
+        val artifactStore = ProviderArtifactStore(tempDir.resolve("mangaall-artifacts").toFile())
+        val transport = FakeTransport()
+        val manager = manager(
+            enrollmentStore = enrollmentStore,
+            trustStore = FileProviderRepositoryTrustStore(tempDir.resolve("mangaall-trust").toFile()),
+            artifactStore = artifactStore,
+            transport = transport,
+        )
+        val members = MangaAllFamilyCatalog.activeSourceProviderIds
+        val artifacts = members.associateWith { tsz(versionCode = 1, providerId = it) }
+        val descriptors = artifacts.map { (id, bytes) ->
+            ProviderArtifactDescriptor(
+                providerId = id,
+                versionName = "1.0.1",
+                versionCode = 1,
+                artifactUrl = "https://repo.example/$id.tsz",
+                sha256 = sha256Hex(bytes),
+                minHostApi = 1,
+            )
+        }
+        val paused = "app.tsuzuki.mangaall.mangaball"
+        val pausedBytes = tsz(versionCode = 1, providerId = paused)
+        val signed = signedIndex(
+            keyPair,
+            ProviderRepositoryIndex(
+                schemaVersion = 1,
+                repositoryId = repositoryId,
+                sequence = 1,
+                providers = descriptors + ProviderArtifactDescriptor(
+                    providerId = paused,
+                    versionName = "1.0.1",
+                    versionCode = 1,
+                    artifactUrl = "https://repo.example/paused.tsz",
+                    sha256 = sha256Hex(pausedBytes),
+                    minHostApi = 1,
+                ),
+            ),
+        )
+        // The existing standalone MangaFire is enrolled under its original ID.
+        transport.publishMany(
+            signed,
+            mapOf(descriptors.last().artifactUrl to artifacts.getValue(members.last())),
+        )
+        manager.refresh(repositoryId)
+        manager.install(repositoryId, "app.tsuzuki.mangafire")
+        val existing = artifactStore.current("app.tsuzuki.mangafire")
+        existing?.providerId shouldBe "app.tsuzuki.mangafire"
+
+        // A failed download must not install even the first valid new MangaAll member.
+        transport.publishMany(
+            signed,
+            mapOf(descriptors[0].artifactUrl to artifacts.getValue(members[0])),
+        )
+        shouldThrow<NoSuchElementException> {
+            manager.installMangaAll(repositoryId)
+        }
+        manager.installed().map { it.providerId } shouldBe listOf("app.tsuzuki.mangafire")
+
+        transport.publishMany(
+            signed,
+            descriptors.associate { it.artifactUrl to artifacts.getValue(it.providerId) },
+        )
+        manager.installMangaAll(repositoryId).size shouldBe 2
+        manager.installed().map { it.providerId } shouldBe members.sorted()
+        artifactStore.current("app.tsuzuki.mangafire") shouldBe existing
+        manager.installMangaAll(repositoryId).size shouldBe 0
+        manager.installed().size shouldBe 3
+        transport.requestedArtifactUrls.count { it == descriptors.last().artifactUrl } shouldBe 1
+        transport.requestedArtifactUrls.none { it.contains("paused") } shouldBe true
+    }
+
+    @Test
+    fun `MangaAll rejects missing signed source without downloading artifacts`() = runBlocking<Unit> {
+        val keyPair = ecKeyPair()
+        val enrollmentStore = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("mangaall-missing-enrollments").toFile(),
+        )
+        enrollmentStore.save(
+            EnrolledProviderRepository(
+                "Existing repository",
+                ProviderRepositoryEnrollment(
+                    repositoryId = "repo.example",
+                    indexUrl = "https://repo.example/index.json",
+                    signingKey = ProviderRepositorySigningKey(
+                        keyId = "root-1",
+                        publicKeyBase64 = Base64.getEncoder().encodeToString(keyPair.public.encoded),
+                    ),
+                ),
+            ),
+        )
+        val bytes = tsz(versionCode = 1, providerId = "app.tsuzuki.mangafire")
+        val transport = FakeTransport()
+        transport.publishMany(
+            signedIndex(
+                keyPair,
+                ProviderRepositoryIndex(
+                    schemaVersion = 1,
+                    repositoryId = "repo.example",
+                    sequence = 1,
+                    providers = listOf(
+                        ProviderArtifactDescriptor(
+                            providerId = "app.tsuzuki.mangafire",
+                            versionName = "1.0.1",
+                            versionCode = 1,
+                            artifactUrl = "https://repo.example/mangafire.tsz",
+                            sha256 = sha256Hex(bytes),
+                            minHostApi = 1,
+                        ),
+                    ),
+                ),
+            ),
+            mapOf("https://repo.example/mangafire.tsz" to bytes),
+        )
+        val manager = manager(
+            enrollmentStore = enrollmentStore,
+            trustStore = FileProviderRepositoryTrustStore(tempDir.resolve("mangaall-missing-trust").toFile()),
+            artifactStore = ProviderArtifactStore(tempDir.resolve("mangaall-missing-artifacts").toFile()),
+            transport = transport,
+        )
+        manager.refresh("repo.example")
+        shouldThrow<ProviderSupplyChainException> {
+            manager.installMangaAll("repo.example")
+        }
+        transport.requestedArtifactUrls shouldBe emptyList()
+        manager.installed() shouldBe emptyList()
+    }
+
     private fun manager(
         enrollmentStore: ProviderRepositoryEnrollmentStore,
         trustStore: ProviderRepositoryTrustStore,
@@ -767,11 +914,11 @@ class ProviderRepositoryManagerTest {
         )
     }
 
-    private fun tsz(versionCode: Long): ByteArray {
+    private fun tsz(versionCode: Long, providerId: String = "reader.example"): ByteArray {
         val manifest = """
             {
               "manifestVersion": 1,
-              "id": "reader.example",
+              "id": "$providerId",
               "name": "Reader Example",
               "version": {"name": "1.0.$versionCode", "code": $versionCode},
               "minHostApi": 1,
@@ -821,6 +968,12 @@ class ProviderRepositoryManagerTest {
             )
             val descriptor = index.providers.single()
             artifacts[descriptor.artifactUrl] = artifactBytes
+        }
+
+        fun publishMany(signed: SignedProviderRepositoryIndex, sourceArtifacts: Map<String, ByteArray>) {
+            this.signed = signed
+            artifacts.clear()
+            artifacts.putAll(sourceArtifacts)
         }
 
         override suspend fun fetchIndex(indexUrl: String): SignedProviderRepositoryIndex {
