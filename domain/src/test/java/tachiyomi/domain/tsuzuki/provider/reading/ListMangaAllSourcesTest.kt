@@ -61,7 +61,7 @@ class ListMangaAllSourcesTest {
             ProviderWorkVerification.AUTHOR_CONFLICT,
             ProviderWorkVerification.AUTHOR_CORROBORATED,
         )
-        result.all { !it.canReadPages && !it.isPreferred && !it.languageAttested } shouldBe true
+        result.all { !it.isReaderVerified } shouldBe true
     }
 
     @Test
