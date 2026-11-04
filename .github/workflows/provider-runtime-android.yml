@@ -1,4 +1,5 @@
 name: Provider Platform Android gate
+# Isolated #176 edition-picker metadata Android smoke gate; workflow-only branch, never merge.
 
 on:
   push:
