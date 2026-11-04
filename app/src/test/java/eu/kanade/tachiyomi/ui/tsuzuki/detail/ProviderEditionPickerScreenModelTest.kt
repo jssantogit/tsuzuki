@@ -4,11 +4,14 @@ import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
@@ -67,6 +70,22 @@ class ProviderEditionPickerScreenModelTest {
             viewModel.start("title-2")
             advanceUntilIdle()
             viewModel.state.value.activeRequestedLanguage shouldBe null
+        }
+
+    @Test
+    fun `opening Reader during restoration awaits saved explicit language rather than falling back`() =
+        runTest(dispatcher) {
+            val repository = mockk<MangaAllSourceSelectionRepository>()
+            val pending = CompletableDeferred<MangaAllSourceSelection?>()
+            coEvery { repository.getLatest("title-1") } coAnswers { pending.await() }
+            val model = ProviderEditionPickerScreenModel(mockk(), mockk(), repository)
+            model.start("title-1")
+            val launch = async { model.requestedLanguageForReader("title-1") }
+            runCurrent()
+            launch.isCompleted shouldBe false
+            pending.complete(MangaAllSourceSelection("title-1", candidate.ref, 50))
+            advanceUntilIdle()
+            launch.await() shouldBe "en"
         }
 
     @Test
