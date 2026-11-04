@@ -13,9 +13,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionCandidate
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionConfirmation
-import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionResult
 import tachiyomi.domain.tsuzuki.provider.reading.SelectMangaAllSource
 import tachiyomi.domain.tsuzuki.provider.reading.SelectProviderReadingEdition
 
