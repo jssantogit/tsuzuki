@@ -4,6 +4,7 @@ import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 
+// CI mirror: restored per-title source and requested-language Reader workflow.
 class MangaAllReadingIdentityTest {
 
     private val mangaAllId = ProviderId("app.tsuzuki.mangaall")
