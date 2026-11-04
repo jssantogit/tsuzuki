@@ -2,6 +2,9 @@ package tachiyomi.domain.tsuzuki.reader
 
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
@@ -29,6 +32,12 @@ import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.download.model.CanonicalDownloadArtifact
 import tachiyomi.domain.tsuzuki.download.repository.CanonicalDownloadRepository
 import tachiyomi.domain.tsuzuki.download.service.CanonicalDownloadGateway
+import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption
+import tachiyomi.domain.tsuzuki.provider.reading.ResolveMangaAllSelectedChapter
+import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import tachiyomi.domain.tsuzuki.reader.interactor.PrepareCanonicalChapterForReader
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterHistory
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterHistoryUpdate
@@ -36,6 +45,7 @@ import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterProgress
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalReaderPreferences
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalReaderPreparation
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
+import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 import tachiyomi.domain.tsuzuki.reader.repository.CanonicalReadingRepository
 import tachiyomi.domain.tsuzuki.reader.service.ChapterContentPreparer
 
@@ -258,12 +268,80 @@ class PrepareCanonicalChapterForReaderTest {
         fixture.preparer.calls shouldBe 0
     }
 
+    @Test
+    fun `explicit MangaAll preference opens only the selected verified chapter pages`() = runTest {
+        val selected = mockk<ResolveMangaAllSelectedChapter>()
+        val reader = mockk<ResolveProviderChapterReading>()
+        val ref = ProviderBindingRef(
+            providerId = ProviderId("app.tsuzuki.mangaall"),
+            facetId = "en",
+            externalWorkId = "mangafire:verified",
+        )
+        val option = ProviderChapterReadingOption(
+            canonicalChapterId = "chapter-1",
+            bindingId = "work-source:verified",
+            providerId = ref.providerId,
+            facetId = ref.facetId,
+            externalWorkId = ref.externalWorkId,
+            providerChapterId = "mangafire:chapter-one",
+        )
+        val pages = PreparedChapterContent.HttpPages(
+            listOf(
+                PreparedHttpPage(
+                    url = "https://cdn.example.com/page-1.jpg",
+                    allowedOrigins = setOf("https://cdn.example.com"),
+                ),
+            ),
+        )
+        coEvery { selected.execute("chapter-1", "en") } returns option
+        coEvery { reader.preparedContent(option) } returns ProviderCallResult.Success(pages)
+        val fixture = fixture(
+            preference = null,
+            providers = listOf(provider(option("other-addon"))),
+            mangaAllSource = selected,
+            providerReader = reader,
+        )
+
+        val result = fixture.prepare.execute(
+            canonicalChapterId = "chapter-1",
+            requestedMangaAllLanguage = "en",
+        )
+        result.shouldBeInstanceOf<CanonicalReaderPreparation.Ready>()
+        result.target shouldBe pages
+        result.usedFallback shouldBe false
+        fixture.preparer.calls shouldBe 0
+        coVerify(exactly = 1) { selected.execute("chapter-1", "en") }
+        coVerify(exactly = 1) { reader.preparedContent(option) }
+    }
+
+    @Test
+    fun `explicit MangaAll preference cannot fall back to an unrelated available source`() = runTest {
+        val selected = mockk<ResolveMangaAllSelectedChapter>()
+        val reader = mockk<ResolveProviderChapterReading>()
+        coEvery { selected.execute("chapter-1", "pt-br") } returns null
+        val fixture = fixture(
+            preference = null,
+            providers = listOf(provider(option("other-addon"))),
+            mangaAllSource = selected,
+            providerReader = reader,
+        )
+
+        fixture.prepare.execute(
+            canonicalChapterId = "chapter-1",
+            requestedMangaAllLanguage = "pt-br",
+        ).shouldBeInstanceOf<CanonicalReaderPreparation.Unavailable>()
+        fixture.preparer.calls shouldBe 0
+        coVerify(exactly = 0) { reader.preparedContent(any()) }
+    }
+
     private fun fixture(
         preference: ContentPreference?,
         providers: List<ContentProvider>,
         downloadArtifact: CanonicalDownloadArtifact? = null,
         addonRepository: AddonRepository? = null,
         downloadArtifactAvailable: Boolean = true,
+        mangaAllSource: ResolveMangaAllSelectedChapter? = null,
+        providerReader: ResolveProviderChapterReading? = null,
     ): Fixture {
         val readerPreferences = CanonicalReaderPreferences(InMemoryPreferenceStore())
         val resolver = ResolveChapterContent(
@@ -292,6 +370,8 @@ class PrepareCanonicalChapterForReaderTest {
             },
             chapterContentPreparer = preparer,
             structuredDiagnostics = NoOpStructuredDiagnosticRecorder,
+            resolveMangaAllSelectedChapter = mangaAllSource,
+            resolveProviderChapterReading = providerReader,
         )
         return Fixture(prepare, reading, preparer, downloads, downloadArtifactAvailable)
     }
