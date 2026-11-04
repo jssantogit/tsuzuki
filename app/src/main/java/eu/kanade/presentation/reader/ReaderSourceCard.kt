@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.ReaderRecovery
+import eu.kanade.tachiyomi.ui.reader.shouldOfferReaderEditionPicker
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkState
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentOptionPresentation
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentSelectorScreenState
@@ -40,6 +41,7 @@ fun ColumnScope.ReaderSourceCard(
     onSelect: (ContentOptionPresentation) -> Unit,
     onRetry: () -> Unit,
     onFindSource: (String) -> Unit,
+    onChooseEdition: (String) -> Unit,
     onCancelDiscovery: () -> Unit,
     selectionInProgress: Boolean = false,
 ) {
@@ -64,6 +66,7 @@ fun ColumnScope.ReaderSourceCard(
                     when (it) {
                         ReaderRecovery.SOURCE_UNAVAILABLE -> MR.strings.tsuzuki_reader_source_failed
                         ReaderRecovery.P2P_REQUIRED -> MR.strings.tsuzuki_reader_p2p_required
+                        ReaderRecovery.EDITION_CONFIRMATION_REQUIRED -> MR.strings.tsuzuki_edition_description
                     },
                 ),
                 color = MaterialTheme.colorScheme.error,
@@ -87,6 +90,11 @@ fun ColumnScope.ReaderSourceCard(
                     UnavailableActions(
                         onRetry = onRetry,
                         onFindSource = { onFindSource(state.canonicalTitleId) },
+                        onChooseEdition = if (shouldOfferReaderEditionPicker(failure)) {
+                            { onChooseEdition(state.canonicalTitleId) }
+                        } else {
+                            null
+                        },
                         enabled = !selectionInProgress,
                     )
                 } else {
@@ -144,6 +152,15 @@ fun ColumnScope.ReaderSourceCard(
                             Text(stringResource(MR.strings.tsuzuki_reader_retry))
                         }
                     }
+                    if (shouldOfferReaderEditionPicker(failure)) {
+                        OutlinedButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !selectionInProgress,
+                            onClick = { onChooseEdition(state.canonicalTitleId) },
+                        ) {
+                            Text(stringResource(MR.strings.tsuzuki_edition_choose))
+                        }
+                    }
                     OutlinedButton(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !selectionInProgress,
@@ -165,6 +182,11 @@ fun ColumnScope.ReaderSourceCard(
                     UnavailableActions(
                         onRetry = onRetry,
                         onFindSource = { onFindSource(canonicalTitleId) },
+                        onChooseEdition = if (shouldOfferReaderEditionPicker(failure)) {
+                            { onChooseEdition(canonicalTitleId) }
+                        } else {
+                            null
+                        },
                         enabled = !selectionInProgress,
                     )
                 }
@@ -193,7 +215,13 @@ fun ColumnScope.ReaderBindingCard(
             is ContentBindingLinkState.Addons -> {
                 if (state.enabled.isEmpty()) {
                     Text(
-                        text = stringResource(MR.strings.tsuzuki_reader_source_unavailable),
+                        text = stringResource(
+                if (onChooseEdition != null) {
+                    MR.strings.tsuzuki_edition_description
+                } else {
+                    MR.strings.tsuzuki_reader_source_unavailable
+                },
+            ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     OutlinedButton(
@@ -318,6 +346,7 @@ private fun LoadingState() {
 private fun UnavailableActions(
     onRetry: () -> Unit,
     onFindSource: () -> Unit,
+    onChooseEdition: (() -> Unit)?,
     enabled: Boolean,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -325,6 +354,15 @@ private fun UnavailableActions(
             text = stringResource(MR.strings.tsuzuki_reader_source_unavailable),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        onChooseEdition?.let { choose ->
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = choose,
+                enabled = enabled,
+            ) {
+                Text(stringResource(MR.strings.tsuzuki_edition_choose))
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onRetry, enabled = enabled) {
                 Text(stringResource(MR.strings.tsuzuki_reader_retry))
