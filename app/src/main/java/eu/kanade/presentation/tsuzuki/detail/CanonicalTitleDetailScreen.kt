@@ -145,7 +145,8 @@ fun CanonicalTitleDetailScreen(
                 state, background, navigateUp, onAtualizar, onAddToLibrary, onRemoveFromLibrary,
                 onReadTitle, onOpenChapter, onBaixarChapter, onOpenProvidersSettings,
                 onImportEpub, onReviewCandidates, inventoryRefresh,
-                editionPicker, onChooseEdition, onEditionSearch, onEditionConfirm, onEditionDismiss,
+                editionPicker, onChooseEdition, onEditionSearch, onEditionConfirm, onEditionSourceSelect,
+                onEditionDismiss,
                 onChapterSortMeasured,
             )
         }
@@ -171,6 +172,7 @@ private fun LoadedDetails(
     onChooseEdition: () -> Unit,
     onEditionSearch: (String) -> Unit,
     onEditionConfirm: (ProviderEditionCandidate) -> Unit,
+    onEditionSourceSelect: (ProviderEditionCandidate) -> Unit,
     onEditionDismiss: () -> Unit,
     onChapterSortMeasured: (Long, Int) -> Unit,
 ) {
