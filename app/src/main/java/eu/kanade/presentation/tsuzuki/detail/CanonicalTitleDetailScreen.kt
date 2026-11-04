@@ -82,6 +82,7 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionCandidate
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionConfirmation
+import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionResult
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -106,6 +107,7 @@ fun CanonicalTitleDetailScreen(
     onChooseEdition: () -> Unit = {},
     onEditionSearch: (String) -> Unit = {},
     onEditionConfirm: (ProviderEditionCandidate) -> Unit = {},
+    onEditionSourceSelect: (ProviderEditionCandidate) -> Unit = {},
     onEditionDismiss: () -> Unit = {},
     onChapterSortMeasured: (Long, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
@@ -515,6 +517,38 @@ private fun LoadedDetails(
                                 }
                                 if (selected) Text("✓", color = colors.accent)
                             }
+                        }
+                        // A MangaAll work can have multiple content sources
+                        // and translations while retaining one confirmed edition.
+                        // This action persists only an explicit source preference.
+                        selectedEdition?.takeIf {
+                            it.ref.providerId.value == "app.tsuzuki.mangaall" &&
+                                it in editionPicker.candidates
+                        }?.let { candidate ->
+                            DefaultSkinTextAction(
+                                text = "Preferir esta fonte e idioma",
+                                onClick = { onEditionSourceSelect(candidate) },
+                                enabled = !editionPicker.searching && !editionPicker.confirming,
+                            )
+                        }
+                        editionPicker.sourceSelection?.let { result ->
+                            Text(
+                                text = when (result) {
+                                    MangaAllSourceSelectionResult.SELECTED,
+                                    MangaAllSourceSelectionResult.ALREADY_SELECTED,
+                                    -> "Fonte e idioma preferidos salvos"
+                                    MangaAllSourceSelectionResult.NOT_ASSOCIATED ->
+                                        "Associe esta obra à fonte antes de preferi-la"
+                                    MangaAllSourceSelectionResult.BLOCKED ->
+                                        "A fonte não tem identidade editorial verificada"
+                                    MangaAllSourceSelectionResult.UNSUPPORTED ->
+                                        "Esta combinação de fonte e idioma não é suportada"
+                                    MangaAllSourceSelectionResult.UNAVAILABLE ->
+                                        "Não foi possível salvar a preferência"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.secondary,
+                            )
                         }
                         editionPicker.confirmation?.let { result ->
                             val message = when (result) {
