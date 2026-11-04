@@ -8,15 +8,18 @@ import java.util.Locale
  * completeness, canonical identity, translation equivalence or Reader authority.
  */
 internal fun editionCandidateMetadata(candidate: ProviderEditionCandidate): List<String> {
+    // These vals are stable for Kotlin smart casts across the Domain/App module boundary.
+    val reported = candidate.chapterCount
+    val observed = candidate.observedChapterCount
+    val hasMore = candidate.coverageHasMore
     val chapters = when {
-        candidate.chapterCount != null &&
-            (candidate.observedChapterCount == null || candidate.observedChapterCount <= candidate.chapterCount) ->
-            "${candidate.chapterCount} informados pela fonte"
-        candidate.observedChapterCount != null && candidate.chapterCount != null ->
-            "${candidate.observedChapterCount} observados (contagem informada divergente)"
-        candidate.observedChapterCount != null && candidate.coverageHasMore == true ->
-            "ao menos ${candidate.observedChapterCount} observados (parcial)"
-        candidate.observedChapterCount != null -> "${candidate.observedChapterCount} observados"
+        reported != null && (observed == null || observed <= reported) ->
+            "$"+"{reported} informados pela fonte"
+        observed != null && reported != null ->
+            "$"+"{observed} observados (contagem informada divergente)"
+        observed != null && hasMore == true ->
+            "ao menos $"+"{observed} observados (parcial)"
+        observed != null -> "$"+"{observed} observados"
         else -> "não informado"
     }
 
