@@ -23,7 +23,7 @@ class ListMangaAllSourcesTest {
     )
 
     @Test
-    fun `alternatives preserve source and requested facet without turning evidence into Reader authority`() = runBlocking {
+    fun `work alternatives preserve source and facet without granting Reader authority`() = runBlocking {
         val associations = listOf(
             association("mangafire", "en", "fire-1"),
             association("mangafire", "en", "fire-2"),
