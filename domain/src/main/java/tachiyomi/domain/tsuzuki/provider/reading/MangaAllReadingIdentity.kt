@@ -32,6 +32,12 @@ object MangaAllReadingIdentity {
         return source.takeIf { it in supportedLanguages && localId.isNotBlank() }
     }
 
+    /** A language facet is requested, not evidence that translated pages exist. */
+    fun supportsRequestedLanguage(ref: ProviderBindingRef): Boolean {
+        val source = sourceId(ref) ?: return false
+        return ref.facetId?.lowercase() in supportedLanguages[source].orEmpty()
+    }
+
     fun accepts(
         ref: ProviderBindingRef,
         providerChapterId: String,
@@ -51,7 +57,7 @@ object MangaAllReadingIdentity {
             return false
         }
         val language = ref.facetId?.lowercase() ?: return false
-        if (language !in (supportedLanguages[workSource] ?: return false)) return false
+        if (!supportsRequestedLanguage(ref)) return false
         return reportedLanguage?.lowercase() == language
     }
 }
