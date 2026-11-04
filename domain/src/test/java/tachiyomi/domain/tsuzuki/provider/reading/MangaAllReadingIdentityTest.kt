@@ -40,6 +40,11 @@ class MangaAllReadingIdentityTest {
         MangaAllReadingIdentity.accepts(dexPt, "mangadex:chapter-1", "pt-br") shouldBe false
         MangaAllReadingIdentity.accepts(dotPt, "mangadot:uploads:123", "pt-br") shouldBe true
         MangaAllReadingIdentity.accepts(dotPt, "mangadot:chapters:123", "pt-br") shouldBe true
+        MangaAllReadingIdentity.accepts(
+            ProviderBindingRef(mangaAllId, "en", "mangadot:317"),
+            "mangadot:uploads:123",
+            "en",
+        ) shouldBe true
         MangaAllReadingIdentity.accepts(dotPt, "mangadot:uploads:123", "en") shouldBe false
         MangaAllReadingIdentity.accepts(dotPt, "mangadot:uploads:123", null) shouldBe false
         MangaAllReadingIdentity.accepts(dotPt, "mangadot:uploads:0", "pt-br") shouldBe false
