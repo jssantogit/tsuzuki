@@ -1,5 +1,7 @@
 package tachiyomi.core.provider.supplychain
 
+// MangaAll RED CI trigger; tests and production behavior are unchanged.
+
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
