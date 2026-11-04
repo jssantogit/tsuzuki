@@ -33,12 +33,25 @@ class OpenHomeHeroTest {
     }
 
     @Test
-    fun `count derived first slot goes through the canonical gateway`() = runTest {
+    fun `reported count without individually known chapter cannot open a fictitious reader target`() = runTest {
         val fixture = Fixture()
         fixture.chapters = emptyList()
         coEvery { fixture.counts.getByTitle("title") } returns listOf(ReportedChapterCount("title", "kitsu", 2, 1L))
+        fixture.open.execute(fixture.item) shouldBe null
+        coVerify(exactly = 0) { fixture.gateway.execute(any()) }
+    }
+
+    @Test
+    fun `historical count chapter with existing progress stays readable through original gateway`() = runTest {
+        val fixture = Fixture()
+        val legacy = chapter("tsuzuki:count:title:1", 1)
+            .copy(confirmation = CanonicalChapterConfirmation.PROVISIONAL)
+        fixture.chapters = listOf(legacy)
+        fixture.progress = listOf(CanonicalChapterProgress(legacy.id, lastPageRead = 1, updatedAt = 10))
+        coEvery { fixture.counts.getByTitle("title") } returns listOf(ReportedChapterCount("title", "kitsu", 120, 1L))
+
         fixture.open.execute(fixture.item) shouldBe "resolved-tsuzuki:count:title:1"
-        coVerify { fixture.gateway.execute(match { it.id == "tsuzuki:count:title:1" }) }
+        coVerify(exactly = 1) { fixture.gateway.execute(legacy) }
     }
 
     @Test

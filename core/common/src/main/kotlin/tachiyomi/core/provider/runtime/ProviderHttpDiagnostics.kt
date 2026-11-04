@@ -26,4 +26,6 @@ data class ProviderHttpDiagnostic(
     val timeoutMs: Long,
     val statusCode: Int? = null,
     val failureFamily: ProviderHttpFailureFamily? = null,
+    /** Per-network-hop correlation ID, generated exclusively by the Host. No URL or source metadata. */
+    val operationId: String? = null,
 )

@@ -22,8 +22,19 @@ sealed interface ContentDelivery {
         val magnetUri: String?,
         val fileIndex: Int?,
         val filePath: String?,
+        val torrentUrl: String? = null,
+        val fileSizeBytes: Long? = null,
+        val discoveryOperationId: String? = null,
+        val chapterImages: List<TorrentChapterImageFile> = emptyList(),
     ) : ContentDelivery
 }
+
+/** Exact metadata file identity for Host-only chapter image acquisition. */
+data class TorrentChapterImageFile(
+    val index: Int,
+    val path: String,
+    val sizeBytes: Long,
+)
 
 data class ContentOption(
     val key: String,

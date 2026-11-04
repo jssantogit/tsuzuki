@@ -2,6 +2,7 @@ package eu.kanade.presentation.tsuzuki.detail
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,21 +59,33 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinShape
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinTextAction
 import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
+import eu.kanade.presentation.util.relativeTimeSpanString
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalChapterDetailItem
 import eu.kanade.tachiyomi.ui.tsuzuki.detail.CanonicalTitleScreenState
+import eu.kanade.tachiyomi.ui.tsuzuki.detail.InventoryWorkDiscoveryStatus
+import eu.kanade.tachiyomi.ui.tsuzuki.detail.NativeInventoryRefreshState
+import eu.kanade.tachiyomi.ui.tsuzuki.detail.ProviderEditionPickerState
 import kotlinx.coroutines.launch
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.automirroredrounded.ArrowBack
 import mihon.icons.materialsymbols.automirroredrounded.Sort
 import mihon.icons.materialsymbols.rounded.MoreVert
 import mihon.icons.materialsymbols.rounded.Search
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySnapshot
+import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySourceSnapshot
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchFailureReason
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionCandidate
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionConfirmation
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
-private enum class DetailsSheet { SORT, JUMP, SOURCES }
+private enum class DetailsSheet { SORT, JUMP, SOURCES, INVENTORY, EDITION }
 private const val FULL_CHAPTER_FIRST_ITEM = 1
 
 @Composable
@@ -86,6 +99,15 @@ fun CanonicalTitleDetailScreen(
     onOpenChapter: (String) -> Unit,
     onBaixarChapter: (String) -> Unit,
     onOpenProvidersSettings: () -> Unit,
+    onImportEpub: () -> Unit = {},
+    onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit = {},
+    inventoryRefresh: NativeInventoryRefreshState,
+    editionPicker: ProviderEditionPickerState = ProviderEditionPickerState(),
+    onChooseEdition: () -> Unit = {},
+    onEditionSearch: (String) -> Unit = {},
+    onEditionConfirm: (ProviderEditionCandidate) -> Unit = {},
+    onEditionDismiss: () -> Unit = {},
+    onChapterSortMeasured: (Long, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
@@ -120,6 +142,9 @@ fun CanonicalTitleDetailScreen(
             is CanonicalTitleScreenState.Loaded -> LoadedDetails(
                 state, background, navigateUp, onAtualizar, onAddToLibrary, onRemoveFromLibrary,
                 onReadTitle, onOpenChapter, onBaixarChapter, onOpenProvidersSettings,
+                onImportEpub, onReviewCandidates, inventoryRefresh,
+                editionPicker, onChooseEdition, onEditionSearch, onEditionConfirm, onEditionDismiss,
+                onChapterSortMeasured,
             )
         }
     }
@@ -137,11 +162,38 @@ private fun LoadedDetails(
     onOpenChapter: (String) -> Unit,
     onDownload: (String) -> Unit,
     onProviders: () -> Unit,
+    onImportEpub: () -> Unit,
+    onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit,
+    inventoryRefresh: NativeInventoryRefreshState,
+    editionPicker: ProviderEditionPickerState,
+    onChooseEdition: () -> Unit,
+    onEditionSearch: (String) -> Unit,
+    onEditionConfirm: (ProviderEditionCandidate) -> Unit,
+    onEditionDismiss: () -> Unit,
+    onChapterSortMeasured: (Long, Int) -> Unit,
 ) {
     var mode by rememberSaveable(state.title.id) { mutableStateOf(CanonicalDetailsLowerMode.COMPACT) }
     var sort by rememberSaveable(state.title.id) { mutableStateOf(CanonicalChapterSort.ORIGINAL) }
     var sheet by remember { mutableStateOf<DetailsSheet?>(null) }
-    val chapters = remember(state.chapters, sort) { sortDetailChapters(state.chapters, sort) }
+    var editionQuery by remember(state.title.id) { mutableStateOf(state.title.displayTitle) }
+    var selectedEdition by remember(state.title.id) { mutableStateOf<ProviderEditionCandidate?>(null) }
+    LaunchedEffect(editionPicker.open) {
+        if (editionPicker.open) {
+            editionQuery = editionPicker.query
+            sheet = DetailsSheet.EDITION
+        } else if (sheet == DetailsSheet.EDITION) {
+            sheet = null
+            selectedEdition = null
+        }
+    }
+    val (chapters, sortDurationMs) = remember(state.chapters, sort) {
+        val started = System.nanoTime()
+        val sorted = sortDetailChapters(state.chapters, sort)
+        sorted to ((System.nanoTime() - started) / 1_000_000L).coerceAtLeast(0)
+    }
+    LaunchedEffect(chapters, sort) {
+        if (sortDurationMs >= 16L) onChapterSortMeasured(sortDurationMs, chapters.size)
+    }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -186,9 +238,14 @@ private fun LoadedDetails(
                 item(key = "modes") { DetailsModes(mode, moveMode) }
             }
             when (mode) {
-                CanonicalDetailsLowerMode.COMPACT -> item(key = "context") {
-                    ContextualChapterRail(state, onOpenChapter, onProviders) {
-                        moveMode(CanonicalDetailsLowerAction.VIEW_ALL)
+                CanonicalDetailsLowerMode.COMPACT -> {
+                    item(key = "context") {
+                        ContextualChapterRail(
+                            state,
+                            onOpenChapter,
+                            onProviders,
+                            onAll = { moveMode(CanonicalDetailsLowerAction.VIEW_ALL) },
+                        )
                     }
                 }
                 CanonicalDetailsLowerMode.EDITORIAL -> item(key = "editorial") { DetailsEditorial(state) }
@@ -217,7 +274,12 @@ private fun LoadedDetails(
                     }
                     if (chapters.isEmpty()) {
                         item(key = "empty-chapters") {
-                            ContextualChapterRail(state, onOpenChapter, onProviders) {}
+                            ContextualChapterRail(
+                                state,
+                                onOpenChapter,
+                                onProviders,
+                                onAll = {},
+                            )
                         }
                     }
                     items(chapters, key = { it.chapter.id }) { item ->
@@ -237,6 +299,7 @@ private fun LoadedDetails(
             onBack = { moveMode(CanonicalDetailsLowerAction.BACK) },
             onRefresh = onRefresh,
             onProviders = onProviders,
+            onImportEpub = onImportEpub,
             background = if (mode == CanonicalDetailsLowerMode.FULL) {
                 background
             } else {
@@ -250,12 +313,17 @@ private fun LoadedDetails(
                 )
             },
             onSources = if (state.metadataSources.isNotEmpty()) ({ sheet = DetailsSheet.SOURCES }) else null,
+            onInventory = { sheet = DetailsSheet.INVENTORY },
+            onChooseEdition = onChooseEdition,
         )
     }
     sheet?.let { current ->
         val colors = defaultSkinColors()
         ModalBottomSheet(
-            onDismissRequest = { sheet = null },
+            onDismissRequest = {
+                if (current == DetailsSheet.EDITION) onEditionDismiss()
+                sheet = null
+            },
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
             containerColor = colors.surface,
             contentColor = colors.foreground,
@@ -329,6 +397,161 @@ private fun LoadedDetails(
                     val index = chapters.indexOfFirst { it.chapter.id == target.chapter.id }
                     scope.launch { listState.animateScrollToItem(FULL_CHAPTER_FIRST_ITEM + index, -toolbarOffset) }
                 }
+                DetailsSheet.EDITION -> Column(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 560.dp),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            stringResource(MR.strings.tsuzuki_edition_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = colors.foreground,
+                        )
+                        Text(
+                            stringResource(MR.strings.tsuzuki_edition_description),
+                            color = colors.secondary,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        OutlinedTextField(
+                            value = editionQuery,
+                            onValueChange = { editionQuery = it },
+                            label = { Text(stringResource(MR.strings.tsuzuki_edition_search)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = DefaultSkinShape.Control,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = colors.accent,
+                                unfocusedBorderColor = colors.outline,
+                                focusedTextColor = colors.foreground,
+                                unfocusedTextColor = colors.foreground,
+                                focusedLabelColor = colors.secondary,
+                                unfocusedLabelColor = colors.secondary,
+                                cursorColor = colors.accent,
+                                focusedContainerColor = colors.surfaceMuted,
+                                unfocusedContainerColor = colors.surfaceMuted,
+                            ),
+                        )
+                        DefaultSkinTextAction(
+                            text = stringResource(MR.strings.tsuzuki_edition_find),
+                            onClick = {
+                                selectedEdition = null
+                                onEditionSearch(editionQuery)
+                            },
+                            enabled = !editionPicker.searching &&
+                                !editionPicker.confirming && editionQuery.isNotBlank(),
+                        )
+                        if (editionPicker.searching || editionPicker.confirming) {
+                            CircularProgressIndicator(color = colors.accent)
+                        }
+                        if (editionPicker.failed) {
+                            Text(stringResource(MR.strings.tsuzuki_edition_error), color = colors.secondary)
+                        }
+                        if (!editionPicker.searching && editionPicker.candidates.isEmpty()) {
+                            Text(stringResource(MR.strings.tsuzuki_edition_none), color = colors.secondary)
+                        }
+                        editionPicker.candidates.forEach { candidate ->
+                            val selected = candidate == selectedEdition
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        if (selected) colors.surfaceMuted else colors.surface,
+                                        DefaultSkinShape.Card,
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (selected) colors.accent else colors.outline,
+                                        DefaultSkinShape.Card,
+                                    )
+                                    .selectable(
+                                        selected = selected,
+                                        enabled = !editionPicker.confirming,
+                                        role = Role.RadioButton,
+                                        onClick = { selectedEdition = candidate },
+                                    )
+                                    .heightIn(min = 56.dp)
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(
+                                        candidate.title,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium,
+                                        color = colors.foreground,
+                                    )
+                                    Text(
+                                        "${candidate.providerName} · ID ${candidate.ref.externalWorkId}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.secondary,
+                                    )
+                                    editionCandidateMetadata(candidate).forEach { description ->
+                                        Text(
+                                            description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = colors.secondary,
+                                        )
+                                    }
+                                    if (selected) {
+                                        candidate.url?.let { url ->
+                                            Text(
+                                                url,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = colors.secondary,
+                                                maxLines = 2,
+                                            )
+                                        }
+                                    }
+                                }
+                                if (selected) Text("✓", color = colors.accent)
+                            }
+                        }
+                        editionPicker.confirmation?.let { result ->
+                            val message = when (result) {
+                                ProviderEditionConfirmation.BLOCKED -> MR.strings.tsuzuki_edition_conflict
+                                ProviderEditionConfirmation.STALE -> MR.strings.tsuzuki_edition_stale
+                                ProviderEditionConfirmation.UNAVAILABLE -> MR.strings.tsuzuki_edition_unavailable
+                                else -> MR.strings.tsuzuki_edition_unavailable
+                            }
+                            Text(stringResource(message), color = colors.secondary)
+                        }
+                    }
+                    HorizontalDivider(color = colors.outline)
+                    DefaultSkinPrimaryButton(
+                        text = stringResource(MR.strings.tsuzuki_edition_confirm),
+                        onClick = { selectedEdition?.let(onEditionConfirm) },
+                        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp),
+                        enabled = selectedEdition in editionPicker.candidates &&
+                            !editionPicker.searching && !editionPicker.confirming,
+                    )
+                }
+                DetailsSheet.INVENTORY -> Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 560.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = 16.dp),
+                ) {
+                    // Detailed evidence is available on demand, never in the chapter feed.
+                    IndependentInventoryInfo(
+                        state.independentInventory,
+                        inventoryRefresh,
+                        onReviewCandidates = { candidate ->
+                            sheet = null
+                            onReviewCandidates(candidate)
+                        },
+                    )
+                }
                 DetailsSheet.SOURCES -> Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -348,6 +571,308 @@ private fun LoadedDetails(
             }
         }
     }
+}
+
+@Composable
+private fun IndependentInventoryInfo(
+    snapshot: IndependentInventorySnapshot,
+    refresh: NativeInventoryRefreshState,
+    onReviewCandidates: (IndependentInventorySourceSnapshot) -> Unit,
+) {
+    val colors = defaultSkinColors()
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            stringResource(MR.strings.tsuzuki_inventory_title),
+            style = MaterialTheme.typography.labelLarge,
+            color = colors.foreground,
+        )
+        Text(
+            stringResource(MR.strings.tsuzuki_inventory_offline_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.secondary,
+        )
+        Text(
+            stringResource(MR.strings.tsuzuki_inventory_auto_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.secondary,
+        )
+        if (refresh.refreshing) {
+            Text(
+                stringResource(MR.strings.tsuzuki_inventory_fetching),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+        }
+        refresh.discoveryStatus.forEach { (producerId, status) ->
+            val source = when (producerId) {
+                "mangadex" -> "MangaDex"
+                "mangaupdates" -> "MangaUpdates"
+                else -> producerId
+            }
+            val label = when (status) {
+                InventoryWorkDiscoveryStatus.SEARCHING -> MR.strings.tsuzuki_inventory_discovery_searching
+                InventoryWorkDiscoveryStatus.LINKED -> MR.strings.tsuzuki_inventory_discovery_linked
+                InventoryWorkDiscoveryStatus.NO_VERIFIED_MATCH -> MR.strings.tsuzuki_inventory_discovery_no_match
+                InventoryWorkDiscoveryStatus.FAILED -> MR.strings.tsuzuki_inventory_discovery_failed
+                InventoryWorkDiscoveryStatus.REQUIRES_MANGADEX -> MR.strings.tsuzuki_inventory_discovery_requires_md
+                InventoryWorkDiscoveryStatus.INTERRUPTED -> MR.strings.tsuzuki_inventory_discovery_interrupted
+            }
+            Text(
+                "$source · ${stringResource(label)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+        }
+        refresh.refreshStops.forEach { (producerId, stop) ->
+            val source = when (producerId) {
+                "mangadex" -> "MangaDex"
+                "mangaupdates" -> "MangaUpdates"
+                else -> producerId
+            }
+            val label = when (stop) {
+                InventoryRefreshStop.EXHAUSTED -> MR.strings.tsuzuki_inventory_refresh_exhausted
+                InventoryRefreshStop.PARTIAL -> MR.strings.tsuzuki_inventory_refresh_partial
+                InventoryRefreshStop.FAILED -> MR.strings.tsuzuki_inventory_refresh_failed
+                InventoryRefreshStop.NO_VERIFIED_WORK -> MR.strings.tsuzuki_inventory_refresh_unlinked
+                InventoryRefreshStop.DISABLED -> MR.strings.tsuzuki_inventory_refresh_disabled
+            }
+            Text(
+                "$source · ${stringResource(MR.strings.tsuzuki_inventory_release_status, stringResource(label))}",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+            if (stop == InventoryRefreshStop.FAILED) {
+                refresh.refreshFailureReasons[producerId]?.let { InventoryFailureReasonText(it) }
+            }
+        }
+        refresh.lastStop?.takeIf { refresh.refreshStops.isEmpty() }?.let { stop ->
+            Text(
+                stringResource(
+                    when (stop) {
+                        InventoryRefreshStop.EXHAUSTED -> MR.strings.tsuzuki_inventory_refresh_exhausted
+                        InventoryRefreshStop.PARTIAL -> MR.strings.tsuzuki_inventory_refresh_partial
+                        InventoryRefreshStop.FAILED -> MR.strings.tsuzuki_inventory_refresh_failed
+                        InventoryRefreshStop.NO_VERIFIED_WORK -> MR.strings.tsuzuki_inventory_refresh_unlinked
+                        InventoryRefreshStop.DISABLED -> MR.strings.tsuzuki_inventory_refresh_disabled
+                    },
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+        }
+        if (refresh.lastStop == InventoryRefreshStop.FAILED && refresh.refreshStops.isEmpty()) {
+            refresh.producerId?.let { producerId ->
+                refresh.refreshFailureReasons[producerId]?.let { InventoryFailureReasonText(it) }
+            }
+        }
+        if (snapshot.sources.isEmpty()) {
+            Text(
+                stringResource(MR.strings.tsuzuki_inventory_unknown),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+            return@Column
+        }
+        Text(
+            stringResource(MR.strings.tsuzuki_inventory_partial),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.secondary,
+        )
+        snapshot.sources.forEach { source ->
+            val providerName = when (source.scope.producerId) {
+                "mangadex" -> "MangaDex"
+                "mangaupdates" -> "MangaUpdates"
+                else -> source.scope.producerId
+            }
+            Text(providerName, style = MaterialTheme.typography.labelMedium, color = colors.foreground)
+            val editionKey = source.scope.editionKey?.takeIf(String::isNotBlank)
+            Text(
+                stringResource(
+                    MR.strings.tsuzuki_inventory_scope,
+                    source.scope.externalWorkId,
+                    editionKey?.let {
+                        stringResource(
+                            MR.strings.tsuzuki_inventory_edition_scope_value,
+                            it,
+                            stringResource(
+                                if (source.scope.editionIdentityVerified) {
+                                    MR.strings.tsuzuki_inventory_edition_verified
+                                } else {
+                                    MR.strings.tsuzuki_inventory_edition_unverified
+                                },
+                            ),
+                        )
+                    } ?: stringResource(MR.strings.tsuzuki_inventory_edition_unrecorded),
+                    source.scope.language?.takeIf(String::isNotBlank)
+                        ?: stringResource(MR.strings.tsuzuki_inventory_language_unrecorded),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+            val latestAttempt = source.latestAttemptOutcomes
+                .sortedBy { it.name }
+                .map { outcome ->
+                    stringResource(
+                        when (outcome) {
+                            InventoryFetchOutcome.PARTIAL -> MR.strings.tsuzuki_inventory_outcome_partial
+                            InventoryFetchOutcome.EXHAUSTED -> MR.strings.tsuzuki_inventory_outcome_exhausted
+                            InventoryFetchOutcome.FAILED -> MR.strings.tsuzuki_inventory_outcome_failed
+                            InventoryFetchOutcome.NOT_ATTEMPTED -> MR.strings.tsuzuki_inventory_outcome_not_attempted
+                        },
+                    )
+                }
+                .ifEmpty {
+                    listOf(
+                        stringResource(
+                            if (source.latestAttemptAt == null) {
+                                MR.strings.tsuzuki_inventory_no_attempt
+                            } else {
+                                MR.strings.tsuzuki_inventory_outcome_unrecorded
+                            },
+                        ),
+                    )
+                }
+                .joinToString("; ")
+            if (source.latestAttemptAt == null && source.latestAttemptOutcomes.isEmpty()) {
+                Text(latestAttempt, style = MaterialTheme.typography.bodySmall, color = colors.secondary)
+            } else {
+                val attemptTime = source.latestAttemptAt?.let { relativeTimeSpanString(it) }
+                    ?: stringResource(MR.strings.tsuzuki_inventory_time_unrecorded)
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_latest_attempt, latestAttempt, attemptTime),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            val successfulFetchTime = source.latestSuccessfulFetchAt?.let { relativeTimeSpanString(it) }
+            val claimObservationTime = source.latestClaimObservedAt?.let { relativeTimeSpanString(it) }
+            Text(
+                stringResource(
+                    MR.strings.tsuzuki_inventory_success_and_claim_times,
+                    successfulFetchTime ?: stringResource(MR.strings.tsuzuki_inventory_no_successful_fetch),
+                    claimObservationTime ?: stringResource(MR.strings.tsuzuki_inventory_no_claim_observation),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondary,
+            )
+            if (source.knownIndividualClaims > 0) {
+                Text(
+                    "${source.knownIndividualClaims} " + stringResource(MR.strings.tsuzuki_inventory_individual),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.candidateObservations > 0) {
+                Text(
+                    "${source.candidateObservations} " + stringResource(MR.strings.tsuzuki_inventory_candidates),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.releaseObservations > 0) {
+                Text(
+                    "${source.releaseObservations} " + stringResource(MR.strings.tsuzuki_inventory_releases),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.numberedReleaseCandidateCount > 0) {
+                Text(
+                    "${source.numberedReleaseCandidateCount} " +
+                        stringResource(MR.strings.tsuzuki_inventory_numbered_release_candidates),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+                source.numberedReleaseCandidates.forEach { candidate ->
+                    Text(
+                        stringResource(
+                            MR.strings.tsuzuki_inventory_numbered_release_example,
+                            candidate.label,
+                            candidate.language ?: stringResource(MR.strings.tsuzuki_inventory_language_unrecorded),
+                            candidate.releaseCount,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.secondary,
+                    )
+                }
+            } else if (source.releaseObservations == 0 && source.latestSuccessfulFetchAt != null) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_empty_release_feed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            } else if (source.releaseObservations > 0) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_no_numbered_release_candidates),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.knownEditorialLabels.isNotEmpty()) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_editorial_examples) + ": " +
+                        source.knownEditorialLabels.joinToString(", "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.candidateExampleLabels.isNotEmpty()) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_candidate_examples) + ": " +
+                        source.candidateExampleLabels.joinToString(", "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (
+                source.candidateObservations > 0 &&
+                !source.scope.editionKey.isNullOrBlank() &&
+                !source.scope.language.isNullOrBlank()
+            ) {
+                DefaultSkinTextAction(
+                    text = "Revisar capítulos desta edição",
+                    onClick = { onReviewCandidates(source) },
+                )
+            }
+            if (source.releaseExampleLabels.isNotEmpty()) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_release_examples) + ": " +
+                        source.releaseExampleLabels.joinToString(", "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+            if (source.declaredTotals.isNotEmpty()) {
+                Text(
+                    stringResource(MR.strings.tsuzuki_inventory_totals) + ": " +
+                        source.declaredTotals.sorted().joinToString(", "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun InventoryFailureReasonText(reason: InventoryFetchFailureReason) {
+    val label = when (reason) {
+        InventoryFetchFailureReason.ACCESS_DENIED -> MR.strings.tsuzuki_inventory_error_access
+        InventoryFetchFailureReason.RATE_LIMITED -> MR.strings.tsuzuki_inventory_error_rate_limit
+        InventoryFetchFailureReason.HTTP_ERROR -> MR.strings.tsuzuki_inventory_error_http
+        InventoryFetchFailureReason.RESPONSE_TOO_LARGE -> MR.strings.tsuzuki_inventory_error_size
+        InventoryFetchFailureReason.NETWORK_ERROR -> MR.strings.tsuzuki_inventory_error_network
+        InventoryFetchFailureReason.INVALID_RESPONSE -> MR.strings.tsuzuki_inventory_error_response
+        InventoryFetchFailureReason.UNKNOWN -> MR.strings.tsuzuki_inventory_error_unknown
+    }
+    Text(
+        stringResource(label),
+        style = MaterialTheme.typography.bodySmall,
+        color = defaultSkinColors().secondary,
+    )
 }
 
 @Composable
@@ -404,6 +929,9 @@ private fun DetailsToolbar(
     onProviders: () -> Unit,
     background: Color = Color.Transparent,
     onSources: (() -> Unit)? = null,
+    onInventory: (() -> Unit)? = null,
+    onChooseEdition: (() -> Unit)? = null,
+    onImportEpub: (() -> Unit)? = null,
 ) {
     val colors = defaultSkinColors()
     var expanded by remember { mutableStateOf(false) }
@@ -456,6 +984,28 @@ private fun DetailsToolbar(
                         false
                     onProviders()
                 })
+                onChooseEdition?.let { action ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(stringResource(MR.strings.tsuzuki_edition_choose), color = colors.foreground)
+                        },
+                        onClick = {
+                            expanded = false
+                            action()
+                        },
+                    )
+                }
+                onImportEpub?.let { action ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(stringResource(MR.strings.tsuzuki_epub_import_action), color = colors.foreground)
+                        },
+                        onClick = {
+                            expanded = false
+                            action()
+                        },
+                    )
+                }
                 onSources?.let { action ->
                     DropdownMenuItem(text = {
                         Text(stringResource(MR.strings.tsuzuki_details_metadata_sources), color = colors.foreground)
@@ -464,6 +1014,17 @@ private fun DetailsToolbar(
                             false
                         action()
                     })
+                }
+                onInventory?.let { action ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(stringResource(MR.strings.tsuzuki_inventory_title), color = colors.foreground)
+                        },
+                        onClick = {
+                            expanded = false
+                            action()
+                        },
+                    )
                 }
             }
         }

@@ -50,32 +50,44 @@ class PrepareProviderChapterTorrentTest {
             updatedAt = 1,
         )
         val providerId = ProviderId("org.example.torrent")
-        val file = TorrentCandidateFile(0, "Example Manga - Vol 2 Ch 12.cbz")
+        val file = TorrentCandidateFile(1, "Example Manga/Volume 2/Chapter 12.cbz", sizeBytes = 42_000L)
         val candidate = TorrentCandidate(
             infoHash = "0123456789abcdef0123456789abcdef01234567",
             magnetUri = null,
-            torrentUrl = null,
+            torrentUrl = "https://source.example/verified.torrent",
             displayName = "Example Manga",
-            files = listOf(file),
+            files = listOf(
+                TorrentCandidateFile(0, "Example Manga/Volume 1/Chapter 12.cbz"),
+                file,
+                TorrentCandidateFile(2, "Example Manga/Volume 3/Chapter 12.cbz"),
+            ),
         )
+        var searchedDiscoveryId: String? = null
         val resolver = ResolveProviderChapterTorrent(
             canonicalChapterRepository = chapterRepository(chapter),
             canonicalTitleRepository = titleRepository(title),
             providerRegistry = DefaultProviderRegistry(
                 registrations = { listOf(registration(providerId)) },
             ),
-            gateway = TorrentSearchGateway { _, _ ->
+            gateway = TorrentSearchGateway { _, search ->
+                searchedDiscoveryId = search.operationId
                 ProviderCallResult.Success(ProviderPage(listOf(candidate), null))
             },
         )
         var capturedIndex: Int? = null
         var capturedPath: String? = null
+        var capturedUrl: String? = null
+        var capturedSize: Long? = null
+        var capturedDiscoveryId: String? = null
         val preparer = PrepareProviderChapterTorrent(
             resolver = resolver,
             prepareTorrentArtifact = PrepareTorrentArtifact(
                 TorrentArtifactEngine { request ->
                     capturedIndex = request.fileIndex
                     capturedPath = request.filePath
+                    capturedUrl = request.torrentUrl
+                    capturedSize = request.fileSizeBytes
+                    capturedDiscoveryId = request.discoveryOperationId
                     Result.success(
                         PreparedTorrentArtifact(
                             localUri = "content://provider.test/chapter-12.cbz",
@@ -94,8 +106,11 @@ class PrepareProviderChapterTorrentTest {
                 "content://provider.test/chapter-12.cbz",
             ),
         )
-        capturedIndex shouldBe 0
+        capturedIndex shouldBe 1
         capturedPath shouldBe file.path
+        capturedUrl shouldBe "https://source.example/verified.torrent"
+        capturedSize shouldBe 42_000L
+        capturedDiscoveryId shouldBe requireNotNull(searchedDiscoveryId)
     }
 
     private fun registration(id: ProviderId): ProviderRegistration = ProviderRegistration(

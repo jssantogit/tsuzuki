@@ -4,6 +4,345 @@ import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
 class StructuredDiagnosticEventTest {
+
+    @Test
+    fun `UI stall events preserve duration but never accept free form stack or URL`() {
+        val attributes = mapOf(
+            "untrusted_stack_trace" to DiagnosticAttributeValue.Text("Authorization: secret"),
+            "request_url" to DiagnosticAttributeValue.Text("https://example.invalid/?token=secret"),
+        )
+        val event = StructuredDiagnosticEvent(
+            timestampMillis = 1_790_755_200_000L,
+            severity = DiagnosticSeverity.WARN,
+            subsystem = DiagnosticSubsystem.APP,
+            name = DiagnosticEventName.APP_FRAME_STALL,
+            sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+            operationId = null,
+            stage = DiagnosticStage.RENDER,
+            outcome = DiagnosticOutcome.PARTIAL,
+            durationMillis = 420L,
+            attributes = attributes,
+        )
+        val sanitized = requireNotNull(StructuredDiagnosticSanitizer.sanitize(event))
+        sanitized.durationMillis shouldBe 420L
+        sanitized.attributes shouldBe emptyMap()
+    }
+
+    @Test
+    fun `canonical refresh phases accept typed causes and reject arbitrary strings`() {
+        fun attributes(values: Map<String, DiagnosticAttributeValue>) =
+            requireNotNull(
+                StructuredDiagnosticSanitizer.sanitize(
+                    StructuredDiagnosticEvent(
+                        timestampMillis = 1_790_755_200_000L,
+                        severity = DiagnosticSeverity.DEBUG,
+                        subsystem = DiagnosticSubsystem.CHAPTER,
+                        name = DiagnosticEventName.CHAPTER_RECONCILE_PHASE,
+                        sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                        operationId = null,
+                        stage = DiagnosticStage.RECONCILE,
+                        outcome = DiagnosticOutcome.SUCCEEDED,
+                        durationMillis = 82L,
+                        attributes = values,
+                    ),
+                ),
+            ).attributes
+
+        attributes(
+            mapOf(
+                "chapter_reconcile_phase" to DiagnosticAttributeValue.Code(
+                    DiagnosticChapterReconcilePhase.DELTA_WRITE,
+                ),
+                "chapter_ui_phase" to DiagnosticAttributeValue.Code(DiagnosticChapterUiPhase.ROWS_BUILD),
+                "item_count" to DiagnosticAttributeValue.Number(2231),
+            ),
+        ) shouldBe mapOf(
+            DiagnosticAttribute.CHAPTER_RECONCILE_PHASE to DiagnosticAttributeValue.Code(
+                DiagnosticChapterReconcilePhase.DELTA_WRITE,
+            ),
+            DiagnosticAttribute.CHAPTER_UI_PHASE to DiagnosticAttributeValue.Code(
+                DiagnosticChapterUiPhase.ROWS_BUILD,
+            ),
+            DiagnosticAttribute.ITEM_COUNT to DiagnosticAttributeValue.Number(2231),
+        )
+        attributes(
+            mapOf("chapter_reconcile_phase" to DiagnosticAttributeValue.Text("DELTA_WRITE; cookie=secret")),
+        ) shouldBe emptyMap()
+    }
+
+    @Test
+    fun `isolated runtime phases remain closed and cannot accept arbitrary source diagnostics`() {
+        fun sanitize(attributes: Map<String, DiagnosticAttributeValue>) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000,
+                severity = DiagnosticSeverity.DEBUG,
+                subsystem = DiagnosticSubsystem.NETWORK,
+                name = DiagnosticEventName.PROVIDER_RUNTIME_STAGE,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.BINDING,
+                outcome = DiagnosticOutcome.REUSED,
+                attributes = attributes,
+            ),
+        )?.attributes.orEmpty()
+
+        sanitize(
+            mapOf(
+                "provider_runtime_phase" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderRuntimePhase.BIND_REUSED,
+                ),
+            ),
+        ) shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_RUNTIME_PHASE to DiagnosticAttributeValue.Code(
+                DiagnosticProviderRuntimePhase.BIND_REUSED,
+            ),
+        )
+
+        sanitize(
+            mapOf(
+                "provider_runtime_phase" to DiagnosticAttributeValue.Text("BIND_REUSED; cookie=secret"),
+                "request_url" to DiagnosticAttributeValue.Text("https://example.org/?token=secret"),
+            ),
+        ) shouldBe emptyMap()
+    }
+
+    @Test
+    fun `Reader empty source audit keeps only closed causes and bounded counts`() {
+        fun sanitize(values: Map<String, DiagnosticAttributeValue>) =
+            StructuredDiagnosticSanitizer.sanitize(
+                StructuredDiagnosticEvent(
+                    timestampMillis = 1_790_755_200_000L,
+                    severity = DiagnosticSeverity.INFO,
+                    subsystem = DiagnosticSubsystem.CONTENT,
+                    name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
+                    sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                    operationId = null,
+                    stage = DiagnosticStage.BINDING,
+                    outcome = DiagnosticOutcome.EMPTY,
+                    attributes = values,
+                ),
+            )?.attributes.orEmpty()
+
+        val expectedReason = DiagnosticAttributeValue.Code(
+            DiagnosticProviderReaderNoMatchReason.NO_MATCHING_SOURCE_CHAPTER,
+        )
+        sanitize(
+            mapOf(
+                "provider_reader_no_match_reason" to expectedReason,
+                "provider_reader_eligible_source_count" to DiagnosticAttributeValue.Number(1),
+                "provider_reader_observed_evidence_count" to DiagnosticAttributeValue.Number(1250),
+                "provider_reader_matching_number_count" to DiagnosticAttributeValue.Number(0),
+                "provider_reader_mapped_evidence_count" to DiagnosticAttributeValue.Number(0),
+                "provider_reader_eligible_mapped_count" to DiagnosticAttributeValue.Number(0),
+            ),
+        ) shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_READER_NO_MATCH_REASON to expectedReason,
+            DiagnosticAttribute.PROVIDER_READER_ELIGIBLE_SOURCE_COUNT to DiagnosticAttributeValue.Number(1),
+            DiagnosticAttribute.PROVIDER_READER_OBSERVED_EVIDENCE_COUNT to DiagnosticAttributeValue.Number(1250),
+            DiagnosticAttribute.PROVIDER_READER_MATCHING_NUMBER_COUNT to DiagnosticAttributeValue.Number(0),
+            DiagnosticAttribute.PROVIDER_READER_MAPPED_EVIDENCE_COUNT to DiagnosticAttributeValue.Number(0),
+            DiagnosticAttribute.PROVIDER_READER_ELIGIBLE_MAPPED_COUNT to DiagnosticAttributeValue.Number(0),
+        )
+        sanitize(
+            mapOf(
+                "provider_reader_no_match_reason" to
+                    DiagnosticAttributeValue.Text("NO_MATCHING_SOURCE_CHAPTER; bearer secret"),
+                "provider_reader_observed_evidence_count" to DiagnosticAttributeValue.Number(-1),
+                "provider_reader_matching_number_count" to DiagnosticAttributeValue.Number(2_000_000),
+            ),
+        ) shouldBe emptyMap()
+    }
+
+    @Test
+    fun `Reader identity rejection reason is a closed diagnostic code`() {
+        fun audited(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000L,
+                severity = DiagnosticSeverity.INFO,
+                subsystem = DiagnosticSubsystem.CONTENT,
+                name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.BINDING,
+                outcome = DiagnosticOutcome.EMPTY,
+                attributes = mapOf("provider_reader_identity_rejection_reason" to value),
+            ),
+        )?.attributes.orEmpty()
+
+        val reason = DiagnosticAttributeValue.Code(
+            DiagnosticProviderReaderIdentityRejectionReason.CANONICAL_VOLUME_CONFLICT,
+        )
+        audited(reason) shouldBe mapOf(DiagnosticAttribute.PROVIDER_READER_IDENTITY_REJECTION_REASON to reason)
+        val conflictingChapter = DiagnosticAttributeValue.Code(
+            DiagnosticProviderReaderIdentityRejectionReason.CONFLICTING_CHAPTER_MARKERS,
+        )
+        audited(conflictingChapter) shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_READER_IDENTITY_REJECTION_REASON to conflictingChapter,
+        )
+        audited(DiagnosticAttributeValue.Text("unverified text")) shouldBe emptyMap()
+        audited(DiagnosticAttributeValue.Code(DiagnosticProviderReaderNoMatchReason.IDENTITY_REJECTED)) shouldBe
+            emptyMap()
+    }
+
+    @Test
+    fun `selected Reader source metadata accepts only numbers and closed flags`() {
+        fun attributes(raw: Map<String, DiagnosticAttributeValue>) =
+            StructuredDiagnosticSanitizer.sanitize(
+                StructuredDiagnosticEvent(
+                    timestampMillis = 1_790_755_200_000L,
+                    severity = DiagnosticSeverity.INFO,
+                    subsystem = DiagnosticSubsystem.READER,
+                    name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                    sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                    operationId = null,
+                    stage = DiagnosticStage.READER,
+                    outcome = DiagnosticOutcome.SUCCEEDED,
+                    attributes = raw,
+                ),
+            )?.attributes.orEmpty()
+
+        attributes(
+            mapOf(
+                "provider_reader_source_number_milli" to DiagnosticAttributeValue.Number(0),
+                "provider_reader_source_volume" to DiagnosticAttributeValue.Number(1),
+                "provider_reader_label_has_volume_marker" to DiagnosticAttributeValue.Flag(true),
+                "provider_reader_title_is_volume_container" to DiagnosticAttributeValue.Flag(false),
+                "provider_reader_title_present" to DiagnosticAttributeValue.Flag(true),
+            ),
+        ) shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_READER_SOURCE_NUMBER_MILLI to DiagnosticAttributeValue.Number(0),
+            DiagnosticAttribute.PROVIDER_READER_SOURCE_VOLUME to DiagnosticAttributeValue.Number(1),
+            DiagnosticAttribute.PROVIDER_READER_LABEL_HAS_VOLUME_MARKER to DiagnosticAttributeValue.Flag(true),
+            DiagnosticAttribute.PROVIDER_READER_TITLE_IS_VOLUME_CONTAINER to DiagnosticAttributeValue.Flag(false),
+            DiagnosticAttribute.PROVIDER_READER_TITLE_PRESENT to DiagnosticAttributeValue.Flag(true),
+        )
+        attributes(
+            mapOf(
+                "provider_reader_source_number_milli" to DiagnosticAttributeValue.Number(-1),
+                "provider_reader_source_volume" to DiagnosticAttributeValue.Number(11111),
+                "provider_reader_title_present" to DiagnosticAttributeValue.Text("Authorization: secret"),
+            ),
+        ) shouldBe emptyMap()
+    }
+
+    @Test
+    fun `Reader detailed capture preserves zero as a number but rejects invalid chapter hints`() {
+        fun sanitize(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000,
+                severity = DiagnosticSeverity.INFO,
+                subsystem = DiagnosticSubsystem.READER,
+                name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.READER,
+                outcome = DiagnosticOutcome.SUCCEEDED,
+                attributes = mapOf("canonical_chapter_base_number" to value),
+            ),
+        )?.attributes.orEmpty()
+        sanitize(DiagnosticAttributeValue.Number(0))[DiagnosticAttribute.CANONICAL_CHAPTER_BASE_NUMBER] shouldBe
+            DiagnosticAttributeValue.Number(0)
+        sanitize(DiagnosticAttributeValue.Number(-1)) shouldBe emptyMap()
+        sanitize(DiagnosticAttributeValue.Text("0; Authorization: secret")) shouldBe emptyMap()
+    }
+
+    @Test
+    fun `Reader chapter diagnostics accept only bounded numeric public source chapter IDs`() {
+        fun sanitizeChapter(value: String) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000,
+                severity = DiagnosticSeverity.INFO,
+                subsystem = DiagnosticSubsystem.READER,
+                name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.READER,
+                outcome = DiagnosticOutcome.SUCCEEDED,
+                attributes = mapOf("provider_chapter_id" to DiagnosticAttributeValue.Text(value)),
+            ),
+        )?.attributes.orEmpty()
+
+        sanitizeChapter("7540238")[DiagnosticAttribute.PROVIDER_CHAPTER_ID] shouldBe
+            DiagnosticAttributeValue.Text("7540238")
+        listOf("secret:chapter", "https://example.com?token=secret", "12\\nAuthorization: token", "abc", "0".repeat(33))
+            .forEach { unsafe -> sanitizeChapter(unsafe) shouldBe emptyMap() }
+    }
+
+    @Test
+    fun `provider candidate diagnostics accept only public bounded source identifiers`() {
+        fun sanitizeCandidate(attributes: Map<String, DiagnosticAttributeValue>) =
+            StructuredDiagnosticSanitizer.sanitize(
+                StructuredDiagnosticEvent(
+                    timestampMillis = 1_790_755_200_000,
+                    severity = DiagnosticSeverity.DEBUG,
+                    subsystem = DiagnosticSubsystem.CHAPTER,
+                    name = DiagnosticEventName.PROVIDER_READING_CANDIDATE,
+                    sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                    operationId = null,
+                    stage = DiagnosticStage.LOOKUP,
+                    outcome = DiagnosticOutcome.REJECTED,
+                    attributes = attributes,
+                ),
+            )?.attributes.orEmpty()
+
+        val safe = sanitizeCandidate(
+            mapOf(
+                "provider_work_id" to DiagnosticAttributeValue.Text("qnlvj"),
+                "provider_work_title" to DiagnosticAttributeValue.Text("Vagabond"),
+                "provider_work_url" to DiagnosticAttributeValue.Text("https://mangafire.to/title/qnlvj-vagabond22"),
+                "provider_work_chapter_count" to DiagnosticAttributeValue.Number(327),
+                "provider_coverage_outcome" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderCoverageOutcome.OBSERVED,
+                ),
+                "provider_coverage_observed_count" to DiagnosticAttributeValue.Number(101),
+                "provider_coverage_has_more" to DiagnosticAttributeValue.Flag(true),
+                "chapter_number_min_milli" to DiagnosticAttributeValue.Number(1000),
+                "chapter_number_max_milli" to DiagnosticAttributeValue.Number(101000),
+                "provider_detail_outcome" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderDetailOutcome.DETAIL_FAILED,
+                ),
+                "http_status" to DiagnosticAttributeValue.Number(503),
+                "provider_candidate_reason" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderCandidateReason.ALIAS_MATCH_BLOCKED,
+                ),
+            ),
+        )
+        safe[DiagnosticAttribute.PROVIDER_WORK_ID] shouldBe DiagnosticAttributeValue.Text("qnlvj")
+        safe[DiagnosticAttribute.PROVIDER_WORK_TITLE] shouldBe DiagnosticAttributeValue.Text("Vagabond")
+        safe[DiagnosticAttribute.PROVIDER_WORK_URL] shouldBe
+            DiagnosticAttributeValue.Text("https://mangafire.to/title/qnlvj-vagabond22")
+        safe[DiagnosticAttribute.PROVIDER_WORK_CHAPTER_COUNT] shouldBe DiagnosticAttributeValue.Number(327)
+        safe[DiagnosticAttribute.PROVIDER_COVERAGE_OUTCOME] shouldBe
+            DiagnosticAttributeValue.Code(DiagnosticProviderCoverageOutcome.OBSERVED)
+        safe[DiagnosticAttribute.PROVIDER_COVERAGE_OBSERVED_COUNT] shouldBe DiagnosticAttributeValue.Number(101)
+        safe[DiagnosticAttribute.PROVIDER_COVERAGE_HAS_MORE] shouldBe DiagnosticAttributeValue.Flag(true)
+        safe[DiagnosticAttribute.CHAPTER_NUMBER_MIN_MILLI] shouldBe DiagnosticAttributeValue.Number(1000)
+        safe[DiagnosticAttribute.CHAPTER_NUMBER_MAX_MILLI] shouldBe DiagnosticAttributeValue.Number(101000)
+        safe[DiagnosticAttribute.PROVIDER_DETAIL_OUTCOME] shouldBe
+            DiagnosticAttributeValue.Code(DiagnosticProviderDetailOutcome.DETAIL_FAILED)
+        safe[DiagnosticAttribute.HTTP_STATUS] shouldBe DiagnosticAttributeValue.Number(503)
+
+        listOf(
+            "https://mangafire.to/title/qnlvj-vagabond22?token=secret",
+            "https://user:pass@mangafire.to/title/qnlvj-vagabond22",
+            "https://evil.example/title/qnlvj-vagabond22",
+            "http://mangafire.to/title/qnlvj-vagabond22",
+        ).forEach { unsafe ->
+            sanitizeCandidate(
+                mapOf("provider_work_url" to DiagnosticAttributeValue.Text(unsafe)),
+            ) shouldBe emptyMap()
+        }
+        sanitizeCandidate(
+            mapOf("provider_work_title" to DiagnosticAttributeValue.Text("Bad\nAuthorization: Bearer secret")),
+        ) shouldBe emptyMap()
+        sanitizeCandidate(
+            mapOf(
+                "provider_detail_outcome" to DiagnosticAttributeValue.Text("Authorization: Bearer secret"),
+                "http_status" to DiagnosticAttributeValue.Number(999),
+            ),
+        ) shouldBe emptyMap()
+    }
+
     @Test
     fun `sanitizer keeps typed safe fields and drops unknown keys and unsafe values`() {
         val event = StructuredDiagnosticEvent(

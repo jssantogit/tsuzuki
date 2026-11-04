@@ -9,6 +9,7 @@ import dev.zacsweers.metro.AssistedInject
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.data.backup.BackupArchiveByteLimit
 import eu.kanade.tachiyomi.data.backup.BackupFileValidator
+import eu.kanade.tachiyomi.data.backup.CanonicalStandaloneArchive
 import eu.kanade.tachiyomi.data.backup.create.creators.CategoriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.ExtensionStoresBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.MangaBackupCreator
@@ -52,6 +53,7 @@ class BackupCreator(
     private val extensionStoresBackupCreator: ExtensionStoresBackupCreator,
     private val sourcesBackupCreator: SourcesBackupCreator,
     private val backupFileValidator: BackupFileValidator,
+    private val canonicalCoreBackupExporter: CanonicalCoreBackupExporter,
 ) {
     @AssistedFactory
     fun interface Factory {
@@ -81,17 +83,26 @@ class BackupCreator(
                 throw IllegalStateException(context.stringResource(MR.strings.create_backup_file_error))
             }
 
-            val nonFavoriteManga = if (options.readEntries) mangaRepository.getReadMangaNotInLibrary() else emptyList()
-            val backupManga = backupMangas(getFavorites.await() + nonFavoriteManga, options)
-
-            val backup = Backup(
-                backupManga = backupManga,
-                backupCategories = backupCategories(options),
-                backupSources = backupSources(backupManga),
-                backupPreferences = backupAppPreferences(options),
-                backupExtensionStores = backupExtensionStores(options),
-                backupSourcePreferences = backupSourcePreferences(options),
-            )
+            val backup = if (options.canonicalLibraryOnly) {
+                // Separate, explicitly selected archive: never combine with
+                // non-transactional legacy manga restore or credentials.
+                CanonicalStandaloneArchive.compose(canonicalCoreBackupExporter.export())
+            } else {
+                val nonFavoriteManga = if (options.readEntries) {
+                    mangaRepository.getReadMangaNotInLibrary()
+                } else {
+                    emptyList()
+                }
+                val backupManga = backupMangas(getFavorites.await() + nonFavoriteManga, options)
+                Backup(
+                    backupManga = backupManga,
+                    backupCategories = backupCategories(options),
+                    backupSources = backupSources(backupManga),
+                    backupPreferences = backupAppPreferences(options),
+                    backupExtensionStores = backupExtensionStores(options),
+                    backupSourcePreferences = backupSourcePreferences(options),
+                )
+            }
 
             val byteArray = parser.encodeToByteArray(Backup.serializer(), backup)
             if (byteArray.isEmpty()) {

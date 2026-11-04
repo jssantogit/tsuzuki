@@ -11,6 +11,7 @@ import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
+import tachiyomi.core.provider.runtime.ProviderP2pChapterImage
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderCursor
@@ -135,6 +136,9 @@ class ScriptProviderTorrentGateway(
                 selectedFileIndex = request.selectedFile.index,
                 selectedFilePath = request.selectedFile.path,
                 selectedFileSizeBytes = request.selectedFile.sizeBytes,
+                selectedChapterImages = request.selectedChapterImages.map { page ->
+                    ProviderP2pChapterImage(page.index, page.path, requireNotNull(page.sizeBytes))
+                },
             )
         }.getOrNull()
         val result = executor.invoke(

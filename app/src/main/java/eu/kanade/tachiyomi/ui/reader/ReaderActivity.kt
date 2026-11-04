@@ -430,6 +430,13 @@ class ReaderActivity : BaseActivity() {
                                 contentSelectorViewModel.cancelDiscovery()
                                 bindingLinkTitleId = canonicalTitleId
                             },
+                            onChooseEdition = { canonicalTitleId ->
+                                CanonicalTitleActivity.newIntent(
+                                    this@ReaderActivity,
+                                    canonicalTitleId,
+                                    openEditionPicker = true,
+                                )?.let(::startActivity)
+                            },
                             onCancelDiscovery = contentSelectorViewModel::cancelDiscovery,
                         )
                     }

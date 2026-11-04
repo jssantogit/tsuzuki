@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - 'tsuzuki/**'
+      - 'feat/issue-155-independent-chapter-inventory'
 
 concurrency:
   group: apk-build-${{ github.ref }}

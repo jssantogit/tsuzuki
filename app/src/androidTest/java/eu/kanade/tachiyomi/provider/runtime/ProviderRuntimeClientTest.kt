@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.provider.runtime
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
@@ -13,6 +14,7 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
 import java.io.File
+import java.util.concurrent.CopyOnWriteArrayList
 
 @RunWith(AndroidJUnit4::class)
 class ProviderRuntimeClientTest {
@@ -67,6 +69,41 @@ class ProviderRuntimeClientTest {
         assertEquals("42", response.value)
         storageRoot.deleteRecursively()
         Unit
+    }
+
+    @Test
+    fun consecutivePages_reuseBinderButIdleBindingEventuallyCloses() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val events = CopyOnWriteArrayList<ProviderRuntimeBindingPhase>()
+        val client = ProviderRuntimeClient(
+            context = context,
+            hostInvocationFactory = ProviderHostInvocationFactory(context = context),
+            bindingObserver = { events.add(it) },
+            bindingIdleTimeoutMs = 1_000L,
+        )
+
+        suspend fun invoke(id: String): String? {
+            val result = client.invoke(
+                request = request(invocationId = id),
+                source = "6 * 7".encodeToByteArray(),
+                hostPolicy = ProviderHostInvocationPolicy(
+                    providerId = "org.example.reader",
+                    invocationId = id,
+                ),
+            )
+            assertEquals(null, result.failure)
+            return result.value
+        }
+
+        assertEquals("42", invoke("page-first"))
+        assertEquals("42", invoke("page-second"))
+        assertEquals(1, events.count { it == ProviderRuntimeBindingPhase.BIND_STARTED })
+        assertEquals(1, events.count { it == ProviderRuntimeBindingPhase.BIND_REUSED })
+
+        delay(1_500L)
+        assertTrue(events.contains(ProviderRuntimeBindingPhase.BIND_INVALIDATED))
+        assertEquals("42", invoke("page-after-idle"))
+        assertEquals(2, events.count { it == ProviderRuntimeBindingPhase.BIND_STARTED })
     }
 
     private fun request(

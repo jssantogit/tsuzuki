@@ -60,22 +60,28 @@ class ProviderTorrentArtifactEngine(
             val selectedFile = TorrentCandidateFile(
                 index = selectedIndex,
                 path = selectedPath,
+                sizeBytes = request.fileSizeBytes,
             )
+            val selectedChapterImages = request.chapterImages.map {
+                TorrentCandidateFile(index = it.index, path = it.path, sizeBytes = it.sizeBytes)
+            }
             val providerRequest = TorrentAcquisitionRequest(
                 operationId = operationId,
                 candidate = TorrentCandidate(
                     infoHash = request.infoHash,
                     magnetUri = request.magnetUri,
-                    torrentUrl = null,
+                    torrentUrl = request.torrentUrl,
                     displayName = request.infoHash,
-                    files = listOf(selectedFile),
+                    files = if (selectedChapterImages.isEmpty()) listOf(selectedFile) else selectedChapterImages,
                 ),
                 selectedFile = selectedFile,
+                selectedChapterImages = selectedChapterImages,
             )
 
             ProviderP2pDiagnostics.record(
                 event = ProviderP2pDiagnosticEvent.READER_ACQUISITION_STATE,
                 operationId = operationId,
+                correlationOperationId = request.discoveryOperationId,
                 codes = mapOf(
                     "state" to "STARTED",
                     "preference" to preferences.acquisitionPreference.get().name,
@@ -89,7 +95,7 @@ class ProviderTorrentArtifactEngine(
                     "directP2pAllowed" to preferences.directP2pAllowed.get(),
                     "hasInfoHash" to request.infoHash.isNotBlank(),
                     "hasMagnet" to !request.magnetUri.isNullOrBlank(),
-                    "hasTorrentUrl" to false,
+                    "hasTorrentUrl" to !request.torrentUrl.isNullOrBlank(),
                 ),
             )
 

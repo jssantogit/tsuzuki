@@ -21,7 +21,16 @@ import tachiyomi.data.Mangas
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
+import tachiyomi.data.tsuzuki.chapter.IndependentInventoryRepositoryImpl
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
+import tachiyomi.domain.tsuzuki.chapter.interactor.buildCanonicalChapterOutline
+import tachiyomi.domain.tsuzuki.chapter.interactor.inferredChapterId
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaim
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryClaimKind
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryDerivation
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryEvidenceBatch
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
+import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryScope
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterNumberingKind
@@ -233,6 +242,54 @@ class CanonicalTitleMergeRepositoryImplTest {
     }
 
     @Test
+    fun `convergence retains historical count IDs with progress history download and inferred status`() =
+        runBlocking<Unit> {
+            seedTitle("winner", "Winner")
+            seedTitle("duplicate", "Duplicate")
+            val legacyId = inferredChapterId("duplicate", 37)
+            chapterRepository.upsert(
+                chapter(legacyId, "duplicate", 37).copy(
+                    confirmation = CanonicalChapterConfirmation.PROVISIONAL,
+                ),
+            )
+            readingRepository.recordCheckpoint(
+                progress = CanonicalChapterProgress(
+                    canonicalChapterId = legacyId,
+                    lastPageRead = 8L,
+                    updatedAt = 22L,
+                ),
+                history = CanonicalChapterHistoryUpdate(
+                    canonicalChapterId = legacyId,
+                    readAt = 22L,
+                    sessionReadDuration = 41L,
+                ),
+            )
+            database.tsuzuki_canonical_downloadsQueries.upsertTsuzukiCanonicalDownload(
+                canonicalChapterId = legacyId,
+                localUri = "file:///legacy-37.cbz",
+                format = "CBZ",
+                originatingAddonId = "source",
+                originatingOptionKey = "source:37",
+                completedAt = 23L,
+                checksum = "checksum",
+            )
+
+            repository.convergeTo("winner", "duplicate")
+
+            val migrated = chapterRepository.getById(legacyId)!!
+            migrated.id shouldBe legacyId
+            migrated.canonicalTitleId shouldBe "winner"
+            readingRepository.getProgress(legacyId)?.lastPageRead shouldBe 8L
+            readingRepository.getHistory(legacyId)?.totalReadDuration shouldBe 41L
+            database.tsuzuki_canonical_downloadsQueries
+                .getTsuzukiCanonicalDownload(legacyId) { _, uri, _, _, _, _, _ -> uri }
+                .awaitAsOneOrNull() shouldBe "file:///legacy-37.cbz"
+            val outline = buildCanonicalChapterOutline("winner", listOf(migrated), emptyList())
+            outline.single().chapter.id shouldBe legacyId
+            outline.single().inferredFromReportedCount shouldBe true
+        }
+
+    @Test
     fun `missing target is created from local title before rekey`() = runBlocking<Unit> {
         seedTitle("local", "Cross-device title")
         database.tsuzuki_external_identitiesQueries.insertTsuzukiExternalIdentity(
@@ -412,6 +469,61 @@ class CanonicalTitleMergeRepositoryImplTest {
 
         chapterRepository.getById("winner-12-05") shouldBe exact
         chapterRepository.getById("duplicate-12-05")?.canonicalTitleId shouldBe "duplicate"
+    }
+
+    @Test
+    fun `merging titles retains every independent claim and the newest matching page atomically`() = runBlocking<Unit> {
+        seedTitle("winner", "Winner")
+        seedTitle("duplicate", "Duplicate")
+        val ledger = IndependentInventoryRepositoryImpl(database)
+        fun scope(title: String) = InventoryScope(
+            canonicalTitleId = title,
+            producerId = "mangadex",
+            externalWorkId = "external-123",
+            editionKey = "edition-1",
+            language = "pt-br",
+            workIdentityVerified = true,
+            editionIdentityVerified = true,
+        )
+        suspend fun record(title: String, release: String, label: String, at: Long) {
+            ledger.saveBatch(
+                InventoryEvidenceBatch(
+                    scope = scope(title),
+                    pageKey = "page:$release",
+                    observedAt = at,
+                    outcome = InventoryFetchOutcome.EXHAUSTED,
+                    claims = listOf(
+                        InventoryClaim(
+                            sourceRecordId = release,
+                            label = label,
+                            volumeLabel = "1",
+                            language = "pt-br",
+                            kind = InventoryClaimKind.INDIVIDUAL,
+                            derivation = InventoryDerivation.RELEASE_RECORD,
+                            upstreamSourceId = "origin",
+                            observedAt = at,
+                        ),
+                    ),
+                ),
+            )
+        }
+        record("winner", "same", "older", 10L)
+        record("winner", "target-only", "untouched", 20L)
+        record("duplicate", "same", "newer", 30L)
+        record("duplicate", "local-only", "retained", 40L)
+
+        repository.convergeTo(targetId = "winner", localId = "duplicate")
+
+        titleRepository.getById("duplicate") shouldBe null
+        ledger.byTitle("duplicate") shouldBe emptyList()
+        val claims = ledger.byTitle("winner")
+        claims.size shouldBe 3
+        claims.single { it.claim.sourceRecordId == "same" }.claim.label shouldBe "newer"
+        claims.single { it.claim.sourceRecordId == "target-only" }.claim.label shouldBe "untouched"
+        claims.single { it.claim.sourceRecordId == "local-only" }.claim.label shouldBe "retained"
+        ledger.batchesByTitle("winner").size shouldBe 3
+        ledger.batchesByTitle("winner")
+            .single { it.pageKey == "page:same" }.observedAt shouldBe 30L
     }
 
     private suspend fun seedTitle(id: String, displayTitle: String) {

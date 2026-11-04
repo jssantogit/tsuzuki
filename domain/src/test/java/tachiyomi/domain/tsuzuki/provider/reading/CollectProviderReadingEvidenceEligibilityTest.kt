@@ -21,11 +21,11 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 
-// Reading discovery is eligible only when one SCRIPT Provider can complete the entire Reader path.
+// Chapter evidence may be discovered without pages, but only from enabled SCRIPT metadata capabilities.
 class CollectProviderReadingEvidenceEligibilityTest {
 
     @Test
-    fun `Provider missing pages capability is not eligible for canonical reading discovery`() = runBlocking {
+    fun `Provider with lookup and chapters but no pages contributes provisional evidence`() = runBlocking {
         val providerId = ProviderId("app.tsuzuki.incomplete")
         val title = CanonicalTitle(
             id = "title-1",
@@ -40,7 +40,7 @@ class CollectProviderReadingEvidenceEligibilityTest {
                     ProviderRegistration(
                         descriptor = ProviderDescriptor(
                             id = providerId,
-                            name = "Incomplete reading Provider",
+                            name = "Metadata-only chapter Provider",
                             version = ProviderVersion("0.1.0", 1),
                             origin = ProviderOrigin.Repository("app.tsuzuki.providers"),
                             runtime = ProviderRuntimeKind.SCRIPT,
@@ -65,7 +65,13 @@ class CollectProviderReadingEvidenceEligibilityTest {
                 request: ProviderReadingLookupRequest,
             ): ProviderCallResult<ProviderPage<ProviderWorkCandidate>> {
                 gatewayCalls++
-                error("incomplete Provider must not be queried")
+                request.titles shouldBe listOf("Dandadan")
+                return ProviderCallResult.Success(
+                    ProviderPage(
+                        items = listOf(ProviderWorkCandidate("work-dandadan", "Dandadan")),
+                        nextCursor = null,
+                    ),
+                )
             }
 
             override suspend fun chapters(
@@ -73,15 +79,29 @@ class CollectProviderReadingEvidenceEligibilityTest {
                 request: ProviderReadingChaptersRequest,
             ): ProviderCallResult<ProviderPage<ProviderChapterObservation>> {
                 gatewayCalls++
-                error("incomplete Provider must not be queried")
+                request.binding.externalWorkId shouldBe "work-dandadan"
+                return ProviderCallResult.Success(
+                    ProviderPage(
+                        items = listOf(
+                            ProviderChapterObservation(
+                                providerChapterId = "ch-1",
+                                rawLabel = "Chapter 1",
+                                rawNumber = 1.0,
+                                language = "en",
+                                scanlationGroup = "Group",
+                                releaseDateMillis = 100L,
+                            ),
+                        ),
+                        nextCursor = null,
+                    ),
+                )
             }
 
             override suspend fun pages(
                 providerId: ProviderId,
                 request: ProviderReadingPagesRequest,
             ): ProviderCallResult<ProviderReadingDelivery> {
-                gatewayCalls++
-                error("incomplete Provider must not be queried")
+                error("reading pages must never be called during chapter evidence discovery")
             }
         }
         val bridge = CollectProviderReadingEvidence(
@@ -96,9 +116,13 @@ class CollectProviderReadingEvidenceEligibilityTest {
         val result = bridge.execute(title.id)
 
         result.complete shouldBe true
-        result.bindingCount shouldBe 0
-        result.evidence shouldBe emptyList()
-        gatewayCalls shouldBe 0
+        result.bindingCount shouldBe 1
+        result.evidence.size shouldBe 1
+        result.evidence.single().producerKind shouldBe tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind.PROVIDER
+        result.evidence.single().authority shouldBe
+            tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority.PROVIDER_PROVISIONAL
+        result.evidence.single().externalChapterKey shouldBe "ch-1"
+        gatewayCalls shouldBe 2
     }
 
     private fun titleRepository(title: CanonicalTitle) = object : CanonicalTitleRepository {

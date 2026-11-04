@@ -33,9 +33,11 @@ run_package() {
   fi
 }
 
-# Keep runtime/torrent acquisition and Reader archive acceptance on the same
+# Keep runtime, provisional Provider ICE metadata, and Reader archive acceptance on the same
 # physical emulator gate and branch head without broadening to unrelated tests.
 run_package "eu.kanade.tachiyomi.provider.runtime" "Provider Platform runtime"
+run_package "eu.kanade.tachiyomi.provider.reading" "Provider Reading/ICE"
 run_package "eu.kanade.tachiyomi.ui.reader.loader" "Provider Torrent Reader"
+run_package "eu.kanade.tachiyomi.ui.main" "Canonical UI jank"
 
 exit "$status"

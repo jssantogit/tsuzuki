@@ -72,12 +72,22 @@ internal object DefaultIntegrationManifests {
                 IntegrationCapability.METADATA_ARTWORK,
                 IntegrationCapability.METADATA_EDITORIAL,
                 IntegrationCapability.METADATA_STAFF,
+                IntegrationCapability.CHAPTER_INVENTORY,
                 IntegrationCapability.RATINGS,
                 IntegrationCapability.TRACKING,
                 IntegrationCapability.USER_LISTS,
                 attribution = "MangaUpdates",
             ),
             legacyTrackerId = 7L,
+        ),
+        IntegrationManifest(
+            integrationId = IntegrationId("mangadex"),
+            displayName = "MangaDex",
+            category = IntegrationCategory.METADATA_SERVICE,
+            capabilities = policies(
+                IntegrationPolicy.ALLOWED,
+                IntegrationCapability.CHAPTER_INVENTORY,
+            ),
         ),
         IntegrationManifest(
             integrationId = IntegrationId("bangumi"),

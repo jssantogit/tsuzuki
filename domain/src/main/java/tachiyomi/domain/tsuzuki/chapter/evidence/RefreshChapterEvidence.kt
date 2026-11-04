@@ -38,6 +38,7 @@ import tachiyomi.domain.tsuzuki.content.interactor.DiscoverReadableTitle
 import tachiyomi.domain.tsuzuki.content.interactor.ResolveContentBinding
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticChapterReconcilePhase
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
@@ -146,6 +147,7 @@ class RefreshChapterEvidence private constructor(
         registry: IntegrationRegistry,
         reconcileChapterEvidence: ReconcileChapterEvidence,
         providerReadingEvidence: CollectProviderReadingEvidence,
+        structuredDiagnostics: StructuredDiagnosticRecorder = NoOpStructuredDiagnosticRecorder,
     ) : this(
         registry = registry,
         reconcileChapterEvidence = reconcileChapterEvidence,
@@ -155,7 +157,7 @@ class RefreshChapterEvidence private constructor(
         inFlightContentResolution = null,
         diagnostics = NoOpChapterInventoryDiagnostics,
         discoverReadableTitle = null,
-        structuredDiagnostics = NoOpStructuredDiagnosticRecorder,
+        structuredDiagnostics = structuredDiagnostics,
         refreshSnapshots = null,
         providerReadingEvidence = providerReadingEvidence,
         clock = { Clock.System.now().toEpochMilliseconds() },
@@ -287,6 +289,40 @@ class RefreshChapterEvidence private constructor(
                 )
             }
 
+            // Record only slow, typed local phases during an explicit detailed capture.
+            // HTTP/provider timing alone cannot explain a frozen chapter list.
+            suspend fun timedLocalPhase(
+                phase: DiagnosticChapterReconcilePhase,
+                itemCount: Int,
+                operation: suspend () -> Unit,
+            ) {
+                if (!structuredDiagnostics.detailedCaptureActive) {
+                    operation()
+                    return
+                }
+                val phaseStart = TimeSource.Monotonic.markNow()
+                var succeeded = false
+                try {
+                    operation()
+                    succeeded = true
+                } finally {
+                    val millis = phaseStart.elapsedNow().inWholeMilliseconds.coerceAtLeast(0)
+                    if (millis >= 16L) {
+                        trace.event(
+                            subsystem = DiagnosticSubsystem.CHAPTER,
+                            name = DiagnosticEventName.CHAPTER_RECONCILE_PHASE,
+                            stage = DiagnosticStage.RECONCILE,
+                            outcome = if (succeeded) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.FAILED,
+                            durationMillis = millis.coerceAtMost(86_400_000L),
+                            attributes = mapOf(
+                                DiagnosticAttribute.CHAPTER_RECONCILE_PHASE to DiagnosticAttributeValue.Code(phase),
+                                DiagnosticAttribute.ITEM_COUNT to DiagnosticAttributeValue.Number(itemCount.toLong()),
+                            ),
+                        )
+                    }
+                }
+            }
+
             suspend fun reconcileStage(
                 observations: List<ChapterEvidence>,
                 pendingSnapshots: List<ChapterRefreshSnapshot> = emptyList(),
@@ -297,7 +333,9 @@ class RefreshChapterEvidence private constructor(
                         stagedEvidence[observation.id] != observation
                     }
                     if (delta.isNotEmpty()) {
-                        reconcileChapterEvidence.execute(canonicalTitleId, delta)
+                        timedLocalPhase(DiagnosticChapterReconcilePhase.DELTA_WRITE, delta.size) {
+                            reconcileChapterEvidence.execute(canonicalTitleId, delta)
+                        }
                         delta.forEach { observation -> stagedEvidence[observation.id] = observation }
                     }
                     pendingSnapshots
@@ -306,8 +344,12 @@ class RefreshChapterEvidence private constructor(
                         .forEach { snapshot -> refreshSnapshots?.upsertIfNewer(snapshot) }
 
                     if (delta.isNotEmpty()) {
-                        invalidateTitleContentOptions()
-                        notifyStageReconciled()
+                        timedLocalPhase(DiagnosticChapterReconcilePhase.CACHE_INVALIDATION, delta.size) {
+                            invalidateTitleContentOptions()
+                        }
+                        timedLocalPhase(DiagnosticChapterReconcilePhase.UI_RELOAD_CALLBACK, delta.size) {
+                            notifyStageReconciled()
+                        }
                     }
                 } finally {
                     stageMutex.unlock()
@@ -317,19 +359,25 @@ class RefreshChapterEvidence private constructor(
             suspend fun reconcileProviderSnapshot(snapshot: ProviderReadingEvidenceSnapshot) {
                 stageMutex.lock()
                 try {
-                    reconcileChapterEvidence.executeProviderSnapshot(
-                        canonicalTitleId = canonicalTitleId,
-                        producerId = snapshot.producerId,
-                        snapshotObservedAt = snapshot.observedAt,
-                        evidence = snapshot.evidence,
-                    )
+                    timedLocalPhase(DiagnosticChapterReconcilePhase.PROVIDER_SNAPSHOT_WRITE, snapshot.evidence.size) {
+                        reconcileChapterEvidence.executeProviderSnapshot(
+                            canonicalTitleId = canonicalTitleId,
+                            producerId = snapshot.producerId,
+                            snapshotObservedAt = snapshot.observedAt,
+                            evidence = snapshot.evidence,
+                        )
+                    }
                     snapshot.evidence.forEach { observation ->
                         stagedEvidence[observation.id] = observation
                     }
                     // A complete empty snapshot may detach stale Provider support, so invalidation
                     // and progressive publication must run even when this snapshot has no evidence.
-                    invalidateTitleContentOptions()
-                    notifyStageReconciled()
+                    timedLocalPhase(DiagnosticChapterReconcilePhase.CACHE_INVALIDATION, snapshot.evidence.size) {
+                        invalidateTitleContentOptions()
+                    }
+                    timedLocalPhase(DiagnosticChapterReconcilePhase.UI_RELOAD_CALLBACK, snapshot.evidence.size) {
+                        notifyStageReconciled()
+                    }
                 } finally {
                     stageMutex.unlock()
                 }
@@ -344,6 +392,12 @@ class RefreshChapterEvidence private constructor(
                 val providerEvidence = async {
                     val collected = providerReadingEvidence?.execute(canonicalTitleId)
                         ?: ProviderReadingEvidenceCollection()
+                    // An interrupted paginated source still provides real provisional
+                    // observations. Reconcile them additively: never use the snapshot
+                    // replacement path until the source proves completeness.
+                    if (collected.partialEvidence.isNotEmpty()) {
+                        reconcileStage(collected.partialEvidence)
+                    }
                     collected.snapshots.forEach { snapshot ->
                         reconcileProviderSnapshot(snapshot)
                     }
@@ -410,13 +464,16 @@ class RefreshChapterEvidence private constructor(
                     collections.addon.evidence +
                     collections.provider.evidence
                 ).distinctBy(ChapterEvidence::id)
+            // Incomplete Provider pages were already reconciled additively.
+            // Count them in diagnostics, never in full-refresh snapshots.
+            val reconciledObservationCount = (
+                evidence + collections.provider.partialEvidence
+                ).distinctBy(ChapterEvidence::id).size
 
-            if (
-                collections.integration.complete &&
+            val allSourcesComplete = collections.integration.complete &&
                 collections.addon.complete &&
-                collections.provider.complete &&
-                refreshSnapshots != null
-            ) {
+                collections.provider.complete
+            if (allSourcesComplete && refreshSnapshots != null) {
                 val now = clock()
                 refreshSnapshots.upsertIfNewer(
                     ChapterRefreshSnapshot(
@@ -437,17 +494,20 @@ class RefreshChapterEvidence private constructor(
                 stage = DiagnosticStage.RECONCILE,
                 outcome = DiagnosticOutcome.SUCCEEDED,
                 attributes = mapOf(
-                    DiagnosticAttribute.ITEM_COUNT to DiagnosticAttributeValue.Number(evidence.size.toLong()),
+                    DiagnosticAttribute.ITEM_COUNT to
+                        DiagnosticAttributeValue.Number(reconciledObservationCount.toLong()),
                 ),
             )
             trace.event(
                 subsystem = DiagnosticSubsystem.CHAPTER,
                 name = DiagnosticEventName.CHAPTER_REFRESH_COMPLETED,
                 stage = DiagnosticStage.COMPLETE,
-                outcome = DiagnosticOutcome.SUCCEEDED,
+                outcome = if (allSourcesComplete) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
                 durationMillis = started.elapsedNow().inWholeMilliseconds.coerceAtLeast(0),
                 attributes = mapOf(
-                    DiagnosticAttribute.ITEM_COUNT to DiagnosticAttributeValue.Number(evidence.size.toLong()),
+                    DiagnosticAttribute.ITEM_COUNT to
+                        DiagnosticAttributeValue.Number(reconciledObservationCount.toLong()),
+                    DiagnosticAttribute.COMPLETED to DiagnosticAttributeValue.Flag(allSourcesComplete),
                 ),
             )
             Result.success(Unit)

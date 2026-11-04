@@ -9,6 +9,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.content.ContentDelivery
+import tachiyomi.domain.tsuzuki.content.TorrentChapterImageFile
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
@@ -27,17 +28,30 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
+import java.util.UUID
 
 data class ProviderChapterTorrentOption(
     val canonicalChapterId: String,
     val providerId: ProviderId,
     val candidate: TorrentCandidate,
     val selectedFile: TorrentCandidateFile,
+    val selectedChapterImages: List<TorrentCandidateFile> = emptyList(),
+    /** Host diagnostic correlation only, never the identity of a reusable P2P job. */
+    val discoveryOperationId: String? = null,
 ) {
     init {
         require(canonicalChapterId.isNotBlank()) { "Canonical chapter ID must not be blank" }
         require(candidate.files.orEmpty().any { it == selectedFile }) {
             "Selected torrent file must belong to the candidate"
+        }
+        require(
+            selectedChapterImages.isEmpty() ||
+                (
+                    selectedChapterImages.first() == selectedFile &&
+                        selectedChapterImages.all { it in candidate.files.orEmpty() }
+                    ),
+        ) {
+            "Selected chapter images must belong to the candidate"
         }
     }
 }
@@ -49,6 +63,12 @@ fun ProviderChapterTorrentOption.toContentDelivery(): ContentDelivery.Torrent? {
         magnetUri = candidate.magnetUri,
         fileIndex = selectedFile.index,
         filePath = selectedFile.path,
+        torrentUrl = candidate.torrentUrl,
+        fileSizeBytes = selectedFile.sizeBytes,
+        discoveryOperationId = discoveryOperationId,
+        chapterImages = selectedChapterImages.map { image ->
+            TorrentChapterImageFile(image.index, image.path, requireNotNull(image.sizeBytes))
+        },
     )
 }
 
@@ -116,6 +136,7 @@ class ResolveProviderChapterTorrent(
             .flatMap { provider ->
                 val providerId = provider.id
                 val providerTrace = trace?.child()
+                val operationId = providerTrace?.operationId ?: UUID.randomUUID().toString()
                 val providerAttributes = mapOf(
                     DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text(providerId.value),
                     DiagnosticAttribute.PROVIDER_VERSION_NAME to
@@ -130,6 +151,7 @@ class ResolveProviderChapterTorrent(
                         titles = searchTitles,
                         chapterNumber = chapter.displayNumber,
                         volume = chapter.volume,
+                        operationId = operationId,
                     )
                 ) {
                     is TorrentDiscoveryResult.Failure -> {
@@ -192,17 +214,27 @@ class ResolveProviderChapterTorrent(
 
                         val matches = candidates.mapNotNull { candidate ->
                             if (candidate.infoHash == null) return@mapNotNull null
-                            val file = when (val match = mapper.map(request, candidate)) {
-                                is TorrentChapterFileMatch.Exact -> match.file
-                                TorrentChapterFileMatch.None,
-                                is TorrentChapterFileMatch.Ambiguous,
+                            val payload = when (val match = mapper.select(request, candidate)) {
+                                is TorrentChapterPayloadMatch.Exact -> match.payload
+                                TorrentChapterPayloadMatch.None,
+                                is TorrentChapterPayloadMatch.Ambiguous,
                                 -> return@mapNotNull null
+                            }
+                            val selectedFile = when (payload) {
+                                is TorrentChapterPayload.SingleArchive -> payload.file
+                                is TorrentChapterPayload.ImageDirectory -> payload.files.first()
                             }
                             ProviderChapterTorrentOption(
                                 canonicalChapterId = canonicalChapterId,
                                 providerId = providerId,
                                 candidate = candidate,
-                                selectedFile = file,
+                                selectedFile = selectedFile,
+                                selectedChapterImages = if (payload is TorrentChapterPayload.ImageDirectory) {
+                                    payload.files
+                                } else {
+                                    emptyList()
+                                },
+                                discoveryOperationId = operationId,
                             )
                         }
                         providerTrace?.event(
@@ -239,6 +271,7 @@ class ResolveProviderChapterTorrent(
         titles: List<String>,
         chapterNumber: String,
         volume: Int?,
+        operationId: String,
     ): TorrentDiscoveryResult {
         return try {
             val firstPage = when (
@@ -247,6 +280,7 @@ class ResolveProviderChapterTorrent(
                     titles = titles,
                     chapterNumber = chapterNumber,
                     volume = volume,
+                    operationId = operationId,
                     cursor = null,
                 )
             ) {
@@ -260,6 +294,7 @@ class ResolveProviderChapterTorrent(
                     titles = titles,
                     chapterNumber = chapterNumber,
                     volume = volume,
+                    operationId = operationId,
                     firstPage = firstPage,
                 )
             } else {
@@ -268,6 +303,7 @@ class ResolveProviderChapterTorrent(
                     titles = titles,
                     chapterNumber = chapterNumber,
                     volume = volume,
+                    operationId = operationId,
                     firstPage = firstPage,
                 )
             }
@@ -283,6 +319,7 @@ class ResolveProviderChapterTorrent(
         titles: List<String>,
         chapterNumber: String,
         volume: Int?,
+        operationId: String,
         firstPage: tachiyomi.domain.tsuzuki.provider.ProviderPage<TorrentCandidate>,
     ): TorrentDiscoveryResult = coroutineScope {
         if (firstPage.parallelCursors.size + 1 > MAX_SEARCH_PAGES) {
@@ -304,6 +341,7 @@ class ResolveProviderChapterTorrent(
                             titles = titles,
                             chapterNumber = chapterNumber,
                             volume = volume,
+                            operationId = operationId,
                             cursor = cursor,
                         )
                     }
@@ -335,6 +373,7 @@ class ResolveProviderChapterTorrent(
         titles: List<String>,
         chapterNumber: String,
         volume: Int?,
+        operationId: String,
         firstPage: tachiyomi.domain.tsuzuki.provider.ProviderPage<TorrentCandidate>,
     ): TorrentDiscoveryResult {
         val items = firstPage.items.toMutableList()
@@ -355,6 +394,7 @@ class ResolveProviderChapterTorrent(
                     titles = titles,
                     chapterNumber = chapterNumber,
                     volume = volume,
+                    operationId = operationId,
                     cursor = cursor,
                 )
             ) {
@@ -378,6 +418,7 @@ class ResolveProviderChapterTorrent(
         titles: List<String>,
         chapterNumber: String,
         volume: Int?,
+        operationId: String,
         cursor: ProviderCursor?,
     ) = gateway.search(
         providerId = providerId,
@@ -385,6 +426,7 @@ class ResolveProviderChapterTorrent(
             titles = titles,
             chapterNumber = chapterNumber,
             volume = volume,
+            operationId = operationId,
             cursor = cursor,
         ),
     )

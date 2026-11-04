@@ -33,6 +33,7 @@ import mihon.icons.materialsymbols.rounded.Check
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemStatus
+import tachiyomi.domain.tsuzuki.catalog.model.preferredDisplayTitle
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -57,7 +58,7 @@ fun CatalogItemDetailSheet(
             ) {
                 MangaCover.Book(
                     data = item.coverUrl,
-                    contentDescription = item.title,
+                    contentDescription = item.preferredDisplayTitle(),
                     modifier = Modifier.width(100.dp),
                 )
 
@@ -67,7 +68,7 @@ fun CatalogItemDetailSheet(
                         .padding(start = 16.dp),
                 ) {
                     Text(
-                        text = item.title,
+                        text = item.preferredDisplayTitle(),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                     )

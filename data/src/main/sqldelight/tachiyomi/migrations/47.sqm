@@ -1,0 +1,1 @@
+ALTER TABLE tsuzuki_independent_inventory_claims ADD COLUMN provenance_json TEXT;

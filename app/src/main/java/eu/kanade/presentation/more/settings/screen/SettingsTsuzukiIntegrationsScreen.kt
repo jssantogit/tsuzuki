@@ -236,7 +236,7 @@ class SettingsTsuzukiIntegrationDetailScreen(
                                         SettingsGroupDivider()
                                         IntegrationToggleRow(
                                             title = stringResource(capability.labelRes()),
-                                            checked = item.capabilityEnabled[capability] ?: true,
+                                            checked = item.capabilityEnabled[capability] ?: false,
                                             enabled = item.enabled,
                                             onCheckedChange = {
                                                 screenModel.setCapabilityEnabled(item.id, capability, it)
@@ -632,6 +632,7 @@ private fun IntegrationCapability.labelRes(): StringResource = when (this) {
     IntegrationCapability.METADATA_ARTWORK -> MR.strings.tsuzuki_integration_capability_metadata_artwork
     IntegrationCapability.METADATA_EDITORIAL -> MR.strings.tsuzuki_integration_capability_metadata_editorial
     IntegrationCapability.METADATA_STAFF -> MR.strings.tsuzuki_integration_capability_metadata_staff
+    IntegrationCapability.CHAPTER_INVENTORY -> MR.strings.tsuzuki_integration_capability_chapter_inventory
     IntegrationCapability.RATINGS -> MR.strings.tsuzuki_integration_capability_ratings
     IntegrationCapability.RELATIONS -> MR.strings.tsuzuki_integration_capability_relations
     IntegrationCapability.CROSSWALK -> MR.strings.tsuzuki_integration_capability_crosswalk

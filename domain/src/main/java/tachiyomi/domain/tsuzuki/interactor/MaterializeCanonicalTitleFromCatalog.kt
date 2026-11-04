@@ -5,6 +5,7 @@ import tachiyomi.domain.tsuzuki.artwork.model.TitleArtworkObservation
 import tachiyomi.domain.tsuzuki.artwork.repository.TitleArtworkRepository
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
+import tachiyomi.domain.tsuzuki.catalog.model.preferredDisplayTitle
 import tachiyomi.domain.tsuzuki.library.model.TitleFormatObservation
 import tachiyomi.domain.tsuzuki.metadata.ReportedChapterCount
 import tachiyomi.domain.tsuzuki.metadata.repository.ReportedChapterCountRepository
@@ -62,7 +63,7 @@ class MaterializeCanonicalTitleFromCatalog internal constructor(
 
     suspend fun execute(catalogItem: CatalogItem): CanonicalTitle {
         val title = materializeCanonicalTitle.fromCatalog(
-            displayTitle = catalogItem.title,
+            displayTitle = catalogItem.preferredDisplayTitle(),
             provider = catalogItem.provider,
             externalId = catalogItem.providerId,
             externalIds = catalogItem.externalIds,

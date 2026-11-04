@@ -21,6 +21,22 @@ import java.nio.file.Path
 class DefaultSkinVisualContractTest {
 
     @Test
+    fun `EPUB import belongs to the work details overflow and not to the inventory panel`() {
+        val screen = readSource("detail/CanonicalTitleDetailScreen.kt")
+        val inventory = screen.substringAfter("private fun IndependentInventoryInfo(")
+            .substringBefore("@Composable\nprivate fun")
+        val toolbar = screen.substringAfter("private fun DetailsToolbar(")
+            .substringBefore("@Composable\nprivate fun ChapterJumpSheet(")
+
+        toolbar shouldContain "onImportEpub: (() -> Unit)? = null"
+        toolbar shouldContain "Text(stringResource(MR.strings.tsuzuki_epub_import_action)"
+        toolbar shouldContain "action()"
+        inventory shouldNotContain "MR.strings.tsuzuki_epub_import_action"
+        inventory shouldNotContain "onImportEpub"
+        screen shouldContain "onImportEpub = onImportEpub"
+    }
+
+    @Test
     fun `shared Default Skin separates neutral interface roles from brand Paper`() {
         defaultSkinPalette(isLight = true) shouldBe DefaultSkinColors(
             canvas = Color(0xFFF7F7F8),

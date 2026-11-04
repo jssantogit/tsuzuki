@@ -10,6 +10,58 @@ class BackupCanonicalSnapshotTest {
     private val codec = ProtoBuf
 
     @Test
+    fun `omitted nullable chapter fields roundtrip through canonical snapshot validation`() {
+        val core = BackupCanonicalCore(
+            titles = listOf(BackupCoreTitle("epub-work", "EPUB fixture", "SOURCE_ONLY", 1, 1)),
+            chapters = listOf(
+                BackupCoreChapter(
+                    id = "chapter-one",
+                    canonicalTitleId = "epub-work",
+                    displayNumber = "1",
+                    volume = null,
+                    title = null,
+                    type = "REGULAR",
+                    baseNumber = 1,
+                    part = null,
+                    alphaSuffix = null,
+                    confidence = 1.0,
+                    createdAt = 1,
+                    updatedAt = 1,
+                    confirmation = "PROVISIONAL",
+                ),
+            ),
+        )
+        core.validate()
+        // App-wide JSON omits nullable fields. Validation and import must
+        // consume the very same wire form written by the real backup worker.
+        val payload = Json { explicitNulls = false }.encodeToString(BackupCanonicalCore.serializer(), core)
+        require(!payload.contains("\"volume\""))
+        val section = BackupCanonicalSection.fromJson(BackupCanonicalCore.SECTION_KEY, payload)
+        BackupCanonicalSnapshot(sections = listOf(section)).validate()
+        val restored = Json { explicitNulls = false }
+            .decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
+        restored shouldBe core
+    }
+
+    @Test
+    fun `missing required chapter identity is never treated as a nullable omission`() {
+        val section = BackupCanonicalSection.fromJson(
+            BackupCanonicalCore.SECTION_KEY,
+            """
+            {
+              "titles":[{"id":"work","displayTitle":"Work","identityState":"SOURCE_ONLY","createdAt":1,"updatedAt":1}],
+              "chapters":[{
+                "canonicalTitleId":"work","displayNumber":"1","type":"REGULAR",
+                "baseNumber":1,"confidence":1.0,"createdAt":1,"updatedAt":1,
+                "confirmation":"PROVISIONAL"
+              }]
+            }
+            """.trimIndent(),
+        )
+        runCatching { BackupCanonicalSnapshot(sections = listOf(section)).validate() }.isFailure shouldBe true
+    }
+
+    @Test
     fun `legacy backup decodes with no canonical snapshot`() {
         val legacy = codec.encodeToByteArray(LegacyBackup.serializer(), LegacyBackup())
         val decoded = codec.decodeFromByteArray(Backup.serializer(), legacy)

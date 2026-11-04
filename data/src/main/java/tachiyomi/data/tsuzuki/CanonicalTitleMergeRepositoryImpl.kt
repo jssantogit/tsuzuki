@@ -1,6 +1,7 @@
 package tachiyomi.data.tsuzuki
 
 import app.cash.sqldelight.async.coroutines.awaitAsList
+import app.cash.sqldelight.async.coroutines.awaitAsOne
 import app.cash.sqldelight.async.coroutines.awaitAsOneOrNull
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -65,6 +66,28 @@ class CanonicalTitleMergeRepositoryImpl(
             val targetMappings = getSourceMappings(targetId)
             validatePreferredSourceMappings(targetMappings, localMappings)
 
+            // This local-only edition ownership cannot yet be re-homed safely.
+            // A convergence must fail rather than cascade-delete the lineage.
+            check(
+                database.tsuzuki_editorial_edition_consentsQueries
+                    .countTsuzukiEditorialEditionConsentsForTitle(localId).awaitAsOne() == 0L &&
+                    database.tsuzuki_editorial_edition_consentsQueries
+                        .countTsuzukiEditorialEditionConsentsForTitle(targetId).awaitAsOne() == 0L,
+            ) { "Title convergence with editorial Host consent requires explicit reauthorization" }
+            // A user adoption is personal provenance; no implicit rehome.
+            check(
+                database.tsuzuki_user_adoption_receiptsQueries
+                    .countTsuzukiUserAdoptionReceiptsByTitle(localId).awaitAsOne() == 0L &&
+                    database.tsuzuki_user_adoption_receiptsQueries
+                        .countTsuzukiUserAdoptionReceiptsByTitle(targetId).awaitAsOne() == 0L,
+            ) { "User-adopted chapters require an audited title merge" }
+            check(
+                database.tsuzuki_editorial_chapter_bindingsQueries
+                    .getTsuzukiEditorialBindingsByTitle(localId).awaitAsList().isEmpty() &&
+                    database.tsuzuki_editorial_chapter_bindingsQueries
+                        .getTsuzukiEditorialBindingsByTitle(targetId).awaitAsList().isEmpty(),
+            ) { "Title convergence involving scoped editorial chapter bindings requires an audited migration" }
+
             val localChapters = getChapters(localId)
             val targetChapters = getChapters(targetId)
             validateChapterIdentities(targetChapters, localChapters)
@@ -109,6 +132,18 @@ class CanonicalTitleMergeRepositoryImpl(
             }
 
             database.tsuzuki_external_identitiesQueries.rekeyTsuzukiExternalIdentities(
+                targetId = targetId,
+                localId = localId,
+            )
+
+            // Preserve the additive issue #155 ledger before the source title
+            // is deleted. Its foreign keys cascade, so leaving it behind here
+            // would silently destroy the locally sourced inventory.
+            database.tsuzuki_independent_inventory_claimsQueries.mergeTsuzukiIndependentInventoryClaims(
+                targetId = targetId,
+                localId = localId,
+            )
+            database.tsuzuki_independent_inventory_claimsQueries.mergeTsuzukiIndependentInventoryPages(
                 targetId = targetId,
                 localId = localId,
             )

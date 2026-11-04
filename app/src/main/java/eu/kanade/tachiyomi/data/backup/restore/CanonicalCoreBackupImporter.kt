@@ -5,6 +5,7 @@ import app.cash.sqldelight.async.coroutines.awaitAsOneOrNull
 import dev.zacsweers.metro.Inject
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalCore
 import eu.kanade.tachiyomi.data.backup.models.BackupCanonicalSection
+import eu.kanade.tachiyomi.data.backup.models.CanonicalCoreWireJson
 import eu.kanade.tachiyomi.data.backup.models.PortableMihonBindingCodec
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -13,6 +14,8 @@ import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadata
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadataCodec
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterOverrideKind
 import tachiyomi.domain.tsuzuki.integration.model.PortableIntegrationConfig
@@ -41,7 +44,7 @@ class CanonicalCoreBackupImporter(
             "Only canonical core sections can be restored by this importer"
         }
         section.validate()
-        val core = json.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
+        val core = CanonicalCoreWireJson.codec.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
         core.validate()
         // Validate enums and metadata before acquiring any database write locks.
         core.titles.forEach { CanonicalIdentityState.valueOf(it.identityState) }
@@ -212,6 +215,52 @@ class CanonicalCoreBackupImporter(
                     decimalScale = it.decimalScale?.toLong(),
                 )
             }
+            // Preserve publisher/edition lineage in the same transaction as
+            // canonical chapters, progress, history and the restore receipt.
+            core.editorialChapterBindings.forEach {
+                database.tsuzuki_editorial_chapter_bindingsQueries.insertTsuzukiEditorialChapterBinding(
+                    canonicalChapterId = it.canonicalChapterId,
+                    canonicalTitleId = it.canonicalTitleId,
+                    producerId = it.producerId,
+                    externalWorkId = it.externalWorkId,
+                    editionKey = it.editionKey,
+                    scopeLanguage = it.scopeLanguage,
+                    sourceRecordId = it.sourceRecordId,
+                    upstreamSourceId = it.upstreamSourceId,
+                    identityKey = it.identityKey,
+                    volumeKey = it.volumeKey,
+                    observedAt = it.observedAt,
+                )
+            }
+            // Each human approval and its source revision remains attached
+            // to the chapter in the same transaction. No Host grant is restored.
+            core.userAdoptionReceipts.forEach {
+                database.tsuzuki_user_adoption_receiptsQueries.insertTsuzukiUserAdoptionReceipt(
+                    canonicalChapterId = it.canonicalChapterId,
+                    receiptId = it.receiptId,
+                    canonicalTitleId = it.canonicalTitleId,
+                    producerId = it.producerId,
+                    externalWorkId = it.externalWorkId,
+                    editionKey = it.editionKey,
+                    scopeLanguage = it.scopeLanguage,
+                    sourceRecordId = it.sourceRecordId,
+                    sourceKind = it.sourceKind,
+                    derivation = it.derivation,
+                    originReference = it.originReference,
+                    exactRevision = it.exactRevision,
+                    attributionReference = it.attributionReference,
+                    licenseReference = it.licenseReference,
+                    snapshotDigest = it.snapshotDigest,
+                    sourceUnitId = it.sourceUnitId,
+                    structuralCategory = it.structuralCategory,
+                    acceptedLabel = it.acceptedLabel,
+                    identityKey = it.identityKey,
+                    volumeKey = it.volumeKey,
+                    observedAt = it.observedAt,
+                    acceptedAt = it.acceptedAt,
+                    reviewFingerprint = it.reviewFingerprint,
+                )
+            }
             core.variants.forEach {
                 database.tsuzuki_chapter_variantsQueries.upsertTsuzukiChapterVariant(
                     id = it.id,
@@ -236,6 +285,16 @@ class CanonicalCoreBackupImporter(
                 )
             }
             core.chapterEvidence.forEach {
+                val safeMetadata = ProviderEvidenceMetadata(
+                    language = it.providerLanguage,
+                    scanlationGroup = it.providerScanlationGroup,
+                    releaseDateMillis = it.providerReleaseDateMillis,
+                )
+                val portableRawMetadata = if (safeMetadata.hasValues) {
+                    ProviderEvidenceMetadataCodec.encode(safeMetadata)
+                } else {
+                    byteArrayOf()
+                }
                 database.tsuzuki_chapter_evidenceQueries.upsertTsuzukiChapterEvidence(
                     id = it.id,
                     canonicalTitleId = it.canonicalTitleId,
@@ -250,7 +309,7 @@ class CanonicalCoreBackupImporter(
                     confidence = it.confidence,
                     authorityClass = it.authorityClass,
                     mappedCanonicalChapterId = it.mappedCanonicalChapterId,
-                    rawMetadata = byteArrayOf(),
+                    rawMetadata = portableRawMetadata,
                 )
             }
             core.collections.filterNot { it.id in existingCollectionIds }.forEach {

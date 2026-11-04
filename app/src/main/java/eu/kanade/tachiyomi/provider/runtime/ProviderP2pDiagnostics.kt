@@ -85,6 +85,7 @@ internal object ProviderP2pDiagnostics {
         flags: Map<String, Boolean> = emptyMap(),
         exceptionClass: String? = null,
         priority: LogPriority = LogPriority.INFO,
+        correlationOperationId: String? = null,
     ) {
         val line = runCatching {
             format(
@@ -115,7 +116,7 @@ internal object ProviderP2pDiagnostics {
                     subsystem = DiagnosticSubsystem.CONTENT,
                     name = DiagnosticEventName.PROVIDER_P2P_EVENT,
                     sessionId = recorder.sessionId,
-                    operationId = null,
+                    operationId = correlationOperationId?.takeIf(DISCOVERY_OPERATION_ID::matches),
                     stage = DiagnosticStage.SUMMARY,
                     outcome = when (event) {
                         ProviderP2pDiagnosticEvent.METADATA_FAILED,
@@ -221,6 +222,7 @@ internal object ProviderP2pDiagnostics {
             .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xFF) }
     }
 
+    private val DISCOVERY_OPERATION_ID = Regex("^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$")
     private val JOB_ID = Regex("^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
     private val PROVIDER_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
     private val FIELD_KEY = Regex("^[A-Za-z][A-Za-z0-9]{0,31}$")

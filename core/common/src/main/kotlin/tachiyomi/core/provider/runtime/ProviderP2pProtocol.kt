@@ -7,6 +7,16 @@ import kotlinx.serialization.json.Json
 import java.net.URI
 
 /**
+ * Real torrent file identity for one page, never a synthetic directory index.
+ * Only Host-verified chapter selections may authorize multiple images.
+ */
+data class ProviderP2pChapterImage(
+    val index: Int,
+    val path: String,
+    val sizeBytes: Long,
+)
+
+/**
  * Selected-file acquisition intent crossing the isolated Provider boundary.
  * The host remains the sole owner of BitTorrent/native authority.
  */
@@ -18,6 +28,7 @@ data class ProviderP2pAcquireRequest(
     val selectedFileIndex: Int,
     val selectedFilePath: String,
     val selectedFileSizeBytes: Long? = null,
+    val selectedChapterImages: List<ProviderP2pChapterImage> = emptyList(),
 ) {
     init {
         require(OPERATION_ID.matches(operationId)) {
@@ -31,8 +42,55 @@ data class ProviderP2pAcquireRequest(
         ) {
             "Provider P2P selected file size must not be negative"
         }
-        require(validRelativeArchivePath(selectedFilePath)) {
+        // Legacy isolated Provider calls identify the first selected page only.
+        // The Host manager rejects that bare page request unless the invocation
+        // carries an identical, privately approved complete image selection.
+        require(
+            if (selectedChapterImages.isEmpty()) {
+                validRelativeArchivePath(selectedFilePath) || validRelativeImagePath(selectedFilePath)
+            } else {
+                validRelativeImagePath(selectedFilePath)
+            },
+        ) {
             "Provider P2P selected file path is invalid"
+        }
+        if (selectedChapterImages.isNotEmpty()) {
+            require(selectedChapterImages.size <= MAX_CHAPTER_PAGES) {
+                "Provider P2P chapter page count exceeds the limit"
+            }
+            val chapterDirectory = selectedChapterImages.first().path.substringBeforeLast('/', "")
+            require(chapterDirectory.isNotBlank()) {
+                "Provider P2P images require an actual chapter directory"
+            }
+            require(
+                selectedChapterImages.first().index == selectedFileIndex &&
+                    selectedChapterImages.first().path == selectedFilePath &&
+                    selectedChapterImages.first().sizeBytes == selectedFileSizeBytes,
+            ) {
+                "Provider P2P chapter first page must equal the selected file"
+            }
+            require(selectedChapterImages.map { it.index }.distinct().size == selectedChapterImages.size) {
+                "Provider P2P chapter file indexes must be unique"
+            }
+            require(selectedChapterImages.map { it.path.lowercase() }.distinct().size == selectedChapterImages.size) {
+                "Provider P2P chapter image paths must be unique"
+            }
+            var totalBytes = 0L
+            for (page in selectedChapterImages) {
+                require(
+                    page.index >= 0 && validRelativeImagePath(page.path) &&
+                        page.path.substringBeforeLast('/', "") == chapterDirectory,
+                ) {
+                    "Provider P2P chapter image path is invalid"
+                }
+                require(
+                    page.sizeBytes in 1L..MAX_IMAGE_BYTES &&
+                        totalBytes <= MAX_CHAPTER_BYTES - page.sizeBytes,
+                ) {
+                    "Provider P2P chapter images exceed verified size bounds"
+                }
+                totalBytes += page.sizeBytes
+            }
         }
         require(
             infoHash == null || INFO_HASH.matches(infoHash),
@@ -63,6 +121,9 @@ data class ProviderP2pAcquireRequest(
 
     private companion object {
         const val MAX_URI_CHARS = 8 * 1024
+        const val MAX_CHAPTER_PAGES = 400
+        const val MAX_IMAGE_BYTES = 32L * 1024L * 1024L
+        const val MAX_CHAPTER_BYTES = 256L * 1024L * 1024L
         val OPERATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
         val INFO_HASH = Regex("(?:[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})")
 
@@ -74,7 +135,16 @@ data class ProviderP2pAcquireRequest(
                 uri.userInfo == null
         }
 
-        fun validRelativeArchivePath(value: String): Boolean {
+        fun validRelativeImagePath(value: String): Boolean =
+            validRelativePath(value) &&
+                value.substringAfterLast('.', "").lowercase() in
+                setOf("jpg", "jpeg", "png", "webp", "gif")
+
+        fun validRelativeArchivePath(value: String): Boolean =
+            validRelativePath(value) &&
+                value.substringAfterLast('.', "").lowercase() in setOf("cbz", "zip")
+
+        private fun validRelativePath(value: String): Boolean {
             if (
                 value.isBlank() ||
                 value.length > 4 * 1024 ||
@@ -89,8 +159,7 @@ data class ProviderP2pAcquireRequest(
             if (value.split('/').any { it.isBlank() || it == "." || it == ".." }) {
                 return false
             }
-            val extension = value.substringAfterLast('.', missingDelimiterValue = "").lowercase()
-            return extension == "cbz" || extension == "zip"
+            return true
         }
     }
 }
@@ -158,6 +227,9 @@ object ProviderP2pProtocol {
                 selectedFileIndex = request.selectedFileIndex,
                 selectedFilePath = request.selectedFilePath,
                 selectedFileSizeBytes = request.selectedFileSizeBytes,
+                selectedChapterImages = request.selectedChapterImages.map {
+                    ChapterImageDto(it.index, it.path, it.sizeBytes)
+                },
             ),
         ).also {
             requireBound(it, MAX_REQUEST_JSON_CHARS, "request")
@@ -175,6 +247,9 @@ object ProviderP2pProtocol {
                 selectedFileIndex = dto.selectedFileIndex,
                 selectedFilePath = dto.selectedFilePath,
                 selectedFileSizeBytes = dto.selectedFileSizeBytes,
+                selectedChapterImages = dto.selectedChapterImages.map {
+                    ProviderP2pChapterImage(it.index, it.path, it.sizeBytes)
+                },
             )
         } catch (error: Exception) {
             throw ProviderHostServiceException("Provider P2P request is malformed", error)
@@ -250,6 +325,14 @@ object ProviderP2pProtocol {
         val selectedFileIndex: Int,
         val selectedFilePath: String,
         val selectedFileSizeBytes: Long? = null,
+        val selectedChapterImages: List<ChapterImageDto> = emptyList(),
+    )
+
+    @Serializable
+    private data class ChapterImageDto(
+        val index: Int,
+        val path: String,
+        val sizeBytes: Long,
     )
 
     @Serializable

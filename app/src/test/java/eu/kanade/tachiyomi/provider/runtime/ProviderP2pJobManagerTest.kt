@@ -1,9 +1,12 @@
 package eu.kanade.tachiyomi.provider.runtime
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -12,6 +15,7 @@ import org.junit.jupiter.api.io.TempDir
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireResponse
+import tachiyomi.core.provider.runtime.ProviderP2pChapterImage
 import tachiyomi.core.provider.runtime.ProviderP2pFailureCode
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderManagedFileFormat
@@ -75,6 +79,49 @@ class ProviderP2pJobManagerTest {
         ) shouldBe null
 
         manager.close()
+    }
+
+    @Test
+    fun `Host-verified directory selection upgrades a legacy script page without granting extra files`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        val firstPage = ProviderP2pChapterImage(0, "Tokyo Ghoul Manga/Chapter 01/001.jpg", 100L)
+        val secondPage = ProviderP2pChapterImage(3, "Tokyo Ghoul Manga/Chapter 01/002.jpg", 150L)
+        val approved = ProviderP2pAcquireRequest(
+            operationId = "read:chapter-folder",
+            infoHash = "0123456789abcdef0123456789abcdef01234567",
+            selectedFileIndex = firstPage.index,
+            selectedFilePath = firstPage.path,
+            selectedFileSizeBytes = firstPage.sizeBytes,
+            selectedChapterImages = listOf(firstPage, secondPage),
+        )
+        val scriptEcho = approved.copy(selectedChapterImages = emptyList())
+        var downloadedPages = emptyList<ProviderP2pChapterImage>()
+        val manager = ProviderP2pJobManager(
+            root = tempDir.resolve("folder-jobs").toFile(),
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { request, directory ->
+                downloadedPages = request.selectedChapterImages
+                val archive = directory.resolve("chapter.cbz")
+                archive.writeBytes(zip("0001.jpg", "chapter"))
+                ProviderP2pDownloadResult.Ready(archive, ProviderManagedResourceFormat.CBZ)
+            },
+            scope = scope,
+        )
+        try {
+            manager.service("org.example.p2p").acquire(scriptEcho) shouldBe
+                ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.FILE_MISMATCH)
+
+            val granted = manager.service("org.example.p2p", approved)
+            (granted.acquire(scriptEcho) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            scope.advanceUntilIdle()
+            downloadedPages shouldBe listOf(firstPage, secondPage)
+            (granted.acquire(scriptEcho) is ProviderP2pAcquireResponse.Ready) shouldBe true
+            // An ungranted invocation cannot poll the completed job.
+            manager.service("org.example.p2p").acquire(scriptEcho) shouldBe
+                ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.FILE_MISMATCH)
+        } finally {
+            manager.close()
+        }
     }
 
     @Test
@@ -150,6 +197,93 @@ class ProviderP2pJobManagerTest {
         starts shouldBe 2
 
         manager.close()
+    }
+
+    @Test
+    fun `Reader polling cancellation does not implicitly cancel a Host owned pending transfer`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        var starts = 0
+        var cancellations = 0
+        val manager = ProviderP2pJobManager(
+            root = tempDir.resolve("pending-lifecycle").toFile(),
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { _, _ ->
+                starts += 1
+                try {
+                    awaitCancellation()
+                } finally {
+                    cancellations += 1
+                }
+            },
+            scope = scope,
+        )
+        val request = request()
+        try {
+            val polling = launch {
+                val pending = manager.service("org.example.p2p").acquire(request)
+                (pending is ProviderP2pAcquireResponse.Pending) shouldBe true
+                awaitCancellation()
+            }
+            runCurrent()
+            starts shouldBe 1
+            polling.cancel()
+            runCurrent()
+            cancellations shouldBe 0
+            // A later Reader request may resume observing the same Host job.
+            (manager.service("org.example.p2p").acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            manager.cancelAll() shouldBe 1
+            runCurrent()
+            cancellations shouldBe 1
+            // Cancellation removes the stale job rather than letting it be polled again.
+            (manager.service("org.example.p2p").acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+            starts shouldBe 2
+        } finally {
+            manager.close()
+            runCurrent()
+        }
+    }
+
+    @Test
+    fun `switching chapters keeps distinct pending jobs isolated until explicit shutdown`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        var starts = 0
+        var cancellations = 0
+        val manager = ProviderP2pJobManager(
+            root = tempDir.resolve("chapter-switch").toFile(),
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { _, _ ->
+                starts += 1
+                try {
+                    awaitCancellation()
+                } finally {
+                    cancellations += 1
+                }
+            },
+            scope = scope,
+        )
+        val first = request()
+        val second = first.copy(
+            operationId = "read:canonical-13",
+            selectedFileIndex = 2,
+            selectedFilePath = "pack/chapter-013.cbz",
+        )
+        try {
+            (manager.service("org.example.p2p").acquire(first) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            (manager.service("org.example.p2p").acquire(second) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+            starts shouldBe 2
+            // A different canonical chapter never reuses the previous selection.
+            manager.service("org.example.p2p").acquire(
+                first.copy(selectedFilePath = second.selectedFilePath),
+            ) shouldBe ProviderP2pAcquireResponse.Failure(ProviderP2pFailureCode.FILE_MISMATCH)
+            manager.cancelAll() shouldBe 2
+            runCurrent()
+            cancellations shouldBe 2
+        } finally {
+            manager.close()
+            runCurrent()
+        }
     }
 
     @Test
@@ -263,6 +397,177 @@ class ProviderP2pJobManagerTest {
             seen shouldBe listOf(false, true, false)
         } finally {
             jobs.close()
+        }
+    }
+
+    @Test
+    fun `revoking Host P2P authorization stops the active worker and blocks replay`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        var authorized = true
+        var starts = 0
+        var cancellations = 0
+        val manager = ProviderP2pJobManager(
+            root = tempDir.resolve("revoke-consent").toFile(),
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { _, _ ->
+                starts++
+                try {
+                    awaitCancellation()
+                } finally {
+                    cancellations++
+                }
+            },
+            scope = scope,
+            authorizationCheck = { authorized },
+            authorizationCheckIntervalMs = 100L,
+        )
+        val service = manager.service("org.example.p2p")
+        val request = request()
+        try {
+            (service.acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+            starts shouldBe 1
+
+            authorized = false
+            advanceTimeBy(101L)
+            runCurrent()
+            cancellations shouldBe 1
+            service.acquire(request) shouldBe ProviderP2pAcquireResponse.Failure(
+                ProviderP2pFailureCode.CANCELLED,
+            )
+
+            authorized = true
+            (service.acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+            starts shouldBe 2
+        } finally {
+            manager.close()
+            runCurrent()
+        }
+    }
+
+    @Test
+    fun `cancelling one Provider does not cancel another Providers active transfer`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        val cancellations = mutableListOf<String>()
+        val manager = ProviderP2pJobManager(
+            root = tempDir.resolve("revoke-provider").toFile(),
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { req, _ ->
+                try {
+                    awaitCancellation()
+                } finally {
+                    cancellations += req.operationId
+                }
+            },
+            scope = scope,
+        )
+        val first = request()
+        val second = first.copy(operationId = "read:second-provider")
+        try {
+            (manager.service("org.example.p2p").acquire(first) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            (manager.service("org.example.other").acquire(second) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+
+            manager.cancelProvider("org.example.p2p") shouldBe 1
+            runCurrent()
+            cancellations shouldBe listOf(first.operationId)
+            (manager.service("org.example.other").acquire(second) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            manager.cancelAll() shouldBe 1
+            runCurrent()
+            cancellations.toSet() shouldBe setOf(first.operationId, second.operationId)
+        } finally {
+            manager.close()
+            runCurrent()
+        }
+    }
+
+    @Test
+    fun `Host revocation evicts cancelled jobs before reauthorization without polling`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        var allowed = true
+        var started = 0
+        var cancelled = 0
+        val manager = ProviderP2pJobManager(
+            root = tempDir.resolve("revocation-no-poll").toFile(),
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { _, _ ->
+                started++
+                try {
+                    awaitCancellation()
+                } finally {
+                    cancelled++
+                }
+            },
+            scope = scope,
+            authorizationCheck = { allowed },
+            authorizationCheckIntervalMs = 100L,
+        )
+        val request = request()
+        val service = manager.service("org.example.p2p")
+        try {
+            (service.acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+            started shouldBe 1
+
+            allowed = false
+            advanceTimeBy(101L)
+            runCurrent()
+            cancelled shouldBe 1
+
+            // No poll while revoked: a later approval must never reuse the cancelled entry.
+            allowed = true
+            (service.acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+            started shouldBe 2
+        } finally {
+            manager.close()
+            runCurrent()
+        }
+    }
+
+    @Test
+    fun `cancelled native-like worker cannot adopt after rapid provider reauthorization`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        var authorized = true
+        val jobsRoot = tempDir.resolve("late-cancelled-jobs").toFile()
+        val manager = ProviderP2pJobManager(
+            root = jobsRoot,
+            managedFiles = managedStore(),
+            engine = ProviderP2pDownloadEngine { _, directory ->
+                try {
+                    awaitCancellation()
+                } catch (_: CancellationException) {
+                    // A native boundary may swallow cancellation and return a late archive.
+                    val file = directory.resolve("late.cbz")
+                    file.writeBytes(zip("page.jpg", "late"))
+                    ProviderP2pDownloadResult.Ready(file, ProviderManagedResourceFormat.CBZ)
+                }
+            },
+            scope = scope,
+            authorizationCheck = { authorized },
+            authorizationCheckIntervalMs = 100L,
+        )
+        val service = manager.service("org.example.p2p")
+        val request = request()
+        try {
+            (service.acquire(request) is ProviderP2pAcquireResponse.Pending) shouldBe true
+            runCurrent()
+
+            authorized = false
+            manager.cancelProvider("org.example.p2p") shouldBe 1
+            // The provider becomes eligible again before the old worker unwinds.
+            authorized = true
+            runCurrent()
+
+            val storedArchives = tempDir.resolve("managed").toFile()
+                .walkTopDown()
+                .count { it.isFile && it.extension == "cbz" }
+            storedArchives shouldBe 0
+            jobsRoot.listFiles().orEmpty().size shouldBe 0
+        } finally {
+            manager.close()
+            runCurrent()
         }
     }
 

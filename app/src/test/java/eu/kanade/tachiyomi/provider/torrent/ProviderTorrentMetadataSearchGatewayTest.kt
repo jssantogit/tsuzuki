@@ -188,8 +188,8 @@ class ProviderTorrentMetadataSearchGatewayTest {
             ),
             candidate(
                 files = listOf(
-                    TorrentCandidateFile(index = 0, path = "pack-a/Vol. 2 Ch. 12.cbz"),
-                    TorrentCandidateFile(index = 1, path = "pack-b/Vol. 2 Chapter 12.zip"),
+                    TorrentCandidateFile(index = 0, path = "pack/Vol. 2 Ch. 12.cbz"),
+                    TorrentCandidateFile(index = 1, path = "alternate/Vol. 2 Chapter 12.zip"),
                 ),
             ),
             candidate(
@@ -233,6 +233,75 @@ class ProviderTorrentMetadataSearchGatewayTest {
         encoded.contains("Secret Example Manga - Chapter 12.cbz") shouldBe false
         encoded.contains("Vol. 2 Ch. 12.cbz") shouldBe false
         encoded.contains("0123456789abcdef0123456789abcdef01234567") shouldBe false
+    }
+
+    @Test
+    fun `verified chapter image directory is classified as readable exact match`() = runTest {
+        val folder = candidate(
+            files = listOf(
+                TorrentCandidateFile(0, "Secret Example Manga/Chapter 12/001.jpg", sizeBytes = 120L),
+                TorrentCandidateFile(1, "Secret Example Manga/Chapter 12/002.png", sizeBytes = 130L),
+            ),
+        )
+        val logs = mutableListOf<String>()
+        val gateway = ProviderTorrentMetadataSearchGateway(
+            delegate = TorrentSearchGateway { _, _ ->
+                ProviderCallResult.Success(ProviderPage(listOf(folder), nextCursor = null))
+            },
+            registry = registry(),
+            inspector = ProviderTorrentMetadataInspector { _, _ ->
+                error("pre-hydrated candidates must not be inspected")
+            },
+            diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
+            logSink = ProviderRuntimeLogSink { _, message -> logs += message },
+        )
+
+        gateway.search(
+            providerId = providerId,
+            request = TorrentSearchRequest(
+                titles = listOf("Secret Example Manga"),
+                chapterNumber = "12",
+            ),
+        )
+
+        val summary = logs.single { it.startsWith("host_torrent_match ") }
+        summary.contains("readable=1") shouldBe true
+        summary.contains("identity=1 volume=1 exact=1 ambiguous=0") shouldBe true
+        summary.contains("reason=") shouldBe false
+        summary.contains("Secret Example Manga") shouldBe false
+    }
+
+    @Test
+    fun `alternate image chapter directory receives distinct unsupported reason`() = runTest {
+        val alternate = candidate(
+            files = listOf(
+                TorrentCandidateFile(
+                    0,
+                    "Secret Example Manga/Alternate Chapter Releases/Chapter 12/001.jpg",
+                    sizeBytes = 120L,
+                ),
+            ),
+        )
+        val logs = mutableListOf<String>()
+        val gateway = ProviderTorrentMetadataSearchGateway(
+            delegate = TorrentSearchGateway { _, _ ->
+                ProviderCallResult.Success(ProviderPage(listOf(alternate), nextCursor = null))
+            },
+            registry = registry(),
+            inspector = ProviderTorrentMetadataInspector { _, _ ->
+                error("pre-hydrated candidates must not be inspected")
+            },
+            diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
+            logSink = ProviderRuntimeLogSink { _, message -> logs += message },
+        )
+        gateway.search(
+            providerId,
+            TorrentSearchRequest(titles = listOf("Secret Example Manga"), chapterNumber = "12"),
+        )
+        val summary = logs.single { it.startsWith("host_torrent_match ") }
+        summary.endsWith("reason=IMAGE_DIRECTORY_UNSUPPORTED") shouldBe true
+        summary.contains("exact=0") shouldBe true
+        summary.contains("Secret Example Manga") shouldBe false
     }
 
     @Test
@@ -305,14 +374,14 @@ class ProviderTorrentMetadataSearchGatewayTest {
         // The generic label parser may recognize the leading 86, but the real mapper
         // must reject it when that token belongs only to the requested title.
         logs.single { it.startsWith("host_torrent_match ") }
-            .endsWith("identity=0 volume=0 exact=0 ambiguous=0") shouldBe true
+            .endsWith("identity=0 volume=0 exact=0 ambiguous=0 reason=CHAPTER_IDENTITY_NOT_PROVEN") shouldBe true
     }
 
     private fun candidate(files: List<TorrentCandidateFile>?): TorrentCandidate = TorrentCandidate(
         infoHash = "0123456789abcdef0123456789abcdef01234567",
         magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
         torrentUrl = "https://nyaa.si/download/1234567.torrent",
-        displayName = "Example Manga Chapter 12",
+        displayName = "Secret Example Manga Chapter 12",
         files = files,
     )
 

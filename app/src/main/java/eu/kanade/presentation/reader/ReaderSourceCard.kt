@@ -22,7 +22,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
+import eu.kanade.presentation.tsuzuki.components.DefaultSkinSecondaryButton
+import eu.kanade.presentation.tsuzuki.components.defaultSkinColors
 import eu.kanade.tachiyomi.ui.reader.ReaderRecovery
+import eu.kanade.tachiyomi.ui.reader.shouldOfferReaderEditionPicker
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkState
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentOptionPresentation
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentSelectorScreenState
@@ -40,6 +44,7 @@ fun ColumnScope.ReaderSourceCard(
     onSelect: (ContentOptionPresentation) -> Unit,
     onRetry: () -> Unit,
     onFindSource: (String) -> Unit,
+    onChooseEdition: (String) -> Unit,
     onCancelDiscovery: () -> Unit,
     selectionInProgress: Boolean = false,
 ) {
@@ -64,9 +69,14 @@ fun ColumnScope.ReaderSourceCard(
                     when (it) {
                         ReaderRecovery.SOURCE_UNAVAILABLE -> MR.strings.tsuzuki_reader_source_failed
                         ReaderRecovery.P2P_REQUIRED -> MR.strings.tsuzuki_reader_p2p_required
+                        ReaderRecovery.EDITION_CONFIRMATION_REQUIRED -> MR.strings.tsuzuki_edition_description
                     },
                 ),
-                color = MaterialTheme.colorScheme.error,
+                color = if (shouldOfferReaderEditionPicker(it)) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -87,6 +97,11 @@ fun ColumnScope.ReaderSourceCard(
                     UnavailableActions(
                         onRetry = onRetry,
                         onFindSource = { onFindSource(state.canonicalTitleId) },
+                        onChooseEdition = if (shouldOfferReaderEditionPicker(failure)) {
+                            { onChooseEdition(state.canonicalTitleId) }
+                        } else {
+                            null
+                        },
                         enabled = !selectionInProgress,
                     )
                 } else {
@@ -144,6 +159,15 @@ fun ColumnScope.ReaderSourceCard(
                             Text(stringResource(MR.strings.tsuzuki_reader_retry))
                         }
                     }
+                    if (shouldOfferReaderEditionPicker(failure)) {
+                        OutlinedButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !selectionInProgress,
+                            onClick = { onChooseEdition(state.canonicalTitleId) },
+                        ) {
+                            Text(stringResource(MR.strings.tsuzuki_edition_choose))
+                        }
+                    }
                     OutlinedButton(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !selectionInProgress,
@@ -165,6 +189,11 @@ fun ColumnScope.ReaderSourceCard(
                     UnavailableActions(
                         onRetry = onRetry,
                         onFindSource = { onFindSource(canonicalTitleId) },
+                        onChooseEdition = if (shouldOfferReaderEditionPicker(failure)) {
+                            { onChooseEdition(canonicalTitleId) }
+                        } else {
+                            null
+                        },
                         enabled = !selectionInProgress,
                     )
                 }
@@ -318,20 +347,38 @@ private fun LoadingState() {
 private fun UnavailableActions(
     onRetry: () -> Unit,
     onFindSource: () -> Unit,
+    onChooseEdition: (() -> Unit)?,
     enabled: Boolean,
 ) {
+    val colors = defaultSkinColors()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(MR.strings.tsuzuki_reader_source_unavailable),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (onChooseEdition == null) {
+            Text(
+                text = stringResource(MR.strings.tsuzuki_reader_source_unavailable),
+                color = colors.secondary,
+            )
+        }
+        onChooseEdition?.let { choose ->
+            DefaultSkinSecondaryButton(
+                text = stringResource(MR.strings.tsuzuki_edition_choose),
+                modifier = Modifier.fillMaxWidth(),
+                onClick = choose,
+                enabled = enabled,
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onRetry, enabled = enabled) {
-                Text(stringResource(MR.strings.tsuzuki_reader_retry))
-            }
-            OutlinedButton(onClick = onFindSource, enabled = enabled) {
-                Text(stringResource(MR.strings.tsuzuki_reader_find_source))
-            }
+            DefaultSkinPrimaryButton(
+                text = stringResource(MR.strings.tsuzuki_reader_retry),
+                onClick = onRetry,
+                enabled = enabled,
+                modifier = Modifier.weight(1f),
+            )
+            DefaultSkinSecondaryButton(
+                text = stringResource(MR.strings.tsuzuki_reader_find_source),
+                onClick = onFindSource,
+                enabled = enabled,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }

@@ -7,6 +7,7 @@ import dev.zacsweers.metro.AssistedFactory
 import dev.zacsweers.metro.AssistedInject
 import eu.kanade.tachiyomi.data.backup.BackupDecoder
 import eu.kanade.tachiyomi.data.backup.BackupNotifier
+import eu.kanade.tachiyomi.data.backup.CanonicalStandaloneArchive
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupExtensionStore
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
@@ -50,6 +51,7 @@ class BackupRestorer(
     private val extensionStoreRestorer: ExtensionStoreRestorer,
     private val mangaRestorer: MangaRestorer,
     private val backupDecoder: BackupDecoder,
+    private val canonicalCoreBackupImporter: CanonicalCoreBackupImporter,
 ) {
 
     @AssistedFactory
@@ -96,11 +98,12 @@ class BackupRestorer(
     private suspend fun restoreFromFile(uri: Uri, options: RestoreOptions) {
         val backup = backupDecoder.decode(uri)
 
-        // The production restorer currently handles Mihon's legacy fields only.
-        // Never report a successful restore after silently dropping any declared
-        // canonical Tsuzuki content. Release a tested writer/importer pair first.
-        check(backup.canonicalSnapshot == null) {
-            "canonical Tsuzuki backup restoration is not supported yet; no data was changed"
+        if (backup.canonicalSnapshot != null) {
+            // The one supported canonical archive contains NO legacy Mihon
+            // fields. Never partially restore a mixed archive.
+            val section = CanonicalStandaloneArchive.requireRestorable(backup, options.libraryEntries)
+            canonicalCoreBackupImporter.restoreCore(section)
+            return
         }
 
         // Store source mapping for error messages

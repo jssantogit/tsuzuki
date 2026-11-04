@@ -68,7 +68,10 @@ fun resolveReaderChapterJump(chapters: List<CanonicalChapter>, input: String): C
 fun readerChapterPosition(chapters: List<CanonicalChapter>, currentId: String?): Int =
     chapters.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
 
-enum class ReaderRecovery { SOURCE_UNAVAILABLE, P2P_REQUIRED }
+enum class ReaderRecovery { SOURCE_UNAVAILABLE, P2P_REQUIRED, EDITION_CONFIRMATION_REQUIRED }
+
+fun shouldOfferReaderEditionPicker(recovery: ReaderRecovery?): Boolean =
+    recovery == ReaderRecovery.EDITION_CONFIRMATION_REQUIRED
 
 /** Only known content failures qualify; unexpected programming errors retain fatal handling. */
 fun classifyReaderRecovery(error: Throwable): ReaderRecovery? = when (error) {

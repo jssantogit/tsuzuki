@@ -1,3 +1,5 @@
-Temporary acceptance-build trigger for Provider Reader diagnostics.
-Acceptance build after Provider HTTP page cancellation fix (10257156211231e8bea9af7eeab20ca04d7b0b62).
-Keep until APK artifact is published.
+Tsuzuki #176 / PR #181: signed update-in-place Release APK smoke trigger.
+Functional source tree equals CI full GREEN b97f2b0a0dc19e9140ce2f38453cc956fcd15dbc.
+Provider Platform Android instrumentation #41217344228 SUCCESS on functionally identical tree.
+Capture MangaFire candidates using Logs -> Start logs BEFORE opening each title.
+Do not merge main or reset provider settings, grants, library, reader progress or backup.

@@ -249,6 +249,69 @@ class ReconcileChapterEvidenceTest {
     }
 
     @Test
+    fun `MangaFire code13 partial correction detaches old scene mappings without erasing IDs`() = runTest {
+        val fixture = fixture()
+        val oldScenes = listOf(
+            Triple("5892019", "0", "Darkshine vs Garou"),
+            Triple("5892072", "0.2", "Saitama vs Garou (not full)"),
+            Triple("5892081", "0.3", "Child Emperor vs Evil Natural Water"),
+        )
+        val code12 = oldScenes.map { (key, number, title) ->
+            ChapterEvidence(
+                id = "provider-$key",
+                canonicalTitleId = "title",
+                producerKind = ProducerKind.PROVIDER,
+                producerId = "mangafire-729pj-en",
+                externalChapterKey = key,
+                rawLabel = "Ch. $number - $title",
+                rawNumber = number.toDouble(),
+                volume = null,
+                title = title,
+                observedAt = 10L,
+                confidence = 0.95,
+                authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+            )
+        }
+        // The two ambiguous One Punch Man HIDs produce partialEvidence;
+        // no complete-provider snapshot can safely replace either inventory.
+        fixture.reconciler.execute("title", code12)
+        val historicalIds = fixture.chapterRepository.getByCanonicalTitleId("title").map { it.id }.toSet()
+        historicalIds.size shouldBe 3
+        oldScenes.forEach { (key, _, _) ->
+            fixture.evidenceRepository.getByProducerExternalKey(
+                ProducerKind.PROVIDER,
+                "mangafire-729pj-en",
+                key,
+            )?.mappedCanonicalChapterId shouldNotBe null
+        }
+
+        // Code13 preserves each raw numeric hint and exact source ID, but
+        // no longer creates a fictitious Chapter 0.x prefix for scene names.
+        val corrected = code12.map { old ->
+            old.copy(
+                rawLabel = requireNotNull(old.title),
+                observedAt = 20L,
+            )
+        }
+        fixture.reconciler.execute("title", corrected)
+
+        // Historical chapter rows remain to protect progress and sync IDs;
+        // neither a previous Ch.0 nor Ch.0.2 nor Ch.0.3 remains mapped.
+        fixture.chapterRepository.getByCanonicalTitleId("title").map { it.id }.toSet() shouldBe historicalIds
+        oldScenes.forEach { (key, _, title) ->
+            val persisted = fixture.evidenceRepository.getByProducerExternalKey(
+                ProducerKind.PROVIDER,
+                "mangafire-729pj-en",
+                key,
+            )
+            persisted?.mappedCanonicalChapterId shouldBe null
+            persisted?.evidence?.id shouldBe "provider-$key"
+            persisted?.evidence?.title shouldBe title
+            persisted?.evidence?.rawNumber shouldBe code12.single { it.externalChapterKey == key }.rawNumber
+        }
+    }
+
+    @Test
     fun `provider bare volume zero placeholder cannot create canonical structure`() = runTest {
         val fixture = fixture()
         val observation = ChapterEvidence(

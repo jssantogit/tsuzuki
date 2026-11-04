@@ -3,6 +3,8 @@ package eu.kanade.tachiyomi.data.backup.models
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 
 class BackupCanonicalCoreTest {
 
@@ -18,6 +20,241 @@ class BackupCanonicalCoreTest {
         decoded shouldBe original
         decoded.chapters.single().confirmation shouldBe "PROVISIONAL"
         decoded.identities.single().verified shouldBe false
+    }
+
+    @Test
+    fun `provider observation metadata survives canonical backup without changing older snapshot schema`() {
+        val evidence = BackupCoreChapterEvidence(
+            id = "provider-evidence",
+            canonicalTitleId = "title-1",
+            producerKind = "PROVIDER",
+            producerId = "provider-binding:stable",
+            externalChapterKey = "ch-01",
+            rawLabel = "Chapter 1",
+            rawNumber = 1.0,
+            volume = null,
+            title = null,
+            observedAt = 10L,
+            confidence = 0.95,
+            authorityClass = "PROVIDER_PROVISIONAL",
+            mappedCanonicalChapterId = "chapter-1",
+            providerLanguage = "pt-BR",
+            providerScanlationGroup = "Grupo Ñ",
+            providerReleaseDateMillis = 1_700_000_000_000L,
+        )
+        val snapshot = core().copy(chapterEvidence = listOf(evidence))
+        snapshot.validate()
+        val decoded = Json.decodeFromString(
+            BackupCanonicalCore.serializer(),
+            Json.encodeToString(BackupCanonicalCore.serializer(), snapshot),
+        )
+        decoded.chapterEvidence.single() shouldBe evidence
+        decoded.validate()
+
+        val missing = evidence.copy(
+            providerLanguage = null,
+            providerScanlationGroup = null,
+            providerReleaseDateMillis = null,
+        )
+        val olderJson = Json.encodeToString(
+            BackupCanonicalCore.serializer(),
+            core().copy(chapterEvidence = listOf(missing)),
+        )
+        Json.decodeFromString(BackupCanonicalCore.serializer(), olderJson).validate()
+        runCatching {
+            snapshot.copy(chapterEvidence = listOf(evidence.copy(producerKind = "INTEGRATION"))).validate()
+        }.isFailure shouldBe true
+    }
+
+    @Test
+    fun `edition ownership survives a portable core roundtrip and rejects invalid ownership`() {
+        val original = core().copy(
+            chapters = core().chapters.map { it.copy(confirmation = "CONFIRMED") },
+        )
+        val link = BackupCoreEditorialChapterBinding(
+            canonicalChapterId = "chapter-1",
+            canonicalTitleId = "title-1",
+            producerId = "editorial-test",
+            externalWorkId = "work-1",
+            editionKey = "edition-ja",
+            scopeLanguage = "ja",
+            sourceRecordId = "chapter-1",
+            upstreamSourceId = "publisher-feed",
+            identityKey = CanonicalChapterIdentity(CanonicalChapterType.REGULAR, 1).sortKey,
+            volumeKey = 0L,
+            observedAt = 42L,
+        )
+        val valid = original.copy(editorialChapterBindings = listOf(link))
+        valid.validate()
+        val json = Json.encodeToString(BackupCanonicalCore.serializer(), valid)
+        val decoded = Json.decodeFromString(BackupCanonicalCore.serializer(), json)
+        decoded shouldBe valid
+        runCatching {
+            valid.copy(editorialChapterBindings = listOf(link, link)).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            valid.copy(editorialChapterBindings = listOf(link.copy(canonicalTitleId = "wrong"))).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            valid.copy(editorialChapterBindings = listOf(link.copy(canonicalChapterId = "missing"))).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            valid.copy(editorialChapterBindings = listOf(link.copy(editionKey = " "))).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            valid.copy(editorialChapterBindings = listOf(link.copy(volumeKey = -1))).validate()
+        }.isFailure shouldBe true
+    }
+
+    @Test
+    fun `user adoption backup preserves exact personal provenance without editor claims`() {
+        val receipt = BackupCoreUserAdoptionReceipt(
+            canonicalChapterId = "chapter-1",
+            receiptId = "receipt-1",
+            canonicalTitleId = "title-1",
+            producerId = "epub3-user-selected",
+            externalWorkId = "book",
+            editionKey = "edition",
+            scopeLanguage = "ja",
+            sourceRecordId = "unit-1",
+            sourceKind = "USER_SELECTED_EPUB3_TOC",
+            derivation = "USER_SUPPLIED_EDITION_TOC",
+            originReference = "user-selected:edition",
+            exactRevision = "r1",
+            attributionReference = null,
+            licenseReference = null,
+            snapshotDigest = "sha256:" + "a".repeat(64),
+            sourceUnitId = "chapter.xhtml",
+            structuralCategory = "toc-chapter",
+            acceptedLabel = "1",
+            identityKey = CanonicalChapterIdentity(CanonicalChapterType.REGULAR, 1).sortKey,
+            volumeKey = 0L,
+            observedAt = 10L,
+            acceptedAt = 20L,
+            reviewFingerprint = "sha256:" + "b".repeat(64),
+        )
+        val original = core().copy(
+            chapters = core().chapters.map { it.copy(confirmation = "CONFIRMED") },
+            userAdoptionReceipts = listOf(receipt),
+        )
+        original.validate()
+        val decoded = Json.decodeFromString(
+            BackupCanonicalCore.serializer(),
+            Json.encodeToString(BackupCanonicalCore.serializer(), original),
+        )
+        decoded shouldBe original
+        // EPUB2 uses identical explicit review and receipt semantics. The
+        // portable archive must retain this new provenance source kind.
+        val epub2 = original.copy(
+            userAdoptionReceipts = listOf(
+                receipt.copy(
+                    producerId = "epub2-user-selected",
+                    sourceKind = "USER_SELECTED_EPUB2_NCX",
+                    sourceUnitId = "index.html#p2",
+                ),
+            ),
+        )
+        epub2.validate()
+        Json.decodeFromString(
+            BackupCanonicalCore.serializer(),
+            Json.encodeToString(BackupCanonicalCore.serializer(), epub2),
+        ) shouldBe epub2
+        runCatching {
+            epub2.copy(
+                userAdoptionReceipts = epub2.userAdoptionReceipts.map {
+                    it.copy(structuralCategory = "toc-navigation-ambiguous")
+                },
+            ).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            original.copy(userAdoptionReceipts = listOf(receipt, receipt)).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            original.copy(userAdoptionReceipts = listOf(receipt.copy(canonicalTitleId = "wrong"))).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            original.copy(userAdoptionReceipts = listOf(receipt.copy(snapshotDigest = "not-a-digest"))).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            original.copy(userAdoptionReceipts = listOf(receipt.copy(structuralCategory = "toc-preface"))).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            original.copy(
+                userAdoptionReceipts = listOf(
+                    receipt.copy(
+                        sourceKind = "WIKIMEDIA_SELECTED_PAGE_REVISION",
+                        derivation = "COMMUNITY_CURATED",
+                        structuralCategory = "chapter-list-entry",
+                        attributionReference = null,
+                        licenseReference = null,
+                    ),
+                ),
+            ).validate()
+        }.isFailure shouldBe true
+        val otherChapter = original.chapters.single().copy(
+            id = "chapter-2",
+            displayNumber = "2",
+            baseNumber = 2,
+        )
+        val mixedOriginReceipt = receipt.copy(
+            canonicalChapterId = "chapter-2",
+            sourceRecordId = "unit-2",
+            sourceUnitId = "chapter-2.xhtml",
+            acceptedLabel = "2",
+            identityKey = CanonicalChapterIdentity(CanonicalChapterType.REGULAR, 2).sortKey,
+            originReference = "user-selected:other-edition",
+        )
+        runCatching {
+            original.copy(
+                chapters = original.chapters + otherChapter,
+                userAdoptionReceipts = listOf(receipt, mixedOriginReceipt),
+            ).validate()
+        }.isFailure shouldBe true
+
+        val duplicateIdentity = receipt.copy(
+            canonicalChapterId = "chapter-2",
+            receiptId = "receipt-2",
+            sourceRecordId = "unit-2",
+            sourceUnitId = "chapter-2.xhtml",
+        )
+        runCatching {
+            original.copy(
+                chapters = original.chapters + original.chapters.single().copy(id = "chapter-2"),
+                userAdoptionReceipts = listOf(receipt, duplicateIdentity),
+            ).validate()
+        }.isFailure shouldBe true
+    }
+
+    @Test
+    fun `legacy count ID retains progress history and variant across portable backup roundtrip`() {
+        val core = core()
+        // A canonical-title merge changes the chapter owner, never its historical ID.
+        val oldChapterId = "tsuzuki:count:previous-local-title:37"
+        val legacy = core.copy(
+            chapters = core.chapters.map {
+                it.copy(
+                    id = oldChapterId,
+                    displayNumber = "37",
+                    baseNumber = 37,
+                    confirmation = "PROVISIONAL",
+                )
+            },
+            variants = core.variants.map { it.copy(canonicalChapterId = oldChapterId) },
+            progress = core.progress.map { it.copy(canonicalChapterId = oldChapterId) },
+            history = core.history.map { it.copy(canonicalChapterId = oldChapterId) },
+        )
+
+        legacy.validate()
+        val encoded = Json.encodeToString(BackupCanonicalCore.serializer(), legacy)
+        val decoded = Json.decodeFromString(BackupCanonicalCore.serializer(), encoded)
+        decoded.validate()
+
+        decoded shouldBe legacy
+        decoded.chapters.single().canonicalTitleId shouldBe "title-1"
+        decoded.chapters.single().id shouldBe oldChapterId
+        decoded.progress.single().canonicalChapterId shouldBe oldChapterId
+        decoded.history.single().canonicalChapterId shouldBe oldChapterId
+        decoded.variants.single().canonicalChapterId shouldBe oldChapterId
     }
 
     @Test

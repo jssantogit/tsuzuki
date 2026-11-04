@@ -10,13 +10,17 @@ class ProviderRuntimeAndroidGateTest(unittest.TestCase):
         script = SCRIPT_PATH.read_text(encoding="utf-8")
 
         self.assertIn("eu.kanade.tachiyomi.provider.runtime", script)
+        self.assertIn("eu.kanade.tachiyomi.provider.reading", script)
         self.assertIn("eu.kanade.tachiyomi.ui.reader.loader", script)
+        # UI freeze coverage must actually run, not just compile in the Android gate.
+        self.assertIn('run_package "eu.kanade.tachiyomi.ui.main" "Canonical UI jank"', script)
         self.assertIn(":app:connectedDebugAndroidTest", script)
 
     def test_workflow_selects_acceptance_branch_and_reader_dependencies(self):
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
         self.assertIn("tsuzuki/provider-torrent-acceptance-harness", workflow)
+        self.assertIn("tsuzuki/issue-160-*", workflow)
         self.assertIn("app/src/androidTest/**", workflow)
         # Provider composition changes can alter which real Host services are reachable.
         self.assertIn("app/src/main/java/mihon/app/di/AppBindings.kt", workflow)

@@ -4,6 +4,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.ExternalIdentity
+import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationRequest
+import tachiyomi.domain.tsuzuki.model.MangaDexWorkAssociationResult
+import tachiyomi.domain.tsuzuki.model.VerifiedInventoryWorkAssociationRequest
+import tachiyomi.domain.tsuzuki.model.VerifiedInventoryWorkAssociationResult
 
 interface CanonicalTitleRepository {
     suspend fun getById(id: String): CanonicalTitle?
@@ -29,4 +33,28 @@ interface CanonicalTitleRepository {
     }
 
     suspend fun addExternalIdentity(identity: ExternalIdentity)
+
+    /**
+     * Transactional work-only association shared by inventory producers.
+     * The default remains fail-closed for repositories without an implementation.
+     */
+    suspend fun associateVerifiedInventoryWorkIfCurrent(
+        request: VerifiedInventoryWorkAssociationRequest,
+        isAuthorized: () -> Boolean,
+    ): VerifiedInventoryWorkAssociationResult =
+        if (isAuthorized()) {
+            VerifiedInventoryWorkAssociationResult.UNSUPPORTED
+        } else {
+            VerifiedInventoryWorkAssociationResult.REFUSED
+        }
+
+    /**
+     * Associates one verified MangaDex work only when persisted permission and
+     * the exact verified crosswalk are current; otherwise fails closed.
+     */
+    suspend fun associateMangaDexWorkIfCurrent(
+        request: MangaDexWorkAssociationRequest,
+        isAuthorized: () -> Boolean,
+    ): MangaDexWorkAssociationResult =
+        if (isAuthorized()) MangaDexWorkAssociationResult.UNSUPPORTED else MangaDexWorkAssociationResult.REFUSED
 }

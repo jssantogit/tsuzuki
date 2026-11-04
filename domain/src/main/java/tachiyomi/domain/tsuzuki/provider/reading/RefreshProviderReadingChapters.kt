@@ -6,13 +6,19 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
 class RefreshProviderReadingChapters internal constructor(
     private val gateway: ProviderReadingGateway,
     private val evidenceAdapter: ProviderChapterEvidenceAdapter,
-    private val publishSnapshot: suspend (
-        canonicalTitleId: String,
-        producerId: String,
-        snapshotObservedAt: Long,
-        evidence: List<ChapterEvidence>,
-    ) -> Unit,
+    private val publishSnapshot: (
+        suspend (
+            canonicalTitleId: String,
+            producerId: String,
+            snapshotObservedAt: Long,
+            evidence: List<ChapterEvidence>,
+        ) -> Unit
+    )?,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val onPageObserved: suspend (pageCount: Int, observationCount: Int) -> Unit = { _, _ -> },
+    private val onPageCollected: suspend (List<ProviderChapterObservation>, Long) -> Unit = { _, _ -> },
+    private val onPageStarted: suspend (Int) -> Unit = {},
+    private val onPageFinished: suspend (Int, Int?, ProviderErrorCode?, Long) -> Unit = { _, _, _, _ -> },
 ) {
 
     constructor(
@@ -43,6 +49,9 @@ class RefreshProviderReadingChapters internal constructor(
         var cursor: ProviderCursor? = null
 
         repeat(MAX_PAGES) {
+            val pageIndex = it + 1
+            onPageStarted(pageIndex)
+            val startedNanos = System.nanoTime()
             val result = gateway.chapters(
                 providerId = binding.ref.providerId,
                 request = ProviderReadingChaptersRequest(
@@ -50,9 +59,16 @@ class RefreshProviderReadingChapters internal constructor(
                     cursor = cursor,
                 ),
             )
+            val elapsedMillis = (System.nanoTime() - startedNanos) / 1_000_000L
             val page = when (result) {
-                is ProviderCallResult.Success -> result.value
-                is ProviderCallResult.Failure -> return result
+                is ProviderCallResult.Success -> {
+                    onPageFinished(pageIndex, result.value.items.size, null, elapsedMillis)
+                    result.value
+                }
+                is ProviderCallResult.Failure -> {
+                    onPageFinished(pageIndex, null, result.error.code, elapsedMillis)
+                    return result
+                }
             }
 
             page.items.forEach { observation ->
@@ -66,23 +82,37 @@ class RefreshProviderReadingChapters internal constructor(
             }
 
             val next = page.nextCursor
-            if (next == null) {
-                val evidence = evidenceAdapter.toEvidence(
-                    canonicalTitleId = binding.canonicalTitleId,
-                    binding = binding.ref,
-                    observations = observations,
-                    observedAt = snapshotObservedAt,
-                )
-                publishSnapshot(
-                    binding.canonicalTitleId,
-                    binding.ref.evidenceProducerId(),
-                    snapshotObservedAt,
-                    evidence,
-                )
-                return ProviderCallResult.Success(observations.size)
-            }
-            if (!seenCursors.add(next.value)) {
+            if (next != null && !seenCursors.add(next.value)) {
                 return failure(ProviderErrorCode.MALFORMED_RESULT)
+            }
+            // These are sanitized page-level diagnostics only, not partial chapter inventory.
+            // Never publish a canonical snapshot until the final page is verified, so a
+            // stalled or failed later page cannot detach previously recorded chapters.
+            // The incomplete result must not pretend that the inventory is complete.
+            onPageObserved(it + 1, observations.size)
+            // Observed chapters may be used additively if a later page stalls. This is
+            // not a complete snapshot and must never detach older Provider support.
+            onPageCollected(page.items, snapshotObservedAt)
+            if (next == null) {
+                // A source-only portfolio scan must verify every page, cursor and
+                // chapter identity but must not build a redundant canonical
+                // snapshot. Only a preferred binding can publish one.
+                val publisher = publishSnapshot
+                if (publisher != null) {
+                    val evidence = evidenceAdapter.toEvidence(
+                        canonicalTitleId = binding.canonicalTitleId,
+                        binding = binding.ref,
+                        observations = observations,
+                        observedAt = snapshotObservedAt,
+                    )
+                    publisher(
+                        binding.canonicalTitleId,
+                        binding.ref.evidenceProducerId(),
+                        snapshotObservedAt,
+                        evidence,
+                    )
+                }
+                return ProviderCallResult.Success(observations.size)
             }
             cursor = next
         }

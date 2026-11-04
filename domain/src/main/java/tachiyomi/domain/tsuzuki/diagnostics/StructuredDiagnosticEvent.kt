@@ -101,7 +101,21 @@ enum class DiagnosticEventName {
 
     CHAPTER_REFRESH_STARTED,
     CHAPTER_EVIDENCE_RECONCILED,
+    CHAPTER_RECONCILE_PHASE,
+    CHAPTER_UI_PHASE,
+    APP_FRAME_STALL,
     CHAPTER_REFRESH_COMPLETED,
+    PROVIDER_READING_EVIDENCE,
+    PROVIDER_READING_LOOKUP_ATTEMPT,
+    PROVIDER_READING_CHAPTER_ATTEMPT,
+    PROVIDER_READING_PAGE,
+    PROVIDER_READING_PAGE_DETAIL,
+    PROVIDER_READING_BINDING,
+    PROVIDER_READING_CANDIDATE,
+    PROVIDER_READING_SOURCE_ASSOCIATION,
+    PROVIDER_HTTP_REQUEST,
+    PROVIDER_RUNTIME_STAGE,
+    PROVIDER_BROWSER_REQUEST,
 
     READER_OPEN_STARTED,
     READER_SOURCE_SELECTED,
@@ -116,6 +130,7 @@ enum class DiagnosticEventName {
     TORRENT_METADATA_SUMMARY,
     TORRENT_MATCH_SUMMARY,
     TORRENT_RELEASE_EVIDENCE_SUMMARY,
+    TORRENT_CANDIDATE_EVALUATED,
     PROVIDER_P2P_EVENT,
 
     CACHE_LOOKUP,
@@ -185,6 +200,49 @@ enum class DiagnosticAttribute {
     TARGET_SOURCE_COUNT,
     CANDIDATE_COUNT,
     CANDIDATE_INDEX,
+    QUERY_INDEX,
+    PROVIDER_WORK_ID,
+    PROVIDER_WORK_TITLE,
+    PROVIDER_WORK_URL,
+    PROVIDER_WORK_ALIASES,
+    PROVIDER_LOOKUP_TITLE,
+    LOOKUP_DECISION,
+    PROVIDER_CHAPTER_ID,
+    PROVIDER_CHAPTER_FIRST_ID,
+    PROVIDER_CHAPTER_LAST_ID,
+
+    // Count-only explanation of why a discovered chapter has no Reader option.
+    PROVIDER_READER_ELIGIBLE_SOURCE_COUNT,
+    PROVIDER_READER_OBSERVED_EVIDENCE_COUNT,
+    PROVIDER_READER_MATCHING_NUMBER_COUNT,
+    PROVIDER_READER_MAPPED_EVIDENCE_COUNT,
+    PROVIDER_READER_ELIGIBLE_MAPPED_COUNT,
+    PROVIDER_READER_NO_MATCH_REASON,
+    PROVIDER_READER_IDENTITY_REJECTION_REASON,
+
+    // Source-attested chapter structure for an opt-in selected Reader option.
+    PROVIDER_READER_SOURCE_NUMBER_MILLI,
+    PROVIDER_READER_SOURCE_VOLUME,
+    PROVIDER_READER_LABEL_HAS_VOLUME_MARKER,
+    PROVIDER_READER_TITLE_IS_VOLUME_CONTAINER,
+    PROVIDER_READER_TITLE_PRESENT,
+    CANONICAL_CHAPTER_BASE_NUMBER,
+    CHAPTER_NUMBER_MIN_MILLI,
+    CHAPTER_NUMBER_MAX_MILLI,
+    PARTIAL_EVIDENCE_COUNT,
+    PROVIDER_WORK_CHAPTER_COUNT,
+    PROVIDER_CANDIDATE_REASON,
+    PROVIDER_DETAIL_OUTCOME,
+    PROVIDER_COVERAGE_OUTCOME,
+    PROVIDER_COVERAGE_OBSERVED_COUNT,
+    PROVIDER_COVERAGE_HAS_MORE,
+    PROVIDER_WORK_VERIFICATION,
+    PROVIDER_EDITION_QUALIFICATION,
+    PROVIDER_HTTP_FAILURE,
+    PROVIDER_RUNTIME_PHASE,
+    PROVIDER_BROWSER_FAILURE,
+    CHAPTER_RECONCILE_PHASE,
+    CHAPTER_UI_PHASE,
     BROADENED,
     MAPPING_REUSED,
     LANGUAGE,
@@ -235,6 +293,16 @@ enum class DiagnosticAttribute {
     TORRENT_FILE_TITLE_TOKEN_COUNT,
     TORRENT_FILE_TITLE_TOKEN_SINGLE_COUNT,
     TORRENT_VOLUME_REQUESTED,
+    TORRENT_NO_MATCH_REASON,
+    TORRENT_CANDIDATE_MATCH_REASON,
+    TORRENT_CANDIDATE_EXACT_COUNT,
+    TORRENT_CANDIDATE_WORK_UNPROVEN_COUNT,
+    TORRENT_CANDIDATE_CHAPTER_UNPROVEN_COUNT,
+    TORRENT_CANDIDATE_NO_ARCHIVE_COUNT,
+    TORRENT_CANDIDATE_IMAGE_DIRECTORY_UNSUPPORTED_COUNT,
+    TORRENT_CANDIDATE_VOLUME_UNPROVEN_COUNT,
+    TORRENT_CANDIDATE_AMBIGUOUS_COUNT,
+    TORRENT_CANDIDATE_METADATA_UNAVAILABLE_COUNT,
     PROVIDER_P2P_LINE,
 
     COVER_PRESENT,
@@ -277,6 +345,7 @@ sealed interface DiagnosticAttributeValue {
 sealed interface DiagnosticSafeCode
 
 enum class DiagnosticErrorCategory : DiagnosticSafeCode {
+    CHAPTER_IDENTITY,
     NETWORK,
     TIMEOUT,
     HTTP,
@@ -301,6 +370,163 @@ enum class DiagnosticCandidateType : DiagnosticSafeCode {
     SOURCE_AWARE,
     SOURCE_RAW,
     LOCAL,
+}
+
+/** Closed, content-free reason codes for a torrent search with no safe exact match. */
+enum class DiagnosticTorrentNoMatchReason : DiagnosticSafeCode {
+    NO_CANDIDATES,
+    NO_READABLE_ARCHIVES,
+    IMAGE_DIRECTORY_UNSUPPORTED,
+    CHAPTER_IDENTITY_NOT_PROVEN,
+    VOLUME_NOT_PROVEN,
+    AMBIGUOUS_ARCHIVES,
+    NO_EXACT_MATCH,
+}
+
+/** Private, closed classifications for a single torrent candidate. Never include file paths or titles. */
+enum class DiagnosticTorrentCandidateMatchReason : DiagnosticSafeCode {
+    EXACT,
+    AMBIGUOUS_ARCHIVES,
+    METADATA_UNAVAILABLE,
+    NO_READABLE_ARCHIVES,
+    IMAGE_DIRECTORY_UNSUPPORTED,
+    CHAPTER_IDENTITY_NOT_PROVEN,
+    WORK_IDENTITY_NOT_PROVEN,
+    VOLUME_NOT_PROVEN,
+}
+
+/** Source identity is unresolved even when lookup HTTP/API completed successfully. */
+enum class DiagnosticProviderLookupDecision : DiagnosticSafeCode {
+    SELECTED,
+    AUTHOR_CORROBORATED,
+    UNIQUE_READABLE_SOURCE,
+    NO_MATCH,
+    MULTIPLE_PRIMARY_IDENTITIES,
+    AMBIGUOUS_EDITION,
+}
+
+/** Detailed-capture-only classification; never use title similarity as binding authorization. */
+enum class DiagnosticProviderCandidateReason : DiagnosticSafeCode {
+    SELECTED,
+    PRIMARY_MATCH_BLOCKED,
+    ALIAS_MATCH_BLOCKED,
+    ALTERNATE_EDITION,
+    FACET_MISMATCH,
+    TITLE_MISMATCH,
+}
+
+/** Closed source-enrichment outcomes: no upstream response text or secrets. */
+enum class DiagnosticProviderBrowserFailure : DiagnosticSafeCode {
+    TIMEOUT,
+    NAVIGATION,
+    TLS,
+    RENDERER_GONE,
+    WEBVIEW_UNSUPPORTED,
+    SELECTOR_MISSING,
+    CANCELLED,
+    UNKNOWN,
+}
+
+enum class DiagnosticProviderHttpFailure : DiagnosticSafeCode {
+    DNS,
+    CONNECT,
+    TLS,
+    READ_TIMEOUT,
+    HOST_DEADLINE,
+    CANCELLED,
+    NETWORK_POLICY,
+    HTTP_STATUS,
+    RESPONSE_LIMIT,
+    UNKNOWN,
+}
+
+/** Bounded content-free checkpoints for identifying the expensive part of a canonical refresh. */
+enum class DiagnosticChapterReconcilePhase : DiagnosticSafeCode {
+    DELTA_WRITE,
+    PROVIDER_SNAPSHOT_WRITE,
+    CACHE_INVALIDATION,
+    UI_RELOAD_CALLBACK,
+}
+
+/** Main-thread chapter UI work; independent from HTTP / Binder timing. */
+enum class DiagnosticChapterUiPhase : DiagnosticSafeCode {
+    CHAPTERS_QUERY,
+    ROWS_BUILD,
+    METADATA_ROW_MERGE,
+    CHAPTER_SORT,
+}
+
+/** Closed Binder lifecycle stages; no provider payload, URI, error message or token. */
+enum class DiagnosticProviderRuntimePhase : DiagnosticSafeCode {
+    BIND_STARTED,
+    BIND_CONNECTED,
+    BIND_REUSED,
+    BIND_INVALIDATED,
+    INVOKE_STARTED,
+    INVOKE_COMPLETED,
+}
+
+enum class DiagnosticProviderCoverageOutcome : DiagnosticSafeCode {
+    OBSERVED,
+    EMPTY,
+    UNKNOWN,
+    INVALID_RESPONSE,
+    CHALLENGE_BLOCKED,
+    FAILED,
+}
+
+enum class DiagnosticProviderDetailOutcome : DiagnosticSafeCode {
+    NOT_NEEDED,
+    SKIPPED_IRRELEVANT,
+    BUDGET_EXHAUSTED,
+    VERIFIED_WITH_ALIASES,
+    VERIFIED_NO_ALIASES,
+    IDENTITY_MISMATCH,
+    INVALID_RESPONSE,
+    CHALLENGE_BLOCKED,
+    DETAIL_FAILED,
+}
+
+/** Sanitized per-HID work/edition assessment codes, not source-authored text. */
+enum class DiagnosticProviderWorkVerification : DiagnosticSafeCode {
+    AUTHOR_CORROBORATED,
+    CANONICAL_METADATA_UNVERIFIED,
+    SOURCE_DETAIL_UNVERIFIED,
+    MISSING_AUTHOR_EVIDENCE,
+    AUTHOR_CONFLICT,
+    TITLE_UNVERIFIED,
+}
+
+enum class DiagnosticProviderEditionQualification : DiagnosticSafeCode {
+    UNRESOLVED,
+    SOURCE_ATTESTED_VARIANT,
+}
+
+/** A closed cause for an empty Reader Provider source lookup; no source text. */
+enum class DiagnosticProviderReaderNoMatchReason : DiagnosticSafeCode {
+    NO_ELIGIBLE_SOURCE,
+    SOURCE_EDITION_EXCLUDED,
+    NO_PROVIDER_EVIDENCE,
+    NO_MATCHING_SOURCE_CHAPTER,
+    NO_CANONICAL_MAPPING,
+    NO_ELIGIBLE_MAPPED_SOURCE,
+    UNVERIFIED_EARLY_TITLE,
+    IDENTITY_REJECTED,
+}
+
+/** First failing Reader identity invariant for a mapped source (no source-authored text). */
+enum class DiagnosticProviderReaderIdentityRejectionReason : DiagnosticSafeCode {
+    UNPARSEABLE_SOURCE_IDENTITY,
+    UNVERIFIED_EARLY_TITLE,
+    LOW_CONFIDENCE,
+    CHAPTER_IDENTITY_MISMATCH,
+    SOURCE_VOLUME_BUNDLE,
+    CONFLICTING_NUMBER_HINT,
+    CONFLICTING_CHAPTER_MARKERS,
+    MALFORMED_VOLUME_LABEL,
+    SOURCE_VOLUME_CONFLICT,
+    CANONICAL_VOLUME_CONFLICT,
+    MIXED_REJECTIONS,
 }
 
 enum class DiagnosticCacheStatus : DiagnosticSafeCode {
@@ -351,6 +577,11 @@ object StructuredDiagnosticSanitizer {
     private val providerIdPattern = Regex("^[a-zA-Z0-9._-]{1,64}$")
     private val providerVersionPattern = Regex("^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$")
     private val providerErrorCodePattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
+
+    // Detailed capture accepts only bounded MangaFire public title paths, never query strings or credentials.
+    private val providerWorkIdPattern = Regex("^[A-Za-z0-9_-]{1,80}$")
+    private val providerChapterIdPattern = Regex("^[0-9]{1,32}$")
+    private val providerWorkUrlPattern = Regex("^https://mangafire\\.to/title/[A-Za-z0-9-]{2,160}/?$")
     private val p2pEventPattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
     private val p2pOperationPattern = Regex("^opRef=[0-9a-f]{16}$")
     private val p2pProviderIdPattern = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -458,6 +689,15 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.TARGET_SOURCE_COUNT,
         DiagnosticAttribute.CANDIDATE_COUNT,
         DiagnosticAttribute.CANDIDATE_INDEX,
+        DiagnosticAttribute.QUERY_INDEX,
+        DiagnosticAttribute.PROVIDER_WORK_CHAPTER_COUNT,
+        DiagnosticAttribute.PROVIDER_COVERAGE_OBSERVED_COUNT,
+        DiagnosticAttribute.PARTIAL_EVIDENCE_COUNT,
+        DiagnosticAttribute.PROVIDER_READER_ELIGIBLE_SOURCE_COUNT,
+        DiagnosticAttribute.PROVIDER_READER_OBSERVED_EVIDENCE_COUNT,
+        DiagnosticAttribute.PROVIDER_READER_MATCHING_NUMBER_COUNT,
+        DiagnosticAttribute.PROVIDER_READER_MAPPED_EVIDENCE_COUNT,
+        DiagnosticAttribute.PROVIDER_READER_ELIGIBLE_MAPPED_COUNT,
         DiagnosticAttribute.OBSERVATION_COUNT,
         DiagnosticAttribute.ITEM_COUNT,
         DiagnosticAttribute.ACCEPTED_COUNT,
@@ -498,7 +738,27 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.TORRENT_FILE_TOKEN_SINGLE_COUNT,
         DiagnosticAttribute.TORRENT_FILE_TITLE_TOKEN_COUNT,
         DiagnosticAttribute.TORRENT_FILE_TITLE_TOKEN_SINGLE_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_EXACT_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_WORK_UNPROVEN_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_CHAPTER_UNPROVEN_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_NO_ARCHIVE_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_IMAGE_DIRECTORY_UNSUPPORTED_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_VOLUME_UNPROVEN_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_AMBIGUOUS_COUNT,
+        DiagnosticAttribute.TORRENT_CANDIDATE_METADATA_UNAVAILABLE_COUNT,
         -> (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..MAX_COUNT }
+
+        DiagnosticAttribute.CANONICAL_CHAPTER_BASE_NUMBER ->
+            (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..MAX_COUNT }
+
+        // 1000x scales decimal source chapter numbers without collapsing 1180.5 to 1180.
+        DiagnosticAttribute.CHAPTER_NUMBER_MIN_MILLI,
+        DiagnosticAttribute.CHAPTER_NUMBER_MAX_MILLI,
+        DiagnosticAttribute.PROVIDER_READER_SOURCE_NUMBER_MILLI,
+        -> (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..1_000_000_000L }
+
+        DiagnosticAttribute.PROVIDER_READER_SOURCE_VOLUME ->
+            (value as? DiagnosticAttributeValue.Number)?.takeIf { it.value in 0..10_000L }
 
         DiagnosticAttribute.PROVIDER_VERSION_CODE -> (value as? DiagnosticAttributeValue.Number)
             ?.takeIf { it.value in 1..MAX_COUNT }
@@ -508,10 +768,14 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.AUTO_CONFIRM_ATTEMPTED,
         DiagnosticAttribute.AMBIGUOUS,
         DiagnosticAttribute.COVER_PRESENT,
+        DiagnosticAttribute.PROVIDER_COVERAGE_HAS_MORE,
         DiagnosticAttribute.SOURCE_ARTWORK_PRESENT,
         DiagnosticAttribute.CANONICAL_ARTWORK_PRESENT,
         DiagnosticAttribute.REQUEST_DATA_PRESENT,
         DiagnosticAttribute.INITIALIZED,
+        DiagnosticAttribute.PROVIDER_READER_LABEL_HAS_VOLUME_MARKER,
+        DiagnosticAttribute.PROVIDER_READER_TITLE_IS_VOLUME_CONTAINER,
+        DiagnosticAttribute.PROVIDER_READER_TITLE_PRESENT,
         DiagnosticAttribute.COMPLETED,
         DiagnosticAttribute.IDENTITY_VERIFIED,
         DiagnosticAttribute.RATING_PRESENT,
@@ -520,8 +784,56 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.TORRENT_VOLUME_REQUESTED,
         -> value as? DiagnosticAttributeValue.Flag
 
+        DiagnosticAttribute.TORRENT_NO_MATCH_REASON -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticTorrentNoMatchReason }
+        DiagnosticAttribute.TORRENT_CANDIDATE_MATCH_REASON -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticTorrentCandidateMatchReason }
+        DiagnosticAttribute.PROVIDER_CANDIDATE_REASON -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderCandidateReason }
+        DiagnosticAttribute.PROVIDER_DETAIL_OUTCOME -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderDetailOutcome }
+        DiagnosticAttribute.PROVIDER_COVERAGE_OUTCOME -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderCoverageOutcome }
+        DiagnosticAttribute.PROVIDER_WORK_VERIFICATION -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderWorkVerification }
+        DiagnosticAttribute.PROVIDER_EDITION_QUALIFICATION -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderEditionQualification }
+        DiagnosticAttribute.PROVIDER_READER_NO_MATCH_REASON -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderReaderNoMatchReason }
+        DiagnosticAttribute.PROVIDER_READER_IDENTITY_REJECTION_REASON -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderReaderIdentityRejectionReason }
+        DiagnosticAttribute.PROVIDER_HTTP_FAILURE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderHttpFailure }
+        DiagnosticAttribute.PROVIDER_RUNTIME_PHASE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderRuntimePhase }
+        DiagnosticAttribute.PROVIDER_BROWSER_FAILURE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderBrowserFailure }
+        DiagnosticAttribute.CHAPTER_RECONCILE_PHASE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticChapterReconcilePhase }
+        DiagnosticAttribute.CHAPTER_UI_PHASE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticChapterUiPhase }
+        DiagnosticAttribute.LOOKUP_DECISION -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderLookupDecision }
+
         DiagnosticAttribute.PROVIDER_P2P_LINE -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { isSafeP2pLine(it.value) }
+        DiagnosticAttribute.PROVIDER_WORK_ID -> (value as? DiagnosticAttributeValue.Text)
+            ?.takeIf { providerWorkIdPattern.matches(it.value) }
+        DiagnosticAttribute.PROVIDER_CHAPTER_ID,
+        DiagnosticAttribute.PROVIDER_CHAPTER_FIRST_ID,
+        DiagnosticAttribute.PROVIDER_CHAPTER_LAST_ID,
+        -> (value as? DiagnosticAttributeValue.Text)
+            ?.takeIf { providerChapterIdPattern.matches(it.value) }
+        DiagnosticAttribute.PROVIDER_WORK_URL -> (value as? DiagnosticAttributeValue.Text)
+            ?.takeIf { providerWorkUrlPattern.matches(it.value) }
+        DiagnosticAttribute.PROVIDER_WORK_TITLE,
+        DiagnosticAttribute.PROVIDER_WORK_ALIASES,
+        DiagnosticAttribute.PROVIDER_LOOKUP_TITLE,
+        -> (value as? DiagnosticAttributeValue.Text)
+            ?.takeIf { text ->
+                text.value.length in 1..512 &&
+                    text.value.all { char -> char.code >= 32 && char.code != 127 && char.code != 0x2028 }
+            }
 
         DiagnosticAttribute.LANGUAGE -> (value as? DiagnosticAttributeValue.Text)
             ?.takeIf { languageTagPattern.matches(it.value) }

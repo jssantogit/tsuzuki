@@ -12,6 +12,9 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticCandidateType
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticErrorCategory
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderIdentityRejectionReason
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderNoMatchReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
@@ -50,7 +53,7 @@ class PrepareCanonicalChapterForReader(
         canonicalChapterId: String,
         selectedOption: ContentOption? = null,
     ): CanonicalReaderPreparation {
-        val trace = DiagnosticTrace.start(
+        var trace = DiagnosticTrace.start(
             recorder = structuredDiagnostics,
             workflow = DiagnosticWorkflow.READER_OPEN,
             subsystem = DiagnosticSubsystem.READER,
@@ -70,6 +73,11 @@ class PrepareCanonicalChapterForReader(
                     started,
                     CanonicalReaderPreparation.Unavailable(canonicalChapterId),
                 )
+            // Bind subsequent Reader events to the same pseudonymous title
+            // reference used by chapter discovery and reconciliation logs.
+            trace = trace.copy(
+                canonicalTitleRef = structuredDiagnostics.canonicalTitleReference(chapter.canonicalTitleId),
+            )
 
             if (selectedOption == null) {
                 val artifact = canonicalDownloadRepository.get(canonicalChapterId)
@@ -145,6 +153,18 @@ class PrepareCanonicalChapterForReader(
         trace: DiagnosticTrace,
     ): CanonicalReaderPreparation {
         val resolver = resolveProviderChapterReading
+        // Only identify the exact canonical number during voluntary detailed
+        // capture. Without this, Ch. 0 / Ch. 0.1 misroutes look identical.
+        val capturedCanonicalIdentity = if (structuredDiagnostics.detailedCaptureActive) {
+            canonicalChapterRepository.getById(canonicalChapterId)?.baseNumber?.let { number ->
+                mapOf(
+                    DiagnosticAttribute.CANONICAL_CHAPTER_BASE_NUMBER to
+                        DiagnosticAttributeValue.Number(number.toLong()),
+                )
+            }.orEmpty()
+        } else {
+            emptyMap()
+        }
         trace.event(
             subsystem = DiagnosticSubsystem.CONTENT,
             name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
@@ -159,26 +179,173 @@ class PrepareCanonicalChapterForReader(
 
         if (resolver != null) {
             val options = resolver.options(canonicalChapterId)
+            // An empty result could mean genuinely absent source chapter,
+            // missing canonical mapping, ineligible HID, or rejected identity.
+            // Log count-only causes rather than hiding every case as no source.
+            val noMatchAudit = if (options.isEmpty() && structuredDiagnostics.detailedCaptureActive) {
+                try {
+                    resolver.auditNoMatch(canonicalChapterId)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    // Detailed logging is best-effort. Its separate database reads
+                    // must never prevent a normal Reader fallback or torrent lookup.
+                    null
+                }
+            } else {
+                null
+            }
             trace.event(
                 subsystem = DiagnosticSubsystem.CONTENT,
                 name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
                 stage = DiagnosticStage.BINDING,
                 outcome = if (options.isEmpty()) DiagnosticOutcome.EMPTY else DiagnosticOutcome.CANDIDATES,
-                attributes = mapOf(
-                    DiagnosticAttribute.CANDIDATE_TYPE to
+                attributes = buildMap {
+                    put(
+                        DiagnosticAttribute.CANDIDATE_TYPE,
                         DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
-                    DiagnosticAttribute.CANDIDATE_COUNT to DiagnosticAttributeValue.Number(options.size.toLong()),
-                ),
+                    )
+                    put(DiagnosticAttribute.CANDIDATE_COUNT, DiagnosticAttributeValue.Number(options.size.toLong()))
+                    noMatchAudit?.let { audit ->
+                        put(
+                            DiagnosticAttribute.PROVIDER_READER_ELIGIBLE_SOURCE_COUNT,
+                            DiagnosticAttributeValue.Number(audit.eligibleSourceCount.toLong()),
+                        )
+                        put(
+                            DiagnosticAttribute.PROVIDER_READER_OBSERVED_EVIDENCE_COUNT,
+                            DiagnosticAttributeValue.Number(audit.providerEvidenceCount.toLong()),
+                        )
+                        put(
+                            DiagnosticAttribute.PROVIDER_READER_MATCHING_NUMBER_COUNT,
+                            DiagnosticAttributeValue.Number(audit.matchingNumberEvidenceCount.toLong()),
+                        )
+                        put(
+                            DiagnosticAttribute.PROVIDER_READER_MAPPED_EVIDENCE_COUNT,
+                            DiagnosticAttributeValue.Number(audit.mappedEvidenceCount.toLong()),
+                        )
+                        put(
+                            DiagnosticAttribute.PROVIDER_READER_ELIGIBLE_MAPPED_COUNT,
+                            DiagnosticAttributeValue.Number(audit.mappedEligibleSourceEvidenceCount.toLong()),
+                        )
+                        put(
+                            DiagnosticAttribute.PROVIDER_READER_NO_MATCH_REASON,
+                            DiagnosticAttributeValue.Code(
+                                DiagnosticProviderReaderNoMatchReason.valueOf(audit.reason.name),
+                            ),
+                        )
+                        audit.identityRejectionReason?.let { rejection ->
+                            put(
+                                DiagnosticAttribute.PROVIDER_READER_IDENTITY_REJECTION_REASON,
+                                DiagnosticAttributeValue.Code(
+                                    DiagnosticProviderReaderIdentityRejectionReason.valueOf(rejection.name),
+                                ),
+                            )
+                        }
+                    }
+                } + capturedCanonicalIdentity,
             )
 
-            // Provider-native selection will become a first-class UI model later. Until then, never
-            // choose silently when more than one independent Provider/facet can serve the chapter.
-            if (options.size > 1) {
-                return CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+            // Work-level evidence never licenses an arbitrary source choice.
+            // Only a single chapter option belonging to an edition explicitly
+            // confirmed by the user can outrank other eligible sources.
+            val explicitlyConfirmedOption = if (options.size > 1) {
+                try {
+                    resolver.uniqueUserConfirmedOption(canonicalChapterId, options)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    // A supplementary binding read is not license to guess a
+                    // source or to suppress the independent torrent fallback.
+                    null
+                }
+            } else {
+                null
+            }
+            if (options.size > 1 && explicitlyConfirmedOption == null) {
+                trace.event(
+                    subsystem = DiagnosticSubsystem.READER,
+                    name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                    stage = DiagnosticStage.READER,
+                    outcome = DiagnosticOutcome.NEEDS_CONFIRMATION,
+                    attributes = mapOf(
+                        DiagnosticAttribute.CANDIDATE_COUNT to DiagnosticAttributeValue.Number(options.size.toLong()),
+                        DiagnosticAttribute.LOOKUP_DECISION to
+                            DiagnosticAttributeValue.Code(DiagnosticProviderLookupDecision.AMBIGUOUS_EDITION),
+                    ) + capturedCanonicalIdentity,
+                )
+                // An ambiguous HTTP identity is not authority to choose one
+                // candidate, but it must not suppress a separately verified
+                // torrent archive. That fallback runs its own chapter/volume
+                // identity checks and can still fail closed when ambiguous.
+                val alternative = prepareProviderTorrentFallback(canonicalChapterId, trace)
+                if (alternative is CanonicalReaderPreparation.Unavailable) {
+                    val canonicalTitleId = canonicalChapterRepository.getById(canonicalChapterId)?.canonicalTitleId
+                    if (canonicalTitleId != null) {
+                        return CanonicalReaderPreparation.ProviderEditionConfirmationRequired(
+                            canonicalTitleId = canonicalTitleId,
+                            canonicalChapterId = canonicalChapterId,
+                            candidateCount = options.size,
+                        )
+                    }
+                }
+                return alternative
             }
 
-            val option = options.singleOrNull()
+            val option = explicitlyConfirmedOption ?: options.singleOrNull()
             if (option != null) {
+                // Public source identities are useful for exact Reader debugging,
+                // but must never enter ordinary logs outside opt-in capture.
+                val capturedSourceIdentity = if (structuredDiagnostics.detailedCaptureActive) {
+                    mapOf(
+                        DiagnosticAttribute.PROVIDER_WORK_ID to DiagnosticAttributeValue.Text(option.externalWorkId),
+                        DiagnosticAttribute.PROVIDER_CHAPTER_ID to
+                            DiagnosticAttributeValue.Text(option.providerChapterId),
+                    )
+                } else {
+                    emptyMap()
+                }
+                val capturedSourceStructure = if (structuredDiagnostics.detailedCaptureActive) {
+                    val sourceAudit = try {
+                        resolver.auditSourceIdentity(option)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        // Diagnostics cannot block selection of a validated Reader source.
+                        null
+                    }
+                    if (sourceAudit == null) {
+                        emptyMap()
+                    } else {
+                        buildMap {
+                            sourceAudit.sourceNumberMilli?.let { number ->
+                                put(
+                                    DiagnosticAttribute.PROVIDER_READER_SOURCE_NUMBER_MILLI,
+                                    DiagnosticAttributeValue.Number(number),
+                                )
+                            }
+                            sourceAudit.sourceVolume?.let { volume ->
+                                put(
+                                    DiagnosticAttribute.PROVIDER_READER_SOURCE_VOLUME,
+                                    DiagnosticAttributeValue.Number(volume.toLong()),
+                                )
+                            }
+                            put(
+                                DiagnosticAttribute.PROVIDER_READER_LABEL_HAS_VOLUME_MARKER,
+                                DiagnosticAttributeValue.Flag(sourceAudit.labelHasExplicitVolumeMarker),
+                            )
+                            put(
+                                DiagnosticAttribute.PROVIDER_READER_TITLE_IS_VOLUME_CONTAINER,
+                                DiagnosticAttributeValue.Flag(sourceAudit.sourceTitleIsVolumeContainer),
+                            )
+                            put(
+                                DiagnosticAttribute.PROVIDER_READER_TITLE_PRESENT,
+                                DiagnosticAttributeValue.Flag(sourceAudit.sourceTitlePresent),
+                            )
+                        }
+                    }
+                } else {
+                    emptyMap()
+                }
                 trace.event(
                     subsystem = DiagnosticSubsystem.READER,
                     name = DiagnosticEventName.READER_SOURCE_SELECTED,
@@ -188,7 +355,7 @@ class PrepareCanonicalChapterForReader(
                         DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text(option.providerId.value),
                         DiagnosticAttribute.CANDIDATE_TYPE to
                             DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
-                    ),
+                    ) + capturedCanonicalIdentity + capturedSourceIdentity + capturedSourceStructure,
                 )
 
                 when (val prepared = resolver.preparedContent(option)) {
@@ -199,13 +366,25 @@ class PrepareCanonicalChapterForReader(
                             stage = DiagnosticStage.READER,
                             outcome = DiagnosticOutcome.TYPED_FAILURE,
                             severity = DiagnosticSeverity.WARN,
-                            attributes = mapOf(
-                                DiagnosticAttribute.PROVIDER_ID to
+                            attributes = buildMap {
+                                put(
+                                    DiagnosticAttribute.PROVIDER_ID,
                                     DiagnosticAttributeValue.Text(option.providerId.value),
-                                DiagnosticAttribute.ERROR_CATEGORY to DiagnosticAttributeValue.Code(
-                                    prepared.error.code.toDiagnosticCategory(),
-                                ),
-                            ),
+                                )
+                                put(
+                                    DiagnosticAttribute.ERROR_CATEGORY,
+                                    DiagnosticAttributeValue.Code(prepared.error.code.toDiagnosticCategory()),
+                                )
+                                put(
+                                    DiagnosticAttribute.PROVIDER_ERROR_CODE,
+                                    DiagnosticAttributeValue.Text(prepared.error.code.name),
+                                )
+                                putAll(capturedCanonicalIdentity)
+                                putAll(capturedSourceIdentity)
+                                prepared.error.observedPageCount?.let { count ->
+                                    put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(count.toLong()))
+                                }
+                            },
                         )
                     }
                     is ProviderCallResult.Success -> {
@@ -220,6 +399,8 @@ class PrepareCanonicalChapterForReader(
                                     DiagnosticAttribute.PROVIDER_ID,
                                     DiagnosticAttributeValue.Text(option.providerId.value),
                                 )
+                                putAll(capturedCanonicalIdentity)
+                                putAll(capturedSourceIdentity)
                                 pageCount?.let {
                                     put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(it.toLong()))
                                 }
@@ -384,6 +565,17 @@ class PrepareCanonicalChapterForReader(
                         DiagnosticAttributeValue.Number(result.options.size.toLong()),
                 ),
             )
+            is CanonicalReaderPreparation.ProviderEditionConfirmationRequired -> trace.event(
+                subsystem = DiagnosticSubsystem.READER,
+                name = DiagnosticEventName.READER_OPEN_COMPLETED,
+                stage = DiagnosticStage.COMPLETE,
+                outcome = DiagnosticOutcome.NEEDS_CONFIRMATION,
+                durationMillis = duration,
+                attributes = mapOf(
+                    DiagnosticAttribute.CANDIDATE_COUNT to
+                        DiagnosticAttributeValue.Number(result.candidateCount.toLong()),
+                ),
+            )
             is CanonicalReaderPreparation.Unavailable -> trace.event(
                 subsystem = DiagnosticSubsystem.READER,
                 name = DiagnosticEventName.READER_OPEN_COMPLETED,
@@ -440,8 +632,15 @@ private fun ProviderErrorCode.toDiagnosticCategory(): DiagnosticErrorCategory = 
     ProviderErrorCode.BROWSER_ERROR,
     -> DiagnosticErrorCategory.NETWORK
     ProviderErrorCode.MALFORMED_RESULT -> DiagnosticErrorCategory.MALFORMED_RESPONSE
+    ProviderErrorCode.CHAPTER_IDENTITY_UNVERIFIED -> DiagnosticErrorCategory.CHAPTER_IDENTITY
     ProviderErrorCode.RUNTIME_DIED,
     ProviderErrorCode.SCRIPT_ERROR,
+    ProviderErrorCode.PACKAGE_INVALID,
+    ProviderErrorCode.MALFORMED_REQUEST,
+    ProviderErrorCode.SOURCE_TOO_LARGE,
+    ProviderErrorCode.SOURCE_READ_ERROR,
+    ProviderErrorCode.INVOCATION_CONFLICT,
+    ProviderErrorCode.HOST_ERROR,
     ProviderErrorCode.HOST_API_UNSUPPORTED,
     ProviderErrorCode.RESOURCE_LIMIT,
     -> DiagnosticErrorCategory.EXTENSION

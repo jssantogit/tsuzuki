@@ -28,6 +28,7 @@ import tachiyomi.domain.tsuzuki.catalog.interactor.SearchIntegrations
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
+import tachiyomi.domain.tsuzuki.catalog.model.harmonizeCatalogTitlesAcrossSections
 import tachiyomi.domain.tsuzuki.catalog.model.mergeCatalogItemsByVerifiedIdentity
 import tachiyomi.domain.tsuzuki.integration.DiscoveryProvider
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
@@ -361,8 +362,12 @@ class TsuzukiSearchScreenModel(
             } else {
                 blocks[block.kind] = block
             }
+            val ordered = blocks.values.sortedBy { it.kind.ordinal }
+            val harmonized = harmonizeCatalogTitlesAcrossSections(ordered.map(DiscoverBlock::items))
             discover.copy(
-                blocks = blocks.values.sortedBy { it.kind.ordinal },
+                blocks = ordered.mapIndexed { index, current ->
+                    current.copy(items = harmonized[index])
+                },
             )
         }
     }
@@ -384,7 +389,7 @@ class TsuzukiSearchScreenModel(
                 blocks = discover.blocks.toMutableList().apply {
                     this[blockIndex] = block.copy(
                         items = block.items.toMutableList().apply {
-                            this[index] = item
+                            this[index] = item.copy(titles = item.titles + block.items[index].titles)
                         },
                     )
                 },

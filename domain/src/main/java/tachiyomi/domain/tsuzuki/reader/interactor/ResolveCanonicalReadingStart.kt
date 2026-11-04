@@ -73,12 +73,17 @@ class ResolveCanonicalReadingStart(
         }
 
         val mappings = persisted.filter(::isEligible)
+        val chapters = canonicalChapterRepository.getByCanonicalTitleId(canonicalTitleId)
         if (mappings.isEmpty()) {
-            throw IllegalStateException("No materialized reading source is available")
+            // The canonical inventory is independently populated by Providers/ICE.
+            // Reading must not require a legacy Mihon source mapping when real
+            // canonical chapters have already been established. The Reader will
+            // still verify an eligible delivery for the selected chapter.
+            if (chapters.isNotEmpty()) return
+            throw IllegalStateException("No canonical chapters or materialized reading source available")
         }
 
         val preferred = mappings.firstOrNull { it.preferredOverride } ?: mappings.first()
-        val chapters = canonicalChapterRepository.getByCanonicalTitleId(canonicalTitleId)
 
         if (chapters.isEmpty()) {
             refreshCanonicalChapters.execute(

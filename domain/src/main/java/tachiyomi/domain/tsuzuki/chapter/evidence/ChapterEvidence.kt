@@ -31,4 +31,12 @@ data class ChapterEvidence(
     val observedAt: Long,
     val confidence: Double,
     val authority: ChapterEvidenceAuthority,
-)
+    val providerMetadata: ProviderEvidenceMetadata? = null,
+) {
+    init {
+        require(
+            providerMetadata == null ||
+                (producerKind == ProducerKind.PROVIDER && authority == ChapterEvidenceAuthority.PROVIDER_PROVISIONAL),
+        ) { "Provider release attributes require provisional Provider provenance" }
+    }
+}

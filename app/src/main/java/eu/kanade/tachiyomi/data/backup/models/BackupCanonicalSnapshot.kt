@@ -1,9 +1,20 @@
 package eu.kanade.tachiyomi.data.backup.models
 
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoNumber
 import java.security.MessageDigest
+
+/**
+ * Canonical core is produced by the app's JSON codec, which may omit null
+ * properties. Decode absent nullable fields as null, but keep strict checks
+ * for unknown keys, mandatory chapter identity and graph provenance.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+internal object CanonicalCoreWireJson {
+    val codec = Json { explicitNulls = false }
+}
 
 /**
  * Optional, versioned extension to the legacy Mihon backup wire format.
@@ -26,7 +37,7 @@ data class BackupCanonicalSnapshot(
         sections.forEach { section ->
             section.validate()
             if (section.key == BackupCanonicalCore.SECTION_KEY) {
-                Json.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
+                CanonicalCoreWireJson.codec.decodeFromString(BackupCanonicalCore.serializer(), section.payloadJson)
                     .validate()
             }
         }

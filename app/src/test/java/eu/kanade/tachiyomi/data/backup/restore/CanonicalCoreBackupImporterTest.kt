@@ -15,6 +15,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupCoreCollection
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContentBinding
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContentPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreContinueReadingState
+import eu.kanade.tachiyomi.data.backup.models.BackupCoreEditorialChapterBinding
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreFolder
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupCoreIntegrationSetting
@@ -55,6 +56,10 @@ import tachiyomi.data.tsuzuki.CanonicalLibraryRepositoryImpl
 import tachiyomi.data.tsuzuki.CanonicalReadingRepositoryImpl
 import tachiyomi.data.tsuzuki.CanonicalTitleRepositoryImpl
 import tachiyomi.data.tsuzuki.SourceTitleMappingRepositoryImpl
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadata
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadataCodec
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.sync.service.CanonicalTitleSyncSource
 import java.nio.file.Files
 
@@ -155,6 +160,69 @@ class CanonicalCoreBackupImporterTest {
         database.tsuzuki_backup_restore_receiptsQueries
             .getTsuzukiBackupRestoreReceipt(section.sha256).awaitAsOne().snapshot_hash shouldBe section.sha256
     }
+
+    @Test
+    fun `edition ownership is restored transactionally and is included in the next core export`(): Unit =
+        runBlocking {
+            val original = Json.decodeFromString(BackupCanonicalCore.serializer(), section().payloadJson)
+            val chapter = original.chapters.single().copy(confirmation = "CONFIRMED")
+            val link = BackupCoreEditorialChapterBinding(
+                canonicalChapterId = chapter.id,
+                canonicalTitleId = "title-1",
+                producerId = "editorial-test",
+                externalWorkId = "work-1",
+                editionKey = "edition-ja",
+                scopeLanguage = "ja",
+                sourceRecordId = "chapter-1",
+                upstreamSourceId = "publisher-feed",
+                identityKey = CanonicalChapterIdentity(CanonicalChapterType.REGULAR, 1).sortKey,
+                volumeKey = 0L,
+                observedAt = 42L,
+            )
+            importer.restoreCore(
+                coreSection(original.copy(chapters = listOf(chapter), editorialChapterBindings = listOf(link))),
+            )
+            database.tsuzuki_editorial_chapter_bindingsQueries.getTsuzukiEditorialBindingsByTitle("title-1")
+                .awaitAsList().single().edition_key shouldBe "edition-ja"
+            // Restoring lineage must NOT silently restore permission to claim
+            // more chapters from that publisher on a different installation.
+            database.tsuzuki_editorial_edition_consentsQueries
+                .countTsuzukiEditorialEditionConsentsForTitle("title-1")
+                .awaitAsOne() shouldBe 0L
+            database.tsuzuki_integration_settingsQueries.upsertTsuzukiIntegrationSetting(
+                integrationId = "editorial-test",
+                enabled = true,
+                configJson = """{"chapter_inventory":true}""",
+                updatedAt = 99L,
+            )
+            database.tsuzuki_editorial_edition_consentsQueries.upsertTsuzukiEditorialEditionConsent(
+                canonicalTitleId = "title-1",
+                producerId = "editorial-test",
+                externalWorkId = "work-1",
+                editionKey = "edition-ja",
+                scopeLanguage = "ja",
+                grantedAt = 123456789L,
+                integrationSettingsRevision = 99L,
+            )
+            database.tsuzuki_editorial_edition_consentsQueries
+                .countTsuzukiEditorialEditionConsentsForTitle("title-1")
+                .awaitAsOne() shouldBe 1L
+            val titles = CanonicalTitleRepositoryImpl(database)
+            val exporter = CanonicalCoreBackupExporter(
+                titleSource = CanonicalTitleSyncSource { titles.getAllAsFlow().first() },
+                titleRepository = titles,
+                libraryRepository = CanonicalLibraryRepositoryImpl(database),
+                chapterRepository = CanonicalChapterRepositoryImpl(database),
+                sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+                readingRepository = CanonicalReadingRepositoryImpl(database),
+                database = database,
+                json = Json,
+            )
+            val portableSection = exporter.export()
+            portableSection.payloadJson.contains("123456789") shouldBe false
+            val exported = Json.decodeFromString(BackupCanonicalCore.serializer(), portableSection.payloadJson)
+            exported.editorialChapterBindings shouldBe listOf(link)
+        }
 
     @Test
     fun `canonical export of restored SQLite graph preserves its local-only state`(): Unit = runBlocking {
@@ -786,6 +854,111 @@ class CanonicalCoreBackupImporterTest {
     }
 
     @Test
+    fun `canonical standalone export keeps titles and receipts while omitting account scoped memberships`(): Unit =
+        runBlocking {
+            importer.restoreCore(section())
+            val membershipQueries = database.tsuzuki_external_library_membershipsQueries
+            repeat(11) { index ->
+                membershipQueries.upsertTsuzukiScopedExternalLibraryMembership(
+                    canonicalTitleId = "title-1",
+                    provider = "kitsu",
+                    ownerKey = "private-owner-key",
+                    externalId = "remote-$index",
+                    listKey = "reading",
+                    listTitle = "Private list",
+                    selectionGroup = null,
+                    status = "READING",
+                    remoteStatus = "Current",
+                    progress = index.toDouble(),
+                    score = null,
+                    listedAt = null,
+                    syncedAt = 50L,
+                    coverUrl = null,
+                )
+            }
+            membershipQueries.upsertTsuzukiExternalLibraryMembership(
+                canonicalTitleId = "title-1",
+                provider = "mal",
+                externalId = "legacy-remote",
+                listKey = "planning",
+                listTitle = null,
+                selectionGroup = null,
+                status = null,
+                remoteStatus = null,
+                progress = null,
+                score = null,
+                listedAt = null,
+                syncedAt = 50L,
+                coverUrl = null,
+            )
+            val titles = CanonicalTitleRepositoryImpl(database)
+            val exported = CanonicalCoreBackupExporter(
+                titleSource = CanonicalTitleSyncSource { titles.getAllAsFlow().first() },
+                titleRepository = titles,
+                libraryRepository = CanonicalLibraryRepositoryImpl(database),
+                chapterRepository = CanonicalChapterRepositoryImpl(database),
+                sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+                readingRepository = CanonicalReadingRepositoryImpl(database),
+                database = database,
+                json = Json,
+            ).export()
+            val core = Json.decodeFromString(BackupCanonicalCore.serializer(), exported.payloadJson)
+            core.omittedExternalAccountMemberships shouldBe 12
+            core.titles.single().id shouldBe "title-1"
+            core.chapters.single().id shouldBe "chapter-1"
+            core.progress.single().lastPageRead shouldBe 7
+            exported.payloadJson.contains("private-owner-key") shouldBe false
+            exported.payloadJson.contains("legacy-remote") shouldBe false
+            exported.payloadJson.contains("remote-0") shouldBe false
+            membershipQueries.getAllTsuzukiScopedExternalLibraryMemberships().awaitAsList().size shouldBe 11
+            membershipQueries.getAllTsuzukiExternalLibraryMemberships().awaitAsList().size shouldBe 1
+            core.validate()
+        }
+
+    @Test
+    fun `excluded account list state never materializes on restore`(): Unit =
+        runBlocking {
+            val core = Json.decodeFromString(BackupCanonicalCore.serializer(), section().payloadJson)
+                .copy(omittedExternalAccountMemberships = 11)
+            importer.restoreCore(coreSection(core))
+            database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList().single().id shouldBe "title-1"
+            database.tsuzuki_external_library_membershipsQueries
+                .getAllTsuzukiScopedExternalLibraryMemberships().awaitAsList() shouldBe emptyList()
+            database.tsuzuki_external_library_membershipsQueries
+                .getAllTsuzukiExternalLibraryMemberships().awaitAsList() shouldBe emptyList()
+            database.tsuzuki_backup_restore_receiptsQueries
+                .listTsuzukiBackupRestoreReceipts().awaitAsList().size shouldBe 1
+        }
+
+    @Test
+    fun `existing canonical v1 archive without exclusion metadata restores with default zero`(): Unit =
+        runBlocking {
+            val archive = section()
+            archive.payloadJson.contains("\"omittedExternalAccountMemberships\"") shouldBe false
+            val decoded = Json.decodeFromString(BackupCanonicalCore.serializer(), archive.payloadJson)
+            decoded.omittedExternalAccountMemberships shouldBe 0
+            importer.restoreCore(archive)
+            database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList().single().id shouldBe "title-1"
+        }
+
+    @Test
+    fun `negative account omission count cannot trigger a partial restore`(): Unit = runBlocking {
+        val unsafe = Json.decodeFromString(BackupCanonicalCore.serializer(), section().payloadJson)
+            .copy(omittedExternalAccountMemberships = -1)
+        shouldThrow<IllegalArgumentException> { importer.restoreCore(coreSection(unsafe)) }
+        database.tsuzuki_titlesQueries.getAllTsuzukiTitles().awaitAsList() shouldBe emptyList()
+        database.tsuzuki_backup_restore_receiptsQueries
+            .listTsuzukiBackupRestoreReceipts().awaitAsList() shouldBe emptyList()
+    }
+
+    @Test
+    fun `portable archive rejects invalid omitted external membership audit count`() {
+        shouldThrow<IllegalArgumentException> {
+            BackupCanonicalCore(omittedExternalAccountMemberships = -1).validate()
+        }
+    }
+
+    @Test
     fun `provenance and mapped chapter evidence survive transactional restore and export`(): Unit = runBlocking {
         val core = coreWithCollectionsAndBindings().copy(
             chapterEvidence = listOf(
@@ -860,6 +1033,55 @@ class CanonicalCoreBackupImporterTest {
         database.tsuzuki_backup_restore_receiptsQueries
             .listTsuzukiBackupRestoreReceipts().awaitAsList() shouldBe emptyList()
     }
+
+    @Test
+    fun `portable Provider metadata survives import and export without persisting arbitrary bytes`(): Unit =
+        runBlocking {
+            val core = Json.decodeFromString(BackupCanonicalCore.serializer(), section().payloadJson)
+            val provider = BackupCoreChapterEvidence(
+                id = "provider-metadata-1",
+                canonicalTitleId = "title-1",
+                producerKind = "PROVIDER",
+                producerId = "provider-binding:portable",
+                externalChapterKey = "chapter-01",
+                rawLabel = "Chapter 1",
+                rawNumber = 1.0,
+                volume = null,
+                title = null,
+                observedAt = 18L,
+                confidence = 0.95,
+                authorityClass = "PROVIDER_PROVISIONAL",
+                mappedCanonicalChapterId = "chapter-1",
+                providerLanguage = "pt-BR",
+                providerScanlationGroup = "Grupo Ñ",
+                providerReleaseDateMillis = 1_700_000_000_000L,
+            )
+            importer.restoreCore(coreSection(core.copy(chapterEvidence = listOf(provider))))
+            val row = database.tsuzuki_chapter_evidenceQueries
+                .getTsuzukiChapterEvidenceByTitle("title-1").awaitAsList().single()
+            ProviderEvidenceMetadataCodec.decode(row.raw_metadata) shouldBe ProviderEvidenceMetadata(
+                "pt-BR",
+                "Grupo Ñ",
+                1_700_000_000_000L,
+            )
+
+            val titles = CanonicalTitleRepositoryImpl(database)
+            val exporter = CanonicalCoreBackupExporter(
+                titleSource = CanonicalTitleSyncSource { titles.getAllAsFlow().first() },
+                titleRepository = titles,
+                libraryRepository = CanonicalLibraryRepositoryImpl(database),
+                chapterRepository = CanonicalChapterRepositoryImpl(database),
+                sourceMappingRepository = SourceTitleMappingRepositoryImpl(database),
+                readingRepository = CanonicalReadingRepositoryImpl(database),
+                database = database,
+                json = Json,
+            )
+            val exported = Json.decodeFromString(
+                BackupCanonicalCore.serializer(),
+                exporter.export().payloadJson,
+            )
+            exported.chapterEvidence.single() shouldBe provider
+        }
 
     @Test
     fun `opaque evidence metadata cannot silently disappear from portable backup`(): Unit = runBlocking {

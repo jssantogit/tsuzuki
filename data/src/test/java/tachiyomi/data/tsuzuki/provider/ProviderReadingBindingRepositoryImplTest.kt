@@ -21,6 +21,9 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBinding
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderSourceEditionQualification
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkSourceAssociation
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkVerification
 import java.nio.file.Files
 
 class ProviderReadingBindingRepositoryImplTest {
@@ -117,6 +120,110 @@ class ProviderReadingBindingRepositoryImplTest {
                 "root" to root,
             )
     }
+
+    @Test
+    fun `edition selection cannot insert a second work into the same title provider facet`() = runBlocking<Unit> {
+        val original = binding()
+        val competing = original.copy(
+            id = "competing-edition",
+            ref = original.ref.copy(externalWorkId = "work-colored"),
+            verification = ProviderBindingVerification.USER_CONFIRMED,
+            updatedAt = 101L,
+        )
+
+        repository.insertIfAbsent(original) shouldBe true
+        repository.insertIfAbsent(competing) shouldBe false
+        repository.get("title", ProviderId("org.example.reader"), "en") shouldBe original
+        repository.getByTitle("title") shouldBe listOf(original)
+    }
+
+    @Test
+    fun `multi HID observations do not replace the preferred edition`() = runBlocking<Unit> {
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val preferred = binding()
+        repository.insertIfAbsent(preferred) shouldBe true
+        val first = workSource("work-42")
+        val second = workSource("work-232")
+
+        portfolio.observe(first) shouldBe true
+        portfolio.observe(second) shouldBe true
+
+        portfolio.getByTitle("title").associateBy { it.ref.externalWorkId } shouldBe
+            mapOf("work-42" to first, "work-232" to second)
+        repository.getByTitle("title") shouldBe listOf(preferred)
+        repository.insertIfAbsent(
+            preferred.copy(
+                id = "different",
+                ref = preferred.ref.copy(externalWorkId = "work-232"),
+            ),
+        ) shouldBe false
+    }
+
+    @Test
+    fun `same provider HID cannot be stolen by another canonical work or stale refresh`() = runBlocking<Unit> {
+        database.tsuzuki_titlesQueries.insertTsuzukiTitle(
+            id = "different-title",
+            displayTitle = "Unrelated",
+            identityState = "SOURCE_ONLY",
+            createdAt = 1L,
+            updatedAt = 1L,
+        )
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val source = workSource("same-hid")
+        portfolio.observe(source) shouldBe true
+
+        portfolio.observe(source.copy(canonicalTitleId = "different-title", observedAt = 300L)) shouldBe false
+        portfolio.observe(
+            source.copy(
+                workVerification = ProviderWorkVerification.AUTHOR_CONFLICT,
+                observedAt = 99L,
+            ),
+        ) shouldBe true
+        portfolio.get(source.ref) shouldBe source
+
+        val changed = source.copy(
+            workVerification = ProviderWorkVerification.SOURCE_DETAIL_UNVERIFIED,
+            observedAt = 301L,
+        )
+        portfolio.observe(changed) shouldBe true
+        portfolio.get(source.ref) shouldBe changed
+        portfolio.getByTitle("different-title") shouldBe emptyList()
+    }
+
+    @Test
+    fun `shadow association cannot take a HID already preferred by another canonical work`() = runBlocking<Unit> {
+        database.tsuzuki_titlesQueries.insertTsuzukiTitle(
+            id = "other-title",
+            displayTitle = "Different Work",
+            identityState = "SOURCE_ONLY",
+            createdAt = 1L,
+            updatedAt = 1L,
+        )
+        val foreign = binding().copy(
+            id = "foreign-preferred",
+            canonicalTitleId = "other-title",
+            ref = binding().ref.copy(externalWorkId = "foreign-hid"),
+        )
+        repository.insertIfAbsent(foreign) shouldBe true
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+
+        portfolio.observe(workSource("foreign-hid")) shouldBe false
+        portfolio.get(foreign.ref) shouldBe null
+        portfolio.getByTitle("title") shouldBe emptyList()
+        repository.getByTitle("other-title") shouldBe listOf(foreign)
+    }
+
+    private fun workSource(hid: String) = ProviderWorkSourceAssociation(
+        canonicalTitleId = "title",
+        ref = ProviderBindingRef(
+            providerId = ProviderId("org.example.reader"),
+            facetId = "en",
+            externalWorkId = hid,
+        ),
+        workVerification = ProviderWorkVerification.AUTHOR_CORROBORATED,
+        editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+        observedAt = 100L,
+    )
 
     private fun binding() = ProviderReadingBinding(
         id = "binding",

@@ -20,6 +20,8 @@ class ProviderTorrentContractTest {
         ),
         volume = null,
         preferredLanguages = emptySet(),
+        titles = listOf("Example title"),
+        chapterNumber = "12",
     )
 
     @Test
@@ -57,6 +59,17 @@ class ProviderTorrentContractTest {
     }
 
     @Test
+    fun `search diagnostic correlation only accepts opaque UUIDs`() {
+        shouldThrow<IllegalArgumentException> {
+            TorrentSearchRequest(titles = listOf("Example Manga"), operationId = "read:canonical-12")
+        }
+        TorrentSearchRequest(
+            titles = listOf("Example Manga"),
+            operationId = "123e4567-e89b-12d3-a456-426614174000",
+        ).operationId shouldBe "123e4567-e89b-12d3-a456-426614174000"
+    }
+
+    @Test
     fun `chapter mapper selects one explicit matching chapter file`() {
         val candidate = candidate(
             files = listOf(
@@ -88,8 +101,8 @@ class ProviderTorrentContractTest {
     fun `chapter mapper fails closed when more than one file remains plausible`() {
         val candidate = candidate(
             files = listOf(
-                file(0, "release-a/chapter-012.cbz"),
-                file(1, "release-b/chapter-012.zip"),
+                file(0, "pack/chapter-012.cbz"),
+                file(1, "alternate/chapter-012.zip"),
             ),
         )
 
@@ -395,7 +408,7 @@ class ProviderTorrentContractTest {
         infoHash = "0123456789abcdef0123456789abcdef01234567",
         magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
         torrentUrl = null,
-        displayName = "Example pack",
+        displayName = "Example title release",
         languages = setOf("en"),
         files = files,
     )

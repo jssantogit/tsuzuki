@@ -10,6 +10,7 @@ import tachiyomi.core.provider.runtime.DefaultProviderCryptoHostService
 import tachiyomi.core.provider.runtime.DefaultProviderDomHostService
 import tachiyomi.core.provider.runtime.DefaultProviderHttpHostService
 import tachiyomi.core.provider.runtime.FileProviderStorageHostService
+import tachiyomi.core.provider.runtime.ProviderBrowserHostService
 import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderHostServices
 import tachiyomi.core.provider.runtime.ProviderHttpDiagnostic
@@ -28,6 +29,8 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ScopedProviderSecretsHostService
 import java.io.File
 import java.security.MessageDigest
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 data class ProviderHostInvocationPolicy(
@@ -90,6 +93,8 @@ class ProviderHostInvocationFactory(
     private val storageRoot: File = File(context.filesDir, "provider-storage"),
     private val secretResolver: suspend (providerId: String, key: String) -> String? = { _, _ -> null },
     private val logSink: (providerId: String, message: String) -> Unit = { _, _ -> },
+    private val httpDiagnosticSink: (providerId: String, detail: ProviderHttpDiagnostic) -> Unit = { _, _ -> },
+    private val browserDiagnosticSink: (providerId: String, detail: ProviderBrowserDiagnostic) -> Unit = { _, _ -> },
     private val httpSessions: ProviderHttpSessionStore = ProviderHttpSessionStore(),
     private val p2pServiceFactory: (String) -> ProviderP2pHostService? = { null },
     private val approvedP2pServiceFactory: ((String, ProviderP2pAcquireRequest?) -> ProviderP2pHostService?)? = null,
@@ -122,6 +127,9 @@ class ProviderHostInvocationFactory(
                     invocationTimeoutMs = invocationTimeoutMs,
                     diagnosticSink = { diagnostic ->
                         logSink(policy.providerId, diagnostic.toRuntimeLogMessage())
+                        // Structured recorder receives the typed, sanitized counterpart only
+                        // during an explicitly started diagnostic capture.
+                        runCatching { httpDiagnosticSink(policy.providerId, diagnostic) }
                     },
                 )
             }
@@ -129,7 +137,7 @@ class ProviderHostInvocationFactory(
         val browser = policy.browserOrigins
             .takeIf { it.isNotEmpty() }
             ?.let { origins ->
-                AndroidProviderBrowserHostService(
+                val delegate = AndroidProviderBrowserHostService(
                     context = context,
                     policy = ProviderNetworkPolicy(
                         allowedOrigins = origins,
@@ -137,6 +145,38 @@ class ProviderHostInvocationFactory(
                     ),
                     providerProfileName = providerProfileName(policy.providerId),
                 )
+                object : ProviderBrowserHostService, AutoCloseable {
+                    override suspend fun readText(url: String, cssSelector: String): String {
+                        val operationId = UUID.randomUUID().toString()
+                        val startedNanos = System.nanoTime()
+                        fun emit(phase: ProviderBrowserDiagnosticPhase, failure: ProviderBrowserFailure? = null) {
+                            runCatching {
+                                browserDiagnosticSink(
+                                    policy.providerId,
+                                    ProviderBrowserDiagnostic(
+                                        phase = phase,
+                                        elapsedMs = TimeUnit.NANOSECONDS.toMillis(
+                                            (System.nanoTime() - startedNanos).coerceAtLeast(0),
+                                        ),
+                                        failure = failure,
+                                        operationId = operationId,
+                                    ),
+                                )
+                            }
+                        }
+                        emit(ProviderBrowserDiagnosticPhase.STARTED)
+                        return try {
+                            delegate.readText(url, cssSelector).also {
+                                emit(ProviderBrowserDiagnosticPhase.SUCCEEDED)
+                            }
+                        } catch (error: Throwable) {
+                            emit(ProviderBrowserDiagnosticPhase.FAILED, classifyProviderBrowserFailure(error))
+                            throw error
+                        }
+                    }
+
+                    override fun close() = delegate.close()
+                }
             }
 
         val services = ProviderHostServices(

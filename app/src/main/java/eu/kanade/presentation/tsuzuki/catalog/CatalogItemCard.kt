@@ -28,6 +28,7 @@ import eu.kanade.tachiyomi.R
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogScore
+import tachiyomi.domain.tsuzuki.catalog.model.preferredDisplayTitle
 import tachiyomi.domain.tsuzuki.integration.model.TsuzukiRating
 import java.util.Locale
 
@@ -54,7 +55,7 @@ fun CatalogItemCard(
         ) {
             MangaCover.Book(
                 data = item.coverUrl,
-                contentDescription = item.title,
+                contentDescription = item.preferredDisplayTitle(),
                 modifier = Modifier.width(64.dp),
             )
 
@@ -64,7 +65,7 @@ fun CatalogItemCard(
                     .padding(start = 12.dp),
             ) {
                 Text(
-                    text = item.title,
+                    text = item.preferredDisplayTitle(),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
@@ -114,11 +115,11 @@ fun CatalogCompactCard(
     ) {
         MangaCover.Book(
             data = item.coverUrl,
-            contentDescription = item.title,
+            contentDescription = item.preferredDisplayTitle(),
             modifier = Modifier.fillMaxWidth(),
         )
         Text(
-            text = item.title,
+            text = item.preferredDisplayTitle(),
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
             maxLines = 2,

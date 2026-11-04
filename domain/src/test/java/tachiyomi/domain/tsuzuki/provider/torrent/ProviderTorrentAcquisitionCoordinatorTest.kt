@@ -182,6 +182,55 @@ class ProviderTorrentAcquisitionCoordinatorTest {
         calls shouldBe 0
     }
 
+    @Test
+    fun `P2P pending response is discarded when Provider is disabled during invocation`() = runTest {
+        val providerId = ProviderId("org.example.p2p")
+        var registration = registration(providerId.value, ProviderCapabilities.AcquisitionP2pV1)
+        val coordinator = ProviderTorrentAcquisitionCoordinator(
+            registry = DefaultProviderRegistry(registrations = { listOf(registration) }),
+            debrid = DebridResolveGateway { _, _ -> error("Debrid must not run") },
+            p2p = P2pAcquireGateway { id, _ ->
+                id shouldBe providerId
+                registration = registration.copy(lifecycleStatus = ProviderLifecycleStatus.DISABLED)
+                ProviderCallResult.Success(P2pAcquireState.Pending("pending-after-disable"))
+            },
+        )
+
+        coordinator.acquire(
+            request = request(),
+            preference = TorrentAcquisitionPreference.P2P_ONLY,
+            directP2pAllowed = true,
+        ) shouldBe ProviderTorrentAcquisitionState.Failure(TorrentAcquisitionFailure.UNAVAILABLE)
+    }
+
+    @Test
+    fun `Debrid ready response is discarded when capability is revoked during invocation`() = runTest {
+        val providerId = ProviderId("org.example.debrid")
+        var registration = registration(providerId.value, ProviderCapabilities.DebridResolveV1)
+        val coordinator = ProviderTorrentAcquisitionCoordinator(
+            registry = DefaultProviderRegistry(registrations = { listOf(registration) }),
+            debrid = DebridResolveGateway { id, _ ->
+                id shouldBe providerId
+                registration = registration.copy(enabledCapabilities = emptySet())
+                ProviderCallResult.Success(
+                    DebridResolveState.Ready(
+                        TorrentReadableResource.HttpFile(
+                            url = "https://cdn.example/chapter.cbz",
+                            allowedOrigins = setOf("https://cdn.example"),
+                        ),
+                    ),
+                )
+            },
+            p2p = P2pAcquireGateway { _, _ -> error("P2P must not run") },
+        )
+
+        coordinator.acquire(
+            request = request(),
+            preference = TorrentAcquisitionPreference.DEBRID_ONLY,
+            directP2pAllowed = false,
+        ) shouldBe ProviderTorrentAcquisitionState.Failure(TorrentAcquisitionFailure.UNAVAILABLE)
+    }
+
     private fun coordinator(
         debridProviders: List<String> = listOf("org.example.debrid"),
         p2pProviders: List<String> = listOf("org.example.p2p"),

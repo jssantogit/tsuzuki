@@ -15,9 +15,9 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.chapter.model.ChapterVariant
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
-import tachiyomi.domain.tsuzuki.metadata.ReportedChapterCount
 
 class MaterializeInferredChapterTest {
 
@@ -25,11 +25,7 @@ class MaterializeInferredChapterTest {
     fun `concurrent read and download taps persist only one canonical chapter`() = runTest {
         val repo = FakeChapters()
         val materializer = MaterializeInferredChapter(repo, ChapterMutationGate(), { 2L })
-        val slot = buildCanonicalChapterOutline(
-            "title",
-            emptyList(),
-            listOf(ReportedChapterCount("title", "kitsu", 37, 1L)),
-        ).last().chapter
+        val slot = legacySlot(37)
         val chapters = (1..20).map { async { materializer.execute(slot) } }.awaitAll()
 
         chapters.map(CanonicalChapter::id).distinct() shouldBe listOf(inferredChapterId("title", 37))
@@ -51,11 +47,7 @@ class MaterializeInferredChapterTest {
             clock = { 3L },
             mutationGate = sharedGate,
         )
-        val slot = buildCanonicalChapterOutline(
-            "title",
-            emptyList(),
-            listOf(ReportedChapterCount("title", "kitsu", 108, 1L)),
-        )[36].chapter
+        val slot = legacySlot(37)
         materializer.execute(slot)
         reconciler.execute(
             "title",
@@ -95,11 +87,7 @@ class MaterializeInferredChapterTest {
             confidence = 1.0,
         )
         repo.upsert(existing)
-        val slot = buildCanonicalChapterOutline(
-            "title",
-            emptyList(),
-            listOf(ReportedChapterCount("title", "kitsu", 108, 1L)),
-        )[36].chapter
+        val slot = legacySlot(37)
         val actual = MaterializeInferredChapter(repo, ChapterMutationGate(), { 2L }).execute(slot)
 
         actual.id shouldBe existing.id
@@ -120,11 +108,7 @@ class MaterializeInferredChapterTest {
         )
         repo.upsert(firstVolume)
         repo.upsert(firstVolume.copy(id = "volume-two-37", volume = 2))
-        val inferred = buildCanonicalChapterOutline(
-            "title",
-            emptyList(),
-            listOf(ReportedChapterCount("title", "kitsu", 37, 1L)),
-        ).last().chapter
+        val inferred = legacySlot(37)
 
         shouldThrow<IllegalStateException> {
             MaterializeInferredChapter(repo, ChapterMutationGate(), { 2L }).execute(inferred)
@@ -146,11 +130,7 @@ class MaterializeInferredChapterTest {
         )
         repo.upsert(observed)
         repo.upsert(observed.copy(id = "volume-two-chapter-one", volume = 2))
-        val staleSlot = buildCanonicalChapterOutline(
-            "title",
-            emptyList(),
-            listOf(ReportedChapterCount("title", "kitsu", 3, 1L)),
-        ).last().chapter
+        val staleSlot = legacySlot(3)
 
         shouldThrow<IllegalStateException> {
             MaterializeInferredChapter(repo, ChapterMutationGate(), { 2L }).execute(staleSlot)
@@ -158,6 +138,16 @@ class MaterializeInferredChapterTest {
         repo.getByCanonicalTitleId("title").map { it.id } shouldBe
             listOf("volume-one-chapter-one", "volume-two-chapter-one")
     }
+
+    // An in-flight or previously displayed count slot from an older client is still
+    // a valid compatibility input, although new outlines no longer synthesize it.
+    private fun legacySlot(number: Int) = CanonicalChapter(
+        id = inferredChapterId("title", number),
+        canonicalTitleId = "title",
+        displayNumber = number.toString(),
+        type = CanonicalChapterType.REGULAR,
+        baseNumber = number,
+    )
 
     private class FakeChapters : CanonicalChapterRepository {
         private val values = linkedMapOf<String, CanonicalChapter>()

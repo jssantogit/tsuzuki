@@ -276,7 +276,29 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 )
             }
 
+            // Native metadata is authoritative. A Host-approved directory
+            // selection is not trusted until every real file index, normalized
+            // path and exact length agrees with the resolved torrent info.
+            val chapterImages = request.selectedChapterImages
+            if (chapterImages.any { image ->
+                    image.index !in 0 until files.numFiles() ||
+                        files.filePath(image.index).replace('\\', '/') != image.path ||
+                        files.fileSize(image.index) != image.sizeBytes
+                }
+            ) {
+                ProviderP2pDiagnostics.record(
+                    event = ProviderP2pDiagnosticEvent.FILE_SELECTION_CHECK,
+                    operationId = request.operationId,
+                    codes = mapOf("failure" to ProviderP2pFailureCode.FILE_MISMATCH.name),
+                    numbers = mapOf("imageCount" to chapterImages.size.toLong()),
+                    priority = LogPriority.WARN,
+                )
+                return@withContext ProviderP2pDownloadResult.Failure(
+                    ProviderP2pFailureCode.FILE_MISMATCH,
+                )
+            }
             val format = when {
+                chapterImages.isNotEmpty() -> ProviderManagedResourceFormat.CBZ
                 selectedPath.endsWith(".cbz", ignoreCase = true) ->
                     ProviderManagedResourceFormat.CBZ
                 selectedPath.endsWith(".zip", ignoreCase = true) ->
@@ -322,7 +344,11 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
             ensureDirectory(downloadRoot)
 
             val priorities = Priority.array(Priority.IGNORE, torrent.numFiles())
-            priorities[selectedIndex] = Priority.NORMAL
+            if (chapterImages.isEmpty()) {
+                priorities[selectedIndex] = Priority.NORMAL
+            } else {
+                chapterImages.forEach { priorities[it.index] = Priority.NORMAL }
+            }
 
             session.download(
                 torrent,
@@ -332,13 +358,15 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 configuredInitialPeers,
                 TorrentFlags.PAUSED,
             )
+            val ignoredFileCount = torrent.numFiles() - if (chapterImages.isEmpty()) 1 else chapterImages.size
             ProviderP2pDiagnostics.record(
                 event = ProviderP2pDiagnosticEvent.DOWNLOAD_SUBMITTED,
                 operationId = request.operationId,
                 numbers = mapOf(
                     "selectedIndex" to selectedIndex.toLong(),
                     "fileCount" to torrent.numFiles().toLong(),
-                    "ignoredFileCount" to (torrent.numFiles() - 1).coerceAtLeast(0).toLong(),
+                    "ignoredFileCount" to ignoredFileCount.coerceAtLeast(0).toLong(),
+                    "selectedImageCount" to chapterImages.size.toLong(),
                     "initialPeerCount" to configuredInitialPeers.size.toLong(),
                 ),
             )
@@ -575,8 +603,24 @@ class JlibtorrentProviderP2pDownloadEngine internal constructor(
                 )
             }
 
+            val preparedFile = if (chapterImages.isEmpty()) {
+                selectedFile
+            } else {
+                currentStage = "CHAPTER_ARCHIVE"
+                val validatedImages = chapterImages.map { image ->
+                    TorrentVerifiedImageFile(image.index, image.path, image.sizeBytes)
+                }
+                P2pChapterImageArchiveBuilder().build(
+                    downloadRoot = downloadRoot,
+                    archiveRoot = workingDirectory,
+                    images = validatedImages,
+                ) ?: return@withContext ProviderP2pDownloadResult.Failure(
+                    ProviderP2pFailureCode.STORAGE_ERROR,
+                )
+            }
+
             ProviderP2pDownloadResult.Ready(
-                file = selectedFile,
+                file = preparedFile,
                 format = format,
             )
         } catch (error: CancellationException) {

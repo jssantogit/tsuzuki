@@ -4,7 +4,7 @@ import dev.zacsweers.metro.Inject
 import java.text.Normalizer
 import java.util.Locale
 
-/** Extracts volume evidence only from an explicit leading volume and chapter label. */
+/** Extracts bounded volume evidence from explicit, consistent source chapter labels. */
 @Inject
 class ParseCanonicalChapterVolume {
 
@@ -12,14 +12,65 @@ class ParseCanonicalChapterVolume {
 
     fun execute(rawLabel: String?): Int? {
         val normalized = normalize(rawLabel.orEmpty())
-        val match = LEADING_VOLUME_CHAPTER_PREFIX.find(normalized) ?: return null
-        if (VOLUME_MARKERS.findAll(normalized).take(2).count() != 1) return null
-        return match.groupValues[1].toIntOrNull()
+        val volumes = VOLUME_MARKERS.findAll(normalized).take(3).map { marker ->
+            marker.value.filter(Char::isDigit).toIntOrNull()
+        }.toList()
+        if (volumes.isEmpty() || volumes.size > 2 || volumes.any { it == null }) return null
+        val chapterNumbers = chapterMarkers(normalized)
+        if (
+            chapterNumbers.isEmpty() ||
+            chapterNumbers.size > 2 ||
+            chapterNumbers.any { it == null } ||
+            chapterNumbers.any { it != chapterNumbers.first() }
+        ) {
+            return null
+        }
+
+        // Some providers repeat the same volume in "Vol. 1 Ch. 1 - Chapter 1 - Volume 1".
+        val leadingVolume = LEADING_VOLUME_CHAPTER_PREFIX.find(normalized)
+            ?.groupValues?.get(1)?.toIntOrNull()
+        if (leadingVolume != null) {
+            return leadingVolume.takeIf { volume -> volumes.all { it == volume } }
+        }
+
+        // MangaFire may supply no structured volume but title the chapter
+        // "Chapter 1 - Volume 1". Its Host label becomes
+        // "Ch. 1 - Chapter 1 - Volume 1". Permit the single suffix volume
+        // only for positive numbered chapters with consistent chapter markers.
+        // Ch. 0 - Volume 112 and conflicting chapter numbers stay unqualified.
+        val leadingChapter = LEADING_NUMBERED_CHAPTER.find(normalized)
+            ?.groupValues?.get(1)?.toIntOrNull() ?: return null
+        if (volumes.size != 1 || chapterNumbers.any { it != leadingChapter }) return null
+        return volumes.single()
     }
+
+    /**
+     * A source-authored chapter number contradicting another explicit chapter
+     * marker must never silently become a verified volume/chapter identity.
+     * Return a closed diagnostic flag; never export the untrusted source label.
+     */
+    fun hasConflictingChapterMarkers(rawLabel: String?): Boolean {
+        val numbers = chapterMarkers(normalize(rawLabel.orEmpty()))
+        return numbers.size > 1 && (numbers.any { it == null } || numbers.distinct().size > 1)
+    }
+
+    private fun chapterMarkers(normalized: String): List<Int?> =
+        CHAPTER_MARKERS.findAll(normalized).take(3).map { marker ->
+            marker.groupValues[1].toIntOrNull()
+        }.toList()
 
     /** True when a label starts with a volume marker, even if its value is unusable. */
     fun hasExplicitVolumePrefix(rawLabel: String?): Boolean =
         VOLUME_PREFIX_START.containsMatchIn(normalize(rawLabel.orEmpty()))
+
+    /**
+     * A numeric volume marker anywhere in a chapter label must be accounted for.
+     * "Ch. 0 - Volume 112" is a volume container, not an unqualified chapter 0.
+     * [execute] also accepts one consistent suffix volume on a positive chapter,
+     * never a bare volume container on chapter zero.
+     */
+    fun hasExplicitVolumeMarker(rawLabel: String?): Boolean =
+        VOLUME_MARKERS.containsMatchIn(normalize(rawLabel.orEmpty()))
 
     private fun normalize(value: String): String =
         Normalizer.normalize(value, Normalizer.Form.NFD)
@@ -35,6 +86,8 @@ class ParseCanonicalChapterVolume {
         val WHITESPACE = Regex("\\s+")
         val VOLUME_PREFIX_START = Regex("^vol(?:ume)?(?:\\b|\\.)")
         val VOLUME_MARKERS = Regex("\\bvol(?:ume)?\\.?\\s*(?:\\d+|none)\\b")
+        val LEADING_NUMBERED_CHAPTER = Regex("^ch(?:apter)?\\.?\\s*([1-9]\\d*)\\b")
+        val CHAPTER_MARKERS = Regex("\\b(?:ch(?:apter)?|capitulo)\\.?\\s*(\\d+)\\b")
         val LEADING_VOLUME_CHAPTER_PREFIX = Regex(
             "^vol(?:ume)?\\.?\\s*(\\d+)\\s*(?:[-:|/]\\s*|\\s+)" +
                 "(?=(?:ch(?:apter)?|capitulo)\\s*\\.?\\s*\\d)",

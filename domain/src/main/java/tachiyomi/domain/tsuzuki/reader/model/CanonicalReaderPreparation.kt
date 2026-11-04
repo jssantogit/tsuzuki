@@ -20,6 +20,19 @@ sealed interface CanonicalReaderPreparation {
         val preferredUnavailable: Boolean,
     ) : CanonicalReaderPreparation
 
+    /** Work confirmed, chapter matches several editions; require explicit user intent. */
+    data class ProviderEditionConfirmationRequired(
+        val canonicalTitleId: String,
+        val canonicalChapterId: String,
+        val candidateCount: Int,
+    ) : CanonicalReaderPreparation {
+        init {
+            require(canonicalTitleId.isNotBlank())
+            require(canonicalChapterId.isNotBlank())
+            require(candidateCount >= 2)
+        }
+    }
+
     data class Unavailable(
         val canonicalChapterId: String,
     ) : CanonicalReaderPreparation

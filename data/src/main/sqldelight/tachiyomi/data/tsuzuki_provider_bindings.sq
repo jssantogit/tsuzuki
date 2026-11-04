@@ -33,6 +33,36 @@ FROM tsuzuki_provider_bindings
 WHERE canonical_title_id = :canonicalTitleId
 ORDER BY created_at ASC, id ASC;
 
+insertTsuzukiProviderBindingIfAbsent:
+INSERT OR IGNORE INTO tsuzuki_provider_bindings(
+    id,
+    canonical_title_id,
+    provider_id,
+    facet_id,
+    external_work_id,
+    verification,
+    availability,
+    created_at,
+    updated_at
+)
+SELECT
+    :id,
+    :canonicalTitleId,
+    :providerId,
+    :facetId,
+    :externalWorkId,
+    :verification,
+    :availability,
+    :createdAt,
+    :updatedAt
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM tsuzuki_provider_bindings
+    WHERE canonical_title_id = :canonicalTitleId
+      AND provider_id = :providerId
+      AND facet_id = :facetId
+);
+
 upsertTsuzukiProviderBinding:
 INSERT INTO tsuzuki_provider_bindings(
     id,

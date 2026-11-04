@@ -117,6 +117,14 @@ class ReaderSessionPresentationTest {
     }
 
     @Test
+    fun `edition picker is offered only for unresolved Provider editions`() {
+        shouldOfferReaderEditionPicker(ReaderRecovery.EDITION_CONFIRMATION_REQUIRED) shouldBe true
+        shouldOfferReaderEditionPicker(ReaderRecovery.SOURCE_UNAVAILABLE) shouldBe false
+        shouldOfferReaderEditionPicker(ReaderRecovery.P2P_REQUIRED) shouldBe false
+        shouldOfferReaderEditionPicker(null) shouldBe false
+    }
+
+    @Test
     fun `recognized canonical content failures are recoverable`() {
         classifyReaderRecovery(IOException("content could not load")) shouldBe ReaderRecovery.SOURCE_UNAVAILABLE
         classifyReaderRecovery(

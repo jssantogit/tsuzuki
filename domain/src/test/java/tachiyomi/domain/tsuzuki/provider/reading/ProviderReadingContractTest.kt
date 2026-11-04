@@ -118,6 +118,8 @@ class ProviderReadingContractTest {
             listOf(observation),
         ).single()
 
+        // Database and Reader links depend on the exact legacy SHA-256 hex ID.
+        first.id shouldBe "provider:9372dddaecac7e3a95c46039eb435d1cc386df7fa386b4d50004bffb6c0bcc5c"
         repeated.id shouldBe first.id
         (otherProvider.id != first.id) shouldBe true
     }

@@ -2,6 +2,8 @@ package tachiyomi.domain.tsuzuki.reader
 
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -34,6 +36,7 @@ import tachiyomi.domain.tsuzuki.content.repository.ContentPreferenceRepository
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderNoMatchReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
@@ -46,6 +49,7 @@ import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
+import tachiyomi.domain.tsuzuki.provider.ProviderFacetRef
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
@@ -58,9 +62,11 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterObservation
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderError
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderManagedResourceResolver
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderPageRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBinding
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBindingRepository
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
@@ -90,6 +96,563 @@ import tachiyomi.domain.tsuzuki.provider.ProviderCallResult as TorrentProviderCa
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult as ReadingProviderCallResult
 
 class PrepareCanonicalChapterProviderFallbackTest {
+
+    @Test
+    fun `ambiguous reading without an independent source requests a confirmed edition`() = runTest {
+        val chapter = CanonicalChapter(
+            id = "chapter-1",
+            canonicalTitleId = "title-1",
+            displayNumber = "1",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 1,
+            confidence = 1.0,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val options = listOf("work-a", "work-b").map { workId ->
+            ProviderChapterReadingOption(
+                canonicalChapterId = chapter.id,
+                bindingId = "source-$workId",
+                providerId = ProviderId("app.tsuzuki.mangafire"),
+                facetId = "en",
+                externalWorkId = workId,
+                providerChapterId = "chapter-$workId",
+            )
+        }
+        val resolver = mockk<ResolveProviderChapterReading>()
+        coEvery { resolver.options(chapter.id) } returns options
+        coEvery { resolver.uniqueUserConfirmedOption(chapter.id, options) } returns null
+        val reader = PrepareCanonicalChapterForReader(
+            resolveChapterContent = emptyAddonResolver(),
+            canonicalChapterRepository = chapterRepository(chapter),
+            canonicalReadingRepository = readingRepository(),
+            canonicalDownloadRepository = emptyDownloadRepository(),
+            canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+            },
+            chapterContentPreparer = mockk(),
+            structuredDiagnostics = RecordingStructuredDiagnosticRecorder(detailed = true),
+            resolveProviderChapterReading = resolver,
+        )
+        val unresolved = reader.execute(chapter.id)
+            .shouldBeInstanceOf<CanonicalReaderPreparation.ProviderEditionConfirmationRequired>()
+        unresolved.canonicalTitleId shouldBe chapter.canonicalTitleId
+        unresolved.candidateCount shouldBe 2
+    }
+
+    @Test
+    fun `unresolved work sources have distinct actionable preparation`() {
+        val unresolved = CanonicalReaderPreparation.ProviderEditionConfirmationRequired(
+            canonicalTitleId = "title-1",
+            canonicalChapterId = "chapter-1",
+            candidateCount = 3,
+        )
+        unresolved.canonicalTitleId shouldBe "title-1"
+        unresolved.candidateCount shouldBe 3
+    }
+
+    @Test
+    fun `empty Provider audit runs only during detailed capture and never breaks Reader fallback`() = runTest {
+        val chapter = CanonicalChapter(
+            id = "chapter-1",
+            canonicalTitleId = "title-1",
+            displayNumber = "1",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 1,
+            confidence = 1.0,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val providerId = ProviderId("app.tsuzuki.mangafire")
+        val binding = ProviderReadingBinding(
+            id = "binding-1",
+            canonicalTitleId = chapter.canonicalTitleId,
+            ref = ProviderBindingRef(providerId, "en", "work-1"),
+            verification = ProviderBindingVerification.EXACT,
+            availability = ProviderBindingAvailability.AVAILABLE,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+
+        listOf(false to false, true to false, true to true).forEach { (detailed, failAudit) ->
+            var evidenceReads = 0
+            val localEvidence = object : ChapterEvidenceRepository by evidenceRepository(emptyList()) {
+                override suspend fun getByCanonicalTitleId(
+                    canonicalTitleId: String,
+                ): List<PersistedChapterEvidence> {
+                    evidenceReads++
+                    if (evidenceReads > 1 && failAudit) error("diagnostic-only repository failure")
+                    return emptyList()
+                }
+            }
+            val resolver = ResolveProviderChapterReading(
+                canonicalChapterRepository = chapterRepository(chapter),
+                evidenceRepository = localEvidence,
+                bindingRepository = bindingRepository(binding),
+                providerRegistry = DefaultProviderRegistry(
+                    registrations = { listOf(readingRegistration(providerId, "en")) },
+                ),
+                gateway = object : ProviderReadingGateway {
+                    override suspend fun lookup(
+                        providerId: ProviderId,
+                        request: ProviderReadingLookupRequest,
+                    ): ReadingProviderCallResult<ProviderPage<ProviderWorkCandidate>> = error("unused")
+
+                    override suspend fun chapters(
+                        providerId: ProviderId,
+                        request: ProviderReadingChaptersRequest,
+                    ): ReadingProviderCallResult<ProviderPage<ProviderChapterObservation>> = error("unused")
+
+                    override suspend fun pages(
+                        providerId: ProviderId,
+                        request: ProviderReadingPagesRequest,
+                    ): ReadingProviderCallResult<ProviderReadingDelivery> = error("unused")
+                },
+            )
+            val recorder = RecordingStructuredDiagnosticRecorder(detailed = detailed)
+            val reader = PrepareCanonicalChapterForReader(
+                resolveChapterContent = emptyAddonResolver(),
+                canonicalChapterRepository = chapterRepository(chapter),
+                canonicalReadingRepository = readingRepository(),
+                canonicalDownloadRepository = emptyDownloadRepository(),
+                canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                    override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+                },
+                chapterContentPreparer = object : ChapterContentPreparer {
+                    override suspend fun prepare(
+                        option: ContentOption,
+                        progress: CanonicalChapterProgress?,
+                    ): Result<PreparedChapterContent> = error("unused")
+                },
+                structuredDiagnostics = recorder,
+                resolveProviderChapterReading = resolver,
+                prepareProviderChapterTorrent = null,
+            )
+
+            reader.execute(chapter.id).shouldBeInstanceOf<CanonicalReaderPreparation.Unavailable>()
+            evidenceReads shouldBe (if (detailed) 2 else 1)
+            recorder.events.any { event ->
+                event.name == DiagnosticEventName.CONTENT_BINDING_LOOKUP &&
+                    event.outcome == DiagnosticOutcome.EMPTY &&
+                    event.attributes["candidate_count"] == DiagnosticAttributeValue.Number(0)
+            } shouldBe true
+            recorder.events.any { event ->
+                event.name == DiagnosticEventName.CONTENT_BINDING_LOOKUP &&
+                    event.attributes["provider_reader_no_match_reason"] == DiagnosticAttributeValue.Code(
+                        DiagnosticProviderReaderNoMatchReason.NO_PROVIDER_EVIDENCE,
+                    )
+            } shouldBe (detailed && !failAudit)
+        }
+    }
+
+    @Test
+    fun `detailed Reader source trace includes original source structure but never raw chapter labels`() = runTest {
+        val chapter = CanonicalChapter(
+            id = "chapter-zero-volume-one",
+            canonicalTitleId = "title-1",
+            displayNumber = "0",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 0,
+            volume = 1,
+            confidence = 1.0,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val providerId = ProviderId("app.tsuzuki.mangafire")
+        val binding = ProviderReadingBinding(
+            id = "binding-1",
+            canonicalTitleId = chapter.canonicalTitleId,
+            ref = ProviderBindingRef(providerId, "en", "work-1"),
+            verification = ProviderBindingVerification.EXACT,
+            availability = ProviderBindingAvailability.AVAILABLE,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val readingResolver = ResolveProviderChapterReading(
+            canonicalChapterRepository = chapterRepository(chapter),
+            evidenceRepository = evidenceRepository(
+                listOf(
+                    PersistedChapterEvidence(
+                        evidence = ChapterEvidence(
+                            id = "source-chapter",
+                            canonicalTitleId = chapter.canonicalTitleId,
+                            producerKind = ProducerKind.PROVIDER,
+                            producerId = binding.ref.evidenceProducerId(),
+                            externalChapterKey = "12345",
+                            rawLabel = "Vol. 1 Ch. 0 - Opening",
+                            rawNumber = 0.0,
+                            volume = 1,
+                            title = "Opening",
+                            observedAt = 1,
+                            confidence = 0.95,
+                            authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+                        ),
+                        mappedCanonicalChapterId = chapter.id,
+                    ),
+                ),
+            ),
+            bindingRepository = bindingRepository(binding),
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { listOf(readingRegistration(providerId, "en")) },
+            ),
+            gateway = object : ProviderReadingGateway {
+                override suspend fun lookup(
+                    providerId: ProviderId,
+                    request: ProviderReadingLookupRequest,
+                ): ReadingProviderCallResult<ProviderPage<ProviderWorkCandidate>> = error("unused")
+
+                override suspend fun chapters(
+                    providerId: ProviderId,
+                    request: ProviderReadingChaptersRequest,
+                ): ReadingProviderCallResult<ProviderPage<ProviderChapterObservation>> = error("unused")
+
+                override suspend fun pages(
+                    providerId: ProviderId,
+                    request: ProviderReadingPagesRequest,
+                ): ReadingProviderCallResult<ProviderReadingDelivery> = ReadingProviderCallResult.Failure(
+                    ProviderError(ProviderErrorCode.PACKAGE_INVALID, retryable = false),
+                )
+            },
+        )
+        val diagnostics = RecordingStructuredDiagnosticRecorder(detailed = true)
+        val reader = PrepareCanonicalChapterForReader(
+            resolveChapterContent = emptyAddonResolver(),
+            canonicalChapterRepository = chapterRepository(chapter),
+            canonicalReadingRepository = readingRepository(),
+            canonicalDownloadRepository = emptyDownloadRepository(),
+            canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+            },
+            chapterContentPreparer = object : ChapterContentPreparer {
+                override suspend fun prepare(
+                    option: ContentOption,
+                    progress: CanonicalChapterProgress?,
+                ): Result<PreparedChapterContent> = error("unused")
+            },
+            structuredDiagnostics = diagnostics,
+            resolveProviderChapterReading = readingResolver,
+        )
+        reader.execute(chapter.id).shouldBeInstanceOf<CanonicalReaderPreparation.Unavailable>()
+
+        val event = diagnostics.events.first {
+            it.name == DiagnosticEventName.READER_SOURCE_SELECTED &&
+                it.outcome == DiagnosticOutcome.SUCCEEDED
+        }
+        event.attributes["provider_reader_source_number_milli"] shouldBe DiagnosticAttributeValue.Number(0)
+        event.attributes["provider_reader_source_volume"] shouldBe DiagnosticAttributeValue.Number(1)
+        event.attributes["provider_reader_label_has_volume_marker"] shouldBe DiagnosticAttributeValue.Flag(true)
+        event.attributes["provider_reader_title_is_volume_container"] shouldBe DiagnosticAttributeValue.Flag(false)
+        event.attributes["provider_reader_title_present"] shouldBe DiagnosticAttributeValue.Flag(true)
+        event.attributes.values.any { it == DiagnosticAttributeValue.Text("Opening") } shouldBe false
+    }
+
+    @Test
+    fun `Reader opens only uniquely confirmed edition when provisional alternate is also mapped`() = runTest {
+        val chapter = CanonicalChapter(
+            id = "chapter-1",
+            canonicalTitleId = "title-1",
+            displayNumber = "1",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 1,
+            confidence = 1.0,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val sourceIds = listOf(ProviderId("app.tsuzuki.mangafire"), ProviderId("app.tsuzuki.mangadot"))
+        val bindings = sourceIds.mapIndexed { index, source ->
+            ProviderReadingBinding(
+                id = "binding-$index",
+                canonicalTitleId = chapter.canonicalTitleId,
+                ref = ProviderBindingRef(source, "en", "work-$index"),
+                verification = if (index == 0) {
+                    ProviderBindingVerification.USER_CONFIRMED
+                } else {
+                    ProviderBindingVerification.EXACT
+                },
+                availability = ProviderBindingAvailability.AVAILABLE,
+                createdAt = 1,
+                updatedAt = 1,
+            )
+        }
+        val evidence = bindings.mapIndexed { index, binding ->
+            PersistedChapterEvidence(
+                evidence = ChapterEvidence(
+                    id = "source-$index",
+                    canonicalTitleId = chapter.canonicalTitleId,
+                    producerKind = ProducerKind.PROVIDER,
+                    producerId = binding.ref.evidenceProducerId(),
+                    externalChapterKey = "page-source-$index",
+                    rawLabel = "Chapter 1",
+                    rawNumber = 1.0,
+                    volume = null,
+                    title = null,
+                    observedAt = 1,
+                    confidence = 0.95,
+                    authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+                ),
+                mappedCanonicalChapterId = chapter.id,
+            )
+        }
+        val resolver = ResolveProviderChapterReading(
+            canonicalChapterRepository = chapterRepository(chapter),
+            evidenceRepository = evidenceRepository(evidence),
+            bindingRepository = object : ProviderReadingBindingRepository {
+                override suspend fun get(
+                    canonicalTitleId: String,
+                    providerId: ProviderId,
+                    facetId: String?,
+                ): ProviderReadingBinding? = bindings.firstOrNull {
+                    it.canonicalTitleId == canonicalTitleId &&
+                        it.ref.providerId == providerId &&
+                        it.ref.facetId == facetId
+                }
+                override suspend fun getByTitle(canonicalTitleId: String): List<ProviderReadingBinding> =
+                    bindings.filter { it.canonicalTitleId == canonicalTitleId }
+                override suspend fun upsert(binding: ProviderReadingBinding) = Unit
+                override suspend fun markUnavailable(bindingId: String, updatedAt: Long) = Unit
+            },
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { bindings.map { readingRegistration(it.ref.providerId, it.ref.facetId) } },
+            ),
+            gateway = object : ProviderReadingGateway {
+                override suspend fun lookup(
+                    providerId: ProviderId,
+                    request: ProviderReadingLookupRequest,
+                ): ReadingProviderCallResult<ProviderPage<ProviderWorkCandidate>> = error("unused")
+                override suspend fun chapters(
+                    providerId: ProviderId,
+                    request: ProviderReadingChaptersRequest,
+                ): ReadingProviderCallResult<ProviderPage<ProviderChapterObservation>> = error("unused")
+                override suspend fun pages(
+                    providerId: ProviderId,
+                    request: ProviderReadingPagesRequest,
+                ): ReadingProviderCallResult<ProviderReadingDelivery> {
+                    providerId shouldBe sourceIds.first()
+                    request.providerChapterId shouldBe "page-source-0"
+                    return ReadingProviderCallResult.Success(
+                        ProviderReadingDelivery.PageList(
+                            listOf(
+                                ProviderPageRequest(
+                                    url = "https://reader.example/chapter-1/001.jpg",
+                                    allowedOrigins = setOf("https://reader.example"),
+                                ),
+                            ),
+                        ),
+                    )
+                }
+            },
+        )
+        val recorder = RecordingStructuredDiagnosticRecorder(detailed = true)
+        val reader = PrepareCanonicalChapterForReader(
+            resolveChapterContent = emptyAddonResolver(),
+            canonicalChapterRepository = chapterRepository(chapter),
+            canonicalReadingRepository = readingRepository(),
+            canonicalDownloadRepository = emptyDownloadRepository(),
+            canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+            },
+            chapterContentPreparer = object : ChapterContentPreparer {
+                override suspend fun prepare(
+                    option: ContentOption,
+                    progress: CanonicalChapterProgress?,
+                ): Result<PreparedChapterContent> = error("unused")
+            },
+            structuredDiagnostics = recorder,
+            resolveProviderChapterReading = resolver,
+        )
+
+        resolver.options(chapter.id).size shouldBe 2
+        val result = reader.execute(chapter.id).shouldBeInstanceOf<CanonicalReaderPreparation.Ready>()
+        result.target.shouldBeInstanceOf<PreparedChapterContent.HttpPages>().pages.size shouldBe 1
+        recorder.events.any {
+            it.name == DiagnosticEventName.READER_SOURCE_SELECTED &&
+                it.outcome == DiagnosticOutcome.SUCCEEDED &&
+                it.attributes["provider_id"] == DiagnosticAttributeValue.Text(sourceIds.first().value)
+        } shouldBe true
+        recorder.events.none {
+            it.name == DiagnosticEventName.READER_SOURCE_SELECTED &&
+                it.outcome == DiagnosticOutcome.NEEDS_CONFIRMATION
+        } shouldBe true
+    }
+
+    @Test
+    fun `ambiguous HTTP Provider sources never get chosen but allow exact torrent fallback`() = runTest {
+        val chapter = CanonicalChapter(
+            id = "chapter-1",
+            canonicalTitleId = "title-1",
+            displayNumber = "1",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 1,
+            confidence = 1.0,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val chapters = chapterRepository(chapter)
+        val httpProviders = listOf(
+            ProviderId("app.tsuzuki.mangafire"),
+            ProviderId("app.tsuzuki.mangadot"),
+        )
+        val bindings = httpProviders.mapIndexed { index, providerId ->
+            ProviderReadingBinding(
+                id = "binding-$index",
+                canonicalTitleId = chapter.canonicalTitleId,
+                ref = ProviderBindingRef(providerId, "en", "work-$index"),
+                verification = ProviderBindingVerification.EXACT,
+                availability = ProviderBindingAvailability.AVAILABLE,
+                createdAt = 1,
+                updatedAt = 1,
+            )
+        }
+        val observations = bindings.mapIndexed { index, binding ->
+            PersistedChapterEvidence(
+                evidence = ChapterEvidence(
+                    id = "source-$index",
+                    canonicalTitleId = chapter.canonicalTitleId,
+                    producerKind = ProducerKind.PROVIDER,
+                    producerId = binding.ref.evidenceProducerId(),
+                    externalChapterKey = "source-chapter-$index",
+                    rawLabel = "Chapter 1",
+                    rawNumber = 1.0,
+                    volume = null,
+                    title = null,
+                    observedAt = 1,
+                    confidence = 0.95,
+                    authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+                ),
+                mappedCanonicalChapterId = chapter.id,
+            )
+        }
+        var unexpectedHttpCalls = 0
+        var failConfirmationRead = false
+        var bindingReads = 0
+        val http = ResolveProviderChapterReading(
+            canonicalChapterRepository = chapters,
+            evidenceRepository = evidenceRepository(observations),
+            bindingRepository = object : ProviderReadingBindingRepository {
+                override suspend fun get(
+                    canonicalTitleId: String,
+                    providerId: ProviderId,
+                    facetId: String?,
+                ): ProviderReadingBinding? = bindings.firstOrNull {
+                    it.canonicalTitleId == canonicalTitleId &&
+                        it.ref.providerId == providerId &&
+                        it.ref.facetId == facetId
+                }
+
+                override suspend fun getByTitle(canonicalTitleId: String): List<ProviderReadingBinding> {
+                    bindingReads++
+                    if (failConfirmationRead && bindingReads % 2 == 0) {
+                        error("A secondary confirmed-binding lookup failed")
+                    }
+                    return bindings.filter { it.canonicalTitleId == canonicalTitleId }
+                }
+
+                override suspend fun upsert(binding: ProviderReadingBinding) = Unit
+                override suspend fun markUnavailable(bindingId: String, updatedAt: Long) = Unit
+            },
+            providerRegistry = DefaultProviderRegistry(
+                registrations = {
+                    bindings.map { readingRegistration(it.ref.providerId, it.ref.facetId) }
+                },
+            ),
+            gateway = object : ProviderReadingGateway {
+                override suspend fun lookup(
+                    providerId: ProviderId,
+                    request: ProviderReadingLookupRequest,
+                ): ReadingProviderCallResult<ProviderPage<ProviderWorkCandidate>> = error("unused")
+                override suspend fun chapters(
+                    providerId: ProviderId,
+                    request: ProviderReadingChaptersRequest,
+                ): ReadingProviderCallResult<ProviderPage<ProviderChapterObservation>> = error("unused")
+                override suspend fun pages(
+                    providerId: ProviderId,
+                    request: ProviderReadingPagesRequest,
+                ): ReadingProviderCallResult<ProviderReadingDelivery> {
+                    unexpectedHttpCalls++
+                    error("Ambiguous HTTP selection must never fetch pages")
+                }
+            },
+        )
+        val torrentProviderId = ProviderId("app.tsuzuki.nyaa")
+        var torrentArtifactCalls = 0
+        val torrent = PrepareProviderChapterTorrent(
+            resolver = ResolveProviderChapterTorrent(
+                canonicalChapterRepository = chapters,
+                canonicalTitleRepository = titleRepository(),
+                providerRegistry = DefaultProviderRegistry(
+                    registrations = { listOf(torrentRegistration(torrentProviderId)) },
+                ),
+                gateway = TorrentSearchGateway { _, _ ->
+                    TorrentProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                TorrentCandidate(
+                                    infoHash = "0123456789abcdef0123456789abcdef01234567",
+                                    magnetUri = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+                                    torrentUrl = null,
+                                    displayName = "Example Manga Chapter 1",
+                                    files = listOf(TorrentCandidateFile(0, "chapter-001.cbz")),
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            prepareTorrentArtifact = PrepareTorrentArtifact(
+                TorrentArtifactEngine {
+                    torrentArtifactCalls++
+                    Result.success(
+                        PreparedTorrentArtifact(
+                            localUri = "content://provider.test/chapter-1.cbz",
+                            format = "CBZ",
+                        ),
+                    )
+                },
+            ),
+        )
+        val recorder = RecordingStructuredDiagnosticRecorder(detailed = true)
+        val reader = PrepareCanonicalChapterForReader(
+            resolveChapterContent = emptyAddonResolver(),
+            canonicalChapterRepository = chapters,
+            canonicalReadingRepository = readingRepository(),
+            canonicalDownloadRepository = emptyDownloadRepository(),
+            canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+            },
+            chapterContentPreparer = object : ChapterContentPreparer {
+                override suspend fun prepare(
+                    option: ContentOption,
+                    progress: CanonicalChapterProgress?,
+                ): Result<PreparedChapterContent> = error("unused")
+            },
+            structuredDiagnostics = recorder,
+            resolveProviderChapterReading = http,
+            prepareProviderChapterTorrent = torrent,
+        )
+        val result = reader.execute(chapter.id).shouldBeInstanceOf<CanonicalReaderPreparation.Ready>()
+        result.target shouldBe PreparedChapterContent.LocalArchive("content://provider.test/chapter-1.cbz")
+        unexpectedHttpCalls shouldBe 0
+        torrentArtifactCalls shouldBe 1
+        recorder.events.any {
+            it.name == DiagnosticEventName.READER_SOURCE_SELECTED &&
+                it.outcome == DiagnosticOutcome.NEEDS_CONFIRMATION &&
+                it.attributes["candidate_count"] == DiagnosticAttributeValue.Number(2)
+        } shouldBe true
+        recorder.events.any {
+            it.name == DiagnosticEventName.READER_PAGES_READY &&
+                it.outcome == DiagnosticOutcome.READY &&
+                it.attributes["provider_id"] == DiagnosticAttributeValue.Text(torrentProviderId.value)
+        } shouldBe true
+        // The optional DB read needed to check user-confirmed preferences may
+        // fail after options() succeeded. It must not throw or hide the
+        // independently verified torrent fallback.
+        failConfirmationRead = true
+        bindingReads = 0
+        reader.execute(chapter.id).shouldBeInstanceOf<CanonicalReaderPreparation.Ready>()
+        unexpectedHttpCalls shouldBe 0
+        torrentArtifactCalls shouldBe 2
+    }
 
     @Test
     fun `failed Provider HTTP delivery falls through to exact torrent archive`() = runTest {
@@ -138,6 +701,9 @@ class PrepareCanonicalChapterProviderFallbackTest {
                 ),
             ),
             bindingRepository = bindingRepository(binding),
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { listOf(readingRegistration(binding.ref.providerId, binding.ref.facetId)) },
+            ),
             gateway = object : ProviderReadingGateway {
                 override suspend fun lookup(
                     providerId: ProviderId,
@@ -153,7 +719,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
                     providerId: ProviderId,
                     request: ProviderReadingPagesRequest,
                 ): ReadingProviderCallResult<ProviderReadingDelivery> = ReadingProviderCallResult.Failure(
-                    ProviderError(ProviderErrorCode.UNAVAILABLE, retryable = false),
+                    ProviderError(ProviderErrorCode.PACKAGE_INVALID, retryable = false),
                 )
             },
             managedResources = ProviderManagedResourceResolver.DenyAll,
@@ -227,10 +793,22 @@ class PrepareCanonicalChapterProviderFallbackTest {
         result.usedFallback shouldBe true
         torrentArtifactCalls shouldBe 1
         diagnostics.events.any { event ->
+            event.name == DiagnosticEventName.READER_PAGES_READY &&
+                event.attributes["provider_error_code"] == DiagnosticAttributeValue.Text("PACKAGE_INVALID")
+        } shouldBe true
+        diagnostics.events.any { event ->
             event.name == DiagnosticEventName.CONTENT_BINDING_LOOKUP &&
                 event.stage == DiagnosticStage.SEARCH &&
                 event.outcome == DiagnosticOutcome.CANDIDATES &&
                 event.attributes["provider_id"] == DiagnosticAttributeValue.Text(torrentProviderId.value)
+        } shouldBe true
+        // Reader identity correlation must be opt-in; normal INFO/WARN logs
+        // must not expose public work or exact chapter IDs.
+        diagnostics.events.filter { event ->
+            event.name == DiagnosticEventName.READER_SOURCE_SELECTED ||
+                event.name == DiagnosticEventName.READER_PAGES_READY
+        }.none { event ->
+            "provider_work_id" in event.attributes || "provider_chapter_id" in event.attributes
         } shouldBe true
     }
 
@@ -250,6 +828,26 @@ class PrepareCanonicalChapterProviderFallbackTest {
         contentOptionCache = ContentOptionCache(),
         inFlightContentResolution = InFlightContentResolution(),
         addonRepository = null,
+    )
+
+    private fun readingRegistration(id: ProviderId, facetId: String?) = ProviderRegistration(
+        descriptor = ProviderDescriptor(
+            id = id,
+            name = id.value,
+            version = ProviderVersion("1.0.0", 1),
+            origin = ProviderOrigin.Repository("repo"),
+            runtime = ProviderRuntimeKind.SCRIPT,
+            capabilities = setOf(
+                ProviderCapabilities.ReadingLookupV1,
+                ProviderCapabilities.ReadingChaptersV1,
+                ProviderCapabilities.ReadingPagesV1,
+            ),
+            permissions = ProviderPermissionSet(),
+            settings = emptyList(),
+            contentLanguages = setOf("en"),
+        ),
+        lifecycleStatus = ProviderLifecycleStatus.ENABLED,
+        facets = facetId?.let { listOf(ProviderFacetRef(id, it)) }.orEmpty(),
     )
 
     private fun torrentRegistration(id: ProviderId) = ProviderRegistration(
@@ -359,7 +957,10 @@ class PrepareCanonicalChapterProviderFallbackTest {
         ) = Unit
     }
 
-    private class RecordingStructuredDiagnosticRecorder : StructuredDiagnosticRecorder {
+    private class RecordingStructuredDiagnosticRecorder(
+        private val detailed: Boolean = false,
+    ) : StructuredDiagnosticRecorder {
+        override val detailedCaptureActive: Boolean get() = detailed
         override val sessionId: String = "00000000-0000-0000-0000-000000000001"
         val events = mutableListOf<StructuredDiagnosticEvent>()
 
