@@ -16,10 +16,11 @@ class ResolveMangaAllSelectedReadingOption(
 ) {
     suspend fun select(
         canonicalTitleId: String,
+        canonicalChapterId: String,
         requestedLanguage: String,
         verifiedOptions: List<ProviderChapterReadingOption>,
     ): ProviderChapterReadingOption? {
-        if (canonicalTitleId.isBlank() || requestedLanguage.isBlank()) return null
+        if (canonicalTitleId.isBlank() || canonicalChapterId.isBlank() || requestedLanguage.isBlank()) return null
         val language = requestedLanguage.lowercase()
         val saved = selections.get(canonicalTitleId, language) ?: return null
         if (saved.canonicalTitleId != canonicalTitleId ||
@@ -30,7 +31,8 @@ class ResolveMangaAllSelectedReadingOption(
         }
         return verifiedOptions.filter { option ->
             val source = option.contentSourceId
-            option.bindingRef() == saved.ref &&
+            option.canonicalChapterId == canonicalChapterId &&
+                option.bindingRef() == saved.ref &&
                 source != null &&
                 option.providerChapterId.startsWith("$source:") &&
                 option.providerChapterId.substringAfter(':').isNotBlank()
