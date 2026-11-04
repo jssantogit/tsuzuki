@@ -69,7 +69,11 @@ fun ColumnScope.ReaderSourceCard(
                         ReaderRecovery.EDITION_CONFIRMATION_REQUIRED -> MR.strings.tsuzuki_edition_description
                     },
                 ),
-                color = MaterialTheme.colorScheme.error,
+                color = if (shouldOfferReaderEditionPicker(it)) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -215,13 +219,7 @@ fun ColumnScope.ReaderBindingCard(
             is ContentBindingLinkState.Addons -> {
                 if (state.enabled.isEmpty()) {
                     Text(
-                        text = stringResource(
-                if (onChooseEdition != null) {
-                    MR.strings.tsuzuki_edition_description
-                } else {
-                    MR.strings.tsuzuki_reader_source_unavailable
-                },
-            ),
+                        text = stringResource(MR.strings.tsuzuki_reader_source_unavailable),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     OutlinedButton(
@@ -350,10 +348,12 @@ private fun UnavailableActions(
     enabled: Boolean,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(MR.strings.tsuzuki_reader_source_unavailable),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (onChooseEdition == null) {
+            Text(
+                text = stringResource(MR.strings.tsuzuki_reader_source_unavailable),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         onChooseEdition?.let { choose ->
             OutlinedButton(
                 modifier = Modifier.fillMaxWidth(),
