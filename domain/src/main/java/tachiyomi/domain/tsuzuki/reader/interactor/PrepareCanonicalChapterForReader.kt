@@ -26,6 +26,7 @@ import tachiyomi.domain.tsuzuki.download.service.CanonicalDownloadGateway
 import tachiyomi.domain.tsuzuki.download.service.canReuseArtifact
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
+import tachiyomi.domain.tsuzuki.provider.reading.ResolveMangaAllSelectedChapter
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import tachiyomi.domain.tsuzuki.provider.torrent.PrepareProviderChapterTorrent
 import tachiyomi.domain.tsuzuki.provider.torrent.ProviderChapterTorrentPreparation
@@ -47,11 +48,13 @@ class PrepareCanonicalChapterForReader(
     private val structuredDiagnostics: StructuredDiagnosticRecorder,
     private val resolveProviderChapterReading: ResolveProviderChapterReading? = null,
     private val prepareProviderChapterTorrent: PrepareProviderChapterTorrent? = null,
+    private val resolveMangaAllSelectedChapter: ResolveMangaAllSelectedChapter? = null,
 ) {
 
     suspend fun execute(
         canonicalChapterId: String,
         selectedOption: ContentOption? = null,
+        requestedMangaAllLanguage: String? = null,
     ): CanonicalReaderPreparation {
         var trace = DiagnosticTrace.start(
             recorder = structuredDiagnostics,
@@ -78,6 +81,31 @@ class PrepareCanonicalChapterForReader(
             trace = trace.copy(
                 canonicalTitleRef = structuredDiagnostics.canonicalTitleReference(chapter.canonicalTitleId),
             )
+
+            // This opt-in argument comes only from an explicit source+language
+            // choice in the MangaAll picker. Do not silently choose a different
+            // source, language, cached edition or torrent if the chosen chapter
+            // is not verifiably readable.
+            if (requestedMangaAllLanguage != null && selectedOption == null) {
+                val option = resolveMangaAllSelectedChapter?.execute(
+                    canonicalChapterId,
+                    requestedMangaAllLanguage,
+                )
+                val prepared = if (option != null) {
+                    resolveProviderChapterReading?.preparedContent(option)
+                } else {
+                    null
+                }
+                val explicitResult = when (prepared) {
+                    is ProviderCallResult.Success -> CanonicalReaderPreparation.Ready(
+                        canonicalChapterId = canonicalChapterId,
+                        target = prepared.value,
+                        usedFallback = false,
+                    )
+                    else -> CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+                }
+                return complete(trace, started, explicitResult)
+            }
 
             if (selectedOption == null) {
                 val artifact = canonicalDownloadRepository.get(canonicalChapterId)
