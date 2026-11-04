@@ -254,6 +254,4 @@ class ProviderWorkSourcePortfolioTest {
             "One Punch-Man",
         ) shouldBe false
     }
-
-
 }
