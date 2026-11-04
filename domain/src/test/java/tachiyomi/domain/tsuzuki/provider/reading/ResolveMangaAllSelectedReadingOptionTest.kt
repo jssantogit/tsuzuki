@@ -19,11 +19,12 @@ class ResolveMangaAllSelectedReadingOptionTest {
         val other = option(refEn.copy(externalWorkId = "mangafire:other-work"), "mangafire:other-chapter")
         val pt = option(refPt, "mangadex:chapter-two")
 
-        resolver.select(title, "en", listOf(other, pt, fireOption)) shouldBe fireOption
-        resolver.select(title, "pt-br", listOf(pt)) shouldBe null
-        resolver.select(title, "en", listOf(other, pt)) shouldBe null
-        resolver.select(title, "en", listOf(pt)) shouldBe null
-        resolver.select(title, "fr", listOf(fireOption)) shouldBe null
+        resolver.select(title, "chapter-1", "en", listOf(other, pt, fireOption)) shouldBe fireOption
+        resolver.select(title, "chapter-other", "en", listOf(fireOption)) shouldBe null
+        resolver.select(title, "chapter-1", "pt-br", listOf(pt)) shouldBe null
+        resolver.select(title, "chapter-1", "en", listOf(other, pt)) shouldBe null
+        resolver.select(title, "chapter-1", "en", listOf(pt)) shouldBe null
+        resolver.select(title, "chapter-1", "fr", listOf(fireOption)) shouldBe null
     }
 
     @Test
@@ -33,7 +34,7 @@ class ResolveMangaAllSelectedReadingOptionTest {
         )
         val first = option(refEn, "mangafire:first")
         val second = option(refEn, "mangafire:second")
-        resolver.select(title, "en", listOf(first, second)) shouldBe null
+        resolver.select(title, "chapter-1", "en", listOf(first, second)) shouldBe null
         resolver.select(
             title,
             "en",
@@ -51,8 +52,8 @@ class ResolveMangaAllSelectedReadingOptionTest {
         val resolver = ResolveMangaAllSelectedReadingOption(
             fakeSelection(MangaAllSourceSelection(title, refEn, 10)),
         )
-        resolver.select("other-title", "en", listOf(option(refEn, "mangafire:first"))) shouldBe null
-        resolver.select("", "en", listOf(option(refEn, "mangafire:first"))) shouldBe null
+        resolver.select("other-title", "chapter-1", "en", listOf(option(refEn, "mangafire:first"))) shouldBe null
+        resolver.select("", "chapter-1", "en", listOf(option(refEn, "mangafire:first"))) shouldBe null
     }
 
     private fun option(ref: ProviderBindingRef, chapterId: String) = ProviderChapterReadingOption(
