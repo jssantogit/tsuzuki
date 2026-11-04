@@ -103,7 +103,11 @@ data class CanonicalTitleScreen(
         val downloadSelectionChapterId = loaded?.downloadSelectionChapterId
         val openReader: (String) -> Unit = { chapterId ->
             context.startActivity(
-                ReaderActivity.newCanonicalIntent(context, chapterId),
+                ReaderActivity.newCanonicalIntent(
+                    context,
+                    chapterId,
+                    preferredLanguage = editionState.activeRequestedLanguage,
+                ),
             )
         }
         val openProviders: () -> Unit = { navigator.push(canonicalDetailsProvidersDestination()) }
