@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionRepository
 import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionCandidate
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionConfirmation
@@ -40,18 +41,39 @@ data class ProviderEditionPickerState(
 class ProviderEditionPickerScreenModel(
     private val selectEdition: SelectProviderReadingEdition,
     private val selectMangaAllSource: SelectMangaAllSource,
+    private val sourceSelections: MangaAllSourceSelectionRepository,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(ProviderEditionPickerState())
     val state: StateFlow<ProviderEditionPickerState> = mutableState.asStateFlow()
 
     private var titleId: String? = null
     private var operation: Job? = null
+    private var restoreJob: Job? = null
 
     fun start(canonicalTitleId: String) {
         if (titleId == canonicalTitleId) return
         operation?.cancel()
+        restoreJob?.cancel()
         titleId = canonicalTitleId
         mutableState.value = ProviderEditionPickerState()
+        restoreJob = viewModelScope.launch {
+            val saved = try {
+                sourceSelections.getLatest(canonicalTitleId)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
+            val current = mutableState.value
+            if (
+                titleId == canonicalTitleId &&
+                current.activeRequestedLanguage == null &&
+                current.sourceSelection == null &&
+                current.confirmation == null
+            ) {
+                mutableState.value = current.copy(activeRequestedLanguage = saved?.ref?.facetId)
+            }
+        }
     }
 
     fun open(canonicalTitleId: String, displayTitle: String) {
@@ -95,6 +117,7 @@ class ProviderEditionPickerScreenModel(
         val id = titleId ?: return
         val current = mutableState.value
         if (!current.open || current.searching || current.confirming || candidate !in current.candidates) return
+        restoreJob?.cancel()
         operation?.cancel()
         mutableState.value = current.copy(confirming = true, confirmation = null)
         operation = viewModelScope.launch {
@@ -143,6 +166,7 @@ class ProviderEditionPickerScreenModel(
         ) {
             return
         }
+        restoreJob?.cancel()
         operation?.cancel()
         // If changing a source fails, do not reopen the old language silently.
         mutableState.value = current.copy(
