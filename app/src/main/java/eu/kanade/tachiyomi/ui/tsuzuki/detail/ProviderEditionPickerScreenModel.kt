@@ -29,6 +29,8 @@ data class ProviderEditionPickerState(
     val failed: Boolean = false,
     val confirmation: ProviderEditionConfirmation? = null,
     val sourceSelection: MangaAllSourceSelectionResult? = null,
+    /** Set only by an explicit successful source+language user action. */
+    val activeRequestedLanguage: String? = null,
     val revision: Int = 0,
 )
 
@@ -153,6 +155,14 @@ class ProviderEditionPickerScreenModel(
                 mutableState.value = mutableState.value.copy(
                     confirming = false,
                     sourceSelection = result,
+                    activeRequestedLanguage = if (
+                        result == MangaAllSourceSelectionResult.SELECTED ||
+                        result == MangaAllSourceSelectionResult.ALREADY_SELECTED
+                    ) {
+                        candidate.ref.facetId
+                    } else {
+                        mutableState.value.activeRequestedLanguage
+                    },
                     revision = if (
                         result == MangaAllSourceSelectionResult.SELECTED ||
                         result == MangaAllSourceSelectionResult.ALREADY_SELECTED
@@ -177,6 +187,9 @@ class ProviderEditionPickerScreenModel(
 
     fun dismiss() {
         operation?.cancel()
-        mutableState.value = ProviderEditionPickerState(revision = mutableState.value.revision)
+        mutableState.value = ProviderEditionPickerState(
+            revision = mutableState.value.revision,
+            activeRequestedLanguage = mutableState.value.activeRequestedLanguage,
+        )
     }
 }
