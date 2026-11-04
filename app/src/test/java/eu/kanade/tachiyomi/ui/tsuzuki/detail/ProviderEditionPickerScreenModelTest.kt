@@ -109,11 +109,12 @@ class ProviderEditionPickerScreenModelTest {
 
             model.state.value.sourceSelection shouldBe MangaAllSourceSelectionResult.SELECTED
             model.state.value.activeRequestedLanguage shouldBe "en"
-            model.dismiss()
-            model.state.value.activeRequestedLanguage shouldBe "en"
             model.state.value.open shouldBe true
             model.state.value.confirmation shouldBe null
             model.state.value.revision shouldBe 1
+            model.dismiss()
+            model.state.value.activeRequestedLanguage shouldBe "en"
+            model.state.value.open shouldBe false
             coVerify(exactly = 1) { preference.select("title-1", candidate.ref, any()) }
             coVerify(exactly = 0) { edition.confirm(any(), any()) }
         }
