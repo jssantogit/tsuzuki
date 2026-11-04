@@ -2308,7 +2308,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `MangaAll keeps multiple verified internal MangaFire sources and excludes metadata-only candidates`() = runBlocking<Unit> {
+    fun `MangaAll keeps internal MangaFire sources separate from metadata-only candidates`() = runBlocking<Unit> {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val id = IntegrationId("mal")
         val metadata = mockk<CanonicalMetadataSnapshotRepository>()
