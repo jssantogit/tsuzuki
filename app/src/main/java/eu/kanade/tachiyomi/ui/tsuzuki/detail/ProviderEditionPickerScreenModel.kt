@@ -71,7 +71,11 @@ class ProviderEditionPickerScreenModel(
                 current.sourceSelection == null &&
                 current.confirmation == null
             ) {
-                mutableState.value = current.copy(activeRequestedLanguage = saved?.ref?.facetId)
+                mutableState.value = current.copy(
+                    activeRequestedLanguage = saved
+                        ?.takeIf { it.canonicalTitleId == canonicalTitleId }
+                        ?.ref?.facetId,
+                )
             }
         }
     }
