@@ -11,6 +11,7 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceRepository
 import tachiyomi.domain.tsuzuki.chapter.evidence.PersistedChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
+import tachiyomi.domain.tsuzuki.chapter.evidence.ProviderEvidenceMetadata
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterDecimalFraction
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
@@ -1262,9 +1263,80 @@ class ResolveProviderChapterReadingTest {
         }
     }
 
+    @Test
+    fun `MangaAll offers two attested sources in the same language without mixing source chapters`(): Unit = runBlocking {
+        val mangaAllId = ProviderId("app.tsuzuki.mangaall")
+        val fire = binding.copy(
+            id = "mangaall-fire",
+            ref = ProviderBindingRef(mangaAllId, "en", "mangafire:729pj"),
+        )
+        val dex = binding.copy(
+            id = "mangaall-dex",
+            ref = ProviderBindingRef(mangaAllId, "en", "mangadex:verified-work"),
+        )
+        val sourceAssociation = ProviderWorkSourceAssociation(
+            canonicalTitleId = chapter.canonicalTitleId,
+            ref = dex.ref,
+            workVerification = ProviderWorkVerification.AUTHOR_CORROBORATED,
+            editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+            observedAt = 2,
+        )
+        fun observed(
+            target: ProviderReadingBinding,
+            chapterId: String,
+            language: String?,
+        ): PersistedChapterEvidence = evidence(target, chapterId, chapter.id).let { persisted ->
+            persisted.copy(
+                evidence = persisted.evidence.copy(
+                    providerMetadata = ProviderEvidenceMetadata(language = language),
+                ),
+            )
+        }
+
+        var calls = 0
+        val reader = resolver(
+            bindings = listOf(fire),
+            evidence = listOf(
+                observed(fire, "mangafire:101", "en"),
+                observed(dex, "mangadex:201", "en"),
+                observed(dex, "mangafire:202", "en"),
+                observed(fire, "mangafire:103", "pt-br"),
+                observed(fire, "mangafire:104", null),
+            ),
+            sourceAssociations = listOf(sourceAssociation),
+            providerRegistry = DefaultProviderRegistry(
+                registrations = { listOf(readingRegistration(provider = mangaAllId)) },
+            ),
+            gateway = gateway {
+                calls++
+                error("A fabricated cross-source option must never invoke Reader pages")
+            },
+        )
+        val options = reader.options(chapter.id)
+        options.map { it.externalWorkId to it.providerChapterId } shouldBe listOf(
+            "mangadex:verified-work" to "mangadex:201",
+            "mangafire:729pj" to "mangafire:101",
+        )
+        reader.uniqueUserConfirmedOption(chapter.id, options) shouldBe null
+        val unsafe = ProviderChapterReadingOption(
+            canonicalChapterId = chapter.id,
+            bindingId = fire.id,
+            providerId = mangaAllId,
+            facetId = "en",
+            externalWorkId = fire.ref.externalWorkId,
+            providerChapterId = "mangafire:103",
+        )
+        reader.delivery(unsafe) shouldBe ProviderCallResult.Failure(
+            ProviderError(ProviderErrorCode.UNAVAILABLE, retryable = false),
+        )
+        reader.auditSourceIdentity(unsafe) shouldBe null
+        calls shouldBe 0
+    }
+
     private fun readingRegistration(
         lifecycle: ProviderLifecycleStatus = ProviderLifecycleStatus.ENABLED,
         facet: String = "en",
+        provider: ProviderId = providerId,
         enabledCapabilities: Set<ProviderCapabilityRef> = setOf(
             ProviderCapabilities.ReadingLookupV1,
             ProviderCapabilities.ReadingChaptersV1,
@@ -1272,7 +1344,7 @@ class ResolveProviderChapterReadingTest {
         ),
     ) = ProviderRegistration(
         descriptor = ProviderDescriptor(
-            id = providerId,
+            id = provider,
             name = "Reader",
             version = ProviderVersion("1.0.0", 1),
             origin = ProviderOrigin.Repository("fixture"),
@@ -1287,7 +1359,7 @@ class ResolveProviderChapterReadingTest {
             contentLanguages = setOf("en", "pt-br"),
         ),
         lifecycleStatus = lifecycle,
-        facets = listOf(ProviderFacetRef(providerId, facet)),
+        facets = listOf(ProviderFacetRef(provider, facet)),
         enabledCapabilities = enabledCapabilities,
     )
 
