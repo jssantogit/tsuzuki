@@ -19,10 +19,11 @@ object MangaAllReadingIdentity {
     )
 
     // The MangaAll package advertises reading.pages globally, but as of v0.1.0
-    // only MangaFire actually exports verified pages. MangaDex/MangaDot remain
-    // chapter-evidence sources. Update this closed contract only after those
-    // source implementations pass real Reader/permissions/attribution gates.
-    private val readerReadySources = setOf("mangafire")
+    // MangaFire and MangaDot now route source-scoped page metadata. MangaDex
+    // remains blocked until attribution/removal and real image delivery gates.
+    // A ready source still requires a verified chapter and attested language;
+    // a package-wide pages capability alone never establishes readability.
+    private val readerReadySources = setOf("mangafire", "mangadot")
 
     /** Content source for UI/diagnostics, distinct from the one Provider ID. */
     fun sourceId(ref: ProviderBindingRef): String? {
@@ -59,6 +60,9 @@ object MangaAllReadingIdentity {
         }
         val language = ref.facetId?.lowercase() ?: return false
         if (!supportsRequestedLanguage(ref)) return false
+        // MangaDot IDs encode the upstream image endpoint to prevent accidental
+        // uploads/chapters ambiguity and malformed IDs reaching the Reader.
+        if (workSource == "mangadot" && !Regex("^(uploads|chapters):[1-9][0-9]{0,15}$").matches(chapterLocalId)) return false
         return reportedLanguage?.lowercase() == language
     }
 }
