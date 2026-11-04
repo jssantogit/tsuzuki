@@ -91,10 +91,52 @@ class PrepareCanonicalChapterForReader(
                     canonicalChapterId,
                     requestedMangaAllLanguage,
                 )
+                trace.event(
+                    subsystem = DiagnosticSubsystem.READER,
+                    name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                    stage = DiagnosticStage.READER,
+                    outcome = if (option != null) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.REJECTED,
+                    attributes = mapOf(
+                        DiagnosticAttribute.CANDIDATE_TYPE to
+                            DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
+                        DiagnosticAttribute.INITIALIZED to
+                            DiagnosticAttributeValue.Flag(resolveMangaAllSelectedChapter != null),
+                    ),
+                )
                 val prepared = if (option != null) {
                     resolveProviderChapterReading?.preparedContent(option)
                 } else {
                     null
+                }
+                if (option != null) {
+                    trace.event(
+                        subsystem = DiagnosticSubsystem.READER,
+                        name = DiagnosticEventName.READER_PAGES_READY,
+                        stage = DiagnosticStage.READER,
+                        outcome = if (prepared is ProviderCallResult.Success) {
+                            DiagnosticOutcome.READY
+                        } else {
+                            DiagnosticOutcome.TYPED_FAILURE
+                        },
+                        attributes = buildMap {
+                            put(DiagnosticAttribute.PROVIDER_ID, DiagnosticAttributeValue.Text(option.providerId.value))
+                            if (prepared is ProviderCallResult.Failure) {
+                                put(
+                                    DiagnosticAttribute.PROVIDER_ERROR_CODE,
+                                    DiagnosticAttributeValue.Text(prepared.error.code.name),
+                                )
+                                put(
+                                    DiagnosticAttribute.ERROR_CATEGORY,
+                                    DiagnosticAttributeValue.Code(prepared.error.code.toDiagnosticCategory()),
+                                )
+                            }
+                            (prepared as? ProviderCallResult.Success)?.value?.let { delivery ->
+                                (delivery as? PreparedChapterContent.HttpPages)?.pages?.size?.let { count ->
+                                    put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(count.toLong()))
+                                }
+                            }
+                        },
+                    )
                 }
                 val explicitResult = when (prepared) {
                     is ProviderCallResult.Success -> CanonicalReaderPreparation.Ready(
