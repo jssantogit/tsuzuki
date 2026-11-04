@@ -316,6 +316,7 @@ fun ReaderRecoveryCard(recovery: ReaderRecovery, onRetry: () -> Unit, onSources:
                 when (recovery) {
                     ReaderRecovery.SOURCE_UNAVAILABLE -> MR.strings.tsuzuki_reader_source_failed
                     ReaderRecovery.P2P_REQUIRED -> MR.strings.tsuzuki_reader_p2p_required
+                    ReaderRecovery.EDITION_CONFIRMATION_REQUIRED -> MR.strings.tsuzuki_edition_description
                 },
             ),
         )
