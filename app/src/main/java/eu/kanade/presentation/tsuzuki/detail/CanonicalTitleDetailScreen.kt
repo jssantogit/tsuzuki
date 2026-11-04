@@ -526,26 +526,28 @@ private fun LoadedDetails(
                                 it in editionPicker.candidates
                         }?.let { candidate ->
                             DefaultSkinTextAction(
-                                text = "Preferir esta fonte e idioma",
+                                text = stringResource(MR.strings.tsuzuki_mangaall_source_prefer),
                                 onClick = { onEditionSourceSelect(candidate) },
                                 enabled = !editionPicker.searching && !editionPicker.confirming,
                             )
                         }
                         editionPicker.sourceSelection?.let { result ->
                             Text(
-                                text = when (result) {
-                                    MangaAllSourceSelectionResult.SELECTED,
-                                    MangaAllSourceSelectionResult.ALREADY_SELECTED,
-                                    -> "Fonte e idioma preferidos salvos"
-                                    MangaAllSourceSelectionResult.NOT_ASSOCIATED ->
-                                        "Associe esta obra à fonte antes de preferi-la"
-                                    MangaAllSourceSelectionResult.BLOCKED ->
-                                        "A fonte não tem identidade editorial verificada"
-                                    MangaAllSourceSelectionResult.UNSUPPORTED ->
-                                        "Esta combinação de fonte e idioma não é suportada"
-                                    MangaAllSourceSelectionResult.UNAVAILABLE ->
-                                        "Não foi possível salvar a preferência"
-                                },
+                                text = stringResource(
+                                    when (result) {
+                                        MangaAllSourceSelectionResult.SELECTED,
+                                        MangaAllSourceSelectionResult.ALREADY_SELECTED,
+                                        -> MR.strings.tsuzuki_mangaall_source_selected
+                                        MangaAllSourceSelectionResult.NOT_ASSOCIATED ->
+                                            MR.strings.tsuzuki_mangaall_source_not_associated
+                                        MangaAllSourceSelectionResult.BLOCKED ->
+                                            MR.strings.tsuzuki_mangaall_source_blocked
+                                        MangaAllSourceSelectionResult.UNSUPPORTED ->
+                                            MR.strings.tsuzuki_mangaall_source_unsupported
+                                        MangaAllSourceSelectionResult.UNAVAILABLE ->
+                                            MR.strings.tsuzuki_mangaall_source_unavailable
+                                    },
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colors.secondary,
                             )
