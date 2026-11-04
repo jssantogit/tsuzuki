@@ -1363,4 +1363,10 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_inventory_numbered_release_example">Observado %1$s · idioma %2$s · %3$d registros de release</string>
     <string name="tsuzuki_inventory_empty_release_feed">A API não retornou releases para esta obra vinculada. Nenhum número de capítulo foi observado.</string>
     <string name="tsuzuki_inventory_no_numbered_release_candidates">Há releases observados, mas nenhum contém um número individual de capítulo inequívoco.</string>
+    <string name="tsuzuki_mangaall_source_prefer">Preferir esta fonte e idioma</string>
+    <string name="tsuzuki_mangaall_source_selected">Preferência de fonte e idioma salva</string>
+    <string name="tsuzuki_mangaall_source_not_associated">Associe esta obra à fonte antes de escolhê-la</string>
+    <string name="tsuzuki_mangaall_source_blocked">A identidade editorial da fonte não foi verificada</string>
+    <string name="tsuzuki_mangaall_source_unsupported">Esta combinação de fonte e idioma não é suportada</string>
+    <string name="tsuzuki_mangaall_source_unavailable">Não foi possível salvar a preferência de fonte</string>
 </resources>
