@@ -28,6 +28,7 @@ class CanonicalTitleActivity : BaseActivity() {
             Navigator(
                 screen = CanonicalTitleScreen(
                     canonicalTitleId = canonicalTitleId,
+                    openEditionPicker = intent.getBooleanExtra("openEditionPicker", false),
                     finishOnNavigateUp = true,
                 ),
             ) { navigator ->
@@ -43,10 +44,12 @@ class CanonicalTitleActivity : BaseActivity() {
         fun newIntent(
             context: Context,
             canonicalTitleId: String,
+            openEditionPicker: Boolean = false,
         ): Intent? {
             val normalizedId = canonicalTitleId.takeIf(String::isNotBlank) ?: return null
             return Intent(context, CanonicalTitleActivity::class.java)
                 .putExtra(EXTRA_CANONICAL_TITLE_ID, normalizedId)
+                .putExtra("openEditionPicker", openEditionPicker)
         }
     }
 }
