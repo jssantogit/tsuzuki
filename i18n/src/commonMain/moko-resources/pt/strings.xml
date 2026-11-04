@@ -972,4 +972,10 @@
     <string name="tsuzuki_integration_provider_komga">Integração de servidor pessoal. Endereço e credenciais são reutilizados da configuração da fonte Komga instalada.</string>
     <string name="tsuzuki_integration_provider_kavita">Integração de servidor pessoal. Endereço e chave de API são reutilizados da configuração da fonte Kavita instalada.</string>
     <string name="tsuzuki_integration_provider_suwayomi">Integração de servidor pessoal de leitura. Ligação e definições de fontes são reutilizadas da fonte Suwayomi/Tachidesk instalada.</string>
+    <string name="tsuzuki_mangaall_source_prefer">Preferir esta fonte e idioma</string>
+    <string name="tsuzuki_mangaall_source_selected">Preferência de fonte e idioma guardada</string>
+    <string name="tsuzuki_mangaall_source_not_associated">Associe esta obra à fonte antes de a escolher</string>
+    <string name="tsuzuki_mangaall_source_blocked">A identidade editorial da fonte não foi verificada</string>
+    <string name="tsuzuki_mangaall_source_unsupported">Esta combinação de fonte e idioma não é suportada</string>
+    <string name="tsuzuki_mangaall_source_unavailable">Não foi possível guardar a preferência de fonte</string>
 </resources>
