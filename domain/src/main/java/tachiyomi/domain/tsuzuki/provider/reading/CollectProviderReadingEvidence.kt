@@ -719,17 +719,22 @@ class CollectProviderReadingEvidence private constructor(
         matches: List<ProviderWorkCandidate>,
     ): List<ProviderWorkSourceAssessment> {
         val repository = workSourceAssociationRepository ?: return emptyList()
-        // Author evidence has a verified source-detail contract only for MangaFire
-        // code9. Never grant this privilege to arbitrary third-party Provider DTOs.
-        if (target.registration.descriptor.id.value != "app.tsuzuki.mangafire" || matches.isEmpty()) {
-            return emptyList()
-        }
+        // Preserve the established MangaFire source-detail trust boundary.
+        // MangaAll is a single Provider, but only its internal MangaFire adapter
+        // currently supplies the verified authors/coverage needed for a
+        // provisional source portfolio. Do not promote MangaDex/MangaDot by title.
+        val trusted = ProviderWorkSourcePortfolio.trustedCandidates(
+            providerId = target.registration.descriptor.id,
+            facetId = target.facetId,
+            candidates = matches,
+        )
+        if (trusted.isEmpty()) return emptyList()
         val assessed = ProviderWorkSourcePortfolio.assess(
             providerId = target.registration.descriptor.id,
             facetId = target.facetId,
             queryTitle = queryTitle,
             independentlyVerifiedAuthors = canonicalAuthors,
-            candidates = matches,
+            candidates = trusted,
         )
         val retained = mutableListOf<ProviderWorkSourceAssessment>()
         for (assessment in assessed) {
@@ -918,7 +923,14 @@ class CollectProviderReadingEvidence private constructor(
                     request = ProviderReadingLookupRequest(
                         titles = listOf(title),
                         cursor = cursor,
-                        coverageEvidenceVersion = if (providerId.value == "app.tsuzuki.mangafire") 1 else null,
+                        coverageEvidenceVersion = if (
+                            providerId.value == "app.tsuzuki.mangafire" ||
+                            providerId.value == "app.tsuzuki.mangaall"
+                        ) {
+                            1
+                        } else {
+                            null
+                        },
                     ),
                 )
             ) {
