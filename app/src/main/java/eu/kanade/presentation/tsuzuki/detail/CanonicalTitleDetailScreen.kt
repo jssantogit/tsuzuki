@@ -461,19 +461,37 @@ private fun LoadedDetails(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(candidate.title, color = colors.foreground)
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
                                     Text(
-                                        candidate.providerName + " · " + (candidate.ref.facetId ?: "—"),
+                                        candidate.title,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium,
+                                        color = colors.foreground,
+                                    )
+                                    Text(
+                                        "${candidate.providerName} · ID ${candidate.ref.externalWorkId}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = colors.secondary,
                                     )
-                                    candidate.url?.let { url ->
+                                    editionCandidateMetadata(candidate).forEach { description ->
                                         Text(
-                                            url,
+                                            description,
                                             style = MaterialTheme.typography.bodySmall,
                                             color = colors.secondary,
                                         )
+                                    }
+                                    if (selected) {
+                                        candidate.url?.let { url ->
+                                            Text(
+                                                url,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = colors.secondary,
+                                                maxLines = 2,
+                                            )
+                                        }
                                     }
                                 }
                                 if (selected) Text("✓", color = colors.accent)
