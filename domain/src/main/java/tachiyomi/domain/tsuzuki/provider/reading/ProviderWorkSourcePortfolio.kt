@@ -147,10 +147,11 @@ object ProviderWorkSourcePortfolio {
     ): Boolean {
         val hid = when (providerId.value) {
             MANGAFIRE_PROVIDER_ID -> candidate.externalWorkId
-            MANGAALL_PROVIDER_ID -> candidate.externalWorkId
-                .takeIf { it.startsWith(MANGAALL_MANGAFIRE_PREFIX) }
-                ?.removePrefix(MANGAALL_MANGAFIRE_PREFIX)
-                ?: return false
+            MANGAALL_PROVIDER_ID ->
+                candidate.externalWorkId
+                    .takeIf { it.startsWith(MANGAALL_MANGAFIRE_PREFIX) }
+                    ?.removePrefix(MANGAALL_MANGAFIRE_PREFIX)
+                    ?: return false
             else -> return false
         }
         if (!MANGAFIRE_HID.matches(hid)) return false
