@@ -56,6 +56,37 @@ class ProviderEditionCandidatePresentationTest {
     }
 
     @Test
+    fun `MangaAll picker distinguishes source and does not invent language`() {
+        val mangaAllCandidate = candidate(language = null).copy(
+            ref = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "pt-br", "mangadex:uuid-123"),
+            providerName = "MangaAll",
+        )
+        editionCandidateMetadata(mangaAllCandidate) shouldBe listOf(
+            "Fonte: MangaDex",
+            "Capítulos: não informado",
+            "Idioma: não informado",
+            "Autor: não informado",
+        )
+        editionCandidateMetadata(
+            mangaAllCandidate.copy(
+                ref = mangaAllCandidate.ref.copy(externalWorkId = "mangadot:317"),
+                language = "pt-br",
+            ),
+        ) shouldBe listOf(
+            "Fonte: MangaDot",
+            "Capítulos: não informado",
+            "Idioma: Português (Brasil)",
+            "Autor: não informado",
+        )
+        editionCandidateMetadata(
+            mangaAllCandidate.copy(
+                ref = mangaAllCandidate.ref.copy(externalWorkId = "mangafire:729pj"),
+                language = "en",
+            ),
+        ).first() shouldBe "Fonte: MangaFire"
+    }
+
+    @Test
     fun `missing metadata stays visibly unknown and locales use readable names`() {
         editionCandidateMetadata(candidate(language = null)) shouldBe listOf(
             "Capítulos: não informado",
