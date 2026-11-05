@@ -127,17 +127,6 @@ fun ColumnScope.ReaderSourceCard(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 }
-                                Text(
-                                    text = stringResource(
-                                        if (active) {
-                                            MR.strings.tsuzuki_reader_current_source
-                                        } else {
-                                            MR.strings.tsuzuki_reader_available_source
-                                        },
-                                    ),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
                             }
                         },
                         trailingContent = {
@@ -177,11 +166,6 @@ fun ColumnScope.ReaderSourceCard(
                     )
                 } else {
                     if (state.options.isNotEmpty()) {
-                        Text(
-                            text = stringResource(MR.strings.tsuzuki_reader_available_source),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -215,17 +199,6 @@ fun ColumnScope.ReaderSourceCard(
                                                     overflow = TextOverflow.Ellipsis,
                                                 )
                                             }
-                                            Text(
-                                                stringResource(
-                                                    if (active) {
-                                                        MR.strings.tsuzuki_reader_current_source
-                                                    } else {
-                                                        MR.strings.tsuzuki_reader_available_source
-                                                    },
-                                                ),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
                                         }
                                     },
                                     trailingContent = {
