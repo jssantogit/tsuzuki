@@ -209,8 +209,10 @@ class SelectProviderReadingEdition(
                                             .take(minOf(perQueryLimit, MAX_CANDIDATES_PER_SOURCE - seen))
                                             .forEach { item ->
                                                 if (
-                                                    (registration.descriptor.id.value != "app.tsuzuki.mangaall" ||
-                                                        relevantEditionCandidateTitle(searchTitle, item.title)) &&
+                                                    (
+                                                        registration.descriptor.id.value != "app.tsuzuki.mangaall" ||
+                                                            relevantEditionCandidateTitle(searchTitle, item.title)
+                                                        ) &&
                                                     (
                                                         facetId == null ||
                                                             item.language == null ||
