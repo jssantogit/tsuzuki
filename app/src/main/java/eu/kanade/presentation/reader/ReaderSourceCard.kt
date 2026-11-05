@@ -93,7 +93,10 @@ fun ColumnScope.ReaderSourceCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp)) {
-                items(providerOptions, key = { it.providerId.value + ":" + it.externalWorkId + ":" + it.providerChapterId }) { option ->
+                items(
+                    providerOptions,
+                    key = { it.providerId.value + ":" + it.externalWorkId + ":" + it.providerChapterId },
+                ) { option ->
                     val sourceName = when (option.contentSourceId) {
                         "mangadex" -> "MangaDex"
                         "mangadot" -> "MangaDot"
@@ -126,8 +129,11 @@ fun ColumnScope.ReaderSourceCard(
                                 }
                                 Text(
                                     text = stringResource(
-                                        if (active) MR.strings.tsuzuki_reader_current_source
-                                        else MR.strings.tsuzuki_reader_available_source,
+                                        if (active) {
+                                            MR.strings.tsuzuki_reader_current_source
+                                        } else {
+                                            MR.strings.tsuzuki_reader_available_source
+                                        },
                                     ),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -135,7 +141,11 @@ fun ColumnScope.ReaderSourceCard(
                             }
                         },
                         trailingContent = {
-                            RadioButton(selected = active, enabled = !selectionInProgress, onClick = null)
+                            RadioButton(
+                                selected = active,
+                                enabled = !selectionInProgress,
+                                onClick = null,
+                            )
                         },
                     )
                 }
@@ -166,65 +176,67 @@ fun ColumnScope.ReaderSourceCard(
                         enabled = !selectionInProgress,
                     )
                 } else {
-                    Text(
-                        text = stringResource(MR.strings.tsuzuki_reader_available_source),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f, fill = false)
-                            .heightIn(max = 280.dp),
-                    ) {
-                        items(state.options, key = { it.option.key }) { option ->
-                            val active = activeOptionKey == option.option.key
-                            ListItem(
-                                modifier = Modifier.selectable(
-                                    selected = active,
-                                    enabled = !selectionInProgress,
-                                    role = Role.RadioButton,
-                                    onClick = { onSelect(option) },
-                                ),
-                                headlineContent = { Text(option.addonDisplayName) },
-                                supportingContent = {
-                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        option.language?.takeIf(String::isNotBlank)?.let { language ->
-                                            Text(language)
-                                        }
-                                        option.scanlationGroup?.trim()?.takeIf(String::isNotBlank)?.let { group ->
-                                            Text(
-                                                text = stringResource(
-                                                    MR.strings.tsuzuki_reader_scanlation_group,
-                                                    group,
-                                                ),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                        }
-                                        Text(
-                                            stringResource(
-                                                if (active) {
-                                                    MR.strings.tsuzuki_reader_current_source
-                                                } else {
-                                                    MR.strings.tsuzuki_reader_available_source
-                                                },
-                                            ),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                },
-                                trailingContent = {
-                                    RadioButton(
+                    if (state.options.isNotEmpty()) {
+                        Text(
+                            text = stringResource(MR.strings.tsuzuki_reader_available_source),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f, fill = false)
+                                .heightIn(max = 280.dp),
+                        ) {
+                            items(state.options, key = { it.option.key }) { option ->
+                                val active = activeOptionKey == option.option.key
+                                ListItem(
+                                    modifier = Modifier.selectable(
                                         selected = active,
                                         enabled = !selectionInProgress,
-                                        onClick = null,
-                                    )
-                                },
-                            )
+                                        role = Role.RadioButton,
+                                        onClick = { onSelect(option) },
+                                    ),
+                                    headlineContent = { Text(option.addonDisplayName) },
+                                    supportingContent = {
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            option.language?.takeIf(String::isNotBlank)?.let { language ->
+                                                Text(language)
+                                            }
+                                            option.scanlationGroup?.trim()?.takeIf(String::isNotBlank)?.let { group ->
+                                                Text(
+                                                    text = stringResource(
+                                                        MR.strings.tsuzuki_reader_scanlation_group,
+                                                        group,
+                                                    ),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
+                                            Text(
+                                                stringResource(
+                                                    if (active) {
+                                                        MR.strings.tsuzuki_reader_current_source
+                                                    } else {
+                                                        MR.strings.tsuzuki_reader_available_source
+                                                    },
+                                                ),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    },
+                                    trailingContent = {
+                                        RadioButton(
+                                            selected = active,
+                                            enabled = !selectionInProgress,
+                                            onClick = null,
+                                        )
+                                    },
+                                )
+                            }
                         }
                     }
                     if (failure != null) {
