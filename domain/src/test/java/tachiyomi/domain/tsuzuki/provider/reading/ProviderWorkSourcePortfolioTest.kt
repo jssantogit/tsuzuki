@@ -192,7 +192,7 @@ class ProviderWorkSourcePortfolioTest {
     }
 
     @Test
-    fun `MangaAll accepts only internal MangaFire candidates into verified source portfolio`() {
+    fun `MangaAll excludes unverified MangaDex search hits from trusted source portfolio`() {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val verified = original.copy(
             externalWorkId = "mangafire:kx1p6",
