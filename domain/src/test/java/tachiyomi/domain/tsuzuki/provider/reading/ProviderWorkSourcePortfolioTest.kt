@@ -202,6 +202,15 @@ class ProviderWorkSourcePortfolioTest {
         val unverified = original.copy(
             externalWorkId = "mangadex:11111111-2222-4333-8444-555555555555",
             url = "https://mangafire.to/title/kx1p6-chainsaw-man",
+            // A similarly named MangaDex search hit cannot borrow MangaFire's
+            // details, authors or chapter coverage for automatic source trust.
+            detailOutcome = ProviderWorkDetailOutcome.NOT_NEEDED,
+            authors = emptyList(),
+            coverageOutcome = ProviderCoverageOutcome.UNKNOWN,
+            coverageObservedCount = null,
+            coverageMinMilli = null,
+            coverageMaxMilli = null,
+            coverageHasMore = null,
         )
         val fake = original.copy(externalWorkId = "mangafire:", title = "Chainsaw Man")
         val candidates = ProviderWorkSourcePortfolio.trustedCandidates(
