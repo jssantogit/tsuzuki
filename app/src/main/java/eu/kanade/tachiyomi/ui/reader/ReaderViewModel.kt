@@ -112,10 +112,10 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticTrace
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticWorkflow
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
+import tachiyomi.domain.tsuzuki.model.SourceMappingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
-import tachiyomi.domain.tsuzuki.model.SourceMappingAvailability
 import tachiyomi.domain.tsuzuki.reader.interactor.GetAdjacentCanonicalChapter
 import tachiyomi.domain.tsuzuki.reader.interactor.PrepareCanonicalChapterForReader
 import tachiyomi.domain.tsuzuki.reader.interactor.RecordCanonicalReaderProgress
