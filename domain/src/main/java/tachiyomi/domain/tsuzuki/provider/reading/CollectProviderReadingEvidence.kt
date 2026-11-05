@@ -445,7 +445,13 @@ class CollectProviderReadingEvidence private constructor(
         for ((queryIndex, title) in titles.withIndex()) {
             val queryStarted = System.nanoTime()
             traceLookupAttempt(canonicalTitleId, target, queryIndex, title, DiagnosticOutcome.STARTED)
-            val candidates = when (val result = collectLookup(target.registration.descriptor.id, title, target.facetId)) {
+            val candidates = when (
+                val result = collectLookup(
+                    target.registration.descriptor.id,
+                    title,
+                    target.facetId,
+                )
+            ) {
                 is ProviderCallResult.Failure -> {
                     traceLookupAttempt(
                         canonicalTitleId,
