@@ -2331,6 +2331,7 @@ class CollectProviderReadingEvidenceTest {
             gateway = gateway(
                 lookupHandler = { request ->
                     request.coverageEvidenceVersion shouldBe 1
+                    request.requestedLanguage shouldBe "en"
                     ProviderCallResult.Success(
                         ProviderPage(
                             items = listOf(
