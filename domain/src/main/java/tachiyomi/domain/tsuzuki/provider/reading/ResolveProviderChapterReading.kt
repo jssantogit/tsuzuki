@@ -44,6 +44,17 @@ data class ProviderChapterReadingOption(
     /** Name of the MangaAll content source, not a second installed Provider. */
     val contentSourceId: String?
         get() = MangaAllReadingIdentity.sourceId(bindingRef())
+
+    /** Stable Reader UI selection identity; chapter credits do not define identity. */
+    val readerSourceKey: String
+        get() = listOf(
+            canonicalChapterId,
+            providerId.value,
+            facetId.orEmpty(),
+            externalWorkId,
+            bindingId,
+            providerChapterId,
+        ).joinToString("\u0000")
 }
 
 /**
