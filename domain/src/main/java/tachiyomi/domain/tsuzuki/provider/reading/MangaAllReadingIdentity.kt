@@ -65,7 +65,9 @@ object MangaAllReadingIdentity {
         if (
             workSource == "mangadot" &&
             !Regex("^(uploads|chapters):[1-9][0-9]{0,15}$").matches(chapterLocalId)
-        ) return false
+        ) {
+            return false
+        }
         return reportedLanguage?.lowercase() == language
     }
 }
