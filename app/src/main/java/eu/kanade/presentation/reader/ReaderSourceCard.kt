@@ -46,7 +46,7 @@ fun ColumnScope.ReaderSourceCard(
     onSelect: (ContentOptionPresentation) -> Unit,
     providerOptions: List<ProviderChapterReadingOption> = emptyList(),
     activeProviderSourceKey: String? = null,
-    onSelectProvider: (ProviderChapterReadingOption) -> Unit = {},
+    onSelectProvider: (ProviderChapterReadingOption) -> Unit,
     onRetry: () -> Unit,
     onFindSource: (String) -> Unit,
     onChooseEdition: (String) -> Unit,
