@@ -1026,21 +1026,26 @@ class ReaderViewModel(
     /** An explicit Reader source tap never falls back to another language or provider. */
     fun selectProviderReadingOption(option: ProviderChapterReadingOption) {
         val selector = mutableState.value.dialog as? Dialog.ContentSelector ?: return
-        if (option.canonicalChapterId != selector.canonicalChapterId ||
+        if (
+            option.canonicalChapterId != selector.canonicalChapterId ||
             option.providerId.value != "app.tsuzuki.mangaall" ||
-            option !in mutableState.value.providerSourceOptions || contentSelectionInProgress
-        ) return
+            option !in mutableState.value.providerSourceOptions ||
+            contentSelectionInProgress
+        ) {
+            return
+        }
         contentSelectionInProgress = true
         mutableState.update { it.copy(sourceSelectionInProgress = true, recovery = null) }
         val hadActiveSession = canonicalSession != null
         viewModelScope.launchIO {
             try {
-                val result = resolveProviderChapterReading.preparedContent(option)
-                val ready = result as? ProviderCallResult.Success
-                    ?: error("Selected MangaAll chapter source is unavailable")
+                val prepared = when (val result = resolveProviderChapterReading.preparedContent(option)) {
+                    is ProviderCallResult.Success -> result.value
+                    is ProviderCallResult.Failure -> error("Selected MangaAll chapter source is unavailable")
+                }
                 loadCanonicalTarget(
                     canonicalChapterId = option.canonicalChapterId,
-                    target = ready.value,
+                    target = prepared,
                     resetPage = false,
                     recordPreviousHistory = hadActiveSession,
                 )
