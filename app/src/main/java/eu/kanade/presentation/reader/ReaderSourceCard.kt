@@ -270,7 +270,7 @@ fun ColumnScope.ReaderSourceCard(
                     is ContentSelectorScreenState.Error -> state.canonicalTitleId
                     else -> null
                 }
-                if (canonicalTitleId != null) {
+                if (canonicalTitleId != null && providerOptions.isEmpty()) {
                     UnavailableActions(
                         onRetry = onRetry,
                         onFindSource = { onFindSource(canonicalTitleId) },
