@@ -2411,6 +2411,9 @@ class CollectProviderReadingEvidenceTest {
             setOf("mangafire:fire-one", "mangafire:fire-two")
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
         val observedCandidates = recorder.events.filter { it.name == DiagnosticEventName.PROVIDER_READING_CANDIDATE }
+        observedCandidates.all {
+            it.attributes["provider_id"] == DiagnosticAttributeValue.Text("app.tsuzuki.mangaall")
+        } shouldBe true
         observedCandidates.mapNotNull { it.attributes["provider_work_id"] }.toSet() shouldBe setOf(
             DiagnosticAttributeValue.Text("mangafire:fire-one"),
             DiagnosticAttributeValue.Text("mangafire:fire-two"),
