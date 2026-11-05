@@ -131,6 +131,13 @@ fun ColumnScope.ReaderSourceCard(
                                         option.language?.takeIf(String::isNotBlank)?.let { language ->
                                             Text(language)
                                         }
+                                        option.scanlationGroup?.trim()?.takeIf(String::isNotBlank)?.let { group ->
+                                            Text(
+                                                text = stringResource(MR.strings.tsuzuki_reader_scanlation_group, group),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
                                         Text(
                                             stringResource(
                                                 if (active) {
