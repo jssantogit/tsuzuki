@@ -71,6 +71,54 @@ class ProviderEditionCandidateMetadataTest {
     }
 
     @Test
+    fun `MangaAll candidate exposes content source but never invents language from lookup facet`() {
+        val mangaAllRef = ProviderBindingRef(
+            providerId = ProviderId("app.tsuzuki.mangaall"),
+            facetId = "pt-br",
+            externalWorkId = "mangadex:11111111-2222-4333-8444-555555555555",
+        )
+        val unknownLanguage = editionCandidateFromLookup(
+            ref = mangaAllRef,
+            providerName = "MangaAll",
+            work = ProviderWorkCandidate(
+                externalWorkId = mangaAllRef.externalWorkId,
+                title = "Chainsaw Man",
+                language = null,
+            ),
+            query = "Chainsaw Man",
+            providerVersionCode = 1,
+            configurationFingerprint = "signed",
+        )
+        unknownLanguage.contentSourceId shouldBe "mangadex"
+        unknownLanguage.language shouldBe null
+        unknownLanguage.ref.facetId shouldBe "pt-br"
+        val attested = editionCandidateFromLookup(
+            ref = mangaAllRef.copy(externalWorkId = "mangadot:317"),
+            providerName = "MangaAll",
+            work = ProviderWorkCandidate(
+                externalWorkId = "mangadot:317",
+                title = "Chainsaw Man",
+                language = "pt-br",
+            ),
+            query = "Chainsaw Man",
+            providerVersionCode = 1,
+            configurationFingerprint = "signed",
+        )
+        attested.contentSourceId shouldBe "mangadot"
+        attested.language shouldBe "pt-br"
+        val legacy = editionCandidateFromLookup(
+            ref = ref,
+            providerName = "MangaFire",
+            work = ProviderWorkCandidate(externalWorkId = "jjrxn", title = "Bleach"),
+            query = "Bleach",
+            providerVersionCode = 13,
+            configurationFingerprint = "signed",
+        )
+        legacy.contentSourceId shouldBe null
+        legacy.language shouldBe "en"
+    }
+
+    @Test
     fun `changing counts does not invalidate exact confirmed source identity`() {
         val original = ProviderEditionCandidate(
             ref = ref,

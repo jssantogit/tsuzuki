@@ -31,6 +31,10 @@ data class ProviderEditionCandidate(
     val observedChapterCount: Int? = null,
     val coverageHasMore: Boolean? = null,
 ) {
+    /** Internal MangaAll content source, never another installed Provider. */
+    val contentSourceId: String?
+        get() = MangaAllReadingIdentity.sourceId(ref)
+
     /**
      * Metadata may change during the confirmation re-query. Keep the safety
      * check anchored to the same exact source record, language and grants.
@@ -64,7 +68,12 @@ internal fun editionCandidateFromLookup(
         query = query,
         providerVersionCode = providerVersionCode,
         configurationFingerprint = configurationFingerprint,
-        language = work.language ?: ref.facetId,
+        // An unreported work language is unknown for multifonte MangaAll.
+        // A selected facet only filters later chapter requests; it does not
+        // attest which translation(s) this source actually hosts.
+        language = work.language ?: ref.facetId.takeUnless {
+            ref.providerId.value == "app.tsuzuki.mangaall"
+        },
         authors = work.authors,
         chapterCount = work.chapterCount,
         observedChapterCount = work.coverageObservedCount

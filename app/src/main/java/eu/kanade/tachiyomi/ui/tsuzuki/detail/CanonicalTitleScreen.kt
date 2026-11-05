@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -44,6 +45,7 @@ import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkScreenModel
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkState
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentSelectorScreenModel
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import tachiyomi.domain.tsuzuki.chapter.inventory.PreviewUserAdoptedInventory
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -77,6 +79,7 @@ data class CanonicalTitleScreen(
         val adoptionModel = metroViewModel<UserAdoptionReviewScreenModel>()
         val editionModel = metroViewModel<ProviderEditionPickerScreenModel>()
         val editionState by editionModel.state.collectAsStateWithLifecycle()
+        val readerLaunchScope = rememberCoroutineScope()
         val adoptionState by adoptionModel.state.collectAsStateWithLifecycle()
         val selectedEpubLauncher = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.OpenDocument(),
@@ -102,9 +105,16 @@ data class CanonicalTitleScreen(
             ?.takeIf { it.title.id == canonicalTitleId }
         val downloadSelectionChapterId = loaded?.downloadSelectionChapterId
         val openReader: (String) -> Unit = { chapterId ->
-            context.startActivity(
-                ReaderActivity.newCanonicalIntent(context, chapterId),
-            )
+            readerLaunchScope.launch {
+                val language = editionModel.requestedLanguageForReader(canonicalTitleId)
+                context.startActivity(
+                    ReaderActivity.newCanonicalIntent(
+                        context,
+                        chapterId,
+                        preferredLanguage = language,
+                    ),
+                )
+            }
         }
         val openProviders: () -> Unit = { navigator.push(canonicalDetailsProvidersDestination()) }
 
@@ -183,6 +193,7 @@ data class CanonicalTitleScreen(
             },
             onEditionSearch = editionModel::search,
             onEditionConfirm = editionModel::confirm,
+            onEditionSourceSelect = editionModel::selectMangaAllSource,
             onEditionDismiss = editionModel::dismiss,
             onChapterSortMeasured = screenModel::recordChapterSortDuration,
             onReadTitle = { screenModel.startReading(openReader) },

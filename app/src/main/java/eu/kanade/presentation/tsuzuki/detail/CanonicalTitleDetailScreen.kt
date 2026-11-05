@@ -80,6 +80,7 @@ import tachiyomi.domain.tsuzuki.chapter.inventory.IndependentInventorySourceSnap
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchFailureReason
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryFetchOutcome
 import tachiyomi.domain.tsuzuki.chapter.inventory.InventoryRefreshStop
+import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionCandidate
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionConfirmation
 import tachiyomi.i18n.MR
@@ -106,6 +107,7 @@ fun CanonicalTitleDetailScreen(
     onChooseEdition: () -> Unit = {},
     onEditionSearch: (String) -> Unit = {},
     onEditionConfirm: (ProviderEditionCandidate) -> Unit = {},
+    onEditionSourceSelect: (ProviderEditionCandidate) -> Unit = {},
     onEditionDismiss: () -> Unit = {},
     onChapterSortMeasured: (Long, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
@@ -143,7 +145,8 @@ fun CanonicalTitleDetailScreen(
                 state, background, navigateUp, onAtualizar, onAddToLibrary, onRemoveFromLibrary,
                 onReadTitle, onOpenChapter, onBaixarChapter, onOpenProvidersSettings,
                 onImportEpub, onReviewCandidates, inventoryRefresh,
-                editionPicker, onChooseEdition, onEditionSearch, onEditionConfirm, onEditionDismiss,
+                editionPicker, onChooseEdition, onEditionSearch, onEditionConfirm, onEditionSourceSelect,
+                onEditionDismiss,
                 onChapterSortMeasured,
             )
         }
@@ -169,6 +172,7 @@ private fun LoadedDetails(
     onChooseEdition: () -> Unit,
     onEditionSearch: (String) -> Unit,
     onEditionConfirm: (ProviderEditionCandidate) -> Unit,
+    onEditionSourceSelect: (ProviderEditionCandidate) -> Unit,
     onEditionDismiss: () -> Unit,
     onChapterSortMeasured: (Long, Int) -> Unit,
 ) {
@@ -515,6 +519,40 @@ private fun LoadedDetails(
                                 }
                                 if (selected) Text("✓", color = colors.accent)
                             }
+                        }
+                        // A MangaAll work can have multiple content sources
+                        // and translations while retaining one confirmed edition.
+                        // This action persists only an explicit source preference.
+                        selectedEdition?.takeIf {
+                            it.ref.providerId.value == "app.tsuzuki.mangaall" &&
+                                it in editionPicker.candidates
+                        }?.let { candidate ->
+                            DefaultSkinTextAction(
+                                text = stringResource(MR.strings.tsuzuki_mangaall_source_prefer),
+                                onClick = { onEditionSourceSelect(candidate) },
+                                enabled = !editionPicker.searching && !editionPicker.confirming,
+                            )
+                        }
+                        editionPicker.sourceSelection?.let { result ->
+                            Text(
+                                text = stringResource(
+                                    when (result) {
+                                        MangaAllSourceSelectionResult.SELECTED,
+                                        MangaAllSourceSelectionResult.ALREADY_SELECTED,
+                                        -> MR.strings.tsuzuki_mangaall_source_selected
+                                        MangaAllSourceSelectionResult.NOT_ASSOCIATED ->
+                                            MR.strings.tsuzuki_mangaall_source_not_associated
+                                        MangaAllSourceSelectionResult.BLOCKED ->
+                                            MR.strings.tsuzuki_mangaall_source_blocked
+                                        MangaAllSourceSelectionResult.UNSUPPORTED ->
+                                            MR.strings.tsuzuki_mangaall_source_unsupported
+                                        MangaAllSourceSelectionResult.UNAVAILABLE ->
+                                            MR.strings.tsuzuki_mangaall_source_unavailable
+                                    },
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.secondary,
+                            )
                         }
                         editionPicker.confirmation?.let { result ->
                             val message = when (result) {

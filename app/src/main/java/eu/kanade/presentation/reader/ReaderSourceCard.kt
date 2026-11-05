@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinPrimaryButton
 import eu.kanade.presentation.tsuzuki.components.DefaultSkinSecondaryButton
@@ -31,6 +32,7 @@ import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentBindingLinkState
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentOptionPresentation
 import eu.kanade.tachiyomi.ui.tsuzuki.content.ContentSelectorScreenState
 import tachiyomi.domain.tsuzuki.addon.AddonId
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption
 import tachiyomi.domain.tsuzuki.source.model.ScoredSourceCandidate
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -42,6 +44,9 @@ fun ColumnScope.ReaderSourceCard(
     activeContentLabel: String?,
     failure: ReaderRecovery?,
     onSelect: (ContentOptionPresentation) -> Unit,
+    providerOptions: List<ProviderChapterReadingOption> = emptyList(),
+    activeProviderSourceKey: String? = null,
+    onSelectProvider: (ProviderChapterReadingOption) -> Unit,
     onRetry: () -> Unit,
     onFindSource: (String) -> Unit,
     onChooseEdition: (String) -> Unit,
@@ -81,6 +86,72 @@ fun ColumnScope.ReaderSourceCard(
             )
         }
 
+        if (providerOptions.isNotEmpty()) {
+            Text(
+                text = "MangaAll",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp)) {
+                items(
+                    providerOptions,
+                    key = { it.readerSourceKey },
+                ) { option ->
+                    val sourceName = when (option.contentSourceId) {
+                        "mangadex" -> "MangaDex"
+                        "mangadot" -> "MangaDot"
+                        "mangafire" -> "MangaFire"
+                        else -> return@items
+                    }
+                    val active = activeProviderSourceKey == option.readerSourceKey
+                    ListItem(
+                        modifier = Modifier.selectable(
+                            selected = active,
+                            enabled = !selectionInProgress,
+                            role = Role.RadioButton,
+                            onClick = { onSelectProvider(option) },
+                        ),
+                        headlineContent = { Text(sourceName) },
+                        supportingContent = {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                option.facetId?.takeIf(String::isNotBlank)?.let { Text(it) }
+                                option.scanlationGroup?.trim()?.takeIf(String::isNotBlank)?.let { group ->
+                                    Text(
+                                        text = stringResource(
+                                            MR.strings.tsuzuki_reader_scanlation_group,
+                                            group,
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                Text(
+                                    text = stringResource(
+                                        if (active) {
+                                            MR.strings.tsuzuki_reader_current_source
+                                        } else {
+                                            MR.strings.tsuzuki_reader_available_source
+                                        },
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        },
+                        trailingContent = {
+                            RadioButton(
+                                selected = active,
+                                enabled = !selectionInProgress,
+                                onClick = null,
+                            )
+                        },
+                    )
+                }
+            }
+        }
+
         when (state) {
             ContentSelectorScreenState.Loading -> LoadingState()
             is ContentSelectorScreenState.Discovering -> {
@@ -93,7 +164,7 @@ fun ColumnScope.ReaderSourceCard(
                 }
             }
             is ContentSelectorScreenState.Ready -> {
-                if (state.options.isEmpty()) {
+                if (state.options.isEmpty() && providerOptions.isEmpty()) {
                     UnavailableActions(
                         onRetry = onRetry,
                         onFindSource = { onFindSource(state.canonicalTitleId) },
@@ -105,53 +176,67 @@ fun ColumnScope.ReaderSourceCard(
                         enabled = !selectionInProgress,
                     )
                 } else {
-                    Text(
-                        text = stringResource(MR.strings.tsuzuki_reader_available_source),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f, fill = false)
-                            .heightIn(max = 280.dp),
-                    ) {
-                        items(state.options, key = { it.option.key }) { option ->
-                            val active = activeOptionKey == option.option.key
-                            ListItem(
-                                modifier = Modifier.selectable(
-                                    selected = active,
-                                    enabled = !selectionInProgress,
-                                    role = Role.RadioButton,
-                                    onClick = { onSelect(option) },
-                                ),
-                                headlineContent = { Text(option.addonDisplayName) },
-                                supportingContent = {
-                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        option.language?.takeIf(String::isNotBlank)?.let { language ->
-                                            Text(language)
-                                        }
-                                        Text(
-                                            stringResource(
-                                                if (active) {
-                                                    MR.strings.tsuzuki_reader_current_source
-                                                } else {
-                                                    MR.strings.tsuzuki_reader_available_source
-                                                },
-                                            ),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                },
-                                trailingContent = {
-                                    RadioButton(
+                    if (state.options.isNotEmpty()) {
+                        Text(
+                            text = stringResource(MR.strings.tsuzuki_reader_available_source),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f, fill = false)
+                                .heightIn(max = 280.dp),
+                        ) {
+                            items(state.options, key = { it.option.key }) { option ->
+                                val active = activeOptionKey == option.option.key
+                                ListItem(
+                                    modifier = Modifier.selectable(
                                         selected = active,
                                         enabled = !selectionInProgress,
-                                        onClick = null,
-                                    )
-                                },
-                            )
+                                        role = Role.RadioButton,
+                                        onClick = { onSelect(option) },
+                                    ),
+                                    headlineContent = { Text(option.addonDisplayName) },
+                                    supportingContent = {
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            option.language?.takeIf(String::isNotBlank)?.let { language ->
+                                                Text(language)
+                                            }
+                                            option.scanlationGroup?.trim()?.takeIf(String::isNotBlank)?.let { group ->
+                                                Text(
+                                                    text = stringResource(
+                                                        MR.strings.tsuzuki_reader_scanlation_group,
+                                                        group,
+                                                    ),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
+                                            Text(
+                                                stringResource(
+                                                    if (active) {
+                                                        MR.strings.tsuzuki_reader_current_source
+                                                    } else {
+                                                        MR.strings.tsuzuki_reader_available_source
+                                                    },
+                                                ),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    },
+                                    trailingContent = {
+                                        RadioButton(
+                                            selected = active,
+                                            enabled = !selectionInProgress,
+                                            onClick = null,
+                                        )
+                                    },
+                                )
+                            }
                         }
                     }
                     if (failure != null) {
@@ -185,7 +270,7 @@ fun ColumnScope.ReaderSourceCard(
                     is ContentSelectorScreenState.Error -> state.canonicalTitleId
                     else -> null
                 }
-                if (canonicalTitleId != null) {
+                if (canonicalTitleId != null && providerOptions.isEmpty()) {
                     UnavailableActions(
                         onRetry = onRetry,
                         onFindSource = { onFindSource(canonicalTitleId) },

@@ -26,6 +26,7 @@ import tachiyomi.domain.tsuzuki.download.service.CanonicalDownloadGateway
 import tachiyomi.domain.tsuzuki.download.service.canReuseArtifact
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
+import tachiyomi.domain.tsuzuki.provider.reading.ResolveMangaAllSelectedChapter
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import tachiyomi.domain.tsuzuki.provider.torrent.PrepareProviderChapterTorrent
 import tachiyomi.domain.tsuzuki.provider.torrent.ProviderChapterTorrentPreparation
@@ -47,11 +48,13 @@ class PrepareCanonicalChapterForReader(
     private val structuredDiagnostics: StructuredDiagnosticRecorder,
     private val resolveProviderChapterReading: ResolveProviderChapterReading? = null,
     private val prepareProviderChapterTorrent: PrepareProviderChapterTorrent? = null,
+    private val resolveMangaAllSelectedChapter: ResolveMangaAllSelectedChapter? = null,
 ) {
 
     suspend fun execute(
         canonicalChapterId: String,
         selectedOption: ContentOption? = null,
+        requestedMangaAllLanguage: String? = null,
     ): CanonicalReaderPreparation {
         var trace = DiagnosticTrace.start(
             recorder = structuredDiagnostics,
@@ -78,6 +81,73 @@ class PrepareCanonicalChapterForReader(
             trace = trace.copy(
                 canonicalTitleRef = structuredDiagnostics.canonicalTitleReference(chapter.canonicalTitleId),
             )
+
+            // This opt-in argument comes only from an explicit source+language
+            // choice in the MangaAll picker. Do not silently choose a different
+            // source, language, cached edition or torrent if the chosen chapter
+            // is not verifiably readable.
+            if (requestedMangaAllLanguage != null && selectedOption == null) {
+                val option = resolveMangaAllSelectedChapter?.execute(
+                    canonicalChapterId,
+                    requestedMangaAllLanguage,
+                )
+                trace.event(
+                    subsystem = DiagnosticSubsystem.READER,
+                    name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                    stage = DiagnosticStage.READER,
+                    outcome = if (option != null) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.REJECTED,
+                    attributes = mapOf(
+                        DiagnosticAttribute.CANDIDATE_TYPE to
+                            DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
+                        DiagnosticAttribute.INITIALIZED to
+                            DiagnosticAttributeValue.Flag(resolveMangaAllSelectedChapter != null),
+                    ),
+                )
+                val prepared = if (option != null) {
+                    resolveProviderChapterReading?.preparedContent(option)
+                } else {
+                    null
+                }
+                if (option != null) {
+                    trace.event(
+                        subsystem = DiagnosticSubsystem.READER,
+                        name = DiagnosticEventName.READER_PAGES_READY,
+                        stage = DiagnosticStage.READER,
+                        outcome = if (prepared is ProviderCallResult.Success) {
+                            DiagnosticOutcome.READY
+                        } else {
+                            DiagnosticOutcome.TYPED_FAILURE
+                        },
+                        attributes = buildMap {
+                            put(DiagnosticAttribute.PROVIDER_ID, DiagnosticAttributeValue.Text(option.providerId.value))
+                            if (prepared is ProviderCallResult.Failure) {
+                                put(
+                                    DiagnosticAttribute.PROVIDER_ERROR_CODE,
+                                    DiagnosticAttributeValue.Text(prepared.error.code.name),
+                                )
+                                put(
+                                    DiagnosticAttribute.ERROR_CATEGORY,
+                                    DiagnosticAttributeValue.Code(prepared.error.code.toDiagnosticCategory()),
+                                )
+                            }
+                            (prepared as? ProviderCallResult.Success)?.value?.let { delivery ->
+                                (delivery as? PreparedChapterContent.HttpPages)?.pages?.size?.let { count ->
+                                    put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(count.toLong()))
+                                }
+                            }
+                        },
+                    )
+                }
+                val explicitResult = when (prepared) {
+                    is ProviderCallResult.Success -> CanonicalReaderPreparation.Ready(
+                        canonicalChapterId = canonicalChapterId,
+                        target = prepared.value,
+                        usedFallback = false,
+                    )
+                    else -> CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+                }
+                return complete(trace, started, explicitResult)
+            }
 
             if (selectedOption == null) {
                 val artifact = canonicalDownloadRepository.get(canonicalChapterId)

@@ -1,0 +1,42 @@
+-- User-selected MangaAll source per canonical work and requested language.
+-- Independent of preferred Provider binding and of canonical chapter/progress.
+CREATE TABLE tsuzuki_mangaall_source_selections(
+    canonical_title_id TEXT NOT NULL,
+    language TEXT NOT NULL,
+    external_work_id TEXT NOT NULL,
+    selected_at INTEGER NOT NULL,
+    PRIMARY KEY(canonical_title_id, language),
+    FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
+);
+
+getMangaAllSourceSelection:
+SELECT *
+FROM tsuzuki_mangaall_source_selections
+WHERE canonical_title_id = :canonicalTitleId AND language = :language
+LIMIT 1;
+
+getLatestMangaAllSourceSelection:
+SELECT *
+FROM tsuzuki_mangaall_source_selections
+WHERE canonical_title_id = :canonicalTitleId
+ORDER BY selected_at DESC, language ASC
+LIMIT 1;
+
+selectMangaAllSource:
+INSERT INTO tsuzuki_mangaall_source_selections(
+    canonical_title_id, language, external_work_id, selected_at
+)
+SELECT
+    :canonicalTitleId, :language, :externalWorkId, :selectedAt
+WHERE EXISTS (
+    SELECT 1
+    FROM tsuzuki_provider_work_sources
+    WHERE canonical_title_id = :canonicalTitleId
+      AND provider_id = 'app.tsuzuki.mangaall'
+      AND facet_id = :language
+      AND external_work_id = :externalWorkId
+)
+ON CONFLICT(canonical_title_id, language) DO UPDATE SET
+    external_work_id = excluded.external_work_id,
+    selected_at = excluded.selected_at
+WHERE excluded.selected_at >= tsuzuki_mangaall_source_selections.selected_at;

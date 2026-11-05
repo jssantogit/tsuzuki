@@ -25,6 +25,8 @@ data class ProviderChapterReadingOption(
     val facetId: String?,
     val externalWorkId: String,
     val providerChapterId: String,
+    /** Attribution from observed chapter evidence, not work-search candidates. */
+    val scanlationGroup: String? = null,
 ) {
     init {
         require(canonicalChapterId.isNotBlank()) { "Canonical chapter ID must not be blank" }
@@ -38,6 +40,21 @@ data class ProviderChapterReadingOption(
         facetId = facetId,
         externalWorkId = externalWorkId,
     )
+
+    /** Name of the MangaAll content source, not a second installed Provider. */
+    val contentSourceId: String?
+        get() = MangaAllReadingIdentity.sourceId(bindingRef())
+
+    /** Stable Reader UI selection identity; chapter credits do not define identity. */
+    val readerSourceKey: String
+        get() = listOf(
+            canonicalChapterId,
+            providerId.value,
+            facetId.orEmpty(),
+            externalWorkId,
+            bindingId,
+            providerChapterId,
+        ).joinToString("\u0000")
 }
 
 /**
@@ -171,6 +188,14 @@ class ResolveProviderChapterReading(
             .mapNotNull { persisted ->
                 val providerChapterId = persisted.evidence.externalChapterKey ?: return@mapNotNull null
                 val (bindingId, ref) = sources[persisted.evidence.producerId] ?: return@mapNotNull null
+                if (!MangaAllReadingIdentity.accepts(
+                        ref,
+                        providerChapterId,
+                        persisted.evidence.providerMetadata?.language,
+                    )
+                ) {
+                    return@mapNotNull null
+                }
                 ProviderChapterReadingOption(
                     canonicalChapterId = canonicalChapterId,
                     bindingId = bindingId,
@@ -178,6 +203,8 @@ class ResolveProviderChapterReading(
                     facetId = ref.facetId,
                     externalWorkId = ref.externalWorkId,
                     providerChapterId = providerChapterId,
+                    scanlationGroup = persisted.evidence.providerMetadata?.scanlationGroup
+                        ?.trim()?.takeIf(String::isNotBlank),
                 )
             }
             .distinct()
@@ -441,7 +468,12 @@ class ResolveProviderChapterReading(
             evidence.producerKind != ProducerKind.PROVIDER ||
             evidence.authority != ChapterEvidenceAuthority.PROVIDER_PROVISIONAL ||
             evidence.producerId != option.bindingRef().evidenceProducerId() ||
-            evidence.externalChapterKey != option.providerChapterId
+            evidence.externalChapterKey != option.providerChapterId ||
+            !MangaAllReadingIdentity.accepts(
+                option.bindingRef(),
+                option.providerChapterId,
+                evidence.providerMetadata?.language,
+            )
         ) {
             return null
         }
@@ -461,8 +493,12 @@ class ResolveProviderChapterReading(
     suspend fun delivery(
         option: ProviderChapterReadingOption,
     ): ProviderCallResult<ProviderReadingDelivery> {
+        // Group credit is display metadata, not chapter identity. A corrected
+        // scanlation-group name must not invalidate the exact selected source.
         val current = options(option.canonicalChapterId)
-            .firstOrNull { it == option }
+            .firstOrNull {
+                it.copy(scanlationGroup = null) == option.copy(scanlationGroup = null)
+            }
             ?: return unavailable()
 
         val result = gateway.pages(

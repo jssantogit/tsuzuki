@@ -17,6 +17,7 @@ import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.UpdateStrategyColumnAdapter
 import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelection
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
@@ -211,6 +212,53 @@ class ProviderReadingBindingRepositoryImplTest {
         portfolio.get(foreign.ref) shouldBe null
         portfolio.getByTitle("title") shouldBe emptyList()
         repository.getByTitle("other-title") shouldBe listOf(foreign)
+    }
+
+    @Test
+    fun `MangaAll selections require source association and never rewrite preferred binding`() = runBlocking<Unit> {
+        val portfolio = ProviderWorkSourceAssociationRepositoryImpl(database)
+        val selections = MangaAllSourceSelectionRepositoryImpl(database)
+        val preferred = binding()
+        repository.insertIfAbsent(preferred) shouldBe true
+
+        val en = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "en", "mangafire:one")
+        val pt = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "pt-br", "mangadex:uuid")
+        val english = MangaAllSourceSelection("title", en, 100)
+        val portuguese = MangaAllSourceSelection("title", pt, 110)
+        selections.select(english) shouldBe false
+        selections.get("title", "en") shouldBe null
+
+        portfolio.observe(
+            ProviderWorkSourceAssociation(
+                canonicalTitleId = "title",
+                ref = en,
+                workVerification = ProviderWorkVerification.AUTHOR_CORROBORATED,
+                editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+                observedAt = 90,
+            ),
+        ) shouldBe true
+        portfolio.observe(
+            ProviderWorkSourceAssociation(
+                canonicalTitleId = "title",
+                ref = pt,
+                workVerification = ProviderWorkVerification.MISSING_AUTHOR_EVIDENCE,
+                editionQualification = ProviderSourceEditionQualification.UNRESOLVED,
+                observedAt = 91,
+            ),
+        ) shouldBe true
+
+        selections.select(english) shouldBe true
+        selections.select(portuguese) shouldBe true
+        selections.get("title", "en") shouldBe english
+        selections.get("title", "pt-br") shouldBe portuguese
+        selections.getLatest("title") shouldBe portuguese
+        repository.getByTitle("title") shouldBe listOf(preferred)
+
+        val stale = english.copy(ref = en.copy(externalWorkId = "mangafire:unobserved"), selectedAt = 120)
+        selections.select(stale) shouldBe false
+        selections.get("title", "en") shouldBe english
+        selections.select(english.copy(selectedAt = 50)) shouldBe true
+        selections.get("title", "en") shouldBe english
     }
 
     private fun workSource(hid: String) = ProviderWorkSourceAssociation(

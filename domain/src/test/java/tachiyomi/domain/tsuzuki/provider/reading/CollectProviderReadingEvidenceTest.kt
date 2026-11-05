@@ -2307,6 +2307,108 @@ class CollectProviderReadingEvidenceTest {
         } shouldBe 1
     }
 
+    @Test
+    fun `MangaAll keeps internal MangaFire sources separate from metadata-only candidates`() = runBlocking<Unit> {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val id = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), id, externalId = "verified"),
+                externalIds = mapOf(id to "verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val associations = MemoryWorkSourceAssociationRepository()
+        val bindings = MemoryBindingRepository()
+        val readWorkIds = mutableListOf<String>()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(provider = mangaAll),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    request.coverageEvidenceVersion shouldBe 1
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    externalWorkId = "mangafire:fire-one",
+                                    title = "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Arakawa Hiromu"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                    coverageMinMilli = 1_000,
+                                    coverageMaxMilli = 1_000,
+                                    coverageHasMore = false,
+                                ),
+                                ProviderWorkCandidate(
+                                    externalWorkId = "mangafire:fire-two",
+                                    title = "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Arakawa Hiromu"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                    coverageMinMilli = 1_000,
+                                    coverageMaxMilli = 1_000,
+                                    coverageHasMore = false,
+                                ),
+                                ProviderWorkCandidate(
+                                    externalWorkId = "mangadex:verified-uuid",
+                                    title = "Dandadan",
+                                    language = null,
+                                    authors = listOf("Arakawa Hiromu"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                    coverageMinMilli = 1_000,
+                                    coverageMaxMilli = 1_000,
+                                    coverageHasMore = false,
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    readWorkIds += request.binding.externalWorkId
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderChapterObservation(
+                                    providerChapterId = "${request.binding.externalWorkId}:chapter-one",
+                                    rawLabel = "Chapter 1",
+                                    rawNumber = 1.0,
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = associations,
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+        result.bindingCount shouldBe 0
+        result.snapshots shouldBe emptyList()
+        result.partialEvidence.map { it.producerId }.distinct().size shouldBe 2
+        readWorkIds.toSet() shouldBe setOf("mangafire:fire-one", "mangafire:fire-two")
+        associations.getByTitle(canonicalTitle.id).map { it.ref.externalWorkId }.toSet() shouldBe
+            setOf("mangafire:fire-one", "mangafire:fire-two")
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+    }
+
     private class CapturingProviderDiagnostics(
         private val captureActive: Boolean = false,
     ) : StructuredDiagnosticRecorder {
@@ -2320,12 +2422,12 @@ class CollectProviderReadingEvidenceTest {
         }
     }
 
-    private fun registry() = DefaultProviderRegistry(
+    private fun registry(provider: ProviderId = providerId) = DefaultProviderRegistry(
         registrations = {
             listOf(
                 ProviderRegistration(
                     descriptor = ProviderDescriptor(
-                        id = providerId,
+                        id = provider,
                         name = "MangaFire",
                         version = ProviderVersion("0.1.1", 2),
                         origin = ProviderOrigin.Repository("app.tsuzuki.providers"),
@@ -2340,7 +2442,7 @@ class CollectProviderReadingEvidenceTest {
                         contentLanguages = setOf("en"),
                     ),
                     lifecycleStatus = ProviderLifecycleStatus.ENABLED,
-                    facets = listOf(ProviderFacetRef(providerId, "en")),
+                    facets = listOf(ProviderFacetRef(provider, "en")),
                 ),
             )
         },
@@ -2353,12 +2455,13 @@ class CollectProviderReadingEvidenceTest {
         chaptersHandler: suspend (
             ProviderReadingChaptersRequest,
         ) -> ProviderCallResult<ProviderPage<ProviderChapterObservation>>,
+        expectedProviderId: ProviderId = providerId,
     ) = object : ProviderReadingGateway {
         override suspend fun lookup(
             providerId: ProviderId,
             request: ProviderReadingLookupRequest,
         ): ProviderCallResult<ProviderPage<ProviderWorkCandidate>> {
-            providerId shouldBe this@CollectProviderReadingEvidenceTest.providerId
+            providerId shouldBe expectedProviderId
             return lookupHandler(request)
         }
 
@@ -2366,7 +2469,7 @@ class CollectProviderReadingEvidenceTest {
             providerId: ProviderId,
             request: ProviderReadingChaptersRequest,
         ): ProviderCallResult<ProviderPage<ProviderChapterObservation>> {
-            providerId shouldBe this@CollectProviderReadingEvidenceTest.providerId
+            providerId shouldBe expectedProviderId
             return chaptersHandler(request)
         }
 

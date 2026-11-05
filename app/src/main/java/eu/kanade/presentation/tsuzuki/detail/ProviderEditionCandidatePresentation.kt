@@ -40,8 +40,29 @@ internal fun editionCandidateMetadata(candidate: ProviderEditionCandidate): List
         else -> "Autores: ${authors.take(2).joinToString(", ")} e mais ${authors.size - 2}"
     }
 
-    return listOf(
+    val sourceLabel = when (candidate.contentSourceId) {
+        "mangadex" -> "Fonte: MangaDex"
+        "mangadot" -> "Fonte: MangaDot"
+        "mangafire" -> "Fonte: MangaFire"
+        else -> null
+    }
+    // The lookup facet is what the user REQUESTED, not proof that a manga
+    // actually has translated chapters. Show it independently from the
+    // source-attested language so two MangaAll candidates remain distinguishable.
+    val requestedLanguage = if (sourceLabel != null) {
+        candidate.ref.facetId?.trim()?.takeIf(String::isNotBlank)?.let { tag ->
+            Locale.forLanguageTag(tag.replace('_', '-'))
+                .getDisplayName(Locale.forLanguageTag("pt-BR"))
+                .replaceFirstChar(Char::uppercaseChar)
+        } ?: "não informado"
+    } else {
+        null
+    }
+
+    return listOfNotNull(
+        sourceLabel,
         "Capítulos: $chapters",
+        requestedLanguage?.let { "Idioma solicitado: $it" },
         "Idioma: $language",
         authorText,
     )

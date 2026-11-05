@@ -1625,4 +1625,11 @@
     <string name="tsuzuki_inventory_numbered_release_example">Observed %1$s · language %2$s · %3$d release records</string>
     <string name="tsuzuki_inventory_empty_release_feed">The API returned no releases for this linked work. No chapter numbers were observed.</string>
     <string name="tsuzuki_inventory_no_numbered_release_candidates">Releases were observed, but none had an unambiguous individual chapter number.</string>
+    <string name="tsuzuki_mangaall_source_prefer">Prefer this source and language</string>
+    <string name="tsuzuki_mangaall_source_selected">Source and language preference saved</string>
+    <string name="tsuzuki_mangaall_source_not_associated">Link this work to the source before choosing it</string>
+    <string name="tsuzuki_mangaall_source_blocked">The source identity has not been verified</string>
+    <string name="tsuzuki_mangaall_source_unsupported">This source and language combination is not supported</string>
+    <string name="tsuzuki_mangaall_source_unavailable">Could not save the source preference</string>
+    <string name="tsuzuki_reader_scanlation_group">Scanlation group: %1$s</string>
 </resources>
