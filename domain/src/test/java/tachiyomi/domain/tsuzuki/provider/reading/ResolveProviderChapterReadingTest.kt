@@ -1285,10 +1285,11 @@ class ResolveProviderChapterReadingTest {
             target: ProviderReadingBinding,
             chapterId: String,
             language: String?,
+            group: String? = null,
         ): PersistedChapterEvidence = evidence(target, chapterId, chapter.id).let { persisted ->
             persisted.copy(
                 evidence = persisted.evidence.copy(
-                    providerMetadata = ProviderEvidenceMetadata(language = language),
+                    providerMetadata = ProviderEvidenceMetadata(language = language, scanlationGroup = group),
                 ),
             )
         }
@@ -1297,7 +1298,7 @@ class ResolveProviderChapterReadingTest {
         val reader = resolver(
             bindings = listOf(fire),
             evidence = listOf(
-                observed(fire, "mangafire:101", "en"),
+                observed(fire, "mangafire:101", "en", "  Verified Scans  "),
                 observed(dex, "mangadex:201", "en"),
                 observed(dex, "mangafire:202", "en"),
                 observed(fire, "mangafire:103", "pt-br"),
@@ -1317,6 +1318,7 @@ class ResolveProviderChapterReadingTest {
             "mangafire:729pj" to "mangafire:101",
         )
         options.map { it.contentSourceId } shouldBe listOf("mangafire")
+        options.map { it.scanlationGroup } shouldBe listOf("Verified Scans")
         MangaAllReadingIdentity.sourceId(dex.ref) shouldBe "mangadex"
         reader.uniqueUserConfirmedOption(chapter.id, options) shouldBe null
         val unsafe = ProviderChapterReadingOption(
