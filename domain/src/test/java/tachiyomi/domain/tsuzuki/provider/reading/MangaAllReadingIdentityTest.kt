@@ -94,3 +94,5 @@ class MangaAllReadingIdentityTest {
         MangaAllReadingIdentity.accepts(standalone, "1234", "en") shouldBe true
     }
 }
+
+// CI mirror: MangaDex, MangaDot and MangaFire Reader entrypoints in one package.
