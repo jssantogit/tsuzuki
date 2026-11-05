@@ -119,6 +119,19 @@ class ProviderEditionCandidateMetadataTest {
     }
 
     @Test
+    fun `edition picker rejects unrelated fuzzy matches but keeps close editions`() {
+        relevantEditionCandidateTitle("Vagabond", "Patati patata") shouldBe false
+        relevantEditionCandidateTitle("Vagabond", "Vagabond") shouldBe true
+        relevantEditionCandidateTitle("Vagabond", "Vagabond (Hong Kong Colored Version)") shouldBe true
+        relevantEditionCandidateTitle("One Punch Man", "One Piece") shouldBe false
+        relevantEditionCandidateTitle("One Punch Man", "One-Punch Man") shouldBe true
+        relevantEditionCandidateTitle("Chainsaw Man", "Chainsaw") shouldBe false
+        relevantEditionCandidateTitle("Kimetsu no Yaiba", "Kimetsu no Yaiba: Gaiden") shouldBe true
+        relevantEditionCandidateTitle("Bleach", "Bleach: Thousand-Year Blood War") shouldBe true
+        relevantEditionCandidateTitle("", "Vagabond") shouldBe false
+    }
+
+    @Test
     fun `changing counts does not invalidate exact confirmed source identity`() {
         val original = ProviderEditionCandidate(
             ref = ref,
