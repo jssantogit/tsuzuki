@@ -30,14 +30,22 @@ object ProviderWorkSourcePortfolio {
         candidates: List<ProviderWorkCandidate>,
     ): List<ProviderWorkCandidate> = when (providerId.value) {
         MANGAFIRE_PROVIDER_ID -> candidates
-        MANGAALL_PROVIDER_ID -> if (facetId == "en") {
-            candidates.filter { candidate ->
-                val hid = candidate.externalWorkId.removePrefix(MANGAALL_MANGAFIRE_PREFIX)
-                candidate.externalWorkId.startsWith(MANGAALL_MANGAFIRE_PREFIX) &&
-                    MANGAFIRE_HID.matches(hid)
+        MANGAALL_PROVIDER_ID -> candidates.filter { candidate ->
+            when {
+                facetId == "en" && candidate.externalWorkId.startsWith(MANGAALL_MANGAFIRE_PREFIX) ->
+                    MANGAFIRE_HID.matches(candidate.externalWorkId.removePrefix(MANGAALL_MANGAFIRE_PREFIX))
+                facetId in setOf("en", "pt-br") &&
+                    candidate.externalWorkId.startsWith(MANGAALL_MANGADEX_PREFIX) -> {
+                    // Exact detail + expanded authors + observed numeric chapters
+                    // from the requested facet; title-only matches never qualify.
+                    MANGADEX_HID.matches(candidate.externalWorkId.removePrefix(MANGAALL_MANGADEX_PREFIX)) &&
+                        candidate.detailOutcome in VERIFIED_SOURCE_DETAILS &&
+                        candidate.authors.isNotEmpty() &&
+                        candidate.coverageOutcome == ProviderCoverageOutcome.OBSERVED &&
+                        candidate.coverageObservedCount?.let { it > 0 } == true
+                }
+                else -> false
             }
-        } else {
-            emptyList()
         }
         else -> emptyList()
     }
@@ -177,6 +185,8 @@ object ProviderWorkSourcePortfolio {
     private const val MANGAFIRE_PROVIDER_ID = "app.tsuzuki.mangafire"
     private const val MANGAALL_PROVIDER_ID = "app.tsuzuki.mangaall"
     private const val MANGAALL_MANGAFIRE_PREFIX = "mangafire:"
+    private const val MANGAALL_MANGADEX_PREFIX = "mangadex:"
+    private val MANGADEX_HID = Regex("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
     private val MANGAFIRE_HID = Regex("[a-zA-Z0-9_-]{1,128}")
     private val NON_SLUG_CHARACTERS = Regex("[^a-z0-9]+")
     private val EDITION_SLUG_MARKERS = listOf(
