@@ -25,6 +25,8 @@ data class ProviderChapterReadingOption(
     val facetId: String?,
     val externalWorkId: String,
     val providerChapterId: String,
+    /** Attribution from observed chapter evidence, not work-search candidates. */
+    val scanlationGroup: String? = null,
 ) {
     init {
         require(canonicalChapterId.isNotBlank()) { "Canonical chapter ID must not be blank" }
@@ -190,6 +192,8 @@ class ResolveProviderChapterReading(
                     facetId = ref.facetId,
                     externalWorkId = ref.externalWorkId,
                     providerChapterId = providerChapterId,
+                    scanlationGroup = persisted.evidence.providerMetadata?.scanlationGroup
+                        ?.trim()?.takeIf(String::isNotBlank),
                 )
             }
             .distinct()
