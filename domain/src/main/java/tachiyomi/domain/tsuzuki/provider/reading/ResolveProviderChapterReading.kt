@@ -482,8 +482,12 @@ class ResolveProviderChapterReading(
     suspend fun delivery(
         option: ProviderChapterReadingOption,
     ): ProviderCallResult<ProviderReadingDelivery> {
+        // Group credit is display metadata, not chapter identity. A corrected
+        // scanlation-group name must not invalidate the exact selected source.
         val current = options(option.canonicalChapterId)
-            .firstOrNull { it == option }
+            .firstOrNull {
+                it.copy(scanlationGroup = null) == option.copy(scanlationGroup = null)
+            }
             ?: return unavailable()
 
         val result = gateway.pages(
