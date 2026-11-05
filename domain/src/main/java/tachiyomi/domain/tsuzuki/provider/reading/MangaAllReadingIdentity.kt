@@ -18,12 +18,11 @@ object MangaAllReadingIdentity {
         "mangafire" to setOf("en"),
     )
 
-    // The MangaAll package advertises reading.pages globally, but as of v0.1.0
-    // MangaFire and MangaDot now route source-scoped page metadata. MangaDex
-    // remains blocked until attribution/removal and real image delivery gates.
-    // A ready source still requires a verified chapter and attested language;
-    // a package-wide pages capability alone never establishes readability.
-    private val readerReadySources = setOf("mangafire", "mangadot")
+    // Development-only MangaAll routes pages from all three internal sources.
+    // Production publication still requires group-removal enforcement, credits
+    // and physical verification of MangaDex@Home image delivery.
+    // A package-wide pages capability alone never establishes readability.
+    private val readerReadySources = setOf("mangafire", "mangadot", "mangadex")
 
     /** Content source for UI/diagnostics, distinct from the one Provider ID. */
     fun sourceId(ref: ProviderBindingRef): String? {
@@ -67,6 +66,12 @@ object MangaAllReadingIdentity {
             !Regex("^(uploads|chapters):[1-9][0-9]{0,15}$").matches(chapterLocalId)
         ) {
             return false
+        }
+        // MangaDex chapter and work identities are canonical UUIDs. Keep
+        // malformed or cross-source IDs away from page delivery.
+        if (workSource == "mangadex") {
+            val uuid = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+            if (!uuid.matches(workLocalId) || !uuid.matches(chapterLocalId)) return false
         }
         return reportedLanguage?.lowercase() == language
     }
