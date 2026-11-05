@@ -59,11 +59,15 @@ internal fun editionCandidateMetadata(candidate: ProviderEditionCandidate): List
         null
     }
 
+    // MangaAll results often have no source-attested work metadata. Do not
+    // fill candidate cards with repeated "não informado" rows: absent data
+    // remains unknown rather than being rendered as empty promises.
+    val hasContentSource = sourceLabel != null
     return listOfNotNull(
         sourceLabel,
-        "Capítulos: $chapters",
+        "Capítulos: $chapters".takeUnless { hasContentSource && reported == null && observed == null },
         requestedLanguage?.let { "Idioma solicitado: $it" },
-        "Idioma: $language",
-        authorText,
+        "Idioma: $language".takeUnless { hasContentSource && candidate.language.isNullOrBlank() },
+        authorText.takeUnless { hasContentSource && authors.isEmpty() },
     )
 }
