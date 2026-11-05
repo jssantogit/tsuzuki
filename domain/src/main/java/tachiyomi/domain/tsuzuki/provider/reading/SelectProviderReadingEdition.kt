@@ -10,7 +10,30 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
+import java.text.Normalizer
 import java.util.UUID
+
+/**
+ * An upstream search hit is only a discovery hint. The manual edition picker
+ * must not invite binding a work that does not even match the requested title.
+ * Longer candidate titles can identify variants, which remain explicit choices.
+ */
+internal fun relevantEditionCandidateTitle(requested: String, candidate: String): Boolean {
+    fun terms(value: String): List<String> = Normalizer
+        .normalize(value, Normalizer.Form.NFKD)
+        .replace(Regex("\\p{M}+"), "")
+        .lowercase(java.util.Locale.ROOT)
+        .split(Regex("[^\\p{L}\\p{N}]+"))
+        .filter(String::isNotBlank)
+
+    val expected = terms(requested)
+    val actual = terms(candidate)
+    if (expected.isEmpty() || actual.isEmpty()) return false
+    val actualSet = actual.toSet()
+    // Require the complete requested title rather than a few coinciding
+    // words; prevent unrelated ranked search results from entering the picker.
+    return expected.all(actualSet::contains)
+}
 
 /** A source-provided work, not a canonical chapter or editorial certification. */
 data class ProviderEditionCandidate(
@@ -185,12 +208,15 @@ class SelectProviderReadingEdition(
                                         response.value.items
                                             .take(minOf(perQueryLimit, MAX_CANDIDATES_PER_SOURCE - seen))
                                             .forEach { item ->
-                                                seen++
                                                 if (
-                                                    facetId == null ||
-                                                    item.language == null ||
-                                                    item.language.equals(facetId, ignoreCase = true)
+                                                    relevantEditionCandidateTitle(searchTitle, item.title) &&
+                                                    (
+                                                        facetId == null ||
+                                                            item.language == null ||
+                                                            item.language.equals(facetId, ignoreCase = true)
+                                                        )
                                                 ) {
+                                                    seen++
                                                     candidates += editionCandidateFromLookup(
                                                         ref = ProviderBindingRef(
                                                             providerId = registration.descriptor.id,
