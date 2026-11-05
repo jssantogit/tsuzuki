@@ -2321,6 +2321,7 @@ class CollectProviderReadingEvidenceTest {
             ),
             refreshedAt = 42L,
         )
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
         val associations = MemoryWorkSourceAssociationRepository()
         val bindings = MemoryBindingRepository()
         val readWorkIds = mutableListOf<String>()
@@ -2397,6 +2398,7 @@ class CollectProviderReadingEvidenceTest {
             clock = { 42L },
             canonicalMetadataSnapshotRepository = metadata,
             workSourceAssociationRepository = associations,
+            diagnostics = recorder,
         )
 
         val result = collector.execute(canonicalTitle.id)
@@ -2407,6 +2409,12 @@ class CollectProviderReadingEvidenceTest {
         associations.getByTitle(canonicalTitle.id).map { it.ref.externalWorkId }.toSet() shouldBe
             setOf("mangafire:fire-one", "mangafire:fire-two")
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        val observedCandidates = recorder.events.filter { it.name == DiagnosticEventName.PROVIDER_READING_CANDIDATE }
+        observedCandidates.mapNotNull { it.attributes["provider_work_id"] }.toSet() shouldBe setOf(
+            DiagnosticAttributeValue.Text("mangafire:fire-one"),
+            DiagnosticAttributeValue.Text("mangafire:fire-two"),
+            DiagnosticAttributeValue.Text("mangadex:verified-uuid"),
+        )
     }
 
     private class CapturingProviderDiagnostics(
