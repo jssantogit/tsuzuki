@@ -31,6 +31,18 @@ class ReaderEditionDefaultSkinContractTest {
     }
 
     @Test
+    fun `reader reading source options show attested scanlation groups without inventing them`() {
+        val readerSources = source("presentation/reader/ReaderSourceCard.kt")
+            .substringAfter("items(state.options, key = { it.option.key })")
+            .substringBefore("trailingContent = {")
+        readerSources shouldContain "option.scanlationGroup?.trim()?.takeIf(String::isNotBlank)"
+        readerSources shouldContain "MR.strings.tsuzuki_reader_scanlation_group"
+        readerSources shouldContain "option.language?.takeIf(String::isNotBlank)"
+        // This is the Reader's chapter-source list, NOT the work/edition candidate picker.
+        readerSources shouldNotContain "ProviderWorkCandidate"
+    }
+
+    @Test
     fun `manual edition picker uses existing skin controls and distinct cards`() {
         val picker = source("presentation/tsuzuki/detail/CanonicalTitleDetailScreen.kt")
             .substringAfter("DetailsSheet.EDITION -> Column(")
