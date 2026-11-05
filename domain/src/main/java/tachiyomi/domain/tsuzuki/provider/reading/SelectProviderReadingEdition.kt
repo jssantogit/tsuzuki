@@ -188,6 +188,7 @@ class SelectProviderReadingEdition(
                                         registration.descriptor.id,
                                         ProviderReadingLookupRequest(
                                             titles = listOf(searchTitle),
+                                            requestedLanguage = facetId,
                                             // The explicit picker may inspect a bounded preview,
                                             // never infer a canonical or complete inventory.
                                             coverageEvidenceVersion = if (selectedRef == null) 1 else null,
