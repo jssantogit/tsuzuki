@@ -35,9 +35,23 @@ class MangaAllReadingIdentityTest {
     fun `Reader must respect source-supported and actually reported chapter language`() {
         val dexPt = ProviderBindingRef(mangaAllId, "pt-br", "mangadex:uuid-1")
         val dotPt = ProviderBindingRef(mangaAllId, "pt-br", "mangadot:317")
-        // MangaDex remains evidence-only; MangaDot pages require attested language
-        // and a valid source-scoped chapter with its specific upstream kind.
+        // All three internal sources can return pages in development, but only
+        // structurally valid IDs and attested chapter languages are readable.
         MangaAllReadingIdentity.accepts(dexPt, "mangadex:chapter-1", "pt-br") shouldBe false
+        val dexWorkId = "11111111-2222-4333-8444-555555555555"
+        val dexChapterId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+        val verifiedDex = ProviderBindingRef(mangaAllId, "pt-br", "mangadex:$dexWorkId")
+        MangaAllReadingIdentity.accepts(verifiedDex, "mangadex:$dexChapterId", "pt-br") shouldBe true
+        MangaAllReadingIdentity.accepts(verifiedDex, "mangadex:$dexChapterId", "en") shouldBe false
+        MangaAllReadingIdentity.accepts(verifiedDex, "mangadex:$dexChapterId", null) shouldBe false
+        MangaAllReadingIdentity.accepts(verifiedDex, "mangadot:$dexChapterId", "pt-br") shouldBe false
+        MangaAllReadingIdentity.accepts(verifiedDex, "mangadex:invalid", "pt-br") shouldBe false
+        MangaAllReadingIdentity.accepts(
+            ProviderBindingRef(mangaAllId, "en", "mangadex:$dexWorkId"),
+            "mangadex:$dexChapterId",
+            "en",
+        ) shouldBe true
+
         MangaAllReadingIdentity.accepts(dotPt, "mangadot:uploads:123", "pt-br") shouldBe true
         MangaAllReadingIdentity.accepts(dotPt, "mangadot:chapters:123", "pt-br") shouldBe true
         MangaAllReadingIdentity.accepts(
