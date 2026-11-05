@@ -121,6 +121,7 @@ class ProviderEditionCandidateMetadataTest {
     @Test
     fun `edition picker rejects unrelated fuzzy matches but keeps close editions`() {
         relevantEditionCandidateTitle("Vagabond", "Patati patata") shouldBe false
+        relevantEditionCandidateTitle("Vagabond", "PATATI PATATA") shouldBe false
         relevantEditionCandidateTitle("Vagabond", "Vagabond") shouldBe true
         relevantEditionCandidateTitle("Vagabond", "Vagabond (Hong Kong Colored Version)") shouldBe true
         relevantEditionCandidateTitle("One Punch Man", "One Piece") shouldBe false
