@@ -445,7 +445,7 @@ class CollectProviderReadingEvidence private constructor(
         for ((queryIndex, title) in titles.withIndex()) {
             val queryStarted = System.nanoTime()
             traceLookupAttempt(canonicalTitleId, target, queryIndex, title, DiagnosticOutcome.STARTED)
-            val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
+            val candidates = when (val result = collectLookup(target.registration.descriptor.id, title, target.facetId)) {
                 is ProviderCallResult.Failure -> {
                     traceLookupAttempt(
                         canonicalTitleId,
@@ -910,6 +910,7 @@ class CollectProviderReadingEvidence private constructor(
     private suspend fun collectLookup(
         providerId: ProviderId,
         title: String,
+        requestedLanguage: String?,
     ): ProviderCallResult<List<ProviderWorkCandidate>> {
         val items = mutableListOf<ProviderWorkCandidate>()
         val seenCursors = mutableSetOf<String>()
@@ -923,6 +924,7 @@ class CollectProviderReadingEvidence private constructor(
                     request = ProviderReadingLookupRequest(
                         titles = listOf(title),
                         cursor = cursor,
+                        requestedLanguage = requestedLanguage,
                         coverageEvidenceVersion = if (
                             providerId.value == "app.tsuzuki.mangafire" ||
                             providerId.value == "app.tsuzuki.mangaall"
