@@ -302,6 +302,11 @@ class ReaderActivity : BaseActivity() {
                 // Keep the Reader and current page alive; reconcile only the
                 // newly persisted editions before retrying the current chapter.
                 contentSelectorViewModel.refreshAfterBindings(request)
+                viewModel.refreshProviderSourceOptions(
+                    viewModel.state.value.activeCanonicalChapterId
+                        ?: (viewModel.state.value.dialog as? ReaderViewModel.Dialog.ContentSelector)?.canonicalChapterId
+                        ?: return@collect,
+                )
             }
         }
         val settingsviewModel = remember {
@@ -412,6 +417,9 @@ class ReaderActivity : BaseActivity() {
                     } else {
                         ReaderSourceCard(
                             state = selectorState,
+                            providerOptions = state.providerSourceOptions,
+                            activeProviderSourceKey = state.activeProviderSourceKey,
+                            onSelectProvider = viewModel::selectProviderReadingOption,
                             activeOptionKey = state.activeContentOptionKey,
                             activeContentLabel = state.activeContentLabel,
                             failure = state.recovery,
