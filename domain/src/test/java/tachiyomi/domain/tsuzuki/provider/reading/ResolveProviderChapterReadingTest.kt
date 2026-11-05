@@ -1322,6 +1322,11 @@ class ResolveProviderChapterReadingTest {
         )
         options.map { it.contentSourceId } shouldBe listOf("mangafire")
         options.map { it.scanlationGroup } shouldBe listOf("Verified Scans")
+        val exact = options.single()
+        exact.readerSourceKey shouldBe exact.copy(scanlationGroup = "Corrected Group").readerSourceKey
+        (exact.readerSourceKey == exact.copy(providerChapterId = "mangafire:102").readerSourceKey) shouldBe false
+        (exact.readerSourceKey == exact.copy(facetId = "pt-br").readerSourceKey) shouldBe false
+        (exact.readerSourceKey == exact.copy(externalWorkId = "mangafire:other").readerSourceKey) shouldBe false
         MangaAllReadingIdentity.sourceId(dex.ref) shouldBe "mangadex"
         reader.uniqueUserConfirmedOption(chapter.id, options) shouldBe null
         val unsafe = ProviderChapterReadingOption(
