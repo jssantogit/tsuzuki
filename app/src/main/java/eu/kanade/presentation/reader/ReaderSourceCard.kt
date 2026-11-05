@@ -95,7 +95,7 @@ fun ColumnScope.ReaderSourceCard(
             LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp)) {
                 items(
                     providerOptions,
-                    key = { it.providerId.value + ":" + it.externalWorkId + ":" + it.providerChapterId },
+                    key = { it.readerSourceKey },
                 ) { option ->
                     val sourceName = when (option.contentSourceId) {
                         "mangadex" -> "MangaDex"
@@ -103,7 +103,7 @@ fun ColumnScope.ReaderSourceCard(
                         "mangafire" -> "MangaFire"
                         else -> return@items
                     }
-                    val active = activeProviderSourceKey == option.providerChapterId
+                    val active = activeProviderSourceKey == option.readerSourceKey
                     ListItem(
                         modifier = Modifier.selectable(
                             selected = active,
