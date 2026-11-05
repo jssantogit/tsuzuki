@@ -1049,11 +1049,39 @@ class CollectProviderReadingEvidence private constructor(
         selected: ProviderWorkCandidate?,
         primary: ProviderWorkCandidate?,
     ) {
-        if (!diagnostics.detailedCaptureActive || target.registration.descriptor.id.value != "app.tsuzuki.mangafire") {
+        val providerId = target.registration.descriptor.id.value
+        if (!diagnostics.detailedCaptureActive || providerId !in setOf(
+                "app.tsuzuki.mangafire",
+                "app.tsuzuki.mangaall",
+            )
+        ) {
             return
         }
         runCatching {
-            candidates.take(MAX_DIAGNOSTIC_CANDIDATES).forEachIndexed { index, work ->
+            // MangaAll is one Provider with several content sources. Sampling
+            // only the first 20 hits hides later sources when MangaDex fills
+            // the front of the lookup. Keep a bounded, source-balanced sample
+            // while preserving the upstream candidate index in diagnostics.
+            val sampled = if (providerId == "app.tsuzuki.mangaall") {
+                val perSource = mutableMapOf<String, Int>()
+                candidates.withIndex().filter { (_, work) ->
+                    val source = work.externalWorkId.substringBefore(':')
+                    if (source !in setOf("mangadex", "mangadot", "mangafire")) {
+                        false
+                    } else {
+                        val seen = perSource[source] ?: 0
+                        if (seen >= MAX_DIAGNOSTIC_CANDIDATES_PER_SOURCE) {
+                            false
+                        } else {
+                            perSource[source] = seen + 1
+                            true
+                        }
+                    }
+                }.take(MAX_DIAGNOSTIC_CANDIDATES)
+            } else {
+                candidates.withIndex().take(MAX_DIAGNOSTIC_CANDIDATES)
+            }
+            sampled.forEach { (index, work) ->
                 val facetMatches = target.facetId == null ||
                     work.language == null ||
                     work.language.equals(target.facetId, ignoreCase = true)
@@ -1467,5 +1495,6 @@ class CollectProviderReadingEvidence private constructor(
         const val MAX_LOOKUP_PAGES = 8
         const val MAX_LOOKUP_ITEMS = 2_000
         const val MAX_DIAGNOSTIC_CANDIDATES = 20
+        const val MAX_DIAGNOSTIC_CANDIDATES_PER_SOURCE = 6
     }
 }
