@@ -495,7 +495,7 @@ private fun LoadedDetails(
                                         color = colors.foreground,
                                     )
                                     Text(
-                                        "${candidate.providerName} · ID ${candidate.ref.externalWorkId}",
+                                        candidate.providerName,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = colors.secondary,
                                     )
