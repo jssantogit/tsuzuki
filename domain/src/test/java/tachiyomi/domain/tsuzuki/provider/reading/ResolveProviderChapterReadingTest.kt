@@ -1231,7 +1231,10 @@ class ResolveProviderChapterReadingTest {
                 ),
             ),
         )
-        requests shouldBe 1
+        // Display attribution can change without altering the verified chapter.
+        resolver.delivery(option.copy(scanlationGroup = "Outdated credit")) shouldBe
+            resolver.delivery(option)
+        requests shouldBe 3
     }
 
     @Test
