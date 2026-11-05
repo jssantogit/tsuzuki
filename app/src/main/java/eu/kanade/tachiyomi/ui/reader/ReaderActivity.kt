@@ -301,12 +301,11 @@ class ReaderActivity : BaseActivity() {
             contentBindingLinkViewModel.bindingUpdates.collect { request ->
                 // Keep the Reader and current page alive; reconcile only the
                 // newly persisted editions before retrying the current chapter.
-                contentSelectorViewModel.refreshAfterBindings(request)
-                viewModel.refreshProviderSourceOptions(
-                    viewModel.state.value.activeCanonicalChapterId
-                        ?: (viewModel.state.value.dialog as? ReaderViewModel.Dialog.ContentSelector)?.canonicalChapterId
-                        ?: return@collect,
-                )
+                val refreshed = contentSelectorViewModel.refreshAfterBindings(request)
+                val selector = viewModel.state.value.dialog as? ReaderViewModel.Dialog.ContentSelector
+                if (refreshed.isSuccess && selector?.canonicalTitleId == request.canonicalTitleId) {
+                    viewModel.refreshProviderSourceOptions(selector.canonicalChapterId)
+                }
             }
         }
         val settingsviewModel = remember {
