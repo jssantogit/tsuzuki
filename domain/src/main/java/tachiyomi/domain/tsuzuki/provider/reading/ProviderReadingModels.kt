@@ -270,8 +270,11 @@ data class ProviderReadingLookupRequest(
     val cursor: ProviderCursor? = null,
     /** Optional read-only source coverage preview, only for providers that explicitly support it. */
     val coverageEvidenceVersion: Int? = null,
+    /** Language of the exact source facet to probe; never inferred from the work. */
+    val requestedLanguage: String? = null,
 ) {
     init {
+        require(requestedLanguage == null || (requestedLanguage.isNotBlank() && requestedLanguage.length <= 32))
         require(coverageEvidenceVersion == null || coverageEvidenceVersion == 1)
         require(titles.isNotEmpty()) { "Provider lookup requires at least one title" }
         require(titles.size <= MAX_TITLES) { "Provider lookup has too many titles" }
