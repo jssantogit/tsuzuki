@@ -84,6 +84,7 @@ class ReaderEditionDefaultSkinContractTest {
         picker shouldContain "colors.accent"
         picker shouldContain "DefaultSkinPrimaryButton("
         picker shouldNotContain "MaterialTheme.colorScheme"
+        picker shouldNotContain "ID ${candidate.ref.externalWorkId}"
     }
 
     private fun source(relative: String): String = Files.readString(
