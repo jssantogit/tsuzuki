@@ -1631,4 +1631,5 @@
     <string name="tsuzuki_mangaall_source_blocked">The source identity has not been verified</string>
     <string name="tsuzuki_mangaall_source_unsupported">This source and language combination is not supported</string>
     <string name="tsuzuki_mangaall_source_unavailable">Could not save the source preference</string>
+    <string name="tsuzuki_reader_scanlation_group">Scanlation group: %1$s</string>
 </resources>
