@@ -132,6 +132,7 @@ class ScriptProviderReadingGateway internal constructor(
                     titles = request.titles,
                     cursor = request.cursor?.value,
                     coverageEvidenceVersion = request.coverageEvidenceVersion,
+                    requestedLanguage = request.requestedLanguage,
                 ),
             ),
         ) { value, active ->
@@ -498,6 +499,7 @@ class ScriptProviderReadingGateway internal constructor(
         /** Optional editorial evidence; ignored by Providers lacking this extension. */
         val editorialEvidenceVersion: Int = 1,
         val coverageEvidenceVersion: Int? = null,
+        val requestedLanguage: String? = null,
     )
 
     @Serializable
