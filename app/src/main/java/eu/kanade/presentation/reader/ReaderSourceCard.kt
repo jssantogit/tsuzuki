@@ -134,7 +134,10 @@ fun ColumnScope.ReaderSourceCard(
                                         }
                                         option.scanlationGroup?.trim()?.takeIf(String::isNotBlank)?.let { group ->
                                             Text(
-                                                text = stringResource(MR.strings.tsuzuki_reader_scanlation_group, group),
+                                                text = stringResource(
+                                                    MR.strings.tsuzuki_reader_scanlation_group,
+                                                    group,
+                                                ),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 maxLines = 2,
