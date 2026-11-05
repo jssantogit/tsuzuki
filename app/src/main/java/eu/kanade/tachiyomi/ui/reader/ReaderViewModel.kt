@@ -839,6 +839,7 @@ class ReaderViewModel(
                                 source = nextSource,
                                 activeContentLabel = canonicalContentLabel(nextSource?.name, selectedOption),
                                 activeContentOptionKey = selectedOption?.key,
+                                activeProviderSourceKey = null,
                                 activeCanonicalChapterId = session.canonicalChapterId,
                                 recovery = null,
                                 sessionPresentation = it.sessionPresentation.dismiss(),
@@ -1061,7 +1062,7 @@ class ReaderViewModel(
                                 option.scanlationGroup,
                             ).joinToString(" · "),
                             activeContentOptionKey = null,
-                            activeProviderSourceKey = option.providerChapterId,
+                            activeProviderSourceKey = option.readerSourceKey,
                             recovery = null,
                         )
                     }
@@ -1120,6 +1121,7 @@ class ReaderViewModel(
                                         selection.option.scanlationGroup,
                                     ).joinToString(" · "),
                                     activeContentOptionKey = selection.option.key,
+                                    activeProviderSourceKey = null,
                                 )
                             }
                         }
