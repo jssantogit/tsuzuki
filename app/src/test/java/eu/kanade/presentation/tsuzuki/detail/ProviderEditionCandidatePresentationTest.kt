@@ -63,10 +63,7 @@ class ProviderEditionCandidatePresentationTest {
         )
         editionCandidateMetadata(mangaAllCandidate) shouldBe listOf(
             "Fonte: MangaDex",
-            "Capítulos: não informado",
             "Idioma solicitado: Português (Brasil)",
-            "Idioma: não informado",
-            "Autor: não informado",
         )
         editionCandidateMetadata(
             mangaAllCandidate.copy(
@@ -75,10 +72,8 @@ class ProviderEditionCandidatePresentationTest {
             ),
         ) shouldBe listOf(
             "Fonte: MangaDot",
-            "Capítulos: não informado",
             "Idioma solicitado: Português (Brasil)",
             "Idioma: Português (Brasil)",
-            "Autor: não informado",
         )
         editionCandidateMetadata(
             mangaAllCandidate.copy(
