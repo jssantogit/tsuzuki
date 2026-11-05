@@ -112,6 +112,9 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSubsystem
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticTrace
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticWorkflow
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption
+import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import tachiyomi.domain.tsuzuki.model.SourceMappingAvailability
 import tachiyomi.domain.tsuzuki.reader.interactor.GetAdjacentCanonicalChapter
 import tachiyomi.domain.tsuzuki.reader.interactor.PrepareCanonicalChapterForReader
@@ -156,6 +159,7 @@ class ReaderViewModel(
     private val refreshCanonicalChapters: RefreshCanonicalChapters,
     private val repairZeroPlaceholderChapterSemantics: RepairZeroPlaceholderChapterSemantics,
     private val prepareCanonicalChapterForReader: PrepareCanonicalChapterForReader,
+    private val resolveProviderChapterReading: ResolveProviderChapterReading,
     private val recordCanonicalReaderProgress: RecordCanonicalReaderProgress,
     private val canonicalReadingRepository: CanonicalReadingRepository,
     private val getAdjacentCanonicalChapter: GetAdjacentCanonicalChapter,
@@ -964,12 +968,39 @@ class ReaderViewModel(
                     canonicalTitleId = canonicalTitleId,
                     recovery = recovery,
                     sessionPresentation = it.sessionPresentation.dismiss(),
+                    providerSourceOptions = emptyList(),
                     dialog = Dialog.ContentSelector(
                         canonicalTitleId = canonicalTitleId,
                         canonicalChapterId = canonicalChapterId,
                         closeReaderOnDismiss = closeReaderOnDismiss,
                     ),
                 )
+            }
+        }
+        refreshProviderSourceOptions(canonicalChapterId)
+    }
+
+    /** Only Chapter-specific MangaAll reading options are surfaced here. */
+    fun refreshProviderSourceOptions(canonicalChapterId: String) {
+        viewModelScope.launchIO {
+            val options = try {
+                resolveProviderChapterReading.options(canonicalChapterId)
+                    .filter { it.providerId.value == "app.tsuzuki.mangaall" }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                logcat(LogPriority.ERROR, error) { "Failed to query MangaAll Reader source alternatives" }
+                emptyList()
+            }
+            withUIContext {
+                mutableState.update { state ->
+                    val selector = state.dialog as? Dialog.ContentSelector
+                    if (selector?.canonicalChapterId == canonicalChapterId) {
+                        state.copy(providerSourceOptions = options)
+                    } else {
+                        state
+                    }
+                }
             }
         }
     }
@@ -991,6 +1022,57 @@ class ReaderViewModel(
 
     private var contentSelectionInProgress = false
     private var failedContentSelection: SelectionResult? = null
+
+    /** An explicit Reader source tap never falls back to another language or provider. */
+    fun selectProviderReadingOption(option: ProviderChapterReadingOption) {
+        val selector = mutableState.value.dialog as? Dialog.ContentSelector ?: return
+        if (option.canonicalChapterId != selector.canonicalChapterId ||
+            option.providerId.value != "app.tsuzuki.mangaall" ||
+            option !in mutableState.value.providerSourceOptions || contentSelectionInProgress
+        ) return
+        contentSelectionInProgress = true
+        mutableState.update { it.copy(sourceSelectionInProgress = true, recovery = null) }
+        val hadActiveSession = canonicalSession != null
+        viewModelScope.launchIO {
+            try {
+                val result = resolveProviderChapterReading.preparedContent(option)
+                val ready = result as? ProviderCallResult.Success
+                    ?: error("Selected MangaAll chapter source is unavailable")
+                loadCanonicalTarget(
+                    canonicalChapterId = option.canonicalChapterId,
+                    target = ready.value,
+                    resetPage = false,
+                    recordPreviousHistory = hadActiveSession,
+                )
+                canonicalPreferredLanguage = null
+                savedState.remove<String>("canonical_language")
+                withUIContext {
+                    mutableState.update { state ->
+                        state.copy(
+                            activeContentLabel = listOfNotNull(
+                                "MangaAll",
+                                option.contentSourceId,
+                                option.facetId,
+                                option.scanlationGroup,
+                            ).joinToString(" · "),
+                            activeContentOptionKey = null,
+                            activeProviderSourceKey = option.providerChapterId,
+                            recovery = null,
+                        )
+                    }
+                }
+                failedContentSelection = null
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                logcat(LogPriority.ERROR, error) { "Failed to prepare selected MangaAll chapter source" }
+                mutableState.update { it.copy(recovery = ReaderRecovery.SOURCE_UNAVAILABLE) }
+            } finally {
+                contentSelectionInProgress = false
+                mutableState.update { it.copy(sourceSelectionInProgress = false) }
+            }
+        }
+    }
 
     fun selectCanonicalContent(selection: SelectionResult) {
         val selector = mutableState.value.dialog as? Dialog.ContentSelector ?: return
@@ -2060,6 +2142,8 @@ class ReaderViewModel(
         val canonicalTitleId: String? = null,
         val activeContentLabel: String? = null,
         val activeContentOptionKey: String? = null,
+        val activeProviderSourceKey: String? = null,
+        val providerSourceOptions: List<ProviderChapterReadingOption> = emptyList(),
         val activeCanonicalChapterId: String? = null,
         val canonicalChapters: List<CanonicalChapter> = emptyList(),
         val sessionPresentation: ReaderSessionPresentation = ReaderSessionPresentation(),
