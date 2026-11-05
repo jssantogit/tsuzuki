@@ -253,13 +253,22 @@ class ProviderWorkSourcePortfolioTest {
                     verified.copy(externalWorkId = "mangadex:not-a-uuid"),
                     verified.copy(authors = emptyList()),
                     verified.copy(detailOutcome = ProviderWorkDetailOutcome.DETAIL_FAILED),
-                    verified.copy(coverageOutcome = ProviderCoverageOutcome.FAILED, coverageObservedCount = null,
-                        coverageMinMilli = null, coverageMaxMilli = null, coverageHasMore = null),
+                    verified.copy(
+                        coverageOutcome = ProviderCoverageOutcome.FAILED,
+                        coverageObservedCount = null,
+                        coverageMinMilli = null,
+                        coverageMaxMilli = null,
+                        coverageHasMore = null,
+                    ),
                 ),
             )
             sources shouldBe listOf(verified)
             val assessed = ProviderWorkSourcePortfolio.assess(
-                mangaAll, language, "Chainsaw Man", setOf("Tatsuki Fujimoto"), sources,
+                mangaAll,
+                language,
+                "Chainsaw Man",
+                setOf("Tatsuki Fujimoto"),
+                sources,
             )
             assessed.single().workVerification shouldBe ProviderWorkVerification.AUTHOR_CORROBORATED
             assessed.single().canCollectProvisionalChapters shouldBe true
@@ -268,7 +277,9 @@ class ProviderWorkSourcePortfolioTest {
         }
         ProviderWorkSourcePortfolio.trustedCandidates(mangaAll, "ja", listOf(verified)) shouldBe emptyList()
         ProviderWorkSourcePortfolio.trustedCandidates(
-            mangaAll, "en", listOf(verified.copy(externalWorkId = "mangadot:317")),
+            mangaAll,
+            "en",
+            listOf(verified.copy(externalWorkId = "mangadot:317")),
         ) shouldBe emptyList()
     }
 
