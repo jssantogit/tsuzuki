@@ -107,6 +107,7 @@ fun CanonicalTitleDetailScreen(
     onChooseEdition: () -> Unit = {},
     onEditionSearch: (String) -> Unit = {},
     onEditionConfirm: (ProviderEditionCandidate) -> Unit = {},
+    onEditionInspect: (ProviderEditionCandidate) -> Unit = {},
     onEditionSourceSelect: (ProviderEditionCandidate) -> Unit = {},
     onEditionDismiss: () -> Unit = {},
     onChapterSortMeasured: (Long, Int) -> Unit = { _, _ -> },
@@ -145,7 +146,7 @@ fun CanonicalTitleDetailScreen(
                 state, background, navigateUp, onAtualizar, onAddToLibrary, onRemoveFromLibrary,
                 onReadTitle, onOpenChapter, onBaixarChapter, onOpenProvidersSettings,
                 onImportEpub, onReviewCandidates, inventoryRefresh,
-                editionPicker, onChooseEdition, onEditionSearch, onEditionConfirm, onEditionSourceSelect,
+                editionPicker, onChooseEdition, onEditionSearch, onEditionConfirm, onEditionInspect, onEditionSourceSelect,
                 onEditionDismiss,
                 onChapterSortMeasured,
             )
@@ -172,6 +173,7 @@ private fun LoadedDetails(
     onChooseEdition: () -> Unit,
     onEditionSearch: (String) -> Unit,
     onEditionConfirm: (ProviderEditionCandidate) -> Unit,
+    onEditionInspect: (ProviderEditionCandidate) -> Unit,
     onEditionSourceSelect: (ProviderEditionCandidate) -> Unit,
     onEditionDismiss: () -> Unit,
     onChapterSortMeasured: (Long, Int) -> Unit,
@@ -477,7 +479,10 @@ private fun LoadedDetails(
                                         selected = selected,
                                         enabled = !editionPicker.confirming,
                                         role = Role.RadioButton,
-                                        onClick = { selectedEdition = candidate },
+                                        onClick = {
+                                            selectedEdition = candidate
+                                            onEditionInspect(candidate)
+                                        },
                                     )
                                     .heightIn(min = 56.dp)
                                     .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -507,6 +512,25 @@ private fun LoadedDetails(
                                         )
                                     }
                                     if (selected) {
+                                        if (editionPicker.inspectedRef == candidate.ref) {
+                                            if (editionPicker.inspecting) {
+                                                Text(
+                                                    "Consultando os capítulos desta edição...",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = colors.secondary,
+                                                )
+                                            } else {
+                                                editionPicker.inspection?.let { inspection ->
+                                                    editionChapterInspectionMetadata(inspection).forEach { detail ->
+                                                        Text(
+                                                            detail,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = colors.secondary,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
                                         candidate.url?.let { url ->
                                             Text(
                                                 url,
