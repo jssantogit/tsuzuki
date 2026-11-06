@@ -84,6 +84,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
         var showRepositories by remember { mutableStateOf(false) }
         var showAddRepository by remember { mutableStateOf(false) }
         var repositoryToRemove by remember { mutableStateOf<EnrolledProviderRepository?>(null) }
+        var providerToUninstall by remember { mutableStateOf<ProviderRegistration?>(null) }
 
         suspend fun reloadInstalled() {
             val state = withContext(Dispatchers.IO) {
@@ -292,6 +293,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                                 manager.rollback(providerId)
                             }
                         },
+                        onUninstall = { registration -> providerToUninstall = registration },
                     )
                 } else {
                     DiscoverProvidersList(
@@ -376,6 +378,36 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                         }.onFailure { error ->
                             errorMessage = error.message
                         }
+                    }
+                },
+            )
+        }
+
+        providerToUninstall?.let { registration ->
+            val providerId = registration.descriptor.id.value
+            AlertDialog(
+                onDismissRequest = { providerToUninstall = null },
+                title = { Text(stringResource(MR.strings.tsuzuki_providers_uninstall)) },
+                text = {
+                    Text(
+                        "${registration.descriptor.name}\n\n" +
+                            stringResource(MR.strings.tsuzuki_providers_uninstall_confirm),
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = "uninstall:$providerId" !in operations,
+                        onClick = {
+                            providerToUninstall = null
+                            runProviderOperation("uninstall:$providerId") {
+                                manager.uninstall(providerId)
+                            }
+                        },
+                    ) { Text(stringResource(MR.strings.tsuzuki_providers_uninstall)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { providerToUninstall = null }) {
+                        Text(stringResource(MR.strings.action_cancel))
                     }
                 },
             )
@@ -917,6 +949,7 @@ private fun InstalledProvidersList(
     onOpen: (ProviderRegistration) -> Unit,
     onEnabledChange: (ProviderRegistration, Boolean) -> Unit,
     onRollback: (String) -> Unit,
+    onUninstall: (ProviderRegistration) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         if (registrations.isEmpty()) {
@@ -960,19 +993,23 @@ private fun InstalledProvidersList(
                 },
                 modifier = Modifier.clickable { onOpen(registration) },
             )
-            if (canRollback) {
+            if (descriptor.origin is ProviderOrigin.Repository) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.End,
                 ) {
-                    TextButton(
-                        enabled = "rollback:$providerId" !in operationKeys,
-                        onClick = { onRollback(providerId) },
-                    ) {
-                        Text(stringResource(MR.strings.tsuzuki_providers_rollback))
+                    if (canRollback) {
+                        TextButton(
+                            enabled = "rollback:$providerId" !in operationKeys,
+                            onClick = { onRollback(providerId) },
+                        ) { Text(stringResource(MR.strings.tsuzuki_providers_rollback)) }
                     }
+                    TextButton(
+                        enabled = "uninstall:$providerId" !in operationKeys,
+                        onClick = { onUninstall(registration) },
+                    ) { Text(stringResource(MR.strings.tsuzuki_providers_uninstall)) }
                 }
             }
             HorizontalDivider()
