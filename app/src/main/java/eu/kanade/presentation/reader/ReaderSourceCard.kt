@@ -37,6 +37,16 @@ import tachiyomi.domain.tsuzuki.source.model.ScoredSourceCandidate
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
+/**
+ * An available chapter-scoped source makes the editorial-confirmation hint
+ * redundant in this modal. Preserve the real source failure states.
+ */
+internal fun shouldShowReaderSourceRecovery(
+    failure: ReaderRecovery?,
+    hasProviderSourceOptions: Boolean,
+): Boolean = failure != null &&
+    (!hasProviderSourceOptions || failure != ReaderRecovery.EDITION_CONFIRMATION_REQUIRED)
+
 @Composable
 fun ColumnScope.ReaderSourceCard(
     state: ContentSelectorScreenState,
@@ -68,7 +78,9 @@ fun ColumnScope.ReaderSourceCard(
             }
         }
 
-        failure?.let {
+        failure?.takeIf {
+            shouldShowReaderSourceRecovery(it, providerOptions.isNotEmpty())
+        }?.let {
             Text(
                 text = stringResource(
                     when (it) {
