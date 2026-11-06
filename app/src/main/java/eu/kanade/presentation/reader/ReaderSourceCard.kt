@@ -67,6 +67,12 @@ fun ColumnScope.ReaderSourceCard(
         modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // A committed choice is preparing its exact pages. Keep one modal with
+        // progress, not a second-looking copy of the source radio list.
+        if (selectionInProgress) {
+            LoadingState()
+            return@Column
+        }
         activeContentLabel?.takeIf(String::isNotBlank)?.let { label ->
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
