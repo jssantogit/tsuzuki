@@ -694,12 +694,88 @@ class ProviderRepositoryManagerTest {
             ProviderRepositoryEntryStatus.AVAILABLE
     }
 
+    @Test
+    fun `uninstall removes local enablement without removing repository enrollment`() = runBlocking {
+        val artifacts = ProviderArtifactStore(tempDir.resolve("uninstall-manager-artifacts").toFile())
+        val configurations = FileProviderLocalConfigurationStore(
+            tempDir.resolve("uninstall-manager-config").toFile(),
+        )
+        val enrollments = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("uninstall-manager-enrollments").toFile(),
+        )
+        val bytes = tsz(versionCode = 1)
+        artifacts.activate(
+            VerifiedProviderArtifact(
+                repositoryId = "repo.old",
+                repositoryTrustAnchorSha256 = sha256Hex("old-root".encodeToByteArray()),
+                descriptor = ProviderArtifactDescriptor(
+                    providerId = "reader.example",
+                    versionName = "1.0.0",
+                    versionCode = 1,
+                    artifactUrl = "https://repo.old/reader.tsz",
+                    sha256 = sha256Hex(bytes),
+                    minHostApi = 1,
+                ),
+                bytes = bytes,
+            ),
+        )
+        configurations.save(ProviderLocalConfiguration("reader.example", enabled = false))
+        val manager = manager(
+            enrollmentStore = enrollments,
+            trustStore = FileProviderRepositoryTrustStore(
+                tempDir.resolve("uninstall-manager-trust").toFile(),
+            ),
+            artifactStore = artifacts,
+            transport = FakeTransport(),
+            configurationStore = configurations,
+        )
+        manager.uninstall("reader.example") shouldBe true
+        manager.installed() shouldBe emptyList()
+        configurations.get("reader.example") shouldBe null
+        manager.uninstall("reader.example") shouldBe false
+    }
+
+    @Test
+    fun `reserved providers cannot be uninstalled`() = runBlocking {
+        val artifacts = ProviderArtifactStore(tempDir.resolve("uninstall-reserved").toFile())
+        val bytes = tsz(versionCode = 1)
+        artifacts.activate(
+            VerifiedProviderArtifact(
+                repositoryId = "repo.old",
+                repositoryTrustAnchorSha256 = sha256Hex("root".encodeToByteArray()),
+                descriptor = ProviderArtifactDescriptor(
+                    providerId = "reader.example",
+                    versionName = "1.0.0",
+                    versionCode = 1,
+                    artifactUrl = "https://repo.old/reader.tsz",
+                    sha256 = sha256Hex(bytes),
+                    minHostApi = 1,
+                ),
+                bytes = bytes,
+            ),
+        )
+        val manager = manager(
+            enrollmentStore = FileProviderRepositoryEnrollmentStore(
+                tempDir.resolve("uninstall-reserved-enroll").toFile(),
+            ),
+            trustStore = FileProviderRepositoryTrustStore(
+                tempDir.resolve("uninstall-reserved-trust").toFile(),
+            ),
+            artifactStore = artifacts,
+            transport = FakeTransport(),
+            reservedProviderIds = setOf("reader.example"),
+        )
+        shouldThrow<ProviderSupplyChainException> { manager.uninstall("reader.example") }
+        manager.installed().single().providerId shouldBe "reader.example"
+    }
+
     private fun manager(
         enrollmentStore: ProviderRepositoryEnrollmentStore,
         trustStore: ProviderRepositoryTrustStore,
         artifactStore: ProviderArtifactStore,
         transport: ProviderRepositoryTransport,
         reservedProviderIds: Set<String> = emptySet(),
+        configurationStore: ProviderLocalConfigurationStore? = null,
     ) = ProviderRepositoryManager(
         hostApiVersion = 3,
         enrollmentStore = enrollmentStore,
@@ -713,6 +789,7 @@ class ProviderRepositoryManagerTest {
         ),
         transport = transport,
         reservedProviderIds = reservedProviderIds,
+        configurationStore = configurationStore,
     )
 
     private fun signedIndex(
