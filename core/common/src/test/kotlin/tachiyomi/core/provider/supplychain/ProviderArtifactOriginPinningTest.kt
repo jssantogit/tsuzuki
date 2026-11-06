@@ -64,6 +64,11 @@ class ProviderArtifactOriginPinningTest {
 
         Modifier.isSynchronized(activate.modifiers) shouldBe true
         Modifier.isSynchronized(rollback.modifiers) shouldBe true
+        val uninstall = ProviderArtifactStore::class.java.getDeclaredMethod(
+            "uninstall",
+            String::class.java,
+        )
+        Modifier.isSynchronized(uninstall.modifiers) shouldBe true
     }
 
     @Test
