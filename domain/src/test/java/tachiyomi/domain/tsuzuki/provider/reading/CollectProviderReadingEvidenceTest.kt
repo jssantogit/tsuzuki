@@ -2469,12 +2469,14 @@ class CollectProviderReadingEvidenceTest {
                     readWorkIds += request.binding.externalWorkId
                     ProviderCallResult.Success(
                         ProviderPage(
-                            items = listOf(ProviderChapterObservation(
-                                providerChapterId = "mangadex:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-                                rawLabel = "Chapter 1",
-                                rawNumber = 1.0,
-                                language = "en",
-                            )),
+                            items = listOf(
+                                ProviderChapterObservation(
+                                    providerChapterId = "mangadex:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                                    rawLabel = "Chapter 1",
+                                    rawNumber = 1.0,
+                                    language = "en",
+                                ),
+                            ),
                             nextCursor = null,
                         ),
                     )
