@@ -1030,6 +1030,8 @@
     <string name="tsuzuki_providers_install">Install</string>
     <string name="tsuzuki_providers_update">Update</string>
     <string name="tsuzuki_providers_rollback">Rollback</string>
+    <string name="tsuzuki_providers_uninstall">Uninstall</string>
+    <string name="tsuzuki_providers_uninstall_confirm">Remove only this Provider, including its installed versions and local preferences? Your library, reading progress, other Providers and repository enrollments will be preserved.</string>
     <string name="tsuzuki_providers_enabled">Enabled</string>
     <string name="tsuzuki_providers_disabled">Disabled</string>
     <string name="tsuzuki_providers_blocked">Blocked</string>
