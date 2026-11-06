@@ -2418,6 +2418,87 @@ class CollectProviderReadingEvidenceTest {
         )
     }
 
+    @Test
+    fun `one verified MangaAll source gives provisional chapters despite an unverified rival`() = runBlocking<Unit> {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), metadataId, externalId = "verified"),
+                externalIds = mapOf(metadataId to "verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val bindings = MemoryBindingRepository()
+        val observed = MemoryWorkSourceAssociationRepository()
+        val readWorkIds = mutableListOf<String>()
+        val dexId = "mangadex:11111111-2222-4333-8444-555555555555"
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(provider = mangaAll),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    externalWorkId = dexId,
+                                    title = "Dandadan",
+                                    authors = listOf("Arakawa Hiromu"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                    coverageMinMilli = 1_000,
+                                    coverageMaxMilli = 1_000,
+                                    coverageHasMore = true,
+                                ),
+                                ProviderWorkCandidate(
+                                    externalWorkId = "mangadot:317",
+                                    title = "Dandadan",
+                                    authors = emptyList(),
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    readWorkIds += request.binding.externalWorkId
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation(
+                                providerChapterId = "mangadex:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                                rawLabel = "Chapter 1",
+                                rawNumber = 1.0,
+                                language = "en",
+                            )),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = observed,
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+
+        result.bindingCount shouldBe 0
+        result.snapshots shouldBe emptyList()
+        result.complete shouldBe false
+        result.partialEvidence.size shouldBe 1
+        readWorkIds shouldBe listOf(dexId)
+        observed.getByTitle(canonicalTitle.id).map { it.ref.externalWorkId } shouldBe listOf(dexId)
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+    }
+
     private class CapturingProviderDiagnostics(
         private val captureActive: Boolean = false,
     ) : StructuredDiagnosticRecorder {
