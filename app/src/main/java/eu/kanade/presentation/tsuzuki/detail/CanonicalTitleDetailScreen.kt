@@ -146,7 +146,8 @@ fun CanonicalTitleDetailScreen(
                 state, background, navigateUp, onAtualizar, onAddToLibrary, onRemoveFromLibrary,
                 onReadTitle, onOpenChapter, onBaixarChapter, onOpenProvidersSettings,
                 onImportEpub, onReviewCandidates, inventoryRefresh,
-                editionPicker, onChooseEdition, onEditionSearch, onEditionConfirm, onEditionInspect, onEditionSourceSelect,
+                editionPicker, onChooseEdition, onEditionSearch, onEditionConfirm,
+                onEditionInspect, onEditionSourceSelect,
                 onEditionDismiss,
                 onChapterSortMeasured,
             )
