@@ -136,6 +136,7 @@ class ProviderEditionCandidatePresentationTest {
     @Test
     fun `MangaAll edition preview distinguishes bounded coverage and chapter range`() {
         val partial = candidate(
+            language = null,
             observedChapterCount = 2,
             hasMore = true,
             rangeStart = 1000,
