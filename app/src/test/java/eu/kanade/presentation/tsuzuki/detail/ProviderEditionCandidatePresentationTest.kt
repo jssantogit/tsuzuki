@@ -12,6 +12,8 @@ class ProviderEditionCandidatePresentationTest {
         chapterCount: Int? = null,
         observedChapterCount: Int? = null,
         hasMore: Boolean? = null,
+        rangeStart: Int? = null,
+        rangeEnd: Int? = null,
         authors: List<String> = emptyList(),
     ) = ProviderEditionCandidate(
         ref = ProviderBindingRef(ProviderId("app.tsuzuki.mangafire"), "en", "jjrxn"),
@@ -25,6 +27,8 @@ class ProviderEditionCandidatePresentationTest {
         chapterCount = chapterCount,
         observedChapterCount = observedChapterCount,
         coverageHasMore = hasMore,
+        coverageMinMilli = rangeStart,
+        coverageMaxMilli = rangeEnd,
         authors = authors,
     )
 
@@ -98,4 +102,30 @@ class ProviderEditionCandidatePresentationTest {
             "Autores: Autor A, Autor B e mais 1",
         )
     }
+    @Test
+    fun `MangaAll edition preview distinguishes bounded coverage and chapter range`() {
+        val partial = candidate(
+            observedChapterCount = 2,
+            hasMore = true,
+            rangeStart = 1000,
+            rangeEnd = 2000,
+        ).copy(
+            ref = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "pt-br", "mangadex:uuid-123"),
+            providerName = "MangaAll",
+        )
+        editionCandidateMetadata(partial) shouldBe listOf(
+            "Fonte: MangaDex",
+            "Capítulos: ao menos 2 observados (amostra parcial)",
+            "Intervalo observado: caps. 1–2",
+            "Idioma solicitado: Português (Brasil)",
+        )
+        editionCandidateMetadata(partial.copy(
+            observedChapterCount = null,
+            coverageHasMore = null,
+            coverageMinMilli = null,
+            coverageMaxMilli = null,
+        )).any { it.startsWith("Capítulos:") } shouldBe true
+    }
+
+
 }
