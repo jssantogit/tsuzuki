@@ -1057,7 +1057,7 @@ internal fun validateIdentifier(
     }
 }
 
-private fun validateHttpsUrl(
+internal fun validateHttpsUrl(
     value: String,
     label: String,
 ) {

@@ -20,6 +20,38 @@ class AndroidProviderRepositoryTransportTest {
     }
 
     @Test
+    fun `one-link repository enrollment decodes public metadata with a strict body budget`() = runBlocking {
+        val keyPair = java.security.KeyPairGenerator.getInstance("EC").run {
+            initialize(java.security.spec.ECGenParameterSpec("secp256r1"))
+            generateKeyPair()
+        }
+        val server = MockWebServer()
+        server.start()
+        try {
+            val body = """
+                {"repositoryId":"repo.example","indexUrl":"https://repo.example/index.json",
+                 "keyId":"root-1","publicKeyBase64":"${Base64.getEncoder().encodeToString(keyPair.public.encoded)}",
+                 "displayName":"Example"}
+            """.trimIndent()
+            server.enqueue(MockResponse(body = body))
+            server.enqueue(MockResponse(body = "x".repeat(4096)))
+            val transport = AndroidProviderRepositoryTransport(
+                client = okhttp3.OkHttpClient(),
+                allowInsecureHttp = true,
+                maxEnrollmentBytes = 2048,
+            )
+            val resolution = transport.fetchEnrollment(server.url("/enrollment.json").toString())
+            resolution.displayName shouldBe "Example"
+            resolution.enrollment.repositoryId shouldBe "repo.example"
+            shouldThrow<ProviderSupplyChainException> {
+                transport.fetchEnrollment(server.url("/too-large.json").toString())
+            }
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
     fun `fetches signed index envelope and bounded artifact bytes`() = runBlocking {
         val server = MockWebServer()
         server.start()

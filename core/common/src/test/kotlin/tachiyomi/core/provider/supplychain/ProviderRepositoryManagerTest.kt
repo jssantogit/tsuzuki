@@ -769,6 +769,108 @@ class ProviderRepositoryManagerTest {
         manager.installed().single().providerId shouldBe "reader.example"
     }
 
+    @Test
+    fun `one-link preview verifies a signed index without enrolling or pinning trust`() = runBlocking {
+        val key = ecKeyPair()
+        val artifact = tsz(versionCode = 1)
+        val source = FakeTransport()
+        source.publish(
+            signed = signedIndex(key, sequence = 1, artifactBytes = artifact, versionCode = 1),
+            artifactBytes = artifact,
+        )
+        source.enrollment = EnrolledProviderRepository(
+            "Tsuzuki Providers",
+            ProviderRepositoryEnrollment(
+                "repo.example",
+                "https://repo.example/index.json",
+                ProviderRepositorySigningKey(
+                    "root-1",
+                    Base64.getEncoder().encodeToString(key.public.encoded),
+                ),
+            ),
+        )
+        val enrollments = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("link-enrollments").toFile(),
+        )
+        val trustStore = FileProviderRepositoryTrustStore(tempDir.resolve("link-trust").toFile())
+        val manager = manager(
+            enrollments,
+            trustStore,
+            ProviderArtifactStore(tempDir.resolve("link-artifacts").toFile()),
+            source,
+        )
+
+        val resolved = manager.resolveEnrollment("https://repo.example/enrollment.json")
+        resolved.displayName shouldBe "Tsuzuki Providers"
+        manager.repositories() shouldBe emptyList()
+        trustStore.load("repo.example") shouldBe null
+
+        manager.enroll(resolved)
+        manager.refresh("repo.example").entries.single().status shouldBe
+            ProviderRepositoryEntryStatus.AVAILABLE
+        manager.install("repo.example", "reader.example")
+        manager.installed().single().versionCode shouldBe 1L
+
+        val updated = tsz(versionCode = 2)
+        source.publish(
+            signed = signedIndex(key, sequence = 2, artifactBytes = updated, versionCode = 2),
+            artifactBytes = updated,
+        )
+        manager.refresh("repo.example").entries.single().status shouldBe
+            ProviderRepositoryEntryStatus.UPDATE_AVAILABLE
+        manager.install("repo.example", "reader.example")
+        manager.installed().single().versionCode shouldBe 2L
+        manager.canRollback("reader.example") shouldBe true
+    }
+
+    @Test
+    fun `one-link preview rejects a substituted signer without saving repository trust`() = runBlocking {
+        val publisherKey = ecKeyPair()
+        val injectedKey = ecKeyPair()
+        val source = FakeTransport()
+        val artifact = tsz(versionCode = 1)
+        source.publish(
+            signed = signedIndex(
+                publisherKey,
+                sequence = 1,
+                artifactBytes = artifact,
+                versionCode = 1,
+            ),
+            artifactBytes = artifact,
+        )
+        source.enrollment = EnrolledProviderRepository(
+            "Untrusted",
+            ProviderRepositoryEnrollment(
+                "repo.example",
+                "https://repo.example/index.json",
+                ProviderRepositorySigningKey(
+                    "root-1",
+                    Base64.getEncoder().encodeToString(injectedKey.public.encoded),
+                ),
+            ),
+        )
+        val enrollments = FileProviderRepositoryEnrollmentStore(
+            tempDir.resolve("link-invalid-enrollments").toFile(),
+        )
+        val trustStore = FileProviderRepositoryTrustStore(
+            tempDir.resolve("link-invalid-trust").toFile(),
+        )
+        val manager = manager(
+            enrollments,
+            trustStore,
+            ProviderArtifactStore(tempDir.resolve("link-invalid-artifacts").toFile()),
+            source,
+        )
+        shouldThrow<ProviderSupplyChainException> {
+            manager.resolveEnrollment("https://repo.example/enrollment.json")
+        }
+        enrollments.list() shouldBe emptyList()
+        trustStore.load("repo.example") shouldBe null
+        shouldThrow<ProviderSupplyChainException> {
+            manager.resolveEnrollment("http://repo.example/enrollment.json")
+        }
+    }
+
     private fun manager(
         enrollmentStore: ProviderRepositoryEnrollmentStore,
         trustStore: ProviderRepositoryTrustStore,
@@ -887,6 +989,10 @@ class ProviderRepositoryManagerTest {
         val requestedIndexUrls = mutableListOf<String>()
         val requestedArtifactUrls = mutableListOf<String>()
         var beforeFetchIndex: suspend () -> Unit = {}
+        var enrollment: EnrolledProviderRepository? = null
+
+        override suspend fun fetchEnrollment(linkUrl: String): EnrolledProviderRepository =
+            enrollment ?: throw ProviderSupplyChainException("No enrollment link published")
 
         fun publish(
             signed: SignedProviderRepositoryIndex,
