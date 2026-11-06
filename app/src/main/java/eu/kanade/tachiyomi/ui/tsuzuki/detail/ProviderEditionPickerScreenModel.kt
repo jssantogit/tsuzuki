@@ -15,7 +15,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionRepository
 import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelectionResult
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionCandidate
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionChapterInspection
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderEditionConfirmation
 import tachiyomi.domain.tsuzuki.provider.reading.SelectMangaAllSource
 import tachiyomi.domain.tsuzuki.provider.reading.SelectProviderReadingEdition
@@ -27,6 +29,9 @@ data class ProviderEditionPickerState(
     val searching: Boolean = false,
     val confirming: Boolean = false,
     val candidates: List<ProviderEditionCandidate> = emptyList(),
+    val inspecting: Boolean = false,
+    val inspectedRef: ProviderBindingRef? = null,
+    val inspection: ProviderEditionChapterInspection? = null,
     val failed: Boolean = false,
     val confirmation: ProviderEditionConfirmation? = null,
     val sourceSelection: MangaAllSourceSelectionResult? = null,
@@ -48,11 +53,13 @@ class ProviderEditionPickerScreenModel(
 
     private var titleId: String? = null
     private var operation: Job? = null
+    private var inspectionJob: Job? = null
     private var restoreJob: Job? = null
 
     fun start(canonicalTitleId: String) {
         if (titleId == canonicalTitleId) return
         operation?.cancel()
+        inspectionJob?.cancel()
         restoreJob?.cancel()
         titleId = canonicalTitleId
         mutableState.value = ProviderEditionPickerState()
@@ -103,10 +110,14 @@ class ProviderEditionPickerScreenModel(
         val id = titleId ?: return
         if (!mutableState.value.open || mutableState.value.confirming) return
         operation?.cancel()
+        inspectionJob?.cancel()
         mutableState.value = mutableState.value.copy(
             query = query,
             searching = true,
             candidates = emptyList(),
+            inspecting = false,
+            inspectedRef = null,
+            inspection = null,
             failed = false,
             confirmation = null,
             sourceSelection = null,
@@ -130,13 +141,40 @@ class ProviderEditionPickerScreenModel(
         }
     }
 
+    /**
+     * Selecting a visible source starts a read-only, bounded chapter inventory
+     * inspection. This is presentation metadata only: never a binding, canonical
+     * chapter inventory or authorization to read a different edition.
+     */
+    fun inspect(candidate: ProviderEditionCandidate) {
+        val current = mutableState.value
+        if (!current.open || current.searching || current.confirming || candidate !in current.candidates) return
+        if (current.inspectedRef == candidate.ref && (current.inspecting || current.inspection != null)) return
+        inspectionJob?.cancel()
+        mutableState.value = current.copy(inspecting = true, inspectedRef = candidate.ref, inspection = null)
+        inspectionJob = viewModelScope.launch {
+            val result = try {
+                selectEdition.inspect(candidate)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                ProviderEditionChapterInspection(observedRecords = 0, complete = false, failed = true)
+            }
+            val latest = mutableState.value
+            if (latest.open && latest.inspectedRef == candidate.ref && candidate in latest.candidates) {
+                mutableState.value = latest.copy(inspecting = false, inspection = result)
+            }
+        }
+    }
+
     fun confirm(candidate: ProviderEditionCandidate) {
         val id = titleId ?: return
         val current = mutableState.value
         if (!current.open || current.searching || current.confirming || candidate !in current.candidates) return
         restoreJob?.cancel()
         operation?.cancel()
-        mutableState.value = current.copy(confirming = true, confirmation = null)
+        inspectionJob?.cancel()
+        mutableState.value = current.copy(confirming = true, inspecting = false, confirmation = null)
         operation = viewModelScope.launch {
             try {
                 val result = selectEdition.confirm(id, candidate)
