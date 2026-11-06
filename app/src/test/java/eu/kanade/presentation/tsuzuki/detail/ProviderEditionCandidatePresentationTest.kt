@@ -150,11 +150,13 @@ class ProviderEditionCandidatePresentationTest {
             "Intervalo observado: caps. 1–2",
             "Idioma solicitado: Português (Brasil)",
         )
-        editionCandidateMetadata(partial.copy(
-            observedChapterCount = null,
-            coverageHasMore = null,
-            coverageMinMilli = null,
-            coverageMaxMilli = null,
-        )).any { it.startsWith("Capítulos:") } shouldBe true
+        editionCandidateMetadata(
+            partial.copy(
+                observedChapterCount = null,
+                coverageHasMore = null,
+                coverageMinMilli = null,
+                coverageMaxMilli = null,
+            ),
+        ).any { it.startsWith("Capítulos:") } shouldBe true
     }
 }
