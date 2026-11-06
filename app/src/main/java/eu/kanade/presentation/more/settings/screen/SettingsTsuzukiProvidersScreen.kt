@@ -1208,8 +1208,11 @@ private fun AddProviderRepositoryDialog(
                 ) {
                     Text(
                         stringResource(
-                            if (resolving) MR.strings.tsuzuki_providers_repository_resolving
-                            else MR.strings.tsuzuki_providers_repository_resolve,
+                            if (resolving) {
+                                MR.strings.tsuzuki_providers_repository_resolving
+                            } else {
+                                MR.strings.tsuzuki_providers_repository_resolve
+                            },
                         ),
                     )
                 }
