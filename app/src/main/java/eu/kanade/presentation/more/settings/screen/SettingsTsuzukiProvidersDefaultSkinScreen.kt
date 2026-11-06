@@ -832,8 +832,11 @@ private fun DefaultSkinAddRepositoryDialog(
                 )
                 DefaultSkinTextAction(
                     text = stringResource(
-                        if (isResolving) MR.strings.tsuzuki_providers_repository_resolving
-                        else MR.strings.tsuzuki_providers_repository_resolve,
+                        if (isResolving) {
+                            MR.strings.tsuzuki_providers_repository_resolving
+                        } else {
+                            MR.strings.tsuzuki_providers_repository_resolve
+                        },
                     ),
                     enabled = !isResolving && link.isNotBlank(),
                     onClick = {
