@@ -315,7 +315,7 @@ class CollectProviderReadingEvidence private constructor(
             ) {
                 is ProviderCallResult.Failure -> return ProviderReadingEvidenceCollection(complete = false)
                 is ProviderCallResult.Success ->
-                    discovery.value.binding ?: return if (discovery.value.workSources.size >= 2) {
+                    discovery.value.binding ?: return if (discovery.value.workSources.isNotEmpty()) {
                         onStageChanged(DiagnosticStage.READ)
                         collectUnresolvedWorkSources(
                             canonicalTitleId = canonicalTitleId,
@@ -669,14 +669,15 @@ class CollectProviderReadingEvidence private constructor(
                 lookupDecision = decision,
             )
             if (candidate == null) {
-                // A verified work may be represented by multiple distinct HIDs.
-                // Do not waste the remaining 20-second deadline on unrelated
-                // alias lookups once at least two live, author-corroborated,
-                // non-variant source chapter pages are independently attested.
-                // Neither source becomes the preferred edition.
+                // A verified work may be represented by several HIDs. Once
+                // even one source independently corroborates its author AND an
+                // observed chapter page, record those chapters provisionally
+                // without selecting an edition. Unknown rivals stay unresolved.
+                // Extra title lookups cannot turn this work-level proof into
+                // editorial authority, and would consume the 20-second budget.
                 val confirmedSources = collectedWorkSources.values
                     .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
-                if (confirmedSources.size >= 2) {
+                if (confirmedSources.isNotEmpty()) {
                     return ProviderCallResult.Success(
                         BindingDiscovery(
                             unresolved = true,
