@@ -2495,6 +2495,8 @@ class CollectProviderReadingEvidenceTest {
         result.complete shouldBe false
         result.partialEvidence.size shouldBe 1
         result.partialEvidence.single().authority shouldBe ChapterEvidenceAuthority.PROVIDER_PROVISIONAL
+        result.partialEvidence.single().externalChapterKey shouldBe
+            "mangadex:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
         readWorkIds shouldBe listOf(dexId)
         observed.getByTitle(canonicalTitle.id).map { it.ref.externalWorkId } shouldBe listOf(dexId)
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
