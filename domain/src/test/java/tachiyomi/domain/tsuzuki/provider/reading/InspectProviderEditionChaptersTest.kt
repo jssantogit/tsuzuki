@@ -3,15 +3,8 @@ package tachiyomi.domain.tsuzuki.provider.reading
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
-import tachiyomi.domain.tsuzuki.provider.ProviderId
 
 class InspectProviderEditionChaptersTest {
-
-    private val ref = ProviderBindingRef(
-        providerId = ProviderId("app.tsuzuki.mangaall"),
-        facetId = "pt-br",
-        externalWorkId = "mangadex:example",
-    )
 
     @Test
     fun `counts complete chapter inventory through bounded continuation without inventing canon`() = runBlocking {
