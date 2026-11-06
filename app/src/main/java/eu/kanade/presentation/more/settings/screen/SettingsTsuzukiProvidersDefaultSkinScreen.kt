@@ -115,6 +115,7 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
         var showRepositories by remember { mutableStateOf(false) }
         var showAddRepository by remember { mutableStateOf(false) }
         var repositoryToRemove by remember { mutableStateOf<EnrolledProviderRepository?>(null) }
+        var providerToUninstall by remember { mutableStateOf<ProviderRegistration?>(null) }
 
         suspend fun reloadInstalled() {
             val state = withContext(Dispatchers.IO) {
@@ -252,6 +253,7 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
                         onRollback = { providerId ->
                             runProviderOperation("rollback:$providerId") { manager.rollback(providerId) }
                         },
+                        onUninstall = { registration -> providerToUninstall = registration },
                         modifier = Modifier.weight(1f),
                     )
                 } else {
@@ -327,6 +329,43 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
                         }.onFailure { error -> errorMessage = error.message }
                     }
                 },
+            )
+        }
+
+        providerToUninstall?.let { registration ->
+            val providerId = registration.descriptor.id.value
+            AlertDialog(
+                onDismissRequest = { providerToUninstall = null },
+                title = { Text(stringResource(MR.strings.tsuzuki_providers_uninstall)) },
+                text = {
+                    Text(
+                        "${registration.descriptor.name}\n\n" +
+                            stringResource(MR.strings.tsuzuki_providers_uninstall_confirm),
+                    )
+                },
+                confirmButton = {
+                    DefaultSkinTextAction(
+                        text = stringResource(MR.strings.tsuzuki_providers_uninstall),
+                        enabled = "uninstall:$providerId" !in operations,
+                        onClick = {
+                            providerToUninstall = null
+                            runProviderOperation("uninstall:$providerId") {
+                                manager.uninstall(providerId)
+                            }
+                        },
+                    )
+                },
+                dismissButton = {
+                    DefaultSkinTextAction(
+                        text = stringResource(MR.strings.action_cancel),
+                        onClick = { providerToUninstall = null },
+                    )
+                },
+                shape = DefaultSkinShape.Card,
+                tonalElevation = 0.dp,
+                containerColor = colors.surface,
+                titleContentColor = colors.foreground,
+                textContentColor = colors.secondary,
             )
         }
 
@@ -422,6 +461,7 @@ private fun InstalledProviderCards(
     onOpen: (ProviderRegistration) -> Unit,
     onEnabledChange: (ProviderRegistration, Boolean) -> Unit,
     onRollback: (String) -> Unit,
+    onUninstall: (ProviderRegistration) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
@@ -448,9 +488,11 @@ private fun InstalledProviderCards(
                             registration = registration,
                             rollbackAvailable = providerId in rollbackProviderIds,
                             rollbackEnabled = "rollback:$providerId" !in operationKeys,
+                            uninstallEnabled = "uninstall:$providerId" !in operationKeys,
                             onOpen = { onOpen(registration) },
                             onEnabledChange = { onEnabledChange(registration, it) },
                             onRollback = { onRollback(providerId) },
+                            onUninstall = { onUninstall(registration) },
                         )
                         if (index < registrations.lastIndex) SettingsGroupDivider()
                     }
@@ -466,9 +508,11 @@ private fun InstalledProviderRow(
     registration: ProviderRegistration,
     rollbackAvailable: Boolean,
     rollbackEnabled: Boolean,
+    uninstallEnabled: Boolean,
     onOpen: () -> Unit,
     onEnabledChange: (Boolean) -> Unit,
     onRollback: () -> Unit,
+    onUninstall: () -> Unit,
 ) {
     val colors = defaultSkinColors()
     val descriptor = registration.descriptor
@@ -542,11 +586,19 @@ private fun InstalledProviderRow(
                 }
             }
         }
-        if (rollbackAvailable) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (rollbackAvailable) {
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_providers_rollback),
+                    enabled = rollbackEnabled,
+                    onClick = onRollback,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
+            }
             DefaultSkinTextAction(
-                text = stringResource(MR.strings.tsuzuki_providers_rollback),
-                enabled = rollbackEnabled,
-                onClick = onRollback,
+                text = stringResource(MR.strings.tsuzuki_providers_uninstall),
+                enabled = uninstallEnabled,
+                onClick = onUninstall,
                 modifier = Modifier.heightIn(min = 48.dp),
             )
         }
