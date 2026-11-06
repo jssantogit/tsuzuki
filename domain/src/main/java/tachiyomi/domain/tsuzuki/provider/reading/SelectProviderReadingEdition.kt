@@ -376,7 +376,6 @@ class SelectProviderReadingEdition(
     }
 }
 
-
 /** Display-only source observations; never editorial/canonical chapter authority. */
 data class ProviderEditionChapterInspection(
     val observedRecords: Int,
