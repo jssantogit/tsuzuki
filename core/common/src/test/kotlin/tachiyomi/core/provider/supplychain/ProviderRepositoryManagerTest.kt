@@ -801,6 +801,7 @@ class ProviderRepositoryManagerTest {
         )
 
         val resolved = manager.resolveEnrollment("https://repo.example/enrollment.json")
+        source.requestedIndexUrls shouldBe listOf("https://repo.example/index.json")
         resolved.displayName shouldBe "Tsuzuki Providers"
         manager.repositories() shouldBe emptyList()
         trustStore.load("repo.example") shouldBe null
