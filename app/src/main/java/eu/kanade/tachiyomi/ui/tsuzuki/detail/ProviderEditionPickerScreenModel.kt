@@ -223,6 +223,7 @@ class ProviderEditionPickerScreenModel(
         }
         restoreJob?.cancel()
         operation?.cancel()
+        inspectionJob?.cancel()
         // If changing a source fails, do not reopen the old language silently.
         mutableState.value = current.copy(
             confirming = true,
@@ -273,6 +274,7 @@ class ProviderEditionPickerScreenModel(
 
     fun dismiss() {
         operation?.cancel()
+        inspectionJob?.cancel()
         mutableState.value = ProviderEditionPickerState(
             revision = mutableState.value.revision,
             activeRequestedLanguage = mutableState.value.activeRequestedLanguage,
