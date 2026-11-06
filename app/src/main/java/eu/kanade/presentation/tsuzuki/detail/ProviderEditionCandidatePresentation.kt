@@ -104,4 +104,3 @@ internal fun editionChapterInspectionMetadata(inspection: ProviderEditionChapter
         observedChapterRange(inspection.minChapterMilli, inspection.maxChapterMilli),
     )
 }
-
