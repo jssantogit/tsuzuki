@@ -798,6 +798,20 @@ class ProviderArtifactStore(
         return artifact.toPublic(providerId)
     }
 
+    /**
+     * Explicitly removes the active and rollback packages. Removing an enrolled repository
+     * must never perform this action implicitly.
+     */
+    @Synchronized
+    fun uninstall(providerId: String): Boolean {
+        validateIdentifier(providerId, "Provider ID")
+        if (!stateFile(providerId).isFile) return false
+        if (!providerDirectory(providerId).deleteRecursively()) {
+            throw ProviderSupplyChainException("Provider artifact files could not be removed")
+        }
+        return true
+    }
+
     @Synchronized
     fun rollback(providerId: String) {
         validateIdentifier(providerId, "Provider ID")
