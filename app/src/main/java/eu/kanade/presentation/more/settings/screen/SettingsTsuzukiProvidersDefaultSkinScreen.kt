@@ -808,6 +808,7 @@ private fun DefaultSkinAddRepositoryDialog(
         null
     }
     val trustConfirmed = trustToken != null && trustToken == confirmedTrustToken
+    val canConfirm = candidate != null && trustConfirmed && !isResolving
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -925,7 +926,7 @@ private fun DefaultSkinAddRepositoryDialog(
         confirmButton = {
             DefaultSkinTextAction(
                 text = stringResource(MR.strings.action_add),
-                enabled = candidate != null && trustConfirmed && !isResolving,
+                enabled = canConfirm,
                 onClick = {
                     if (candidate != null && trustConfirmed && !isResolving) onConfirm(candidate)
                 },
