@@ -44,6 +44,7 @@ class ProviderRepositoryManager(
     private val packageActivator: ProviderPackageActivator,
     private val transport: ProviderRepositoryTransport,
     reservedProviderIds: Set<String> = emptySet(),
+    private val configurationStore: ProviderLocalConfigurationStore? = null,
 ) {
 
     private val reservedProviderIds = reservedProviderIds.toSet()
@@ -191,6 +192,26 @@ class ProviderRepositoryManager(
             )
             packageActivator.activate(verifiedArtifact)
         }
+
+    /**
+     * Only an explicit user action may remove a Provider. This clears the pinned origin
+     * rather than weakening install() trust checks, and leaves repository enrollment intact.
+     */
+    suspend fun uninstall(providerId: String): Boolean {
+        if (providerId in reservedProviderIds) {
+            throw ProviderSupplyChainException("Built-in Provider cannot be uninstalled")
+        }
+        val installed = artifactStore.current(providerId) ?: return false
+        return repositoryLock(installed.repositoryId).withLock {
+            val current = artifactStore.current(providerId) ?: return@withLock false
+            if (current.repositoryId != installed.repositoryId) {
+                throw ProviderSupplyChainException("Provider installation changed during removal")
+            }
+            val removed = artifactStore.uninstall(providerId)
+            if (removed) configurationStore?.remove(providerId)
+            removed
+        }
+    }
 
     fun rollback(providerId: String) {
         artifactStore.rollback(providerId)
