@@ -95,17 +95,37 @@ class ProviderArtifactOriginPinningTest {
         store.previous("reader.example")?.versionCode shouldBe 1L
     }
 
+    @Test
+    fun `explicit uninstall removes rollback state and releases trust origin`() {
+        val root = tempDir.resolve("uninstall-artifacts").toFile()
+        val store = ProviderArtifactStore(root)
+        store.activate(artifact(repositoryId = "repo.a", versionCode = 1))
+        store.activate(artifact(repositoryId = "repo.a", versionCode = 2))
+        store.activate(artifact(repositoryId = "repo.keep", versionCode = 1, providerId = "reader.keep"))
+
+        store.uninstall("reader.example") shouldBe true
+        store.current("reader.example") shouldBe null
+        store.previous("reader.example") shouldBe null
+        root.resolve("reader.example").exists() shouldBe false
+        store.uninstall("reader.example") shouldBe false
+        store.current("reader.keep")?.repositoryId shouldBe "repo.keep"
+
+        store.activate(artifact(repositoryId = "repo.b", versionCode = 1))
+        store.current("reader.example")?.repositoryId shouldBe "repo.b"
+    }
+
     private fun artifact(
         repositoryId: String,
         versionCode: Long,
         trustAnchor: String = "$repositoryId-root",
+        providerId: String = "reader.example",
     ): VerifiedProviderArtifact {
         val bytes = "$repositoryId-v$versionCode".encodeToByteArray()
         return VerifiedProviderArtifact(
             repositoryId = repositoryId,
             repositoryTrustAnchorSha256 = sha256Hex(trustAnchor.encodeToByteArray()),
             descriptor = ProviderArtifactDescriptor(
-                providerId = "reader.example",
+                providerId = providerId,
                 versionName = "1.0.$versionCode",
                 versionCode = versionCode,
                 artifactUrl = "https://$repositoryId/reader-$versionCode.tsz",
