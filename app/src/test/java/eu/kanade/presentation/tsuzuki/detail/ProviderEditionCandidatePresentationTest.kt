@@ -99,11 +99,12 @@ class ProviderEditionCandidatePresentationTest {
         editionCandidateMetadata(
             candidate(language = "pt-BR", authors = listOf("Autor A", "Autor B", "Autor C")),
         ) shouldBe listOf(
-            "Capítulos: não informado",
+            "Capítulos: não verificados; selecione para consultar",
             "Idioma: Português (Brasil)",
             "Autores: Autor A, Autor B e mais 1",
         )
     }
+
     @Test
     fun `complete and partial chapter inspection are clearly distinct and never canonical`() {
         editionChapterInspectionMetadata(
@@ -156,6 +157,4 @@ class ProviderEditionCandidatePresentationTest {
             coverageMaxMilli = null,
         )).any { it.startsWith("Capítulos:") } shouldBe true
     }
-
-
 }
