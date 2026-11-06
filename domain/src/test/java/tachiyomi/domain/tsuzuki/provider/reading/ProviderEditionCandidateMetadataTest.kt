@@ -156,6 +156,7 @@ class ProviderEditionCandidateMetadataTest {
         ) shouldBe false
         original.sameSourceIdentityAs(refreshed.copy(url = "https://mangafire.to/title/027-bleach")) shouldBe false
     }
+
     @Test
     fun `coverage range is preserved for MangaAll without implying a complete chapter inventory`() {
         val candidate = editionCandidateFromLookup(
@@ -183,6 +184,4 @@ class ProviderEditionCandidateMetadataTest {
         candidate.coverageMinMilli shouldBe 67000
         candidate.coverageMaxMilli shouldBe 67100
     }
-
-
 }
