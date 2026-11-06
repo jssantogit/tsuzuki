@@ -2494,6 +2494,7 @@ class CollectProviderReadingEvidenceTest {
         result.snapshots shouldBe emptyList()
         result.complete shouldBe false
         result.partialEvidence.size shouldBe 1
+        result.partialEvidence.single().authority shouldBe ChapterEvidenceAuthority.PROVIDER_PROVISIONAL
         readWorkIds shouldBe listOf(dexId)
         observed.getByTitle(canonicalTitle.id).map { it.ref.externalWorkId } shouldBe listOf(dexId)
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
