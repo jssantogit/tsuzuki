@@ -25,7 +25,7 @@ class ProviderRepositoryEnrollmentLinkTest {
         repo.enrollment.signingKey.keyId shouldBe "root-1"
         repo.keyFingerprintSha256.length shouldBe 64
         decodeProviderRepositoryEnrollmentDocument(
-            doc.replace(""","displayName":" Example Repository """, ""),
+            doc.replace(",\"displayName\":\" Example Repository \"", ""),
         ).displayName shouldBe "repo.example"
     }
 
@@ -42,7 +42,7 @@ class ProviderRepositoryEnrollmentLinkTest {
         }
         shouldThrow<ProviderSupplyChainException> {
             decodeProviderRepositoryEnrollmentDocument(
-                valid.replace("root-1", "root-1").dropLast(1) + ""","unexpected":true}""",
+                valid.dropLast(1) + ""","unexpected":true}""",
             )
         }
         shouldThrow<ProviderSupplyChainException> {

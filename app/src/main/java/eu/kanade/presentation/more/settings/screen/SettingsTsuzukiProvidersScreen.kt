@@ -47,11 +47,8 @@ import kotlinx.coroutines.withContext
 import mihon.app.di.appGraph
 import tachiyomi.core.provider.supplychain.EnrolledProviderRepository
 import tachiyomi.core.provider.supplychain.ProviderRepositoryCatalogEntry
-import tachiyomi.core.provider.supplychain.ProviderRepositoryEnrollment
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEntryStatus
-import tachiyomi.core.provider.supplychain.ProviderRepositorySigningKey
 import tachiyomi.core.provider.supplychain.ProviderRepositorySnapshot
-import tachiyomi.core.provider.supplychain.providerRepositoryKeyFingerprint
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
@@ -352,6 +349,9 @@ class SettingsTsuzukiProvidersScreen : Screen() {
         if (showAddRepository) {
             AddProviderRepositoryDialog(
                 onDismiss = { showAddRepository = false },
+                onResolve = { url ->
+                    withContext(Dispatchers.IO) { manager.resolveEnrollment(url) }
+                },
                 onConfirm = { repository ->
                     scope.launch {
                         runProviderUiCatching {
@@ -1140,115 +1140,107 @@ private fun ProviderRepositoriesDialog(
 @Composable
 private fun AddProviderRepositoryDialog(
     onDismiss: () -> Unit,
+    onResolve: suspend (String) -> EnrolledProviderRepository,
     onConfirm: (EnrolledProviderRepository) -> Unit,
 ) {
-    var displayName by remember { mutableStateOf("") }
-    var repositoryId by remember { mutableStateOf("") }
-    var indexUrl by remember { mutableStateOf("") }
-    var keyId by remember { mutableStateOf("") }
-    var publicKeyBase64 by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    var link by remember { mutableStateOf("") }
+    var resolved by remember { mutableStateOf<EnrolledProviderRepository?>(null) }
+    var resolving by remember { mutableStateOf(false) }
+    var resolutionError by remember { mutableStateOf<String?>(null) }
     var confirmedTrustToken by remember { mutableStateOf<String?>(null) }
 
-    val signingKey = remember(keyId, publicKeyBase64) {
-        ProviderRepositorySigningKey(
-            keyId = keyId.trim(),
-            publicKeyBase64 = publicKeyBase64.trim(),
-        )
-    }
-    val fingerprint = remember(signingKey) {
-        runCatching { providerRepositoryKeyFingerprint(signingKey) }.getOrNull()
-    }
-    val trustToken = fingerprint?.let { keyFingerprint ->
+    val candidate = resolved
+    val fingerprint = candidate?.keyFingerprintSha256
+    val trustToken = if (candidate != null && fingerprint != null) {
         providerRepositoryTrustConfirmationToken(
-            displayName = displayName,
-            repositoryId = repositoryId,
-            indexUrl = indexUrl,
-            keyId = keyId,
-            keyFingerprint = keyFingerprint,
+            displayName = candidate.displayName,
+            repositoryId = candidate.enrollment.repositoryId,
+            indexUrl = candidate.enrollment.indexUrl,
+            keyId = candidate.enrollment.signingKey.keyId,
+            keyFingerprint = fingerprint,
         )
+    } else {
+        null
     }
-    val trustConfirmed = trustToken != null && confirmedTrustToken == trustToken
-    val canConfirm = displayName.isNotBlank() &&
-        repositoryId.isNotBlank() &&
-        indexUrl.isNotBlank() &&
-        keyId.isNotBlank() &&
-        publicKeyBase64.isNotBlank() &&
-        fingerprint != null &&
-        trustConfirmed
+    val trustConfirmed = trustToken != null && trustToken == confirmedTrustToken
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(MR.strings.tsuzuki_providers_add_repository)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
-                    value = displayName,
-                    onValueChange = { displayName = it },
-                    label = { Text(stringResource(MR.strings.tsuzuki_providers_repository_name)) },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = repositoryId,
-                    onValueChange = { repositoryId = it },
-                    label = { Text(stringResource(MR.strings.tsuzuki_providers_repository_id)) },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = indexUrl,
-                    onValueChange = { indexUrl = it },
-                    label = {
-                        Text(stringResource(MR.strings.tsuzuki_providers_repository_index_url))
+                    value = link,
+                    onValueChange = {
+                        link = it
+                        resolved = null
+                        confirmedTrustToken = null
+                        resolutionError = null
                     },
+                    label = { Text(stringResource(MR.strings.tsuzuki_providers_repository_link)) },
                     singleLine = true,
                 )
-                OutlinedTextField(
-                    value = keyId,
-                    onValueChange = { keyId = it },
-                    label = { Text(stringResource(MR.strings.tsuzuki_providers_repository_key_id)) },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = publicKeyBase64,
-                    onValueChange = { publicKeyBase64 = it },
-                    label = {
-                        Text(stringResource(MR.strings.tsuzuki_providers_repository_public_key))
+                TextButton(
+                    enabled = !resolving && link.isNotBlank(),
+                    onClick = {
+                        val requestedLink = link.trim()
+                        scope.launch {
+                            resolving = true
+                            resolved = null
+                            confirmedTrustToken = null
+                            resolutionError = null
+                            try {
+                                val preview = onResolve(requestedLink)
+                                if (link.trim() == requestedLink) resolved = preview
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (error: Throwable) {
+                                if (link.trim() == requestedLink) {
+                                    resolutionError = error.message
+                                        ?: "Could not verify repository link"
+                                }
+                            } finally {
+                                resolving = false
+                            }
+                        }
                     },
-                )
-                fingerprint?.let {
+                ) {
                     Text(
-                        "${stringResource(MR.strings.tsuzuki_providers_repository_fingerprint)}: $it",
+                        stringResource(
+                            if (resolving) MR.strings.tsuzuki_providers_repository_resolving
+                            else MR.strings.tsuzuki_providers_repository_resolve,
+                        ),
                     )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = trustConfirmed,
-                        enabled = trustToken != null,
-                        onCheckedChange = { checked ->
-                            confirmedTrustToken = if (checked) trustToken else null
-                        },
-                    )
-                    Text(stringResource(MR.strings.tsuzuki_providers_repository_trust_confirm))
+                resolutionError?.let { Text(it) }
+                candidate?.let { repository ->
+                    Text(stringResource(MR.strings.tsuzuki_providers_repository_preview))
+                    Text(repository.displayName)
+                    Text(repository.enrollment.repositoryId)
+                    Text(repository.enrollment.indexUrl)
+                    Text(stringResource(MR.strings.tsuzuki_providers_repository_fingerprint))
+                    Text(fingerprint.orEmpty())
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = trustConfirmed,
+                            enabled = trustToken != null,
+                            onCheckedChange = { checked ->
+                                confirmedTrustToken = if (checked) trustToken else null
+                            },
+                        )
+                        Text(stringResource(MR.strings.tsuzuki_providers_repository_trust_confirm))
+                    }
                 }
             }
         },
         confirmButton = {
             TextButton(
-                enabled = canConfirm,
+                enabled = candidate != null && trustConfirmed && !resolving,
                 onClick = {
-                    onConfirm(
-                        EnrolledProviderRepository(
-                            displayName = displayName.trim(),
-                            enrollment = ProviderRepositoryEnrollment(
-                                repositoryId = repositoryId.trim(),
-                                indexUrl = indexUrl.trim(),
-                                signingKey = signingKey,
-                            ),
-                        ),
-                    )
+                    if (candidate != null && trustConfirmed && !resolving) onConfirm(candidate)
                 },
-            ) {
-                Text(stringResource(MR.strings.action_add))
-            }
+            ) { Text(stringResource(MR.strings.action_add)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {

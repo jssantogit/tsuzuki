@@ -1042,6 +1042,10 @@
     <string name="tsuzuki_providers_incompatible">Requires a newer Host API</string>
     <string name="tsuzuki_providers_revoked">Revoked</string>
     <string name="tsuzuki_providers_origin_conflict">Provider ID belongs to another repository</string>
+    <string name="tsuzuki_providers_repository_link">Repository link (HTTPS)</string>
+    <string name="tsuzuki_providers_repository_resolve">Verify repository</string>
+    <string name="tsuzuki_providers_repository_resolving">Verifying repository…</string>
+    <string name="tsuzuki_providers_repository_preview">Verified repository</string>
     <string name="tsuzuki_providers_repository_name">Repository name</string>
     <string name="tsuzuki_providers_repository_id">Repository ID</string>
     <string name="tsuzuki_providers_repository_index_url">Signed index URL</string>
