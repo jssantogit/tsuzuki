@@ -1370,4 +1370,10 @@ Selecione uma entrada para migrar ou adicionar mesmo assim.</string>
     <string name="tsuzuki_mangaall_source_unsupported">Esta combinação de fonte e idioma não é suportada</string>
     <string name="tsuzuki_mangaall_source_unavailable">Não foi possível salvar a preferência de fonte</string>
     <string name="tsuzuki_reader_scanlation_group">Grupo de tradução: %1$s</string>
+    <string name="tsuzuki_providers_uninstall">Desinstalar</string>
+    <string name="tsuzuki_providers_uninstall_confirm">Remover apenas este provider, incluindo suas versões instaladas e preferências locais? A biblioteca, o progresso de leitura, os demais providers e os repositórios cadastrados serão preservados.</string>
+    <string name="tsuzuki_providers_repository_link">Link do repositório (HTTPS)</string>
+    <string name="tsuzuki_providers_repository_resolve">Verificar repositório</string>
+    <string name="tsuzuki_providers_repository_resolving">Verificando repositório…</string>
+    <string name="tsuzuki_providers_repository_preview">Repositório verificado</string>
 </resources>

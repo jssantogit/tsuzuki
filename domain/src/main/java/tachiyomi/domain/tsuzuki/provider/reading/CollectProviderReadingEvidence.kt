@@ -315,7 +315,7 @@ class CollectProviderReadingEvidence private constructor(
             ) {
                 is ProviderCallResult.Failure -> return ProviderReadingEvidenceCollection(complete = false)
                 is ProviderCallResult.Success ->
-                    discovery.value.binding ?: return if (discovery.value.workSources.size >= 2) {
+                    discovery.value.binding ?: return if (discovery.value.workSources.isNotEmpty()) {
                         onStageChanged(DiagnosticStage.READ)
                         collectUnresolvedWorkSources(
                             canonicalTitleId = canonicalTitleId,
@@ -445,7 +445,13 @@ class CollectProviderReadingEvidence private constructor(
         for ((queryIndex, title) in titles.withIndex()) {
             val queryStarted = System.nanoTime()
             traceLookupAttempt(canonicalTitleId, target, queryIndex, title, DiagnosticOutcome.STARTED)
-            val candidates = when (val result = collectLookup(target.registration.descriptor.id, title)) {
+            val candidates = when (
+                val result = collectLookup(
+                    target.registration.descriptor.id,
+                    title,
+                    target.facetId,
+                )
+            ) {
                 is ProviderCallResult.Failure -> {
                     traceLookupAttempt(
                         canonicalTitleId,
@@ -663,14 +669,15 @@ class CollectProviderReadingEvidence private constructor(
                 lookupDecision = decision,
             )
             if (candidate == null) {
-                // A verified work may be represented by multiple distinct HIDs.
-                // Do not waste the remaining 20-second deadline on unrelated
-                // alias lookups once at least two live, author-corroborated,
-                // non-variant source chapter pages are independently attested.
-                // Neither source becomes the preferred edition.
+                // A verified work may be represented by several HIDs. Once
+                // even one source independently corroborates its author AND an
+                // observed chapter page, record those chapters provisionally
+                // without selecting an edition. Unknown rivals stay unresolved.
+                // Extra title lookups cannot turn this work-level proof into
+                // editorial authority, and would consume the 20-second budget.
                 val confirmedSources = collectedWorkSources.values
                     .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
-                if (confirmedSources.size >= 2) {
+                if (confirmedSources.isNotEmpty()) {
                     return ProviderCallResult.Success(
                         BindingDiscovery(
                             unresolved = true,
@@ -910,6 +917,7 @@ class CollectProviderReadingEvidence private constructor(
     private suspend fun collectLookup(
         providerId: ProviderId,
         title: String,
+        requestedLanguage: String?,
     ): ProviderCallResult<List<ProviderWorkCandidate>> {
         val items = mutableListOf<ProviderWorkCandidate>()
         val seenCursors = mutableSetOf<String>()
@@ -923,6 +931,7 @@ class CollectProviderReadingEvidence private constructor(
                     request = ProviderReadingLookupRequest(
                         titles = listOf(title),
                         cursor = cursor,
+                        requestedLanguage = requestedLanguage,
                         coverageEvidenceVersion = if (
                             providerId.value == "app.tsuzuki.mangafire" ||
                             providerId.value == "app.tsuzuki.mangaall"
@@ -1041,11 +1050,39 @@ class CollectProviderReadingEvidence private constructor(
         selected: ProviderWorkCandidate?,
         primary: ProviderWorkCandidate?,
     ) {
-        if (!diagnostics.detailedCaptureActive || target.registration.descriptor.id.value != "app.tsuzuki.mangafire") {
+        val providerId = target.registration.descriptor.id.value
+        if (!diagnostics.detailedCaptureActive || providerId !in setOf(
+                "app.tsuzuki.mangafire",
+                "app.tsuzuki.mangaall",
+            )
+        ) {
             return
         }
         runCatching {
-            candidates.take(MAX_DIAGNOSTIC_CANDIDATES).forEachIndexed { index, work ->
+            // MangaAll is one Provider with several content sources. Sampling
+            // only the first 20 hits hides later sources when MangaDex fills
+            // the front of the lookup. Keep a bounded, source-balanced sample
+            // while preserving the upstream candidate index in diagnostics.
+            val sampled = if (providerId == "app.tsuzuki.mangaall") {
+                val perSource = mutableMapOf<String, Int>()
+                candidates.withIndex().filter { (_, work) ->
+                    val source = work.externalWorkId.substringBefore(':')
+                    if (source !in setOf("mangadex", "mangadot", "mangafire")) {
+                        false
+                    } else {
+                        val seen = perSource[source] ?: 0
+                        if (seen >= MAX_DIAGNOSTIC_CANDIDATES_PER_SOURCE) {
+                            false
+                        } else {
+                            perSource[source] = seen + 1
+                            true
+                        }
+                    }
+                }.take(MAX_DIAGNOSTIC_CANDIDATES)
+            } else {
+                candidates.withIndex().take(MAX_DIAGNOSTIC_CANDIDATES)
+            }
+            sampled.forEach { (index, work) ->
                 val facetMatches = target.facetId == null ||
                     work.language == null ||
                     work.language.equals(target.facetId, ignoreCase = true)
@@ -1459,5 +1496,6 @@ class CollectProviderReadingEvidence private constructor(
         const val MAX_LOOKUP_PAGES = 8
         const val MAX_LOOKUP_ITEMS = 2_000
         const val MAX_DIAGNOSTIC_CANDIDATES = 20
+        const val MAX_DIAGNOSTIC_CANDIDATES_PER_SOURCE = 6
     }
 }

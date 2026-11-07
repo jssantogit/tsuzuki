@@ -192,7 +192,7 @@ class ProviderWorkSourcePortfolioTest {
     }
 
     @Test
-    fun `MangaAll accepts only internal MangaFire candidates into verified source portfolio`() {
+    fun `MangaAll excludes unverified MangaDex search hits from trusted source portfolio`() {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val verified = original.copy(
             externalWorkId = "mangafire:kx1p6",
@@ -202,6 +202,15 @@ class ProviderWorkSourcePortfolioTest {
         val unverified = original.copy(
             externalWorkId = "mangadex:11111111-2222-4333-8444-555555555555",
             url = "https://mangafire.to/title/kx1p6-chainsaw-man",
+            // A similarly named MangaDex search hit cannot borrow MangaFire's
+            // details, authors or chapter coverage for automatic source trust.
+            detailOutcome = ProviderWorkDetailOutcome.NOT_NEEDED,
+            authors = emptyList(),
+            coverageOutcome = ProviderCoverageOutcome.UNKNOWN,
+            coverageObservedCount = null,
+            coverageMinMilli = null,
+            coverageMaxMilli = null,
+            coverageHasMore = null,
         )
         val fake = original.copy(externalWorkId = "mangafire:", title = "Chainsaw Man")
         val candidates = ProviderWorkSourcePortfolio.trustedCandidates(
@@ -227,6 +236,60 @@ class ProviderWorkSourcePortfolioTest {
         assessments.single().workVerification shouldBe ProviderWorkVerification.AUTHOR_CORROBORATED
         assessments.single().canPromoteChapters shouldBe false
         assessments.single().canOpenReader shouldBe false
+    }
+
+    @Test
+    fun `MangaDex enters provisional portfolio only with exact author and facet-bound chapter evidence`() {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val verified = original.copy(
+            externalWorkId = "mangadex:11111111-2222-4333-8444-555555555555",
+            title = "Chainsaw Man",
+            url = null,
+            detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+            authors = listOf("Fujimoto Tatsuki"),
+            coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+            coverageObservedCount = 1,
+            coverageMinMilli = 1_000,
+            coverageMaxMilli = 1_000,
+            coverageHasMore = true,
+        )
+        for (language in listOf("en", "pt-br")) {
+            val sources = ProviderWorkSourcePortfolio.trustedCandidates(
+                mangaAll,
+                language,
+                listOf(
+                    verified,
+                    verified.copy(externalWorkId = "mangadex:not-a-uuid"),
+                    verified.copy(authors = emptyList()),
+                    verified.copy(detailOutcome = ProviderWorkDetailOutcome.DETAIL_FAILED),
+                    verified.copy(
+                        coverageOutcome = ProviderCoverageOutcome.FAILED,
+                        coverageObservedCount = null,
+                        coverageMinMilli = null,
+                        coverageMaxMilli = null,
+                        coverageHasMore = null,
+                    ),
+                ),
+            )
+            sources shouldBe listOf(verified)
+            val assessed = ProviderWorkSourcePortfolio.assess(
+                mangaAll,
+                language,
+                "Chainsaw Man",
+                setOf("Tatsuki Fujimoto"),
+                sources,
+            )
+            assessed.single().workVerification shouldBe ProviderWorkVerification.AUTHOR_CORROBORATED
+            assessed.single().canCollectProvisionalChapters shouldBe true
+            assessed.single().canPromoteChapters shouldBe false
+            assessed.single().canOpenReader shouldBe false
+        }
+        ProviderWorkSourcePortfolio.trustedCandidates(mangaAll, "ja", listOf(verified)) shouldBe emptyList()
+        ProviderWorkSourcePortfolio.trustedCandidates(
+            mangaAll,
+            "en",
+            listOf(verified.copy(externalWorkId = "mangadot:317")),
+        ) shouldBe emptyList()
     }
 
     @Test

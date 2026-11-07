@@ -66,6 +66,14 @@ class ReaderEditionDefaultSkinContractTest {
     }
 
     @Test
+    fun `reader source choices do not label already filtered options as available`() {
+        val sourceCard = source("presentation/reader/ReaderSourceCard.kt")
+        sourceCard shouldNotContain "MR.strings.tsuzuki_reader_available_source"
+        sourceCard shouldContain "MR.strings.tsuzuki_reader_current_source"
+        sourceCard shouldContain "option.scanlationGroup?.trim()?.takeIf(String::isNotBlank)"
+    }
+
+    @Test
     fun `manual edition picker uses existing skin controls and distinct cards`() {
         val picker = source("presentation/tsuzuki/detail/CanonicalTitleDetailScreen.kt")
             .substringAfter("DetailsSheet.EDITION -> Column(")
@@ -76,6 +84,7 @@ class ReaderEditionDefaultSkinContractTest {
         picker shouldContain "colors.accent"
         picker shouldContain "DefaultSkinPrimaryButton("
         picker shouldNotContain "MaterialTheme.colorScheme"
+        picker shouldNotContain "candidate.ref.externalWorkId"
     }
 
     private fun source(relative: String): String = Files.readString(

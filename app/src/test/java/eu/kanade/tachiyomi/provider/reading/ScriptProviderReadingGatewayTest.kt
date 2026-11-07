@@ -149,6 +149,7 @@ class ScriptProviderReadingGatewayTest {
             ProviderReadingLookupRequest(
                 titles = listOf("Chainsaw Man"),
                 coverageEvidenceVersion = 1,
+                requestedLanguage = "pt-br",
             ),
         ) as ProviderCallResult.Success
         val item = response.value.items.single()
@@ -159,6 +160,7 @@ class ScriptProviderReadingGatewayTest {
         item.coverageHasMore shouldBe true
         val json = Json.parseToJsonElement(requireNotNull(requestJson)).jsonObject
         json["coverageEvidenceVersion"]?.jsonPrimitive?.int shouldBe 1
+        json["requestedLanguage"]?.jsonPrimitive?.content shouldBe "pt-br"
     }
 
     @Test

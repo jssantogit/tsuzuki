@@ -1030,6 +1030,8 @@
     <string name="tsuzuki_providers_install">Install</string>
     <string name="tsuzuki_providers_update">Update</string>
     <string name="tsuzuki_providers_rollback">Rollback</string>
+    <string name="tsuzuki_providers_uninstall">Uninstall</string>
+    <string name="tsuzuki_providers_uninstall_confirm">Remove only this Provider, including its installed versions and local preferences? Your library, reading progress, other Providers and repository enrollments will be preserved.</string>
     <string name="tsuzuki_providers_enabled">Enabled</string>
     <string name="tsuzuki_providers_disabled">Disabled</string>
     <string name="tsuzuki_providers_blocked">Blocked</string>
@@ -1040,6 +1042,10 @@
     <string name="tsuzuki_providers_incompatible">Requires a newer Host API</string>
     <string name="tsuzuki_providers_revoked">Revoked</string>
     <string name="tsuzuki_providers_origin_conflict">Provider ID belongs to another repository</string>
+    <string name="tsuzuki_providers_repository_link">Repository link (HTTPS)</string>
+    <string name="tsuzuki_providers_repository_resolve">Verify repository</string>
+    <string name="tsuzuki_providers_repository_resolving">Verifying repository…</string>
+    <string name="tsuzuki_providers_repository_preview">Verified repository</string>
     <string name="tsuzuki_providers_repository_name">Repository name</string>
     <string name="tsuzuki_providers_repository_id">Repository ID</string>
     <string name="tsuzuki_providers_repository_index_url">Signed index URL</string>
