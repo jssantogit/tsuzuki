@@ -62,7 +62,7 @@ class ProviderRepositoryCatalogVisibilityTest {
             providerId = providerId,
             versionName = "1.0.0",
             versionCode = 1L,
-            artifactUrl = "https://example.org/${providerId}.tsz",
+            artifactUrl = "https://example.org/$providerId.tsz",
             sha256 = "a".repeat(64),
             minHostApi = 1,
         ),
