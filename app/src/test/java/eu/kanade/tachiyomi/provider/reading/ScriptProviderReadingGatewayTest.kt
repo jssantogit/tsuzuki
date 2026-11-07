@@ -220,8 +220,8 @@ class ScriptProviderReadingGatewayTest {
             .error.malformedStage shouldBe DiagnosticProviderMalformedResultStage.RUNTIME_PAYLOAD
         (invalidSchema.lookup(providerId, request) as ProviderCallResult.Failure)
             .error.malformedStage shouldBe DiagnosticProviderMalformedResultStage.SCHEMA_DECODE
-        (invalidCandidate.lookup(providerId, request) as ProviderCallResult.Failure)
-            .error.malformedStage shouldBe DiagnosticProviderMalformedResultStage.CONTRACT_VALIDATION
+        val invalidCandidateError = invalidCandidate.lookup(providerId, request) as ProviderCallResult.Failure
+        invalidCandidateError.error.malformedStage shouldBe DiagnosticProviderMalformedResultStage.CONTRACT_VALIDATION
     }
 
     @Test
