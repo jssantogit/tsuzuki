@@ -141,6 +141,89 @@ class PrepareCanonicalChapterProviderFallbackTest {
     }
 
     @Test
+    fun `ambiguous verified sources do not await slow torrent fallback before asking for edition`() = runTest {
+        val chapter = CanonicalChapter(
+            id = "chapter-1",
+            canonicalTitleId = "title-1",
+            displayNumber = "1",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 1,
+            confidence = 1.0,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val options = listOf("source-a", "source-b").map { workId ->
+            ProviderChapterReadingOption(
+                canonicalChapterId = chapter.id,
+                bindingId = "binding-$workId",
+                providerId = ProviderId("app.tsuzuki.mangaall"),
+                facetId = "en",
+                externalWorkId = "mangafire:$workId",
+                providerChapterId = "mangafire:chapter-$workId",
+            )
+        }
+        val resolver = mockk<ResolveProviderChapterReading>()
+        coEvery { resolver.options(chapter.id) } returns options
+        coEvery { resolver.uniqueUserConfirmedOption(chapter.id, options) } returns null
+        val torrent = mockk<PrepareProviderChapterTorrent>()
+        coEvery { torrent.prepare(chapter.id, any()) } coAnswers {
+            kotlinx.coroutines.awaitCancellation()
+        }
+        val prepare = PrepareCanonicalChapterForReader(
+            resolveChapterContent = emptyAddonResolver(),
+            canonicalChapterRepository = chapterRepository(chapter),
+            canonicalReadingRepository = readingRepository(),
+            canonicalDownloadRepository = emptyDownloadRepository(),
+            canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+            },
+            chapterContentPreparer = mockk(),
+            structuredDiagnostics = RecordingStructuredDiagnosticRecorder(detailed = true),
+            resolveProviderChapterReading = resolver,
+            prepareProviderChapterTorrent = torrent,
+        )
+        val result = kotlinx.coroutines.withTimeout(500L) { prepare.execute(chapter.id) }
+        result.shouldBeInstanceOf<CanonicalReaderPreparation.ProviderEditionConfirmationRequired>()
+    }
+
+    @Test
+    fun `unavailable HTTP sources bound slow torrent fallback before Reader can exit loading`() = runTest {
+        val chapter = CanonicalChapter(
+            id = "chapter-1",
+            canonicalTitleId = "title-1",
+            displayNumber = "1",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 1,
+            confidence = 1.0,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val torrent = mockk<PrepareProviderChapterTorrent>()
+        coEvery { torrent.prepare(chapter.id, any()) } coAnswers {
+            kotlinx.coroutines.awaitCancellation()
+        }
+        val recorder = RecordingStructuredDiagnosticRecorder(detailed = false)
+        val prepare = PrepareCanonicalChapterForReader(
+            resolveChapterContent = emptyAddonResolver(),
+            canonicalChapterRepository = chapterRepository(chapter),
+            canonicalReadingRepository = readingRepository(),
+            canonicalDownloadRepository = emptyDownloadRepository(),
+            canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+            },
+            chapterContentPreparer = mockk(),
+            structuredDiagnostics = recorder,
+            prepareProviderChapterTorrent = torrent,
+        )
+        val result = kotlinx.coroutines.withTimeout(25_000L) { prepare.execute(chapter.id) }
+        result.shouldBeInstanceOf<CanonicalReaderPreparation.Unavailable>()
+        recorder.events.any {
+            it.name == DiagnosticEventName.CONTENT_BINDING_RESOLVE_COMPLETED &&
+                it.outcome == DiagnosticOutcome.TIMEOUT
+        } shouldBe true
+    }
+
+    @Test
     fun `unresolved work sources have distinct actionable preparation`() {
         val unresolved = CanonicalReaderPreparation.ProviderEditionConfirmationRequired(
             canonicalTitleId = "title-1",
