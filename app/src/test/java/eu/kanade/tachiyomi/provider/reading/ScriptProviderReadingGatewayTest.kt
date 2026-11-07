@@ -8,7 +8,6 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
-import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
 import tachiyomi.core.provider.packageformat.ParsedProviderPackage
 import tachiyomi.core.provider.packageformat.ProviderManifestCapability
 import tachiyomi.core.provider.packageformat.ProviderManifestNetworkPermission
@@ -18,6 +17,7 @@ import tachiyomi.core.provider.packageformat.ProviderScriptManifest
 import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilityRef
