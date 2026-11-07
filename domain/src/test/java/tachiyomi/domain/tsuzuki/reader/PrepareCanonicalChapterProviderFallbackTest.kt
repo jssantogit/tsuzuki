@@ -221,7 +221,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
             it.name == DiagnosticEventName.CONTENT_BINDING_RESOLVE_COMPLETED &&
                 it.outcome == DiagnosticOutcome.TIMEOUT
         } shouldBe true
-        // Timeout never grants source identity or Reader chapter authority.
+        // A timed-out fallback cannot grant Reader source authority.
     }
 
     @Test
