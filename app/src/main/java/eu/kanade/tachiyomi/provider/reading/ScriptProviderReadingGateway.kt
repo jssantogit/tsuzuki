@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationPolicy
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -16,6 +17,7 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
 import tachiyomi.core.provider.supplychain.ProviderArtifactStore
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilityRef
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
@@ -362,7 +364,7 @@ class ScriptProviderReadingGateway internal constructor(
             return failure.toProviderFailure()
         }
 
-        val value = response.value ?: return malformed()
+        val value = response.value ?: return malformed(DiagnosticProviderMalformedResultStage.EMPTY_VALUE)
         return try {
             ProviderCallResult.Success(decode(value, active))
         } catch (error: CancellationException) {
@@ -382,8 +384,10 @@ class ScriptProviderReadingGateway internal constructor(
                     httpStatus = error.httpStatus,
                 ),
             )
+        } catch (_: SerializationException) {
+            malformed(DiagnosticProviderMalformedResultStage.SCHEMA_DECODE)
         } catch (_: Throwable) {
-            malformed()
+            malformed(DiagnosticProviderMalformedResultStage.CONTRACT_VALIDATION)
         }
     }
 
@@ -450,7 +454,7 @@ class ScriptProviderReadingGateway internal constructor(
         ProviderRuntimeFailureCode.INVOCATION_CONFLICT ->
             failure(ProviderErrorCode.INVOCATION_CONFLICT, retryable = true)
         ProviderRuntimeFailureCode.MALFORMED_RESULT ->
-            malformed()
+            malformed(DiagnosticProviderMalformedResultStage.RUNTIME_PAYLOAD)
         ProviderRuntimeFailureCode.CANCELLED ->
             throw CancellationException("Provider reading invocation cancelled")
         ProviderRuntimeFailureCode.HOST_ERROR ->
@@ -470,8 +474,15 @@ class ScriptProviderReadingGateway internal constructor(
     private fun unavailable(retryable: Boolean = false) =
         failure(ProviderErrorCode.UNAVAILABLE, retryable)
 
-    private fun malformed() =
-        failure(ProviderErrorCode.MALFORMED_RESULT, retryable = false)
+    private fun malformed(
+        stage: DiagnosticProviderMalformedResultStage = DiagnosticProviderMalformedResultStage.CONTRACT_VALIDATION,
+    ) = ProviderCallResult.Failure(
+        ProviderError(
+            code = ProviderErrorCode.MALFORMED_RESULT,
+            retryable = false,
+            malformedStage = stage,
+        ),
+    )
 
     private fun failure(
         code: ProviderErrorCode,
