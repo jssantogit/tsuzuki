@@ -29,6 +29,32 @@ class StructuredDiagnosticEventTest {
     }
 
     @Test
+    fun `Provider malformed reply diagnostic keeps closed stage and drops untrusted exception data`() {
+        val event = StructuredDiagnosticEvent(
+            timestampMillis = 1_790_755_200_000L,
+            severity = DiagnosticSeverity.DEBUG,
+            subsystem = DiagnosticSubsystem.CHAPTER,
+            name = DiagnosticEventName.PROVIDER_READING_LOOKUP_ATTEMPT,
+            sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+            operationId = null,
+            stage = DiagnosticStage.LOOKUP,
+            outcome = DiagnosticOutcome.FAILED,
+            attributes = mapOf(
+                "provider_malformed_stage" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderMalformedResultStage.SCHEMA_DECODE,
+                ),
+                "untrusted_json" to DiagnosticAttributeValue.Text("token=secret"),
+            ),
+        )
+        requireNotNull(StructuredDiagnosticSanitizer.sanitize(event)).attributes shouldBe
+            mapOf(
+                DiagnosticAttribute.PROVIDER_MALFORMED_STAGE to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderMalformedResultStage.SCHEMA_DECODE,
+                ),
+            )
+    }
+
+    @Test
     fun `canonical refresh phases accept typed causes and reject arbitrary strings`() {
         fun attributes(values: Map<String, DiagnosticAttributeValue>) =
             requireNotNull(
