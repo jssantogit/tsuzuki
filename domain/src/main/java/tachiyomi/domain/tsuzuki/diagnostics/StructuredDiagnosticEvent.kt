@@ -250,6 +250,7 @@ enum class DiagnosticAttribute {
     PROVIDER_VERSION_NAME,
     PROVIDER_VERSION_CODE,
     PROVIDER_ERROR_CODE,
+    PROVIDER_MALFORMED_STAGE,
     PROVIDER_RETRYABLE,
     ADDON_ID,
     CANONICAL_TITLE_REF,
@@ -503,6 +504,14 @@ enum class DiagnosticProviderEditionQualification : DiagnosticSafeCode {
 }
 
 /** A closed cause for an empty Reader Provider source lookup; no source text. */
+/** Closed Provider reply failure stage; never expose source bodies, URLs or exception messages. */
+enum class DiagnosticProviderMalformedResultStage : DiagnosticSafeCode {
+    RUNTIME_PAYLOAD,
+    EMPTY_VALUE,
+    SCHEMA_DECODE,
+    CONTRACT_VALIDATION,
+}
+
 enum class DiagnosticProviderReaderNoMatchReason : DiagnosticSafeCode {
     NO_ELIGIBLE_SOURCE,
     SOURCE_EDITION_EXCLUDED,
@@ -806,6 +815,8 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticProviderHttpFailure }
         DiagnosticAttribute.PROVIDER_RUNTIME_PHASE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderRuntimePhase }
+        DiagnosticAttribute.PROVIDER_MALFORMED_STAGE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderMalformedResultStage }
         DiagnosticAttribute.PROVIDER_BROWSER_FAILURE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderBrowserFailure }
         DiagnosticAttribute.CHAPTER_RECONCILE_PHASE -> (value as? DiagnosticAttributeValue.Code)
