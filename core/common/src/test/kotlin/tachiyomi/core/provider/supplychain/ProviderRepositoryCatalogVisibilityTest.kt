@@ -1,6 +1,7 @@
 package tachiyomi.core.provider.supplychain
 
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
 class ProviderRepositoryCatalogVisibilityTest {
@@ -26,6 +27,8 @@ class ProviderRepositoryCatalogVisibilityTest {
 
         visibleProviderRepositoryEntries(listOf(dex, fire, unified, external, dot))
             .shouldContainExactly(fire, unified, external)
+        // Display-only migration: never mutate the signed index or installed packages.
+        listOf(dex, fire, unified, external, dot).size shouldBe 5
     }
 
     @Test
