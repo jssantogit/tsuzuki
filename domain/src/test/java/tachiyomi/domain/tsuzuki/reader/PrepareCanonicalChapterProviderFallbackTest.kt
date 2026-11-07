@@ -221,6 +221,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
             it.name == DiagnosticEventName.CONTENT_BINDING_RESOLVE_COMPLETED &&
                 it.outcome == DiagnosticOutcome.TIMEOUT
         } shouldBe true
+        // Timeout does not promote an unverified torrent work into Reader content.
     }
 
     @Test
