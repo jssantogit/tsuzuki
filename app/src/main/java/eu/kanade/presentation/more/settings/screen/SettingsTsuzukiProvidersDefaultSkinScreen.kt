@@ -77,6 +77,7 @@ import tachiyomi.core.provider.supplychain.EnrolledProviderRepository
 import tachiyomi.core.provider.supplychain.ProviderRepositoryCatalogEntry
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEntryStatus
 import tachiyomi.core.provider.supplychain.ProviderRepositorySnapshot
+import tachiyomi.core.provider.supplychain.visibleProviderRepositoryEntries
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
@@ -613,7 +614,7 @@ private fun DiscoverProviderCards(
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
-    val entries = snapshots.flatMap { it.entries }
+    val entries = visibleProviderRepositoryEntries(snapshots.flatMap { it.entries })
         .sortedWith(compareBy({ it.descriptor.providerId }, { it.repositoryId }))
 
     LazyColumn(

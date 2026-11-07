@@ -49,6 +49,7 @@ import tachiyomi.core.provider.supplychain.EnrolledProviderRepository
 import tachiyomi.core.provider.supplychain.ProviderRepositoryCatalogEntry
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEntryStatus
 import tachiyomi.core.provider.supplychain.ProviderRepositorySnapshot
+import tachiyomi.core.provider.supplychain.visibleProviderRepositoryEntries
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
@@ -1023,9 +1024,9 @@ private fun DiscoverProvidersList(
     operationKeys: Set<String>,
     onInstall: (ProviderRepositoryCatalogEntry) -> Unit,
 ) {
-    val entries = snapshots
-        .flatMap { snapshot -> snapshot.entries }
-        .sortedWith(compareBy({ it.descriptor.providerId }, { it.repositoryId }))
+    val entries = visibleProviderRepositoryEntries(
+        snapshots.flatMap { snapshot -> snapshot.entries },
+    ).sortedWith(compareBy({ it.descriptor.providerId }, { it.repositoryId }))
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         if (entries.isEmpty()) {
