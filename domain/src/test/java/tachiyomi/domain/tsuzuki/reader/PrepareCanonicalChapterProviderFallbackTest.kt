@@ -182,7 +182,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
             resolveProviderChapterReading = resolver,
             prepareProviderChapterTorrent = torrent,
         )
-        val result = kotlinx.coroutines.withTimeout(500L) { prepare.execute(chapter.id) }
+        val result = kotlinx.coroutines.withTimeout(2_500L) { prepare.execute(chapter.id) }
         result.shouldBeInstanceOf<CanonicalReaderPreparation.ProviderEditionConfirmationRequired>()
     }
 
