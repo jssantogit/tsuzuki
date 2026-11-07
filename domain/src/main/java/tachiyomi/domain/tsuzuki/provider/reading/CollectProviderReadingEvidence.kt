@@ -472,6 +472,7 @@ class CollectProviderReadingEvidence private constructor(
                         DiagnosticStage.LOOKUP,
                         DiagnosticOutcome.FAILED,
                         errorCode = result.error.code,
+                        malformedStage = result.error.malformedStage,
                     )
                     return result
                 }
@@ -1389,6 +1390,7 @@ class CollectProviderReadingEvidence private constructor(
         pageCount: Int? = null,
         completed: Boolean? = null,
         errorCode: ProviderErrorCode? = null,
+        malformedStage: DiagnosticProviderMalformedResultStage? = null,
         name: DiagnosticEventName = DiagnosticEventName.PROVIDER_READING_EVIDENCE,
     ) {
         runCatching {
@@ -1408,6 +1410,7 @@ class CollectProviderReadingEvidence private constructor(
                 partialCount?.let { put("partial_evidence_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 completed?.let { put("completed", DiagnosticAttributeValue.Flag(it)) }
                 errorCode?.let { put("provider_error_code", DiagnosticAttributeValue.Text(it.name)) }
+                malformedStage?.let { put("provider_malformed_stage", DiagnosticAttributeValue.Code(it)) }
             }
             diagnostics.record(
                 StructuredDiagnosticEvent(
