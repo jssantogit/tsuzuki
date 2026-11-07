@@ -1,5 +1,6 @@
 package tachiyomi.domain.tsuzuki.provider.reading
 
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import java.net.URI
 import java.security.MessageDigest
@@ -342,8 +343,11 @@ data class ProviderError(
     val httpStatus: Int? = null,
     /** Safe, bounded volume-shaped page count for a typed Reader identity rejection. */
     val observedPageCount: Int? = null,
+    /** Closed technical failure stage; never captures source body or raw exception. */
+    val malformedStage: DiagnosticProviderMalformedResultStage? = null,
 ) {
     init {
+        require(malformedStage == null || code == ProviderErrorCode.MALFORMED_RESULT)
         require(httpStatus == null || httpStatus in 100..599)
         require(httpStatus == null || sourceFailureCode != null)
         require(observedPageCount == null || observedPageCount in 0..5000)
