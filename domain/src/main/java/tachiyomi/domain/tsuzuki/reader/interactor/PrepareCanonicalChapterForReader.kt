@@ -2,6 +2,7 @@ package tachiyomi.domain.tsuzuki.reader.interactor
 
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
 import tachiyomi.domain.tsuzuki.content.ContentOption
 import tachiyomi.domain.tsuzuki.content.interactor.ResolveChapterContent
@@ -343,22 +344,21 @@ class PrepareCanonicalChapterForReader(
                             DiagnosticAttributeValue.Code(DiagnosticProviderLookupDecision.AMBIGUOUS_EDITION),
                     ) + capturedCanonicalIdentity,
                 )
-                // An ambiguous HTTP identity is not authority to choose one
-                // candidate, but it must not suppress a separately verified
-                // torrent archive. That fallback runs its own chapter/volume
-                // identity checks and can still fail closed when ambiguous.
-                val alternative = prepareProviderTorrentFallback(canonicalChapterId, trace)
-                if (alternative is CanonicalReaderPreparation.Unavailable) {
-                    val canonicalTitleId = canonicalChapterRepository.getById(canonicalChapterId)?.canonicalTitleId
-                    if (canonicalTitleId != null) {
-                        return CanonicalReaderPreparation.ProviderEditionConfirmationRequired(
-                            canonicalTitleId = canonicalTitleId,
-                            canonicalChapterId = canonicalChapterId,
-                            candidateCount = options.size,
-                        )
-                    }
+                // The Reader already has multiple *exact* chapter sources.
+                // Prompt immediately instead of blocking the UI on unrelated
+                // torrent discovery (observed >120s during physical smoke).
+                // The torrent path remains available when no verified HTTP
+                // chapter option exists. Never select an ambiguous HID here.
+                val canonicalTitleId = canonicalChapterRepository.getById(canonicalChapterId)?.canonicalTitleId
+                return if (canonicalTitleId == null) {
+                    CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+                } else {
+                    CanonicalReaderPreparation.ProviderEditionConfirmationRequired(
+                        canonicalTitleId = canonicalTitleId,
+                        canonicalChapterId = canonicalChapterId,
+                        candidateCount = options.size,
+                    )
                 }
-                return alternative
             }
 
             val option = explicitlyConfirmedOption ?: options.singleOrNull()
@@ -493,6 +493,10 @@ class PrepareCanonicalChapterForReader(
         )
     }
 
+    private companion object {
+        const val TORRENT_FALLBACK_READER_BUDGET_MILLIS = 20_000L
+    }
+
     private suspend fun prepareProviderTorrentFallback(
         canonicalChapterId: String,
         trace: DiagnosticTrace,
@@ -513,7 +517,26 @@ class PrepareCanonicalChapterForReader(
             return CanonicalReaderPreparation.Unavailable(canonicalChapterId)
         }
 
-        return when (val prepared = preparer.prepare(canonicalChapterId, trace)) {
+        // Torrent discovery can involve slow trackers and metadata hydration.
+        // It must not keep a black Reader screen open for minutes when no HTTP
+        // mapping exists. A timed-out attempt is not an absent canonical chapter.
+        val prepared = withTimeoutOrNull(TORRENT_FALLBACK_READER_BUDGET_MILLIS) {
+            preparer.prepare(canonicalChapterId, trace)
+        } ?: run {
+            trace.event(
+                subsystem = DiagnosticSubsystem.CONTENT,
+                name = DiagnosticEventName.CONTENT_BINDING_RESOLVE_COMPLETED,
+                stage = DiagnosticStage.BINDING,
+                outcome = DiagnosticOutcome.TIMEOUT,
+                severity = DiagnosticSeverity.WARN,
+                attributes = mapOf(
+                    DiagnosticAttribute.CANDIDATE_TYPE to
+                        DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
+                ),
+            )
+            return CanonicalReaderPreparation.Unavailable(canonicalChapterId)
+        }
+        return when (prepared) {
             ProviderChapterTorrentPreparation.Unavailable -> {
                 trace.event(
                     subsystem = DiagnosticSubsystem.CONTENT,
