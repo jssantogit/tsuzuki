@@ -221,6 +221,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
             it.name == DiagnosticEventName.CONTENT_BINDING_RESOLVE_COMPLETED &&
                 it.outcome == DiagnosticOutcome.TIMEOUT
         } shouldBe true
+        // A timeout does not grant new Reader or canonical chapter authority.
     }
 
     @Test
