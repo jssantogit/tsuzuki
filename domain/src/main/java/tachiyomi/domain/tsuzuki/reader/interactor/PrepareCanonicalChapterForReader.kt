@@ -344,11 +344,15 @@ class PrepareCanonicalChapterForReader(
                             DiagnosticAttributeValue.Code(DiagnosticProviderLookupDecision.AMBIGUOUS_EDITION),
                     ) + capturedCanonicalIdentity,
                 )
-                // The Reader already has multiple *exact* chapter sources.
-                // Prompt immediately instead of blocking the UI on unrelated
-                // torrent discovery (observed >120s during physical smoke).
-                // The torrent path remains available when no verified HTTP
-                // chapter option exists. Never select an ambiguous HID here.
+                // Keep an independently verified, fast torrent archive as a
+                // valid alternative. A slow torrent scan, however, cannot hold
+                // two already-mapped HTTP sources behind a black Reader screen.
+                val alternative = withTimeoutOrNull(AMBIGUOUS_TORRENT_PROBE_MILLIS) {
+                    prepareProviderTorrentFallback(canonicalChapterId, trace)
+                }
+                if (alternative != null && alternative !is CanonicalReaderPreparation.Unavailable) {
+                    return alternative
+                }
                 val canonicalTitleId = canonicalChapterRepository.getById(canonicalChapterId)?.canonicalTitleId
                 return if (canonicalTitleId == null) {
                     CanonicalReaderPreparation.Unavailable(canonicalChapterId)
@@ -494,6 +498,7 @@ class PrepareCanonicalChapterForReader(
     }
 
     private companion object {
+        const val AMBIGUOUS_TORRENT_PROBE_MILLIS = 1_500L
         const val TORRENT_FALLBACK_READER_BUDGET_MILLIS = 20_000L
     }
 
