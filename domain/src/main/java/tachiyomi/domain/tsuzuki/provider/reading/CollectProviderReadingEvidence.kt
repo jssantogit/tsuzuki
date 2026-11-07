@@ -19,6 +19,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCandidateReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderDetailOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderEditionQualification
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderWorkVerification
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
@@ -462,6 +463,7 @@ class CollectProviderReadingEvidence private constructor(
                         elapsedMillis = (System.nanoTime() - queryStarted) / 1_000_000L,
                         errorCode = result.error.code,
                         sourceFailureCode = result.error.sourceFailureCode,
+                        malformedStage = result.error.malformedStage,
                         httpStatus = result.error.httpStatus,
                     )
                     trace(
@@ -987,6 +989,7 @@ class CollectProviderReadingEvidence private constructor(
         candidateCount: Int? = null,
         errorCode: ProviderErrorCode? = null,
         sourceFailureCode: ProviderLookupFailureCode? = null,
+        malformedStage: DiagnosticProviderMalformedResultStage? = null,
         httpStatus: Int? = null,
     ) {
         if (!diagnostics.detailedCaptureActive) return
@@ -1006,6 +1009,7 @@ class CollectProviderReadingEvidence private constructor(
                 }
                 candidateCount?.let { put("candidate_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 errorCode?.let { put("provider_error_code", DiagnosticAttributeValue.Text(it.name)) }
+                malformedStage?.let { put("provider_malformed_stage", DiagnosticAttributeValue.Code(it)) }
                 sourceFailureCode?.let { reason ->
                     val category = when (reason) {
                         ProviderLookupFailureCode.CHALLENGE_BLOCKED -> DiagnosticErrorCategory.CAPTCHA
