@@ -202,7 +202,7 @@ class ScriptProviderReadingGatewayTest {
     }
 
     @Test
-    fun `malformed lookup explains runtime schema and candidate contract failures without leaking source text`() = runBlocking {
+    fun `malformed lookup identifies runtime schema and candidate contract failures`() = runBlocking {
         val runtime = gateway { _, _, _, _ ->
             ProviderRuntimeInvocationResponse.failure(ProviderRuntimeFailureCode.MALFORMED_RESULT)
         }
