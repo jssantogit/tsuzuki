@@ -8,6 +8,7 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
 import tachiyomi.core.provider.packageformat.ParsedProviderPackage
 import tachiyomi.core.provider.packageformat.ProviderManifestCapability
 import tachiyomi.core.provider.packageformat.ProviderManifestNetworkPermission
@@ -198,6 +199,29 @@ class ScriptProviderReadingGatewayTest {
         }
         val invalid = tampered.lookup(providerId, ProviderReadingLookupRequest(listOf("Vagabond")))
         (invalid as ProviderCallResult.Failure).error.code shouldBe ProviderErrorCode.MALFORMED_RESULT
+    }
+
+    @Test
+    fun `malformed lookup explains runtime schema and candidate contract failures without leaking source text`() = runBlocking {
+        val runtime = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.failure(ProviderRuntimeFailureCode.MALFORMED_RESULT)
+        }
+        val invalidSchema = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success("""{"items":[{"externalWorkId":123,"title":"Title"}]}""")
+        }
+        val invalidCandidate = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success(
+                """{"items":[{"externalWorkId":"work","title":"Title","aliases":["${"x".repeat(1025)}"]}]}""",
+            )
+        }
+
+        val request = ProviderReadingLookupRequest(listOf("Title"))
+        (runtime.lookup(providerId, request) as ProviderCallResult.Failure)
+            .error.malformedStage shouldBe DiagnosticProviderMalformedResultStage.RUNTIME_PAYLOAD
+        (invalidSchema.lookup(providerId, request) as ProviderCallResult.Failure)
+            .error.malformedStage shouldBe DiagnosticProviderMalformedResultStage.SCHEMA_DECODE
+        (invalidCandidate.lookup(providerId, request) as ProviderCallResult.Failure)
+            .error.malformedStage shouldBe DiagnosticProviderMalformedResultStage.CONTRACT_VALIDATION
     }
 
     @Test
