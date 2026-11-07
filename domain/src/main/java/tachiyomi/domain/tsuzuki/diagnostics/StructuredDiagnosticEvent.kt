@@ -504,7 +504,7 @@ enum class DiagnosticProviderEditionQualification : DiagnosticSafeCode {
 }
 
 /** A closed cause for an empty Reader Provider source lookup; no source text. */
-/** Closed Provider reply failure stage; never expose source bodies, URLs or exception messages. */
+// Closed Provider reply failure stage; never expose source bodies, URLs or exception messages.
 enum class DiagnosticProviderMalformedResultStage : DiagnosticSafeCode {
     RUNTIME_PAYLOAD,
     EMPTY_VALUE,
