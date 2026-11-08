@@ -49,10 +49,13 @@ class ProviderHttpDiagnosticTraceTest {
     fun `MangaAll HTTP diagnostics distinguish only approved internal sources`() {
         val sources = listOf(
             "api.mangadex.org" to DiagnosticMangaAllNetworkSource.MANGADEX,
+            "uploads.mangadex.org" to DiagnosticMangaAllNetworkSource.MANGADEX,
+            "edge.mangadex.network" to DiagnosticMangaAllNetworkSource.MANGADEX,
             "mangadot.net" to DiagnosticMangaAllNetworkSource.MANGADOT,
             "mangafire.to" to DiagnosticMangaAllNetworkSource.MANGAFIRE,
             "s1.mangafire.to" to DiagnosticMangaAllNetworkSource.MANGAFIRE,
             "cdn.mfcdn.cc" to DiagnosticMangaAllNetworkSource.MANGAFIRE,
+            "mfcdn2.xyz" to DiagnosticMangaAllNetworkSource.MANGAFIRE,
         )
         for ((host, source) in sources) {
             val event = ProviderHttpDiagnostic(
