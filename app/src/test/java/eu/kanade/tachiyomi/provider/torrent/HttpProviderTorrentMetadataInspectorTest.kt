@@ -159,6 +159,27 @@ class HttpProviderTorrentMetadataInspectorTest {
     }
 
     @Test
+    fun `policy backed async HTTP never fetches disallowed local addresses`() = runTest {
+        val server = MockWebServer()
+        server.enqueue(MockResponse.Builder().body("metadata").build())
+        server.start()
+        try {
+            val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+            val inspector = HttpProviderTorrentMetadataInspector(
+                baseClient = OkHttpClient(),
+                decoder = { _, item -> item },
+            )
+            inspector.inspect(
+                descriptor(origin, allowLocalNetwork = false),
+                candidate(server.url("/blocked.torrent").toString()),
+            ) shouldBe null
+            server.requestCount shouldBe 0
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
     fun `metadata byte quota fails closed`() = runTest {
         val server = MockWebServer()
         server.enqueue(
