@@ -235,6 +235,7 @@ class ProviderTorrentMetadataSearchGatewayTest {
         encoded.contains("0123456789abcdef0123456789abcdef01234567") shouldBe false
     }
 
+    // RED: original Host diagnostic loop attempts to inspect every file.
     @Test
     fun `oversized torrent file table is not exhaustively scanned for diagnostics`() = runTest {
         val hugeFiles = (1..512).map { number ->
