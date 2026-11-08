@@ -266,6 +266,7 @@ class TorrentChapterMapper(
     fun map(
         request: TorrentChapterRequest,
         candidate: TorrentCandidate,
+        checkCancellation: () -> Unit = {},
     ): TorrentChapterFileMatch {
         val files = candidate.files.orEmpty()
         // Canonical resolution always supplies title/alias context; without it there
@@ -274,6 +275,7 @@ class TorrentChapterMapper(
 
         var plausible = files
             .asSequence()
+            .onEach { checkCancellation() }
             .filter(::isSupportedReadableFile)
             .mapNotNull { file ->
                 val label = file.chapterLabel()
@@ -311,7 +313,7 @@ class TorrentChapterMapper(
             .sortedBy(TorrentCandidateFile::index)
 
         return when (matchingFiles.size) {
-            0 -> titleAwareTokenFallback(request, candidate, files)
+            0 -> titleAwareTokenFallback(request, candidate, files, checkCancellation)
             1 -> TorrentChapterFileMatch.Exact(matchingFiles.single())
             else -> TorrentChapterFileMatch.Ambiguous(matchingFiles)
         }
@@ -399,13 +401,15 @@ class TorrentChapterMapper(
         request: TorrentChapterRequest,
         candidate: TorrentCandidate,
         files: List<TorrentCandidateFile>,
+        checkCancellation: () -> Unit,
     ): TorrentChapterFileMatch {
         if (request.titles.isEmpty()) return TorrentChapterFileMatch.None
         val chapterNumber = request.chapterNumber?.trim()?.takeIf(String::isNotEmpty)
             ?: return TorrentChapterFileMatch.None
         if (parseLabel(chapterNumber).identity != request.identity) return TorrentChapterFileMatch.None
 
-        val readableFiles = files.filter(::isSupportedReadableFile)
+        val readableFiles = files.asSequence().onEach { checkCancellation() }
+            .filter(::isSupportedReadableFile).toList()
         if (readableFiles.size != 1) return TorrentChapterFileMatch.None
         val file = readableFiles.single()
         val volumes = volumeEvidence(file, file.chapterLabel()).distinct()
