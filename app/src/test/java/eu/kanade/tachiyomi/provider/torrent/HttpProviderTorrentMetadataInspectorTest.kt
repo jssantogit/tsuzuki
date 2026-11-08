@@ -192,6 +192,7 @@ class HttpProviderTorrentMetadataInspectorTest {
         }
     }
 
+    // RED: the old blocking OkHttp execute() outlives Reader cancellation.
     @Test
     fun `cancelled metadata inspection does not wait for delayed HTTP headers`() = runBlocking {
         val server = MockWebServer()
