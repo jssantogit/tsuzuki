@@ -58,12 +58,6 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
     private val parseChapterVolume = ParseCanonicalChapterVolume()
     private val chapterMapper = TorrentChapterMapper()
 
-    private companion object {
-        const val MAX_DIAGNOSTIC_CANDIDATES = 12
-        const val MAX_DIAGNOSTIC_FILES_PER_CANDIDATE = 96
-        const val MAX_DIAGNOSTIC_MATCH_NANOS = 1_500_000_000L
-    }
-
     init {
         require(maxConcurrentInspections in 1..MAX_CONCURRENT_INSPECTIONS) {
             "Provider torrent metadata concurrency is outside supported bounds"
@@ -573,6 +567,9 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
     }
 
     private companion object {
+        const val MAX_DIAGNOSTIC_CANDIDATES = 12
+        const val MAX_DIAGNOSTIC_FILES_PER_CANDIDATE = 96
+        const val MAX_DIAGNOSTIC_MATCH_NANOS = 1_500_000_000L
         const val MAX_CANDIDATE_EVENTS = 32
         const val DEFAULT_MAX_CONCURRENT_INSPECTIONS = 4
         const val MAX_CONCURRENT_INSPECTIONS = 8
