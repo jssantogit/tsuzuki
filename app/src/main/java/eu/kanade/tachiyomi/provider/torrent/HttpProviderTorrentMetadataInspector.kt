@@ -72,7 +72,10 @@ class HttpProviderTorrentMetadataInspector internal constructor(
         var redirects = 0
 
         while (true) {
-            policy.validate(current.toString(), resolveAddress = true)
+            // URL/origin is checked before dispatch. Actual address validation
+            // happens in OkHttp's policy-backed DNS on its callback thread;
+            // resolving DNS synchronously here could outlive Reader cancellation.
+            policy.validate(current.toString(), resolveAddress = false)
             val result = requestMetadata(client, current.toString())
 
             if (result.code in REDIRECT_CODES) {
