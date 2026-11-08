@@ -214,7 +214,7 @@ class HttpProviderTorrentMetadataInspectorTest {
     }
 
     @Test
-    fun `cancelled metadata inspection does not wait for delayed HTTP headers`() = runBlocking {
+    fun `cancelled metadata inspection does not wait for delayed HTTP headers`() = runBlocking<Unit> {
         val server = MockWebServer()
         server.enqueue(
             MockResponse.Builder()
@@ -246,7 +246,7 @@ class HttpProviderTorrentMetadataInspectorTest {
     }
 
     @Test
-    fun `cancelled metadata inspection interrupts delayed HTTP body`() = runBlocking {
+    fun `cancelled metadata inspection interrupts delayed HTTP body`() = runBlocking<Unit> {
         val server = MockWebServer()
         server.enqueue(
             MockResponse.Builder()
