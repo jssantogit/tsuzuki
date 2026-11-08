@@ -210,7 +210,10 @@ class HttpProviderTorrentMetadataInspectorTest {
             )
             val started = System.nanoTime()
             val result = withTimeoutOrNull(200) {
-                inspector.inspect(descriptor(origin, allowLocalNetwork = true), candidate(server.url("/slow.torrent").toString()))
+                inspector.inspect(
+                    descriptor(origin, allowLocalNetwork = true),
+                    candidate(server.url("/slow.torrent").toString()),
+                )
             }
             val elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
 
@@ -239,7 +242,10 @@ class HttpProviderTorrentMetadataInspectorTest {
             )
             val started = System.nanoTime()
             val result = withTimeoutOrNull(200) {
-                inspector.inspect(descriptor(origin, allowLocalNetwork = true), candidate(server.url("/slow-body.torrent").toString()))
+                inspector.inspect(
+                    descriptor(origin, allowLocalNetwork = true),
+                    candidate(server.url("/slow-body.torrent").toString()),
+                )
             }
             val elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
 
