@@ -39,14 +39,16 @@ sealed interface TorrentChapterPayloadMatch {
 fun TorrentChapterMapper.select(
     request: TorrentChapterRequest,
     candidate: TorrentCandidate,
+    checkCancellation: () -> Unit = {},
 ): TorrentChapterPayloadMatch {
-    val archive = when (val match = map(request, candidate)) {
+    checkCancellation()
+    val archive = when (val match = map(request, candidate, checkCancellation)) {
         TorrentChapterFileMatch.None -> emptyList()
         is TorrentChapterFileMatch.Exact -> listOf(TorrentChapterPayload.SingleArchive(match.file))
         is TorrentChapterFileMatch.Ambiguous ->
             match.files.map(TorrentChapterPayload::SingleArchive)
     }
-    val directories = exactImageDirectories(request, candidate)
+    val directories = exactImageDirectories(request, candidate, checkCancellation)
     val choices = archive + directories
     return when (choices.size) {
         0 -> TorrentChapterPayloadMatch.None
@@ -69,15 +71,18 @@ private val naturalNumber = Regex("\\d+")
 private fun exactImageDirectories(
     request: TorrentChapterRequest,
     candidate: TorrentCandidate,
+    checkCancellation: () -> Unit,
 ): List<TorrentChapterPayload.ImageDirectory> {
     val all = candidate.files.orEmpty()
     if (all.isEmpty() || request.titles.isEmpty() || all.size > 20_000) return emptyList()
-    if (all.any { !isSafeTorrentFilePath(it.path) }) return emptyList()
+    if (all.any { file -> checkCancellation(); !isSafeTorrentFilePath(file.path) }) return emptyList()
 
     return all.asSequence()
+        .onEach { checkCancellation() }
         .filter { file -> file.path.substringAfterLast('.').lowercase() in imageExtensions }
         .groupBy { file -> file.path.substringBeforeLast('/', missingDelimiterValue = "") }
         .mapNotNull { (prefix, pages) ->
+            checkCancellation()
             if (prefix.isBlank() || !directoryMatchesCanonicalChapter(prefix, request)) {
                 return@mapNotNull null
             }
