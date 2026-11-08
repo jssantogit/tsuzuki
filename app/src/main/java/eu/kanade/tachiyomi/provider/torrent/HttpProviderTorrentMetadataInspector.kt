@@ -4,10 +4,15 @@ import com.frostwire.jlibtorrent.TorrentInfo
 import eu.kanade.tachiyomi.provider.runtime.HostVerifiedTorrentMetadataCache
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import okhttp3.ResponseBody
+import java.io.IOException
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
@@ -49,7 +54,7 @@ class HttpProviderTorrentMetadataInspector internal constructor(
         }
     }
 
-    private fun inspectInternal(
+    private suspend fun inspectInternal(
         descriptor: ProviderDescriptor,
         candidate: TorrentCandidate,
     ): TorrentCandidate? {
@@ -68,41 +73,85 @@ class HttpProviderTorrentMetadataInspector internal constructor(
 
         while (true) {
             policy.validate(current.toString(), resolveAddress = true)
-            val response = client.newCall(
-                Request.Builder()
-                    .url(current)
-                    .get()
-                    .build(),
-            ).execute()
+            val result = requestMetadata(client, current.toString())
 
-            try {
-                if (response.code in REDIRECT_CODES) {
-                    if (redirects >= maxRedirects) return null
-                    redirects += 1
-                    val location = response.header("Location") ?: return null
-                    val redirected = current.resolve(location) ?: return null
-                    current = policy.validate(
-                        redirected.toString(),
-                        resolveAddress = false,
-                    )
-                    continue
+            if (result.code in REDIRECT_CODES) {
+                if (redirects >= maxRedirects) return null
+                redirects += 1
+                val location = result.location ?: return null
+                val redirected = current.resolve(location) ?: return null
+                current = policy.validate(
+                    redirected.toString(),
+                    resolveAddress = false,
+                )
+                continue
+            }
+
+            if (result.code !in 200..299) return null
+            val bytes = result.bytes ?: return null
+            if (bytes.isEmpty()) return null
+            val inspected = decoder(bytes, candidate) ?: return null
+            // Only a Host-validated file table can populate the privileged cache.
+            // The cache independently revalidates the native info hash and every file.
+            runCatching { verifiedMetadata?.offer(descriptor.id.value, inspected, bytes) }
+            return inspected
+        }
+    }
+
+    private data class MetadataResponse(
+        val code: Int,
+        val location: String? = null,
+        val bytes: ByteArray? = null,
+    )
+
+    // The Reader owns a strict fallback deadline. A blocking OkHttp execute()
+    // inside Dispatchers.IO does not cooperate with coroutine cancellation:
+    // withTimeoutOrNull then waits for its children, sometimes for a minute.
+    // Keep the entire response-body read on OkHttp's callback thread so that
+    // cancelling the coroutine cancels the HTTP call, including a stalled body.
+    // Only fully materialized, bounded bytes cross the continuation; Response
+    // is closed even when cancellation races with onResponse.
+    private suspend fun requestMetadata(
+        client: OkHttpClient,
+        url: String,
+    ): MetadataResponse = suspendCancellableCoroutine { continuation ->
+        val call = client.newCall(
+            Request.Builder()
+                .url(url)
+                .get()
+                .build(),
+        )
+        continuation.invokeOnCancellation { call.cancel() }
+        call.enqueue(
+            object : Callback {
+                override fun onFailure(call: Call, error: IOException) {
+                    if (continuation.isActive) {
+                        continuation.resumeWith(Result.failure(error))
+                    }
                 }
 
-                if (!response.isSuccessful) return null
-                val body = response.body
-                val declared = body.contentLength()
-                if (declared > maxMetadataBytes) return null
-                val bytes = body.readBounded() ?: return null
-                if (bytes.isEmpty()) return null
-                val inspected = decoder(bytes, candidate) ?: return null
-                // Only a Host-validated file table can populate the privileged cache.
-                // The cache independently revalidates the native info hash and every file.
-                runCatching { verifiedMetadata?.offer(descriptor.id.value, inspected, bytes) }
-                return inspected
-            } finally {
-                response.close()
-            }
-        }
+                override fun onResponse(call: Call, response: Response) {
+                    try {
+                        val result = response.use { reply ->
+                            if (reply.code in REDIRECT_CODES) {
+                                MetadataResponse(code = reply.code, location = reply.header("Location"))
+                            } else if (!reply.isSuccessful || reply.body.contentLength() > maxMetadataBytes) {
+                                MetadataResponse(code = reply.code)
+                            } else {
+                                MetadataResponse(code = reply.code, bytes = reply.body.readBounded())
+                            }
+                        }
+                        if (continuation.isActive) {
+                            continuation.resumeWith(Result.success(result))
+                        }
+                    } catch (error: Throwable) {
+                        if (continuation.isActive) {
+                            continuation.resumeWith(Result.failure(error))
+                        }
+                    }
+                }
+            },
+        )
     }
 
     private fun ResponseBody.readBounded(): ByteArray? =
