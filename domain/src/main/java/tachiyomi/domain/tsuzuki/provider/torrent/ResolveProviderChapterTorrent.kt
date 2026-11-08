@@ -219,9 +219,11 @@ class ResolveProviderChapterTorrent(
                         val matches = candidates.mapNotNull { candidate ->
                             readerContext.ensureActive()
                             if (candidate.infoHash == null) return@mapNotNull null
-                            val payload = when (val match = mapper.select(request, candidate) {
-                                readerContext.ensureActive()
-                            }) {
+                            val payload = when (
+                                val match = mapper.select(request, candidate) {
+                                    readerContext.ensureActive()
+                                }
+                            ) {
                                 is TorrentChapterPayloadMatch.Exact -> match.payload
                                 TorrentChapterPayloadMatch.None,
                                 is TorrentChapterPayloadMatch.Ambiguous,

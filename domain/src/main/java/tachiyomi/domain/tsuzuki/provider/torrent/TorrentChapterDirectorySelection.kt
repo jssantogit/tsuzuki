@@ -75,7 +75,13 @@ private fun exactImageDirectories(
 ): List<TorrentChapterPayload.ImageDirectory> {
     val all = candidate.files.orEmpty()
     if (all.isEmpty() || request.titles.isEmpty() || all.size > 20_000) return emptyList()
-    if (all.any { file -> checkCancellation(); !isSafeTorrentFilePath(file.path) }) return emptyList()
+    if (all.any { file ->
+            checkCancellation()
+            !isSafeTorrentFilePath(file.path)
+        }
+    ) {
+        return emptyList()
+    }
 
     return all.asSequence()
         .onEach { checkCancellation() }

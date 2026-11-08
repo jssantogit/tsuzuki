@@ -235,8 +235,6 @@ class ProviderTorrentMetadataSearchGatewayTest {
         encoded.contains("0123456789abcdef0123456789abcdef01234567") shouldBe false
     }
 
-    // Physical A54 capture 9f47e80b: the optional torrent diagnostics
-    // consumed tens of seconds after HTTP metadata had already completed.
     @Test
     fun `oversized torrent file table is not exhaustively scanned for diagnostics`() = runTest {
         val hugeFiles = (1..512).map { number ->
