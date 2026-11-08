@@ -12,12 +12,12 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody
-import java.io.IOException
 import tachiyomi.core.provider.runtime.ProviderNetworkPolicy
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateFile
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 
 class HttpProviderTorrentMetadataInspector internal constructor(
     baseClient: OkHttpClient,
