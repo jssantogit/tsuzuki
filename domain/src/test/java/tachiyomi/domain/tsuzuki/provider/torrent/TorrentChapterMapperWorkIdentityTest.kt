@@ -1,6 +1,7 @@
 package tachiyomi.domain.tsuzuki.provider.torrent
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.CancellationException
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterIdentity
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
@@ -82,6 +83,25 @@ class TorrentChapterMapperWorkIdentityTest {
     fun `rejects full-volume archive even when release declares work and chapter`() {
         val candidate = candidate("Example Manga - Chapter 12", "Example Manga/Volume 2.cbz")
         TorrentChapterMapper().map(request.copy(volume = 2), candidate) shouldBe TorrentChapterFileMatch.None
+    }
+
+    @Test
+    fun `Reader cancellation interrupts a large torrent map before checking every file`() {
+        val huge = candidate("Example Manga release", "pack/Chapter 12.cbz").copy(
+            files = (1..512).map { index ->
+                TorrentCandidateFile(index, "pack/Chapter $index.cbz", sizeBytes = 1024)
+            },
+        )
+        var inspected = 0
+        val failure = runCatching {
+            TorrentChapterMapper().select(request, huge) {
+                inspected++
+                if (inspected >= 10) throw CancellationException("Reader deadline")
+            }
+        }.exceptionOrNull()
+
+        (failure is CancellationException) shouldBe true
+        (inspected in 10..20) shouldBe true
     }
 
     private fun candidate(name: String, path: String) = TorrentCandidate(
