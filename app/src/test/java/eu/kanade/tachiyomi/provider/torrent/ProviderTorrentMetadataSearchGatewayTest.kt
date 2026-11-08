@@ -236,6 +236,77 @@ class ProviderTorrentMetadataSearchGatewayTest {
     }
 
     @Test
+    fun `oversized torrent file table is not exhaustively scanned for diagnostics`() = runTest {
+        val hugeFiles = (1..512).map { number ->
+            TorrentCandidateFile(index = number, path = "pack/Chapter $number.cbz")
+        }
+        val huge = candidate(files = hugeFiles)
+        val logs = mutableListOf<String>()
+        val gateway = ProviderTorrentMetadataSearchGateway(
+            delegate = TorrentSearchGateway { _, _ ->
+                ProviderCallResult.Success(ProviderPage(listOf(huge), nextCursor = null))
+            },
+            registry = registry(),
+            inspector = ProviderTorrentMetadataInspector { _, _ -> error("already hydrated") },
+            diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
+            logSink = ProviderRuntimeLogSink { _, line -> logs += line },
+        )
+
+        val response = gateway.search(
+            providerId,
+            TorrentSearchRequest(titles = listOf("Secret Example Manga"), chapterNumber = "12"),
+        )
+
+        // The actual torrent candidate is preserved for a later user-selected
+        // acquisition. Only expensive diagnostic inspection is sampled.
+        (response as ProviderCallResult.Success).value.items.single().files shouldBe hugeFiles
+        val match = logs.single { it.startsWith("host_torrent_match ") }
+        match.contains("partial=1") shouldBe true
+        match.contains("analyzed=0") shouldBe true
+        match.contains("reason=CHAPTER_IDENTITY_NOT_PROVEN") shouldBe false
+        val release = logs.single { it.startsWith("host_torrent_release ") }
+        release.contains("partial=1") shouldBe true
+        logs.joinToString().contains("Secret Example Manga") shouldBe false
+    }
+
+    @Test
+    fun `diagnostic sampling keeps exact small archive evidence without declaring exhaustive empty`() = runTest {
+        val huge = candidate(
+            files = (1..512).map { number ->
+                TorrentCandidateFile(index = number, path = "pack/Chapter $number.cbz")
+            },
+        )
+        val exact = candidate(
+            files = listOf(TorrentCandidateFile(index = 0, path = "pack/Vol. 2 Ch. 12.cbz")),
+        )
+        val logs = mutableListOf<String>()
+        val gateway = ProviderTorrentMetadataSearchGateway(
+            delegate = TorrentSearchGateway { _, _ ->
+                ProviderCallResult.Success(ProviderPage(listOf(huge, exact), nextCursor = null))
+            },
+            registry = registry(),
+            inspector = ProviderTorrentMetadataInspector { _, _ -> error("already hydrated") },
+            diagnosticRecorder = NoOpStructuredDiagnosticRecorder,
+            logSink = ProviderRuntimeLogSink { _, line -> logs += line },
+        )
+
+        gateway.search(
+            providerId,
+            TorrentSearchRequest(
+                titles = listOf("Secret Example Manga"),
+                chapterNumber = "12",
+                volume = 2,
+            ),
+        )
+
+        val match = logs.single { it.startsWith("host_torrent_match ") }
+        match.contains("exact=1") shouldBe true
+        match.contains("analyzed=1") shouldBe true
+        match.contains("partial=1") shouldBe true
+        match.contains("Secret Example Manga") shouldBe false
+    }
+
+    @Test
     fun `verified chapter image directory is classified as readable exact match`() = runTest {
         val folder = candidate(
             files = listOf(
