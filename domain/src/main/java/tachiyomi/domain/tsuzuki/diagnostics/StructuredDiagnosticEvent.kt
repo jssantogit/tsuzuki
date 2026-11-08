@@ -239,6 +239,7 @@ enum class DiagnosticAttribute {
     PROVIDER_WORK_VERIFICATION,
     PROVIDER_EDITION_QUALIFICATION,
     PROVIDER_HTTP_FAILURE,
+    MANGAALL_NETWORK_SOURCE,
     PROVIDER_RUNTIME_PHASE,
     PROVIDER_BROWSER_FAILURE,
     CHAPTER_RECONCILE_PHASE,
@@ -439,6 +440,14 @@ enum class DiagnosticProviderHttpFailure : DiagnosticSafeCode {
     HTTP_STATUS,
     RESPONSE_LIMIT,
     UNKNOWN,
+}
+
+// An allowlisted, content-free source family only for the single MangaAll
+// provider. Never store raw request hosts, paths, tokens, query or response.
+enum class DiagnosticMangaAllNetworkSource : DiagnosticSafeCode {
+    MANGADEX,
+    MANGADOT,
+    MANGAFIRE,
 }
 
 /** Bounded content-free checkpoints for identifying the expensive part of a canonical refresh. */
@@ -813,6 +822,8 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticProviderReaderIdentityRejectionReason }
         DiagnosticAttribute.PROVIDER_HTTP_FAILURE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderHttpFailure }
+        DiagnosticAttribute.MANGAALL_NETWORK_SOURCE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticMangaAllNetworkSource }
         DiagnosticAttribute.PROVIDER_RUNTIME_PHASE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderRuntimePhase }
         DiagnosticAttribute.PROVIDER_MALFORMED_STAGE -> (value as? DiagnosticAttributeValue.Code)
