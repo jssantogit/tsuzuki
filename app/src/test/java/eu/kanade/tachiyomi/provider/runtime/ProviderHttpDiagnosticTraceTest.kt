@@ -9,6 +9,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderHttpFailure
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
 
@@ -42,6 +43,51 @@ class ProviderHttpDiagnosticTraceTest {
             DiagnosticAttributeValue.Code(DiagnosticProviderHttpFailure.HOST_DEADLINE)
         sanitized.attributes[DiagnosticAttribute.HTTP_STATUS] shouldBe null
         sanitized.attributes.size shouldBe 2
+    }
+
+    @Test
+    fun `MangaAll HTTP diagnostics distinguish only approved internal sources`() {
+        val sources = listOf(
+            "api.mangadex.org" to DiagnosticMangaAllNetworkSource.MANGADEX,
+            "mangadot.net" to DiagnosticMangaAllNetworkSource.MANGADOT,
+            "mangafire.to" to DiagnosticMangaAllNetworkSource.MANGAFIRE,
+            "s1.mangafire.to" to DiagnosticMangaAllNetworkSource.MANGAFIRE,
+            "cdn.mfcdn.cc" to DiagnosticMangaAllNetworkSource.MANGAFIRE,
+        )
+        for ((host, source) in sources) {
+            val event = ProviderHttpDiagnostic(
+                phase = ProviderHttpDiagnosticPhase.SUCCEEDED,
+                host = host,
+                elapsedMs = 270,
+                timeoutMs = 20_000,
+                statusCode = 403,
+            ).toStructuredDiagnosticEvent("app.tsuzuki.mangaall", session, 2000)
+            val sanitized = requireNotNull(StructuredDiagnosticSanitizer.sanitize(event))
+            sanitized.attributes[DiagnosticAttribute.MANGAALL_NETWORK_SOURCE] shouldBe
+                DiagnosticAttributeValue.Code(source)
+            sanitized.attributes[DiagnosticAttribute.HTTP_STATUS] shouldBe DiagnosticAttributeValue.Number(403)
+            sanitized.attributes.size shouldBe 3
+        }
+    }
+
+    @Test
+    fun `network diagnostic omits unmapped host and never labels another provider MangaAll`() {
+        for ((provider, host) in listOf(
+            "app.tsuzuki.mangaall" to "secret.example",
+            "app.tsuzuki.mangaall" to "mangafire.to.evil.example",
+            "app.tsuzuki.other" to "mangafire.to",
+        )) {
+            val event = ProviderHttpDiagnostic(
+                phase = ProviderHttpDiagnosticPhase.SUCCEEDED,
+                host = host,
+                elapsedMs = 270,
+                timeoutMs = 20_000,
+                statusCode = 403,
+            ).toStructuredDiagnosticEvent(provider, session, 2000)
+            val sanitized = requireNotNull(StructuredDiagnosticSanitizer.sanitize(event))
+            sanitized.attributes[DiagnosticAttribute.MANGAALL_NETWORK_SOURCE] shouldBe null
+            sanitized.attributes.size shouldBe 2
+        }
     }
 
     @Test
