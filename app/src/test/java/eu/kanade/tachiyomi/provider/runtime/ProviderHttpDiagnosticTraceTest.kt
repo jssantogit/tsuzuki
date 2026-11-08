@@ -8,8 +8,8 @@ import tachiyomi.core.provider.runtime.ProviderHttpFailureFamily
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
-import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderHttpFailure
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
 
