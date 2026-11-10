@@ -1016,8 +1016,9 @@ private fun InstalledProvidersList(
                     horizontalArrangement = Arrangement.End,
                 ) {
                     updates[providerId]?.let { update ->
+                        val updateKey = "install:${update.repositoryId}:${update.descriptor.providerId}"
                         TextButton(
-                            enabled = "install:${update.repositoryId}:${update.descriptor.providerId}" !in operationKeys,
+                            enabled = updateKey !in operationKeys,
                             onClick = { onUpdate(update) },
                         ) { Text(stringResource(MR.strings.tsuzuki_providers_update)) }
                     }
