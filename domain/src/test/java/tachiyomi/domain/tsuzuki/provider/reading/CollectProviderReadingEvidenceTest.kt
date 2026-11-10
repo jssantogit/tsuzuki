@@ -2502,6 +2502,7 @@ class CollectProviderReadingEvidenceTest {
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
     }
 
+    // RED: old collector loses all candidates after eight returned pages.
     @Test
     fun `MangaAll partial lookup never promotes a lone candidate to an exact edition binding`() = runBlocking<Unit> {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
