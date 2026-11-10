@@ -2503,6 +2503,98 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `MangaAll pagination budget retains verified provisional chapters and refuses exact binding`() = runBlocking<Unit> {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), metadataId, externalId = "verified"),
+                externalIds = mapOf(metadataId to "verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val bindings = MemoryBindingRepository()
+        val observed = MemoryWorkSourceAssociationRepository()
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val dexId = "mangadex:11111111-2222-4333-8444-555555555555"
+        var lookupPages = 0
+        val readWorkIds = mutableListOf<String>()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(provider = mangaAll),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    val page = request.cursor?.value?.removePrefix("page-")?.toIntOrNull() ?: 0
+                    lookupPages++
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = if (page == 0) listOf(
+                                ProviderWorkCandidate(
+                                    externalWorkId = dexId,
+                                    title = "Dandadan",
+                                    authors = listOf("Arakawa Hiromu"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                    coverageMinMilli = 1_000,
+                                    coverageMaxMilli = 1_000,
+                                    coverageHasMore = true,
+                                ),
+                                ProviderWorkCandidate("mangadot:317", "Dandadan"),
+                            ) else emptyList(),
+                            nextCursor = ProviderCursor("page-${page + 1}"),
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    readWorkIds += request.binding.externalWorkId
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf(
+                                ProviderChapterObservation(
+                                    providerChapterId = "mangadex:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                                    rawLabel = "Chapter 1",
+                                    rawNumber = 1.0,
+                                    language = "en",
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = observed,
+            diagnostics = recorder,
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+        lookupPages shouldBe 8
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        result.snapshots shouldBe emptyList()
+        result.partialEvidence.size shouldBe 1
+        result.partialEvidence.single().authority shouldBe ChapterEvidenceAuthority.PROVIDER_PROVISIONAL
+        readWorkIds shouldBe listOf(dexId)
+        observed.getByTitle(canonicalTitle.id).map { it.ref.externalWorkId } shouldBe listOf(dexId)
+        val lookup = recorder.events.single {
+            it.name == DiagnosticEventName.PROVIDER_READING_LOOKUP_ATTEMPT &&
+                it.outcome != DiagnosticOutcome.STARTED
+        }
+        lookup.outcome shouldBe DiagnosticOutcome.PARTIAL
+        lookup.attributes["candidate_count"] shouldBe DiagnosticAttributeValue.Number(2)
+        (StructuredDiagnosticSanitizer.sanitize(lookup) != null) shouldBe true
+    }
+
+    @Test
     fun `MangaAll partial lookup never promotes a lone candidate to an exact edition binding`() = runBlocking<Unit> {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val bindings = MemoryBindingRepository()
