@@ -2531,20 +2531,24 @@ class CollectProviderReadingEvidenceTest {
                     lookupPages++
                     ProviderCallResult.Success(
                         ProviderPage(
-                            items = if (page == 0) listOf(
-                                ProviderWorkCandidate(
-                                    externalWorkId = dexId,
-                                    title = "Dandadan",
-                                    authors = listOf("Arakawa Hiromu"),
-                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
-                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
-                                    coverageObservedCount = 1,
-                                    coverageMinMilli = 1_000,
-                                    coverageMaxMilli = 1_000,
-                                    coverageHasMore = true,
-                                ),
-                                ProviderWorkCandidate("mangadot:317", "Dandadan"),
-                            ) else emptyList(),
+                            items = if (page == 0) {
+                                listOf(
+                                    ProviderWorkCandidate(
+                                        externalWorkId = dexId,
+                                        title = "Dandadan",
+                                        authors = listOf("Arakawa Hiromu"),
+                                        detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                        coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                        coverageObservedCount = 1,
+                                        coverageMinMilli = 1_000,
+                                        coverageMaxMilli = 1_000,
+                                        coverageHasMore = true,
+                                    ),
+                                    ProviderWorkCandidate("mangadot:317", "Dandadan"),
+                                )
+                            } else {
+                                emptyList()
+                            },
                             nextCursor = ProviderCursor("page-${page + 1}"),
                         ),
                     )
