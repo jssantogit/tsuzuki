@@ -35,6 +35,7 @@ import tachiyomi.domain.tsuzuki.content.interactor.ResolveChapterContent
 import tachiyomi.domain.tsuzuki.content.repository.ContentPreferenceRepository
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderNoMatchReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
@@ -139,6 +140,59 @@ class PrepareCanonicalChapterProviderFallbackTest {
             .shouldBeInstanceOf<CanonicalReaderPreparation.ProviderEditionConfirmationRequired>()
         unresolved.canonicalTitleId shouldBe chapter.canonicalTitleId
         unresolved.candidateCount shouldBe 2
+    }
+
+    @Test
+    fun `MangaAll SCRIPT_ERROR identifies internal source in Reader diagnostics without raw IDs`() = runTest {
+        val chapter = CanonicalChapter(
+            id = "chapter-1",
+            canonicalTitleId = "title-1",
+            displayNumber = "1",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 1,
+            confidence = 1.0,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val option = ProviderChapterReadingOption(
+            canonicalChapterId = chapter.id,
+            bindingId = "binding-1",
+            providerId = ProviderId("app.tsuzuki.mangaall"),
+            facetId = "en",
+            externalWorkId = "mangafire:source-not-for-logs",
+            providerChapterId = "mangafire:chapter-not-for-logs",
+        )
+        val resolver = mockk<ResolveProviderChapterReading>()
+        coEvery { resolver.options(chapter.id) } returns listOf(option)
+        coEvery { resolver.auditSourceIdentity(option) } returns null
+        coEvery { resolver.preparedContent(option) } returns ReadingProviderCallResult.Failure(
+            ProviderError(ProviderErrorCode.SCRIPT_ERROR, retryable = true),
+        )
+        val recorder = RecordingStructuredDiagnosticRecorder(detailed = true)
+        val reader = PrepareCanonicalChapterForReader(
+            resolveChapterContent = emptyAddonResolver(),
+            canonicalChapterRepository = chapterRepository(chapter),
+            canonicalReadingRepository = readingRepository(),
+            canonicalDownloadRepository = emptyDownloadRepository(),
+            canonicalDownloadGateway = object : CanonicalDownloadGateway {
+                override suspend fun isDownloaded(variant: ChapterVariant): Boolean = false
+            },
+            chapterContentPreparer = mockk(),
+            structuredDiagnostics = recorder,
+            resolveProviderChapterReading = resolver,
+        )
+        reader.execute(chapter.id).shouldBeInstanceOf<CanonicalReaderPreparation.Unavailable>()
+        val failure = recorder.events.single {
+            it.name == DiagnosticEventName.READER_PAGES_READY &&
+                it.outcome == DiagnosticOutcome.TYPED_FAILURE
+        }
+        failure.attributes["provider_error_code"] shouldBe DiagnosticAttributeValue.Text("SCRIPT_ERROR")
+        failure.attributes["mangaall_network_source"] shouldBe
+            DiagnosticAttributeValue.Code(DiagnosticMangaAllNetworkSource.MANGAFIRE)
+        failure.attributes.values.any {
+            it == DiagnosticAttributeValue.Text(option.externalWorkId) ||
+                it == DiagnosticAttributeValue.Text(option.providerChapterId)
+        } shouldBe false
     }
 
     @Test
