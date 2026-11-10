@@ -2502,7 +2502,6 @@ class CollectProviderReadingEvidenceTest {
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
     }
 
-    // A54 5db7444a: MangaAll can exhaust eight lookup pages before MangaDot ends.
     @Test
     fun `MangaAll pagination budget retains verified provisional chapters and refuses exact binding`() = runBlocking<Unit> {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")

@@ -515,12 +515,23 @@ class CollectProviderReadingEvidence private constructor(
                 // bounded lookup permits. Retain verified work evidence, but
                 // never choose an edition from a non-exhaustive candidate set.
                 traceLookupCandidates(
-                    canonicalTitleId, target, queryIndex, title, candidates, matches,
-                    selected = null, primary = null,
+                    canonicalTitleId,
+                    target,
+                    queryIndex,
+                    title,
+                    candidates,
+                    matches,
+                    selected = null,
+                    primary = null,
                 )
                 trace(
-                    canonicalTitleId, target, DiagnosticStage.LOOKUP, DiagnosticOutcome.PARTIAL,
-                    candidates = candidates.size, exactMatches = matches.size, bindings = 0,
+                    canonicalTitleId,
+                    target,
+                    DiagnosticStage.LOOKUP,
+                    DiagnosticOutcome.PARTIAL,
+                    candidates = candidates.size,
+                    exactMatches = matches.size,
+                    bindings = 0,
                 )
                 return ProviderCallResult.Success(
                     BindingDiscovery(
