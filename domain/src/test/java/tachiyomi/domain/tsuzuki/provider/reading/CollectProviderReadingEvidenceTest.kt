@@ -16,6 +16,7 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ChapterEvidenceAuthority
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticErrorCategory
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderDetailOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderEditionQualification
@@ -2694,6 +2695,13 @@ class CollectProviderReadingEvidenceTest {
         lookup.attributes["candidate_count"] shouldBe DiagnosticAttributeValue.Number(2)
         lookup.attributes["provider_error_code"] shouldBe DiagnosticAttributeValue.Text("TIMEOUT")
         (StructuredDiagnosticSanitizer.sanitize(lookup) != null) shouldBe true
+        val chapter = recorder.events.single {
+            it.name == DiagnosticEventName.PROVIDER_READING_CHAPTER_ATTEMPT &&
+                it.outcome == DiagnosticOutcome.SUCCEEDED
+        }
+        chapter.attributes["mangaall_network_source"] shouldBe
+            DiagnosticAttributeValue.Code(DiagnosticMangaAllNetworkSource.MANGADEX)
+        (StructuredDiagnosticSanitizer.sanitize(chapter) != null) shouldBe true
     }
 
     @Test
