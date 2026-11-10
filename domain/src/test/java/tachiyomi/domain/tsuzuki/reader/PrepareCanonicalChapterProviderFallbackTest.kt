@@ -355,21 +355,15 @@ class PrepareCanonicalChapterProviderFallbackTest {
         val inactiveRef = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "en", "mangadex:old")
         val unavailableRef = ProviderBindingRef(activeProvider, "en", "missing-work")
         val phantomRef = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "en", "mangadot:317")
-        for ((mappedRef, persistRef, knownCount, activeCount) in listOf(
-            arrayOf(phantomRef, null, 0, 0),
-            arrayOf(inactiveRef, inactiveRef, 1, 0),
-            arrayOf(unavailableRef, unavailableRef, 1, 1),
-        ).map { case ->
-            @Suppress("UNCHECKED_CAST")
-            val ref = case[0] as ProviderBindingRef
-            val saved = case[1] as ProviderBindingRef?
-            val known = case[2] as Int
-            val enabled = case[3] as Int
-            listOf(ref, saved, known, enabled)
-        }) {
+        val cases = listOf(
+            Triple(phantomRef, null, 0 to 0),
+            Triple(inactiveRef, inactiveRef, 1 to 0),
+            Triple(unavailableRef, unavailableRef, 1 to 1),
+        )
+        for ((mappedRef, persistRef, expected) in cases) {
             // Every fixture has one other eligible source, but only an
             // ineligible/unregistered producer owns the mapped chapter.
-            val additional = (persistRef as ProviderBindingRef?)?.let {
+            val additional = persistRef?.let {
                 active.copy(id = "mapped", ref = it, availability = ProviderBindingAvailability.UNAVAILABLE)
             }
             val bindings = listOfNotNull(active, additional)
@@ -393,7 +387,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
                     id = "mapped",
                     canonicalTitleId = chapter.canonicalTitleId,
                     producerKind = ProducerKind.PROVIDER,
-                    producerId = (mappedRef as ProviderBindingRef).evidenceProducerId(),
+                    producerId = mappedRef.evidenceProducerId(),
                     externalChapterKey = "chapter-one",
                     rawLabel = "Chapter 1",
                     rawNumber = 1.0,
@@ -429,8 +423,8 @@ class PrepareCanonicalChapterProviderFallbackTest {
             audit.reason shouldBe tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE
             audit.eligibleSourceCount shouldBe 1
             audit.mappedEvidenceCount shouldBe 1
-            audit.mappedKnownSourceCount shouldBe knownCount
-            audit.mappedActiveSourceCount shouldBe activeCount
+            audit.mappedKnownSourceCount shouldBe expected.first
+            audit.mappedActiveSourceCount shouldBe expected.second
         }
     }
 
