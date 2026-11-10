@@ -449,7 +449,8 @@ class PrepareCanonicalChapterForReader(
                         DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text(option.providerId.value),
                         DiagnosticAttribute.CANDIDATE_TYPE to
                             DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
-                    ) + capturedCanonicalIdentity + capturedSourceIdentity + capturedSourceStructure + capturedInternalSource,
+                    ) + capturedCanonicalIdentity + capturedSourceIdentity + capturedSourceStructure +
+                        capturedInternalSource,
                 )
 
                 when (val prepared = resolver.preparedContent(option)) {
