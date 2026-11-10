@@ -460,8 +460,16 @@ class ResolveProviderChapterReading(
             matchingNumberEvidenceCount = matchingNumberCount,
             mappedEvidenceCount = mapped.size,
             mappedEligibleSourceEvidenceCount = mappedEligible,
-            mappedKnownSourceCount = mappedKnownRefs.size,
-            mappedActiveSourceCount = mappedActiveCount,
+            mappedKnownSourceCount = if (reason == ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE) {
+                mappedKnownRefs.size
+            } else {
+                0
+            },
+            mappedActiveSourceCount = if (reason == ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE) {
+                mappedActiveCount
+            } else {
+                0
+            },
             reason = reason,
             identityRejectionReason = identityRejectionReason,
         )
