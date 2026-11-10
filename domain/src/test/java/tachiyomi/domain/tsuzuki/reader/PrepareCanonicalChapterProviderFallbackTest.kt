@@ -74,6 +74,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingDelivery
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingNoMatchReason
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkCandidate
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import tachiyomi.domain.tsuzuki.provider.reading.evidenceProducerId
@@ -420,7 +421,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
                 },
             )
             val audit = resolver.auditNoMatch(chapter.id)
-            audit.reason shouldBe tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE
+            audit.reason shouldBe ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE
             audit.eligibleSourceCount shouldBe 1
             audit.mappedEvidenceCount shouldBe 1
             audit.mappedKnownSourceCount shouldBe expected.first
