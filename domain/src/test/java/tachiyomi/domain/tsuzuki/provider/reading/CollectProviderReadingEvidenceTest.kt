@@ -2502,6 +2502,53 @@ class CollectProviderReadingEvidenceTest {
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
     }
 
+    @Test
+    fun `MangaAll partial lookup never promotes a lone candidate to an exact edition binding`() = runBlocking<Unit> {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val bindings = MemoryBindingRepository()
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        var lookupPages = 0
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(provider = mangaAll),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    val page = request.cursor?.value?.removePrefix("page-")?.toIntOrNull() ?: 0
+                    lookupPages++
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = if (page == 0) {
+                                listOf(ProviderWorkCandidate("mangadot:317", "Dandadan"))
+                            } else {
+                                emptyList()
+                            },
+                            nextCursor = ProviderCursor("page-${page + 1}"),
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Incomplete lookup must not select an edition") },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            diagnostics = recorder,
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+        lookupPages shouldBe 8
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        result.evidence shouldBe emptyList()
+        result.partialEvidence shouldBe emptyList()
+        val lookup = recorder.events.single {
+            it.name == DiagnosticEventName.PROVIDER_READING_LOOKUP_ATTEMPT &&
+                it.outcome != DiagnosticOutcome.STARTED
+        }
+        lookup.outcome shouldBe DiagnosticOutcome.PARTIAL
+    }
+
     private class CapturingProviderDiagnostics(
         private val captureActive: Boolean = false,
     ) : StructuredDiagnosticRecorder {
