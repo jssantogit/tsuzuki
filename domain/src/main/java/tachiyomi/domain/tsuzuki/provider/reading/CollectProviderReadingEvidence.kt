@@ -985,7 +985,21 @@ class CollectProviderReadingEvidence private constructor(
                     ),
                 )
             ) {
-                is ProviderCallResult.Failure -> return result
+                is ProviderCallResult.Failure -> {
+                    // A later transient source outage cannot invalidate already
+                    // decoded and bounded source candidates. MangaAll may retain
+                    // them only as an INCOMPLETE work lookup: never auto-bind
+                    // an edition or publish a canonical chapter snapshot.
+                    // Malformed/schema/policy failures still fail closed.
+                    if (
+                        providerId.value == "app.tsuzuki.mangaall" &&
+                        items.isNotEmpty() &&
+                        result.error.code in RECOVERABLE_LOOKUP_ERRORS
+                    ) {
+                        return ProviderCallResult.Success(LookupSnapshot(items.toList(), complete = false))
+                    }
+                    return result
+                }
                 is ProviderCallResult.Success -> result.value
             }
             items += page.items
@@ -1552,6 +1566,12 @@ class CollectProviderReadingEvidence private constructor(
         const val MAX_WORK_SOURCE_COLLECTION_MILLIS = 5_800L
         const val MAX_CONCURRENT_PROVIDERS = 4
         const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
+        private val RECOVERABLE_LOOKUP_ERRORS = setOf(
+            ProviderErrorCode.TIMEOUT,
+            ProviderErrorCode.NETWORK_ERROR,
+            ProviderErrorCode.SOURCE_READ_ERROR,
+            ProviderErrorCode.HOST_ERROR,
+        )
         const val MAX_LOOKUP_PAGES = 8
         const val MAX_LOOKUP_ITEMS = 2_000
         const val MAX_DIAGNOSTIC_CANDIDATES = 20
