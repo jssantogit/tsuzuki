@@ -77,6 +77,7 @@ import tachiyomi.core.provider.supplychain.EnrolledProviderRepository
 import tachiyomi.core.provider.supplychain.ProviderRepositoryCatalogEntry
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEntryStatus
 import tachiyomi.core.provider.supplychain.ProviderRepositorySnapshot
+import tachiyomi.core.provider.supplychain.availableInstalledProviderUpdates
 import tachiyomi.core.provider.supplychain.visibleProviderRepositoryEntries
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
@@ -229,6 +230,7 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
                 if (selectedTab == 0) {
                     InstalledProviderCards(
                         registrations = installed,
+                        snapshots = snapshots.values.toList(),
                         rollbackProviderIds = rollbackProviderIds,
                         operationKeys = operations,
                         onOpen = { registration ->
@@ -251,12 +253,18 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
                         onRollback = { providerId ->
                             runProviderOperation("rollback:$providerId") { manager.rollback(providerId) }
                         },
+                        onUpdate = { entry ->
+                            runProviderOperation("install:${entry.repositoryId}:${entry.descriptor.providerId}") {
+                                manager.install(entry.repositoryId, entry.descriptor.providerId)
+                            }
+                        },
                         onUninstall = { registration -> providerToUninstall = registration },
                         modifier = Modifier.weight(1f),
                     )
                 } else {
                     DiscoverProviderCards(
                         snapshots = snapshots.values.toList(),
+                        installedProviderIds = installed.map { it.descriptor.id.value }.toSet(),
                         operationKeys = operations,
                         onInstall = { entry ->
                             runProviderOperation(
@@ -457,15 +465,21 @@ private fun ProviderTabs(
 @Composable
 private fun InstalledProviderCards(
     registrations: List<ProviderRegistration>,
+    snapshots: List<ProviderRepositorySnapshot>,
     rollbackProviderIds: Set<String>,
     operationKeys: Set<String>,
     onOpen: (ProviderRegistration) -> Unit,
     onEnabledChange: (ProviderRegistration, Boolean) -> Unit,
     onRollback: (String) -> Unit,
+    onUpdate: (ProviderRepositoryCatalogEntry) -> Unit,
     onUninstall: (ProviderRegistration) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
+    val updates = availableInstalledProviderUpdates(
+        snapshots.flatMap { it.entries },
+        registrations.map { it.descriptor.id.value }.toSet(),
+    ).associateBy { it.descriptor.providerId }
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(top = 18.dp, bottom = 32.dp),
@@ -487,12 +501,15 @@ private fun InstalledProviderCards(
                         val providerId = registration.descriptor.id.value
                         InstalledProviderRow(
                             registration = registration,
+                            update = updates[providerId],
+                            operationKeys = operationKeys,
                             rollbackAvailable = providerId in rollbackProviderIds,
                             rollbackEnabled = "rollback:$providerId" !in operationKeys,
                             uninstallEnabled = "uninstall:$providerId" !in operationKeys,
                             onOpen = { onOpen(registration) },
                             onEnabledChange = { onEnabledChange(registration, it) },
                             onRollback = { onRollback(providerId) },
+                            onUpdate = { update -> onUpdate(update) },
                             onUninstall = { onUninstall(registration) },
                         )
                         if (index < registrations.lastIndex) SettingsGroupDivider()
@@ -507,12 +524,15 @@ private fun InstalledProviderCards(
 @Composable
 private fun InstalledProviderRow(
     registration: ProviderRegistration,
+    update: ProviderRepositoryCatalogEntry?,
+    operationKeys: Set<String>,
     rollbackAvailable: Boolean,
     rollbackEnabled: Boolean,
     uninstallEnabled: Boolean,
     onOpen: () -> Unit,
     onEnabledChange: (Boolean) -> Unit,
     onRollback: () -> Unit,
+    onUpdate: (ProviderRepositoryCatalogEntry) -> Unit,
     onUninstall: () -> Unit,
 ) {
     val colors = defaultSkinColors()
@@ -588,6 +608,14 @@ private fun InstalledProviderRow(
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (update != null) {
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_providers_update),
+                    enabled = "install:${update.repositoryId}:${update.descriptor.providerId}" !in operationKeys,
+                    onClick = { onUpdate(update) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
+            }
             if (rollbackAvailable) {
                 DefaultSkinTextAction(
                     text = stringResource(MR.strings.tsuzuki_providers_rollback),
@@ -609,12 +637,13 @@ private fun InstalledProviderRow(
 @Composable
 private fun DiscoverProviderCards(
     snapshots: List<ProviderRepositorySnapshot>,
+    installedProviderIds: Set<String>,
     operationKeys: Set<String>,
     onInstall: (ProviderRepositoryCatalogEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
-    val entries = visibleProviderRepositoryEntries(snapshots.flatMap { it.entries })
+    val entries = visibleProviderRepositoryEntries(snapshots.flatMap { it.entries }, installedProviderIds)
         .sortedWith(compareBy({ it.descriptor.providerId }, { it.repositoryId }))
 
     LazyColumn(
