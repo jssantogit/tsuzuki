@@ -68,6 +68,10 @@ data class ProviderReadingNoMatchAudit(
     val matchingNumberEvidenceCount: Int,
     val mappedEvidenceCount: Int,
     val mappedEligibleSourceEvidenceCount: Int,
+    /** Unique persisted work refs behind mapped evidence, even when ineligible. */
+    val mappedKnownSourceCount: Int = 0,
+    /** Unique mapped work refs whose Provider and facet are still Reader-enabled. */
+    val mappedActiveSourceCount: Int = 0,
     val reason: ProviderReadingNoMatchReason,
     val identityRejectionReason: ProviderReadingIdentityRejectionReason? = null,
 )
@@ -365,6 +369,7 @@ class ResolveProviderChapterReading(
         providerRegistry.awaitReady()
         val registrations = providerRegistry.providers().associateBy { it.descriptor.id }
         val associations = workSourceAssociationRepository.getByTitle(chapter.canonicalTitleId)
+        val allBindings = bindingRepository.getByTitle(chapter.canonicalTitleId)
         val attestedVariantProducers = associations.asSequence()
             // Source-attested negative edition evidence does not need author
             // corroboration: it cannot prove an alternate HID, only disqualify
@@ -373,7 +378,7 @@ class ResolveProviderChapterReading(
             .map { it.ref.evidenceProducerId() }
             .toSet()
         val eligibleProducers = buildSet {
-            bindingRepository.getByTitle(chapter.canonicalTitleId)
+            allBindings
                 .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
                 .filter { binding ->
                     binding.verification == ProviderBindingVerification.USER_CONFIRMED ||
@@ -408,6 +413,17 @@ class ResolveProviderChapterReading(
         }
         val mapped = observations.filter { it.mappedCanonicalChapterId == canonicalChapterId }
         val mappedEligible = mapped.count { it.evidence.producerId in eligibleProducers }
+        // A mapped chapter can belong to an older, disabled, or untrusted source
+        // while some unrelated source remains eligible for the same work.
+        // Count unique producer identities without exporting the IDs or URLs.
+        val knownRefs = buildMap {
+            allBindings.forEach { put(it.ref.evidenceProducerId(), it.ref) }
+            associations.forEach { putIfAbsent(it.ref.evidenceProducerId(), it.ref) }
+        }
+        val mappedKnownRefs = mapped.map { it.evidence.producerId }.distinct().mapNotNull(knownRefs::get)
+        val mappedActiveCount = mappedKnownRefs.count { ref ->
+            registrations[ref.providerId]?.isEligibleForReading(ref.facetId) == true
+        }
         val reason = when {
             eligibleProducers.isEmpty() && attestedVariantProducers.isNotEmpty() ->
                 ProviderReadingNoMatchReason.SOURCE_EDITION_EXCLUDED
@@ -444,6 +460,8 @@ class ResolveProviderChapterReading(
             matchingNumberEvidenceCount = matchingNumberCount,
             mappedEvidenceCount = mapped.size,
             mappedEligibleSourceEvidenceCount = mappedEligible,
+            mappedKnownSourceCount = mappedKnownRefs.size,
+            mappedActiveSourceCount = mappedActiveCount,
             reason = reason,
             identityRejectionReason = identityRejectionReason,
         )
