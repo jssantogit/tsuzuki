@@ -49,6 +49,7 @@ import tachiyomi.core.provider.supplychain.EnrolledProviderRepository
 import tachiyomi.core.provider.supplychain.ProviderRepositoryCatalogEntry
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEntryStatus
 import tachiyomi.core.provider.supplychain.ProviderRepositorySnapshot
+import tachiyomi.core.provider.supplychain.availableInstalledProviderUpdates
 import tachiyomi.core.provider.supplychain.visibleProviderRepositoryEntries
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
@@ -251,6 +252,7 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                 if (selectedTab == 0) {
                     InstalledProvidersList(
                         registrations = installed,
+                        snapshots = snapshots.values.toList(),
                         rollbackProviderIds = rollbackProviderIds,
                         operationKeys = operations,
                         onOpen = { registration ->
@@ -291,11 +293,17 @@ class SettingsTsuzukiProvidersScreen : Screen() {
                                 manager.rollback(providerId)
                             }
                         },
+                        onUpdate = { entry ->
+                            runProviderOperation("install:${entry.repositoryId}:${entry.descriptor.providerId}") {
+                                manager.install(entry.repositoryId, entry.descriptor.providerId)
+                            }
+                        },
                         onUninstall = { registration -> providerToUninstall = registration },
                     )
                 } else {
                     DiscoverProvidersList(
                         snapshots = snapshots.values.toList(),
+                        installedProviderIds = installed.map { it.descriptor.id.value }.toSet(),
                         operationKeys = operations,
                         onInstall = { entry ->
                             runProviderOperation(
@@ -945,13 +953,19 @@ private fun TorrentAcquisitionPreferenceRow(
 @Composable
 private fun InstalledProvidersList(
     registrations: List<ProviderRegistration>,
+    snapshots: List<ProviderRepositorySnapshot>,
     rollbackProviderIds: Set<String>,
     operationKeys: Set<String>,
     onOpen: (ProviderRegistration) -> Unit,
     onEnabledChange: (ProviderRegistration, Boolean) -> Unit,
     onRollback: (String) -> Unit,
+    onUpdate: (ProviderRepositoryCatalogEntry) -> Unit,
     onUninstall: (ProviderRegistration) -> Unit,
 ) {
+    val updates = availableInstalledProviderUpdates(
+        snapshots.flatMap { it.entries },
+        registrations.map { it.descriptor.id.value }.toSet(),
+    ).associateBy { it.descriptor.providerId }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         if (registrations.isEmpty()) {
             item(key = "empty") {
@@ -1001,6 +1015,12 @@ private fun InstalledProvidersList(
                         .padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.End,
                 ) {
+                    updates[providerId]?.let { update ->
+                        TextButton(
+                            enabled = "install:${update.repositoryId}:${update.descriptor.providerId}" !in operationKeys,
+                            onClick = { onUpdate(update) },
+                        ) { Text(stringResource(MR.strings.tsuzuki_providers_update)) }
+                    }
                     if (canRollback) {
                         TextButton(
                             enabled = "rollback:$providerId" !in operationKeys,
@@ -1021,11 +1041,13 @@ private fun InstalledProvidersList(
 @Composable
 private fun DiscoverProvidersList(
     snapshots: List<ProviderRepositorySnapshot>,
+    installedProviderIds: Set<String>,
     operationKeys: Set<String>,
     onInstall: (ProviderRepositoryCatalogEntry) -> Unit,
 ) {
     val entries = visibleProviderRepositoryEntries(
         snapshots.flatMap { snapshot -> snapshot.entries },
+        installedProviderIds,
     ).sortedWith(compareBy({ it.descriptor.providerId }, { it.repositoryId }))
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
