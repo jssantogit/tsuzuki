@@ -330,6 +330,111 @@ class PrepareCanonicalChapterProviderFallbackTest {
     }
 
     @Test
+    fun `Reader audit separates orphaned mapped evidence from inactive and ineligible source refs`() = runTest {
+        val chapter = CanonicalChapter(
+            id = "chapter-one",
+            canonicalTitleId = "title-1",
+            displayNumber = "1",
+            type = CanonicalChapterType.REGULAR,
+            baseNumber = 1,
+            confidence = 1.0,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val activeProvider = ProviderId("app.tsuzuki.mangafire")
+        val activeRef = ProviderBindingRef(activeProvider, "en", "current-work")
+        val active = ProviderReadingBinding(
+            id = "active",
+            canonicalTitleId = chapter.canonicalTitleId,
+            ref = activeRef,
+            verification = ProviderBindingVerification.EXACT,
+            availability = ProviderBindingAvailability.AVAILABLE,
+            createdAt = 1,
+            updatedAt = 1,
+        )
+        val inactiveRef = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "en", "mangadex:old")
+        val unavailableRef = ProviderBindingRef(activeProvider, "en", "missing-work")
+        val phantomRef = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "en", "mangadot:317")
+        for ((mappedRef, persistRef, knownCount, activeCount) in listOf(
+            arrayOf(phantomRef, null, 0, 0),
+            arrayOf(inactiveRef, inactiveRef, 1, 0),
+            arrayOf(unavailableRef, unavailableRef, 1, 1),
+        ).map { case ->
+            @Suppress("UNCHECKED_CAST")
+            val ref = case[0] as ProviderBindingRef
+            val saved = case[1] as ProviderBindingRef?
+            val known = case[2] as Int
+            val enabled = case[3] as Int
+            listOf(ref, saved, known, enabled)
+        }) {
+            // Every fixture has one other eligible source, but only an
+            // ineligible/unregistered producer owns the mapped chapter.
+            val additional = (persistRef as ProviderBindingRef?)?.let {
+                active.copy(id = "mapped", ref = it, availability = ProviderBindingAvailability.UNAVAILABLE)
+            }
+            val bindings = listOfNotNull(active, additional)
+            val bindingStore = object : ProviderReadingBindingRepository {
+                override suspend fun get(
+                    canonicalTitleId: String,
+                    providerId: ProviderId,
+                    facetId: String?,
+                ): ProviderReadingBinding? = bindings.firstOrNull {
+                    it.canonicalTitleId == canonicalTitleId &&
+                        it.ref.providerId == providerId &&
+                        it.ref.facetId == facetId
+                }
+                override suspend fun getByTitle(canonicalTitleId: String): List<ProviderReadingBinding> =
+                    bindings.filter { it.canonicalTitleId == canonicalTitleId }
+                override suspend fun upsert(binding: ProviderReadingBinding) = Unit
+                override suspend fun markUnavailable(bindingId: String, updatedAt: Long) = Unit
+            }
+            val evidence = PersistedChapterEvidence(
+                evidence = ChapterEvidence(
+                    id = "mapped",
+                    canonicalTitleId = chapter.canonicalTitleId,
+                    producerKind = ProducerKind.PROVIDER,
+                    producerId = (mappedRef as ProviderBindingRef).evidenceProducerId(),
+                    externalChapterKey = "chapter-one",
+                    rawLabel = "Chapter 1",
+                    rawNumber = 1.0,
+                    observedAt = 1,
+                    confidence = 0.95,
+                    authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+                ),
+                mappedCanonicalChapterId = chapter.id,
+            )
+            val resolver = ResolveProviderChapterReading(
+                canonicalChapterRepository = chapterRepository(chapter),
+                evidenceRepository = evidenceRepository(listOf(evidence)),
+                bindingRepository = bindingStore,
+                providerRegistry = DefaultProviderRegistry(
+                    registrations = { listOf(readingRegistration(activeProvider, "en")) },
+                ),
+                gateway = object : ProviderReadingGateway {
+                    override suspend fun lookup(
+                        providerId: ProviderId,
+                        request: ProviderReadingLookupRequest,
+                    ): ReadingProviderCallResult<ProviderPage<ProviderWorkCandidate>> = error("not used")
+                    override suspend fun chapters(
+                        providerId: ProviderId,
+                        request: ProviderReadingChaptersRequest,
+                    ): ReadingProviderCallResult<ProviderPage<ProviderChapterObservation>> = error("not used")
+                    override suspend fun pages(
+                        providerId: ProviderId,
+                        request: ProviderReadingPagesRequest,
+                    ): ReadingProviderCallResult<ProviderReadingDelivery> = error("not used")
+                },
+            )
+            val audit = resolver.auditNoMatch(chapter.id)
+            audit.reason shouldBe tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE
+            audit.eligibleSourceCount shouldBe 1
+            audit.mappedEvidenceCount shouldBe 1
+            audit.mappedKnownSourceCount shouldBe knownCount
+            audit.mappedActiveSourceCount shouldBe activeCount
+        }
+    }
+
+    @Test
     fun `detailed Reader source trace includes original source structure but never raw chapter labels`() = runTest {
         val chapter = CanonicalChapter(
             id = "chapter-zero-volume-one",
