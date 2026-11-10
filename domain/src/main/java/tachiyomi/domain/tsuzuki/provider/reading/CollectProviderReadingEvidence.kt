@@ -446,7 +446,7 @@ class CollectProviderReadingEvidence private constructor(
         for ((queryIndex, title) in titles.withIndex()) {
             val queryStarted = System.nanoTime()
             traceLookupAttempt(canonicalTitleId, target, queryIndex, title, DiagnosticOutcome.STARTED)
-            val candidates = when (
+            val lookup = when (
                 val result = collectLookup(
                     target.registration.descriptor.id,
                     title,
@@ -482,13 +482,14 @@ class CollectProviderReadingEvidence private constructor(
                         target,
                         queryIndex,
                         title,
-                        DiagnosticOutcome.SUCCEEDED,
+                        if (result.value.complete) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
                         elapsedMillis = (System.nanoTime() - queryStarted) / 1_000_000L,
-                        candidateCount = result.value.size,
+                        candidateCount = result.value.items.size,
                     )
                     result.value
                 }
             }
+            val candidates = lookup.items
             val normalizedTitle = normalize(title)
             val matches = candidates
                 .asSequence()
@@ -509,6 +510,27 @@ class CollectProviderReadingEvidence private constructor(
             // Reader authority merely because their authors/title match.
             observeSourcePortfolio(canonicalTitleId, title, target, canonicalAuthors, matches)
                 .forEach { assessment -> collectedWorkSources[assessment.ref] = assessment }
+            if (!lookup.complete) {
+                // MangaAll can have more upstream source pages than the Host's
+                // bounded lookup permits. Retain verified work evidence, but
+                // never choose an edition from a non-exhaustive candidate set.
+                traceLookupCandidates(
+                    canonicalTitleId, target, queryIndex, title, candidates, matches,
+                    selected = null, primary = null,
+                )
+                trace(
+                    canonicalTitleId, target, DiagnosticStage.LOOKUP, DiagnosticOutcome.PARTIAL,
+                    candidates = candidates.size, exactMatches = matches.size, bindings = 0,
+                )
+                return ProviderCallResult.Success(
+                    BindingDiscovery(
+                        unresolved = true,
+                        workSources = collectedWorkSources.values
+                            .filter(ProviderWorkSourceAssessment::canCollectProvisionalChapters)
+                            .take(MAX_COVERAGE_CONTENDERS),
+                    ),
+                )
+            }
             val sourcePrimaryMatches = matches.filter { normalize(it.title) == normalizedTitle }
             val priorAmbiguous = ambiguousCandidates
             val primary = sourcePrimaryMatches.singleOrNull()
@@ -921,13 +943,19 @@ class CollectProviderReadingEvidence private constructor(
         providerId: ProviderId,
         title: String,
         requestedLanguage: String?,
-    ): ProviderCallResult<List<ProviderWorkCandidate>> {
+    ): ProviderCallResult<LookupSnapshot> {
         val items = mutableListOf<ProviderWorkCandidate>()
         val seenCursors = mutableSetOf<String>()
         var cursor: ProviderCursor? = null
         var pageCount = 0
         while (true) {
-            if (++pageCount > MAX_LOOKUP_PAGES) return malformed()
+            if (++pageCount > MAX_LOOKUP_PAGES) {
+                return if (providerId.value == "app.tsuzuki.mangaall") {
+                    ProviderCallResult.Success(LookupSnapshot(items.toList(), complete = false))
+                } else {
+                    malformed()
+                }
+            }
             val page = when (
                 val result = gateway.lookup(
                     providerId = providerId,
@@ -950,12 +978,20 @@ class CollectProviderReadingEvidence private constructor(
                 is ProviderCallResult.Success -> result.value
             }
             items += page.items
-            if (items.size > MAX_LOOKUP_ITEMS) return malformed()
+            if (items.size > MAX_LOOKUP_ITEMS) {
+                return if (providerId.value == "app.tsuzuki.mangaall") {
+                    ProviderCallResult.Success(
+                        LookupSnapshot(items.take(MAX_LOOKUP_ITEMS), complete = false),
+                    )
+                } else {
+                    malformed()
+                }
+            }
             val next = page.nextCursor ?: break
             if (!seenCursors.add(next.value)) return malformed()
             cursor = next
         }
-        return ProviderCallResult.Success(items)
+        return ProviderCallResult.Success(LookupSnapshot(items.toList(), complete = true))
     }
 
     private fun readingTargets(): List<ReadingTarget> = providerRegistry.providers()
@@ -1468,6 +1504,11 @@ class CollectProviderReadingEvidence private constructor(
             code = ProviderErrorCode.MALFORMED_RESULT,
             retryable = false,
         ),
+    )
+
+    private data class LookupSnapshot(
+        val items: List<ProviderWorkCandidate>,
+        val complete: Boolean,
     )
 
     private data class BindingDiscovery(
