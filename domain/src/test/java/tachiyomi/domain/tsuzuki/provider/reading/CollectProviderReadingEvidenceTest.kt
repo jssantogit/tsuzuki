@@ -2598,6 +2598,7 @@ class CollectProviderReadingEvidenceTest {
         (StructuredDiagnosticSanitizer.sanitize(lookup) != null) shouldBe true
     }
 
+    // TDD RED: valid first page must survive a later transport timeout.
     @Test
     fun `MangaAll salvages verified earlier lookup pages when later source times out`() = runBlocking<Unit> {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
