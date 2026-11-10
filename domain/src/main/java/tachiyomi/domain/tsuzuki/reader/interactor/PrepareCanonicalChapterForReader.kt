@@ -299,6 +299,14 @@ class PrepareCanonicalChapterForReader(
                             DiagnosticAttributeValue.Number(audit.mappedEligibleSourceEvidenceCount.toLong()),
                         )
                         put(
+                            DiagnosticAttribute.PROVIDER_READER_MAPPED_KNOWN_SOURCE_COUNT,
+                            DiagnosticAttributeValue.Number(audit.mappedKnownSourceCount.toLong()),
+                        )
+                        put(
+                            DiagnosticAttribute.PROVIDER_READER_MAPPED_ACTIVE_SOURCE_COUNT,
+                            DiagnosticAttributeValue.Number(audit.mappedActiveSourceCount.toLong()),
+                        )
+                        put(
                             DiagnosticAttribute.PROVIDER_READER_NO_MATCH_REASON,
                             DiagnosticAttributeValue.Code(
                                 DiagnosticProviderReaderNoMatchReason.valueOf(audit.reason.name),
