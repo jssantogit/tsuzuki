@@ -2692,6 +2692,51 @@ class CollectProviderReadingEvidenceTest {
         }
         lookup.outcome shouldBe DiagnosticOutcome.PARTIAL
         lookup.attributes["candidate_count"] shouldBe DiagnosticAttributeValue.Number(2)
+        lookup.attributes["provider_error_code"] shouldBe DiagnosticAttributeValue.Text("TIMEOUT")
+        (StructuredDiagnosticSanitizer.sanitize(lookup) != null) shouldBe true
+    }
+
+    @Test
+    fun `MangaAll never salvages malformed later pages or first-page transport failures`() = runBlocking<Unit> {
+        for (failureCode in listOf(ProviderErrorCode.MALFORMED_RESULT, ProviderErrorCode.TIMEOUT)) {
+            var requests = 0
+            val recorder = CapturingProviderDiagnostics(captureActive = true)
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(canonicalTitle),
+                providerRegistry = registry(provider = ProviderId("app.tsuzuki.mangaall")),
+                gateway = gateway(
+                    lookupHandler = { request ->
+                        requests++
+                        if (request.cursor == null && failureCode == ProviderErrorCode.MALFORMED_RESULT) {
+                            ProviderCallResult.Success(
+                                ProviderPage(
+                                    items = listOf(ProviderWorkCandidate("mangadot:317", "Dandadan")),
+                                    nextCursor = ProviderCursor("next"),
+                                ),
+                            )
+                        } else {
+                            ProviderCallResult.Failure(ProviderError(failureCode, retryable = true))
+                        }
+                    },
+                    chaptersHandler = { error("Untrusted/absent lookup must not request chapters") },
+                    expectedProviderId = ProviderId("app.tsuzuki.mangaall"),
+                ),
+                bindingRepository = MemoryBindingRepository(),
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 42L },
+                diagnostics = recorder,
+            )
+            val result = collector.execute(canonicalTitle.id)
+            result.complete shouldBe false
+            result.snapshots shouldBe emptyList()
+            result.partialEvidence shouldBe emptyList()
+            requests shouldBe if (failureCode == ProviderErrorCode.MALFORMED_RESULT) 2 else 1
+            val outcome = recorder.events.single {
+                it.name == DiagnosticEventName.PROVIDER_READING_LOOKUP_ATTEMPT &&
+                    it.outcome != DiagnosticOutcome.STARTED
+            }
+            outcome.outcome shouldBe DiagnosticOutcome.FAILED
+        }
     }
 
     @Test
