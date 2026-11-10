@@ -485,6 +485,7 @@ class CollectProviderReadingEvidence private constructor(
                         if (result.value.complete) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
                         elapsedMillis = (System.nanoTime() - queryStarted) / 1_000_000L,
                         candidateCount = result.value.items.size,
+                        errorCode = result.value.partialErrorCode,
                     )
                     result.value
                 }
@@ -996,7 +997,9 @@ class CollectProviderReadingEvidence private constructor(
                         items.isNotEmpty() &&
                         result.error.code in RECOVERABLE_LOOKUP_ERRORS
                     ) {
-                        return ProviderCallResult.Success(LookupSnapshot(items.toList(), complete = false))
+                        return ProviderCallResult.Success(
+                            LookupSnapshot(items.toList(), complete = false, partialErrorCode = result.error.code),
+                        )
                     }
                     return result
                 }
@@ -1534,6 +1537,8 @@ class CollectProviderReadingEvidence private constructor(
     private data class LookupSnapshot(
         val items: List<ProviderWorkCandidate>,
         val complete: Boolean,
+        // Closed transport failure type for partial diagnostics; no upstream text.
+        val partialErrorCode: ProviderErrorCode? = null,
     )
 
     private data class BindingDiscovery(
