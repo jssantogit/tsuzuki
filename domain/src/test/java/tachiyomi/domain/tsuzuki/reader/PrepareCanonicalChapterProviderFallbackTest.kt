@@ -329,6 +329,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
         }
     }
 
+    // TDD RED: an unmapped-source audit needs origin-context counters.
     @Test
     fun `Reader audit separates orphaned mapped evidence from inactive and ineligible source refs`() = runTest {
         val chapter = CanonicalChapter(
