@@ -6,13 +6,13 @@ import org.junit.jupiter.api.Test
 class ProviderRepositoryCatalogVisibilityTest {
 
     @Test
-    fun `legacy MangaAll adapters remain discoverable before the unified provider is signed`() {
+    fun `official legacy MangaAll adapters are not offered while unified provider is pending`() {
         val dex = entry("app.tsuzuki.providers", "app.tsuzuki.mangaall.mangadex")
         val dot = entry("app.tsuzuki.providers", "app.tsuzuki.mangaall.mangadot")
         val fire = entry("app.tsuzuki.providers", "app.tsuzuki.mangafire")
 
         visibleProviderRepositoryEntries(listOf(dex, dot, fire))
-            .shouldContainExactly(dex, dot, fire)
+            .shouldContainExactly(fire)
     }
 
     @Test
@@ -29,7 +29,7 @@ class ProviderRepositoryCatalogVisibilityTest {
     }
 
     @Test
-    fun `uninstallable legacy packages are not hidden if the unified release is unavailable`() {
+    fun `legacy official packages remain absent even when unified release is unavailable`() {
         val repo = "app.tsuzuki.providers"
         val dex = entry(repo, "app.tsuzuki.mangaall.mangadex")
         for (status in listOf(
@@ -39,7 +39,7 @@ class ProviderRepositoryCatalogVisibilityTest {
         )) {
             val unified = entry(repo, "app.tsuzuki.mangaall", status)
             visibleProviderRepositoryEntries(listOf(dex, unified))
-                .shouldContainExactly(dex, unified)
+                .shouldContainExactly(unified)
         }
     }
 
@@ -80,12 +80,12 @@ class ProviderRepositoryCatalogVisibilityTest {
     }
 
     @Test
-    fun `signed MangaAll updates still suppress obsolete source adapters`() {
+    fun `signed MangaAll updates stay in Installed and suppress obsolete source adapters`() {
         val repo = "app.tsuzuki.providers"
         val dex = entry(repo, "app.tsuzuki.mangaall.mangadex")
         val unified = entry(repo, "app.tsuzuki.mangaall", ProviderRepositoryEntryStatus.UPDATE_AVAILABLE)
         visibleProviderRepositoryEntries(listOf(dex, unified))
-            .shouldContainExactly(unified)
+            .shouldContainExactly()
     }
 
     private fun entry(
