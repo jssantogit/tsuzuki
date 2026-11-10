@@ -12,6 +12,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticCandidateType
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticErrorCategory
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderIdentityRejectionReason
@@ -386,6 +387,17 @@ class PrepareCanonicalChapterForReader(
                 } else {
                     emptyMap()
                 }
+                // A closed internal source code survives even a generic SCRIPT_ERROR,
+                // so the next A54 capture identifies which adapter failed.
+                // Never log upstream URLs, cookies, HIDs or query strings here.
+                val capturedInternalSource = when (option.contentSourceId) {
+                    "mangadex" -> DiagnosticMangaAllNetworkSource.MANGADEX
+                    "mangadot" -> DiagnosticMangaAllNetworkSource.MANGADOT
+                    "mangafire" -> DiagnosticMangaAllNetworkSource.MANGAFIRE
+                    else -> null
+                }?.let { source ->
+                    mapOf(DiagnosticAttribute.MANGAALL_NETWORK_SOURCE to DiagnosticAttributeValue.Code(source))
+                } ?: emptyMap()
                 val capturedSourceStructure = if (structuredDiagnostics.detailedCaptureActive) {
                     val sourceAudit = try {
                         resolver.auditSourceIdentity(option)
@@ -437,7 +449,7 @@ class PrepareCanonicalChapterForReader(
                         DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text(option.providerId.value),
                         DiagnosticAttribute.CANDIDATE_TYPE to
                             DiagnosticAttributeValue.Code(DiagnosticCandidateType.PROVIDER),
-                    ) + capturedCanonicalIdentity + capturedSourceIdentity + capturedSourceStructure,
+                    ) + capturedCanonicalIdentity + capturedSourceIdentity + capturedSourceStructure + capturedInternalSource,
                 )
 
                 when (val prepared = resolver.preparedContent(option)) {
@@ -463,6 +475,7 @@ class PrepareCanonicalChapterForReader(
                                 )
                                 putAll(capturedCanonicalIdentity)
                                 putAll(capturedSourceIdentity)
+                                putAll(capturedInternalSource)
                                 prepared.error.observedPageCount?.let { count ->
                                     put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(count.toLong()))
                                 }
@@ -483,6 +496,7 @@ class PrepareCanonicalChapterForReader(
                                 )
                                 putAll(capturedCanonicalIdentity)
                                 putAll(capturedSourceIdentity)
+                                putAll(capturedInternalSource)
                                 pageCount?.let {
                                     put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(it.toLong()))
                                 }
