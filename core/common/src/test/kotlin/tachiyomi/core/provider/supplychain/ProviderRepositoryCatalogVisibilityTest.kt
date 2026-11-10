@@ -44,6 +44,42 @@ class ProviderRepositoryCatalogVisibilityTest {
     }
 
     @Test
+    fun `installed providers disappear from Discover including installed newer and updates`() {
+        val repo = "app.tsuzuki.providers"
+        val installed = entry(repo, "app.tsuzuki.nyaa", ProviderRepositoryEntryStatus.INSTALLED)
+        val upgrade = entry(repo, "app.tsuzuki.mangaall", ProviderRepositoryEntryStatus.UPDATE_AVAILABLE)
+        val newer = entry(repo, "app.tsuzuki.directp2p", ProviderRepositoryEntryStatus.INSTALLED_NEWER)
+        val other = entry(repo, "app.tsuzuki.mangafire")
+        visibleProviderRepositoryEntries(
+            listOf(installed, upgrade, newer, other),
+            installedProviderIds = setOf("app.tsuzuki.nyaa", "app.tsuzuki.mangaall", "app.tsuzuki.directp2p"),
+        ).shouldContainExactly(other)
+        availableInstalledProviderUpdates(
+            listOf(installed, upgrade, newer, other),
+            installedProviderIds = setOf("app.tsuzuki.nyaa", "app.tsuzuki.mangaall", "app.tsuzuki.directp2p"),
+        ).shouldContainExactly(upgrade)
+    }
+
+    @Test
+    fun `discover excludes installed package even with stale status or conflicting origins`() {
+        val same = entry("app.tsuzuki.providers", "app.tsuzuki.mangaall")
+        val foreign = entry("other.repo", "app.tsuzuki.mangaall", ProviderRepositoryEntryStatus.ORIGIN_CONFLICT)
+        val free = entry("app.tsuzuki.providers", "app.tsuzuki.mangafire")
+        visibleProviderRepositoryEntries(listOf(same, foreign, free), setOf("app.tsuzuki.mangaall"))
+            .shouldContainExactly(free)
+    }
+
+    @Test
+    fun `official legacy MangaDex and MangaDot packages are never new discovery choices`() {
+        val repo = "app.tsuzuki.providers"
+        val dex = entry(repo, "app.tsuzuki.mangaall.mangadex")
+        val dot = entry(repo, "app.tsuzuki.mangaall.mangadot")
+        val unrelated = entry("independent.repo", "app.tsuzuki.mangaall.mangadex")
+        visibleProviderRepositoryEntries(listOf(dex, dot, unrelated))
+            .shouldContainExactly(unrelated)
+    }
+
+    @Test
     fun `signed MangaAll updates still suppress obsolete source adapters`() {
         val repo = "app.tsuzuki.providers"
         val dex = entry(repo, "app.tsuzuki.mangaall.mangadex")
