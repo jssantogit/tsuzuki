@@ -168,7 +168,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
         coEvery { resolver.preparedContent(option) } returns ReadingProviderCallResult.Failure(
             ProviderError(ProviderErrorCode.SCRIPT_ERROR, retryable = true),
         )
-        val recorder = RecordingStructuredDiagnosticRecorder(detailed = true)
+        val recorder = RecordingStructuredDiagnosticRecorder(detailed = false)
         val reader = PrepareCanonicalChapterForReader(
             resolveChapterContent = emptyAddonResolver(),
             canonicalChapterRepository = chapterRepository(chapter),
