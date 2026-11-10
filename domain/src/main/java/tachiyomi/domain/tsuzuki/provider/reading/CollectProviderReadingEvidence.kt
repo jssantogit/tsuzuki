@@ -14,6 +14,7 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.ProducerKind
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticErrorCategory
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCandidateReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderDetailOutcome
@@ -1278,6 +1279,15 @@ class CollectProviderReadingEvidence private constructor(
                 if (target.registration.descriptor.id.value == "app.tsuzuki.mangafire") {
                     put("provider_work_id", DiagnosticAttributeValue.Text(ref.externalWorkId))
                 }
+                // Keep failures attributable to one internal MangaAll adapter
+                // without exposing external chapter IDs or source-written URLs.
+                val source = when (MangaAllReadingIdentity.sourceId(ref)) {
+                    "mangadex" -> DiagnosticMangaAllNetworkSource.MANGADEX
+                    "mangadot" -> DiagnosticMangaAllNetworkSource.MANGADOT
+                    "mangafire" -> DiagnosticMangaAllNetworkSource.MANGAFIRE
+                    else -> null
+                }
+                source?.let { put("mangaall_network_source", DiagnosticAttributeValue.Code(it)) }
                 itemCount?.let { put("item_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 errorCode?.let { put("provider_error_code", DiagnosticAttributeValue.Text(it.name)) }
             }
