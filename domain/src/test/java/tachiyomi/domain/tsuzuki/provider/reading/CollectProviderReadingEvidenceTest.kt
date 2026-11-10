@@ -2503,7 +2503,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `MangaAll pagination budget retains verified provisional chapters and refuses exact binding`() = runBlocking<Unit> {
+    fun `MangaAll incomplete lookup retains provisional chapters without binding`() = runBlocking<Unit> {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
         val metadata = mockk<CanonicalMetadataSnapshotRepository>()
