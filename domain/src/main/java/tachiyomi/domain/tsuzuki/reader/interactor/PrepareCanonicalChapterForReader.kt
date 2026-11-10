@@ -388,6 +388,7 @@ class PrepareCanonicalChapterForReader(
                     emptyMap()
                 }
                 // A closed internal source code survives even a generic SCRIPT_ERROR,
+                // including before any image URL is known to the Host.
                 // so the next A54 capture identifies which adapter failed.
                 // Never log upstream URLs, cookies, HIDs or query strings here.
                 val capturedInternalSource = when (option.contentSourceId) {
