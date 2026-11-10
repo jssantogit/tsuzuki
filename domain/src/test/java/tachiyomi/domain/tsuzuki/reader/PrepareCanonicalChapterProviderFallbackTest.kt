@@ -392,6 +392,8 @@ class PrepareCanonicalChapterProviderFallbackTest {
                     externalChapterKey = "chapter-one",
                     rawLabel = "Chapter 1",
                     rawNumber = 1.0,
+                    volume = null,
+                    title = null,
                     observedAt = 1,
                     confidence = 0.95,
                     authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
