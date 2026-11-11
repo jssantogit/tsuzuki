@@ -16,6 +16,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderIdentityRejectionReason
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderMappedSourceIneligibilityReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderNoMatchReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
@@ -313,6 +314,14 @@ class PrepareCanonicalChapterForReader(
                                 DiagnosticProviderReaderNoMatchReason.valueOf(audit.reason.name),
                             ),
                         )
+                        audit.mappedSourceIneligibilityReason?.let { cause ->
+                            put(
+                                DiagnosticAttribute.PROVIDER_READER_MAPPED_SOURCE_INELIGIBILITY_REASON,
+                                DiagnosticAttributeValue.Code(
+                                    DiagnosticProviderReaderMappedSourceIneligibilityReason.valueOf(cause.name),
+                                ),
+                            )
+                        }
                         audit.identityRejectionReason?.let { rejection ->
                             put(
                                 DiagnosticAttribute.PROVIDER_READER_IDENTITY_REJECTION_REASON,
