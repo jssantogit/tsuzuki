@@ -16,6 +16,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderIdentityRejectionReason
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderMappedMissingProviderFamily
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderMappedSourceIneligibilityReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderNoMatchReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
@@ -319,6 +320,14 @@ class PrepareCanonicalChapterForReader(
                                 DiagnosticAttribute.PROVIDER_READER_MAPPED_SOURCE_INELIGIBILITY_REASON,
                                 DiagnosticAttributeValue.Code(
                                     DiagnosticProviderReaderMappedSourceIneligibilityReason.valueOf(cause.name),
+                                ),
+                            )
+                        }
+                        audit.mappedMissingProviderFamily?.let { family ->
+                            put(
+                                DiagnosticAttribute.PROVIDER_READER_MAPPED_MISSING_PROVIDER_FAMILY,
+                                DiagnosticAttributeValue.Code(
+                                    DiagnosticProviderReaderMappedMissingProviderFamily.valueOf(family.name),
                                 ),
                             )
                         }
