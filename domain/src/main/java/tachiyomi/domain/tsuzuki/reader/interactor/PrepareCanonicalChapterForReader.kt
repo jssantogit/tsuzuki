@@ -489,6 +489,12 @@ class PrepareCanonicalChapterForReader(
                                 prepared.error.observedPageCount?.let { count ->
                                     put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(count.toLong()))
                                 }
+                                prepared.error.pageFailureStage?.let { stage ->
+                                    put(
+                                        DiagnosticAttribute.PROVIDER_PAGE_FAILURE_STAGE,
+                                        DiagnosticAttributeValue.Code(stage),
+                                    )
+                                }
                             },
                         )
                     }
