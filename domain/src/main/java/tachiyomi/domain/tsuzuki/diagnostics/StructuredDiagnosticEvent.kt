@@ -220,6 +220,7 @@ enum class DiagnosticAttribute {
     PROVIDER_READER_MAPPED_KNOWN_SOURCE_COUNT,
     PROVIDER_READER_MAPPED_ACTIVE_SOURCE_COUNT,
     PROVIDER_READER_MAPPED_SOURCE_INELIGIBILITY_REASON,
+    PROVIDER_READER_MAPPED_MISSING_PROVIDER_FAMILY,
     PROVIDER_READER_NO_MATCH_REASON,
     PROVIDER_READER_IDENTITY_REJECTION_REASON,
 
@@ -549,6 +550,16 @@ enum class DiagnosticProviderReaderMappedSourceIneligibilityReason : DiagnosticS
     MIXED_REASONS,
 }
 
+/** Closed family of a saved, mapped, currently unregistered Provider. */
+enum class DiagnosticProviderReaderMappedMissingProviderFamily : DiagnosticSafeCode {
+    MANGAALL,
+    MANGAFIRE_STANDALONE,
+    LEGACY_MANGADEX_ADAPTER,
+    LEGACY_MANGADOT_ADAPTER,
+    OTHER,
+    MIXED,
+}
+
 enum class DiagnosticProviderReaderNoMatchReason : DiagnosticSafeCode {
     NO_ELIGIBLE_SOURCE,
     SOURCE_EDITION_EXCLUDED,
@@ -849,6 +860,9 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.PROVIDER_READER_MAPPED_SOURCE_INELIGIBILITY_REASON ->
             (value as? DiagnosticAttributeValue.Code)
                 ?.takeIf { it.value is DiagnosticProviderReaderMappedSourceIneligibilityReason }
+        DiagnosticAttribute.PROVIDER_READER_MAPPED_MISSING_PROVIDER_FAMILY ->
+            (value as? DiagnosticAttributeValue.Code)
+                ?.takeIf { it.value is DiagnosticProviderReaderMappedMissingProviderFamily }
         DiagnosticAttribute.PROVIDER_READER_NO_MATCH_REASON -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderReaderNoMatchReason }
         DiagnosticAttribute.PROVIDER_READER_IDENTITY_REJECTION_REASON -> (value as? DiagnosticAttributeValue.Code)
