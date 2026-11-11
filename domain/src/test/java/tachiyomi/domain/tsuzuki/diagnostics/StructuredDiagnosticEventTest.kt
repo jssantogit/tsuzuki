@@ -236,6 +236,33 @@ class StructuredDiagnosticEventTest {
     }
 
     @Test
+    fun `missing mapped Provider family accepts only a known closed code`() {
+        fun sanitize(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000L,
+                severity = DiagnosticSeverity.INFO,
+                subsystem = DiagnosticSubsystem.CONTENT,
+                name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.BINDING,
+                outcome = DiagnosticOutcome.EMPTY,
+                attributes = mapOf("provider_reader_mapped_missing_provider_family" to value),
+            ),
+        )?.attributes.orEmpty()
+
+        val family = DiagnosticAttributeValue.Code(
+            DiagnosticProviderReaderMappedMissingProviderFamily.LEGACY_MANGADEX_ADAPTER,
+        )
+        sanitize(family) shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_READER_MAPPED_MISSING_PROVIDER_FAMILY to family,
+        )
+        sanitize(DiagnosticAttributeValue.Text("app.tsuzuki.mangaall.mangadex; secret")) shouldBe emptyMap()
+        sanitize(DiagnosticAttributeValue.Code(DiagnosticProviderReaderNoMatchReason.NO_PROVIDER_EVIDENCE)) shouldBe
+            emptyMap()
+    }
+
+    @Test
     fun `Reader identity rejection reason is a closed diagnostic code`() {
         fun audited(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
             StructuredDiagnosticEvent(
