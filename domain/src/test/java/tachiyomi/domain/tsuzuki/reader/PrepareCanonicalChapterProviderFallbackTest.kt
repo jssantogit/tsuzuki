@@ -75,6 +75,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingDelivery
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingMappedMissingProviderFamily
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingMappedSourceIneligibilityReason
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingNoMatchReason
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
@@ -432,9 +433,15 @@ class PrepareCanonicalChapterProviderFallbackTest {
         val unavailableRef = ProviderBindingRef(activeProvider, "en", "missing-work")
         val phantomRef = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "en", "mangadot:317")
         val unsupportedFacetRef = ProviderBindingRef(activeProvider, "pt-br", "missing-language")
+        val oldDexAdapter = ProviderBindingRef(
+            ProviderId("app.tsuzuki.mangaall.mangadex"),
+            "en",
+            "mangadex:legacy-work",
+        )
         val cases = listOf(
             Triple(phantomRef, null, 0 to 0),
             Triple(inactiveRef, inactiveRef, 1 to 0),
+            Triple(oldDexAdapter, oldDexAdapter, 1 to 0),
             Triple(unsupportedFacetRef, unsupportedFacetRef, 1 to 0),
             Triple(unavailableRef, unavailableRef, 1 to 1),
         )
@@ -507,9 +514,14 @@ class PrepareCanonicalChapterProviderFallbackTest {
             audit.mappedActiveSourceCount shouldBe expected.second
             audit.mappedSourceIneligibilityReason shouldBe when (mappedRef) {
                 phantomRef -> ProviderReadingMappedSourceIneligibilityReason.SOURCE_REFERENCE_MISSING
-                inactiveRef -> ProviderReadingMappedSourceIneligibilityReason.PROVIDER_NOT_REGISTERED
+                inactiveRef, oldDexAdapter -> ProviderReadingMappedSourceIneligibilityReason.PROVIDER_NOT_REGISTERED
                 unsupportedFacetRef -> ProviderReadingMappedSourceIneligibilityReason.FACET_UNAVAILABLE
                 else -> ProviderReadingMappedSourceIneligibilityReason.SOURCE_NOT_AUTHORIZED
+            }
+            audit.mappedMissingProviderFamily shouldBe when (mappedRef) {
+                inactiveRef -> ProviderReadingMappedMissingProviderFamily.MANGAALL
+                oldDexAdapter -> ProviderReadingMappedMissingProviderFamily.LEGACY_MANGADEX_ADAPTER
+                else -> null
             }
         }
     }
