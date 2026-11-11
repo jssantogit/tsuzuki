@@ -397,6 +397,14 @@ class ScriptProviderReadingGatewayTest {
         }
         (untrusted.pages(providerId, request) as ProviderCallResult.Failure)
             .error.code shouldBe ProviderErrorCode.MALFORMED_RESULT
+
+        val mixed = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success(
+                """{"type":"page_list","pages":[{"url":"https://cdn.example/1.jpg"}],"pageFailureStage":"AT_HOME_REQUEST_FAILED"}""",
+            )
+        }
+        (mixed.pages(providerId, request) as ProviderCallResult.Failure)
+            .error.code shouldBe ProviderErrorCode.MALFORMED_RESULT
     }
 
     @Test
