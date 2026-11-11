@@ -385,6 +385,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
         }
     }
 
+    // TDD RED: the mapped-source cause must be a closed reason, not a raw HID.
     @Test
     fun `Reader audit separates orphaned mapped evidence from inactive and ineligible source refs`() = runTest {
         val chapter = CanonicalChapter(
