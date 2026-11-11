@@ -74,8 +74,8 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingDelivery
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
-import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingNoMatchReason
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingMappedSourceIneligibilityReason
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingNoMatchReason
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkCandidate
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
