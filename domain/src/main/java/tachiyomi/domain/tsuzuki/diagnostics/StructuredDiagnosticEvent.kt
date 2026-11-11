@@ -255,6 +255,7 @@ enum class DiagnosticAttribute {
     PROVIDER_VERSION_CODE,
     PROVIDER_ERROR_CODE,
     PROVIDER_MALFORMED_STAGE,
+    PROVIDER_PAGE_FAILURE_STAGE,
     PROVIDER_RETRYABLE,
     ADDON_ID,
     CANONICAL_TITLE_REF,
@@ -522,6 +523,18 @@ enum class DiagnosticProviderMalformedResultStage : DiagnosticSafeCode {
     EMPTY_VALUE,
     SCHEMA_DECODE,
     CONTRACT_VALIDATION,
+}
+
+/** MangaAll 0.5.1 Reader stage, not an upstream message or exception class. */
+enum class DiagnosticProviderPageFailureStage : DiagnosticSafeCode {
+    INVALID_CHAPTER_ID,
+    CHAPTER_DETAIL_REQUEST_FAILED,
+    CHAPTER_WORK_MISMATCH,
+    CHAPTER_LANGUAGE_MISMATCH,
+    EXTERNAL_CHAPTER,
+    AT_HOME_REQUEST_FAILED,
+    UNTRUSTED_IMAGE_ORIGIN,
+    INVALID_PAGE_METADATA,
 }
 
 /** A bounded, content-free reason a persisted source cannot be a Reader option. */
@@ -848,6 +861,8 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticProviderRuntimePhase }
         DiagnosticAttribute.PROVIDER_MALFORMED_STAGE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderMalformedResultStage }
+        DiagnosticAttribute.PROVIDER_PAGE_FAILURE_STAGE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderPageFailureStage }
         DiagnosticAttribute.PROVIDER_BROWSER_FAILURE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderBrowserFailure }
         DiagnosticAttribute.CHAPTER_RECONCILE_PHASE -> (value as? DiagnosticAttributeValue.Code)
