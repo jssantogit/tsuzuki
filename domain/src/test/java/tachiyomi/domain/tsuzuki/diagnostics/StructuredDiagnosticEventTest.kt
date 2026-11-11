@@ -180,6 +180,37 @@ class StructuredDiagnosticEventTest {
     }
 
     @Test
+    fun `mapped Reader source exclusion retains only typed source cause`() {
+        fun sanitized(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000L,
+                severity = DiagnosticSeverity.INFO,
+                subsystem = DiagnosticSubsystem.CONTENT,
+                name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.BINDING,
+                outcome = DiagnosticOutcome.EMPTY,
+                attributes = mapOf(
+                    "provider_reader_mapped_source_ineligibility_reason" to value,
+                    "provider_work_id" to DiagnosticAttributeValue.Text("mangafire:secret-id"),
+                    "reader_url" to DiagnosticAttributeValue.Text("https://example.test/?token=private"),
+                ),
+            ),
+        )?.attributes.orEmpty()
+
+        val reason = DiagnosticAttributeValue.Code(
+            DiagnosticProviderReaderMappedSourceIneligibilityReason.FACET_UNAVAILABLE,
+        )
+        sanitized(reason) shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_READER_MAPPED_SOURCE_INELIGIBILITY_REASON to reason,
+        )
+        sanitized(DiagnosticAttributeValue.Text("FACET_UNAVAILABLE; Authorization: secret")) shouldBe emptyMap()
+        sanitized(DiagnosticAttributeValue.Code(DiagnosticProviderReaderNoMatchReason.NO_ELIGIBLE_SOURCE)) shouldBe
+            emptyMap()
+    }
+
+    @Test
     fun `Reader identity rejection reason is a closed diagnostic code`() {
         fun audited(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
             StructuredDiagnosticEvent(
