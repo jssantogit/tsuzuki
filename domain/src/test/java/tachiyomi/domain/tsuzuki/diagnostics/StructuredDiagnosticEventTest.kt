@@ -211,6 +211,31 @@ class StructuredDiagnosticEventTest {
     }
 
     @Test
+    fun `page-stage diagnostics keep closed values and reject source-authored content`() {
+        fun attributes(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000L,
+                severity = DiagnosticSeverity.WARN,
+                subsystem = DiagnosticSubsystem.READER,
+                name = DiagnosticEventName.READER_PAGES_READY,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.READER,
+                outcome = DiagnosticOutcome.TYPED_FAILURE,
+                attributes = mapOf("provider_page_failure_stage" to value),
+            ),
+        )?.attributes.orEmpty()
+
+        val stage = DiagnosticAttributeValue.Code(
+            DiagnosticProviderPageFailureStage.AT_HOME_REQUEST_FAILED,
+        )
+        attributes(stage) shouldBe mapOf(DiagnosticAttribute.PROVIDER_PAGE_FAILURE_STAGE to stage)
+        attributes(DiagnosticAttributeValue.Text("AT_HOME_REQUEST_FAILED; token=private")) shouldBe emptyMap()
+        attributes(DiagnosticAttributeValue.Code(DiagnosticProviderReaderNoMatchReason.NO_PROVIDER_EVIDENCE)) shouldBe
+            emptyMap()
+    }
+
+    @Test
     fun `Reader identity rejection reason is a closed diagnostic code`() {
         fun audited(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
             StructuredDiagnosticEvent(
