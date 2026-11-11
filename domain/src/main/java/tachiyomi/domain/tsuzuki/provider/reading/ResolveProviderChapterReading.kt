@@ -72,6 +72,8 @@ data class ProviderReadingNoMatchAudit(
     val mappedKnownSourceCount: Int = 0,
     /** Unique mapped work refs whose Provider and facet are still Reader-enabled. */
     val mappedActiveSourceCount: Int = 0,
+    /** Why saved mapped chapter provenance cannot become a Reader option. */
+    val mappedSourceIneligibilityReason: ProviderReadingMappedSourceIneligibilityReason? = null,
     val reason: ProviderReadingNoMatchReason,
     val identityRejectionReason: ProviderReadingIdentityRejectionReason? = null,
 )
@@ -84,6 +86,18 @@ data class ProviderReadingSourceIdentityAudit(
     val sourceTitleIsVolumeContainer: Boolean,
     val sourceTitlePresent: Boolean,
 )
+
+/** Closed reason codes; never source IDs, titles or network payloads. */
+enum class ProviderReadingMappedSourceIneligibilityReason {
+    SOURCE_REFERENCE_MISSING,
+    PROVIDER_NOT_REGISTERED,
+    PROVIDER_NOT_ENABLED,
+    PROVIDER_RUNTIME_UNSUPPORTED,
+    READING_CAPABILITY_MISSING,
+    FACET_UNAVAILABLE,
+    SOURCE_NOT_AUTHORIZED,
+    MIXED_REASONS,
+}
 
 enum class ProviderReadingNoMatchReason {
     NO_ELIGIBLE_SOURCE,
@@ -424,6 +438,12 @@ class ResolveProviderChapterReading(
         val mappedActiveCount = mappedKnownRefs.count { ref ->
             registrations[ref.providerId]?.isEligibleForReading(ref.facetId) == true
         }
+        val mappedIneligibilityReasons = mapped.map { observed ->
+            mappedSourceIneligibilityReason(
+                knownRefs[observed.evidence.producerId],
+                registrations,
+            )
+        }.distinct()
         val reason = when {
             eligibleProducers.isEmpty() && attestedVariantProducers.isNotEmpty() ->
                 ProviderReadingNoMatchReason.SOURCE_EDITION_EXCLUDED
@@ -469,6 +489,15 @@ class ResolveProviderChapterReading(
                 mappedActiveCount
             } else {
                 0
+            },
+            mappedSourceIneligibilityReason = if (reason == ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE) {
+                when (mappedIneligibilityReasons.size) {
+                    0 -> null
+                    1 -> mappedIneligibilityReasons.single()
+                    else -> ProviderReadingMappedSourceIneligibilityReason.MIXED_REASONS
+                }
+            } else {
+                null
             },
             reason = reason,
             identityRejectionReason = identityRejectionReason,
@@ -604,6 +633,28 @@ class ResolveProviderChapterReading(
                     }
                 }
             }
+        }
+    }
+
+    private fun mappedSourceIneligibilityReason(
+        ref: ProviderBindingRef?,
+        registrations: Map<ProviderId, ProviderRegistration>,
+    ): ProviderReadingMappedSourceIneligibilityReason {
+        if (ref == null) return ProviderReadingMappedSourceIneligibilityReason.SOURCE_REFERENCE_MISSING
+        val registration = registrations[ref.providerId]
+            ?: return ProviderReadingMappedSourceIneligibilityReason.PROVIDER_NOT_REGISTERED
+        return when {
+            registration.lifecycleStatus != ProviderLifecycleStatus.ENABLED ->
+                ProviderReadingMappedSourceIneligibilityReason.PROVIDER_NOT_ENABLED
+            registration.descriptor.runtime != ProviderRuntimeKind.SCRIPT ->
+                ProviderReadingMappedSourceIneligibilityReason.PROVIDER_RUNTIME_UNSUPPORTED
+            !REQUIRED_READING_CAPABILITIES.all { it in registration.enabledCapabilities } ->
+                ProviderReadingMappedSourceIneligibilityReason.READING_CAPABILITY_MISSING
+            registration.facets.isEmpty() && ref.facetId != null ->
+                ProviderReadingMappedSourceIneligibilityReason.FACET_UNAVAILABLE
+            registration.facets.isNotEmpty() && registration.facets.none { it.facetId == ref.facetId } ->
+                ProviderReadingMappedSourceIneligibilityReason.FACET_UNAVAILABLE
+            else -> ProviderReadingMappedSourceIneligibilityReason.SOURCE_NOT_AUTHORIZED
         }
     }
 
