@@ -2633,7 +2633,9 @@ class CollectProviderReadingEvidenceTest {
             refreshedAt = 42L,
         )
         val preferredRef = ProviderBindingRef(
-            mangaAll, "en", "mangadex:11111111-2222-4333-8444-555555555555",
+            mangaAll,
+            "en",
+            "mangadex:11111111-2222-4333-8444-555555555555",
         )
         for (source in listOf(
             ProviderWorkCandidate(
@@ -2661,10 +2663,13 @@ class CollectProviderReadingEvidenceTest {
             ),
         )) {
             val saved = ProviderReadingBinding(
-                id = "saved", canonicalTitleId = title.id, ref = preferredRef,
+                id = "saved",
+                canonicalTitleId = title.id,
+                ref = preferredRef,
                 verification = ProviderBindingVerification.USER_CONFIRMED,
                 availability = ProviderBindingAvailability.AVAILABLE,
-                createdAt = 3L, updatedAt = 4L,
+                createdAt = 3L,
+                updatedAt = 4L,
             )
             val bindings = MemoryBindingRepository().apply { upsert(saved) }
             val associations = MemoryWorkSourceAssociationRepository()
@@ -2694,11 +2699,15 @@ class CollectProviderReadingEvidenceTest {
             result.snapshots.shouldHaveSize(1)
             result.snapshots.single().evidence shouldBe emptyList()
             result.partialEvidence shouldBe emptyList()
+            result.complete shouldBe true
             chapterWorkIds shouldBe listOf(preferredRef.externalWorkId)
             bindings.getByTitle(title.id) shouldBe listOf(saved)
-            associations.getByTitle(title.id).any { it.ref.externalWorkId == source.externalWorkId &&
-                it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED &&
-                it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED } shouldBe false
+            val wronglyCorroborated = associations.getByTitle(title.id).any { assessment ->
+                assessment.ref.externalWorkId == source.externalWorkId &&
+                    assessment.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED &&
+                    assessment.editionQualification == ProviderSourceEditionQualification.UNRESOLVED
+            }
+            wronglyCorroborated shouldBe false
         }
     }
 
