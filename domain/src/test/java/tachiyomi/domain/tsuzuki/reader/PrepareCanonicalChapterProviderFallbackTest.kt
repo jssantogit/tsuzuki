@@ -100,6 +100,7 @@ import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import tachiyomi.domain.tsuzuki.provider.ProviderCallResult as TorrentProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult as ReadingProviderCallResult
 
+// CI: GREEN page-stage diagnostics and legacy mapped-provider family
 class PrepareCanonicalChapterProviderFallbackTest {
 
     @Test
