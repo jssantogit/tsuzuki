@@ -37,6 +37,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderPageFailureStage
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderReaderNoMatchReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
@@ -194,6 +195,25 @@ class PrepareCanonicalChapterProviderFallbackTest {
             it == DiagnosticAttributeValue.Text(option.externalWorkId) ||
                 it == DiagnosticAttributeValue.Text(option.providerChapterId)
         } shouldBe false
+
+        coEvery { resolver.preparedContent(option) } returns ReadingProviderCallResult.Failure(
+            ProviderError(
+                ProviderErrorCode.SOURCE_READ_ERROR,
+                retryable = false,
+                pageFailureStage = DiagnosticProviderPageFailureStage.AT_HOME_REQUEST_FAILED,
+            ),
+        )
+        reader.execute(chapter.id).shouldBeInstanceOf<CanonicalReaderPreparation.Unavailable>()
+        val classified = recorder.events.last {
+            it.name == DiagnosticEventName.READER_PAGES_READY &&
+                it.outcome == DiagnosticOutcome.TYPED_FAILURE
+        }
+        classified.attributes["provider_page_failure_stage"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderPageFailureStage.AT_HOME_REQUEST_FAILED,
+        )
+        classified.attributes["mangaall_network_source"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticMangaAllNetworkSource.MANGAFIRE,
+        )
     }
 
     @Test
