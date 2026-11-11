@@ -18,6 +18,7 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
 import tachiyomi.core.provider.supplychain.ProviderArtifactStore
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderPageFailureStage
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilityRef
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
@@ -228,11 +229,21 @@ class ScriptProviderReadingGateway internal constructor(
                 PagesRequestDto(
                     binding = request.binding.toDto(),
                     providerChapterId = request.providerChapterId,
+                    diagnosticsVersion = 2,
                 ),
             ),
         ) { value, active ->
             val decoded = json.decodeFromString<PagesResultDto>(value)
             when (decoded.type) {
+                PAGE_FAILURE_TYPE -> {
+                    if (decoded.pages.isNotEmpty() || decoded.resource != null || decoded.format != null) {
+                        error("Provider page failure contains unexpected delivery")
+                    }
+                    val stage = DiagnosticProviderPageFailureStage.valueOf(
+                        decoded.pageFailureStage ?: error("Provider page failure has no stage"),
+                    )
+                    throw SourcePageFailure(stage)
+                }
                 PAGE_LIST_TYPE -> {
                     if (decoded.pages.isEmpty()) {
                         error("Provider page list is empty")
@@ -371,6 +382,14 @@ class ScriptProviderReadingGateway internal constructor(
             throw error
         } catch (_: PageOriginPolicyFailure) {
             failure(ProviderErrorCode.NETWORK_POLICY, retryable = false)
+        } catch (error: SourcePageFailure) {
+            ProviderCallResult.Failure(
+                ProviderError(
+                    code = ProviderErrorCode.SOURCE_READ_ERROR,
+                    retryable = false,
+                    pageFailureStage = error.stage,
+                ),
+            )
         } catch (error: SourceLookupFailure) {
             ProviderCallResult.Failure(
                 ProviderError(
@@ -396,6 +415,10 @@ class ScriptProviderReadingGateway internal constructor(
     private class SourceLookupFailure(
         val kind: ProviderLookupFailureCode,
         val httpStatus: Int?,
+    ) : RuntimeException()
+
+    private class SourcePageFailure(
+        val stage: DiagnosticProviderPageFailureStage,
     ) : RuntimeException()
 
     private fun matchesRegistration(
@@ -523,6 +546,8 @@ class ScriptProviderReadingGateway internal constructor(
     internal data class PagesRequestDto(
         val binding: BindingDto,
         val providerChapterId: String,
+        /** New Providers opt into structured failures only on this Host. */
+        val diagnosticsVersion: Int,
     )
 
     @Serializable
@@ -575,6 +600,7 @@ class ScriptProviderReadingGateway internal constructor(
         val pages: List<PageRequestDto> = emptyList(),
         val resource: String? = null,
         val format: String? = null,
+        val pageFailureStage: String? = null,
     )
 
     @Serializable
@@ -585,6 +611,7 @@ class ScriptProviderReadingGateway internal constructor(
 
     private companion object {
         const val PAGE_LIST_TYPE = "page_list"
+        const val PAGE_FAILURE_TYPE = "page_failure"
         const val MANAGED_FILE_TYPE = "managed_file"
     }
 }
