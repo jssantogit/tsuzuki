@@ -385,6 +385,7 @@ class PrepareCanonicalChapterProviderFallbackTest {
         }
     }
 
+    // TDD GREEN: closed mapped-source causes are exported without raw provenance.
     @Test
     fun `Reader audit separates orphaned mapped evidence from inactive and ineligible source refs`() = runTest {
         val chapter = CanonicalChapter(
