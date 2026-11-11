@@ -2504,6 +2504,205 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `MangaAll empty preferred MangaDex binding collects verified MangaFire chapters without rebinding`() = runBlocking<Unit> {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val title = canonicalTitle.copy(displayTitle = "Oyasumi Punpun")
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(title.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = title.id,
+            configurationFingerprint = "verified",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Inio Asano"), metadataId, externalId = "verified"),
+                externalIds = mapOf(metadataId to "verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val dexWork = "mangadex:11111111-2222-4333-8444-555555555555"
+        val fireWork = "mangafire:7p56"
+        val saved = ProviderReadingBinding(
+            id = "saved-preferred-mangadex",
+            canonicalTitleId = title.id,
+            ref = ProviderBindingRef(mangaAll, "en", dexWork),
+            verification = ProviderBindingVerification.EXACT,
+            availability = ProviderBindingAvailability.AVAILABLE,
+            createdAt = 3L,
+            updatedAt = 4L,
+        )
+        val bindings = MemoryBindingRepository().apply { upsert(saved) }
+        val associations = MemoryWorkSourceAssociationRepository()
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val lookups = mutableListOf<String>()
+        val chapterWorkIds = mutableListOf<String>()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(provider = mangaAll),
+            gateway = gateway(
+                lookupHandler = { request ->
+                    lookups += request.titles.single()
+                    request.requestedLanguage shouldBe "en"
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    externalWorkId = fireWork,
+                                    title = "Goodnight Punpun",
+                                    aliases = listOf("Oyasumi Punpun"),
+                                    url = "https://mangafire.to/title/7p56-goodnight-punpun",
+                                    language = "en",
+                                    authors = listOf("Asano Inio"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_WITH_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                    coverageMinMilli = 1_000,
+                                    coverageMaxMilli = 1_000,
+                                    coverageHasMore = true,
+                                ),
+                                ProviderWorkCandidate("mangadot:317", "Oyasumi Punpun"),
+                            ),
+                            // Multiple uninspected upstream pages MUST NOT imply
+                            // a complete editorial edition or auto-bind a fallback.
+                            nextCursor = ProviderCursor("another-source-page"),
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    chapterWorkIds += request.binding.externalWorkId
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = if (request.binding.externalWorkId == dexWork) {
+                                emptyList()
+                            } else {
+                                listOf(
+                                    ProviderChapterObservation(
+                                        providerChapterId = "mangafire:chapter-one",
+                                        rawLabel = "Chapter 1",
+                                        rawNumber = 1.0,
+                                        language = "en",
+                                    ),
+                                )
+                            },
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = associations,
+            diagnostics = recorder,
+        )
+
+        val result = collector.execute(title.id)
+
+        result.bindingCount shouldBe 1
+        result.snapshots.shouldHaveSize(1)
+        result.snapshots.single().producerId shouldBe saved.ref.evidenceProducerId()
+        result.snapshots.single().evidence shouldBe emptyList()
+        result.partialEvidence.shouldHaveSize(1)
+        result.partialEvidence.single().producerId shouldBe
+            ProviderBindingRef(mangaAll, "en", fireWork).evidenceProducerId()
+        result.partialEvidence.single().authority shouldBe ChapterEvidenceAuthority.PROVIDER_PROVISIONAL
+        result.complete shouldBe false
+        chapterWorkIds shouldBe listOf(dexWork, fireWork)
+        lookups shouldBe listOf("Oyasumi Punpun")
+        bindings.getByTitle(title.id) shouldBe listOf(saved)
+        associations.getByTitle(title.id).map { it.ref.externalWorkId } shouldBe listOf(fireWork)
+        recorder.events.any {
+            it.name == DiagnosticEventName.PROVIDER_READING_LOOKUP_ATTEMPT &&
+                it.outcome == DiagnosticOutcome.PARTIAL
+        } shouldBe true
+    }
+
+    @Test
+    fun `empty MangaAll binding does not borrow unverified or explicitly colored sources`() = runBlocking<Unit> {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val title = canonicalTitle.copy(displayTitle = "Oyasumi Punpun")
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(title.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = title.id,
+            configurationFingerprint = "verified",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Inio Asano"), metadataId, externalId = "verified"),
+                externalIds = mapOf(metadataId to "verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val preferredRef = ProviderBindingRef(
+            mangaAll, "en", "mangadex:11111111-2222-4333-8444-555555555555",
+        )
+        for (source in listOf(
+            ProviderWorkCandidate(
+                externalWorkId = "mangafire:7p56",
+                title = "Oyasumi Punpun",
+                language = "en",
+                // No author is not a corroboration even with positive coverage.
+                detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                coverageObservedCount = 1,
+                coverageMinMilli = 1_000,
+                coverageMaxMilli = 1_000,
+            ),
+            ProviderWorkCandidate(
+                externalWorkId = "mangafire:7p56",
+                title = "Oyasumi Punpun",
+                language = "en",
+                url = "https://mangafire.to/title/7p56-oyasumi-punpun-fan-colored",
+                authors = listOf("Asano Inio"),
+                detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                coverageObservedCount = 1,
+                coverageMinMilli = 1_000,
+                coverageMaxMilli = 1_000,
+            ),
+        )) {
+            val saved = ProviderReadingBinding(
+                id = "saved", canonicalTitleId = title.id, ref = preferredRef,
+                verification = ProviderBindingVerification.USER_CONFIRMED,
+                availability = ProviderBindingAvailability.AVAILABLE,
+                createdAt = 3L, updatedAt = 4L,
+            )
+            val bindings = MemoryBindingRepository().apply { upsert(saved) }
+            val associations = MemoryWorkSourceAssociationRepository()
+            val chapterWorkIds = mutableListOf<String>()
+            val collector = CollectProviderReadingEvidence(
+                canonicalTitleRepository = titleRepository(title),
+                providerRegistry = registry(provider = mangaAll),
+                gateway = gateway(
+                    lookupHandler = {
+                        ProviderCallResult.Success(ProviderPage(items = listOf(source), nextCursor = null))
+                    },
+                    chaptersHandler = { request ->
+                        chapterWorkIds += request.binding.externalWorkId
+                        ProviderCallResult.Success(
+                            ProviderPage<ProviderChapterObservation>(items = emptyList(), nextCursor = null),
+                        )
+                    },
+                    expectedProviderId = mangaAll,
+                ),
+                bindingRepository = bindings,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                clock = { 42L },
+                canonicalMetadataSnapshotRepository = metadata,
+                workSourceAssociationRepository = associations,
+            )
+            val result = collector.execute(title.id)
+            result.snapshots.shouldHaveSize(1)
+            result.snapshots.single().evidence shouldBe emptyList()
+            result.partialEvidence shouldBe emptyList()
+            chapterWorkIds shouldBe listOf(preferredRef.externalWorkId)
+            bindings.getByTitle(title.id) shouldBe listOf(saved)
+            associations.getByTitle(title.id).any { it.ref.externalWorkId == source.externalWorkId &&
+                it.workVerification == ProviderWorkVerification.AUTHOR_CORROBORATED &&
+                it.editionQualification == ProviderSourceEditionQualification.UNRESOLVED } shouldBe false
+        }
+    }
+
+    @Test
     fun `MangaAll incomplete lookup retains provisional chapters without binding`() = runBlocking<Unit> {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val metadataId = IntegrationId("mal")
