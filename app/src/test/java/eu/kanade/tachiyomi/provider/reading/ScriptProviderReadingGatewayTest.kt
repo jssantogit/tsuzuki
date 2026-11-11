@@ -18,6 +18,7 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderPageFailureStage
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilityRef
@@ -364,6 +365,38 @@ class ScriptProviderReadingGatewayTest {
                 retryable = false,
             ),
         )
+    }
+
+    @Test
+    fun `Reader page failure envelope carries only a closed stage`() = runBlocking {
+        val request = ProviderReadingPagesRequest(
+            binding = ProviderBindingRef(providerId, "en", "work-42"),
+            providerChapterId = "chapter-1",
+        )
+        var requestedVersion: Int? = null
+        val typed = gateway { _, _, input, _ ->
+            requestedVersion = Json.parseToJsonElement(input).jsonObject["diagnosticsVersion"]
+                ?.jsonPrimitive?.int
+            ProviderRuntimeInvocationResponse.success(
+                """{"type":"page_failure","pageFailureStage":"AT_HOME_REQUEST_FAILED"}""",
+            )
+        }
+        typed.pages(providerId, request) shouldBe ProviderCallResult.Failure(
+            tachiyomi.domain.tsuzuki.provider.reading.ProviderError(
+                code = ProviderErrorCode.SOURCE_READ_ERROR,
+                retryable = false,
+                pageFailureStage = DiagnosticProviderPageFailureStage.AT_HOME_REQUEST_FAILED,
+            ),
+        )
+        requestedVersion shouldBe 2
+
+        val untrusted = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success(
+                """{"type":"page_failure","pageFailureStage":"untrusted token"}""",
+            )
+        }
+        (untrusted.pages(providerId, request) as ProviderCallResult.Failure)
+            .error.code shouldBe ProviderErrorCode.MALFORMED_RESULT
     }
 
     @Test
