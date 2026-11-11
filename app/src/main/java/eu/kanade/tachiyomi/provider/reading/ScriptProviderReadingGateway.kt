@@ -245,6 +245,9 @@ class ScriptProviderReadingGateway internal constructor(
                     throw SourcePageFailure(stage)
                 }
                 PAGE_LIST_TYPE -> {
+                    if (decoded.pageFailureStage != null) {
+                        error("Provider page list contains unrelated failure stage")
+                    }
                     if (decoded.pages.isEmpty()) {
                         error("Provider page list is empty")
                     }
@@ -274,6 +277,9 @@ class ScriptProviderReadingGateway internal constructor(
                     )
                 }
                 MANAGED_FILE_TYPE -> {
+                    if (decoded.pageFailureStage != null) {
+                        error("Provider managed file contains unrelated failure stage")
+                    }
                     val resource = ProviderManagedResourceRef(
                         decoded.resource ?: error("Managed Provider file is missing resource token"),
                     )
