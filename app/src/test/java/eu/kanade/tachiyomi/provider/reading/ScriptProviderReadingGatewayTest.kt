@@ -41,6 +41,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkDetailOutcome
 
+// RED: typed page-stage Reader envelope absent
 class ScriptProviderReadingGatewayTest {
 
     private val providerId = ProviderId("org.example.reader")
