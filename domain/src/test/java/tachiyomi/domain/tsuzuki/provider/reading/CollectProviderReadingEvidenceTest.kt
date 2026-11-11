@@ -2504,7 +2504,7 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
-    fun `MangaAll empty preferred MangaDex binding collects verified MangaFire chapters without rebinding`() = runBlocking<Unit> {
+    fun `MangaAll empty binding recovers verified MangaFire chapters without rebinding`() = runBlocking<Unit> {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val title = canonicalTitle.copy(displayTitle = "Oyasumi Punpun")
         val metadataId = IntegrationId("mal")
@@ -2519,7 +2519,7 @@ class CollectProviderReadingEvidenceTest {
             refreshedAt = 42L,
         )
         val dexWork = "mangadex:11111111-2222-4333-8444-555555555555"
-        val fireWork = "mangafire:7p56"
+        val fireWork = "mangafire:zk12"
         val saved = ProviderReadingBinding(
             id = "saved-preferred-mangadex",
             canonicalTitleId = title.id,
@@ -2548,7 +2548,7 @@ class CollectProviderReadingEvidenceTest {
                                     externalWorkId = fireWork,
                                     title = "Goodnight Punpun",
                                     aliases = listOf("Oyasumi Punpun"),
-                                    url = "https://mangafire.to/title/7p56-goodnight-punpun",
+                                    url = "https://mangafire.to/title/zk12-goodnight-punpun",
                                     language = "en",
                                     authors = listOf("Asano Inio"),
                                     detailOutcome = ProviderWorkDetailOutcome.VERIFIED_WITH_ALIASES,
@@ -2637,7 +2637,7 @@ class CollectProviderReadingEvidenceTest {
         )
         for (source in listOf(
             ProviderWorkCandidate(
-                externalWorkId = "mangafire:7p56",
+                externalWorkId = "mangafire:zk12",
                 title = "Oyasumi Punpun",
                 language = "en",
                 // No author is not a corroboration even with positive coverage.
@@ -2648,10 +2648,10 @@ class CollectProviderReadingEvidenceTest {
                 coverageMaxMilli = 1_000,
             ),
             ProviderWorkCandidate(
-                externalWorkId = "mangafire:7p56",
+                externalWorkId = "mangafire:zk12",
                 title = "Oyasumi Punpun",
                 language = "en",
-                url = "https://mangafire.to/title/7p56-oyasumi-punpun-fan-colored",
+                url = "https://mangafire.to/title/zk12-oyasumi-punpun-fan-colored",
                 authors = listOf("Asano Inio"),
                 detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
                 coverageOutcome = ProviderCoverageOutcome.OBSERVED,
