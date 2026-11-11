@@ -75,6 +75,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingDelivery
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingGateway
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingNoMatchReason
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingMappedSourceIneligibilityReason
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkCandidate
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
@@ -410,9 +411,11 @@ class PrepareCanonicalChapterProviderFallbackTest {
         val inactiveRef = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "en", "mangadex:old")
         val unavailableRef = ProviderBindingRef(activeProvider, "en", "missing-work")
         val phantomRef = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "en", "mangadot:317")
+        val unsupportedFacetRef = ProviderBindingRef(activeProvider, "pt-br", "missing-language")
         val cases = listOf(
             Triple(phantomRef, null, 0 to 0),
             Triple(inactiveRef, inactiveRef, 1 to 0),
+            Triple(unsupportedFacetRef, unsupportedFacetRef, 1 to 0),
             Triple(unavailableRef, unavailableRef, 1 to 1),
         )
         for ((mappedRef, persistRef, expected) in cases) {
@@ -482,6 +485,12 @@ class PrepareCanonicalChapterProviderFallbackTest {
             audit.mappedEvidenceCount shouldBe 1
             audit.mappedKnownSourceCount shouldBe expected.first
             audit.mappedActiveSourceCount shouldBe expected.second
+            audit.mappedSourceIneligibilityReason shouldBe when (mappedRef) {
+                phantomRef -> ProviderReadingMappedSourceIneligibilityReason.SOURCE_REFERENCE_MISSING
+                inactiveRef -> ProviderReadingMappedSourceIneligibilityReason.PROVIDER_NOT_REGISTERED
+                unsupportedFacetRef -> ProviderReadingMappedSourceIneligibilityReason.FACET_UNAVAILABLE
+                else -> ProviderReadingMappedSourceIneligibilityReason.SOURCE_NOT_AUTHORIZED
+            }
         }
     }
 
