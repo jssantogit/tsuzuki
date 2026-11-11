@@ -219,6 +219,7 @@ enum class DiagnosticAttribute {
     PROVIDER_READER_ELIGIBLE_MAPPED_COUNT,
     PROVIDER_READER_MAPPED_KNOWN_SOURCE_COUNT,
     PROVIDER_READER_MAPPED_ACTIVE_SOURCE_COUNT,
+    PROVIDER_READER_MAPPED_SOURCE_INELIGIBILITY_REASON,
     PROVIDER_READER_NO_MATCH_REASON,
     PROVIDER_READER_IDENTITY_REJECTION_REASON,
 
@@ -523,6 +524,18 @@ enum class DiagnosticProviderMalformedResultStage : DiagnosticSafeCode {
     CONTRACT_VALIDATION,
 }
 
+/** A bounded, content-free reason a persisted source cannot be a Reader option. */
+enum class DiagnosticProviderReaderMappedSourceIneligibilityReason : DiagnosticSafeCode {
+    SOURCE_REFERENCE_MISSING,
+    PROVIDER_NOT_REGISTERED,
+    PROVIDER_NOT_ENABLED,
+    PROVIDER_RUNTIME_UNSUPPORTED,
+    READING_CAPABILITY_MISSING,
+    FACET_UNAVAILABLE,
+    SOURCE_NOT_AUTHORIZED,
+    MIXED_REASONS,
+}
+
 enum class DiagnosticProviderReaderNoMatchReason : DiagnosticSafeCode {
     NO_ELIGIBLE_SOURCE,
     SOURCE_EDITION_EXCLUDED,
@@ -820,6 +833,9 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticProviderWorkVerification }
         DiagnosticAttribute.PROVIDER_EDITION_QUALIFICATION -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderEditionQualification }
+        DiagnosticAttribute.PROVIDER_READER_MAPPED_SOURCE_INELIGIBILITY_REASON ->
+            (value as? DiagnosticAttributeValue.Code)
+                ?.takeIf { it.value is DiagnosticProviderReaderMappedSourceIneligibilityReason }
         DiagnosticAttribute.PROVIDER_READER_NO_MATCH_REASON -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderReaderNoMatchReason }
         DiagnosticAttribute.PROVIDER_READER_IDENTITY_REJECTION_REASON -> (value as? DiagnosticAttributeValue.Code)
