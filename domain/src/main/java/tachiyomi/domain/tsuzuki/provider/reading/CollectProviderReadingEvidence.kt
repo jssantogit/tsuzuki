@@ -843,6 +843,7 @@ class CollectProviderReadingEvidence private constructor(
         preferredRef: ProviderBindingRef,
         onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
     ): ProviderReadingEvidenceCollection {
+        var allLookupsComplete = titles.size <= MAX_EMPTY_BINDING_FALLBACK_QUERIES
         for ((queryIndex, title) in titles.take(MAX_EMPTY_BINDING_FALLBACK_QUERIES).withIndex()) {
             val started = System.nanoTime()
             traceLookupAttempt(canonicalTitleId, target, queryIndex, title, DiagnosticOutcome.STARTED)
@@ -873,7 +874,10 @@ class CollectProviderReadingEvidence private constructor(
             val lookup = when (lookupResult) {
                 is ProviderCallResult.Failure -> {
                     traceLookupAttempt(
-                        canonicalTitleId, target, queryIndex, title,
+                        canonicalTitleId,
+                        target,
+                        queryIndex,
+                        title,
                         DiagnosticOutcome.FAILED,
                         elapsedMillis = (System.nanoTime() - started) / 1_000_000L,
                         errorCode = lookupResult.error.code,
@@ -881,12 +885,17 @@ class CollectProviderReadingEvidence private constructor(
                         malformedStage = lookupResult.error.malformedStage,
                         httpStatus = lookupResult.error.httpStatus,
                     )
+                    allLookupsComplete = false
                     continue
                 }
                 is ProviderCallResult.Success -> lookupResult.value
             }
+            if (!lookup.complete) allLookupsComplete = false
             traceLookupAttempt(
-                canonicalTitleId, target, queryIndex, title,
+                canonicalTitleId,
+                target,
+                queryIndex,
+                title,
                 if (lookup.complete) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
                 elapsedMillis = (System.nanoTime() - started) / 1_000_000L,
                 candidateCount = lookup.items.size,
@@ -904,7 +913,11 @@ class CollectProviderReadingEvidence private constructor(
                 primary = null,
             )
             val verified = observeSourcePortfolio(
-                canonicalTitleId, title, target, canonicalAuthors, matches,
+                canonicalTitleId,
+                title,
+                target,
+                canonicalAuthors,
+                matches,
             ).filter { assessment ->
                 assessment.ref != preferredRef && assessment.canCollectProvisionalChapters
             }.take(MAX_COVERAGE_CONTENDERS)
@@ -926,9 +939,10 @@ class CollectProviderReadingEvidence private constructor(
                 )
             }
         }
-        // A failed or incomplete alternative scan cannot certify global
-        // emptiness; only the original preferred HID has a complete snapshot.
-        return ProviderReadingEvidenceCollection(complete = false)
+        // Only an exhaustively checked set of alternative queries can affirm
+        // that the previously completed preferred-empty snapshot is complete.
+        // Failed or bounded lookups remain partial and are retried later.
+        return ProviderReadingEvidenceCollection(complete = allLookupsComplete)
     }
 
     private fun exactFacetMatches(
