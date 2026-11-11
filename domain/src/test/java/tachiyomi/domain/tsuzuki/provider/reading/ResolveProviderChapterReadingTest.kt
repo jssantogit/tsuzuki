@@ -470,6 +470,7 @@ class ResolveProviderChapterReadingTest {
             matchingNumberEvidenceCount = 1,
             mappedEvidenceCount = 1,
             mappedEligibleSourceEvidenceCount = 0,
+            mappedSourceIneligibilityReason = ProviderReadingMappedSourceIneligibilityReason.SOURCE_REFERENCE_MISSING,
             reason = ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE,
         )
     }
