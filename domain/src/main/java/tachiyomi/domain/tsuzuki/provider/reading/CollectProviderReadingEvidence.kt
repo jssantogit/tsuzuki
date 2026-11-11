@@ -413,10 +413,35 @@ class CollectProviderReadingEvidence private constructor(
                         observed = result.value,
                         accepted = snapshot.evidence.size,
                     )
+                    // A complete-empty preferred MangaAll facet does not prove that
+                    // other *internal* sources lack source-attested chapters.
+                    // Probe independently verified work sources without changing
+                    // the saved edition, User progress or Reader authority.
+                    val fallback = if (
+                        result.value == 0 &&
+                        target.registration.descriptor.id.value == "app.tsuzuki.mangaall" &&
+                        target.facetId == "en" &&
+                        canonicalAuthors != null &&
+                        workSourceAssociationRepository != null
+                    ) {
+                        collectEmptyBindingAlternatives(
+                            canonicalTitleId = canonicalTitleId,
+                            titles = titles,
+                            target = target,
+                            canonicalAuthors = canonicalAuthors,
+                            preferredRef = binding.ref,
+                            onPageCollected = onPageCollected,
+                        )
+                    } else {
+                        null
+                    }
                     ProviderReadingEvidenceCollection(
                         snapshots = listOf(snapshot),
                         bindingCount = 1,
-                        complete = true,
+                        // Alternate-source search is intentionally bounded and
+                        // non-exhaustive, even if the preferred snapshot is complete.
+                        complete = fallback?.complete ?: true,
+                        partialEvidence = fallback?.partialEvidence.orEmpty(),
                     )
                 }
             }
@@ -493,20 +518,7 @@ class CollectProviderReadingEvidence private constructor(
             }
             val candidates = lookup.items
             val normalizedTitle = normalize(title)
-            val matches = candidates
-                .asSequence()
-                .filter { candidate ->
-                    target.facetId == null ||
-                        candidate.language == null ||
-                        candidate.language.equals(target.facetId, ignoreCase = true)
-                }
-                .filter { candidate ->
-                    sequenceOf(candidate.title)
-                        .plus(candidate.aliases.asSequence())
-                        .any { normalize(it) == normalizedTitle }
-                }
-                .distinctBy(ProviderWorkCandidate::externalWorkId)
-                .toList()
+            val matches = exactFacetMatches(title, target.facetId, candidates)
             // Source association is deliberately a shadow work-level portfolio.
             // Multiple corroborated HIDs never become one preferred edition or
             // Reader authority merely because their authors/title match.
@@ -817,6 +829,129 @@ class CollectProviderReadingEvidence private constructor(
     }
 
     /**
+     * An existing MangaAll edition can have a *complete* empty inventory for
+     * one language while another internal source has independently corroborated
+     * work identity and real numbered chapters. Never replace the preferred
+     * ProviderReadingBinding or invent edition equivalence: retain these as
+     * source-scoped, additive provisional chapter evidence only.
+     */
+    private suspend fun collectEmptyBindingAlternatives(
+        canonicalTitleId: String,
+        titles: List<String>,
+        target: ReadingTarget,
+        canonicalAuthors: Set<String>,
+        preferredRef: ProviderBindingRef,
+        onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
+    ): ProviderReadingEvidenceCollection {
+        for ((queryIndex, title) in titles.take(MAX_EMPTY_BINDING_FALLBACK_QUERIES).withIndex()) {
+            val started = System.nanoTime()
+            traceLookupAttempt(canonicalTitleId, target, queryIndex, title, DiagnosticOutcome.STARTED)
+            // A first-page trusted HID is sufficient for a *provisional* read,
+            // not a complete edition lookup. Do not consume every MangaDot page
+            // after a source-verified MangaFire alternative has been found.
+            val lookupResult = collectLookup(
+                providerId = target.registration.descriptor.id,
+                title = title,
+                requestedLanguage = target.facetId,
+                maxPages = MAX_EMPTY_BINDING_FALLBACK_LOOKUP_PAGES,
+                stopWhen = { candidates ->
+                    val exact = exactFacetMatches(title, target.facetId, candidates)
+                    val trusted = ProviderWorkSourcePortfolio.trustedCandidates(
+                        providerId = target.registration.descriptor.id,
+                        facetId = target.facetId,
+                        candidates = exact,
+                    )
+                    ProviderWorkSourcePortfolio.assess(
+                        providerId = target.registration.descriptor.id,
+                        facetId = target.facetId,
+                        queryTitle = title,
+                        independentlyVerifiedAuthors = canonicalAuthors,
+                        candidates = trusted,
+                    ).any { it.ref != preferredRef && it.canCollectProvisionalChapters }
+                },
+            )
+            val lookup = when (lookupResult) {
+                is ProviderCallResult.Failure -> {
+                    traceLookupAttempt(
+                        canonicalTitleId, target, queryIndex, title,
+                        DiagnosticOutcome.FAILED,
+                        elapsedMillis = (System.nanoTime() - started) / 1_000_000L,
+                        errorCode = lookupResult.error.code,
+                        sourceFailureCode = lookupResult.error.sourceFailureCode,
+                        malformedStage = lookupResult.error.malformedStage,
+                        httpStatus = lookupResult.error.httpStatus,
+                    )
+                    continue
+                }
+                is ProviderCallResult.Success -> lookupResult.value
+            }
+            traceLookupAttempt(
+                canonicalTitleId, target, queryIndex, title,
+                if (lookup.complete) DiagnosticOutcome.SUCCEEDED else DiagnosticOutcome.PARTIAL,
+                elapsedMillis = (System.nanoTime() - started) / 1_000_000L,
+                candidateCount = lookup.items.size,
+                errorCode = lookup.partialErrorCode,
+            )
+            val matches = exactFacetMatches(title, target.facetId, lookup.items)
+            traceLookupCandidates(
+                canonicalTitleId = canonicalTitleId,
+                target = target,
+                queryIndex = queryIndex,
+                queryTitle = title,
+                candidates = lookup.items,
+                matches = matches,
+                selected = null,
+                primary = null,
+            )
+            val verified = observeSourcePortfolio(
+                canonicalTitleId, title, target, canonicalAuthors, matches,
+            ).filter { assessment ->
+                assessment.ref != preferredRef && assessment.canCollectProvisionalChapters
+            }.take(MAX_COVERAGE_CONTENDERS)
+            if (verified.isNotEmpty()) {
+                trace(
+                    canonicalTitleId,
+                    target,
+                    DiagnosticStage.LOOKUP,
+                    DiagnosticOutcome.PARTIAL,
+                    candidates = lookup.items.size,
+                    exactMatches = matches.size,
+                    bindings = 0,
+                )
+                return collectUnresolvedWorkSources(
+                    canonicalTitleId = canonicalTitleId,
+                    target = target,
+                    sources = verified,
+                    onPageCollected = onPageCollected,
+                )
+            }
+        }
+        // A failed or incomplete alternative scan cannot certify global
+        // emptiness; only the original preferred HID has a complete snapshot.
+        return ProviderReadingEvidenceCollection(complete = false)
+    }
+
+    private fun exactFacetMatches(
+        title: String,
+        facetId: String?,
+        candidates: List<ProviderWorkCandidate>,
+    ): List<ProviderWorkCandidate> {
+        val normalizedTitle = normalize(title)
+        return candidates.asSequence()
+            .filter { candidate ->
+                facetId == null || candidate.language == null ||
+                    candidate.language.equals(facetId, ignoreCase = true)
+            }
+            .filter { candidate ->
+                sequenceOf(candidate.title)
+                    .plus(candidate.aliases.asSequence())
+                    .any { normalize(it) == normalizedTitle }
+            }
+            .distinctBy(ProviderWorkCandidate::externalWorkId)
+            .toList()
+    }
+
+    /**
      * A work can have more than one author-corroborated source HID. Collect
      * separately from each bounded source without declaring any edition
      * canonical, overriding a preferred binding or publishing an authoritative
@@ -956,13 +1091,15 @@ class CollectProviderReadingEvidence private constructor(
         providerId: ProviderId,
         title: String,
         requestedLanguage: String?,
+        maxPages: Int = MAX_LOOKUP_PAGES,
+        stopWhen: ((List<ProviderWorkCandidate>) -> Boolean)? = null,
     ): ProviderCallResult<LookupSnapshot> {
         val items = mutableListOf<ProviderWorkCandidate>()
         val seenCursors = mutableSetOf<String>()
         var cursor: ProviderCursor? = null
         var pageCount = 0
         while (true) {
-            if (++pageCount > MAX_LOOKUP_PAGES) {
+            if (++pageCount > maxPages) {
                 return if (providerId.value == "app.tsuzuki.mangaall") {
                     ProviderCallResult.Success(LookupSnapshot(items.toList(), complete = false))
                 } else {
@@ -1017,6 +1154,11 @@ class CollectProviderReadingEvidence private constructor(
                 }
             }
             val next = page.nextCursor ?: break
+            // Evidence-only early exit is deliberately INCOMPLETE; it cannot
+            // auto-select an edition or claim an authoritative chapter total.
+            if (stopWhen?.invoke(items) == true) {
+                return ProviderCallResult.Success(LookupSnapshot(items.toList(), complete = false))
+            }
             if (!seenCursors.add(next.value)) return malformed()
             cursor = next
         }
@@ -1588,6 +1730,8 @@ class CollectProviderReadingEvidence private constructor(
             ProviderErrorCode.HOST_ERROR,
         )
         const val MAX_LOOKUP_PAGES = 8
+        const val MAX_EMPTY_BINDING_FALLBACK_LOOKUP_PAGES = 2
+        const val MAX_EMPTY_BINDING_FALLBACK_QUERIES = 3
         const val MAX_LOOKUP_ITEMS = 2_000
         const val MAX_DIAGNOSTIC_CANDIDATES = 20
         const val MAX_DIAGNOSTIC_CANDIDATES_PER_SOURCE = 6
