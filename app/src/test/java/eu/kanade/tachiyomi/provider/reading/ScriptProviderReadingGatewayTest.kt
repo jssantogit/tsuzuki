@@ -41,6 +41,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkDetailOutcome
 
+// GREEN: sanitized page-stage Reader failure contract implemented
 class ScriptProviderReadingGatewayTest {
 
     private val providerId = ProviderId("org.example.reader")
