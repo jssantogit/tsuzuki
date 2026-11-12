@@ -1979,9 +1979,20 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
 
     private fun confirmPreferredSource(fixture: SourceSwitchFixture, addonId: AddonId) {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val reader = awaitActivity(ReaderActivity::class.java)
+        awaitValue("Reader to offer changing the existing preferred Add-on after successful preparation") {
+            (reader.viewModel.state.value.dialog as? ReaderViewModel.Dialog.SetPreferredAddon)
+                ?.takeIf { it.selection.option.addonId == addonId }
+        }
+        // Default Skin's dialog uses a shared "Source" heading, not the
+        // removed legacy "Set preferred Add-on?" title. Assert actual modal
+        // content plus the ViewModel's typed state before confirming.
         assertTrue(
-            "Successful source preparation should ask before changing the saved preference",
-            device.wait(Until.hasObject(By.text("Set preferred Add-on?")), UI_TIMEOUT_MS),
+            "A successful switch must display the preferred-source confirmation",
+            device.wait(
+                Until.hasObject(By.text("Use this Provider as the preferred reading source for this work?")),
+                UI_TIMEOUT_MS,
+            ),
         )
         val oldPreference = if (addonId == fixture.addonB) fixture.addonA else fixture.addonB
         assertEquals(
