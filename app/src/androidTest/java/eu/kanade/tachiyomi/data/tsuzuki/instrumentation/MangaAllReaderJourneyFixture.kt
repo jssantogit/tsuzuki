@@ -162,7 +162,7 @@ internal class MangaAllReaderJourneyFixture(
             facets = listOf(ProviderFacetRef(providerId, "en")),
             configurationFingerprint = "android-journey",
         )
-        val registry = DefaultProviderRegistry { listOf(registration) }
+        val registry = DefaultProviderRegistry(registrations = { listOf(registration) })
         val script = """
             const origin = "$origin";
             const workId = "mangafire:zk12";
