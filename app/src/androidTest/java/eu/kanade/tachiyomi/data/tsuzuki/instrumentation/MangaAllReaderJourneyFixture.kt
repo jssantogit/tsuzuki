@@ -111,7 +111,7 @@ internal class MangaAllReaderJourneyFixture(
                                 """
                                 {"type":"page_list",
                                 "pages":[{"url":"${server.url("/mangaall/image.png")}",
-                                "headers":{},"allowedOrigins":["${origin()}"],"allowLocalNetwork":true}]}
+                                "headers":{}}]}
                                 """.trimIndent(),
                             )
                             .build()
