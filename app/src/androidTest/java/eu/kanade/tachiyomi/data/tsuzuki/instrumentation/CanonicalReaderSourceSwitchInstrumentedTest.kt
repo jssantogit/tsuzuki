@@ -13,6 +13,10 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityWindowInfo
+import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.core.view.children
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStoreOwner
@@ -1786,30 +1790,24 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                 device.click(device.displayWidth / 2, device.displayHeight / 2)
                 awaitValue("Reader menu to become visible") { reader.viewModel.state.value.menuVisible }
             }
-            // Default Skin replaced the old overflow-menu "More options" ->
-            // "Change source" route with a horizontally scrollable bottom
-            // Reader tool rail. Exercise the actual UI control rather than
-            // bypassing it with an internal ViewModel call.
+            // Default Skin's bottom rail is a Compose horizontalScroll.
+            // Physical display-percent swipes can hit the pager underneath it
+            // and silently move the chapter to its final page. Scroll *only*
+            // the production rail's semantics node, then tap the real Source
+            // button through UiAutomator. Never call the ViewModel selector
+            // directly in this acceptance test.
+            val pageBeforeToolbar = readerViewSnapshot(reader).position
             var sourceTool = device.findObject(By.desc("Source"))
-            // Compose's horizontalScroll is not necessarily exposed to
-            // UiAutomator as scrollable=true. The production Reader toolbar
-            // occupies the bottom of the foreground window. Swipe the actual
-            // rail through the display while keeping window focus asserted.
-            for (attempt in 0 until 8) {
+            for (attempt in 0 until 4) {
                 if (sourceTool != null) break
-                var focused = false
-                InstrumentationRegistry.getInstrumentation().runOnMainSync {
-                    focused = reader.window.decorView.hasWindowFocus()
-                }
-                assertTrue("Reader must keep foreground focus before source-tool swipe", focused)
-                device.swipe(
-                    device.displayWidth * 88 / 100,
-                    device.displayHeight * 92 / 100,
-                    device.displayWidth * 12 / 100,
-                    device.displayHeight * 92 / 100,
-                    24,
-                )
+                val scrollApplied = scrollReaderToolbarSemantics(reader, amount = 1_000f)
+                assertTrue("Reader bottom toolbar must expose a horizontal ScrollBy semantic action", scrollApplied)
                 SystemClock.sleep(220L)
+                assertEquals(
+                    "Scrolling Reader tools must not navigate the chapter pager",
+                    pageBeforeToolbar,
+                    readerViewSnapshot(reader).position,
+                )
                 sourceTool = device.findObject(By.desc("Source"))
             }
             assertTrue(
@@ -1817,6 +1815,11 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                 sourceTool != null || device.wait(Until.hasObject(By.desc("Source")), UI_TIMEOUT_MS),
             )
             (sourceTool ?: requireNotNull(device.findObject(By.desc("Source")))).click()
+            assertEquals(
+                "Opening the Source selector must not change the observed chapter page",
+                pageBeforeToolbar,
+                readerViewSnapshot(reader).position,
+            )
         }
         awaitValue("canonical reading-source selector to open after tapping the real Source tool") {
             (reader.viewModel.state.value.dialog as? ReaderViewModel.Dialog.ContentSelector)
@@ -1826,6 +1829,33 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             "The new Reader Source card must be visible after the dialog opens",
             device.wait(Until.hasObject(By.text("Source")), UI_TIMEOUT_MS),
         )
+    }
+
+    /**
+     * Scrolls the ACTUAL reader tool rail via its Compose accessibility
+     * semantics, not an assumed screen coordinate. This mirrors an assistive
+     * technology scroll on the real UI and cannot swipe the page viewer.
+     */
+    private fun scrollReaderToolbarSemantics(reader: ReaderActivity, amount: Float): Boolean {
+        var accepted = false
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val roots = mutableListOf<ViewRootForTest>()
+            fun collect(view: View) {
+                if (view is ViewRootForTest) roots += view
+                if (view is android.view.ViewGroup) {
+                    for (i in 0 until view.childCount) collect(view.getChildAt(i))
+                }
+            }
+            collect(reader.window.decorView)
+            val scrollNode = roots.flatMap { it.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false) }
+                .filter { node ->
+                    node.config.contains(SemanticsProperties.HorizontalScrollAxisRange) &&
+                        node.config.contains(SemanticsActions.ScrollBy)
+                }
+                .maxByOrNull { it.boundsInRoot.bottom }
+            accepted = scrollNode?.config?.get(SemanticsActions.ScrollBy)?.action?.invoke(amount, 0f) == true
+        }
+        return accepted
     }
 
     private fun clickText(device: UiDevice, text: String) {
