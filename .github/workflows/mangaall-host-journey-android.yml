@@ -1,6 +1,6 @@
-name: MangaAll Host-to-Reader segmented Android acceptance
+name: MangaAll code7 package / Host-to-Reader Android acceptance
 
-# Opt-in test branch, not a shipping package or full MangaAll UI E2E.
+# Opt-in test branch, not an official signed install or live MangaFire acceptance.
 on:
   push:
     branches:
@@ -13,6 +13,7 @@ on:
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/CanonicalReaderSourceSwitchInstrumentedTest.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllReaderJourneyFixture.kt'
       - 'app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ProviderHostInvocation.kt'
   workflow_dispatch:
 
 permissions:
@@ -24,7 +25,7 @@ concurrency:
 
 jobs:
   segmented-fixture:
-    name: SCRIPT canonical refresh + Reader UI/pixel gates (separate fixtures)
+    name: Real code7 .tsz SCRIPT + canonical refresh + Reader UI/pixel gates
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
@@ -57,6 +58,36 @@ jobs:
           assert d['preferredEmpty'] == {'source':'mangadex','itemCount':0,'complete':True}
           assert d['challenge'] == {'source':'mangafire','outcome':'CHALLENGE_BLOCKED','complete':False}
           print('CODE7_HOST_VECTOR|realProviderJS=PINNED|cases=2|sourceHTTP=SYNTHETIC|secretBytes=NONE')
+          PY
+      - name: Build exact code7 .tsz from pinned unpublished Provider source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 code7-mangaall/tooling/build_provider.py \
+            code7-mangaall/providers/mangaall \
+            app/src/androidTest/assets/mangaall/code7-package.tsz
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import zipfile
+          from pathlib import Path
+          root = Path('code7-mangaall/providers/mangaall')
+          package = Path('app/src/androidTest/assets/mangaall/code7-package.tsz')
+          with zipfile.ZipFile(package) as archive:
+              names = archive.namelist()
+              manifest = json.loads(archive.read('manifest.json'))
+              assert manifest['id'] == 'app.tsuzuki.mangaall'
+              assert manifest['version'] == {'name': '0.5.2', 'code': 7}
+              assert manifest['entrypoint'] == 'main.js'
+              assert 'publication' not in manifest
+              assert 'publication' in json.loads((root/'manifest.json').read_text())
+              paths = sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file())
+              assert sorted(names) == paths
+              for name in names:
+                  if name != 'manifest.json':
+                      assert archive.read(name) == (root/name).read_bytes(), name
+              digest = hashlib.sha256(package.read_bytes()).hexdigest()
+              print('CODE7_PACKAGED|provider=app.tsuzuki.mangaall|code=7|modules=ORIGINAL|sourceHTTP=SYNTHETIC|signedFeed=NOT_TESTED|sha256=' + digest)
           PY
       - name: Check shell gate
         run: bash -n .github/scripts/run_mangaall_host_journey_android.sh
