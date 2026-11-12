@@ -8,6 +8,7 @@ readonly runner='app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner'
 readonly output='.github/results/mangaall-host-journey-android'
 readonly host_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllSyntheticJourney_reconcilesCanonicalChaptersAndReaderPages'
 readonly ui_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#sourceAtoBLoadsPagesAndPreservesCanonicalChapterAndObservedPosition'
+readonly source_row_case='eu.kanade.presentation.reader.MangaAllReaderSourceCardInstrumentedTest#tappingMangaAllSourcePassesExactVerifiedChapterOptionWithoutCrossSourceSelection'
 
 mkdir -p "$output"
 if [ "$(adb shell getprop ro.kernel.qemu | tr -d '\r')" != '1' ]; then
@@ -53,5 +54,6 @@ run_case() {
   printf 'MANGAALL_JOURNEY|phase=%s|outcome=PASS\n' "$label"
 }
 run_case 'SCRIPT_CANONICAL_HTTP_BYTES' "$host_case" 'mangaAllHostJourneyOptIn'
+run_case 'MANGAALL_SOURCE_ROW_TAP' "$source_row_case" 'mangaAllSourceRowOptIn'
 run_case 'READER_UI_SOURCE_SWITCH_PIXELS' "$ui_case" 'androidSourceSwitchOptIn'
-printf 'MANGAALL_JOURNEY|pipeline=SEGMENTED_SYNTHETIC|outcome=PASS|mangaAllActualSourceTap=NOT_TESTED|signedPackage=NOT_TESTED|livePageImage=NOT_TESTED\n'
+printf 'MANGAALL_JOURNEY|pipeline=SEGMENTED_SYNTHETIC|outcome=PASS|mangaAllSourceRowTap=TESTED|mangaAllViewModelIntegration=NOT_TESTED|signedPackage=NOT_TESTED|livePageImage=NOT_TESTED\n'
