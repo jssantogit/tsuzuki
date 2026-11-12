@@ -48,6 +48,7 @@ import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import eu.kanade.tachiyomi.ui.reader.ReaderRecovery
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
@@ -129,6 +130,80 @@ import kotlin.jvm.functions.Function2
 /** Runs production canonical Reader and Mihon source adapters against a disposable local fixture. */
 @RunWith(AndroidJUnit4::class)
 class CanonicalReaderSourceSwitchInstrumentedTest {
+
+    /**
+     * Continuous tap path: one ReaderActivity, its production ViewModel and
+     * source selector, a real isolated SCRIPT MangaAll test package, canonical
+     * reconciliation, HTTP page/image requests and rendered green PNG pixels.
+     * A 503 delivery must keep the old red Reader session and allow retry.
+     */
+    @Test(timeout = 300_000L)
+    fun mangaAllScriptSourceTapFailureAndRetryPublishesDecodedReaderPixels() {
+        requireOptIn()
+        withFixture { fixture ->
+            fixture.launchReader()
+            val reader = awaitActivity(ReaderActivity::class.java)
+            awaitReaderPages(reader, expectedSource = fixture.sourceA.name, expectedCount = 10)
+            awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "MANGAALL_INITIAL_READER")
+            val previousSessionChapter = requireNotNull(reader.viewModel.state.value.currentChapter)
+
+            val mangaAll = fixture.mangaAllJourney(reader)
+            try {
+                runBlocking { mangaAll.attach() }
+
+                fun openAndTapMangaFire() {
+                    reader.viewModel.openContentSelector()
+                    awaitValue("MangaAll chapter-scoped options in ReaderActivity") {
+                        reader.viewModel.state.value.providerSourceOptions
+                            .singleOrNull()
+                            ?.takeIf { it == mangaAll.selectedOption }
+                    }
+                    val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+                    assertTrue(
+                        "The real ReaderActivity must display MangaFire in the source selector",
+                        device.wait(Until.hasObject(By.text("MangaFire")), UI_TIMEOUT_MS),
+                    )
+                    device.findObject(By.text("MangaFire")).click()
+                }
+
+                openAndTapMangaFire()
+                awaitValue("Provider page failure to be recoverable without replacing active Reader") {
+                    val state = reader.viewModel.state.value
+                    (state.recovery == ReaderRecovery.SOURCE_UNAVAILABLE &&
+                        !state.sourceSelectionInProgress).takeIf { it }
+                }
+                assertEquals("First click must issue exactly one SCRIPT pages request", 1, mangaAll.pageDeliveryCalls.get())
+                assertEquals("Failed pages may not download the image", 0, mangaAll.imageRequests.get())
+                assertSame(
+                    "A failed MangaAll tap must keep the existing Reader chapter object",
+                    previousSessionChapter,
+                    reader.viewModel.state.value.currentChapter,
+                )
+                assertEquals(fixture.chapter.id, reader.viewModel.state.value.activeCanonicalChapterId)
+                reader.viewModel.dismissContentSelector()
+                awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "MANGAALL_FAILED_RETAIN_RED")
+
+                mangaAll.allowPages()
+                openAndTapMangaFire()
+                awaitValue("MangaAll retry to stage a real HTTP page in the same Reader") {
+                    val state = reader.viewModel.state.value
+                    val page = state.currentChapter?.pages?.singleOrNull()
+                    (state.activeCanonicalChapterId == fixture.chapter.id &&
+                        state.activeProviderSourceKey == mangaAll.selectedOption.readerSourceKey &&
+                        state.recovery == null &&
+                        !state.sourceSelectionInProgress &&
+                        page?.status == Page.State.Ready &&
+                        page.stream != null).takeIf { it }
+                }
+                assertEquals("Retry must request SCRIPT pages once again", 2, mangaAll.pageDeliveryCalls.get())
+                assertTrue("The Reader must fetch the PNG from the returned page URL", mangaAll.imageRequests.get() > 0)
+                awaitImagePixels(reader, fixture, Color.rgb(12, 168, 82), "MANGAALL_SAME_READER_RENDERED_GREEN")
+                assertEquals(fixture.chapter.id, reader.viewModel.state.value.activeCanonicalChapterId)
+            } finally {
+                mangaAll.close()
+            }
+        }
+    }
 
     @Test(timeout = 240_000L)
     fun sourceAtoBLoadsPagesAndPreservesCanonicalChapterAndObservedPosition() {
@@ -1883,6 +1958,13 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         private val priorExtensions: Map<String, Extension.Installed>,
         private val priorDisabledSources: Set<String>,
     ) {
+
+        fun mangaAllJourney(reader: ReaderActivity) = MangaAllReaderJourneyFixture(
+            context = InstrumentationRegistry.getInstrumentation().targetContext,
+            reader = reader,
+            database = database,
+            chapter = chapter,
+        )
 
         fun launchReader(
             legacyEntry: LegacyReaderEntry? = null,
