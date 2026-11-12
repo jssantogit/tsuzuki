@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: jssantogit/providers-tsuzuki
-          ref: de032d7c2d39a6a4ea1414e4871fad35186f62c2
+          ref: e74a0ebb43ce27b3a237a80bf9d1c81df1397ee3
           path: code7-mangaall
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C code7-mangaall rev-parse HEAD)" = "de032d7c2d39a6a4ea1414e4871fad35186f62c2"
+          test "$(git -C code7-mangaall rev-parse HEAD)" = "e74a0ebb43ce27b3a237a80bf9d1c81df1397ee3"
           mkdir -p app/src/androidTest/assets/mangaall
           ( cd code7-mangaall && node tooling/test_mangaall_code7_host_contract_replay.mjs --export ../app/src/androidTest/assets/mangaall/code7-replay.json )
           python3 - <<'PY'
