@@ -1682,25 +1682,25 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             // Reader tool rail. Exercise the actual UI control rather than
             // bypassing it with an internal ViewModel call.
             var sourceTool = device.findObject(By.desc("Source"))
+            // Compose's horizontalScroll is not necessarily exposed to
+            // UiAutomator as scrollable=true. The production Reader toolbar
+            // occupies the bottom of the foreground window. Swipe the actual
+            // rail through the display while keeping window focus asserted.
             for (attempt in 0 until 8) {
                 if (sourceTool != null) break
-                val toolRail = device.findObjects(By.scrollable(true))
-                    .filter { row ->
-                        val bounds = row.visibleBounds
-                        bounds.centerY() > device.displayHeight * 2 / 3 &&
-                            bounds.width() > device.displayWidth / 3
-                    }
-                    .maxByOrNull { it.visibleBounds.bottom }
-                assertTrue("Reader's bottom tool rail must remain horizontally scrollable", toolRail != null)
-                val bounds = requireNotNull(toolRail).visibleBounds
+                var focused = false
+                InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                    focused = reader.window.decorView.hasWindowFocus()
+                }
+                assertTrue("Reader must keep foreground focus before source-tool swipe", focused)
                 device.swipe(
-                    bounds.right - 20,
-                    bounds.centerY(),
-                    bounds.left + 20,
-                    bounds.centerY(),
-                    20,
+                    device.displayWidth * 88 / 100,
+                    device.displayHeight * 92 / 100,
+                    device.displayWidth * 12 / 100,
+                    device.displayHeight * 92 / 100,
+                    24,
                 )
-                SystemClock.sleep(200)
+                SystemClock.sleep(220L)
                 sourceTool = device.findObject(By.desc("Source"))
             }
             assertTrue(
