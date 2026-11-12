@@ -263,6 +263,12 @@ class ReaderViewModel(
      */
     private var loader: ReaderChapterLoader? = null
 
+    // Private injection seam for disposable Android tests that must render the
+    // ORIGINAL Provider CDN URL without reaching the network. Production always
+    // creates the regular policy-enforcing Provider HTTP loader.
+    private var providerHttpLoaderFactory: (CanonicalReaderTargetPlan.HttpPages) -> ReaderChapterLoader =
+        { plan -> ProviderHttpChapterLoader.from(context, plan) }
+
     private data class CanonicalReaderSession(
         val canonicalChapterId: String,
         val variantId: String?,
@@ -679,7 +685,7 @@ class ReaderViewModel(
                         date_upload = canonicalChapter.updatedAt
                     },
                 )
-                val nextLoader = ProviderHttpChapterLoader.from(context, plan)
+                val nextLoader = providerHttpLoaderFactory(plan)
                 prepareAndPublishCanonicalReaderChapter(
                     loader = nextLoader,
                     chapter = nextChapter,
