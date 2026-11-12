@@ -22,6 +22,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
+import okhttp3.OkHttpClient
 import okio.Buffer
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -1333,12 +1334,14 @@ class ScriptProviderReadingGatewayIsolationTest {
         includePages: Boolean = true,
         onBindingPhase: (ProviderRuntimeBindingPhase) -> Unit = {},
         onRegistry: (DefaultProviderRegistry) -> Unit = {},
+        packageBytesOverride: ByteArray? = null,
+        baseHttpClient: OkHttpClient = OkHttpClient(),
     ): ScriptProviderReadingGateway {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val storageRoot = File(context.cacheDir, "provider-reading-gateway").apply {
             deleteRecursively()
         }
-        val packageBytes = tsz(
+        val packageBytes = packageBytesOverride ?: tsz(
             main = main,
             providerId = providerId,
             networkOrigins = networkOrigins,
@@ -1350,7 +1353,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         val descriptor = ProviderDescriptor(
             id = providerId,
             name = "Reading Fixture",
-            version = ProviderVersion("1.0.1", 1),
+            version = ProviderVersion(parsed.manifest.version.name, parsed.manifest.version.code),
             origin = ProviderOrigin.Repository(REPOSITORY_ID),
             runtime = ProviderRuntimeKind.SCRIPT,
             capabilities = buildSet {
@@ -1389,6 +1392,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 context = context,
                 storageRoot = storageRoot,
                 managedFiles = managedFileStore,
+                baseHttpClient = baseHttpClient,
             ),
             bindingObserver = onBindingPhase,
         )
@@ -1398,7 +1402,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             packageSource = ActiveProviderScriptPackageSource {
                 ActiveProviderScriptPackage(
                     repositoryId = REPOSITORY_ID,
-                    versionCode = 1,
+                    versionCode = parsed.manifest.version.code,
                     bytes = packageBytes,
                     parsed = parsed,
                 )
