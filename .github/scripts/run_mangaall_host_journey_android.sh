@@ -48,6 +48,13 @@ run_case() {
      ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw" ||
      ! grep -Fq 'OK (1 test)' "$raw"; then
     printf 'MANGAALL_JOURNEY|phase=%s|outcome=FAIL|runnerExit=%s\n' "$label" "$exit_code" >&2
+    # Real screenshot + UI accessibility tree from the disposable emulator
+    # make the next "source not visible" failure diagnosable rather than
+    # retrying APKs without evidence. Files are CI artifacts, not log stdout.
+    timeout 12 adb exec-out screencap -p > "$output/$label.failure.png" 2>/dev/null || true
+    timeout 20 adb shell uiautomator dump /sdcard/mangaall-window.xml >/dev/null 2>&1 || true
+    timeout 12 adb exec-out cat /sdcard/mangaall-window.xml > "$output/$label.failure.xml" 2>/dev/null || true
+    timeout 10 adb logcat -d -s AndroidRuntime:E ActivityTaskManager:W '*:S' > "$output/$label.failure-logcat.txt" 2>/dev/null || true
     grep -E 'INSTRUMENTATION_FAILED|INSTRUMENTATION_CODE|FAILURES!!!|Tests run:' "$raw" || true
     return 1
   fi
