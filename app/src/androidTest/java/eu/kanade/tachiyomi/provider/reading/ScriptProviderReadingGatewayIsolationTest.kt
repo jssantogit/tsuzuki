@@ -23,6 +23,7 @@ import kotlinx.coroutines.withTimeout
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okio.Buffer
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -614,6 +615,179 @@ class ScriptProviderReadingGatewayIsolationTest {
         } finally {
             server.close()
         }
+    }
+
+    /**
+     * A pinned Provider repo checkout runs the actual MangaAll code7 JS with
+     * deterministic HTTP responses before this Android test APK is compiled.
+     * This test feeds those emitted JSON V1 objects through the REAL Host
+     * isolated SCRIPT decoder, reconciliation and chapter/page resolver.
+     * It does not execute code7 on Android or download real CDN image bytes.
+     */
+    @Test
+    fun mangaAllCode7EmittedVectors_reconcileHostAndPreserveSourceIdentity() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val replay = instrumentation.context.assets.open("mangaall/code7-replay.json")
+            .bufferedReader().use { JSONObject(it.readText()) }
+        assertEquals(1, replay.getInt("schemaVersion"))
+        assertEquals(
+            "real_code7_js_with_synthetic_http_fixtures_not_live_source",
+            replay.getString("provenance"),
+        )
+        assertEquals("app.tsuzuki.mangaall", replay.getString("providerId"))
+        assertEquals(7, replay.getInt("providerVersionCode"))
+        val replayCases = replay.getJSONArray("cases")
+        assertEquals(2, replayCases.length())
+        val expected = mapOf("punpun" to "mangafire:zk12", "koe" to "mangafire:7p56")
+        val observed = mutableSetOf<String>()
+        val knownEmpty = replay.getJSONObject("preferredEmpty")
+        assertEquals("mangadex", knownEmpty.getString("source"))
+        assertEquals(0, knownEmpty.getInt("itemCount"))
+        assertTrue(knownEmpty.getBoolean("complete"))
+        assertEquals("CHALLENGE_BLOCKED", replay.getJSONObject("challenge").getString("outcome"))
+        assertTrue(!replay.getJSONObject("challenge").getBoolean("complete"))
+
+        repeat(replayCases.length()) { index ->
+            val vector = replayCases.getJSONObject(index)
+            val caseId = vector.getString("caseId")
+            observed += caseId
+            val mangaAll = ProviderId(replay.getString("providerId"))
+            val workId = vector.getString("sourceWorkId")
+            val chapterId = vector.getString("sourceChapterId")
+            assertEquals(expected[caseId], workId)
+            assertTrue(chapterId.startsWith("mangafire:"))
+            val vectorJson = vector.toString()
+            val script = """
+                const vector = $vectorJson;
+                export default {
+                  reading: {
+                    lookup: async (request) => {
+                      if (!request.titles.includes(vector.requestedTitle)) {
+                        throw Error("Unexpected replay title");
+                      }
+                      return vector.lookup;
+                    },
+                    chapters: async (request) => {
+                      if (request.binding.externalWorkId ===
+                          "mangadex:11111111-2222-4333-8444-555555555555") {
+                        return {items:[],nextCursor:null};
+                      }
+                      if (request.binding.externalWorkId !== vector.sourceWorkId ||
+                          request.binding.facetId !== "en") {
+                        throw Error("Replay chapter work mismatch");
+                      }
+                      return vector.chapters;
+                    },
+                    pages: async (request) => {
+                      if (request.binding.externalWorkId !== vector.sourceWorkId ||
+                          request.providerChapterId !== vector.sourceChapterId ||
+                          request.binding.facetId !== "en") {
+                        throw Error("Replay page work/chapter mismatch");
+                      }
+                      return vector.pages;
+                    }
+                  }
+                };
+            """.trimIndent()
+            lateinit var registry: DefaultProviderRegistry
+            // These are REAL declared code7 origins, but no Host HTTP requests
+            // are issued to them. The test SCRIPT returns the pinned replay.
+            val gateway = gateway(
+                main = script,
+                providerId = mangaAll,
+                networkOrigins = setOf("https://mangafire.to", "https://mfcdn.cc"),
+                localNetwork = false,
+                onRegistry = { registry = it },
+            )
+            val observedLookup = gateway.lookup(
+                mangaAll,
+                ProviderReadingLookupRequest(listOf(vector.getString("requestedTitle"))),
+            ) as ProviderCallResult.Success
+            val candidate = observedLookup.value.items.single()
+            assertEquals(workId, candidate.externalWorkId)
+            assertEquals("en", candidate.language)
+            val canonicalTitleId = "code7-replay-$caseId"
+            val chapterRepository = InMemoryCanonicalChapterRepository()
+            val evidenceRepository = InMemoryChapterEvidenceRepository()
+            val refresh = RefreshProviderReadingChapters(
+                gateway = gateway,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(clock = { 10L }),
+                reconcileChapterEvidence = ReconcileChapterEvidence(
+                    parser = ParseCanonicalChapterLabel(),
+                    canonicalChapterRepository = chapterRepository,
+                    evidenceRepository = evidenceRepository,
+                ),
+            )
+
+            // Punpun's saved preferred MangaDex/en returns zero COMPLETE
+            // chapters. That fact must not be mistaken for an exact MangaFire
+            // edition, nor does it authorize an automatic rebind in this test.
+            if (caseId == "punpun") {
+                val previousBinding = ProviderReadingBinding(
+                    id = "preferred-dex-code7",
+                    canonicalTitleId = canonicalTitleId,
+                    ref = ProviderBindingRef(
+                        mangaAll, "en", "mangadex:11111111-2222-4333-8444-555555555555",
+                    ),
+                    verification = ProviderBindingVerification.USER_CONFIRMED,
+                    availability = ProviderBindingAvailability.AVAILABLE,
+                    createdAt = 1L,
+                    updatedAt = 1L,
+                )
+                val preferredRefresh = refresh.execute(previousBinding) as ProviderCallResult.Success
+                assertEquals(0, preferredRefresh.value)
+                assertTrue(chapterRepository.getByCanonicalTitleId(canonicalTitleId).isEmpty())
+                assertEquals(
+                    "mangadex:11111111-2222-4333-8444-555555555555",
+                    previousBinding.ref.externalWorkId,
+                )
+            }
+
+            // A separately user-confirmed MangaFire binding demonstrates
+            // decodability, chapter reconciliation and scoped Reader pages.
+            // Host #196 fallback on an UNCHANGED preferred binding is a
+            // distinct Domain regression; this test doesn't fake that proof.
+            val binding = ProviderReadingBinding(
+                id = "code7-reading-$caseId",
+                canonicalTitleId = canonicalTitleId,
+                ref = ProviderBindingRef(mangaAll, "en", workId),
+                verification = ProviderBindingVerification.USER_CONFIRMED,
+                availability = ProviderBindingAvailability.AVAILABLE,
+                createdAt = 1L,
+                updatedAt = 1L,
+            )
+            val refreshed = refresh.execute(binding) as ProviderCallResult.Success
+            assertEquals(1, refreshed.value)
+            val canonical = chapterRepository.getByCanonicalTitleId(canonicalTitleId).single()
+            assertEquals("1", canonical.displayNumber)
+            val resolver = ResolveProviderChapterReading(
+                canonicalChapterRepository = chapterRepository,
+                evidenceRepository = evidenceRepository,
+                bindingRepository = SingleProviderReadingBindingRepository(binding),
+                gateway = gateway,
+                providerRegistry = registry,
+            )
+            val option = resolver.options(canonical.id).single()
+            assertEquals("mangafire", option.contentSourceId)
+            assertEquals(chapterId, option.providerChapterId)
+            assertEquals(workId, option.externalWorkId)
+            val forged = resolver.preparedContent(
+                option.copy(providerChapterId = "mangadex:foreign-chapter"),
+            )
+            assertTrue(forged is ProviderCallResult.Failure)
+            val prepared = resolver.preparedContent(option) as ProviderCallResult.Success
+            val delivery = prepared.value as PreparedChapterContent.HttpPages
+            assertEquals(1, delivery.pages.size)
+            val expectedUrl = vector.getJSONObject("pages").getJSONArray("pages")
+                .getJSONObject(0).getString("url")
+            assertEquals(expectedUrl, delivery.pages.single().url)
+            assertEquals(
+                "https://mangafire.to",
+                delivery.pages.single().headers["Referer"],
+            )
+            assertTrue("https://mfcdn.cc" in delivery.pages.single().allowedOrigins)
+        }
+        assertEquals(expected.keys, observed)
     }
 
     @Test
