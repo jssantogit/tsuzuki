@@ -56,6 +56,8 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderCoverageOutcome
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkDetailOutcome
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterEvidenceAdapter
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBinding
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBindingRepository
@@ -665,7 +667,9 @@ class ScriptProviderReadingGatewayIsolationTest {
                       if (!request.titles.includes(vector.requestedTitle)) {
                         throw Error("Unexpected replay title");
                       }
-                      return vector.lookup;
+                      return request.coverageEvidenceVersion === 1 &&
+                        request.requestedLanguage === "en"
+                          ? vector.richLookup : vector.lookup;
                     },
                     chapters: async (request) => {
                       if (request.binding.externalWorkId ===
@@ -706,6 +710,30 @@ class ScriptProviderReadingGatewayIsolationTest {
             val candidate = observedLookup.value.items.single()
             assertEquals(workId, candidate.externalWorkId)
             assertEquals("en", candidate.language)
+            val coverage = gateway.lookup(
+                mangaAll,
+                ProviderReadingLookupRequest(
+                    titles = listOf(vector.getString("requestedTitle")),
+                    coverageEvidenceVersion = 1,
+                    requestedLanguage = "en",
+                ),
+            ) as ProviderCallResult.Success
+            val corroborated = coverage.value.items.single()
+            assertEquals(workId, corroborated.externalWorkId)
+            assertEquals(ProviderWorkDetailOutcome.VERIFIED_WITH_ALIASES, corroborated.detailOutcome)
+            assertEquals(ProviderCoverageOutcome.OBSERVED, corroborated.coverageOutcome)
+            assertEquals(1, corroborated.coverageObservedCount)
+            assertEquals(1000, corroborated.coverageMinMilli)
+            assertEquals(1000, corroborated.coverageMaxMilli)
+            assertEquals(false, corroborated.coverageHasMore)
+            assertEquals(
+                vector.getJSONObject("richLookup").getJSONArray("items")
+                    .getJSONObject(0).getJSONArray("authors").getString(0),
+                corroborated.authors.single(),
+            )
+            // Rich first-page coverage is provisional evidence ONLY; do not
+            // treat it as edition verification, canonical chapter total,
+            // persisted binding, or immediate Reader authorization.
             val canonicalTitleId = "code7-replay-$caseId"
             val chapterRepository = InMemoryCanonicalChapterRepository()
             val evidenceRepository = InMemoryChapterEvidenceRepository()
