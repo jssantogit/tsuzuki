@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 class StructuredDiagnosticEventTest {
 
     @Test
-    fun \`MangaAll Reader source click keeps typed failure stage and drops unsafe payload\`() {
+    fun `MangaAll Reader source click keeps typed failure stage and drops unsafe payload`() {
         val event = StructuredDiagnosticEvent(
             timestampMillis = 1_790_755_200_000L,
             severity = DiagnosticSeverity.WARN,
