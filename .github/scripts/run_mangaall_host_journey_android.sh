@@ -11,6 +11,7 @@ readonly code7_replay_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderR
 readonly code7_package_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllRealCode7Package_executesOfflineHttpCanonicalAndPages'
 readonly ui_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#sourceAtoBLoadsPagesAndPreservesCanonicalChapterAndObservedPosition'
 readonly continuous_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#mangaAllScriptSourceTapFailureAndRetryPublishesDecodedReaderPixels'
+readonly real_code7_reader_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#mangaAllOriginalCode7TszSourceTap503RetryRendersCdnPixels'
 readonly source_row_case='eu.kanade.presentation.reader.MangaAllReaderSourceCardInstrumentedTest#tappingMangaAllSourcePassesExactVerifiedChapterOptionWithoutCrossSourceSelection'
 
 mkdir -p "$output"
@@ -68,5 +69,6 @@ run_case 'CODE7_JS_VECTORS_HOST_CANONICAL_AND_PAGES' "$code7_replay_case" 'manga
 run_case 'CODE7_REAL_TSZ_SCRIPT_CANONICAL_PAGES' "$code7_package_case" 'mangaAllHostJourneyOptIn'
 run_case 'MANGAALL_SOURCE_ROW_TAP' "$source_row_case" 'mangaAllSourceRowOptIn'
 run_case 'MANGAALL_CONTINUOUS_READER_TAP_RETRY_PIXELS' "$continuous_case" 'androidSourceSwitchOptIn'
+run_case 'CODE7_REAL_TSZ_CONTINUOUS_READER_TAP_503_RETRY_PIXELS' "$real_code7_reader_case" 'androidSourceSwitchOptIn'
 run_case 'READER_UI_SOURCE_SWITCH_PIXELS' "$ui_case" 'androidSourceSwitchOptIn'
-printf 'MANGAALL_JOURNEY|pipeline=CODE7_PACKAGE_AND_SYNTHETIC_HOST_READER|outcome=PASS|realReaderViewModel=TESTED|sourceTapPixels=SYNTHETIC|code7JsOutputHostReplay=TESTED|code7OriginalTszAndroid=TESTED|signedEnrollment=NOT_TESTED|liveProvider=NOT_TESTED\\n'
+printf 'MANGAALL_JOURNEY|pipeline=CODE7_PACKAGE_AND_SYNTHETIC_HOST_READER|outcome=PASS|realReaderViewModel=TESTED|sourceTapPixels=CODE7_ORIGINAL_OFFLINE|code7JsOutputHostReplay=TESTED|code7OriginalTszAndroid=TESTED|code7ReaderActivityOffline=TESTED|signedEnrollment=NOT_TESTED|liveProvider=NOT_TESTED\\n'
