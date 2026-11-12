@@ -11,6 +11,8 @@ on:
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
       - 'app/src/androidTest/java/eu/kanade/presentation/reader/MangaAllReaderSourceCardInstrumentedTest.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/CanonicalReaderSourceSwitchInstrumentedTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllReaderJourneyFixture.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt'
   workflow_dispatch:
 
 permissions:
