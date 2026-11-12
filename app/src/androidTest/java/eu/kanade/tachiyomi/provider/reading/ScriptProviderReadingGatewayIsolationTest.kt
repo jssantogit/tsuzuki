@@ -23,7 +23,11 @@ import kotlinx.coroutines.withTimeout
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -72,6 +76,8 @@ import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import javax.crypto.Cipher
@@ -627,6 +633,267 @@ class ScriptProviderReadingGatewayIsolationTest {
      * isolated SCRIPT decoder, reconciliation and chapter/page resolver.
      * It does not execute code7 on Android or download real CDN image bytes.
      */
+
+    /**
+     * Loads the UNMODIFIED distributable code7 .tsz built with tooling/build_provider.py.
+     * Only the test's OkHttp transport is synthetic. All requests still pass
+     * the production origin policy and the actual isolated QuickJS package runtime.
+     * No official repository enrollment or signature acceptance is simulated.
+     */
+    @Test
+    fun mangaAllRealCode7Package_executesOfflineHttpCanonicalAndPages() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val packageBytes = instrumentation.context.assets.open("mangaall/code7-package.tsz")
+            .use { it.readBytes() }
+        val parsed = ProviderPackageParser().parse(packageBytes)
+        assertEquals("app.tsuzuki.mangaall", parsed.manifest.id)
+        assertEquals("0.5.2", parsed.manifest.version.name)
+        assertEquals(7L, parsed.manifest.version.code)
+        assertEquals("main.js", parsed.manifest.entrypoint)
+        assertTrue(!parsed.manifest.permissions.network!!.localNetwork)
+        val replay = instrumentation.context.assets.open("mangaall/code7-replay.json")
+            .bufferedReader().use { JSONObject(it.readText()) }
+        assertEquals(7, replay.getInt("providerVersionCode"))
+        val cases = replay.getJSONArray("cases")
+        assertEquals(2, cases.length())
+        val observed = mutableSetOf<String>()
+        repeat(cases.length()) { index ->
+            val vector = cases.getJSONObject(index)
+            val caseId = vector.getString("caseId")
+            observed += caseId
+            val expectedWorkId = vector.getString("sourceWorkId")
+            val expectedChapterId = vector.getString("sourceChapterId")
+            val title = vector.getString("requestedTitle")
+            val hid = expectedWorkId.removePrefix("mangafire:")
+            val sourceChapter = expectedChapterId.removePrefix("mangafire:")
+            val sourceTitle = when (caseId) {
+                "punpun" -> "Goodnight Punpun"
+                "koe" -> "Koe no Katachi"
+                else -> error("Unexpected packaged source case")
+            }
+            val alias = when (caseId) {
+                "punpun" -> "Oyasumi Punpun"
+                else -> "A Silent Voice"
+            }
+            val author = when (caseId) {
+                "punpun" -> "Inio Asano"
+                else -> "Yoshitoki Ooima"
+            }
+            val imageUrl = vector.getJSONObject("pages").getJSONArray("pages")
+                .getJSONObject(0).getString("url")
+            val blockedChapters = AtomicBoolean(false)
+            val blockedLookup = AtomicBoolean(false)
+            val blockedPages = AtomicBoolean(false)
+            val httpCalls = AtomicInteger()
+            val httpClient = OkHttpClient.Builder().addInterceptor { chain ->
+                val request = chain.request()
+                val url = request.url
+                assertEquals("GET", request.method)
+                assertEquals("https", url.scheme)
+                assertTrue("Synthetic contract exceeded the HTTP bound", httpCalls.incrementAndGet() <= 100)
+                // Fail closed: the interceptor NEVER calls chain.proceed, so the
+                // original HTTPS hostname cannot reach a remote server.
+                val (status, body) = when {
+                    url.host == "api.mangadex.org" && url.encodedPath == "/chapter" ->
+                        200 to """{"result":"ok","data":[],"limit":100,"offset":0,"total":0}"""
+                    url.host == "api.mangadex.org" && url.encodedPath == "/manga" ->
+                        200 to """{"result":"ok","data":[],"limit":25,"offset":0,"total":0}"""
+                    url.host == "mangadot.net" && url.encodedPath == "/api/search" ->
+                        200 to """{"results":[]}"""
+                    url.host == "mangafire.to" && url.encodedPath == "/api/titles" -> {
+                        assertEquals(title, url.queryParameter("keyword"))
+                        if (blockedLookup.get()) {
+                            403 to "<html>synthetic challenge</html>"
+                        } else {
+                            200 to JSONObject().put(
+                                "items",
+                                JSONArray().put(
+                                    JSONObject().put("hid", hid).put("slug", caseId)
+                                        .put("title", sourceTitle)
+                                        .put("aliases", JSONArray().put(alias)),
+                                ),
+                            ).toString()
+                        }
+                    }
+                    url.host == "mangafire.to" && url.encodedPath == "/api/titles/$hid" ->
+                        200 to JSONObject().put(
+                            "data",
+                            JSONObject().put("hid", hid).put("title", sourceTitle)
+                                .put("aliases", JSONArray().put(alias))
+                                .put("authors", JSONArray().put(author)),
+                        ).toString()
+                    url.host == "mangafire.to" && url.encodedPath == "/api/titles/$hid/chapters" -> {
+                        assertEquals("en", url.queryParameter("language"))
+                        assertEquals("asc", url.queryParameter("order"))
+                        assertEquals("1", url.queryParameter("page"))
+                        if (blockedChapters.get()) {
+                            403 to "<html>synthetic challenge</html>"
+                        } else {
+                            200 to JSONObject()
+                                .put("items", JSONArray().put(
+                                    JSONObject().put("id", sourceChapter).put("number", 1)
+                                        .put("name", "Chapter 1").put("language", "en")
+                                        .put("type", "official").put("createdAt", 1720000000),
+                                ))
+                                .put("meta", JSONObject().put("hasNext", false).put("lastPage", 1))
+                                .toString()
+                        }
+                    }
+                    url.host == "mangafire.to" && url.encodedPath == "/api/chapters/$sourceChapter" -> {
+                        if (blockedPages.get()) {
+                            503 to "<html>synthetic failure</html>"
+                        } else {
+                            200 to JSONObject().put(
+                                "data",
+                                JSONObject().put("id", sourceChapter)
+                                    .put("mangaHid", hid).put("language", "en")
+                                    .put("pages", JSONArray().put(JSONObject().put("url", imageUrl))),
+                            ).toString()
+                        }
+                    }
+                    else -> error("Unexpected HTTP request in offline code7 fixture")
+                }
+                Response.Builder()
+                    .request(request)
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(status)
+                    .message("Synthetic fixture")
+                    .body(body.toResponseBody())
+                    .build()
+            }.build()
+            val providerId = ProviderId(parsed.manifest.id)
+            lateinit var registry: DefaultProviderRegistry
+            val gateway = gateway(
+                main = "",
+                providerId = providerId,
+                networkOrigins = parsed.manifest.permissions.network!!.origins,
+                browserOrigins = parsed.manifest.permissions.browser?.origins.orEmpty(),
+                localNetwork = false,
+                packageBytesOverride = packageBytes,
+                baseHttpClient = httpClient,
+                onRegistry = { registry = it },
+            )
+
+            val richLookup = gateway.lookup(
+                providerId,
+                ProviderReadingLookupRequest(
+                    titles = listOf(title),
+                    requestedLanguage = "en",
+                    coverageEvidenceVersion = 1,
+                ),
+            ) as ProviderCallResult.Success
+            val candidate = richLookup.value.items.single { it.externalWorkId == expectedWorkId }
+            assertEquals(sourceTitle, candidate.title)
+            assertTrue(candidate.aliases.contains(alias))
+            assertEquals(listOf(author), candidate.authors)
+            assertEquals(ProviderWorkDetailOutcome.VERIFIED_WITH_ALIASES, candidate.detailOutcome)
+            assertEquals(ProviderCoverageOutcome.OBSERVED, candidate.coverageOutcome)
+            assertEquals(1, candidate.coverageObservedCount)
+            assertEquals(1000, candidate.coverageMinMilli)
+            assertEquals(1000, candidate.coverageMaxMilli)
+            assertEquals(false, candidate.coverageHasMore)
+
+            val legacy = gateway.lookup(
+                providerId,
+                ProviderReadingLookupRequest(titles = listOf(title), requestedLanguage = "en"),
+            ) as ProviderCallResult.Success
+            assertEquals(expectedWorkId, legacy.value.items.single().externalWorkId)
+            assertEquals(null, legacy.value.items.single().coverageOutcome)
+
+            val canonicalTitleId = "code7-package-$caseId"
+            val chapterRepository = InMemoryCanonicalChapterRepository()
+            val evidenceRepository = InMemoryChapterEvidenceRepository()
+            val refresh = RefreshProviderReadingChapters(
+                gateway = gateway,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(clock = { 10L }),
+                reconcileChapterEvidence = ReconcileChapterEvidence(
+                    parser = ParseCanonicalChapterLabel(),
+                    canonicalChapterRepository = chapterRepository,
+                    evidenceRepository = evidenceRepository,
+                ),
+            )
+            // Complete-empty MangaDex/en is an independent source fact.
+            if (caseId == "punpun") {
+                val dex = ProviderReadingBinding(
+                    id = "old-dex",
+                    canonicalTitleId = canonicalTitleId,
+                    ref = ProviderBindingRef(
+                        providerId, "en", "mangadex:11111111-2222-4333-8444-555555555555",
+                    ),
+                    verification = ProviderBindingVerification.USER_CONFIRMED,
+                    availability = ProviderBindingAvailability.AVAILABLE,
+                    createdAt = 1L,
+                    updatedAt = 1L,
+                )
+                val empty = refresh.execute(dex) as ProviderCallResult.Success
+                assertEquals(0, empty.value)
+                assertTrue(chapterRepository.getByCanonicalTitleId(canonicalTitleId).isEmpty())
+            }
+
+            val binding = ProviderReadingBinding(
+                id = "verified-code7-$caseId",
+                canonicalTitleId = canonicalTitleId,
+                ref = ProviderBindingRef(providerId, "en", expectedWorkId),
+                verification = ProviderBindingVerification.USER_CONFIRMED,
+                availability = ProviderBindingAvailability.AVAILABLE,
+                createdAt = 1L,
+                updatedAt = 1L,
+            )
+            val refreshed = refresh.execute(binding) as ProviderCallResult.Success
+            assertEquals(1, refreshed.value)
+            val canonical = chapterRepository.getByCanonicalTitleId(canonicalTitleId).single()
+            assertEquals("1", canonical.displayNumber)
+            val resolver = ResolveProviderChapterReading(
+                canonicalChapterRepository = chapterRepository,
+                evidenceRepository = evidenceRepository,
+                bindingRepository = SingleProviderReadingBindingRepository(binding),
+                gateway = gateway,
+                providerRegistry = registry,
+            )
+            val option = resolver.options(canonical.id).single()
+            assertEquals(expectedWorkId, option.externalWorkId)
+            assertEquals(expectedChapterId, option.providerChapterId)
+            assertEquals("mangafire", option.contentSourceId)
+
+            val callsBeforeForgery = httpCalls.get()
+            val crossSource = resolver.preparedContent(
+                option.copy(providerChapterId = "mangadex:foreign-chapter"),
+            )
+            assertTrue(crossSource is ProviderCallResult.Failure)
+            assertEquals(callsBeforeForgery, httpCalls.get())
+            val prepared = resolver.preparedContent(option) as ProviderCallResult.Success
+            val delivery = prepared.value as PreparedChapterContent.HttpPages
+            assertEquals(imageUrl, delivery.pages.single().url)
+            assertEquals("https://mangafire.to", delivery.pages.single().headers["Referer"])
+            assertTrue("https://mfcdn.cc" in delivery.pages.single().allowedOrigins)
+
+            // A 403 cannot be promoted to a complete empty chapter inventory.
+            blockedChapters.set(true)
+            val blocked = gateway.chapters(
+                providerId, ProviderReadingChaptersRequest(binding.ref),
+            )
+            assertTrue(blocked is ProviderCallResult.Failure)
+            blockedChapters.set(false)
+            blockedPages.set(true)
+            val unavailablePages = gateway.pages(
+                providerId,
+                ProviderReadingPagesRequest(binding.ref, expectedChapterId),
+            )
+            assertTrue(unavailablePages is ProviderCallResult.Failure)
+            blockedPages.set(false)
+            blockedLookup.set(true)
+            val incomplete = gateway.lookup(
+                providerId,
+                ProviderReadingLookupRequest(titles = listOf(title), requestedLanguage = "en"),
+            ) as ProviderCallResult.Success
+            assertTrue(incomplete.value.items.isEmpty())
+            assertNotNull(incomplete.value.nextCursor)
+            assertEquals(1, chapterRepository.getByCanonicalTitleId(canonicalTitleId).size)
+            assertTrue(httpCalls.get() > 0)
+        }
+        assertEquals(setOf("punpun", "koe"), observed)
+    }
+
     @Test
     fun mangaAllCode7EmittedVectors_reconcileHostAndPreserveSourceIdentity() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
