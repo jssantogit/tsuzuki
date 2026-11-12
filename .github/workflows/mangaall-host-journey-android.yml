@@ -29,6 +29,35 @@ jobs:
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout pinned MangaAll code7 JS (Provider #64, without publication)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: de032d7c2d39a6a4ea1414e4871fad35186f62c2
+          path: code7-mangaall
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate code7 replay vectors from actual JS (offline fixture only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C code7-mangaall rev-parse HEAD)" = "de032d7c2d39a6a4ea1414e4871fad35186f62c2"
+          mkdir -p app/src/androidTest/assets/mangaall
+          ( cd code7-mangaall && node tooling/test_mangaall_code7_host_contract_replay.mjs --export ../app/src/androidTest/assets/mangaall/code7-replay.json )
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('app/src/androidTest/assets/mangaall/code7-replay.json')
+          d = json.loads(p.read_text())
+          assert d['schemaVersion'] == 1 and d['providerVersionCode'] == 7
+          assert d['providerId'] == 'app.tsuzuki.mangaall'
+          assert set(x['caseId'] for x in d['cases']) == {'punpun', 'koe'}
+          assert d['preferredEmpty'] == {'source':'mangadex','itemCount':0,'complete':True}
+          assert d['challenge'] == {'source':'mangafire','outcome':'CHALLENGE_BLOCKED','complete':False}
+          print('CODE7_HOST_VECTOR|realProviderJS=PINNED|cases=2|sourceHTTP=SYNTHETIC|secretBytes=NONE')
+          PY
       - name: Check shell gate
         run: bash -n .github/scripts/run_mangaall_host_journey_android.sh
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
