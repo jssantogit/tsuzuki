@@ -9,6 +9,8 @@ on:
       - '.github/workflows/mangaall-host-journey-android.yml'
       - '.github/scripts/run_mangaall_host_journey_android.sh'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/presentation/reader/MangaAllReaderSourceCardInstrumentedTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/CanonicalReaderSourceSwitchInstrumentedTest.kt'
   workflow_dispatch:
 
 permissions:
