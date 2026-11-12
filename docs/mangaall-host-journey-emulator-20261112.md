@@ -22,3 +22,14 @@ Stacked Draft PR #197 above Host #196. No main merge, signed Provider publicatio
 - Actual Samsung A54 physical display/performance and behavior with established user progress.
 
 Only regard the Host-level click/recovery as verified after the new continuous Android test is green. Treat remote source cases as inconclusive rather than creating guessed chapter mappings.
+
+
+## New gate: original code7 .tsz inside Android isolated SCRIPT runtime
+
+The CI checks out Provider commit e74a0ebb43ce27b3a237a80bf9d1c81df1397ee3 and uses the **same** tooling/build_provider.py that prepares publishing packages. It verifies that all main.js, modules and assets bytes match the pinned source (only the source-side publication manifest flag is removed by the production packager). The resulting code7-package.tsz is embedded as an **AndroidTest-only asset** and is not published or signed through the official repository.
+
+ScriptProviderReadingGatewayIsolationTest.mangaAllRealCode7Package_executesOfflineHttpCanonicalAndPages loads that actual archive with ProviderPackageParser, checks id/version/manifest, and invokes its **unmodified** unified MangaAll JS through the actual isolated QuickJS ProviderRuntimeClient.invokePackage. The Host HTTP broker still enforces the archive's own HTTPS origin allowlist, but the isolated test supplies an OkHttp application interceptor that synthesizes bounded HTTP responses and **never calls the network** (chain.proceed). Unrecognized origins/paths fail closed. No trust-root override, provider source rewrite, browser bypass or external CDN request is involved.
+
+For source-observed A54 identities Punpun mangafire:zk12 and Koe mangafire:7p56, it tests rich and legacy lookup, editorial detail, bounded chapter preview, canonical refresh from a separately user-confirmed binding, chapter-scoped Reader option and page URL/Referer; negative cases include MangaDex/en complete-empty distinct from provisional MangaFire coverage, cross-source chapter rejection without an HTTP call, 403 chapters/lookup incompleteness and 503 pages without destroying reconciled chapters.
+
+This is a **packaged code7 Android SCRIPT→Host integration** gate; it does NOT exercise installing an officially signed feed, the full code7 package inside a continuous ReaderActivity image-rendering session, or actual remote MangaFire/CDN bytes. The independent prior ReaderActivity gate still uses a synthetic script and PNG fixture. The GitHub Actions result must be green before calling this new gate validated.
