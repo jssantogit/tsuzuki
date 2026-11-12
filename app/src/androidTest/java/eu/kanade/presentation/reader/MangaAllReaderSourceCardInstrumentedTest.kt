@@ -1,6 +1,7 @@
 package eu.kanade.presentation.reader
 
 import android.content.Intent
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Column
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -32,6 +33,7 @@ class MangaAllReaderSourceCardInstrumentedTest {
     fun tappingMangaAllSourcePassesExactVerifiedChapterOptionWithoutCrossSourceSelection() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val device = UiDevice.getInstance(instrumentation)
+        device.wakeUp()
         val context = instrumentation.targetContext
         val activity = instrumentation.startActivitySync(
             Intent(context, DefaultSkinValidationActivity::class.java)
@@ -76,8 +78,32 @@ class MangaAllReaderSourceCardInstrumentedTest {
                     }
                 }
             }
+            // UiAutomator only targets the current foreground window. On a
+            // cold emulator Pixel Launcher may show an ANR/dialog above the
+            // activity after startActivitySync returned. Never dismiss app
+            // failures or change Reader behavior to make a fixture pass.
+            var windowFocused = false
+            val focusDeadline = SystemClock.elapsedRealtime() + 20_000L
+            while (SystemClock.elapsedRealtime() < focusDeadline) {
+                if (device.hasObject(By.text("Pixel Launcher isn't responding"))) {
+                    device.findObject(By.text("Close app"))?.click()
+                }
+                if (device.hasObject(By.text("Viewing full screen"))) {
+                    device.findObject(By.text("Got it"))?.click()
+                }
+                instrumentation.runOnMainSync {
+                    windowFocused = activity.window.decorView.hasWindowFocus()
+                }
+                if (windowFocused) break
+                SystemClock.sleep(200L)
+            }
             assertTrue(
-                "MangaFire option must be visible in the actual Compose Reader card",
+                "MangaAll Reader Source test activity must own the foreground before touching",
+                windowFocused,
+            )
+            instrumentation.waitForIdleSync()
+            assertTrue(
+                "MangaFire option must be visible in the focused Compose Reader card",
                 device.wait(Until.hasObject(By.text("MangaFire")), 15_000L),
             )
             assertTrue(device.hasObject(By.text("MangaDex")))
