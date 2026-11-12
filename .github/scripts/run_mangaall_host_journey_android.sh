@@ -7,6 +7,7 @@ readonly app='app.tsuzuki.dev'
 readonly runner='app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner'
 readonly output='.github/results/mangaall-host-journey-android'
 readonly host_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllSyntheticJourney_reconcilesCanonicalChaptersAndReaderPages'
+readonly code7_replay_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllCode7EmittedVectors_reconcileHostAndPreserveSourceIdentity'
 readonly ui_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#sourceAtoBLoadsPagesAndPreservesCanonicalChapterAndObservedPosition'
 readonly continuous_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#mangaAllScriptSourceTapFailureAndRetryPublishesDecodedReaderPixels'
 readonly source_row_case='eu.kanade.presentation.reader.MangaAllReaderSourceCardInstrumentedTest#tappingMangaAllSourcePassesExactVerifiedChapterOptionWithoutCrossSourceSelection'
@@ -62,7 +63,8 @@ run_case() {
   printf 'MANGAALL_JOURNEY|phase=%s|outcome=PASS\n' "$label"
 }
 run_case 'SCRIPT_CANONICAL_HTTP_BYTES' "$host_case" 'mangaAllHostJourneyOptIn'
+run_case 'CODE7_JS_VECTORS_HOST_CANONICAL_AND_PAGES' "$code7_replay_case" 'mangaAllHostJourneyOptIn'
 run_case 'MANGAALL_SOURCE_ROW_TAP' "$source_row_case" 'mangaAllSourceRowOptIn'
 run_case 'MANGAALL_CONTINUOUS_READER_TAP_RETRY_PIXELS' "$continuous_case" 'androidSourceSwitchOptIn'
 run_case 'READER_UI_SOURCE_SWITCH_PIXELS' "$ui_case" 'androidSourceSwitchOptIn'
-printf 'MANGAALL_JOURNEY|pipeline=CONTINUOUS_SYNTHETIC_HOST_READER|outcome=PASS|realReaderViewModel=TESTED|sourceTapPixels=TESTED|signedPackage=NOT_TESTED|liveProvider=NOT_TESTED\\n'
+printf 'MANGAALL_JOURNEY|pipeline=CONTINUOUS_SYNTHETIC_HOST_READER|outcome=PASS|realReaderViewModel=TESTED|sourceTapPixels=TESTED|code7JsOutputHostReplay=TESTED|signedPackage=NOT_TESTED|liveProvider=NOT_TESTED\\n'
