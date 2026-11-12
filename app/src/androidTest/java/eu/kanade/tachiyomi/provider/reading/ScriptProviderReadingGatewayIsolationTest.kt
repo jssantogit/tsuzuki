@@ -444,6 +444,178 @@ class ScriptProviderReadingGatewayIsolationTest {
         }
     }
 
+    /**
+     * One isolated SCRIPT Host -> canonical refresh -> revalidated chapter -> HTTP
+     * Reader byte-loader journey with a MangaAll-shaped local Provider fixture.
+     * This is NOT the signed MangaAll package or an Activity/UI pixel smoke.
+     */
+    @Test
+    fun mangaAllSyntheticJourney_reconcilesCanonicalChaptersAndReaderPages() = runBlocking {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val server = MockWebServer()
+        server.start()
+        val origin = server.origin()
+        server.enqueue(
+            MockResponse.Builder()
+                .body(
+                    """
+                    {
+                      "items": [
+                        {
+                          "externalWorkId": "mangafire:zk12",
+                          "title": "Goodnight Punpun",
+                          "aliases": ["Oyasumi Punpun"],
+                          "url": "$origin/title/canonical",
+                          "language": "en"
+                        }
+                      ],
+                      "nextCursor": null
+                    }
+                    """.trimIndent(),
+                )
+                .build(),
+        )
+        server.enqueue(
+            MockResponse.Builder()
+                .body(
+                    """
+                    {
+                      "items": [
+                        {
+                          "providerChapterId": "mangafire:chapter-one",
+                          "rawLabel": "Chapter 1",
+                          "rawNumber": 1.0,
+                          "language": "en"
+                        }
+                      ],
+                      "nextCursor": null
+                    }
+                    """.trimIndent(),
+                )
+                .build(),
+        )
+        server.enqueue(
+            MockResponse.Builder()
+                .body("mangaall-reader-fixture-image")
+                .build(),
+        )
+
+        lateinit var providerRegistry: DefaultProviderRegistry
+        val gateway = gateway(
+            providerId = mangaAll,
+            networkOrigins = setOf(origin),
+            localNetwork = true,
+            main = """
+                const base = "$origin";
+                export default {
+                  reading: {
+                    lookup: async () =>
+                      JSON.parse(await tsuzuki.http.get(base + "/lookup")),
+                    chapters: async () =>
+                      JSON.parse(await tsuzuki.http.get(base + "/chapters")),
+                    pages: async () => ({
+                      type: "page_list",
+                      pages: [{url: base + "/page.jpg", headers: {}}]
+                    })
+                  }
+                };
+            """.trimIndent(),
+            onRegistry = { providerRegistry = it },
+        )
+
+        try {
+            val lookup = gateway.lookup(
+                mangaAll,
+                ProviderReadingLookupRequest(listOf("Oyasumi Punpun")),
+            ) as ProviderCallResult.Success
+            val candidate = lookup.value.items.single()
+            assertEquals("mangafire:zk12", candidate.externalWorkId)
+            assertTrue(candidate.aliases.contains("Oyasumi Punpun"))
+            val binding = ProviderReadingBinding(
+                id = "binding-canonical",
+                canonicalTitleId = "punpun-canonical",
+                ref = ProviderBindingRef(
+                    providerId = mangaAll,
+                    facetId = candidate.language,
+                    externalWorkId = candidate.externalWorkId,
+                ),
+                verification = ProviderBindingVerification.EXACT,
+                availability = ProviderBindingAvailability.AVAILABLE,
+                createdAt = 1L,
+                updatedAt = 1L,
+            )
+            val chapterRepository = InMemoryCanonicalChapterRepository()
+            val evidenceRepository = InMemoryChapterEvidenceRepository()
+            val bindingRepository = SingleProviderReadingBindingRepository(binding)
+            val refresh = RefreshProviderReadingChapters(
+                gateway = gateway,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(clock = { 10L }),
+                reconcileChapterEvidence = ReconcileChapterEvidence(
+                    parser = ParseCanonicalChapterLabel(),
+                    canonicalChapterRepository = chapterRepository,
+                    evidenceRepository = evidenceRepository,
+                ),
+            )
+
+            val refreshResult = refresh.execute(binding) as ProviderCallResult.Success
+            assertEquals(1, refreshResult.value)
+            val canonicalChapter = chapterRepository
+                .getByCanonicalTitleId("punpun-canonical")
+                .single()
+
+            val resolver = ResolveProviderChapterReading(
+                canonicalChapterRepository = chapterRepository,
+                evidenceRepository = evidenceRepository,
+                bindingRepository = bindingRepository,
+                gateway = gateway,
+                providerRegistry = providerRegistry,
+            )
+            val option = resolver.options(canonicalChapter.id).single()
+            assertEquals("mangafire:chapter-one", option.providerChapterId)
+            assertEquals("mangafire", option.contentSourceId)
+            val stale = resolver.preparedContent(
+                option.copy(providerChapterId = "mangadex:foreign-chapter"),
+            )
+            assertTrue(stale is ProviderCallResult.Failure)
+
+            val prepared = resolver.preparedContent(option) as ProviderCallResult.Success
+            val content = prepared.value as PreparedChapterContent.HttpPages
+            val plan = CanonicalReaderTargetPlan.HttpPages(
+                canonicalChapterId = canonicalChapter.id,
+                pages = content.pages,
+            )
+            val readerLoader = ProviderHttpChapterLoader.from(
+                InstrumentationRegistry.getInstrumentation().targetContext,
+                plan,
+            )
+            val readerChapter = ReaderChapter(
+                ChapterImpl().apply {
+                    id = Long.MIN_VALUE
+                    url = "provider-pages:${canonicalChapter.id}"
+                    name = "Canonical Provider chapter"
+                },
+            )
+            try {
+                readerLoader.loadChapter(readerChapter)
+                val readerPage = readerChapter.pages!!.single()
+                readerChapter.pageLoader!!.loadPage(readerPage)
+                assertEquals(Page.State.Ready, readerPage.status)
+                assertEquals(
+                    "mangaall-reader-fixture-image",
+                    readerPage.stream!!.invoke().use { it.readBytes().decodeToString() },
+                )
+            } finally {
+                readerChapter.pageLoader?.recycle()
+            }
+
+            assertEquals("/lookup", server.takeRequest().url.encodedPath)
+            assertEquals("/chapters", server.takeRequest().url.encodedPath)
+            assertEquals("/page.jpg", server.takeRequest().url.encodedPath)
+        } finally {
+            server.close()
+        }
+    }
+
     @Test
     fun htmlDomProvider_parsesHostOwnedDocumentInsideIsolatedInvocation() = runBlocking {
         val server = MockWebServer()
