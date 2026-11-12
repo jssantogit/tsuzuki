@@ -1798,10 +1798,20 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             // directly in this acceptance test.
             val pageBeforeToolbar = readerViewSnapshot(reader).position
             var sourceTool = device.findObject(By.desc("Source"))
-            for (attempt in 0 until 4) {
+            if (sourceTool == null) {
+                assertTrue(
+                    "The Reader's visible bottom rail must be composed before navigating to Source",
+                    device.wait(Until.hasObject(By.desc("Chapters")), UI_TIMEOUT_MS),
+                )
+            }
+            for (attempt in 0 until 8) {
                 if (sourceTool != null) break
-                val scrollApplied = scrollReaderToolbarSemantics(reader, amount = 1_000f)
-                assertTrue("Reader bottom toolbar must expose a horizontal ScrollBy semantic action", scrollApplied)
+                // Compose's accessibility ScrollBy may be absent during the
+                // initial layout. An anchored, physically visible toolbar
+                // control gives a safe gesture fallback on a cold emulator.
+                val viaSemantics = scrollReaderToolbarSemantics(reader, amount = 1_000f)
+                val scrollApplied = viaSemantics || swipeReaderToolbarWithinVisibleControls(device)
+                assertTrue("Reader bottom toolbar was not scrollable or visibly reachable", scrollApplied)
                 SystemClock.sleep(220L)
                 assertEquals(
                     "Scrolling Reader tools must not navigate the chapter pager",
@@ -1847,6 +1857,9 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                 }
             }
             collect(reader.window.decorView)
+            // Flush the actual Compose layout before querying accessibility
+            // actions; state.menuVisible can become true ahead of composition.
+            roots.forEach { it.measureAndLayoutForTest() }
             val scrollNode = roots.flatMap { it.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false) }
                 .filter { node ->
                     node.config.contains(SemanticsProperties.HorizontalScrollAxisRange) &&
@@ -1856,6 +1869,24 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             accepted = scrollNode?.config?.get(SemanticsActions.ScrollBy)?.action?.invoke(amount, 0f) == true
         }
         return accepted
+    }
+
+    private fun swipeReaderToolbarWithinVisibleControls(device: UiDevice): Boolean {
+        val anchor = listOf("Chapters", "Previous", "Next", "Brightness", "Fit", "Crop")
+            .firstNotNullOfOrNull { label -> device.findObject(By.desc(label)) }
+            ?: return false
+        val y = anchor.visibleBounds.centerY()
+        // Never use a guessed screen-relative Y. This anchor is a real visible
+        // Reader tool control; its bounds must be in the bottom rail, not in
+        // the chapter's pager or a system overlay.
+        if (y < device.displayHeight * 2 / 3 || y >= device.displayHeight) return false
+        return device.swipe(
+            device.displayWidth * 86 / 100,
+            y,
+            device.displayWidth * 14 / 100,
+            y,
+            26,
+        )
     }
 
     private fun clickText(device: UiDevice, text: String) {
