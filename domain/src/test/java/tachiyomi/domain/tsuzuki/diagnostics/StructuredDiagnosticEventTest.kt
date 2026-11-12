@@ -6,6 +6,46 @@ import org.junit.jupiter.api.Test
 class StructuredDiagnosticEventTest {
 
     @Test
+    fun \`MangaAll Reader source click keeps typed failure stage and drops unsafe payload\`() {
+        val event = StructuredDiagnosticEvent(
+            timestampMillis = 1_790_755_200_000L,
+            severity = DiagnosticSeverity.WARN,
+            subsystem = DiagnosticSubsystem.READER,
+            name = DiagnosticEventName.READER_SOURCE_SELECTED,
+            sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+            operationId = "13d6049a-67ab-4ef2-8d5d-253015ca9372",
+            workflow = DiagnosticWorkflow.READER_SOURCE_SWITCH,
+            stage = DiagnosticStage.READER,
+            outcome = DiagnosticOutcome.TYPED_FAILURE,
+            attributes = mapOf(
+                "provider_id" to DiagnosticAttributeValue.Text("app.tsuzuki.mangaall"),
+                "language" to DiagnosticAttributeValue.Text("en"),
+                "mangaall_network_source" to DiagnosticAttributeValue.Code(DiagnosticMangaAllNetworkSource.MANGAFIRE),
+                "provider_error_code" to DiagnosticAttributeValue.Text("SOURCE_READ_ERROR"),
+                "provider_page_failure_stage" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderPageFailureStage.CHAPTER_DETAIL_REQUEST_FAILED,
+                ),
+                "provider_retryable" to DiagnosticAttributeValue.Flag(false),
+                "raw_response" to DiagnosticAttributeValue.Text("Authorization: bearer secret"),
+                "provider_page_failure_stage_injected" to DiagnosticAttributeValue.Text("HTTP 403 - secret"),
+            ),
+        )
+        val actual = requireNotNull(StructuredDiagnosticSanitizer.sanitize(event)).attributes
+        actual shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text("app.tsuzuki.mangaall"),
+            DiagnosticAttribute.LANGUAGE to DiagnosticAttributeValue.Text("en"),
+            DiagnosticAttribute.MANGAALL_NETWORK_SOURCE to DiagnosticAttributeValue.Code(
+                DiagnosticMangaAllNetworkSource.MANGAFIRE,
+            ),
+            DiagnosticAttribute.PROVIDER_ERROR_CODE to DiagnosticAttributeValue.Text("SOURCE_READ_ERROR"),
+            DiagnosticAttribute.PROVIDER_PAGE_FAILURE_STAGE to DiagnosticAttributeValue.Code(
+                DiagnosticProviderPageFailureStage.CHAPTER_DETAIL_REQUEST_FAILED,
+            ),
+            DiagnosticAttribute.PROVIDER_RETRYABLE to DiagnosticAttributeValue.Flag(false),
+        )
+    }
+
+    @Test
     fun `UI stall events preserve duration but never accept free form stack or URL`() {
         val attributes = mapOf(
             "untrusted_stack_trace" to DiagnosticAttributeValue.Text("Authorization: secret"),
