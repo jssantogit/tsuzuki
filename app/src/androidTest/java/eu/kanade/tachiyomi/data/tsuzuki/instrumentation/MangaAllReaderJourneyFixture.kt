@@ -9,9 +9,9 @@ import eu.kanade.tachiyomi.provider.reading.ActiveProviderScriptPackageSource
 import eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGateway
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
+import eu.kanade.tachiyomi.ui.reader.CanonicalReaderTargetPlan
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderViewModel
-import eu.kanade.tachiyomi.ui.reader.CanonicalReaderTargetPlan
 import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpChapterLoader
 import eu.kanade.tachiyomi.ui.reader.loader.ReaderChapterLoader
 import mockwebserver3.Dispatcher
