@@ -1123,6 +1123,7 @@ class ScriptProviderReadingGatewayIsolationTest {
 
     private fun gateway(
         main: String,
+        providerId: ProviderId = PROVIDER_ID,
         networkOrigins: Set<String>,
         browserOrigins: Set<String> = emptySet(),
         localNetwork: Boolean,
@@ -1137,6 +1138,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         }
         val packageBytes = tsz(
             main = main,
+            providerId = providerId,
             networkOrigins = networkOrigins,
             browserOrigins = browserOrigins,
             localNetwork = localNetwork,
@@ -1144,7 +1146,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         )
         val parsed = ProviderPackageParser().parse(packageBytes)
         val descriptor = ProviderDescriptor(
-            id = PROVIDER_ID,
+            id = providerId,
             name = "Reading Fixture",
             version = ProviderVersion("1.0.1", 1),
             origin = ProviderOrigin.Repository(REPOSITORY_ID),
@@ -1171,7 +1173,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                     ProviderRegistration(
                         descriptor = descriptor,
                         lifecycleStatus = ProviderLifecycleStatus.ENABLED,
-                        facets = listOf(ProviderFacetRef(PROVIDER_ID, "en")),
+                        facets = listOf(ProviderFacetRef(providerId, "en")),
                         configurationFingerprint = "instrumentation",
                     ),
                 )
@@ -1258,6 +1260,7 @@ class ScriptProviderReadingGatewayIsolationTest {
 
     private fun tsz(
         main: String,
+        providerId: ProviderId = PROVIDER_ID,
         networkOrigins: Set<String>,
         browserOrigins: Set<String>,
         localNetwork: Boolean,
@@ -1270,7 +1273,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         val manifest = """
             {
               "manifestVersion": 1,
-              "id": "${PROVIDER_ID.value}",
+              "id": "${providerId.value}",
               "name": "Reading Fixture",
               "version": {"name": "1.0.1", "code": 1},
               "minHostApi": 1,
