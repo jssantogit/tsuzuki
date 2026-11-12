@@ -49,6 +49,7 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderRecovery
+import eu.kanade.tachiyomi.ui.reader.ReaderViewModel
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
@@ -144,7 +145,10 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         // Guard the screenshot oracle itself: the first continuous E2E RED
         // rendered READY PNG pages, but the old color matcher only knew RED
         // and BLUE and could never match this fixture's GREEN.
-        assertTrue("MangaAll green must be recognized by the pixel probe", isNearColor(expectedMangaAllGreen, expectedMangaAllGreen))
+        assertTrue(
+            "MangaAll green must be recognized by the pixel probe",
+            isNearColor(expectedMangaAllGreen, expectedMangaAllGreen),
+        )
         assertTrue(
             "A stale red Reader page must not be mistaken for MangaAll green",
             !isNearColor(Color.rgb(220, 40, 40), expectedMangaAllGreen),
@@ -182,10 +186,16 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                 openAndTapMangaFire()
                 awaitValue("Provider page failure to be recoverable without replacing active Reader") {
                     val state = reader.viewModel.state.value
-                    (state.recovery == ReaderRecovery.SOURCE_UNAVAILABLE &&
-                        !state.sourceSelectionInProgress).takeIf { it }
+                    (
+                        state.recovery == ReaderRecovery.SOURCE_UNAVAILABLE &&
+                            !state.sourceSelectionInProgress
+                        ).takeIf { it }
                 }
-                assertEquals("First click must issue exactly one SCRIPT pages request", 1, mangaAll.pageDeliveryCalls.get())
+                assertEquals(
+                    "First click must issue exactly one SCRIPT pages request",
+                    1,
+                    mangaAll.pageDeliveryCalls.get(),
+                )
                 assertEquals("Failed pages may not download the image", 0, mangaAll.imageRequests.get())
                 assertSame(
                     "A failed MangaAll tap must keep the existing Reader chapter object",
@@ -201,15 +211,24 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                 awaitValue("MangaAll retry to stage a real HTTP page in the same Reader") {
                     val state = reader.viewModel.state.value
                     val page = state.currentChapter?.pages?.singleOrNull()
-                    (state.activeCanonicalChapterId == fixture.chapter.id &&
-                        state.activeProviderSourceKey == mangaAll.selectedOption.readerSourceKey &&
-                        state.recovery == null &&
-                        !state.sourceSelectionInProgress &&
-                        page?.status == Page.State.Ready &&
-                        page.stream != null).takeIf { it }
+                    (
+                        state.activeCanonicalChapterId == fixture.chapter.id &&
+                            state.activeProviderSourceKey == mangaAll.selectedOption.readerSourceKey &&
+                            state.recovery == null &&
+                            !state.sourceSelectionInProgress &&
+                            page?.status == Page.State.Ready &&
+                            page.stream != null
+                        ).takeIf { it }
                 }
-                assertEquals("Retry must request SCRIPT pages once again", 2, mangaAll.pageDeliveryCalls.get())
-                assertTrue("The Reader must fetch the PNG from the returned page URL", mangaAll.imageRequests.get() > 0)
+                assertEquals(
+                    "Retry must request SCRIPT pages once again",
+                    2,
+                    mangaAll.pageDeliveryCalls.get(),
+                )
+                assertTrue(
+                    "The Reader must fetch the PNG from the returned page URL",
+                    mangaAll.imageRequests.get() > 0,
+                )
                 awaitImagePixels(reader, fixture, Color.rgb(12, 168, 82), "MANGAALL_SAME_READER_RENDERED_GREEN")
                 assertEquals(fixture.chapter.id, reader.viewModel.state.value.activeCanonicalChapterId)
             } finally {
@@ -287,7 +306,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             chooseSourceThroughReaderUi(reader, fixture.sourceB.name)
             awaitSourceRequest(fixture.dispatcher, fixture.sourceB.token, emptyPagesBefore)
             assertReaderSession(reader, fixture, fixture.sourceA.name, initial.first, 10)
-            dismissSourceSelectorThroughReaderUi()
+            dismissSourceSelectorThroughReaderUi(reader)
             awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "EMPTY_OR_FAILING")
 
             fixture.dispatcher.setBehavior(fixture.sourceB.token, FixtureBehavior(pageCount = 10, pageListStatus = 503))
@@ -316,7 +335,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                     fixture.reading.getHistory(fixture.chapter.id)
                 },
             )
-            dismissSourceSelectorThroughReaderUi()
+            dismissSourceSelectorThroughReaderUi(reader)
             awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "EMPTY_OR_FAILING")
             assertSame(
                 "Failure must not replace the published chapter object",
@@ -564,7 +583,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                     healthySourceVisible -> "READY_WITH_A"
                     device.hasObject(By.textContains("Finding available chapters")) ||
                         device.hasObject(By.text("Stop searching")) -> "DISCOVERING"
-                    device.hasObject(By.text("Choose reading source")) -> "OPEN_WITHOUT_A"
+                    reader.viewModel.state.value.dialog is ReaderViewModel.Dialog.ContentSelector -> "OPEN_WITHOUT_A"
                     else -> "CLOSED_OR_OTHER"
                 }
                 val typedSelector = typedSelectorSnapshot(reader, fixture)
@@ -591,7 +610,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                 val unchanged = awaitReaderPages(reader, fixture.sourceA.name, expectedCount = 10)
                 assertEquals(current.first, unchanged.first)
                 assertEquals(fixture.chapter.id, reader.intent.getStringExtra("canonical_chapter"))
-                dismissSourceSelectorThroughReaderUi()
+                dismissSourceSelectorThroughReaderUi(reader)
                 awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "SLOW_TO_HEALTHY")
                 report(
                     scenario = "SLOW_TO_HEALTHY",
@@ -643,7 +662,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                     fixture.addonA,
                     runBlocking { fixture.preferences.get(fixture.title.id)?.preferredAddonId },
                 )
-                dismissSourceSelectorThroughReaderUi()
+                dismissSourceSelectorThroughReaderUi(reader)
                 awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "DISCOVERY_CANCEL")
                 assertEquals(
                     "The previous page position must remain observable after late responses return",
@@ -1762,7 +1781,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
 
     private fun openSourceSelectorThroughReaderUi(reader: ReaderActivity) {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        if (!device.hasObject(By.text("Choose reading source"))) {
+        if (reader.viewModel.state.value.dialog !is ReaderViewModel.Dialog.ContentSelector) {
             if (!reader.viewModel.state.value.menuVisible) {
                 device.click(device.displayWidth / 2, device.displayHeight / 2)
                 awaitValue("Reader menu to become visible") { reader.viewModel.state.value.menuVisible }
@@ -1799,9 +1818,13 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             )
             (sourceTool ?: requireNotNull(device.findObject(By.desc("Source")))).click()
         }
+        awaitValue("canonical reading-source selector to open after tapping the real Source tool") {
+            (reader.viewModel.state.value.dialog as? ReaderViewModel.Dialog.ContentSelector)
+                ?.takeIf { it.canonicalChapterId == reader.viewModel.state.value.activeCanonicalChapterId }
+        }
         assertTrue(
-            "The canonical reading-source selector must be open",
-            device.wait(Until.hasObject(By.text("Choose reading source")), UI_TIMEOUT_MS),
+            "The new Reader Source card must be visible after the dialog opens",
+            device.wait(Until.hasObject(By.text("Source")), UI_TIMEOUT_MS),
         )
     }
 
@@ -1810,14 +1833,16 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         device.findObject(By.text(text)).click()
     }
 
-    private fun dismissSourceSelectorThroughReaderUi() {
+    private fun dismissSourceSelectorThroughReaderUi(reader: ReaderActivity) {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        assertTrue(device.hasObject(By.text("Choose reading source")))
-        device.pressBack()
         assertTrue(
-            "Reader source selector must be dismissible after a recoverable failure",
-            device.wait(Until.gone(By.text("Choose reading source")), UI_TIMEOUT_MS),
+            "Reader must have an active source selector before dismissing it",
+            reader.viewModel.state.value.dialog is ReaderViewModel.Dialog.ContentSelector,
         )
+        device.pressBack()
+        awaitValue("Reader source selector to dismiss after a recoverable failure") {
+            (reader.viewModel.state.value.dialog !is ReaderViewModel.Dialog.ContentSelector).takeIf { it }
+        }
     }
 
     private fun assertReaderSession(
