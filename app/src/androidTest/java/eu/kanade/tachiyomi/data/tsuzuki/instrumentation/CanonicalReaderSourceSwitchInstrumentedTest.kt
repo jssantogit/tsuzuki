@@ -1677,16 +1677,37 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                 device.click(device.displayWidth / 2, device.displayHeight / 2)
                 awaitValue("Reader menu to become visible") { reader.viewModel.state.value.menuVisible }
             }
+            // Default Skin replaced the old overflow-menu "More options" ->
+            // "Change source" route with a horizontally scrollable bottom
+            // Reader tool rail. Exercise the actual UI control rather than
+            // bypassing it with an internal ViewModel call.
+            var sourceTool = device.findObject(By.desc("Source"))
+            for (attempt in 0 until 8) {
+                if (sourceTool != null) break
+                val toolRail = device.findObjects(By.scrollable(true))
+                    .filter { row ->
+                        val bounds = row.visibleBounds
+                        bounds.centerY() > device.displayHeight * 2 / 3 &&
+                            bounds.width() > device.displayWidth / 3
+                    }
+                    .maxByOrNull { it.visibleBounds.bottom }
+                assertTrue("Reader's bottom tool rail must remain horizontally scrollable", toolRail != null)
+                val bounds = requireNotNull(toolRail).visibleBounds
+                device.swipe(
+                    bounds.right - 20,
+                    bounds.centerY(),
+                    bounds.left + 20,
+                    bounds.centerY(),
+                    20,
+                )
+                SystemClock.sleep(200)
+                sourceTool = device.findObject(By.desc("Source"))
+            }
             assertTrue(
-                "Reader overflow action must be present",
-                device.wait(Until.hasObject(By.desc("More options")), UI_TIMEOUT_MS),
+                "Reader bottom toolbar must expose the Source button",
+                sourceTool != null || device.wait(Until.hasObject(By.desc("Source")), UI_TIMEOUT_MS),
             )
-            device.findObject(By.desc("More options")).click()
-            assertTrue(
-                "Change source action must be exposed from the Reader overflow menu",
-                device.wait(Until.hasObject(By.text("Change source")), UI_TIMEOUT_MS),
-            )
-            device.findObject(By.text("Change source")).click()
+            (sourceTool ?: requireNotNull(device.findObject(By.desc("Source")))).click()
         }
         assertTrue(
             "The canonical reading-source selector must be open",
