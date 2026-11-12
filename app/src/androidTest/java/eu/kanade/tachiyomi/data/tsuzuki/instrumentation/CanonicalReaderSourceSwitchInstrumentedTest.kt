@@ -145,6 +145,17 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
     @Test(timeout = 300_000L)
     fun mangaAllScriptSourceTapFailureAndRetryPublishesDecodedReaderPixels() {
         requireOptIn()
+        runMangaAllContinuousReaderJourney(originalCode7Package = false)
+    }
+
+    /** Original, unmodified code7 .tsz + the same ReaderActivity tap→503→retry→PNG path. */
+    @Test(timeout = 300_000L)
+    fun mangaAllOriginalCode7TszSourceTap503RetryRendersCdnPixels() {
+        requireOptIn()
+        runMangaAllContinuousReaderJourney(originalCode7Package = true)
+    }
+
+    private fun runMangaAllContinuousReaderJourney(originalCode7Package: Boolean) {
         val expectedMangaAllGreen = Color.rgb(12, 168, 82)
         // Guard the screenshot oracle itself: the first continuous E2E RED
         // rendered READY PNG pages, but the old color matcher only knew RED
@@ -168,7 +179,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "MANGAALL_INITIAL_READER")
             val previousSessionChapter = requireNotNull(reader.viewModel.state.value.currentChapter)
 
-            val mangaAll = fixture.mangaAllJourney(reader)
+            val mangaAll = fixture.mangaAllJourney(reader, originalCode7Package)
             try {
                 runBlocking { mangaAll.attach() }
 
@@ -2071,11 +2082,15 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         private val priorDisabledSources: Set<String>,
     ) {
 
-        fun mangaAllJourney(reader: ReaderActivity) = MangaAllReaderJourneyFixture(
+        fun mangaAllJourney(
+            reader: ReaderActivity,
+            originalCode7Package: Boolean = false,
+        ) = MangaAllReaderJourneyFixture(
             context = InstrumentationRegistry.getInstrumentation().targetContext,
             reader = reader,
             database = database,
             chapter = chapter,
+            originalCode7Package = originalCode7Package,
         )
 
         fun launchReader(
