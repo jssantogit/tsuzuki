@@ -140,6 +140,19 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
     @Test(timeout = 300_000L)
     fun mangaAllScriptSourceTapFailureAndRetryPublishesDecodedReaderPixels() {
         requireOptIn()
+        val expectedMangaAllGreen = Color.rgb(12, 168, 82)
+        // Guard the screenshot oracle itself: the first continuous E2E RED
+        // rendered READY PNG pages, but the old color matcher only knew RED
+        // and BLUE and could never match this fixture's GREEN.
+        assertTrue("MangaAll green must be recognized by the pixel probe", isNearColor(expectedMangaAllGreen, expectedMangaAllGreen))
+        assertTrue(
+            "A stale red Reader page must not be mistaken for MangaAll green",
+            !isNearColor(Color.rgb(220, 40, 40), expectedMangaAllGreen),
+        )
+        assertTrue(
+            "A stale blue Reader page must not be mistaken for MangaAll green",
+            !isNearColor(Color.rgb(35, 70, 225), expectedMangaAllGreen),
+        )
         withFixture { fixture ->
             fixture.launchReader()
             val reader = awaitActivity(ReaderActivity::class.java)
@@ -1392,6 +1405,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         return when (expected) {
             Color.rgb(220, 40, 40) -> red >= 100 && red >= green * 3 / 2 && red >= blue * 3 / 2
             Color.rgb(35, 70, 225) -> blue >= 100 && blue >= red * 3 / 2 && blue >= green * 4 / 3
+            Color.rgb(12, 168, 82) -> green >= 100 && green >= red * 3 / 2 && green >= blue * 3 / 2
             else -> false
         }
     }
@@ -1628,6 +1642,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
     private fun colorName(color: Int): String = when (color) {
         Color.rgb(220, 40, 40) -> "RED"
         Color.rgb(35, 70, 225) -> "BLUE"
+        Color.rgb(12, 168, 82) -> "GREEN"
         else -> "NONE"
     }
 
