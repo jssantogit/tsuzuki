@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.provider.runtime
 
 import android.content.Context
 import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttpClient
 import logcat.LogPriority
 import tachiyomi.core.provider.packageformat.ProviderScriptManifest
 import tachiyomi.core.provider.runtime.BoundedProviderLogHostService
@@ -96,6 +97,9 @@ class ProviderHostInvocationFactory(
     private val httpDiagnosticSink: (providerId: String, detail: ProviderHttpDiagnostic) -> Unit = { _, _ -> },
     private val browserDiagnosticSink: (providerId: String, detail: ProviderBrowserDiagnostic) -> Unit = { _, _ -> },
     private val httpSessions: ProviderHttpSessionStore = ProviderHttpSessionStore(),
+    // Injected only by isolated Android contract tests. Production keeps the standard client;
+    // ProviderNetworkPolicy still validates every requested origin before interception.
+    private val baseHttpClient: OkHttpClient = OkHttpClient(),
     private val p2pServiceFactory: (String) -> ProviderP2pHostService? = { null },
     private val approvedP2pServiceFactory: ((String, ProviderP2pAcquireRequest?) -> ProviderP2pHostService?)? = null,
     val managedFiles: ProviderManagedFileStore = ProviderManagedFileStore(context.applicationContext),
@@ -124,6 +128,7 @@ class ProviderHostInvocationFactory(
                         allowLocalNetwork = policy.allowLocalNetwork,
                     ),
                     cookieJar = httpSessions.cookieJar(policy.providerId),
+                    baseClient = baseHttpClient,
                     invocationTimeoutMs = invocationTimeoutMs,
                     diagnosticSink = { diagnostic ->
                         logSink(policy.providerId, diagnostic.toRuntimeLogMessage())
