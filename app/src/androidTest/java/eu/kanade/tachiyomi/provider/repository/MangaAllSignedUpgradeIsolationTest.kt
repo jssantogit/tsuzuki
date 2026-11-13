@@ -159,9 +159,8 @@ class MangaAllSignedUpgradeIsolationTest {
             // Use the app's REAL SQLite database, not a fake persistence marker.
             // This protects the persisted Punpun-style preferred MangaDex/en
             // binding and canonical position against accidental update cleanup.
-            val database = (
-                InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as App
-                ).graph.database
+            val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as App
+            val database = app.graph.database
             val titleRepository = CanonicalTitleRepositoryImpl(database)
             val chapterRepository = CanonicalChapterRepositoryImpl(database)
             val bindingRepository = ProviderReadingBindingRepositoryImpl(database)
@@ -175,7 +174,7 @@ class MangaAllSignedUpgradeIsolationTest {
                 updatedAt = 1L,
             )
             val chapter = CanonicalChapter(
-                id = "$"+"titleId-chapter-1",
+                id = titleId + "-chapter-1",
                 canonicalTitleId = title.id,
                 displayNumber = "1",
                 type = CanonicalChapterType.REGULAR,
