@@ -138,6 +138,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-read-only: true
+      - name: Fail closed if production or instrumented Kotlin formatting drifts
+        run: ./gradlew :app:spotlessKotlinCheck
       - name: Compile app + instrumentation
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Enable KVM
