@@ -43,3 +43,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'style(mangaall): apply scoped Spotless Kotlin formatting on draft'
           git push origin HEAD:refs/heads/tsuzuki/provider-platform-mangaall-host-journey-ci-20261112
+
+# Retry after duplicate KDoc corrected; remove this one-off workflow after formatting.
