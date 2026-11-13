@@ -69,9 +69,9 @@ internal class ProviderHttpPageLoader(
     override suspend fun getPages(): List<ReaderPage> = pages
 
     override suspend fun loadPage(page: ReaderPage) {
-        if (isRecycled) {
-            throw ProviderHttpPageException("Provider Reader loader has been recycled")
-        }
+        // A viewer can still request a page while switching chapters. The old
+        // loader is no longer responsible for rendering anything.
+        if (isRecycled) return
         val request = requests.getOrNull(page.index)
             ?: throw ProviderHttpPageException("Provider Reader page index is invalid")
         val target = pageFile(page.index)
@@ -89,22 +89,28 @@ internal class ProviderHttpPageLoader(
             )
             if (isRecycled) {
                 target.delete()
-                throw ProviderHttpPageException("Provider Reader loader was recycled during download")
+                return
             }
             page.stream = { target.inputStream() }
             page.status = Page.State.Ready
         } catch (error: CancellationException) {
             target.delete()
+            // Cancellation belongs to the viewer/lifecycle, not the image
+            // error UI. A future request may retry if the loader still lives.
+            page.status = Page.State.Queue
             throw error
-        } catch (error: Throwable) {
+        } catch (error: Exception) {
             target.delete()
             val failure = if (error is ProviderHttpPageException) {
                 error
             } else {
                 ProviderHttpPageException("Provider Reader page download failed", error)
             }
+            // The page consumer launches loadPage asynchronously. Propagating
+            // a recoverable network exception from here would crash its
+            // StandaloneCoroutine instead of showing the existing retry UI.
+            // Keep the typed failure on the page; match HttpPageLoader.
             page.status = Page.State.Error(failure)
-            throw failure
         }
     }
 
@@ -164,9 +170,16 @@ internal class ProviderHttpPageLoader(
                         activeCalls.remove(call)
                         target.delete()
                         if (continuation.isActive) {
-                            continuation.resumeWithException(
-                                ProviderHttpPageException("Provider Reader HTTP request failed", e),
-                            )
+                            if (call.isCanceled()) {
+                                // recycle() cancels active OkHttp calls before
+                                // the parent viewer coroutine always gets its
+                                // cancellation. Preserve cancellation semantics.
+                                continuation.cancel(CancellationException("Provider Reader request cancelled"))
+                            } else {
+                                continuation.resumeWithException(
+                                    ProviderHttpPageException("Provider Reader HTTP request failed", e),
+                                )
+                            }
                         }
                     }
 

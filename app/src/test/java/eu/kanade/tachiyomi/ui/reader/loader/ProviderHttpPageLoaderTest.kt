@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.loader
 
 import eu.kanade.tachiyomi.source.model.Page
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -17,9 +16,11 @@ import okhttp3.OkHttpClient
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
+import java.io.IOException
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class ProviderHttpPageLoaderTest {
 
@@ -125,6 +126,100 @@ class ProviderHttpPageLoaderTest {
     }
 
     @Test
+    fun `canceled OkHttp callback from Reader recycle does not crash the page caller`() = runTest {
+        val server = MockWebServer()
+        server.start()
+        server.enqueue(MockResponse.Builder().body("unused-image").build())
+        val requestStarted = CountDownLatch(1)
+        val releaseRequest = CountDownLatch(1)
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                requestStarted.countDown()
+                check(releaseRequest.await(5, TimeUnit.SECONDS)) {
+                    "Timed out waiting to release Provider page request"
+                }
+                chain.proceed(chain.request())
+            }
+            .build()
+        val loader = ProviderHttpPageLoader(
+            requests = listOf(
+                PreparedHttpPage(
+                    url = server.url("/recycled.jpg").toString(),
+                    allowedOrigins = setOf(server.origin()),
+                    allowLocalNetwork = true,
+                ),
+            ),
+            cacheRoot = tempDir.toFile(),
+            client = client,
+        )
+        val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val finished = CompletableDeferred<Throwable?>()
+
+        try {
+            val page = loader.getPages().single()
+            val worker = ioScope.launch {
+                finished.complete(runCatching { loader.loadPage(page) }.exceptionOrNull())
+            }
+            check(requestStarted.await(5, TimeUnit.SECONDS)) { "Provider page request did not start" }
+
+            loader.recycle()
+            releaseRequest.countDown()
+            val failure = finished.await()
+
+            (failure == null || failure is CancellationException) shouldBe true
+            (page.status is Page.State.Error) shouldBe false
+            worker.join()
+        } finally {
+            releaseRequest.countDown()
+            ioScope.cancel()
+            loader.recycle()
+            server.close()
+        }
+    }
+
+    @Test
+    fun `ordinary OkHttp IO failures update status without escaping the Reader caller`() = runTest {
+        val server = MockWebServer()
+        server.start()
+        server.enqueue(MockResponse.Builder().body("working-image").build())
+        val attempts = AtomicInteger()
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                if (attempts.getAndIncrement() == 0) throw IOException("Canceled")
+                chain.proceed(chain.request())
+            }
+            .build()
+        val loader = ProviderHttpPageLoader(
+            requests = listOf(
+                PreparedHttpPage(
+                    url = server.url("/fail-once.jpg").toString(),
+                    allowedOrigins = setOf(server.origin()),
+                    allowLocalNetwork = true,
+                ),
+            ),
+            cacheRoot = tempDir.toFile(),
+            client = client,
+        )
+
+        try {
+            val page = loader.getPages().single()
+            // loadPage is launched from the Reader viewer. Ordinary failures
+            // must change Page.State, never escape an unhandled coroutine.
+            loader.loadPage(page)
+            (page.status is Page.State.Error) shouldBe true
+
+            page.status = Page.State.Queue
+            loader.loadPage(page)
+            page.status shouldBe Page.State.Ready
+            page.stream!!.invoke().use { it.readBytes().decodeToString() shouldBe "working-image" }
+            server.requestCount shouldBe 1
+        } finally {
+            loader.recycle()
+            server.close()
+        }
+    }
+
+    @Test
     fun `redirect response fails closed instead of escaping validated URL`() = runTest {
         val server = MockWebServer()
         server.start()
@@ -151,9 +246,7 @@ class ProviderHttpPageLoaderTest {
 
         try {
             val page = loader.getPages().single()
-            shouldThrow<ProviderHttpPageException> {
-                loader.loadPage(page)
-            }
+            loader.loadPage(page)
             (page.status is Page.State.Error) shouldBe true
             server.requestCount shouldBe 1
         } finally {
@@ -179,9 +272,7 @@ class ProviderHttpPageLoaderTest {
 
         try {
             val page = loader.getPages().single()
-            shouldThrow<ProviderHttpPageException> {
-                loader.loadPage(page)
-            }
+            loader.loadPage(page)
             server.requestCount shouldBe 0
         } finally {
             loader.recycle()
@@ -212,9 +303,7 @@ class ProviderHttpPageLoaderTest {
 
         try {
             val page = loader.getPages().single()
-            shouldThrow<ProviderHttpPageException> {
-                loader.loadPage(page)
-            }
+            loader.loadPage(page)
             tempDir.toFile().walkTopDown()
                 .filter { it.isFile }
                 .toList()
