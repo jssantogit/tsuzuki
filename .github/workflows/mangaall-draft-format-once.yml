@@ -1,0 +1,42 @@
+name: MangaAll draft one-time Kotlin formatter
+
+on:
+  push:
+    branches:
+      - tsuzuki/provider-platform-mangaall-host-journey-ci-20261112
+    paths:
+      - .github/workflows/mangaall-draft-format-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format-draft-only:
+    if: github.repository == 'jssantogit/tsuzuki' && github.ref == 'refs/heads/tsuzuki/provider-platform-mangaall-host-journey-ci-20261112'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tsuzuki/provider-platform-mangaall-host-journey-ci-20261112
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+      - name: Format only the remaining code7 original package instrumented test
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew :app:spotlessKotlinApply --no-daemon
+          git add -- app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt
+          git diff --cached --check
+          git diff --cached --stat
+          if git diff --cached --quiet; then
+            echo 'No code7 fixture formatting changes needed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'style(mangaall): format code7 original Android contract test'
+          git push origin HEAD:refs/heads/tsuzuki/provider-platform-mangaall-host-journey-ci-20261112
