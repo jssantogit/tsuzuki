@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.provider.repository
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import eu.kanade.tachiyomi.App
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -27,6 +28,21 @@ import tachiyomi.core.provider.supplychain.ProviderRepositoryTransport
 import tachiyomi.core.provider.supplychain.SignedProviderRepositoryIndex
 import tachiyomi.core.provider.supplychain.decodeProviderSignedIndexEnvelope
 import tachiyomi.core.provider.supplychain.sha256Hex
+import tachiyomi.data.tsuzuki.CanonicalChapterRepositoryImpl
+import tachiyomi.data.tsuzuki.CanonicalReadingRepositoryImpl
+import tachiyomi.data.tsuzuki.CanonicalTitleRepositoryImpl
+import tachiyomi.data.tsuzuki.provider.ProviderReadingBindingRepositoryImpl
+import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
+import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
+import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
+import tachiyomi.domain.tsuzuki.model.CanonicalTitle
+import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBinding
+import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterProgress
 import java.io.File
 import java.security.KeyPair
 import java.security.KeyPairGenerator
@@ -139,11 +155,73 @@ class MangaAllSignedUpgradeIsolationTest {
             val store = ProviderArtifactStore(File(root, "artifacts"))
             val manager = manager(root, store, transport)
             manager.enroll(enrollment)
+
+            // Use the app's REAL SQLite database, not a fake persistence marker.
+            // This protects the persisted Punpun-style preferred MangaDex/en
+            // binding and canonical position against accidental update cleanup.
+            val database = (
+                InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as App
+                ).graph.database
+            val titleRepository = CanonicalTitleRepositoryImpl(database)
+            val chapterRepository = CanonicalChapterRepositoryImpl(database)
+            val bindingRepository = ProviderReadingBindingRepositoryImpl(database)
+            val readingRepository = CanonicalReadingRepositoryImpl(database)
+            val titleId = "mangaall-upgrade-" + System.nanoTime()
+            val title = CanonicalTitle(
+                id = titleId,
+                displayTitle = "Oyasumi Punpun",
+                identityState = CanonicalIdentityState.SOURCE_ONLY,
+                createdAt = 1L,
+                updatedAt = 1L,
+            )
+            val chapter = CanonicalChapter(
+                id = "$"+"titleId-chapter-1",
+                canonicalTitleId = title.id,
+                displayNumber = "1",
+                type = CanonicalChapterType.REGULAR,
+                baseNumber = 1,
+                confidence = 1.0,
+                confirmation = CanonicalChapterConfirmation.CONFIRMED,
+                createdAt = 1L,
+                updatedAt = 1L,
+            )
+            val binding = ProviderReadingBinding(
+                id = "binding-" + title.id,
+                canonicalTitleId = title.id,
+                ref = ProviderBindingRef(
+                    providerId = ProviderId(providerId),
+                    facetId = "en",
+                    externalWorkId = "mangadex:punpun-preferred-zero",
+                ),
+                verification = ProviderBindingVerification.USER_CONFIRMED,
+                availability = ProviderBindingAvailability.AVAILABLE,
+                createdAt = 1L,
+                updatedAt = 1L,
+            )
+            val progress = CanonicalChapterProgress(
+                canonicalChapterId = chapter.id,
+                read = false,
+                lastPageRead = 3L,
+                updatedAt = 2L,
+            )
+            titleRepository.insert(title)
+            chapterRepository.upsert(chapter)
+            bindingRepository.upsert(binding)
+            readingRepository.upsertProgress(progress)
+            suspend fun assertSqliteContinuity() {
+                assertEquals(title.displayTitle, titleRepository.getById(title.id)?.displayTitle)
+                assertEquals(chapter.displayNumber, chapterRepository.getById(chapter.id)?.displayNumber)
+                assertEquals(binding, bindingRepository.get(title.id, ProviderId(providerId), "en"))
+                assertEquals(progress, readingRepository.getProgress(chapter.id))
+            }
+            assertSqliteContinuity()
+
             assertEquals(ProviderRepositoryEntryStatus.AVAILABLE,
                 manager.refresh(repositoryId).entries.single().status)
             manager.install(repositoryId, providerId)
             assertEquals(6L, store.current(providerId)?.versionCode)
             assertFalse(manager.canRollback(providerId))
+            assertSqliteContinuity()
             val fingerprint = manager.repositories().single().keyFingerprintSha256
 
             // The code7 descriptor is test-signed with the SAME ephemeral key,
@@ -157,6 +235,7 @@ class MangaAllSignedUpgradeIsolationTest {
             assertEquals(6L, store.current(providerId)?.versionCode)
             assertEquals(officialCode6Sha, sha256Hex(store.readCurrentArtifact(providerId)))
             assertFalse(manager.canRollback(providerId))
+            assertSqliteContinuity()
 
             transport.artifacts[d7.artifactUrl] = code7
             manager.install(repositoryId, providerId)
@@ -166,6 +245,7 @@ class MangaAllSignedUpgradeIsolationTest {
             assertTrue(manager.canRollback(providerId))
             assertEquals(fingerprint, manager.repositories().single().keyFingerprintSha256)
             assertEquals(1, manager.installed().size)
+            assertSqliteContinuity()
             assertEquals(ProviderRepositoryEntryStatus.INSTALLED,
                 manager.snapshot(repositoryId)!!.entries.single().status)
 
@@ -176,6 +256,7 @@ class MangaAllSignedUpgradeIsolationTest {
             assertEquals(7L, reopened.installed().single().versionCode)
             assertEquals(33L, reopened.refresh(repositoryId).sequence)
             assertEquals(6L, reopened.previous(providerId)?.versionCode)
+            assertSqliteContinuity()
             val oldIndex = sign(pair, index(32, d6))
             transport.index = oldIndex
             assertTrue("Old signed sequence must not roll trust backward",
@@ -207,6 +288,7 @@ class MangaAllSignedUpgradeIsolationTest {
             assertEquals(7L, reopened.previous(providerId)?.versionCode)
             assertFalse(reopened.canRollback(providerId))
             assertEquals(1, reopened.repositories().size)
+            assertSqliteContinuity()
         }
     }
 
