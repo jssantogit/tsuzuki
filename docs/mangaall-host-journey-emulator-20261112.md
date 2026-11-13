@@ -1,6 +1,60 @@
 # MangaAll: Host→Reader Android acceptance gate
 
-Stacked Draft PR #197 above Host #196. No main merge, signed Provider publication, trust-pinning bypass, or real user data.
+**Release status (2026-11-13).** The Host was squash-merged into main as
+[PR #197](https://github.com/jssantogit/tsuzuki/pull/197),
+commit `22db2bdd94d993b239d3d1e5e07cab8a62ebc043`.
+The original MangaAll code7 was squash-merged into the provider repo via
+[PR #64](https://github.com/jssantogit/providers-tsuzuki/pull/64).
+The official provider repository publication
+[CI #43500638681](https://github.com/jssantogit/providers-tsuzuki/actions/runs/43500638681)
+succeeded, using the **existing P-256 root** `tsuzuki-provider-root-2026-02`.
+The real signed index is now **sequence 33**, with exactly one upgrade:
+`app.tsuzuki.mangaall` **0.5.1/code6 → 0.5.2/code7**,
+archive SHA-256 `cbc7e890fda26138a20358a332c8a700b3aec19ba14c47c53834dc35001673f0`.
+The signed index was verified by the publisher, all four descriptor identities
+and the other three descriptor hashes were retained. No new repository or
+Provider ID was enrolled or created.
+
+## Physical Galaxy A54 acceptance — still pending, not solved by offline CI
+
+1. On the same Galaxy A54 that has the existing library, install the
+   **signed `main` release APK in place**. Keep app data, settings, and
+   the existing `app.tsuzuki.providers` signed enrollment. Do not uninstall
+   Tsuzuki, clear app data, switch to `app.tsuzuki.dev`, or re-enroll.
+   The current Host release application ID is `app.tsuzuki`,
+   version `0.20.4` / versionCode `29`; installation requires the existing
+   signing certificate. The APK build workflow checks it.
+2. Open **Providers → Installed**, refresh the *existing* Tsuzuki Providers
+   repository, and confirm the single MangaAll becomes **UPDATE_AVAILABLE**
+   from `0.5.1 (6)` to `0.5.2 (7)`. Update it; no separate MangaDex,
+   MangaDot, or MangaFire provider should be needed for MangaAll.
+3. With existing **Oyasumi Punpun** and **Koe no Katachi** library entries,
+   refresh chapters. Verify actual canonical chapter counts, first/last
+   number, exact source work ID (`mangafire:zk12` and `mangafire:7p56`
+   when selected), language, author/alias evidence, and correct mapping
+   when tapping **choose reading edition**. A complete-empty preferred
+   `MangaDex/en` inventory must not suppress *verified provisional*
+   MangaFire chapter evidence or silently replace the preferred binding.
+4. Open the Reader and select available **reading sources**. Verify the
+   exact canonical chapter opens, decoded images render on the real
+   MangaFire/CDN connection, retry after a failure, and change sources
+   without opening the wrong title, chapter zero, or resetting progress.
+   Verify no empty/duplicate/unavailable source rows are displayed.
+5. Close and reopen the app, then check the old library entry, preferred
+   edition, canonical chapter order, last-page position, installed provider
+   version, and repository fingerprint are preserved. If any check fails,
+   export **Tsuzuki Logs** with verbose diagnostic capture for the exact
+   attempted chapter and source. Mask/redact private tokens or session
+   material. For Provider failures, use the supported rollback to code6;
+   **never downgrade the signed repository index**.
+
+**This release merely enables the first physical code7 acceptance.** The
+earlier Android acceptance [#43454459767](https://github.com/jssantogit/tsuzuki/actions/runs/43454459767)
+was **9/9 PASS** with synthetic HTTP/Reader pixels and ephemeral key
+for a simulated code7 upgrade; the physical MangaFire HTTP challenge, CDN
+pixels, real update, and Galaxy A54 data survival remain unverified.
+
+
 
 ## Gates
 
