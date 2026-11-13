@@ -29,6 +29,7 @@ import tachiyomi.core.provider.supplychain.SignedProviderRepositoryIndex
 import tachiyomi.core.provider.supplychain.decodeProviderSignedIndexEnvelope
 import tachiyomi.core.provider.supplychain.sha256Hex
 import tachiyomi.data.tsuzuki.CanonicalChapterRepositoryImpl
+import tachiyomi.data.tsuzuki.CanonicalLibraryRepositoryImpl
 import tachiyomi.data.tsuzuki.CanonicalReadingRepositoryImpl
 import tachiyomi.data.tsuzuki.CanonicalTitleRepositoryImpl
 import tachiyomi.data.tsuzuki.provider.ProviderReadingBindingRepositoryImpl
@@ -36,7 +37,9 @@ import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapter
 import tachiyomi.domain.tsuzuki.chapter.model.CanonicalChapterType
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
+import tachiyomi.domain.tsuzuki.model.CanonicalLibraryEntry
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
+import tachiyomi.domain.tsuzuki.model.LibraryStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
@@ -162,6 +165,7 @@ class MangaAllSignedUpgradeIsolationTest {
             val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as App
             val database = app.graph.database
             val titleRepository = CanonicalTitleRepositoryImpl(database)
+            val libraryRepository = CanonicalLibraryRepositoryImpl(database)
             val chapterRepository = CanonicalChapterRepositoryImpl(database)
             val bindingRepository = ProviderReadingBindingRepositoryImpl(database)
             val readingRepository = CanonicalReadingRepositoryImpl(database)
@@ -197,6 +201,13 @@ class MangaAllSignedUpgradeIsolationTest {
                 createdAt = 1L,
                 updatedAt = 1L,
             )
+            val libraryEntry = CanonicalLibraryEntry(
+                canonicalTitleId = title.id,
+                status = LibraryStatus.READING,
+                favorite = true,
+                addedAt = 1L,
+                updatedAt = 1L,
+            )
             val progress = CanonicalChapterProgress(
                 canonicalChapterId = chapter.id,
                 read = false,
@@ -204,11 +215,13 @@ class MangaAllSignedUpgradeIsolationTest {
                 updatedAt = 2L,
             )
             titleRepository.insert(title)
+            libraryRepository.upsert(libraryEntry)
             chapterRepository.upsert(chapter)
             bindingRepository.upsert(binding)
             readingRepository.upsertProgress(progress)
             suspend fun assertSqliteContinuity() {
                 assertEquals(title.displayTitle, titleRepository.getById(title.id)?.displayTitle)
+                assertEquals(libraryEntry, libraryRepository.get(title.id))
                 assertEquals(chapter.displayNumber, chapterRepository.getById(chapter.id)?.displayNumber)
                 assertEquals(binding, bindingRepository.get(title.id, ProviderId(providerId), "en"))
                 assertEquals(progress, readingRepository.getProgress(chapter.id))
