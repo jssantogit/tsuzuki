@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationPolicy
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -16,6 +17,8 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
 import tachiyomi.core.provider.supplychain.ProviderArtifactStore
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderPageFailureStage
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilityRef
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
@@ -132,6 +135,7 @@ class ScriptProviderReadingGateway internal constructor(
                     titles = request.titles,
                     cursor = request.cursor?.value,
                     coverageEvidenceVersion = request.coverageEvidenceVersion,
+                    requestedLanguage = request.requestedLanguage,
                 ),
             ),
         ) { value, active ->
@@ -225,12 +229,25 @@ class ScriptProviderReadingGateway internal constructor(
                 PagesRequestDto(
                     binding = request.binding.toDto(),
                     providerChapterId = request.providerChapterId,
+                    diagnosticsVersion = 2,
                 ),
             ),
         ) { value, active ->
             val decoded = json.decodeFromString<PagesResultDto>(value)
             when (decoded.type) {
+                PAGE_FAILURE_TYPE -> {
+                    if (decoded.pages.isNotEmpty() || decoded.resource != null || decoded.format != null) {
+                        error("Provider page failure contains unexpected delivery")
+                    }
+                    val stage = DiagnosticProviderPageFailureStage.valueOf(
+                        decoded.pageFailureStage ?: error("Provider page failure has no stage"),
+                    )
+                    throw SourcePageFailure(stage)
+                }
                 PAGE_LIST_TYPE -> {
+                    if (decoded.pageFailureStage != null) {
+                        error("Provider page list contains unrelated failure stage")
+                    }
                     if (decoded.pages.isEmpty()) {
                         error("Provider page list is empty")
                     }
@@ -260,6 +277,9 @@ class ScriptProviderReadingGateway internal constructor(
                     )
                 }
                 MANAGED_FILE_TYPE -> {
+                    if (decoded.pageFailureStage != null) {
+                        error("Provider managed file contains unrelated failure stage")
+                    }
                     val resource = ProviderManagedResourceRef(
                         decoded.resource ?: error("Managed Provider file is missing resource token"),
                     )
@@ -361,13 +381,21 @@ class ScriptProviderReadingGateway internal constructor(
             return failure.toProviderFailure()
         }
 
-        val value = response.value ?: return malformed()
+        val value = response.value ?: return malformed(DiagnosticProviderMalformedResultStage.EMPTY_VALUE)
         return try {
             ProviderCallResult.Success(decode(value, active))
         } catch (error: CancellationException) {
             throw error
         } catch (_: PageOriginPolicyFailure) {
             failure(ProviderErrorCode.NETWORK_POLICY, retryable = false)
+        } catch (error: SourcePageFailure) {
+            ProviderCallResult.Failure(
+                ProviderError(
+                    code = ProviderErrorCode.SOURCE_READ_ERROR,
+                    retryable = false,
+                    pageFailureStage = error.stage,
+                ),
+            )
         } catch (error: SourceLookupFailure) {
             ProviderCallResult.Failure(
                 ProviderError(
@@ -381,8 +409,10 @@ class ScriptProviderReadingGateway internal constructor(
                     httpStatus = error.httpStatus,
                 ),
             )
+        } catch (_: SerializationException) {
+            malformed(DiagnosticProviderMalformedResultStage.SCHEMA_DECODE)
         } catch (_: Throwable) {
-            malformed()
+            malformed(DiagnosticProviderMalformedResultStage.CONTRACT_VALIDATION)
         }
     }
 
@@ -391,6 +421,10 @@ class ScriptProviderReadingGateway internal constructor(
     private class SourceLookupFailure(
         val kind: ProviderLookupFailureCode,
         val httpStatus: Int?,
+    ) : RuntimeException()
+
+    private class SourcePageFailure(
+        val stage: DiagnosticProviderPageFailureStage,
     ) : RuntimeException()
 
     private fun matchesRegistration(
@@ -449,7 +483,7 @@ class ScriptProviderReadingGateway internal constructor(
         ProviderRuntimeFailureCode.INVOCATION_CONFLICT ->
             failure(ProviderErrorCode.INVOCATION_CONFLICT, retryable = true)
         ProviderRuntimeFailureCode.MALFORMED_RESULT ->
-            malformed()
+            malformed(DiagnosticProviderMalformedResultStage.RUNTIME_PAYLOAD)
         ProviderRuntimeFailureCode.CANCELLED ->
             throw CancellationException("Provider reading invocation cancelled")
         ProviderRuntimeFailureCode.HOST_ERROR ->
@@ -469,8 +503,15 @@ class ScriptProviderReadingGateway internal constructor(
     private fun unavailable(retryable: Boolean = false) =
         failure(ProviderErrorCode.UNAVAILABLE, retryable)
 
-    private fun malformed() =
-        failure(ProviderErrorCode.MALFORMED_RESULT, retryable = false)
+    private fun malformed(
+        stage: DiagnosticProviderMalformedResultStage = DiagnosticProviderMalformedResultStage.CONTRACT_VALIDATION,
+    ) = ProviderCallResult.Failure(
+        ProviderError(
+            code = ProviderErrorCode.MALFORMED_RESULT,
+            retryable = false,
+            malformedStage = stage,
+        ),
+    )
 
     private fun failure(
         code: ProviderErrorCode,
@@ -498,6 +539,7 @@ class ScriptProviderReadingGateway internal constructor(
         /** Optional editorial evidence; ignored by Providers lacking this extension. */
         val editorialEvidenceVersion: Int = 1,
         val coverageEvidenceVersion: Int? = null,
+        val requestedLanguage: String? = null,
     )
 
     @Serializable
@@ -510,6 +552,8 @@ class ScriptProviderReadingGateway internal constructor(
     internal data class PagesRequestDto(
         val binding: BindingDto,
         val providerChapterId: String,
+        /** New Providers opt into structured failures only on this Host. */
+        val diagnosticsVersion: Int,
     )
 
     @Serializable
@@ -562,6 +606,7 @@ class ScriptProviderReadingGateway internal constructor(
         val pages: List<PageRequestDto> = emptyList(),
         val resource: String? = null,
         val format: String? = null,
+        val pageFailureStage: String? = null,
     )
 
     @Serializable
@@ -572,6 +617,7 @@ class ScriptProviderReadingGateway internal constructor(
 
     private companion object {
         const val PAGE_LIST_TYPE = "page_list"
+        const val PAGE_FAILURE_TYPE = "page_failure"
         const val MANAGED_FILE_TYPE = "managed_file"
     }
 }

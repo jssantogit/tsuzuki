@@ -5,6 +5,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
@@ -156,16 +158,20 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
         )
     }
 
-    private fun emitMatchSummary(
+    private suspend fun emitMatchSummary(
         providerId: ProviderId,
         operationId: String,
         request: TorrentSearchRequest,
         items: List<TorrentCandidate>,
     ) {
         val chapterNumber = request.chapterNumber ?: return
-        runCatching {
+        val coroutineContext = currentCoroutineContext()
+        // Diagnostic matching is supplementary: never allow a 20-torrent release
+        // with thousands of file paths to monopolize the Reader's 20s deadline.
+        val diagnosticsStarted = System.nanoTime()
+        try {
             val identity = parseChapterLabel(chapterNumber).identity
-            if (!identity.isSpecific || !identity.isNumbered) return@runCatching
+            if (!identity.isSpecific || !identity.isNumbered) return
 
             // Use the same chapter context as ResolveProviderChapterTorrent. Omitting titles
             // and display number here hides exact matches accepted by the title-aware mapper.
@@ -190,12 +196,22 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
             var exactMatches = 0
             var ambiguousMatches = 0
             val candidateDecisions = mutableMapOf<DiagnosticTorrentCandidateMatchReason, Int>()
+            var analyzed = 0
 
-            items.forEachIndexed { index, candidate ->
+            items.take(MAX_DIAGNOSTIC_CANDIDATES).forEachIndexed { index, candidate ->
+                coroutineContext.ensureActive()
+                if (candidate.files.orEmpty().size > MAX_DIAGNOSTIC_FILES_PER_CANDIDATE ||
+                    System.nanoTime() - diagnosticsStarted >= MAX_DIAGNOSTIC_MATCH_NANOS
+                ) {
+                    return@forEachIndexed
+                }
+                analyzed++
                 val readableFiles = candidate.files.orEmpty().filter(::isSupportedReadableFile)
-                val match = chapterMapper.select(volumeRequest, candidate)
+                val match = chapterMapper.select(volumeRequest, candidate) {
+                    coroutineContext.ensureActive()
+                }
                 val withoutVolume = if (request.volume != null && match is TorrentChapterPayloadMatch.None) {
-                    chapterMapper.select(identityRequest, candidate)
+                    chapterMapper.select(identityRequest, candidate) { coroutineContext.ensureActive() }
                 } else {
                     TorrentChapterPayloadMatch.None
                 }
@@ -269,8 +285,9 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                 }
             }
 
+            val partial = analyzed < items.size
             val noMatchReason = when {
-                exactMatches > 0 -> null
+                partial || exactMatches > 0 -> null
                 items.isEmpty() -> DiagnosticTorrentNoMatchReason.NO_CANDIDATES
                 readable == 0 && candidateDecisions.countOf(
                     DiagnosticTorrentCandidateMatchReason.IMAGE_DIRECTORY_UNSUPPORTED,
@@ -318,18 +335,23 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
             )
             noMatchReason?.let { noMatchAttributes["torrent_no_match_reason"] = DiagnosticAttributeValue.Code(it) }
             val reasonSuffix = noMatchReason?.let { " reason=${it.name}" }.orEmpty()
+            val partialSuffix = if (partial) " analyzed=$analyzed partial=1" else ""
             logSink.info(
                 providerId.value,
                 "host_torrent_match total=${items.size} readable=$readable parsed=$parsed embedded=$embedded " +
                     "identity=$identityMatches volume=$volumeMatches exact=$exactMatches ambiguous=$ambiguousMatches" +
-                    reasonSuffix,
+                    reasonSuffix + partialSuffix,
             )
             recordSummary(
                 providerId = providerId,
                 operationId = operationId,
                 name = DiagnosticEventName.TORRENT_MATCH_SUMMARY,
-                outcome = if (exactMatches == 0) DiagnosticOutcome.EMPTY else DiagnosticOutcome.SUCCEEDED,
-                attributes = noMatchAttributes,
+                outcome = when {
+                    partial -> DiagnosticOutcome.PARTIAL
+                    exactMatches == 0 -> DiagnosticOutcome.EMPTY
+                    else -> DiagnosticOutcome.SUCCEEDED
+                },
+                attributes = noMatchAttributes + mapOf("item_count" to analyzed.numberValue()),
             )
 
             var releaseExplicit = 0
@@ -346,7 +368,15 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                 "(?i)(?<![\\p{L}\\p{N}])${Regex.escape(chapterNumber.trim())}(?![\\p{L}\\p{N}])",
             )
 
-            items.forEach { candidate ->
+            var analyzedRelease = 0
+            items.take(MAX_DIAGNOSTIC_CANDIDATES).forEach { candidate ->
+                coroutineContext.ensureActive()
+                if (candidate.files.orEmpty().size > MAX_DIAGNOSTIC_FILES_PER_CANDIDATE ||
+                    System.nanoTime() - diagnosticsStarted >= MAX_DIAGNOSTIC_MATCH_NANOS
+                ) {
+                    return@forEach
+                }
+                analyzedRelease++
                 val readableFiles = candidate.files.orEmpty().filter(::isSupportedReadableFile)
                 val releaseChapterMatches = EMBEDDED_CHAPTER_MARKER
                     .findAll(candidate.displayName)
@@ -381,6 +411,7 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                 if (hasFileTitleToken && readableFiles.size == 1) fileTitleTokenSingle += 1
             }
 
+            val releasePartial = analyzedRelease < items.size
             logSink.info(
                 providerId.value,
                 "host_torrent_release total=${items.size} releaseExplicit=$releaseExplicit " +
@@ -389,13 +420,14 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                     "releaseExactMultiReadable=$releaseExactMultiReadable fileToken=$fileToken " +
                     "fileTokenSingle=$fileTokenSingle fileTitleToken=$fileTitleToken " +
                     "fileTitleTokenSingle=$fileTitleTokenSingle " +
-                    "volumeRequested=${if (request.volume == null) 0 else 1}",
+                    "volumeRequested=${if (request.volume == null) 0 else 1}" +
+                    if (releasePartial) " analyzed=$analyzedRelease partial=1" else "",
             )
             recordSummary(
                 providerId = providerId,
                 operationId = operationId,
                 name = DiagnosticEventName.TORRENT_RELEASE_EVIDENCE_SUMMARY,
-                outcome = DiagnosticOutcome.SUCCEEDED,
+                outcome = if (releasePartial) DiagnosticOutcome.PARTIAL else DiagnosticOutcome.SUCCEEDED,
                 attributes = mapOf(
                     "candidate_count" to items.size.numberValue(),
                     "torrent_release_explicit_count" to releaseExplicit.numberValue(),
@@ -409,8 +441,13 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
                     "torrent_file_title_token_count" to fileTitleToken.numberValue(),
                     "torrent_file_title_token_single_count" to fileTitleTokenSingle.numberValue(),
                     "torrent_volume_requested" to DiagnosticAttributeValue.Flag(request.volume != null),
+                    "item_count" to analyzedRelease.numberValue(),
                 ),
             )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            // Count-only diagnostics cannot influence real chapter selection.
         }
     }
 
@@ -530,6 +567,9 @@ class ProviderTorrentMetadataSearchGateway internal constructor(
     }
 
     private companion object {
+        const val MAX_DIAGNOSTIC_CANDIDATES = 12
+        const val MAX_DIAGNOSTIC_FILES_PER_CANDIDATE = 96
+        const val MAX_DIAGNOSTIC_MATCH_NANOS = 1_500_000_000L
         const val MAX_CANDIDATE_EVENTS = 32
         const val DEFAULT_MAX_CONCURRENT_INSPECTIONS = 4
         const val MAX_CONCURRENT_INSPECTIONS = 8

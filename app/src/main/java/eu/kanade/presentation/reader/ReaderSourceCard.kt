@@ -37,6 +37,16 @@ import tachiyomi.domain.tsuzuki.source.model.ScoredSourceCandidate
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
+/**
+ * An available chapter-scoped source makes the editorial-confirmation hint
+ * redundant in this modal. Preserve the real source failure states.
+ */
+internal fun shouldShowReaderSourceRecovery(
+    failure: ReaderRecovery?,
+    hasProviderSourceOptions: Boolean,
+): Boolean = failure != null &&
+    (!hasProviderSourceOptions || failure != ReaderRecovery.EDITION_CONFIRMATION_REQUIRED)
+
 @Composable
 fun ColumnScope.ReaderSourceCard(
     state: ContentSelectorScreenState,
@@ -57,6 +67,12 @@ fun ColumnScope.ReaderSourceCard(
         modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // A committed choice is preparing its exact pages. Keep one modal with
+        // progress, not a second-looking copy of the source radio list.
+        if (selectionInProgress) {
+            LoadingState()
+            return@Column
+        }
         activeContentLabel?.takeIf(String::isNotBlank)?.let { label ->
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
@@ -68,7 +84,9 @@ fun ColumnScope.ReaderSourceCard(
             }
         }
 
-        failure?.let {
+        failure?.takeIf {
+            shouldShowReaderSourceRecovery(it, providerOptions.isNotEmpty())
+        }?.let {
             Text(
                 text = stringResource(
                     when (it) {
@@ -127,17 +145,6 @@ fun ColumnScope.ReaderSourceCard(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 }
-                                Text(
-                                    text = stringResource(
-                                        if (active) {
-                                            MR.strings.tsuzuki_reader_current_source
-                                        } else {
-                                            MR.strings.tsuzuki_reader_available_source
-                                        },
-                                    ),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
                             }
                         },
                         trailingContent = {
@@ -177,11 +184,6 @@ fun ColumnScope.ReaderSourceCard(
                     )
                 } else {
                     if (state.options.isNotEmpty()) {
-                        Text(
-                            text = stringResource(MR.strings.tsuzuki_reader_available_source),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -215,17 +217,6 @@ fun ColumnScope.ReaderSourceCard(
                                                     overflow = TextOverflow.Ellipsis,
                                                 )
                                             }
-                                            Text(
-                                                stringResource(
-                                                    if (active) {
-                                                        MR.strings.tsuzuki_reader_current_source
-                                                    } else {
-                                                        MR.strings.tsuzuki_reader_available_source
-                                                    },
-                                                ),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
                                         }
                                     },
                                     trailingContent = {

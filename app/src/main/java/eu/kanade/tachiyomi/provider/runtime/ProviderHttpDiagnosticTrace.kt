@@ -4,6 +4,7 @@ import tachiyomi.core.provider.runtime.ProviderHttpDiagnostic
 import tachiyomi.core.provider.runtime.ProviderHttpDiagnosticPhase
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderHttpFailure
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
@@ -29,6 +30,11 @@ internal fun ProviderHttpDiagnostic.toStructuredDiagnosticEvent(
     }
     val details = buildMap<String, DiagnosticAttributeValue> {
         put("provider_id", DiagnosticAttributeValue.Text(providerId))
+        if (providerId == "app.tsuzuki.mangaall") {
+            sourceFamilyForMangaAllHost(host)?.let { source ->
+                put("mangaall_network_source", DiagnosticAttributeValue.Code(source))
+            }
+        }
         statusCode?.takeIf { it in 100..599 }?.let { code ->
             put("http_status", DiagnosticAttributeValue.Number(code.toLong()))
         }
@@ -58,4 +64,23 @@ internal fun ProviderHttpDiagnostic.toStructuredDiagnosticEvent(
         durationMillis = elapsedMs.coerceIn(0, 86_400_000),
         attributes = details,
     )
+}
+
+// No arbitrary Host-provided network hostname enters diagnostics. This closed
+// classification is limited to MangaAll's declared first-party metadata and
+// image origins; unexpected hosts remain unclassified and are never exported.
+private fun sourceFamilyForMangaAllHost(host: String): DiagnosticMangaAllNetworkSource? {
+    val value = host.lowercase()
+    return when {
+        value == "api.mangadex.org" ||
+            value == "uploads.mangadex.org" ||
+            value.endsWith(".mangadex.network") -> DiagnosticMangaAllNetworkSource.MANGADEX
+        value == "mangadot.net" -> DiagnosticMangaAllNetworkSource.MANGADOT
+        value == "mangafire.to" ||
+            value.endsWith(".mangafire.to") ||
+            listOf("mfcdn.cc", "mfcdn.nl", "mfcdn1.xyz", "mfcdn2.xyz", "mfcdn3.xyz").any {
+                value == it || value.endsWith(".$it")
+            } -> DiagnosticMangaAllNetworkSource.MANGAFIRE
+        else -> null
+    }
 }

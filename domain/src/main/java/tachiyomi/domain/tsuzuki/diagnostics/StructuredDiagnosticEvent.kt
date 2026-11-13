@@ -217,6 +217,10 @@ enum class DiagnosticAttribute {
     PROVIDER_READER_MATCHING_NUMBER_COUNT,
     PROVIDER_READER_MAPPED_EVIDENCE_COUNT,
     PROVIDER_READER_ELIGIBLE_MAPPED_COUNT,
+    PROVIDER_READER_MAPPED_KNOWN_SOURCE_COUNT,
+    PROVIDER_READER_MAPPED_ACTIVE_SOURCE_COUNT,
+    PROVIDER_READER_MAPPED_SOURCE_INELIGIBILITY_REASON,
+    PROVIDER_READER_MAPPED_MISSING_PROVIDER_FAMILY,
     PROVIDER_READER_NO_MATCH_REASON,
     PROVIDER_READER_IDENTITY_REJECTION_REASON,
 
@@ -239,6 +243,7 @@ enum class DiagnosticAttribute {
     PROVIDER_WORK_VERIFICATION,
     PROVIDER_EDITION_QUALIFICATION,
     PROVIDER_HTTP_FAILURE,
+    MANGAALL_NETWORK_SOURCE,
     PROVIDER_RUNTIME_PHASE,
     PROVIDER_BROWSER_FAILURE,
     CHAPTER_RECONCILE_PHASE,
@@ -250,6 +255,8 @@ enum class DiagnosticAttribute {
     PROVIDER_VERSION_NAME,
     PROVIDER_VERSION_CODE,
     PROVIDER_ERROR_CODE,
+    PROVIDER_MALFORMED_STAGE,
+    PROVIDER_PAGE_FAILURE_STAGE,
     PROVIDER_RETRYABLE,
     ADDON_ID,
     CANONICAL_TITLE_REF,
@@ -440,6 +447,14 @@ enum class DiagnosticProviderHttpFailure : DiagnosticSafeCode {
     UNKNOWN,
 }
 
+// An allowlisted, content-free source family only for the single MangaAll
+// provider. Never store raw request hosts, paths, tokens, query or response.
+enum class DiagnosticMangaAllNetworkSource : DiagnosticSafeCode {
+    MANGADEX,
+    MANGADOT,
+    MANGAFIRE,
+}
+
 /** Bounded content-free checkpoints for identifying the expensive part of a canonical refresh. */
 enum class DiagnosticChapterReconcilePhase : DiagnosticSafeCode {
     DELTA_WRITE,
@@ -503,6 +518,48 @@ enum class DiagnosticProviderEditionQualification : DiagnosticSafeCode {
 }
 
 /** A closed cause for an empty Reader Provider source lookup; no source text. */
+// Closed Provider reply failure stage; never expose source bodies, URLs or exception messages.
+enum class DiagnosticProviderMalformedResultStage : DiagnosticSafeCode {
+    RUNTIME_PAYLOAD,
+    EMPTY_VALUE,
+    SCHEMA_DECODE,
+    CONTRACT_VALIDATION,
+}
+
+/** MangaAll 0.5.1 Reader stage, not an upstream message or exception class. */
+enum class DiagnosticProviderPageFailureStage : DiagnosticSafeCode {
+    INVALID_CHAPTER_ID,
+    CHAPTER_DETAIL_REQUEST_FAILED,
+    CHAPTER_WORK_MISMATCH,
+    CHAPTER_LANGUAGE_MISMATCH,
+    EXTERNAL_CHAPTER,
+    AT_HOME_REQUEST_FAILED,
+    UNTRUSTED_IMAGE_ORIGIN,
+    INVALID_PAGE_METADATA,
+}
+
+/** A bounded, content-free reason a persisted source cannot be a Reader option. */
+enum class DiagnosticProviderReaderMappedSourceIneligibilityReason : DiagnosticSafeCode {
+    SOURCE_REFERENCE_MISSING,
+    PROVIDER_NOT_REGISTERED,
+    PROVIDER_NOT_ENABLED,
+    PROVIDER_RUNTIME_UNSUPPORTED,
+    READING_CAPABILITY_MISSING,
+    FACET_UNAVAILABLE,
+    SOURCE_NOT_AUTHORIZED,
+    MIXED_REASONS,
+}
+
+/** Closed family of a saved, mapped, currently unregistered Provider. */
+enum class DiagnosticProviderReaderMappedMissingProviderFamily : DiagnosticSafeCode {
+    MANGAALL,
+    MANGAFIRE_STANDALONE,
+    LEGACY_MANGADEX_ADAPTER,
+    LEGACY_MANGADOT_ADAPTER,
+    OTHER,
+    MIXED,
+}
+
 enum class DiagnosticProviderReaderNoMatchReason : DiagnosticSafeCode {
     NO_ELIGIBLE_SOURCE,
     SOURCE_EDITION_EXCLUDED,
@@ -698,6 +755,8 @@ object StructuredDiagnosticSanitizer {
         DiagnosticAttribute.PROVIDER_READER_MATCHING_NUMBER_COUNT,
         DiagnosticAttribute.PROVIDER_READER_MAPPED_EVIDENCE_COUNT,
         DiagnosticAttribute.PROVIDER_READER_ELIGIBLE_MAPPED_COUNT,
+        DiagnosticAttribute.PROVIDER_READER_MAPPED_KNOWN_SOURCE_COUNT,
+        DiagnosticAttribute.PROVIDER_READER_MAPPED_ACTIVE_SOURCE_COUNT,
         DiagnosticAttribute.OBSERVATION_COUNT,
         DiagnosticAttribute.ITEM_COUNT,
         DiagnosticAttribute.ACCEPTED_COUNT,
@@ -798,14 +857,26 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticProviderWorkVerification }
         DiagnosticAttribute.PROVIDER_EDITION_QUALIFICATION -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderEditionQualification }
+        DiagnosticAttribute.PROVIDER_READER_MAPPED_SOURCE_INELIGIBILITY_REASON ->
+            (value as? DiagnosticAttributeValue.Code)
+                ?.takeIf { it.value is DiagnosticProviderReaderMappedSourceIneligibilityReason }
+        DiagnosticAttribute.PROVIDER_READER_MAPPED_MISSING_PROVIDER_FAMILY ->
+            (value as? DiagnosticAttributeValue.Code)
+                ?.takeIf { it.value is DiagnosticProviderReaderMappedMissingProviderFamily }
         DiagnosticAttribute.PROVIDER_READER_NO_MATCH_REASON -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderReaderNoMatchReason }
         DiagnosticAttribute.PROVIDER_READER_IDENTITY_REJECTION_REASON -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderReaderIdentityRejectionReason }
         DiagnosticAttribute.PROVIDER_HTTP_FAILURE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderHttpFailure }
+        DiagnosticAttribute.MANGAALL_NETWORK_SOURCE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticMangaAllNetworkSource }
         DiagnosticAttribute.PROVIDER_RUNTIME_PHASE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderRuntimePhase }
+        DiagnosticAttribute.PROVIDER_MALFORMED_STAGE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderMalformedResultStage }
+        DiagnosticAttribute.PROVIDER_PAGE_FAILURE_STAGE -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderPageFailureStage }
         DiagnosticAttribute.PROVIDER_BROWSER_FAILURE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderBrowserFailure }
         DiagnosticAttribute.CHAPTER_RECONCILE_PHASE -> (value as? DiagnosticAttributeValue.Code)

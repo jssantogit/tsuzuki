@@ -1,5 +1,7 @@
 package tachiyomi.domain.tsuzuki.provider.reading
 
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderPageFailureStage
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import java.net.URI
 import java.security.MessageDigest
@@ -270,8 +272,11 @@ data class ProviderReadingLookupRequest(
     val cursor: ProviderCursor? = null,
     /** Optional read-only source coverage preview, only for providers that explicitly support it. */
     val coverageEvidenceVersion: Int? = null,
+    /** Language of the exact source facet to probe; never inferred from the work. */
+    val requestedLanguage: String? = null,
 ) {
     init {
+        require(requestedLanguage == null || (requestedLanguage.isNotBlank() && requestedLanguage.length <= 32))
         require(coverageEvidenceVersion == null || coverageEvidenceVersion == 1)
         require(titles.isNotEmpty()) { "Provider lookup requires at least one title" }
         require(titles.size <= MAX_TITLES) { "Provider lookup has too many titles" }
@@ -339,8 +344,14 @@ data class ProviderError(
     val httpStatus: Int? = null,
     /** Safe, bounded volume-shaped page count for a typed Reader identity rejection. */
     val observedPageCount: Int? = null,
+    /** Closed technical failure stage; never captures source body or raw exception. */
+    val malformedStage: DiagnosticProviderMalformedResultStage? = null,
+    /** Opt-in, closed Reader failure stage; absent for legacy v1 providers. */
+    val pageFailureStage: DiagnosticProviderPageFailureStage? = null,
 ) {
     init {
+        require(malformedStage == null || code == ProviderErrorCode.MALFORMED_RESULT)
+        require(pageFailureStage == null || code == ProviderErrorCode.SOURCE_READ_ERROR)
         require(httpStatus == null || httpStatus in 100..599)
         require(httpStatus == null || sourceFailureCode != null)
         require(observedPageCount == null || observedPageCount in 0..5000)

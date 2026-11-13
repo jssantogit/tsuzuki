@@ -68,6 +68,14 @@ data class ProviderReadingNoMatchAudit(
     val matchingNumberEvidenceCount: Int,
     val mappedEvidenceCount: Int,
     val mappedEligibleSourceEvidenceCount: Int,
+    /** Unique persisted work refs behind mapped evidence, even when ineligible. */
+    val mappedKnownSourceCount: Int = 0,
+    /** Unique mapped work refs whose Provider and facet are still Reader-enabled. */
+    val mappedActiveSourceCount: Int = 0,
+    /** Why saved mapped chapter provenance cannot become a Reader option. */
+    val mappedSourceIneligibilityReason: ProviderReadingMappedSourceIneligibilityReason? = null,
+    /** Source family of saved mapped evidence referencing an unregistered Provider. */
+    val mappedMissingProviderFamily: ProviderReadingMappedMissingProviderFamily? = null,
     val reason: ProviderReadingNoMatchReason,
     val identityRejectionReason: ProviderReadingIdentityRejectionReason? = null,
 )
@@ -80,6 +88,28 @@ data class ProviderReadingSourceIdentityAudit(
     val sourceTitleIsVolumeContainer: Boolean,
     val sourceTitlePresent: Boolean,
 )
+
+/** Closed reason codes; never source IDs, titles or network payloads. */
+enum class ProviderReadingMappedSourceIneligibilityReason {
+    SOURCE_REFERENCE_MISSING,
+    PROVIDER_NOT_REGISTERED,
+    PROVIDER_NOT_ENABLED,
+    PROVIDER_RUNTIME_UNSUPPORTED,
+    READING_CAPABILITY_MISSING,
+    FACET_UNAVAILABLE,
+    SOURCE_NOT_AUTHORIZED,
+    MIXED_REASONS,
+}
+
+/** Never exports a Provider ID; only a fixed set of known retired identities. */
+enum class ProviderReadingMappedMissingProviderFamily {
+    MANGAALL,
+    MANGAFIRE_STANDALONE,
+    LEGACY_MANGADEX_ADAPTER,
+    LEGACY_MANGADOT_ADAPTER,
+    OTHER,
+    MIXED,
+}
 
 enum class ProviderReadingNoMatchReason {
     NO_ELIGIBLE_SOURCE,
@@ -365,6 +395,7 @@ class ResolveProviderChapterReading(
         providerRegistry.awaitReady()
         val registrations = providerRegistry.providers().associateBy { it.descriptor.id }
         val associations = workSourceAssociationRepository.getByTitle(chapter.canonicalTitleId)
+        val allBindings = bindingRepository.getByTitle(chapter.canonicalTitleId)
         val attestedVariantProducers = associations.asSequence()
             // Source-attested negative edition evidence does not need author
             // corroboration: it cannot prove an alternate HID, only disqualify
@@ -373,7 +404,7 @@ class ResolveProviderChapterReading(
             .map { it.ref.evidenceProducerId() }
             .toSet()
         val eligibleProducers = buildSet {
-            bindingRepository.getByTitle(chapter.canonicalTitleId)
+            allBindings
                 .filter { it.availability == ProviderBindingAvailability.AVAILABLE }
                 .filter { binding ->
                     binding.verification == ProviderBindingVerification.USER_CONFIRMED ||
@@ -408,6 +439,38 @@ class ResolveProviderChapterReading(
         }
         val mapped = observations.filter { it.mappedCanonicalChapterId == canonicalChapterId }
         val mappedEligible = mapped.count { it.evidence.producerId in eligibleProducers }
+        // A mapped chapter can belong to an older, disabled, or untrusted source
+        // while some unrelated source remains eligible for the same work.
+        // Count unique producer identities without exporting the IDs or URLs.
+        val knownRefs = buildMap {
+            allBindings.forEach { put(it.ref.evidenceProducerId(), it.ref) }
+            associations.forEach { putIfAbsent(it.ref.evidenceProducerId(), it.ref) }
+        }
+        val mappedKnownRefs = mapped.map { it.evidence.producerId }.distinct().mapNotNull(knownRefs::get)
+        val mappedActiveCount = mappedKnownRefs.count { ref ->
+            registrations[ref.providerId]?.isEligibleForReading(ref.facetId) == true
+        }
+        val missingProviderFamilies = mappedKnownRefs.asSequence()
+            .filter { it.providerId !in registrations }
+            .map { ref ->
+                when (ref.providerId.value) {
+                    "app.tsuzuki.mangaall" -> ProviderReadingMappedMissingProviderFamily.MANGAALL
+                    "app.tsuzuki.mangafire" -> ProviderReadingMappedMissingProviderFamily.MANGAFIRE_STANDALONE
+                    "app.tsuzuki.mangaall.mangadex" ->
+                        ProviderReadingMappedMissingProviderFamily.LEGACY_MANGADEX_ADAPTER
+                    "app.tsuzuki.mangaall.mangadot" ->
+                        ProviderReadingMappedMissingProviderFamily.LEGACY_MANGADOT_ADAPTER
+                    else -> ProviderReadingMappedMissingProviderFamily.OTHER
+                }
+            }
+            .distinct()
+            .toList()
+        val mappedIneligibilityReasons = mapped.map { observed ->
+            mappedSourceIneligibilityReason(
+                knownRefs[observed.evidence.producerId],
+                registrations,
+            )
+        }.distinct()
         val reason = when {
             eligibleProducers.isEmpty() && attestedVariantProducers.isNotEmpty() ->
                 ProviderReadingNoMatchReason.SOURCE_EDITION_EXCLUDED
@@ -444,6 +507,34 @@ class ResolveProviderChapterReading(
             matchingNumberEvidenceCount = matchingNumberCount,
             mappedEvidenceCount = mapped.size,
             mappedEligibleSourceEvidenceCount = mappedEligible,
+            mappedKnownSourceCount = if (reason == ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE) {
+                mappedKnownRefs.size
+            } else {
+                0
+            },
+            mappedActiveSourceCount = if (reason == ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE) {
+                mappedActiveCount
+            } else {
+                0
+            },
+            mappedSourceIneligibilityReason = if (reason == ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE) {
+                when (mappedIneligibilityReasons.size) {
+                    0 -> null
+                    1 -> mappedIneligibilityReasons.single()
+                    else -> ProviderReadingMappedSourceIneligibilityReason.MIXED_REASONS
+                }
+            } else {
+                null
+            },
+            mappedMissingProviderFamily = if (reason == ProviderReadingNoMatchReason.NO_ELIGIBLE_MAPPED_SOURCE) {
+                when (missingProviderFamilies.size) {
+                    0 -> null
+                    1 -> missingProviderFamilies.single()
+                    else -> ProviderReadingMappedMissingProviderFamily.MIXED
+                }
+            } else {
+                null
+            },
             reason = reason,
             identityRejectionReason = identityRejectionReason,
         )
@@ -578,6 +669,28 @@ class ResolveProviderChapterReading(
                     }
                 }
             }
+        }
+    }
+
+    private fun mappedSourceIneligibilityReason(
+        ref: ProviderBindingRef?,
+        registrations: Map<ProviderId, ProviderRegistration>,
+    ): ProviderReadingMappedSourceIneligibilityReason {
+        if (ref == null) return ProviderReadingMappedSourceIneligibilityReason.SOURCE_REFERENCE_MISSING
+        val registration = registrations[ref.providerId]
+            ?: return ProviderReadingMappedSourceIneligibilityReason.PROVIDER_NOT_REGISTERED
+        return when {
+            registration.lifecycleStatus != ProviderLifecycleStatus.ENABLED ->
+                ProviderReadingMappedSourceIneligibilityReason.PROVIDER_NOT_ENABLED
+            registration.descriptor.runtime != ProviderRuntimeKind.SCRIPT ->
+                ProviderReadingMappedSourceIneligibilityReason.PROVIDER_RUNTIME_UNSUPPORTED
+            !REQUIRED_READING_CAPABILITIES.all { it in registration.enabledCapabilities } ->
+                ProviderReadingMappedSourceIneligibilityReason.READING_CAPABILITY_MISSING
+            registration.facets.isEmpty() && ref.facetId != null ->
+                ProviderReadingMappedSourceIneligibilityReason.FACET_UNAVAILABLE
+            registration.facets.isNotEmpty() && registration.facets.none { it.facetId == ref.facetId } ->
+                ProviderReadingMappedSourceIneligibilityReason.FACET_UNAVAILABLE
+            else -> ProviderReadingMappedSourceIneligibilityReason.SOURCE_NOT_AUTHORIZED
         }
     }
 

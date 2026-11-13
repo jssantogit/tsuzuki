@@ -553,6 +553,7 @@ object AppBindings {
         enrollmentStore: ProviderRepositoryEnrollmentStore,
         trustStore: ProviderRepositoryTrustStore,
         artifactStore: ProviderArtifactStore,
+        configurationStore: ProviderLocalConfigurationStore,
         packageActivator: ProviderPackageActivator,
         transport: ProviderRepositoryTransport,
         integrationRegistry: IntegrationRegistry,
@@ -564,6 +565,7 @@ object AppBindings {
             artifactStore = artifactStore,
             packageActivator = packageActivator,
             transport = transport,
+            configurationStore = configurationStore,
             reservedProviderIds = integrationRegistry.manifests()
                 .map { it.integrationId.value }
                 .toSet(),

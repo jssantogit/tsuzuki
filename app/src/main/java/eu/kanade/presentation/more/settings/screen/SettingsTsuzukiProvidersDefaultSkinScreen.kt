@@ -75,11 +75,10 @@ import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.automirroredrounded.ArrowRight
 import tachiyomi.core.provider.supplychain.EnrolledProviderRepository
 import tachiyomi.core.provider.supplychain.ProviderRepositoryCatalogEntry
-import tachiyomi.core.provider.supplychain.ProviderRepositoryEnrollment
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEntryStatus
-import tachiyomi.core.provider.supplychain.ProviderRepositorySigningKey
 import tachiyomi.core.provider.supplychain.ProviderRepositorySnapshot
-import tachiyomi.core.provider.supplychain.providerRepositoryKeyFingerprint
+import tachiyomi.core.provider.supplychain.availableInstalledProviderUpdates
+import tachiyomi.core.provider.supplychain.visibleProviderRepositoryEntries
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
 import tachiyomi.domain.tsuzuki.provider.ProviderRegistration
@@ -115,6 +114,7 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
         var showRepositories by remember { mutableStateOf(false) }
         var showAddRepository by remember { mutableStateOf(false) }
         var repositoryToRemove by remember { mutableStateOf<EnrolledProviderRepository?>(null) }
+        var providerToUninstall by remember { mutableStateOf<ProviderRegistration?>(null) }
 
         suspend fun reloadInstalled() {
             val state = withContext(Dispatchers.IO) {
@@ -230,6 +230,7 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
                 if (selectedTab == 0) {
                     InstalledProviderCards(
                         registrations = installed,
+                        snapshots = snapshots.values.toList(),
                         rollbackProviderIds = rollbackProviderIds,
                         operationKeys = operations,
                         onOpen = { registration ->
@@ -252,11 +253,18 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
                         onRollback = { providerId ->
                             runProviderOperation("rollback:$providerId") { manager.rollback(providerId) }
                         },
+                        onUpdate = { entry ->
+                            runProviderOperation("install:${entry.repositoryId}:${entry.descriptor.providerId}") {
+                                manager.install(entry.repositoryId, entry.descriptor.providerId)
+                            }
+                        },
+                        onUninstall = { registration -> providerToUninstall = registration },
                         modifier = Modifier.weight(1f),
                     )
                 } else {
                     DiscoverProviderCards(
                         snapshots = snapshots.values.toList(),
+                        installedProviderIds = installed.map { it.descriptor.id.value }.toSet(),
                         operationKeys = operations,
                         onInstall = { entry ->
                             runProviderOperation(
@@ -308,6 +316,9 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
         if (showAddRepository) {
             DefaultSkinAddRepositoryDialog(
                 onDismiss = { showAddRepository = false },
+                onResolve = { url ->
+                    withContext(Dispatchers.IO) { manager.resolveEnrollment(url) }
+                },
                 onConfirm = { repository ->
                     scope.launch {
                         runProviderUiCatching {
@@ -327,6 +338,43 @@ class SettingsTsuzukiProvidersDefaultSkinScreen : Screen() {
                         }.onFailure { error -> errorMessage = error.message }
                     }
                 },
+            )
+        }
+
+        providerToUninstall?.let { registration ->
+            val providerId = registration.descriptor.id.value
+            AlertDialog(
+                onDismissRequest = { providerToUninstall = null },
+                title = { Text(stringResource(MR.strings.tsuzuki_providers_uninstall)) },
+                text = {
+                    Text(
+                        "${registration.descriptor.name}\n\n" +
+                            stringResource(MR.strings.tsuzuki_providers_uninstall_confirm),
+                    )
+                },
+                confirmButton = {
+                    DefaultSkinTextAction(
+                        text = stringResource(MR.strings.tsuzuki_providers_uninstall),
+                        enabled = "uninstall:$providerId" !in operations,
+                        onClick = {
+                            providerToUninstall = null
+                            runProviderOperation("uninstall:$providerId") {
+                                manager.uninstall(providerId)
+                            }
+                        },
+                    )
+                },
+                dismissButton = {
+                    DefaultSkinTextAction(
+                        text = stringResource(MR.strings.action_cancel),
+                        onClick = { providerToUninstall = null },
+                    )
+                },
+                shape = DefaultSkinShape.Card,
+                tonalElevation = 0.dp,
+                containerColor = colors.surface,
+                titleContentColor = colors.foreground,
+                textContentColor = colors.secondary,
             )
         }
 
@@ -417,14 +465,21 @@ private fun ProviderTabs(
 @Composable
 private fun InstalledProviderCards(
     registrations: List<ProviderRegistration>,
+    snapshots: List<ProviderRepositorySnapshot>,
     rollbackProviderIds: Set<String>,
     operationKeys: Set<String>,
     onOpen: (ProviderRegistration) -> Unit,
     onEnabledChange: (ProviderRegistration, Boolean) -> Unit,
     onRollback: (String) -> Unit,
+    onUpdate: (ProviderRepositoryCatalogEntry) -> Unit,
+    onUninstall: (ProviderRegistration) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
+    val updates = availableInstalledProviderUpdates(
+        snapshots.flatMap { it.entries },
+        registrations.map { it.descriptor.id.value }.toSet(),
+    ).associateBy { it.descriptor.providerId }
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(top = 18.dp, bottom = 32.dp),
@@ -446,11 +501,16 @@ private fun InstalledProviderCards(
                         val providerId = registration.descriptor.id.value
                         InstalledProviderRow(
                             registration = registration,
+                            update = updates[providerId],
+                            operationKeys = operationKeys,
                             rollbackAvailable = providerId in rollbackProviderIds,
                             rollbackEnabled = "rollback:$providerId" !in operationKeys,
+                            uninstallEnabled = "uninstall:$providerId" !in operationKeys,
                             onOpen = { onOpen(registration) },
                             onEnabledChange = { onEnabledChange(registration, it) },
                             onRollback = { onRollback(providerId) },
+                            onUpdate = { update -> onUpdate(update) },
+                            onUninstall = { onUninstall(registration) },
                         )
                         if (index < registrations.lastIndex) SettingsGroupDivider()
                     }
@@ -464,11 +524,16 @@ private fun InstalledProviderCards(
 @Composable
 private fun InstalledProviderRow(
     registration: ProviderRegistration,
+    update: ProviderRepositoryCatalogEntry?,
+    operationKeys: Set<String>,
     rollbackAvailable: Boolean,
     rollbackEnabled: Boolean,
+    uninstallEnabled: Boolean,
     onOpen: () -> Unit,
     onEnabledChange: (Boolean) -> Unit,
     onRollback: () -> Unit,
+    onUpdate: (ProviderRepositoryCatalogEntry) -> Unit,
+    onUninstall: () -> Unit,
 ) {
     val colors = defaultSkinColors()
     val descriptor = registration.descriptor
@@ -542,11 +607,27 @@ private fun InstalledProviderRow(
                 }
             }
         }
-        if (rollbackAvailable) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (update != null) {
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_providers_update),
+                    enabled = "install:${update.repositoryId}:${update.descriptor.providerId}" !in operationKeys,
+                    onClick = { onUpdate(update) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
+            }
+            if (rollbackAvailable) {
+                DefaultSkinTextAction(
+                    text = stringResource(MR.strings.tsuzuki_providers_rollback),
+                    enabled = rollbackEnabled,
+                    onClick = onRollback,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
+            }
             DefaultSkinTextAction(
-                text = stringResource(MR.strings.tsuzuki_providers_rollback),
-                enabled = rollbackEnabled,
-                onClick = onRollback,
+                text = stringResource(MR.strings.tsuzuki_providers_uninstall),
+                enabled = uninstallEnabled,
+                onClick = onUninstall,
                 modifier = Modifier.heightIn(min = 48.dp),
             )
         }
@@ -556,12 +637,13 @@ private fun InstalledProviderRow(
 @Composable
 private fun DiscoverProviderCards(
     snapshots: List<ProviderRepositorySnapshot>,
+    installedProviderIds: Set<String>,
     operationKeys: Set<String>,
     onInstall: (ProviderRepositoryCatalogEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = defaultSkinColors()
-    val entries = snapshots.flatMap { it.entries }
+    val entries = visibleProviderRepositoryEntries(snapshots.flatMap { it.entries }, installedProviderIds)
         .sortedWith(compareBy({ it.descriptor.providerId }, { it.repositoryId }))
 
     LazyColumn(
@@ -731,42 +813,32 @@ private fun DefaultSkinRepositoriesDialog(
 @Composable
 private fun DefaultSkinAddRepositoryDialog(
     onDismiss: () -> Unit,
+    onResolve: suspend (String) -> EnrolledProviderRepository,
     onConfirm: (EnrolledProviderRepository) -> Unit,
 ) {
     val colors = defaultSkinColors()
-    var displayName by remember { mutableStateOf("") }
-    var repositoryId by remember { mutableStateOf("") }
-    var indexUrl by remember { mutableStateOf("") }
-    var keyId by remember { mutableStateOf("") }
-    var publicKeyBase64 by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    var link by remember { mutableStateOf("") }
+    var resolved by remember { mutableStateOf<EnrolledProviderRepository?>(null) }
+    var isResolving by remember { mutableStateOf(false) }
+    var resolutionError by remember { mutableStateOf<String?>(null) }
     var confirmedTrustToken by remember { mutableStateOf<String?>(null) }
 
-    val signingKey = remember(keyId, publicKeyBase64) {
-        ProviderRepositorySigningKey(
-            keyId = keyId.trim(),
-            publicKeyBase64 = publicKeyBase64.trim(),
-        )
-    }
-    val fingerprint = remember(signingKey) {
-        runCatching { providerRepositoryKeyFingerprint(signingKey) }.getOrNull()
-    }
-    val trustToken = fingerprint?.let { keyFingerprint ->
+    val candidate = resolved
+    val fingerprint = candidate?.keyFingerprintSha256
+    val trustToken = if (candidate != null && fingerprint != null) {
         providerRepositoryTrustConfirmationToken(
-            displayName = displayName,
-            repositoryId = repositoryId,
-            indexUrl = indexUrl,
-            keyId = keyId,
-            keyFingerprint = keyFingerprint,
+            displayName = candidate.displayName,
+            repositoryId = candidate.enrollment.repositoryId,
+            indexUrl = candidate.enrollment.indexUrl,
+            keyId = candidate.enrollment.signingKey.keyId,
+            keyFingerprint = fingerprint,
         )
+    } else {
+        null
     }
-    val trustConfirmed = trustToken != null && confirmedTrustToken == trustToken
-    val canConfirm = displayName.isNotBlank() &&
-        repositoryId.isNotBlank() &&
-        indexUrl.isNotBlank() &&
-        keyId.isNotBlank() &&
-        publicKeyBase64.isNotBlank() &&
-        fingerprint != null &&
-        trustConfirmed
+    val trustConfirmed = trustToken != null && trustToken == confirmedTrustToken
+    val canConfirm = candidate != null && trustConfirmed && !isResolving
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -777,74 +849,107 @@ private fun DefaultSkinAddRepositoryDialog(
                     .fillMaxWidth()
                     .heightIn(max = 420.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 DefaultSkinTextField(
-                    value = displayName,
-                    onValueChange = { displayName = it },
-                    label = stringResource(MR.strings.tsuzuki_providers_repository_name),
+                    value = link,
+                    onValueChange = {
+                        link = it
+                        resolved = null
+                        confirmedTrustToken = null
+                        resolutionError = null
+                    },
+                    label = stringResource(MR.strings.tsuzuki_providers_repository_link),
                 )
-                DefaultSkinTextField(
-                    value = repositoryId,
-                    onValueChange = { repositoryId = it },
-                    label = stringResource(MR.strings.tsuzuki_providers_repository_id),
+                DefaultSkinTextAction(
+                    text = stringResource(
+                        if (isResolving) {
+                            MR.strings.tsuzuki_providers_repository_resolving
+                        } else {
+                            MR.strings.tsuzuki_providers_repository_resolve
+                        },
+                    ),
+                    enabled = !isResolving && link.isNotBlank(),
+                    onClick = {
+                        val requestedLink = link.trim()
+                        scope.launch {
+                            isResolving = true
+                            resolved = null
+                            confirmedTrustToken = null
+                            resolutionError = null
+                            try {
+                                val preview = onResolve(requestedLink)
+                                if (link.trim() == requestedLink) resolved = preview
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (error: Throwable) {
+                                if (link.trim() == requestedLink) {
+                                    resolutionError = error.message
+                                        ?: "Could not verify repository link"
+                                }
+                            } finally {
+                                isResolving = false
+                            }
+                        }
+                    },
                 )
-                DefaultSkinTextField(
-                    value = indexUrl,
-                    onValueChange = { indexUrl = it },
-                    label = stringResource(MR.strings.tsuzuki_providers_repository_index_url),
-                )
-                DefaultSkinTextField(
-                    value = keyId,
-                    onValueChange = { keyId = it },
-                    label = stringResource(MR.strings.tsuzuki_providers_repository_key_id),
-                )
-                DefaultSkinTextField(
-                    value = publicKeyBase64,
-                    onValueChange = { publicKeyBase64 = it },
-                    label = stringResource(MR.strings.tsuzuki_providers_repository_public_key),
-                    singleLine = false,
-                )
-                fingerprint?.let {
+                resolutionError?.let { message ->
+                    Text(message, color = colors.secondary, style = MaterialTheme.typography.bodySmall)
+                }
+                candidate?.let { repository ->
+                    DefaultSkinSectionLabel(
+                        stringResource(MR.strings.tsuzuki_providers_repository_preview),
+                    )
+                    Text(repository.displayName, color = colors.foreground)
+                    Text(
+                        repository.enrollment.repositoryId,
+                        color = colors.secondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        repository.enrollment.indexUrl,
+                        color = colors.secondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                     DefaultSkinSectionLabel(
                         stringResource(MR.strings.tsuzuki_providers_repository_fingerprint),
                     )
                     Text(
-                        it,
+                        fingerprint.orEmpty(),
                         color = colors.foreground,
                         style = MaterialTheme.typography.bodySmall,
                     )
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .toggleable(
-                            value = trustConfirmed,
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .toggleable(
+                                value = trustConfirmed,
+                                enabled = trustToken != null,
+                                role = Role.Checkbox,
+                                onValueChange = { checked ->
+                                    confirmedTrustToken = if (checked) trustToken else null
+                                },
+                            ),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Checkbox(
+                            checked = trustConfirmed,
                             enabled = trustToken != null,
-                            role = Role.Checkbox,
-                            onValueChange = { checked ->
-                                confirmedTrustToken = if (checked) trustToken else null
-                            },
-                        ),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Checkbox(
-                        checked = trustConfirmed,
-                        enabled = trustToken != null,
-                        onCheckedChange = null,
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = colors.accent,
-                            uncheckedColor = colors.outline,
-                            checkmarkColor = colors.onAccent,
-                        ),
-                    )
-                    Text(
-                        text = stringResource(MR.strings.tsuzuki_providers_repository_trust_confirm),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (trustToken != null) colors.foreground else colors.secondary,
-                    )
+                            onCheckedChange = null,
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = colors.accent,
+                                uncheckedColor = colors.outline,
+                                checkmarkColor = colors.onAccent,
+                            ),
+                        )
+                        Text(
+                            text = stringResource(MR.strings.tsuzuki_providers_repository_trust_confirm),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.foreground,
+                        )
+                    }
                 }
             }
         },
@@ -853,17 +958,7 @@ private fun DefaultSkinAddRepositoryDialog(
                 text = stringResource(MR.strings.action_add),
                 enabled = canConfirm,
                 onClick = {
-                    if (!canConfirm) return@DefaultSkinTextAction
-                    onConfirm(
-                        EnrolledProviderRepository(
-                            displayName = displayName.trim(),
-                            enrollment = ProviderRepositoryEnrollment(
-                                repositoryId = repositoryId.trim(),
-                                indexUrl = indexUrl.trim(),
-                                signingKey = signingKey,
-                            ),
-                        ),
-                    )
+                    if (candidate != null && trustConfirmed && !isResolving) onConfirm(candidate)
                 },
             )
         },

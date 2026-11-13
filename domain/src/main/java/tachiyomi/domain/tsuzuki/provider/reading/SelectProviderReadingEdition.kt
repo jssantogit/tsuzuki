@@ -10,7 +10,30 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.repository.CanonicalTitleRepository
 import tachiyomi.domain.tsuzuki.repository.TitleNameObservationRepository
+import java.text.Normalizer
 import java.util.UUID
+
+/**
+ * An upstream search hit is only a discovery hint. The manual edition picker
+ * must not invite binding a work that does not even match the requested title.
+ * Longer candidate titles can identify variants, which remain explicit choices.
+ */
+internal fun relevantEditionCandidateTitle(requested: String, candidate: String): Boolean {
+    fun terms(value: String): List<String> = Normalizer
+        .normalize(value, Normalizer.Form.NFKD)
+        .replace(Regex("\\p{M}+"), "")
+        .lowercase(java.util.Locale.ROOT)
+        .split(Regex("[^\\p{L}\\p{N}]+"))
+        .filter(String::isNotBlank)
+
+    val expected = terms(requested)
+    val actual = terms(candidate)
+    if (expected.isEmpty() || actual.isEmpty()) return false
+    val actualSet = actual.toSet()
+    // Require the complete requested title rather than a few coinciding
+    // words; prevent unrelated ranked search results from entering the picker.
+    return expected.all(actualSet::contains)
+}
 
 /** A source-provided work, not a canonical chapter or editorial certification. */
 data class ProviderEditionCandidate(
@@ -30,6 +53,9 @@ data class ProviderEditionCandidate(
     /** Bounded, observed first-page evidence; never a total chapter count. */
     val observedChapterCount: Int? = null,
     val coverageHasMore: Boolean? = null,
+    /** Source's chapter-number range from the bounded preview, in thousandths. */
+    val coverageMinMilli: Int? = null,
+    val coverageMaxMilli: Int? = null,
 ) {
     /** Internal MangaAll content source, never another installed Provider. */
     val contentSourceId: String?
@@ -79,6 +105,10 @@ internal fun editionCandidateFromLookup(
         observedChapterCount = work.coverageObservedCount
             .takeIf { work.coverageOutcome == ProviderCoverageOutcome.OBSERVED },
         coverageHasMore = work.coverageHasMore
+            .takeIf { work.coverageOutcome == ProviderCoverageOutcome.OBSERVED },
+        coverageMinMilli = work.coverageMinMilli
+            .takeIf { work.coverageOutcome == ProviderCoverageOutcome.OBSERVED },
+        coverageMaxMilli = work.coverageMaxMilli
             .takeIf { work.coverageOutcome == ProviderCoverageOutcome.OBSERVED },
     )
 }
@@ -165,6 +195,7 @@ class SelectProviderReadingEdition(
                                         registration.descriptor.id,
                                         ProviderReadingLookupRequest(
                                             titles = listOf(searchTitle),
+                                            requestedLanguage = facetId,
                                             // The explicit picker may inspect a bounded preview,
                                             // never infer a canonical or complete inventory.
                                             coverageEvidenceVersion = if (selectedRef == null) 1 else null,
@@ -185,12 +216,18 @@ class SelectProviderReadingEdition(
                                         response.value.items
                                             .take(minOf(perQueryLimit, MAX_CANDIDATES_PER_SOURCE - seen))
                                             .forEach { item ->
-                                                seen++
                                                 if (
-                                                    facetId == null ||
-                                                    item.language == null ||
-                                                    item.language.equals(facetId, ignoreCase = true)
+                                                    (
+                                                        registration.descriptor.id.value != "app.tsuzuki.mangaall" ||
+                                                            relevantEditionCandidateTitle(searchTitle, item.title)
+                                                        ) &&
+                                                    (
+                                                        facetId == null ||
+                                                            item.language == null ||
+                                                            item.language.equals(facetId, ignoreCase = true)
+                                                        )
                                                 ) {
+                                                    seen++
                                                     candidates += editionCandidateFromLookup(
                                                         ref = ProviderBindingRef(
                                                             providerId = registration.descriptor.id,
@@ -226,6 +263,27 @@ class SelectProviderReadingEdition(
             candidates = candidates.distinctBy { it.ref },
             hadFailures = failed,
         )
+    }
+
+    /** Read-only, bounded evidence for an explicitly inspected work and language. */
+    suspend fun inspect(candidate: ProviderEditionCandidate): ProviderEditionChapterInspection {
+        providerRegistry.awaitReady()
+        val registration = providerRegistry.registration(candidate.ref.providerId)
+        if (
+            registration == null ||
+            registration.lifecycleStatus != ProviderLifecycleStatus.ENABLED ||
+            ProviderCapabilities.ReadingChaptersV1 !in registration.enabledCapabilities ||
+            registration.descriptor.version.code != candidate.providerVersionCode ||
+            registration.configurationFingerprint != candidate.configurationFingerprint
+        ) {
+            return ProviderEditionChapterInspection(0, complete = false, failed = true)
+        }
+        return InspectProviderEditionChapters { cursor ->
+            gateway.chapters(
+                candidate.ref.providerId,
+                ProviderReadingChaptersRequest(binding = candidate.ref, cursor = cursor),
+            )
+        }.execute()
     }
 
     suspend fun confirm(canonicalTitleId: String, candidate: ProviderEditionCandidate): ProviderEditionConfirmation {
@@ -315,5 +373,78 @@ class SelectProviderReadingEdition(
         const val MAX_CANDIDATES_PER_SOURCE = 20
         const val MAX_CANDIDATES_PER_VARIANT = 8
         const val LOOKUP_BUDGET_MILLIS = 15_000L
+    }
+}
+
+/** Display-only source observations; never editorial/canonical chapter authority. */
+data class ProviderEditionChapterInspection(
+    val observedRecords: Int,
+    val complete: Boolean,
+    val failed: Boolean,
+    val minChapterMilli: Long? = null,
+    val maxChapterMilli: Long? = null,
+)
+
+/**
+ * Only the selected source is inspected. An empty or failed continuation is
+ * never labeled as an exact total. Duplicate source chapter IDs do not inflate
+ * the observed count. Paging and time limits prevent expensive Reader work.
+ */
+internal class InspectProviderEditionChapters(
+    private val fetch: suspend (ProviderCursor?) -> ProviderCallResult<ProviderPage<ProviderChapterObservation>>,
+) {
+    suspend fun execute(): ProviderEditionChapterInspection {
+        val seen = hashSetOf<String>()
+        val cursors = hashSetOf<String>()
+        var cursor: ProviderCursor? = null
+        var min: Long? = null
+        var max: Long? = null
+        var complete = false
+        var failed = false
+        val finished = withTimeoutOrNull(12_000L) {
+            for (pageIndex in 0 until 12) {
+                when (val response = fetch(cursor)) {
+                    is ProviderCallResult.Success -> {
+                        for (chapter in response.value.items) {
+                            if (!seen.add(chapter.providerChapterId)) continue
+                            chapter.rawNumber
+                                ?.takeIf { it.isFinite() && it >= 0.0 && it <= 1_000_000.0 }
+                                ?.let { number ->
+                                    val milli = kotlin.math.round(number * 1000).toLong()
+                                    min = min?.let { minOf(it, milli) } ?: milli
+                                    max = max?.let { maxOf(it, milli) } ?: milli
+                                }
+                            if (seen.size >= 5_000) break
+                        }
+                        val next = response.value.nextCursor
+                        if (next == null) {
+                            complete = true
+                            break
+                        }
+                        if (seen.size >= 5_000 ||
+                            next == cursor ||
+                            !cursors.add(next.value) ||
+                            response.value.items.isEmpty()
+                        ) {
+                            failed = true
+                            break
+                        }
+                        cursor = next
+                    }
+                    is ProviderCallResult.Failure -> {
+                        failed = true
+                        break
+                    }
+                }
+            }
+        }
+        if (finished == null) failed = true
+        return ProviderEditionChapterInspection(
+            observedRecords = seen.size,
+            complete = complete,
+            failed = failed,
+            minChapterMilli = min,
+            maxChapterMilli = max,
+        )
     }
 }

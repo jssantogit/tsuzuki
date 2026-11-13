@@ -7,6 +7,9 @@ import tachiyomi.core.provider.packageformat.ProviderPackageActivator
 import java.util.concurrent.ConcurrentHashMap
 
 interface ProviderRepositoryTransport {
+    suspend fun fetchEnrollment(linkUrl: String): EnrolledProviderRepository =
+        throw ProviderSupplyChainException("Repository link enrollment is not supported")
+
     suspend fun fetchIndex(indexUrl: String): SignedProviderRepositoryIndex
 
     suspend fun fetchArtifact(artifactUrl: String): ByteArray
@@ -44,6 +47,7 @@ class ProviderRepositoryManager(
     private val packageActivator: ProviderPackageActivator,
     private val transport: ProviderRepositoryTransport,
     reservedProviderIds: Set<String> = emptySet(),
+    private val configurationStore: ProviderLocalConfigurationStore? = null,
 ) {
 
     private val reservedProviderIds = reservedProviderIds.toSet()
@@ -57,6 +61,34 @@ class ProviderRepositoryManager(
 
     fun repositories(): List<EnrolledProviderRepository> =
         enrollmentStore.list()
+
+    /**
+     * Resolves ONE HTTPS enrollment link and checks its signed index without
+     * mutating the trust/enrollment stores. User consent remains a separate step.
+     */
+    suspend fun resolveEnrollment(linkUrl: String): EnrolledProviderRepository {
+        validateHttpsUrl(linkUrl, "Repository enrollment link")
+        val repository = transport.fetchEnrollment(linkUrl)
+        val previewStore = object : ProviderRepositoryTrustStore {
+            private var state: ProviderRepositoryTrustState? = null
+            override fun load(repositoryId: String): ProviderRepositoryTrustState? = state
+            override fun save(state: ProviderRepositoryTrustState) {
+                this.state = state
+            }
+            override fun remove(repositoryId: String): Boolean {
+                val removed = state != null
+                state = null
+                return removed
+            }
+        }
+        val trust = ProviderRepositoryTrust.fromEnrollment(
+            enrollment = repository.enrollment,
+            hostApiVersion = hostApiVersion,
+            stateStore = previewStore,
+        )
+        trust.verifyAndAccept(transport.fetchIndex(repository.enrollment.indexUrl))
+        return repository
+    }
 
     suspend fun enroll(repository: EnrolledProviderRepository) {
         val repositoryId = repository.enrollment.repositoryId
@@ -191,6 +223,26 @@ class ProviderRepositoryManager(
             )
             packageActivator.activate(verifiedArtifact)
         }
+
+    /**
+     * Only an explicit user action may remove a Provider. This clears the pinned origin
+     * rather than weakening install() trust checks, and leaves repository enrollment intact.
+     */
+    suspend fun uninstall(providerId: String): Boolean {
+        if (providerId in reservedProviderIds) {
+            throw ProviderSupplyChainException("Built-in Provider cannot be uninstalled")
+        }
+        val installed = artifactStore.current(providerId) ?: return false
+        return repositoryLock(installed.repositoryId).withLock {
+            val current = artifactStore.current(providerId) ?: return@withLock false
+            if (current.repositoryId != installed.repositoryId) {
+                throw ProviderSupplyChainException("Provider installation changed during removal")
+            }
+            val removed = artifactStore.uninstall(providerId)
+            if (removed) configurationStore?.remove(providerId)
+            removed
+        }
+    }
 
     fun rollback(providerId: String) {
         artifactStore.rollback(providerId)

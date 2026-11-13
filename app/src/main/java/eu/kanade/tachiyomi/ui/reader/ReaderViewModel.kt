@@ -105,6 +105,7 @@ import tachiyomi.domain.tsuzuki.content.ContentOption
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticSeverity
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
@@ -261,6 +262,12 @@ class ReaderViewModel(
      * The chapter loader for the loaded manga. It'll be null until [manga] is set.
      */
     private var loader: ReaderChapterLoader? = null
+
+    // Private injection seam for disposable Android tests that must render the
+    // ORIGINAL Provider CDN URL without reaching the network. Production always
+    // creates the regular policy-enforcing Provider HTTP loader.
+    private var providerHttpLoaderFactory: (CanonicalReaderTargetPlan.HttpPages) -> ReaderChapterLoader =
+        { plan -> ProviderHttpChapterLoader.from(context, plan) }
 
     private data class CanonicalReaderSession(
         val canonicalChapterId: String,
@@ -678,7 +685,7 @@ class ReaderViewModel(
                         date_upload = canonicalChapter.updatedAt
                     },
                 )
-                val nextLoader = ProviderHttpChapterLoader.from(context, plan)
+                val nextLoader = providerHttpLoaderFactory(plan)
                 prepareAndPublishCanonicalReaderChapter(
                     loader = nextLoader,
                     chapter = nextChapter,
@@ -1039,10 +1046,66 @@ class ReaderViewModel(
         mutableState.update { it.copy(sourceSelectionInProgress = true, recovery = null) }
         val hadActiveSession = canonicalSession != null
         viewModelScope.launchIO {
+            // The Reader source tap is an independent operation: record the
+            // *typed* provider failure before the user-facing recovery masks it.
+            // No raw URLs, scripts, headers, exception text or response bodies.
+            val source = when (option.contentSourceId) {
+                "mangadex" -> DiagnosticMangaAllNetworkSource.MANGADEX
+                "mangadot" -> DiagnosticMangaAllNetworkSource.MANGADOT
+                "mangafire" -> DiagnosticMangaAllNetworkSource.MANGAFIRE
+                else -> null
+            }
+            val trace = DiagnosticTrace.start(
+                recorder = structuredDiagnostics,
+                workflow = DiagnosticWorkflow.READER_SOURCE_SWITCH,
+                canonicalTitleId = selector.canonicalTitleId,
+                subsystem = DiagnosticSubsystem.READER,
+            )
+            val common = buildMap {
+                put(DiagnosticAttribute.PROVIDER_ID, DiagnosticAttributeValue.Text(option.providerId.value))
+                put(DiagnosticAttribute.LANGUAGE, DiagnosticAttributeValue.Text(option.facetId.orEmpty()))
+                source?.let {
+                    put(DiagnosticAttribute.MANGAALL_NETWORK_SOURCE, DiagnosticAttributeValue.Code(it))
+                }
+            }
+            trace.event(
+                subsystem = DiagnosticSubsystem.READER,
+                name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                stage = DiagnosticStage.RESOLVE,
+                outcome = DiagnosticOutcome.STARTED,
+                attributes = common,
+            )
+            var typedProviderFailure = false
             try {
                 val prepared = when (val result = resolveProviderChapterReading.preparedContent(option)) {
                     is ProviderCallResult.Success -> result.value
-                    is ProviderCallResult.Failure -> error("Selected MangaAll chapter source is unavailable")
+                    is ProviderCallResult.Failure -> {
+                        typedProviderFailure = true
+                        trace.event(
+                            subsystem = DiagnosticSubsystem.READER,
+                            name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                            stage = DiagnosticStage.READER,
+                            outcome = DiagnosticOutcome.TYPED_FAILURE,
+                            severity = DiagnosticSeverity.WARN,
+                            attributes = common + buildMap {
+                                put(
+                                    DiagnosticAttribute.PROVIDER_ERROR_CODE,
+                                    DiagnosticAttributeValue.Text(result.error.code.name),
+                                )
+                                put(
+                                    DiagnosticAttribute.PROVIDER_RETRYABLE,
+                                    DiagnosticAttributeValue.Flag(result.error.retryable),
+                                )
+                                result.error.pageFailureStage?.let {
+                                    put(
+                                        DiagnosticAttribute.PROVIDER_PAGE_FAILURE_STAGE,
+                                        DiagnosticAttributeValue.Code(it),
+                                    )
+                                }
+                            },
+                        )
+                        error("Selected MangaAll chapter source is unavailable")
+                    }
                 }
                 loadCanonicalTarget(
                     canonicalChapterId = option.canonicalChapterId,
@@ -1067,10 +1130,40 @@ class ReaderViewModel(
                         )
                     }
                 }
+                trace.event(
+                    subsystem = DiagnosticSubsystem.READER,
+                    name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                    stage = DiagnosticStage.READER,
+                    // The session has staged a valid page set; this does NOT
+                    // imply that an Android bitmap has rendered successfully.
+                    outcome = DiagnosticOutcome.READY,
+                    attributes = common + buildMap {
+                        (prepared as? PreparedChapterContent.HttpPages)?.pages?.size?.let {
+                            put(DiagnosticAttribute.PAGE_COUNT, DiagnosticAttributeValue.Number(it.toLong()))
+                        }
+                    },
+                )
                 failedContentSelection = null
             } catch (error: CancellationException) {
+                trace.event(
+                    subsystem = DiagnosticSubsystem.READER,
+                    name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                    stage = DiagnosticStage.READER,
+                    outcome = DiagnosticOutcome.CANCELLED,
+                    attributes = common,
+                )
                 throw error
             } catch (error: Throwable) {
+                if (!typedProviderFailure) {
+                    trace.event(
+                        subsystem = DiagnosticSubsystem.READER,
+                        name = DiagnosticEventName.READER_SOURCE_SELECTED,
+                        stage = DiagnosticStage.READER,
+                        outcome = DiagnosticOutcome.FAILED,
+                        severity = DiagnosticSeverity.ERROR,
+                        attributes = common,
+                    )
+                }
                 logcat(LogPriority.ERROR, error) { "Failed to prepare selected MangaAll chapter source" }
                 mutableState.update { it.copy(recovery = ReaderRecovery.SOURCE_UNAVAILABLE) }
             } finally {

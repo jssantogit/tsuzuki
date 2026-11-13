@@ -9,9 +9,11 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody
+import tachiyomi.core.provider.supplychain.EnrolledProviderRepository
 import tachiyomi.core.provider.supplychain.ProviderRepositoryTransport
 import tachiyomi.core.provider.supplychain.ProviderSupplyChainException
 import tachiyomi.core.provider.supplychain.SignedProviderRepositoryIndex
+import tachiyomi.core.provider.supplychain.decodeProviderRepositoryEnrollmentDocument
 import tachiyomi.core.provider.supplychain.decodeProviderSignedIndexEnvelope
 import java.io.ByteArrayOutputStream
 
@@ -20,6 +22,7 @@ class AndroidProviderRepositoryTransport(
     private val allowInsecureHttp: Boolean = false,
     private val maxRedirects: Int = 5,
     private val maxIndexBytes: Int = 2 * 1024 * 1024,
+    private val maxEnrollmentBytes: Int = 16 * 1024,
     private val maxArtifactBytes: Int = 16 * 1024 * 1024,
 ) : ProviderRepositoryTransport {
 
@@ -38,8 +41,16 @@ class AndroidProviderRepositoryTransport(
     init {
         require(maxRedirects >= 0) { "Provider repository redirect limit must not be negative" }
         require(maxIndexBytes > 0) { "Provider repository index limit must be positive" }
+        require(maxEnrollmentBytes > 0) { "Provider repository enrollment limit must be positive" }
         require(maxArtifactBytes > 0) { "Provider repository artifact limit must be positive" }
     }
+
+    override suspend fun fetchEnrollment(linkUrl: String): EnrolledProviderRepository =
+        withContext(Dispatchers.IO) {
+            decodeProviderRepositoryEnrollmentDocument(
+                fetchBytes(linkUrl, maxEnrollmentBytes).decodeToString(),
+            )
+        }
 
     override suspend fun fetchIndex(indexUrl: String): SignedProviderRepositoryIndex =
         withContext(Dispatchers.IO) {

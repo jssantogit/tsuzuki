@@ -1,0 +1,166 @@
+name: MangaAll code7 package / Host-to-Reader Android acceptance
+
+# Opt-in test branch, not an official signed install or live MangaFire acceptance.
+on:
+  push:
+    branches:
+      - 'tsuzuki/provider-platform-mangaall-host-journey-*'
+    paths:
+      - '.github/workflows/mangaall-host-journey-android.yml'
+      - '.github/scripts/run_mangaall_host_journey_android.sh'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/repository/MangaAllSignedUpgradeIsolationTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/presentation/reader/MangaAllReaderSourceCardInstrumentedTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/CanonicalReaderSourceSwitchInstrumentedTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllReaderJourneyFixture.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/ui/reader/loader/ProviderHttpPageLoader.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ProviderHostInvocation.kt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-host-journey-segmented
+  cancel-in-progress: true
+
+jobs:
+  segmented-fixture:
+    name: Original code7 .tsz + continuous ReaderActivity pixel acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout pinned MangaAll code7 JS (Provider #64, without publication)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: e74a0ebb43ce27b3a237a80bf9d1c81df1397ee3
+          path: code7-mangaall
+          persist-credentials: false
+      - name: Checkout immutable official signed sequence 32 / MangaAll code6 (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 3e0b0bc813910929c2215ad26bc46ff5a6a73706
+          path: code6-published
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify real published code6 envelope, trust key and artifact (no signing)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C code6-published rev-parse HEAD)" = '3e0b0bc813910929c2215ad26bc46ff5a6a73706'
+          ( cd code6-published && node tooling/verify_index.mjs )
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import shutil
+          from pathlib import Path
+          root = Path('code6-published')
+          payload = json.loads((root/'dist/index.payload.json').read_text())
+          enrollment = json.loads((root/'dist/enrollment.json').read_text())
+          assert payload['repositoryId'] == 'app.tsuzuki.providers' and payload['sequence'] == 32
+          assert enrollment['repositoryId'] == payload['repositoryId']
+          assert enrollment['keyId'] == 'tsuzuki-provider-root-2026-02'
+          matches = [p for p in payload['providers'] if p['providerId'] == 'app.tsuzuki.mangaall']
+          assert len(matches) == 1 and matches[0]['versionCode'] == 6
+          assert matches[0]['versionName'] == '0.5.1'
+          package = root/'dist/providers/app.tsuzuki.mangaall-6.tsz'
+          digest = hashlib.sha256(package.read_bytes()).hexdigest()
+          assert digest == matches[0]['sha256']
+          assert digest == 'aa9c101e0764019bc0d09774aeea1600e6bb9f02e12e9c9096f37d0549720320'
+          out = Path('app/src/androidTest/assets/mangaall')
+          out.mkdir(parents=True, exist_ok=True)
+          shutil.copyfile(package, out/'code6-published-package.tsz')
+          shutil.copyfile(root/'dist/index.json', out/'code6-published-index.json')
+          shutil.copyfile(root/'dist/enrollment.json', out/'code6-enrollment.json')
+          print('MANGAALL_SIGNED_BASELINE|repository=app.tsuzuki.providers|sequence=32|providerCode=6|signature=VERIFIED|package=ORIGINAL')
+          PY
+      - name: Generate code7 replay vectors from actual JS (offline fixture only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C code7-mangaall rev-parse HEAD)" = "e74a0ebb43ce27b3a237a80bf9d1c81df1397ee3"
+          mkdir -p app/src/androidTest/assets/mangaall
+          ( cd code7-mangaall && node tooling/test_mangaall_code7_host_contract_replay.mjs --export ../app/src/androidTest/assets/mangaall/code7-replay.json )
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('app/src/androidTest/assets/mangaall/code7-replay.json')
+          d = json.loads(p.read_text())
+          assert d['schemaVersion'] == 1 and d['providerVersionCode'] == 7
+          assert d['providerId'] == 'app.tsuzuki.mangaall'
+          assert set(x['caseId'] for x in d['cases']) == {'punpun', 'koe'}
+          assert d['preferredEmpty'] == {'source':'mangadex','itemCount':0,'complete':True}
+          assert d['challenge'] == {'source':'mangafire','outcome':'CHALLENGE_BLOCKED','complete':False}
+          print('CODE7_HOST_VECTOR|realProviderJS=PINNED|cases=2|sourceHTTP=SYNTHETIC|secretBytes=NONE')
+          PY
+      - name: Build exact code7 .tsz from pinned unpublished Provider source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 code7-mangaall/tooling/build_provider.py \
+            code7-mangaall/providers/mangaall \
+            app/src/androidTest/assets/mangaall/code7-package.tsz
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import zipfile
+          from pathlib import Path
+          root = Path('code7-mangaall/providers/mangaall')
+          package = Path('app/src/androidTest/assets/mangaall/code7-package.tsz')
+          with zipfile.ZipFile(package) as archive:
+              names = archive.namelist()
+              manifest = json.loads(archive.read('manifest.json'))
+              assert manifest['id'] == 'app.tsuzuki.mangaall'
+              assert manifest['version'] == {'name': '0.5.2', 'code': 7}
+              assert manifest['entrypoint'] == 'main.js'
+              assert 'publication' not in manifest
+              assert 'publication' in json.loads((root/'manifest.json').read_text())
+              paths = sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file())
+              assert sorted(names) == paths
+              for name in names:
+                  if name != 'manifest.json':
+                      assert archive.read(name) == (root/name).read_bytes(), name
+              digest = hashlib.sha256(package.read_bytes()).hexdigest()
+              print('CODE7_PACKAGED|provider=app.tsuzuki.mangaall|code=7|modules=ORIGINAL|sourceHTTP=SYNTHETIC|signedFeed=NOT_TESTED|sha256=' + digest)
+          PY
+      - name: Check shell gate
+        run: bash -n .github/scripts/run_mangaall_host_journey_android.sh
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Fail closed if production or instrumented Kotlin formatting drifts
+        run: ./gradlew :app:spotlessKotlinCheck
+      - name: Compile app + instrumentation
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Validate Host and pixel Reader stages on disposable emulator
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaall_host_journey_android.sh
+      - name: Preserve bounded regression evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-host-reader-segmented
+          path: .github/results/mangaall-host-journey-android/**
+          if-no-files-found: ignore
+          retention-days: 3

@@ -17,6 +17,8 @@ import tachiyomi.core.provider.packageformat.ProviderScriptManifest
 import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationRequest
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderPageFailureStage
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilityRef
@@ -149,6 +151,7 @@ class ScriptProviderReadingGatewayTest {
             ProviderReadingLookupRequest(
                 titles = listOf("Chainsaw Man"),
                 coverageEvidenceVersion = 1,
+                requestedLanguage = "pt-br",
             ),
         ) as ProviderCallResult.Success
         val item = response.value.items.single()
@@ -159,6 +162,7 @@ class ScriptProviderReadingGatewayTest {
         item.coverageHasMore shouldBe true
         val json = Json.parseToJsonElement(requireNotNull(requestJson)).jsonObject
         json["coverageEvidenceVersion"]?.jsonPrimitive?.int shouldBe 1
+        json["requestedLanguage"]?.jsonPrimitive?.content shouldBe "pt-br"
     }
 
     @Test
@@ -196,6 +200,29 @@ class ScriptProviderReadingGatewayTest {
         }
         val invalid = tampered.lookup(providerId, ProviderReadingLookupRequest(listOf("Vagabond")))
         (invalid as ProviderCallResult.Failure).error.code shouldBe ProviderErrorCode.MALFORMED_RESULT
+    }
+
+    @Test
+    fun `malformed lookup identifies runtime schema and candidate contract failures`() = runBlocking {
+        val runtime = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.failure(ProviderRuntimeFailureCode.MALFORMED_RESULT)
+        }
+        val invalidSchema = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success("""{"items":[{"externalWorkId":123,"title":"Title"}]}""")
+        }
+        val invalidCandidate = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success(
+                """{"items":[{"externalWorkId":"work","title":"Title","aliases":["${"x".repeat(1025)}"]}]}""",
+            )
+        }
+
+        val request = ProviderReadingLookupRequest(listOf("Title"))
+        (runtime.lookup(providerId, request) as ProviderCallResult.Failure)
+            .error.malformedStage shouldBe DiagnosticProviderMalformedResultStage.RUNTIME_PAYLOAD
+        (invalidSchema.lookup(providerId, request) as ProviderCallResult.Failure)
+            .error.malformedStage shouldBe DiagnosticProviderMalformedResultStage.SCHEMA_DECODE
+        val invalidCandidateError = invalidCandidate.lookup(providerId, request) as ProviderCallResult.Failure
+        invalidCandidateError.error.malformedStage shouldBe DiagnosticProviderMalformedResultStage.CONTRACT_VALIDATION
     }
 
     @Test
@@ -338,6 +365,46 @@ class ScriptProviderReadingGatewayTest {
                 retryable = false,
             ),
         )
+    }
+
+    @Test
+    fun `Reader page failure envelope carries only a closed stage`() = runBlocking {
+        val request = ProviderReadingPagesRequest(
+            binding = ProviderBindingRef(providerId, "en", "work-42"),
+            providerChapterId = "chapter-1",
+        )
+        var requestedVersion: Int? = null
+        val typed = gateway { _, _, input, _ ->
+            requestedVersion = Json.parseToJsonElement(input).jsonObject["diagnosticsVersion"]
+                ?.jsonPrimitive?.int
+            ProviderRuntimeInvocationResponse.success(
+                """{"type":"page_failure","pageFailureStage":"AT_HOME_REQUEST_FAILED"}""",
+            )
+        }
+        typed.pages(providerId, request) shouldBe ProviderCallResult.Failure(
+            tachiyomi.domain.tsuzuki.provider.reading.ProviderError(
+                code = ProviderErrorCode.SOURCE_READ_ERROR,
+                retryable = false,
+                pageFailureStage = DiagnosticProviderPageFailureStage.AT_HOME_REQUEST_FAILED,
+            ),
+        )
+        requestedVersion shouldBe 2
+
+        val untrusted = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success(
+                """{"type":"page_failure","pageFailureStage":"untrusted token"}""",
+            )
+        }
+        (untrusted.pages(providerId, request) as ProviderCallResult.Failure)
+            .error.code shouldBe ProviderErrorCode.MALFORMED_RESULT
+
+        val mixed = gateway { _, _, _, _ ->
+            ProviderRuntimeInvocationResponse.success(
+                """{"type":"page_list","pages":[{"url":"https://cdn.example/1.jpg"}],"pageFailureStage":"AT_HOME_REQUEST_FAILED"}""",
+            )
+        }
+        (mixed.pages(providerId, request) as ProviderCallResult.Failure)
+            .error.code shouldBe ProviderErrorCode.MALFORMED_RESULT
     }
 
     @Test

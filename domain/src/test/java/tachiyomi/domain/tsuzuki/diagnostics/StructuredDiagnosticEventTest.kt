@@ -6,6 +6,46 @@ import org.junit.jupiter.api.Test
 class StructuredDiagnosticEventTest {
 
     @Test
+    fun `MangaAll Reader source click keeps typed failure stage and drops unsafe payload`() {
+        val event = StructuredDiagnosticEvent(
+            timestampMillis = 1_790_755_200_000L,
+            severity = DiagnosticSeverity.WARN,
+            subsystem = DiagnosticSubsystem.READER,
+            name = DiagnosticEventName.READER_SOURCE_SELECTED,
+            sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+            operationId = "13d6049a-67ab-4ef2-8d5d-253015ca9372",
+            workflow = DiagnosticWorkflow.READER_SOURCE_SWITCH,
+            stage = DiagnosticStage.READER,
+            outcome = DiagnosticOutcome.TYPED_FAILURE,
+            attributes = mapOf(
+                "provider_id" to DiagnosticAttributeValue.Text("app.tsuzuki.mangaall"),
+                "language" to DiagnosticAttributeValue.Text("en"),
+                "mangaall_network_source" to DiagnosticAttributeValue.Code(DiagnosticMangaAllNetworkSource.MANGAFIRE),
+                "provider_error_code" to DiagnosticAttributeValue.Text("SOURCE_READ_ERROR"),
+                "provider_page_failure_stage" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderPageFailureStage.CHAPTER_DETAIL_REQUEST_FAILED,
+                ),
+                "provider_retryable" to DiagnosticAttributeValue.Flag(false),
+                "raw_response" to DiagnosticAttributeValue.Text("Authorization: bearer secret"),
+                "provider_page_failure_stage_injected" to DiagnosticAttributeValue.Text("HTTP 403 - secret"),
+            ),
+        )
+        val actual = requireNotNull(StructuredDiagnosticSanitizer.sanitize(event)).attributes
+        actual shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_ID to DiagnosticAttributeValue.Text("app.tsuzuki.mangaall"),
+            DiagnosticAttribute.LANGUAGE to DiagnosticAttributeValue.Text("en"),
+            DiagnosticAttribute.MANGAALL_NETWORK_SOURCE to DiagnosticAttributeValue.Code(
+                DiagnosticMangaAllNetworkSource.MANGAFIRE,
+            ),
+            DiagnosticAttribute.PROVIDER_ERROR_CODE to DiagnosticAttributeValue.Text("SOURCE_READ_ERROR"),
+            DiagnosticAttribute.PROVIDER_PAGE_FAILURE_STAGE to DiagnosticAttributeValue.Code(
+                DiagnosticProviderPageFailureStage.CHAPTER_DETAIL_REQUEST_FAILED,
+            ),
+            DiagnosticAttribute.PROVIDER_RETRYABLE to DiagnosticAttributeValue.Flag(false),
+        )
+    }
+
+    @Test
     fun `UI stall events preserve duration but never accept free form stack or URL`() {
         val attributes = mapOf(
             "untrusted_stack_trace" to DiagnosticAttributeValue.Text("Authorization: secret"),
@@ -26,6 +66,32 @@ class StructuredDiagnosticEventTest {
         val sanitized = requireNotNull(StructuredDiagnosticSanitizer.sanitize(event))
         sanitized.durationMillis shouldBe 420L
         sanitized.attributes shouldBe emptyMap()
+    }
+
+    @Test
+    fun `Provider malformed reply diagnostic keeps closed stage and drops untrusted exception data`() {
+        val event = StructuredDiagnosticEvent(
+            timestampMillis = 1_790_755_200_000L,
+            severity = DiagnosticSeverity.DEBUG,
+            subsystem = DiagnosticSubsystem.CHAPTER,
+            name = DiagnosticEventName.PROVIDER_READING_LOOKUP_ATTEMPT,
+            sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+            operationId = null,
+            stage = DiagnosticStage.LOOKUP,
+            outcome = DiagnosticOutcome.FAILED,
+            attributes = mapOf(
+                "provider_malformed_stage" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderMalformedResultStage.SCHEMA_DECODE,
+                ),
+                "untrusted_json" to DiagnosticAttributeValue.Text("token=secret"),
+            ),
+        )
+        requireNotNull(StructuredDiagnosticSanitizer.sanitize(event)).attributes shouldBe
+            mapOf(
+                DiagnosticAttribute.PROVIDER_MALFORMED_STAGE to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderMalformedResultStage.SCHEMA_DECODE,
+                ),
+            )
     }
 
     @Test
@@ -151,6 +217,89 @@ class StructuredDiagnosticEventTest {
                 "provider_reader_matching_number_count" to DiagnosticAttributeValue.Number(2_000_000),
             ),
         ) shouldBe emptyMap()
+    }
+
+    @Test
+    fun `mapped Reader source exclusion retains only typed source cause`() {
+        fun sanitized(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000L,
+                severity = DiagnosticSeverity.INFO,
+                subsystem = DiagnosticSubsystem.CONTENT,
+                name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.BINDING,
+                outcome = DiagnosticOutcome.EMPTY,
+                attributes = mapOf(
+                    "provider_reader_mapped_source_ineligibility_reason" to value,
+                    "provider_work_id" to DiagnosticAttributeValue.Text("mangafire:secret-id"),
+                    "reader_url" to DiagnosticAttributeValue.Text("https://example.test/?token=private"),
+                ),
+            ),
+        )?.attributes.orEmpty()
+
+        val reason = DiagnosticAttributeValue.Code(
+            DiagnosticProviderReaderMappedSourceIneligibilityReason.FACET_UNAVAILABLE,
+        )
+        sanitized(reason) shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_READER_MAPPED_SOURCE_INELIGIBILITY_REASON to reason,
+        )
+        sanitized(DiagnosticAttributeValue.Text("FACET_UNAVAILABLE; Authorization: secret")) shouldBe emptyMap()
+        sanitized(DiagnosticAttributeValue.Code(DiagnosticProviderReaderNoMatchReason.NO_ELIGIBLE_SOURCE)) shouldBe
+            emptyMap()
+    }
+
+    @Test
+    fun `page-stage diagnostics keep closed values and reject source-authored content`() {
+        fun attributes(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000L,
+                severity = DiagnosticSeverity.WARN,
+                subsystem = DiagnosticSubsystem.READER,
+                name = DiagnosticEventName.READER_PAGES_READY,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.READER,
+                outcome = DiagnosticOutcome.TYPED_FAILURE,
+                attributes = mapOf("provider_page_failure_stage" to value),
+            ),
+        )?.attributes.orEmpty()
+
+        val stage = DiagnosticAttributeValue.Code(
+            DiagnosticProviderPageFailureStage.AT_HOME_REQUEST_FAILED,
+        )
+        attributes(stage) shouldBe mapOf(DiagnosticAttribute.PROVIDER_PAGE_FAILURE_STAGE to stage)
+        attributes(DiagnosticAttributeValue.Text("AT_HOME_REQUEST_FAILED; token=private")) shouldBe emptyMap()
+        attributes(DiagnosticAttributeValue.Code(DiagnosticProviderReaderNoMatchReason.NO_PROVIDER_EVIDENCE)) shouldBe
+            emptyMap()
+    }
+
+    @Test
+    fun `missing mapped Provider family accepts only a known closed code`() {
+        fun sanitize(value: DiagnosticAttributeValue) = StructuredDiagnosticSanitizer.sanitize(
+            StructuredDiagnosticEvent(
+                timestampMillis = 1_790_755_200_000L,
+                severity = DiagnosticSeverity.INFO,
+                subsystem = DiagnosticSubsystem.CONTENT,
+                name = DiagnosticEventName.CONTENT_BINDING_LOOKUP,
+                sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+                operationId = null,
+                stage = DiagnosticStage.BINDING,
+                outcome = DiagnosticOutcome.EMPTY,
+                attributes = mapOf("provider_reader_mapped_missing_provider_family" to value),
+            ),
+        )?.attributes.orEmpty()
+
+        val family = DiagnosticAttributeValue.Code(
+            DiagnosticProviderReaderMappedMissingProviderFamily.LEGACY_MANGADEX_ADAPTER,
+        )
+        sanitize(family) shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_READER_MAPPED_MISSING_PROVIDER_FAMILY to family,
+        )
+        sanitize(DiagnosticAttributeValue.Text("app.tsuzuki.mangaall.mangadex; secret")) shouldBe emptyMap()
+        sanitize(DiagnosticAttributeValue.Code(DiagnosticProviderReaderNoMatchReason.NO_PROVIDER_EVIDENCE)) shouldBe
+            emptyMap()
     }
 
     @Test

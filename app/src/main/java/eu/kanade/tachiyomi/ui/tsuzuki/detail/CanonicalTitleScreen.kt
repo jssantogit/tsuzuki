@@ -193,6 +193,7 @@ data class CanonicalTitleScreen(
             },
             onEditionSearch = editionModel::search,
             onEditionConfirm = editionModel::confirm,
+            onEditionInspect = editionModel::inspect,
             onEditionSourceSelect = editionModel::selectMangaAllSource,
             onEditionDismiss = editionModel::dismiss,
             onChapterSortMeasured = screenModel::recordChapterSortDuration,

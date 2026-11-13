@@ -5,6 +5,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import tachiyomi.domain.tsuzuki.chapter.repository.CanonicalChapterRepository
@@ -131,9 +133,11 @@ class ResolveProviderChapterTorrent(
             chapterNumber = chapter.displayNumber,
         )
         val mapper = TorrentChapterMapper()
+        val readerContext = currentCoroutineContext()
 
         return targets
             .flatMap { provider ->
+                readerContext.ensureActive()
                 val providerId = provider.id
                 val providerTrace = trace?.child()
                 val operationId = providerTrace?.operationId ?: UUID.randomUUID().toString()
@@ -213,8 +217,13 @@ class ResolveProviderChapterTorrent(
                         )
 
                         val matches = candidates.mapNotNull { candidate ->
+                            readerContext.ensureActive()
                             if (candidate.infoHash == null) return@mapNotNull null
-                            val payload = when (val match = mapper.select(request, candidate)) {
+                            val payload = when (
+                                val match = mapper.select(request, candidate) {
+                                    readerContext.ensureActive()
+                                }
+                            ) {
                                 is TorrentChapterPayloadMatch.Exact -> match.payload
                                 TorrentChapterPayloadMatch.None,
                                 is TorrentChapterPayloadMatch.Ambiguous,

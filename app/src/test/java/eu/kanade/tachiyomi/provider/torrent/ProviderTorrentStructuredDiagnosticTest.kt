@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.data.tsuzuki.diagnostics.StructuredDiagnosticHistory
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
@@ -303,7 +304,7 @@ class ProviderTorrentStructuredDiagnosticTest {
     }
 
     @Test
-    fun `candidate diagnostics are capture gated and bounded without losing totals`() = runTest {
+    fun `candidate diagnostics are capture gated and sampled without losing denominator`() = runTest {
         val candidates = (0 until 40).map { index ->
             TorrentCandidate(
                 infoHash = "0123456789abcdef0123456789abcdef01234567",
@@ -331,16 +332,22 @@ class ProviderTorrentStructuredDiagnosticTest {
             )
 
             recorder.events.count { it.name.name == "TORRENT_CANDIDATE_EVALUATED" } shouldBe
-                if (capture) 32 else 0
+                if (capture) 12 else 0
             val summary = requireNotNull(
                 StructuredDiagnosticSanitizer.sanitize(
                     recorder.events.single { it.name == DiagnosticEventName.TORRENT_MATCH_SUMMARY },
                 ),
             )
+            summary.outcome shouldBe DiagnosticOutcome.PARTIAL
+            // Preserve the full provider denominator but do not mislabel an
+            // incomplete sample as an exhaustive NO_READABLE_ARCHIVES result.
             summary.attributes.entries.single { it.key.name == "TORRENT_CANDIDATE_NO_ARCHIVE_COUNT" }
-                .value.toString().contains("40") shouldBe true
+                .value.toString().contains("12") shouldBe true
             summary.attributes.entries.single { it.key.name == "CANDIDATE_COUNT" }
                 .value.toString().contains("40") shouldBe true
+            summary.attributes.entries.single { it.key.name == "ITEM_COUNT" }
+                .value.toString().contains("12") shouldBe true
+            summary.attributes.keys.any { it.name == "TORRENT_NO_MATCH_REASON" } shouldBe false
         }
     }
 

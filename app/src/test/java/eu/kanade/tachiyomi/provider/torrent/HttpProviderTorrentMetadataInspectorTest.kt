@@ -4,7 +4,9 @@ import eu.kanade.tachiyomi.provider.runtime.HostVerifiedTorrentMetadataCache
 import eu.kanade.tachiyomi.provider.runtime.VerifiedTorrentDescription
 import eu.kanade.tachiyomi.provider.runtime.VerifiedTorrentFile
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.Headers.Companion.headersOf
@@ -21,6 +23,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
 import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidate
 import tachiyomi.domain.tsuzuki.provider.torrent.TorrentCandidateFile
+import java.util.concurrent.TimeUnit
 
 class HttpProviderTorrentMetadataInspectorTest {
 
@@ -156,6 +159,27 @@ class HttpProviderTorrentMetadataInspectorTest {
     }
 
     @Test
+    fun `policy backed async HTTP never fetches disallowed local addresses`() = runTest {
+        val server = MockWebServer()
+        server.enqueue(MockResponse.Builder().body("metadata").build())
+        server.start()
+        try {
+            val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+            val inspector = HttpProviderTorrentMetadataInspector(
+                baseClient = OkHttpClient(),
+                decoder = { _, item -> item },
+            )
+            inspector.inspect(
+                descriptor(origin, allowLocalNetwork = false),
+                candidate(server.url("/blocked.torrent").toString()),
+            ) shouldBe null
+            server.requestCount shouldBe 0
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
     fun `metadata byte quota fails closed`() = runTest {
         val server = MockWebServer()
         server.enqueue(
@@ -184,6 +208,70 @@ class HttpProviderTorrentMetadataInspectorTest {
 
             hydrated shouldBe null
             decoded shouldBe false
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun `cancelled metadata inspection does not wait for delayed HTTP headers`() = runBlocking<Unit> {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse.Builder()
+                .headersDelay(3, TimeUnit.SECONDS)
+                .body("metadata")
+                .build(),
+        )
+        server.start()
+        try {
+            val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+            val inspector = HttpProviderTorrentMetadataInspector(
+                baseClient = OkHttpClient(),
+                decoder = { _, item -> item },
+            )
+            val started = System.nanoTime()
+            val result = withTimeoutOrNull(200) {
+                inspector.inspect(
+                    descriptor(origin, allowLocalNetwork = true),
+                    candidate(server.url("/slow.torrent").toString()),
+                )
+            }
+            val elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
+
+            result shouldBe null
+            (elapsedMillis < 1_500L) shouldBe true
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun `cancelled metadata inspection interrupts delayed HTTP body`() = runBlocking<Unit> {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse.Builder()
+                .bodyDelay(3, TimeUnit.SECONDS)
+                .body("metadata")
+                .build(),
+        )
+        server.start()
+        try {
+            val origin = server.url("/").let { "${it.scheme}://${it.host}:${it.port}" }
+            val inspector = HttpProviderTorrentMetadataInspector(
+                baseClient = OkHttpClient(),
+                decoder = { _, item -> item },
+            )
+            val started = System.nanoTime()
+            val result = withTimeoutOrNull(200) {
+                inspector.inspect(
+                    descriptor(origin, allowLocalNetwork = true),
+                    candidate(server.url("/slow-body.torrent").toString()),
+                )
+            }
+            val elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
+
+            result shouldBe null
+            (elapsedMillis < 1_500L) shouldBe true
         } finally {
             server.close()
         }

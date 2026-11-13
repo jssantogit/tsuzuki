@@ -38,6 +38,8 @@ class ProviderEditionCandidateMetadataTest {
         candidate.chapterCount shouldBe 742
         candidate.observedChapterCount shouldBe 200
         candidate.coverageHasMore shouldBe true
+        candidate.coverageMinMilli shouldBe 1000
+        candidate.coverageMaxMilli shouldBe 200000
         candidate.authors shouldBe listOf("Tite Kubo")
         candidate.language shouldBe "en"
     }
@@ -119,6 +121,20 @@ class ProviderEditionCandidateMetadataTest {
     }
 
     @Test
+    fun `edition picker rejects unrelated fuzzy matches but keeps close editions`() {
+        relevantEditionCandidateTitle("Vagabond", "Patati patata") shouldBe false
+        relevantEditionCandidateTitle("Vagabond", "PATATI PATATA") shouldBe false
+        relevantEditionCandidateTitle("Vagabond", "Vagabond") shouldBe true
+        relevantEditionCandidateTitle("Vagabond", "Vagabond (Hong Kong Colored Version)") shouldBe true
+        relevantEditionCandidateTitle("One Punch Man", "One Piece") shouldBe false
+        relevantEditionCandidateTitle("One Punch Man", "One-Punch Man") shouldBe true
+        relevantEditionCandidateTitle("Chainsaw Man", "Chainsaw") shouldBe false
+        relevantEditionCandidateTitle("Kimetsu no Yaiba", "Kimetsu no Yaiba: Gaiden") shouldBe true
+        relevantEditionCandidateTitle("Bleach", "Bleach: Thousand-Year Blood War") shouldBe true
+        relevantEditionCandidateTitle("", "Vagabond") shouldBe false
+    }
+
+    @Test
     fun `changing counts does not invalidate exact confirmed source identity`() {
         val original = ProviderEditionCandidate(
             ref = ref,
@@ -139,5 +155,33 @@ class ProviderEditionCandidateMetadataTest {
             refreshed.copy(ref = ref.copy(externalWorkId = "027")),
         ) shouldBe false
         original.sameSourceIdentityAs(refreshed.copy(url = "https://mangafire.to/title/027-bleach")) shouldBe false
+    }
+
+    @Test
+    fun `coverage range is preserved for MangaAll without implying a complete chapter inventory`() {
+        val candidate = editionCandidateFromLookup(
+            ref = ProviderBindingRef(
+                providerId = ProviderId("app.tsuzuki.mangaall"),
+                facetId = "pt-br",
+                externalWorkId = "mangadex:sample",
+            ),
+            providerName = "MangaAll",
+            work = ProviderWorkCandidate(
+                externalWorkId = "mangadex:sample",
+                title = "Vagabond",
+                coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                coverageObservedCount = 2,
+                coverageMinMilli = 67000,
+                coverageMaxMilli = 67100,
+                coverageHasMore = true,
+            ),
+            query = "Vagabond",
+            providerVersionCode = 3,
+            configurationFingerprint = "signed",
+        )
+        candidate.chapterCount shouldBe null
+        candidate.observedChapterCount shouldBe 2
+        candidate.coverageMinMilli shouldBe 67000
+        candidate.coverageMaxMilli shouldBe 67100
     }
 }

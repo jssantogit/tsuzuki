@@ -13,6 +13,10 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityWindowInfo
+import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.core.view.children
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStoreOwner
@@ -48,6 +52,8 @@ import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import eu.kanade.tachiyomi.ui.reader.ReaderRecovery
+import eu.kanade.tachiyomi.ui.reader.ReaderViewModel
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
@@ -130,6 +136,122 @@ import kotlin.jvm.functions.Function2
 @RunWith(AndroidJUnit4::class)
 class CanonicalReaderSourceSwitchInstrumentedTest {
 
+    /**
+     * Continuous tap path: one ReaderActivity, its production ViewModel and
+     * source selector, a real isolated SCRIPT MangaAll test package, canonical
+     * reconciliation, HTTP page/image requests and rendered green PNG pixels.
+     * A 503 delivery must keep the old red Reader session and allow retry.
+     */
+    @Test(timeout = 300_000L)
+    fun mangaAllScriptSourceTapFailureAndRetryPublishesDecodedReaderPixels() {
+        requireOptIn()
+        runMangaAllContinuousReaderJourney(originalCode7Package = false)
+    }
+
+    /** Original, unmodified code7 .tsz + the same ReaderActivity tap→503→retry→PNG path. */
+    @Test(timeout = 300_000L)
+    fun mangaAllOriginalCode7TszSourceTap503RetryRendersCdnPixels() {
+        requireOptIn()
+        runMangaAllContinuousReaderJourney(originalCode7Package = true)
+    }
+
+    private fun runMangaAllContinuousReaderJourney(originalCode7Package: Boolean) {
+        val expectedMangaAllGreen = Color.rgb(12, 168, 82)
+        // Guard the screenshot oracle itself: the first continuous E2E RED
+        // rendered READY PNG pages, but the old color matcher only knew RED
+        // and BLUE and could never match this fixture's GREEN.
+        assertTrue(
+            "MangaAll green must be recognized by the pixel probe",
+            isNearColor(expectedMangaAllGreen, expectedMangaAllGreen),
+        )
+        assertTrue(
+            "A stale red Reader page must not be mistaken for MangaAll green",
+            !isNearColor(Color.rgb(220, 40, 40), expectedMangaAllGreen),
+        )
+        assertTrue(
+            "A stale blue Reader page must not be mistaken for MangaAll green",
+            !isNearColor(Color.rgb(35, 70, 225), expectedMangaAllGreen),
+        )
+        withFixture { fixture ->
+            fixture.launchReader()
+            val reader = awaitActivity(ReaderActivity::class.java)
+            awaitReaderPages(reader, expectedSource = fixture.sourceA.name, expectedCount = 10)
+            awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "MANGAALL_INITIAL_READER")
+            val previousSessionChapter = requireNotNull(reader.viewModel.state.value.currentChapter)
+
+            val mangaAll = fixture.mangaAllJourney(reader, originalCode7Package)
+            try {
+                runBlocking { mangaAll.attach() }
+
+                fun openAndTapMangaFire() {
+                    reader.viewModel.openContentSelector()
+                    awaitValue("MangaAll chapter-scoped options in ReaderActivity") {
+                        reader.viewModel.state.value.providerSourceOptions
+                            .singleOrNull()
+                            ?.takeIf { it == mangaAll.selectedOption }
+                    }
+                    val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+                    assertTrue(
+                        "The real ReaderActivity must display MangaFire in the source selector",
+                        device.wait(Until.hasObject(By.text("MangaFire")), UI_TIMEOUT_MS),
+                    )
+                    device.findObject(By.text("MangaFire")).click()
+                }
+
+                openAndTapMangaFire()
+                awaitValue("Provider page failure to be recoverable without replacing active Reader") {
+                    val state = reader.viewModel.state.value
+                    (
+                        state.recovery == ReaderRecovery.SOURCE_UNAVAILABLE &&
+                            !state.sourceSelectionInProgress
+                        ).takeIf { it }
+                }
+                assertEquals(
+                    "First click must issue exactly one SCRIPT pages request",
+                    1,
+                    mangaAll.pageDeliveryCalls.get(),
+                )
+                assertEquals("Failed pages may not download the image", 0, mangaAll.imageRequests.get())
+                assertSame(
+                    "A failed MangaAll tap must keep the existing Reader chapter object",
+                    previousSessionChapter,
+                    reader.viewModel.state.value.currentChapter,
+                )
+                assertEquals(fixture.chapter.id, reader.viewModel.state.value.activeCanonicalChapterId)
+                reader.viewModel.dismissContentSelector()
+                awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "MANGAALL_FAILED_RETAIN_RED")
+
+                mangaAll.allowPages()
+                openAndTapMangaFire()
+                awaitValue("MangaAll retry to stage a real HTTP page in the same Reader") {
+                    val state = reader.viewModel.state.value
+                    val page = state.currentChapter?.pages?.singleOrNull()
+                    (
+                        state.activeCanonicalChapterId == fixture.chapter.id &&
+                            state.activeProviderSourceKey == mangaAll.selectedOption.readerSourceKey &&
+                            state.recovery == null &&
+                            !state.sourceSelectionInProgress &&
+                            page?.status == Page.State.Ready &&
+                            page.stream != null
+                        ).takeIf { it }
+                }
+                assertEquals(
+                    "Retry must request SCRIPT pages once again",
+                    2,
+                    mangaAll.pageDeliveryCalls.get(),
+                )
+                assertTrue(
+                    "The Reader must fetch the PNG from the returned page URL",
+                    mangaAll.imageRequests.get() > 0,
+                )
+                awaitImagePixels(reader, fixture, Color.rgb(12, 168, 82), "MANGAALL_SAME_READER_RENDERED_GREEN")
+                assertEquals(fixture.chapter.id, reader.viewModel.state.value.activeCanonicalChapterId)
+            } finally {
+                mangaAll.close()
+            }
+        }
+    }
+
     @Test(timeout = 240_000L)
     fun sourceAtoBLoadsPagesAndPreservesCanonicalChapterAndObservedPosition() {
         requireOptIn()
@@ -199,7 +321,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             chooseSourceThroughReaderUi(reader, fixture.sourceB.name)
             awaitSourceRequest(fixture.dispatcher, fixture.sourceB.token, emptyPagesBefore)
             assertReaderSession(reader, fixture, fixture.sourceA.name, initial.first, 10)
-            dismissSourceSelectorThroughReaderUi()
+            dismissSourceSelectorThroughReaderUi(reader)
             awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "EMPTY_OR_FAILING")
 
             fixture.dispatcher.setBehavior(fixture.sourceB.token, FixtureBehavior(pageCount = 10, pageListStatus = 503))
@@ -228,7 +350,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                     fixture.reading.getHistory(fixture.chapter.id)
                 },
             )
-            dismissSourceSelectorThroughReaderUi()
+            dismissSourceSelectorThroughReaderUi(reader)
             awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "EMPTY_OR_FAILING")
             assertSame(
                 "Failure must not replace the published chapter object",
@@ -476,7 +598,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                     healthySourceVisible -> "READY_WITH_A"
                     device.hasObject(By.textContains("Finding available chapters")) ||
                         device.hasObject(By.text("Stop searching")) -> "DISCOVERING"
-                    device.hasObject(By.text("Choose reading source")) -> "OPEN_WITHOUT_A"
+                    reader.viewModel.state.value.dialog is ReaderViewModel.Dialog.ContentSelector -> "OPEN_WITHOUT_A"
                     else -> "CLOSED_OR_OTHER"
                 }
                 val typedSelector = typedSelectorSnapshot(reader, fixture)
@@ -503,7 +625,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                 val unchanged = awaitReaderPages(reader, fixture.sourceA.name, expectedCount = 10)
                 assertEquals(current.first, unchanged.first)
                 assertEquals(fixture.chapter.id, reader.intent.getStringExtra("canonical_chapter"))
-                dismissSourceSelectorThroughReaderUi()
+                dismissSourceSelectorThroughReaderUi(reader)
                 awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "SLOW_TO_HEALTHY")
                 report(
                     scenario = "SLOW_TO_HEALTHY",
@@ -555,7 +677,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                     fixture.addonA,
                     runBlocking { fixture.preferences.get(fixture.title.id)?.preferredAddonId },
                 )
-                dismissSourceSelectorThroughReaderUi()
+                dismissSourceSelectorThroughReaderUi(reader)
                 awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "DISCOVERY_CANCEL")
                 assertEquals(
                     "The previous page position must remain observable after late responses return",
@@ -1317,6 +1439,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         return when (expected) {
             Color.rgb(220, 40, 40) -> red >= 100 && red >= green * 3 / 2 && red >= blue * 3 / 2
             Color.rgb(35, 70, 225) -> blue >= 100 && blue >= red * 3 / 2 && blue >= green * 4 / 3
+            Color.rgb(12, 168, 82) -> green >= 100 && green >= red * 3 / 2 && green >= blue * 3 / 2
             else -> false
         }
     }
@@ -1553,6 +1676,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
     private fun colorName(color: Int): String = when (color) {
         Color.rgb(220, 40, 40) -> "RED"
         Color.rgb(35, 70, 225) -> "BLUE"
+        Color.rgb(12, 168, 82) -> "GREEN"
         else -> "NONE"
     }
 
@@ -1672,25 +1796,107 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
 
     private fun openSourceSelectorThroughReaderUi(reader: ReaderActivity) {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        if (!device.hasObject(By.text("Choose reading source"))) {
+        if (reader.viewModel.state.value.dialog !is ReaderViewModel.Dialog.ContentSelector) {
             if (!reader.viewModel.state.value.menuVisible) {
                 device.click(device.displayWidth / 2, device.displayHeight / 2)
                 awaitValue("Reader menu to become visible") { reader.viewModel.state.value.menuVisible }
             }
+            // Default Skin's bottom rail is a Compose horizontalScroll.
+            // Physical display-percent swipes can hit the pager underneath it
+            // and silently move the chapter to its final page. Scroll *only*
+            // the production rail's semantics node, then tap the real Source
+            // button through UiAutomator. Never call the ViewModel selector
+            // directly in this acceptance test.
+            val pageBeforeToolbar = readerViewSnapshot(reader).position
+            var sourceTool = device.findObject(By.desc("Source"))
+            if (sourceTool == null) {
+                assertTrue(
+                    "The Reader's visible bottom rail must be composed before navigating to Source",
+                    device.wait(Until.hasObject(By.desc("Chapters")), UI_TIMEOUT_MS),
+                )
+            }
+            for (attempt in 0 until 8) {
+                if (sourceTool != null) break
+                // Compose's accessibility ScrollBy may be absent during the
+                // initial layout. An anchored, physically visible toolbar
+                // control gives a safe gesture fallback on a cold emulator.
+                val viaSemantics = scrollReaderToolbarSemantics(reader, amount = 1_000f)
+                val scrollApplied = viaSemantics || swipeReaderToolbarWithinVisibleControls(device)
+                assertTrue("Reader bottom toolbar was not scrollable or visibly reachable", scrollApplied)
+                SystemClock.sleep(220L)
+                assertEquals(
+                    "Scrolling Reader tools must not navigate the chapter pager",
+                    pageBeforeToolbar,
+                    readerViewSnapshot(reader).position,
+                )
+                sourceTool = device.findObject(By.desc("Source"))
+            }
             assertTrue(
-                "Reader overflow action must be present",
-                device.wait(Until.hasObject(By.desc("More options")), UI_TIMEOUT_MS),
+                "Reader bottom toolbar must expose the Source button",
+                sourceTool != null || device.wait(Until.hasObject(By.desc("Source")), UI_TIMEOUT_MS),
             )
-            device.findObject(By.desc("More options")).click()
-            assertTrue(
-                "Change source action must be exposed from the Reader overflow menu",
-                device.wait(Until.hasObject(By.text("Change source")), UI_TIMEOUT_MS),
+            (sourceTool ?: requireNotNull(device.findObject(By.desc("Source")))).click()
+            assertEquals(
+                "Opening the Source selector must not change the observed chapter page",
+                pageBeforeToolbar,
+                readerViewSnapshot(reader).position,
             )
-            device.findObject(By.text("Change source")).click()
+        }
+        awaitValue("canonical reading-source selector to open after tapping the real Source tool") {
+            (reader.viewModel.state.value.dialog as? ReaderViewModel.Dialog.ContentSelector)
+                ?.takeIf { it.canonicalChapterId == reader.viewModel.state.value.activeCanonicalChapterId }
         }
         assertTrue(
-            "The canonical reading-source selector must be open",
-            device.wait(Until.hasObject(By.text("Choose reading source")), UI_TIMEOUT_MS),
+            "The new Reader Source card must be visible after the dialog opens",
+            device.wait(Until.hasObject(By.text("Source")), UI_TIMEOUT_MS),
+        )
+    }
+
+    /**
+     * Scrolls the ACTUAL reader tool rail via its Compose accessibility
+     * semantics, not an assumed screen coordinate. This mirrors an assistive
+     * technology scroll on the real UI and cannot swipe the page viewer.
+     */
+    private fun scrollReaderToolbarSemantics(reader: ReaderActivity, amount: Float): Boolean {
+        var accepted = false
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val roots = mutableListOf<ViewRootForTest>()
+            fun collect(view: View) {
+                if (view is ViewRootForTest) roots += view
+                if (view is android.view.ViewGroup) {
+                    for (i in 0 until view.childCount) collect(view.getChildAt(i))
+                }
+            }
+            collect(reader.window.decorView)
+            // Flush the actual Compose layout before querying accessibility
+            // actions; state.menuVisible can become true ahead of composition.
+            roots.forEach { it.measureAndLayoutForTest() }
+            val scrollNode = roots.flatMap { it.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false) }
+                .filter { node ->
+                    node.config.contains(SemanticsProperties.HorizontalScrollAxisRange) &&
+                        node.config.contains(SemanticsActions.ScrollBy)
+                }
+                .maxByOrNull { it.boundsInRoot.bottom }
+            accepted = scrollNode?.config?.get(SemanticsActions.ScrollBy)?.action?.invoke(amount, 0f) == true
+        }
+        return accepted
+    }
+
+    private fun swipeReaderToolbarWithinVisibleControls(device: UiDevice): Boolean {
+        val anchor = listOf("Chapters", "Previous", "Next", "Brightness", "Fit", "Crop")
+            .firstNotNullOfOrNull { label -> device.findObject(By.desc(label)) }
+            ?: return false
+        val y = anchor.visibleBounds.centerY()
+        // Never use a guessed screen-relative Y. This anchor is a real visible
+        // Reader tool control; its bounds must be in the bottom rail, not in
+        // the chapter's pager or a system overlay.
+        if (y < device.displayHeight * 2 / 3 || y >= device.displayHeight) return false
+        return device.swipe(
+            device.displayWidth * 86 / 100,
+            y,
+            device.displayWidth * 14 / 100,
+            y,
+            26,
         )
     }
 
@@ -1699,14 +1905,16 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         device.findObject(By.text(text)).click()
     }
 
-    private fun dismissSourceSelectorThroughReaderUi() {
+    private fun dismissSourceSelectorThroughReaderUi(reader: ReaderActivity) {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        assertTrue(device.hasObject(By.text("Choose reading source")))
-        device.pressBack()
         assertTrue(
-            "Reader source selector must be dismissible after a recoverable failure",
-            device.wait(Until.gone(By.text("Choose reading source")), UI_TIMEOUT_MS),
+            "Reader must have an active source selector before dismissing it",
+            reader.viewModel.state.value.dialog is ReaderViewModel.Dialog.ContentSelector,
         )
+        device.pressBack()
+        awaitValue("Reader source selector to dismiss after a recoverable failure") {
+            (reader.viewModel.state.value.dialog !is ReaderViewModel.Dialog.ContentSelector).takeIf { it }
+        }
     }
 
     private fun assertReaderSession(
@@ -1813,9 +2021,20 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
 
     private fun confirmPreferredSource(fixture: SourceSwitchFixture, addonId: AddonId) {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val reader = awaitActivity(ReaderActivity::class.java)
+        awaitValue("Reader to offer changing the existing preferred Add-on after successful preparation") {
+            (reader.viewModel.state.value.dialog as? ReaderViewModel.Dialog.SetPreferredAddon)
+                ?.takeIf { it.selection.option.addonId == addonId }
+        }
+        // Default Skin's dialog uses a shared "Source" heading, not the
+        // removed legacy "Set preferred Add-on?" title. Assert actual modal
+        // content plus the ViewModel's typed state before confirming.
         assertTrue(
-            "Successful source preparation should ask before changing the saved preference",
-            device.wait(Until.hasObject(By.text("Set preferred Add-on?")), UI_TIMEOUT_MS),
+            "A successful switch must display the preferred-source confirmation",
+            device.wait(
+                Until.hasObject(By.text("Use this Provider as the preferred reading source for this work?")),
+                UI_TIMEOUT_MS,
+            ),
         )
         val oldPreference = if (addonId == fixture.addonB) fixture.addonA else fixture.addonB
         assertEquals(
@@ -1862,6 +2081,17 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         private val priorExtensions: Map<String, Extension.Installed>,
         private val priorDisabledSources: Set<String>,
     ) {
+
+        fun mangaAllJourney(
+            reader: ReaderActivity,
+            originalCode7Package: Boolean = false,
+        ) = MangaAllReaderJourneyFixture(
+            context = InstrumentationRegistry.getInstrumentation().targetContext,
+            reader = reader,
+            database = database,
+            chapter = chapter,
+            originalCode7Package = originalCode7Package,
+        )
 
         fun launchReader(
             legacyEntry: LegacyReaderEntry? = null,

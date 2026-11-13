@@ -270,11 +270,13 @@ internal class ProviderHttpChapterLoader(
         fun from(
             context: Context,
             plan: CanonicalReaderTargetPlan.HttpPages,
+            client: OkHttpClient = OkHttpClient(),
         ): ProviderHttpChapterLoader =
             ProviderHttpChapterLoader(
                 ProviderHttpPageLoader(
                     requests = plan.pages,
                     cacheRoot = File(context.cacheDir, "provider-reader"),
+                    client = client,
                 ),
             )
     }
