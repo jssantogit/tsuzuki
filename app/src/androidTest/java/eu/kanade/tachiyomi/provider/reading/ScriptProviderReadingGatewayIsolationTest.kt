@@ -61,15 +61,15 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
-import tachiyomi.domain.tsuzuki.provider.reading.ProviderCoverageOutcome
-import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkDetailOutcome
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterEvidenceAdapter
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderCoverageOutcome
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBinding
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBindingRepository
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingDelivery
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingPagesRequest
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkDetailOutcome
 import tachiyomi.domain.tsuzuki.provider.reading.RefreshProviderReadingChapters
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import tachiyomi.domain.tsuzuki.reader.model.PreparedChapterContent
@@ -722,11 +722,14 @@ class ScriptProviderReadingGatewayIsolationTest {
                             403 to "<html>synthetic challenge</html>"
                         } else {
                             200 to JSONObject()
-                                .put("items", JSONArray().put(
-                                    JSONObject().put("id", sourceChapter).put("number", 1)
-                                        .put("name", "Chapter 1").put("language", "en")
-                                        .put("type", "official").put("createdAt", 1720000000),
-                                ))
+                                .put(
+                                    "items",
+                                    JSONArray().put(
+                                        JSONObject().put("id", sourceChapter).put("number", 1)
+                                            .put("name", "Chapter 1").put("language", "en")
+                                            .put("type", "official").put("createdAt", 1720000000),
+                                    ),
+                                )
                                 .put("meta", JSONObject().put("hasNext", false).put("lastPage", 1))
                                 .toString()
                         }
@@ -810,7 +813,9 @@ class ScriptProviderReadingGatewayIsolationTest {
                     id = "old-dex",
                     canonicalTitleId = canonicalTitleId,
                     ref = ProviderBindingRef(
-                        providerId, "en", "mangadex:11111111-2222-4333-8444-555555555555",
+                        providerId,
+                        "en",
+                        "mangadex:11111111-2222-4333-8444-555555555555",
                     ),
                     verification = ProviderBindingVerification.USER_CONFIRMED,
                     availability = ProviderBindingAvailability.AVAILABLE,
@@ -862,7 +867,8 @@ class ScriptProviderReadingGatewayIsolationTest {
             // A 403 cannot be promoted to a complete empty chapter inventory.
             blockedChapters.set(true)
             val blocked = gateway.chapters(
-                providerId, ProviderReadingChaptersRequest(binding.ref),
+                providerId,
+                ProviderReadingChaptersRequest(binding.ref),
             )
             assertTrue(blocked is ProviderCallResult.Failure)
             blockedChapters.set(false)
@@ -1015,7 +1021,9 @@ class ScriptProviderReadingGatewayIsolationTest {
                     id = "preferred-dex-code7",
                     canonicalTitleId = canonicalTitleId,
                     ref = ProviderBindingRef(
-                        mangaAll, "en", "mangadex:11111111-2222-4333-8444-555555555555",
+                        mangaAll,
+                        "en",
+                        "mangadex:11111111-2222-4333-8444-555555555555",
                     ),
                     verification = ProviderBindingVerification.USER_CONFIRMED,
                     availability = ProviderBindingAvailability.AVAILABLE,
