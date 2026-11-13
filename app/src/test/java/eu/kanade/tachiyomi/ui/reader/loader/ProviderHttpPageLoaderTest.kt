@@ -19,9 +19,9 @@ import org.junit.jupiter.api.io.TempDir
 import tachiyomi.domain.tsuzuki.reader.model.PreparedHttpPage
 import java.io.IOException
 import java.nio.file.Path
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class ProviderHttpPageLoaderTest {
 
