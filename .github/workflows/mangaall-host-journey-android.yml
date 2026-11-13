@@ -9,6 +9,7 @@ on:
       - '.github/workflows/mangaall-host-journey-android.yml'
       - '.github/scripts/run_mangaall_host_journey_android.sh'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/repository/MangaAllSignedUpgradeIsolationTest.kt'
       - 'app/src/androidTest/java/eu/kanade/presentation/reader/MangaAllReaderSourceCardInstrumentedTest.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/CanonicalReaderSourceSwitchInstrumentedTest.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllReaderJourneyFixture.kt'
@@ -38,9 +39,47 @@ jobs:
           ref: e74a0ebb43ce27b3a237a80bf9d1c81df1397ee3
           path: code7-mangaall
           persist-credentials: false
+      - name: Checkout immutable official signed sequence 32 / MangaAll code6 (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 3e0b0bc813910929c2215ad26bc46ff5a6a73706
+          path: code6-published
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Verify real published code6 envelope, trust key and artifact (no signing)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C code6-published rev-parse HEAD)" = '3e0b0bc813910929c2215ad26bc46ff5a6a73706'
+          ( cd code6-published && node tooling/verify_index.mjs )
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import shutil
+          from pathlib import Path
+          root = Path('code6-published')
+          payload = json.loads((root/'dist/index.payload.json').read_text())
+          enrollment = json.loads((root/'dist/enrollment.json').read_text())
+          assert payload['repositoryId'] == 'app.tsuzuki.providers' and payload['sequence'] == 32
+          assert enrollment['repositoryId'] == payload['repositoryId']
+          assert enrollment['keyId'] == 'tsuzuki-provider-root-2026-02'
+          matches = [p for p in payload['providers'] if p['providerId'] == 'app.tsuzuki.mangaall']
+          assert len(matches) == 1 and matches[0]['versionCode'] == 6
+          assert matches[0]['versionName'] == '0.5.1'
+          package = root/'dist/providers/app.tsuzuki.mangaall-6.tsz'
+          digest = hashlib.sha256(package.read_bytes()).hexdigest()
+          assert digest == matches[0]['sha256']
+          assert digest == 'aa9c101e0764019bc0d09774aeea1600e6bb9f02e12e9c9096f37d0549720320'
+          out = Path('app/src/androidTest/assets/mangaall')
+          out.mkdir(parents=True, exist_ok=True)
+          shutil.copyfile(package, out/'code6-published-package.tsz')
+          shutil.copyfile(root/'dist/index.json', out/'code6-published-index.json')
+          shutil.copyfile(root/'dist/enrollment.json', out/'code6-enrollment.json')
+          print('MANGAALL_SIGNED_BASELINE|repository=app.tsuzuki.providers|sequence=32|providerCode=6|signature=VERIFIED|package=ORIGINAL')
+          PY
       - name: Generate code7 replay vectors from actual JS (offline fixture only)
         shell: bash
         run: |
