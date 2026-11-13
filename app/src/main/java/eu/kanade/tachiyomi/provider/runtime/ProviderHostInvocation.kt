@@ -2,8 +2,8 @@ package eu.kanade.tachiyomi.provider.runtime
 
 import android.content.Context
 import kotlinx.coroutines.runBlocking
-import okhttp3.OkHttpClient
 import logcat.LogPriority
+import okhttp3.OkHttpClient
 import tachiyomi.core.provider.packageformat.ProviderScriptManifest
 import tachiyomi.core.provider.runtime.BoundedProviderLogHostService
 import tachiyomi.core.provider.runtime.DefaultProviderBinaryTransformHostService

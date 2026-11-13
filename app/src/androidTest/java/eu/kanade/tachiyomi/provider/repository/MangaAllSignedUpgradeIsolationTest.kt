@@ -69,7 +69,10 @@ class MangaAllSignedUpgradeIsolationTest {
     private val originalCode7Sha = "cbc7e890fda26138a20358a332c8a700b3aec19ba14c47c53834dc35001673f0"
     private val indexUrl = "https://raw.githubusercontent.com/jssantogit/providers-tsuzuki/main/dist/index.json"
     private val artifactBase = "https://raw.githubusercontent.com/jssantogit/providers-tsuzuki/main/dist/providers/"
-    private val json = Json { encodeDefaults = true; explicitNulls = false }
+    private val json = Json {
+        encodeDefaults = true
+        explicitNulls = false
+    }
 
     @Test
     fun publishedCode6IndexVerifiesWithItsActualPinnedRootAndInstallsOriginalArtifact() = runBlocking {
@@ -113,8 +116,10 @@ class MangaAllSignedUpgradeIsolationTest {
             assertEquals("0.5.1", installed.manifest.version.name)
             assertEquals(6L, installed.manifest.version.code)
             assertEquals(officialCode6Sha, sha256Hex(store.readCurrentArtifact(providerId)))
-            assertEquals(ProviderRepositoryEntryStatus.INSTALLED,
-                manager.snapshot(repositoryId)!!.entries.single { it.descriptor.providerId == providerId }.status)
+            assertEquals(
+                ProviderRepositoryEntryStatus.INSTALLED,
+                manager.snapshot(repositoryId)!!.entries.single { it.descriptor.providerId == providerId }.status,
+            )
 
             // The enrollment and accepted signature survive recreation of the
             // Host manager without creating another trust origin or provider ID.
@@ -122,8 +127,10 @@ class MangaAllSignedUpgradeIsolationTest {
             assertEquals(6L, restarted.installed().single().versionCode)
             assertEquals(32L, restarted.refresh(repositoryId).sequence)
             assertEquals(1, restarted.repositories().size)
-            assertEquals(enrollment.keyFingerprintSha256,
-                restarted.repositories().single().keyFingerprintSha256)
+            assertEquals(
+                enrollment.keyFingerprintSha256,
+                restarted.repositories().single().keyFingerprintSha256,
+            )
         }
     }
 
@@ -228,8 +235,10 @@ class MangaAllSignedUpgradeIsolationTest {
             }
             assertSqliteContinuity()
 
-            assertEquals(ProviderRepositoryEntryStatus.AVAILABLE,
-                manager.refresh(repositoryId).entries.single().status)
+            assertEquals(
+                ProviderRepositoryEntryStatus.AVAILABLE,
+                manager.refresh(repositoryId).entries.single().status,
+            )
             manager.install(repositoryId, providerId)
             assertEquals(6L, store.current(providerId)?.versionCode)
             assertFalse(manager.canRollback(providerId))
@@ -239,8 +248,10 @@ class MangaAllSignedUpgradeIsolationTest {
             // The code7 descriptor is test-signed with the SAME ephemeral key,
             // matching the official update protocol without using its secret.
             transport.index = sign(pair, index(33, d7))
-            assertEquals(ProviderRepositoryEntryStatus.UPDATE_AVAILABLE,
-                manager.refresh(repositoryId).entries.single().status)
+            assertEquals(
+                ProviderRepositoryEntryStatus.UPDATE_AVAILABLE,
+                manager.refresh(repositoryId).entries.single().status,
+            )
             transport.artifacts[d7.artifactUrl] = code6 // valid bytes, wrong signed code7 checksum
             val tampered = runCatching { manager.install(repositoryId, providerId) }
             assertTrue("Mismatched archive digest must fail closed", tampered.isFailure)
@@ -258,8 +269,10 @@ class MangaAllSignedUpgradeIsolationTest {
             assertEquals(fingerprint, manager.repositories().single().keyFingerprintSha256)
             assertEquals(1, manager.installed().size)
             assertSqliteContinuity()
-            assertEquals(ProviderRepositoryEntryStatus.INSTALLED,
-                manager.snapshot(repositoryId)!!.entries.single().status)
+            assertEquals(
+                ProviderRepositoryEntryStatus.INSTALLED,
+                manager.snapshot(repositoryId)!!.entries.single().status,
+            )
 
             // Reopening the file-backed Host manager must not revert the
             // previously trusted sequence or its installed package state.
@@ -271,8 +284,10 @@ class MangaAllSignedUpgradeIsolationTest {
             assertSqliteContinuity()
             val oldIndex = sign(pair, index(32, d6))
             transport.index = oldIndex
-            assertTrue("Old signed sequence must not roll trust backward",
-                runCatching { reopened.refresh(repositoryId) }.isFailure)
+            assertTrue(
+                "Old signed sequence must not roll trust backward",
+                runCatching { reopened.refresh(repositoryId) }.isFailure,
+            )
             assertEquals(7L, reopenedStore.current(providerId)?.versionCode)
 
             // A different root may NOT enroll over a current provider.
@@ -285,7 +300,7 @@ class MangaAllSignedUpgradeIsolationTest {
                                 signingKey = ProviderRepositorySigningKey(
                                     keyId = "other-root",
                                     publicKeyBase64 =
-                                        Base64.getEncoder().encodeToString(wrongRoot.public.encoded),
+                                    Base64.getEncoder().encodeToString(wrongRoot.public.encoded),
                                 ),
                             ),
                         ),
@@ -307,8 +322,10 @@ class MangaAllSignedUpgradeIsolationTest {
     private fun requireOptIn() {
         val args = InstrumentationRegistry.getArguments()
         assertEquals("true", args.getString("mangaAllSignedUpgradeOptIn"))
-        assertEquals("app.tsuzuki.dev",
-            InstrumentationRegistry.getInstrumentation().targetContext.packageName)
+        assertEquals(
+            "app.tsuzuki.dev",
+            InstrumentationRegistry.getInstrumentation().targetContext.packageName,
+        )
     }
 
     private fun testAsset(path: String): ByteArray =
@@ -387,8 +404,10 @@ class MangaAllSignedUpgradeIsolationTest {
         val artifacts = mutableMapOf<String, ByteArray>()
 
         override suspend fun fetchIndex(indexUrl: String): SignedProviderRepositoryIndex {
-            check(indexUrl ==
-                "https://raw.githubusercontent.com/jssantogit/providers-tsuzuki/main/dist/index.json")
+            check(
+                indexUrl ==
+                    "https://raw.githubusercontent.com/jssantogit/providers-tsuzuki/main/dist/index.json",
+            )
             return index
         }
 

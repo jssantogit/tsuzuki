@@ -312,7 +312,6 @@ internal class MangaAllReaderJourneyFixture(
         swapped = true
     }
 
-
     /**
      * No real network request leaves this test: neither this interceptor nor
      * the image interceptor ever calls proceed(). The production Host still
