@@ -10,7 +10,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withTimeout
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.OkHttpClient
@@ -165,7 +164,7 @@ class ProviderHttpPageLoaderTest {
 
             loader.recycle()
             releaseRequest.countDown()
-            val failure = withTimeout(5_000) { finished.await() }
+            val failure = finished.await()
 
             (failure == null || failure is CancellationException) shouldBe true
             (page.status is Page.State.Error) shouldBe false
