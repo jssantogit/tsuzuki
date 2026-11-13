@@ -627,14 +627,6 @@ class ScriptProviderReadingGatewayIsolationTest {
     }
 
     /**
-     * A pinned Provider repo checkout runs the actual MangaAll code7 JS with
-     * deterministic HTTP responses before this Android test APK is compiled.
-     * This test feeds those emitted JSON V1 objects through the REAL Host
-     * isolated SCRIPT decoder, reconciliation and chapter/page resolver.
-     * It does not execute code7 on Android or download real CDN image bytes.
-     */
-
-    /**
      * Loads the UNMODIFIED distributable code7 .tsz built with tooling/build_provider.py.
      * Only the test's OkHttp transport is synthetic. All requests still pass
      * the production origin policy and the actual isolated QuickJS package runtime.
