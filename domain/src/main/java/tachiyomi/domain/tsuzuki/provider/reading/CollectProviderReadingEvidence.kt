@@ -17,6 +17,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCandidateReason
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCanonicalAuthorState
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderDetailOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderEditionQualification
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
@@ -29,6 +30,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
+import tachiyomi.domain.tsuzuki.integration.interactor.ResolveCanonicalMetadata
 import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshotRepository
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
@@ -98,6 +100,7 @@ class CollectProviderReadingEvidence private constructor(
     private val titleNameObservationRepository: TitleNameObservationRepository?,
     private val integrationRegistry: IntegrationRegistry?,
     private val canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository?,
+    private val canonicalMetadataResolver: ResolveCanonicalMetadata?,
     private val workSourceAssociationRepository: ProviderWorkSourceAssociationRepository?,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit,
 ) {
@@ -112,6 +115,7 @@ class CollectProviderReadingEvidence private constructor(
         titleNameObservationRepository: TitleNameObservationRepository,
         integrationRegistry: IntegrationRegistry,
         canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository,
+        canonicalMetadataResolver: ResolveCanonicalMetadata,
         workSourceAssociationRepository: ProviderWorkSourceAssociationRepository,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
@@ -124,6 +128,7 @@ class CollectProviderReadingEvidence private constructor(
         titleNameObservationRepository = titleNameObservationRepository,
         integrationRegistry = integrationRegistry,
         canonicalMetadataSnapshotRepository = canonicalMetadataSnapshotRepository,
+        canonicalMetadataResolver = canonicalMetadataResolver,
         workSourceAssociationRepository = workSourceAssociationRepository,
         constructorMarker = Unit,
     )
@@ -139,6 +144,7 @@ class CollectProviderReadingEvidence private constructor(
         titleNameObservationRepository: TitleNameObservationRepository? = null,
         integrationRegistry: IntegrationRegistry? = null,
         canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository? = null,
+        canonicalMetadataResolver: ResolveCanonicalMetadata? = null,
         workSourceAssociationRepository: ProviderWorkSourceAssociationRepository? = null,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
@@ -151,6 +157,7 @@ class CollectProviderReadingEvidence private constructor(
         titleNameObservationRepository = titleNameObservationRepository,
         integrationRegistry = integrationRegistry,
         canonicalMetadataSnapshotRepository = canonicalMetadataSnapshotRepository,
+        canonicalMetadataResolver = canonicalMetadataResolver,
         workSourceAssociationRepository = workSourceAssociationRepository,
         constructorMarker = Unit,
     )
@@ -167,26 +174,67 @@ class CollectProviderReadingEvidence private constructor(
             titleNameObservationRepository,
             integrationRegistry,
         )
-        // Editorial author corroboration is additive, not a title-score heuristic.
-        // Only a snapshot tied to its own verified external ID is eligible.
+        // Bootstrap a missing canonical metadata snapshot once via ICE's
+        // verified external IDs. The resolver pins active integration config,
+        // deduplicates concurrent fetches and never authorizes title-only HIDs.
+        // Test fixtures without that resolver use the isolated snapshot store.
+        var canonicalAuthorState = DiagnosticProviderCanonicalAuthorState.METADATA_MISSING
         val canonicalAuthors = try {
-            canonicalMetadataSnapshotRepository?.get(canonicalTitleId)?.metadata?.let { metadata ->
-                metadata.authors
-                    ?.takeIf { author ->
-                        author.externalId != null &&
-                            metadata.externalIds[author.providerId] == author.externalId
-                    }
-                    ?.value
-                    ?.mapNotNull(::normalizedCreator)
-                    ?.toSet()
-                    ?.takeIf { it.isNotEmpty() }
+            val cached = if (canonicalMetadataResolver != null) {
+                canonicalMetadataResolver.cached(canonicalTitleId)
+            } else {
+                canonicalMetadataSnapshotRepository?.get(canonicalTitleId)?.metadata
             }
+            val metadata = if (cached != null) {
+                canonicalAuthorState = DiagnosticProviderCanonicalAuthorState.UNVERIFIED_CACHED
+                cached
+            } else if (canonicalMetadataResolver != null) {
+                val resolved = withTimeoutOrNull(MAX_CANONICAL_AUTHOR_BOOTSTRAP_MILLIS) {
+                    canonicalMetadataResolver.execute(canonicalTitleId)
+                }
+                canonicalAuthorState = when {
+                    resolved == null -> DiagnosticProviderCanonicalAuthorState.FETCH_TIMEOUT
+                    resolved.isFailure -> DiagnosticProviderCanonicalAuthorState.FETCH_FAILED
+                    else -> DiagnosticProviderCanonicalAuthorState.UNVERIFIED_FETCHED
+                }
+                resolved?.getOrNull()
+            } else {
+                null
+            }
+            metadata?.authors
+                ?.takeIf { author ->
+                    // Never let an unrelated metadata identity or an unverified
+                    // external ID certify a source work's creator.
+                    author.externalId != null &&
+                        metadata.externalIds[author.providerId] == author.externalId
+                }
+                ?.value
+                ?.mapNotNull(::normalizedCreator)
+                ?.toSet()
+                ?.takeIf { it.isNotEmpty() }
+                ?.also {
+                    canonicalAuthorState = if (cached != null) {
+                        DiagnosticProviderCanonicalAuthorState.VERIFIED_CACHED
+                    } else {
+                        DiagnosticProviderCanonicalAuthorState.VERIFIED_FETCHED
+                    }
+                }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
+            // Metadata is best-effort: an unavailable catalog cannot invalidate
+            // previously reconciled chapters, bindings or chapter progress.
+            canonicalAuthorState = DiagnosticProviderCanonicalAuthorState.FETCH_FAILED
             null
         }
-        trace(canonicalTitleId, null, DiagnosticStage.SUMMARY, DiagnosticOutcome.STARTED, targets = targets.size)
+        trace(
+            canonicalTitleId,
+            null,
+            DiagnosticStage.SUMMARY,
+            DiagnosticOutcome.STARTED,
+            targets = targets.size,
+            canonicalAuthorState = canonicalAuthorState,
+        )
 
         val results = coroutineScope {
             val gate = Semaphore(MAX_CONCURRENT_PROVIDERS)
@@ -1621,6 +1669,7 @@ class CollectProviderReadingEvidence private constructor(
         completed: Boolean? = null,
         errorCode: ProviderErrorCode? = null,
         malformedStage: DiagnosticProviderMalformedResultStage? = null,
+        canonicalAuthorState: DiagnosticProviderCanonicalAuthorState? = null,
         name: DiagnosticEventName = DiagnosticEventName.PROVIDER_READING_EVIDENCE,
     ) {
         runCatching {
@@ -1634,6 +1683,9 @@ class CollectProviderReadingEvidence private constructor(
                 exactMatches?.let { put("accepted_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 bindings?.let { put("binding_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 lookupDecision?.let { put("lookup_decision", DiagnosticAttributeValue.Code(it)) }
+                canonicalAuthorState?.let {
+                    put("provider_canonical_author_state", DiagnosticAttributeValue.Code(it))
+                }
                 observed?.let { put("observation_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 pageCount?.let { put("page_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 accepted?.let { put("chapter_count", DiagnosticAttributeValue.Number(it.toLong())) }
@@ -1737,6 +1789,10 @@ class CollectProviderReadingEvidence private constructor(
         const val MAX_WORK_SOURCE_COLLECTION_MILLIS = 5_800L
         const val MAX_CONCURRENT_PROVIDERS = 4
         const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
+
+        // A missing catalog snapshot gets one bounded independent identity
+        // fetch before source lookup, not an unbounded provider discovery.
+        const val MAX_CANONICAL_AUTHOR_BOOTSTRAP_MILLIS = 4_000L
         private val RECOVERABLE_LOOKUP_ERRORS = setOf(
             ProviderErrorCode.TIMEOUT,
             ProviderErrorCode.NETWORK_ERROR,

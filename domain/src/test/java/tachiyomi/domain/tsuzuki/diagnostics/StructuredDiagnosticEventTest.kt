@@ -6,6 +6,40 @@ import org.junit.jupiter.api.Test
 class StructuredDiagnosticEventTest {
 
     @Test
+    fun `canonical author bootstrap diagnostics preserve closed state but not author names or forged codes`() {
+        val event = StructuredDiagnosticEvent(
+            timestampMillis = 1_790_755_200_000L,
+            severity = DiagnosticSeverity.INFO,
+            subsystem = DiagnosticSubsystem.CHAPTER,
+            name = DiagnosticEventName.PROVIDER_READING_EVIDENCE,
+            sessionId = "d2719c3b-4518-4d6b-9b09-2834381a322c",
+            operationId = null,
+            stage = DiagnosticStage.SUMMARY,
+            outcome = DiagnosticOutcome.STARTED,
+            attributes = mapOf(
+                "provider_canonical_author_state" to DiagnosticAttributeValue.Code(
+                    DiagnosticProviderCanonicalAuthorState.VERIFIED_FETCHED,
+                ),
+                "canonical_author" to DiagnosticAttributeValue.Text("private author name"),
+                "provider_canonical_author_state_injected" to
+                    DiagnosticAttributeValue.Text("Bearer private secret"),
+            ),
+        )
+
+        requireNotNull(StructuredDiagnosticSanitizer.sanitize(event)).attributes shouldBe mapOf(
+            DiagnosticAttribute.PROVIDER_CANONICAL_AUTHOR_STATE to DiagnosticAttributeValue.Code(
+                DiagnosticProviderCanonicalAuthorState.VERIFIED_FETCHED,
+            ),
+        )
+        val wrongType = event.copy(
+            attributes = mapOf(
+                "provider_canonical_author_state" to DiagnosticAttributeValue.Text("VERIFIED_FETCHED"),
+            ),
+        )
+        requireNotNull(StructuredDiagnosticSanitizer.sanitize(wrongType)).attributes shouldBe emptyMap()
+    }
+
+    @Test
     fun `MangaAll Reader source click keeps typed failure stage and drops unsafe payload`() {
         val event = StructuredDiagnosticEvent(
             timestampMillis = 1_790_755_200_000L,

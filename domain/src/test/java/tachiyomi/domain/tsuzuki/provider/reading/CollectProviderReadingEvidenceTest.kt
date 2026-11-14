@@ -3,6 +3,7 @@ package tachiyomi.domain.tsuzuki.provider.reading
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
@@ -18,6 +19,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticErrorCategory
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCanonicalAuthorState
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderDetailOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderEditionQualification
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
@@ -28,6 +30,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
 import tachiyomi.domain.tsuzuki.integration.IntegrationId
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
+import tachiyomi.domain.tsuzuki.integration.interactor.ResolveCanonicalMetadata
 import tachiyomi.domain.tsuzuki.integration.model.IntegrationCapability
 import tachiyomi.domain.tsuzuki.integration.model.ProvenancedMetadata
 import tachiyomi.domain.tsuzuki.integration.model.ResolvedMetadata
@@ -466,6 +469,11 @@ class CollectProviderReadingEvidenceTest {
             ),
             refreshedAt = 42L,
         )
+        val resolver = mockk<ResolveCanonicalMetadata>()
+        coEvery { resolver.cached(canonicalTitle.id) } returns ResolvedMetadata(
+            authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), id, externalId = "mal-verified"),
+            externalIds = mapOf(id to "mal-verified"),
+        )
         val bindings = MemoryBindingRepository()
         val recorder = CapturingProviderDiagnostics(captureActive = true)
         val collector = CollectProviderReadingEvidence(
@@ -507,6 +515,7 @@ class CollectProviderReadingEvidenceTest {
             evidenceAdapter = ProviderChapterEvidenceAdapter(),
             clock = { 42L },
             canonicalMetadataSnapshotRepository = metadata,
+            canonicalMetadataResolver = resolver,
             diagnostics = recorder,
         )
         val result = collector.execute(canonicalTitle.id)
@@ -519,6 +528,169 @@ class CollectProviderReadingEvidenceTest {
                 it.stage == DiagnosticStage.LOOKUP
         }.attributes["lookup_decision"] shouldBe DiagnosticAttributeValue.Code(
             DiagnosticProviderLookupDecision.AUTHOR_CORROBORATED,
+        )
+        coVerify(exactly = 1) { resolver.cached(canonicalTitle.id) }
+        coVerify(exactly = 0) { resolver.execute(canonicalTitle.id, false) }
+        recorder.events.single {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.SUMMARY &&
+                it.outcome == DiagnosticOutcome.STARTED
+        }.attributes["provider_canonical_author_state"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderCanonicalAuthorState.VERIFIED_CACHED,
+        )
+    }
+
+    @Test
+    fun `cold metadata cache obtains verified authors before selecting source identity`(): Unit = runBlocking {
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns null
+        val resolver = mockk<ResolveCanonicalMetadata>()
+        coEvery { resolver.cached(canonicalTitle.id) } returns null
+        coEvery { resolver.execute(canonicalTitle.id, false) } returns Result.success(
+            ResolvedMetadata(
+                authors = ProvenancedMetadata(
+                    listOf("Hiromu Arakawa"),
+                    metadataId,
+                    externalId = "mal-verified",
+                ),
+                externalIds = mapOf(metadataId to "mal-verified"),
+            ),
+        )
+        val bindings = MemoryBindingRepository()
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    "same-title-corroborated",
+                                    "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Arakawa Hiromu"),
+                                ),
+                                ProviderWorkCandidate(
+                                    "same-title-other-author",
+                                    "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Other Writer"),
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    request.binding.externalWorkId shouldBe "same-title-corroborated"
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation("chapter-one", "Chapter 1")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            canonicalMetadataResolver = resolver,
+            diagnostics = recorder,
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+
+        result.complete shouldBe true
+        result.bindingCount shouldBe 1
+        result.evidence.single().externalChapterKey shouldBe "chapter-one"
+        bindings.getByTitle(canonicalTitle.id).single().ref.externalWorkId shouldBe "same-title-corroborated"
+        coVerify(exactly = 1) { resolver.cached(canonicalTitle.id) }
+        coVerify(exactly = 1) { resolver.execute(canonicalTitle.id, false) }
+        val authorEvent = recorder.events.single {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.SUMMARY &&
+                it.outcome == DiagnosticOutcome.STARTED
+        }
+        authorEvent.attributes["provider_canonical_author_state"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderCanonicalAuthorState.VERIFIED_FETCHED,
+        )
+        (StructuredDiagnosticSanitizer.sanitize(authorEvent) != null) shouldBe true
+    }
+
+    @Test
+    fun `cold metadata with unverified author provenance never authorizes a source`(): Unit = runBlocking {
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns null
+        val resolver = mockk<ResolveCanonicalMetadata>()
+        coEvery { resolver.cached(canonicalTitle.id) } returns null
+        // The same provider supplied the author's name, but this snapshot
+        // does NOT prove the referenced external identity belongs to the work.
+        coEvery { resolver.execute(canonicalTitle.id, false) } returns Result.success(
+            ResolvedMetadata(
+                authors = ProvenancedMetadata(
+                    listOf("Hiromu Arakawa"),
+                    metadataId,
+                    externalId = "unverified-work",
+                ),
+                externalIds = mapOf(metadataId to "different-verified-work"),
+            ),
+        )
+        val bindings = MemoryBindingRepository()
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    "same-title-one",
+                                    "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Arakawa Hiromu"),
+                                ),
+                                ProviderWorkCandidate(
+                                    "same-title-two",
+                                    "Dandadan",
+                                    language = "en",
+                                    authors = listOf("Other Writer"),
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Unverified author must not authorize any source chapter request") },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            canonicalMetadataResolver = resolver,
+            diagnostics = recorder,
+        )
+
+        val result = collector.execute(canonicalTitle.id)
+
+        result.bindingCount shouldBe 0
+        result.snapshots shouldBe emptyList()
+        result.partialEvidence shouldBe emptyList()
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+        coVerify(exactly = 1) { resolver.execute(canonicalTitle.id, false) }
+        val authorEvent = recorder.events.single {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.SUMMARY &&
+                it.outcome == DiagnosticOutcome.STARTED
+        }
+        authorEvent.attributes["provider_canonical_author_state"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderCanonicalAuthorState.UNVERIFIED_FETCHED,
         )
     }
 
