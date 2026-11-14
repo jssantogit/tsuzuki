@@ -1,5 +1,28 @@
 # MangaAll: Host→Reader Android acceptance gate
 
+## 2026-11-14: integrated A54 release validation — Host #198/#199/#200
+
+Host main contains the three independently verified fixes: Reader network-cancel crash
+([#198](https://github.com/jssantogit/tsuzuki/pull/198)), canonical author provenance
+bootstrapping on cold metadata cache ([#199](https://github.com/jssantogit/tsuzuki/pull/199)),
+and durable per-HID provisional chapter pagination continuation
+([#200](https://github.com/jssantogit/tsuzuki/pull/200)). The post-merge
+[CI #43605935069](https://github.com/jssantogit/tsuzuki/actions/runs/43605935069)
+finished SUCCESS at main commit `76866ca8bd955e6541e2442f0a52a32832a54d79`.
+
+This documentation-only commit requests the standard **signed main release APK**
+via the existing `[apk]` push gate. The install is an in-place update of
+`app.tsuzuki` on A54: do not remove app data or installed providers.
+The signed `app.tsuzuki.mangaall` 0.5.2/code7 at repository sequence 33
+is unchanged; no standalone MangaDex/MangaDot/MangaFire enrollment is needed.
+Check Oyasumi Punpun and Koe no Katachi canonical chapters, progressive page
+continuation across multiple refreshes and process restart, verified source
+and edition identity, Reader open/retry/displayed pixels, existing progress,
+and absence of the prior network-cancel crash. Record any source-specific
+HTTP 403/CDN failure as inconclusive instead of claiming editorial completeness.
+This APK gate is *not* proof of physical A54 correctness by itself.
+
+
 **Release status (2026-11-13).** The Host was squash-merged into main as
 [PR #197](https://github.com/jssantogit/tsuzuki/pull/197),
 commit `22db2bdd94d993b239d3d1e5e07cab8a62ebc043`.
