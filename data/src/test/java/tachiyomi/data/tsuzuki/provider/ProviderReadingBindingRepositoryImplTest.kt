@@ -20,9 +20,9 @@ import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelection
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCursor
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderProvisionalCursorProgress
-import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBinding
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderSourceEditionQualification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkSourceAssociation
@@ -300,11 +300,13 @@ class ProviderReadingBindingRepositoryImplTest {
         cursors.commit(second.copy(nextCursor = ProviderCursor("outdated-page"), completedPages = 3))
         cursors.get("title", ref, 7, "config-a")?.nextCursor shouldBe ProviderCursor("third-page")
         cursors.get("title", ref, 7, "config-a")?.completedPages shouldBe 2
-        cursors.commit(second.copy(
-            expectedCursor = ProviderCursor("third-page"),
-            nextCursor = null,
-            completedPages = 3,
-        ))
+        cursors.commit(
+            second.copy(
+                expectedCursor = ProviderCursor("third-page"),
+                nextCursor = null,
+                completedPages = 3,
+            ),
+        )
         cursors.get("title", ref, 7, "config-a") shouldBe null
     }
 

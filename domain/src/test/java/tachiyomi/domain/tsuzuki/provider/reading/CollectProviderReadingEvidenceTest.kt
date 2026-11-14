@@ -2697,7 +2697,7 @@ class CollectProviderReadingEvidenceTest {
             override suspend fun get(
                 canonicalTitleId: String,
                 ref: ProviderBindingRef,
-                providerVersionCode: Int,
+                providerVersionCode: Long,
                 configurationFingerprint: String,
             ): ProviderProvisionalCursorCheckpoint? =
                 cursors[ref.externalWorkId]?.takeIf {

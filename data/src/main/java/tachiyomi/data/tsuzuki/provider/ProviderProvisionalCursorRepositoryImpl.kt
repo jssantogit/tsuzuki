@@ -49,6 +49,8 @@ class ProviderProvisionalCursorRepositoryImpl(
         val versionCode = progress.providerVersionCode
         val next = progress.nextCursor
         if (next == null) {
+            // A newly scanned single-page source has no prior checkpoint to clear.
+            val expectedCursor = progress.expectedCursor?.value ?: return
             queries.finishTsuzukiProviderProvisionalCursor(
                 canonicalTitleId = progress.canonicalTitleId,
                 providerId = progress.ref.providerId.value,
@@ -56,7 +58,7 @@ class ProviderProvisionalCursorRepositoryImpl(
                 externalWorkId = progress.ref.externalWorkId,
                 providerVersionCode = versionCode,
                 configurationFingerprint = progress.configurationFingerprint,
-                expectedCursor = progress.expectedCursor?.value,
+                expectedCursor = expectedCursor,
             )
         } else {
             queries.advanceTsuzukiProviderProvisionalCursor(
