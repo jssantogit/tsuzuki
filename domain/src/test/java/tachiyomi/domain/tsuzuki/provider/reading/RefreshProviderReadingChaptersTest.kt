@@ -282,6 +282,57 @@ class RefreshProviderReadingChaptersTest {
         published shouldBe false
     }
 
+    @Test
+    fun `provisional source resumes at a persisted page cursor without publishing a snapshot`() = runBlocking {
+        val requested = mutableListOf<String?>()
+        val accepted = mutableListOf<String?>()
+        val refresher = RefreshProviderReadingChapters(
+            gateway = gateway { request ->
+                requested += request.cursor?.value
+                ProviderCallResult.Success(
+                    ProviderPage(
+                        items = listOf(ProviderChapterObservation("c33", "Chapter 33")),
+                        nextCursor = null,
+                    ),
+                )
+            },
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            publishSnapshot = null,
+            clock = { 42L },
+            onPageAccepted = { next -> accepted += next?.value },
+        )
+
+        refresher.execute(binding, startingCursor = ProviderCursor("page-33")) shouldBe
+            ProviderCallResult.Success(1)
+        requested shouldBe listOf("page-33")
+        accepted shouldBe listOf(null)
+    }
+
+    @Test
+    fun `provisional page-limit returns incomplete progress rather than throwing away validated pages`() = runBlocking {
+        val accepted = mutableListOf<String?>()
+        var calls = 0
+        val refresher = RefreshProviderReadingChapters(
+            gateway = gateway { _ ->
+                calls++
+                ProviderCallResult.Success(
+                    ProviderPage(
+                        items = listOf(ProviderChapterObservation("chapter-$calls", "Chapter $calls")),
+                        nextCursor = ProviderCursor("cursor-$calls"),
+                    ),
+                )
+            },
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            publishSnapshot = null,
+            clock = { 42L },
+            onPageAccepted = { next -> accepted += next?.value },
+        )
+
+        refresher.execute(binding, allowPartialPageLimit = true) shouldBe ProviderCallResult.Success(32)
+        calls shouldBe 32
+        accepted.last() shouldBe "cursor-32"
+    }
+
     private fun gateway(
         chapters: suspend (
             ProviderReadingChaptersRequest,
