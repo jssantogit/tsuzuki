@@ -20,6 +20,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderDetailOutcome
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCanonicalAuthorState
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderEditionQualification
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderWorkVerification
@@ -542,6 +543,7 @@ class CollectProviderReadingEvidenceTest {
             ),
         )
         val bindings = MemoryBindingRepository()
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
         val collector = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
             providerRegistry = registry(),
@@ -582,6 +584,7 @@ class CollectProviderReadingEvidenceTest {
             clock = { 42L },
             canonicalMetadataSnapshotRepository = metadata,
             canonicalMetadataResolver = resolver,
+            diagnostics = recorder,
         )
 
         val result = collector.execute(canonicalTitle.id)
@@ -592,6 +595,15 @@ class CollectProviderReadingEvidenceTest {
         bindings.getByTitle(canonicalTitle.id).single().ref.externalWorkId shouldBe "same-title-corroborated"
         coVerify(exactly = 1) { resolver.cached(canonicalTitle.id) }
         coVerify(exactly = 1) { resolver.execute(canonicalTitle.id, false) }
+        val authorEvent = recorder.events.single {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.SUMMARY &&
+                it.outcome == DiagnosticOutcome.STARTED
+        }
+        authorEvent.attributes["provider_canonical_author_state"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderCanonicalAuthorState.VERIFIED_FETCHED,
+        )
+        (StructuredDiagnosticSanitizer.sanitize(authorEvent) != null) shouldBe true
     }
 
     @Test
@@ -614,6 +626,7 @@ class CollectProviderReadingEvidenceTest {
             ),
         )
         val bindings = MemoryBindingRepository()
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
         val collector = CollectProviderReadingEvidence(
             canonicalTitleRepository = titleRepository(canonicalTitle),
             providerRegistry = registry(),
@@ -646,6 +659,7 @@ class CollectProviderReadingEvidenceTest {
             clock = { 42L },
             canonicalMetadataSnapshotRepository = metadata,
             canonicalMetadataResolver = resolver,
+            diagnostics = recorder,
         )
 
         val result = collector.execute(canonicalTitle.id)
@@ -655,6 +669,14 @@ class CollectProviderReadingEvidenceTest {
         result.partialEvidence shouldBe emptyList()
         bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
         coVerify(exactly = 1) { resolver.execute(canonicalTitle.id, false) }
+        val authorEvent = recorder.events.single {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.SUMMARY &&
+                it.outcome == DiagnosticOutcome.STARTED
+        }
+        authorEvent.attributes["provider_canonical_author_state"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderCanonicalAuthorState.UNVERIFIED_FETCHED,
+        )
     }
 
     @Test
