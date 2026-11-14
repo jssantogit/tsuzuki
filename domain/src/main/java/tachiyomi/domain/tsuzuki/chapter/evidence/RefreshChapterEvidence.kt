@@ -400,7 +400,9 @@ class RefreshChapterEvidence private constructor(
                     }
                     // This must follow successful durable evidence reconciliation.
                     // An interrupted write leaves the old cursor and safely replays the page.
-                    providerReadingEvidence?.commitProvisionalCursors(collected.cursorProgress)
+                    if (collected.cursorProgress.isNotEmpty()) {
+                        providerReadingEvidence?.commitProvisionalCursors(collected.cursorProgress)
+                    }
                     collected.snapshots.forEach { snapshot ->
                         reconcileProviderSnapshot(snapshot)
                     }
