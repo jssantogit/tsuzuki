@@ -2676,6 +2676,140 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `verified provisional HID resumes its next page across refreshes without rebinding`() = runBlocking<Unit> {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), metadataId, externalId = "verified"),
+                externalIds = mapOf(metadataId to "verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val dexId = "mangadex:11111111-2222-4333-8444-555555555555"
+        val sources = MemoryWorkSourceAssociationRepository()
+        val bindings = MemoryBindingRepository()
+        val cursors = mutableMapOf<String, ProviderProvisionalCursorCheckpoint>()
+        val repository = object : ProviderProvisionalCursorRepository {
+            override suspend fun get(
+                canonicalTitleId: String,
+                ref: ProviderBindingRef,
+                providerVersionCode: Int,
+                configurationFingerprint: String,
+            ): ProviderProvisionalCursorCheckpoint? =
+                cursors[ref.externalWorkId]?.takeIf {
+                    it.canonicalTitleId == canonicalTitleId &&
+                        it.ref == ref &&
+                        it.providerVersionCode == providerVersionCode &&
+                        it.configurationFingerprint == configurationFingerprint
+                }
+
+            override suspend fun commit(progress: ProviderProvisionalCursorProgress) {
+                val current = cursors[progress.ref.externalWorkId]
+                if (current?.nextCursor != progress.expectedCursor) return
+                if (progress.nextCursor == null) {
+                    cursors.remove(progress.ref.externalWorkId)
+                } else {
+                    cursors[progress.ref.externalWorkId] = ProviderProvisionalCursorCheckpoint(
+                        canonicalTitleId = progress.canonicalTitleId,
+                        ref = progress.ref,
+                        providerVersionCode = progress.providerVersionCode,
+                        configurationFingerprint = progress.configurationFingerprint,
+                        nextCursor = progress.nextCursor,
+                        completedPages = progress.completedPages,
+                    )
+                }
+            }
+        }
+        val requestedCursors = mutableListOf<String?>()
+        var secondPageAttempts = 0
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(provider = mangaAll),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    externalWorkId = dexId,
+                                    title = "Dandadan",
+                                    authors = listOf("Arakawa Hiromu"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                    coverageMinMilli = 1_000,
+                                    coverageMaxMilli = 1_000,
+                                    coverageHasMore = true,
+                                ),
+                                ProviderWorkCandidate("mangadot:317", "Dandadan"),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    requestedCursors += request.cursor?.value
+                    when (request.cursor?.value) {
+                        null -> ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(ProviderChapterObservation("c1", "Chapter 1", rawNumber = 1.0)),
+                                nextCursor = ProviderCursor("second-page"),
+                            ),
+                        )
+                        "second-page" -> {
+                            secondPageAttempts++
+                            if (secondPageAttempts == 1) {
+                                ProviderCallResult.Failure(ProviderError(ProviderErrorCode.TIMEOUT, retryable = true))
+                            } else {
+                                ProviderCallResult.Success(
+                                    ProviderPage(
+                                        items = listOf(ProviderChapterObservation("c2", "Chapter 2", rawNumber = 2.0)),
+                                        nextCursor = null,
+                                    ),
+                                )
+                            }
+                        }
+                        else -> error("Unrecognized cursor")
+                    }
+                },
+                expectedProviderId = mangaAll,
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = sources,
+            provisionalCursorRepository = repository,
+        )
+
+        val first = collector.execute(canonicalTitle.id)
+        first.complete shouldBe false
+        first.bindingCount shouldBe 0
+        first.snapshots shouldBe emptyList()
+        first.partialEvidence.map { it.externalChapterKey } shouldBe listOf("c1")
+        first.cursorProgress.single().nextCursor shouldBe ProviderCursor("second-page")
+        // No persistence before durable evidence reconciliation by the caller.
+        cursors shouldBe emptyMap()
+        collector.commitProvisionalCursors(first.cursorProgress)
+        cursors[dexId]?.nextCursor shouldBe ProviderCursor("second-page")
+
+        val second = collector.execute(canonicalTitle.id)
+        second.complete shouldBe false
+        second.bindingCount shouldBe 0
+        second.snapshots shouldBe emptyList()
+        second.partialEvidence.map { it.externalChapterKey } shouldBe listOf("c2")
+        second.cursorProgress.single().nextCursor shouldBe null
+        collector.commitProvisionalCursors(second.cursorProgress)
+        cursors shouldBe emptyMap()
+        requestedCursors shouldBe listOf(null, "second-page", "second-page")
+        bindings.getByTitle(canonicalTitle.id) shouldBe emptyList()
+    }
+
+    @Test
     fun `MangaAll empty binding recovers verified MangaFire chapters without rebinding`() = runBlocking<Unit> {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val title = canonicalTitle.copy(displayTitle = "Oyasumi Punpun")
