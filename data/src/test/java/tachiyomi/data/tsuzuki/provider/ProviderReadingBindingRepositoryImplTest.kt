@@ -264,7 +264,7 @@ class ProviderReadingBindingRepositoryImplTest {
     }
 
     @Test
-    fun `provisional cursor advances only for an exact HID version and configuration and stale writes lose`() = runBlocking {
+    fun `provisional cursor CAS rejects stale writers and other HID or configuration`() = runBlocking {
         val cursors = ProviderProvisionalCursorRepositoryImpl(database)
         val ref = ProviderBindingRef(
             ProviderId("app.tsuzuki.mangaall"),

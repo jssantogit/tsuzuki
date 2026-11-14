@@ -22,7 +22,7 @@ class ProviderProvisionalCursorRepositoryImpl(
     override suspend fun get(
         canonicalTitleId: String,
         ref: ProviderBindingRef,
-        providerVersionCode: Int,
+        providerVersionCode: Long,
         configurationFingerprint: String,
     ): ProviderProvisionalCursorCheckpoint? =
         database.tsuzuki_provider_provisional_cursorsQueries.getTsuzukiProviderProvisionalCursor(
@@ -30,7 +30,7 @@ class ProviderProvisionalCursorRepositoryImpl(
             providerId = ref.providerId.value,
             facetId = ref.facetId.orEmpty(),
             externalWorkId = ref.externalWorkId,
-            providerVersionCode = providerVersionCode.toLong(),
+            providerVersionCode = providerVersionCode,
             configurationFingerprint = configurationFingerprint,
             mapper = { cursor, pages ->
                 ProviderProvisionalCursorCheckpoint(
@@ -46,7 +46,7 @@ class ProviderProvisionalCursorRepositoryImpl(
 
     override suspend fun commit(progress: ProviderProvisionalCursorProgress) {
         val queries = database.tsuzuki_provider_provisional_cursorsQueries
-        val versionCode = progress.providerVersionCode.toLong()
+        val versionCode = progress.providerVersionCode
         val next = progress.nextCursor
         if (next == null) {
             queries.finishTsuzukiProviderProvisionalCursor(

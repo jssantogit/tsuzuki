@@ -8,7 +8,7 @@ package tachiyomi.domain.tsuzuki.provider.reading
 data class ProviderProvisionalCursorCheckpoint(
     val canonicalTitleId: String,
     val ref: ProviderBindingRef,
-    val providerVersionCode: Int,
+    val providerVersionCode: Long,
     val configurationFingerprint: String,
     val nextCursor: ProviderCursor,
     val completedPages: Int,
@@ -27,7 +27,7 @@ data class ProviderProvisionalCursorCheckpoint(
 data class ProviderProvisionalCursorProgress(
     val canonicalTitleId: String,
     val ref: ProviderBindingRef,
-    val providerVersionCode: Int,
+    val providerVersionCode: Long,
     val configurationFingerprint: String,
     val expectedCursor: ProviderCursor?,
     val nextCursor: ProviderCursor?,
@@ -50,7 +50,7 @@ interface ProviderProvisionalCursorRepository {
     suspend fun get(
         canonicalTitleId: String,
         ref: ProviderBindingRef,
-        providerVersionCode: Int,
+        providerVersionCode: Long,
         configurationFingerprint: String,
     ): ProviderProvisionalCursorCheckpoint?
 
