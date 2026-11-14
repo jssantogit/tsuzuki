@@ -173,23 +173,37 @@ class CollectProviderReadingEvidence private constructor(
             titleNameObservationRepository,
             integrationRegistry,
         )
-        // Editorial author corroboration is additive, not a title-score heuristic.
-        // Only a snapshot tied to its own verified external ID is eligible.
+        // A cold metadata cache must not permanently block corroborated
+        // work-source evidence while chapter refresh is already running.
+        // Resolve through ICE's verified canonical IDs, not a Provider title
+        // search. The resolver checks its active integration fingerprint,
+        // coalesces in-flight requests, and never returns unverified IDs.
+        // Tests without the injected resolver retain their snapshot fixtures.
         val canonicalAuthors = try {
-            canonicalMetadataSnapshotRepository?.get(canonicalTitleId)?.metadata?.let { metadata ->
-                metadata.authors
-                    ?.takeIf { author ->
-                        author.externalId != null &&
-                            metadata.externalIds[author.providerId] == author.externalId
+            val metadata = if (canonicalMetadataResolver != null) {
+                canonicalMetadataResolver.cached(canonicalTitleId)
+                    ?: withTimeoutOrNull(MAX_CANONICAL_AUTHOR_BOOTSTRAP_MILLIS) {
+                        canonicalMetadataResolver.execute(canonicalTitleId).getOrNull()
                     }
-                    ?.value
-                    ?.mapNotNull(::normalizedCreator)
-                    ?.toSet()
-                    ?.takeIf { it.isNotEmpty() }
+            } else {
+                canonicalMetadataSnapshotRepository?.get(canonicalTitleId)?.metadata
             }
+            metadata?.authors
+                ?.takeIf { author ->
+                    // Never let a search title or a different provider ID
+                    // authorize an author's editorial identity.
+                    author.externalId != null &&
+                        metadata.externalIds[author.providerId] == author.externalId
+                }
+                ?.value
+                ?.mapNotNull(::normalizedCreator)
+                ?.toSet()
+                ?.takeIf { it.isNotEmpty() }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
+            // Metadata is best-effort; chapter refresh and existing bindings
+            // must remain usable when a catalog integration is unavailable.
             null
         }
         trace(canonicalTitleId, null, DiagnosticStage.SUMMARY, DiagnosticOutcome.STARTED, targets = targets.size)
@@ -1743,6 +1757,9 @@ class CollectProviderReadingEvidence private constructor(
         const val MAX_WORK_SOURCE_COLLECTION_MILLIS = 5_800L
         const val MAX_CONCURRENT_PROVIDERS = 4
         const val MAX_PROVIDER_COLLECTION_MILLIS = 20_000L
+        // A missing catalog snapshot gets one bounded independent identity
+        // fetch before source lookup, not an unbounded provider discovery.
+        const val MAX_CANONICAL_AUTHOR_BOOTSTRAP_MILLIS = 4_000L
         private val RECOVERABLE_LOOKUP_ERRORS = setOf(
             ProviderErrorCode.TIMEOUT,
             ProviderErrorCode.NETWORK_ERROR,
