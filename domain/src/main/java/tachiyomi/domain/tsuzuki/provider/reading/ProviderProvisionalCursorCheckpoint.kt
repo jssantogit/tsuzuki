@@ -3,6 +3,7 @@ package tachiyomi.domain.tsuzuki.provider.reading
 /**
  * Durable continuation of an incomplete, independently corroborated source HID.
  * Never grants editorial or Reader authority and never represents a full inventory.
+ * Stored cursors are operational hints; page/chapter identity is rechecked at resume.
  */
 data class ProviderProvisionalCursorCheckpoint(
     val canonicalTitleId: String,
