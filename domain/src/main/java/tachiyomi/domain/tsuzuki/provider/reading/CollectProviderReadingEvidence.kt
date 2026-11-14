@@ -77,6 +77,8 @@ data class ProviderReadingEvidenceCollection(
     val complete: Boolean = true,
     /** Source-attested pages from an incomplete inventory; additive only, never a snapshot. */
     val partialEvidence: List<ChapterEvidence> = emptyList(),
+    /** Cursor advances become durable only after additive evidence reconciliation. */
+    val cursorProgress: List<ProviderProvisionalCursorProgress> = emptyList(),
 ) {
     val evidence: List<ChapterEvidence>
         get() = snapshots.flatMap(ProviderReadingEvidenceSnapshot::evidence)
@@ -102,6 +104,7 @@ class CollectProviderReadingEvidence private constructor(
     private val canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository?,
     private val canonicalMetadataResolver: ResolveCanonicalMetadata?,
     private val workSourceAssociationRepository: ProviderWorkSourceAssociationRepository?,
+    private val provisionalCursorRepository: ProviderProvisionalCursorRepository?,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit,
 ) {
 
@@ -117,6 +120,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository,
         canonicalMetadataResolver: ResolveCanonicalMetadata,
         workSourceAssociationRepository: ProviderWorkSourceAssociationRepository,
+        provisionalCursorRepository: ProviderProvisionalCursorRepository,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         providerRegistry = providerRegistry,
@@ -130,6 +134,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalMetadataSnapshotRepository = canonicalMetadataSnapshotRepository,
         canonicalMetadataResolver = canonicalMetadataResolver,
         workSourceAssociationRepository = workSourceAssociationRepository,
+        provisionalCursorRepository = provisionalCursorRepository,
         constructorMarker = Unit,
     )
 
@@ -146,6 +151,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository? = null,
         canonicalMetadataResolver: ResolveCanonicalMetadata? = null,
         workSourceAssociationRepository: ProviderWorkSourceAssociationRepository? = null,
+        provisionalCursorRepository: ProviderProvisionalCursorRepository? = null,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
         providerRegistry = providerRegistry,
@@ -159,6 +165,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalMetadataSnapshotRepository = canonicalMetadataSnapshotRepository,
         canonicalMetadataResolver = canonicalMetadataResolver,
         workSourceAssociationRepository = workSourceAssociationRepository,
+        provisionalCursorRepository = provisionalCursorRepository,
         constructorMarker = Unit,
     )
 
@@ -289,6 +296,7 @@ class CollectProviderReadingEvidence private constructor(
                                 finished == null -> partial.toList()
                                 else -> finished.partialEvidence
                             },
+                            cursorProgress = if (stillEnabled) finished?.cursorProgress.orEmpty() else emptyList(),
                         )
                     }
                 }
@@ -299,6 +307,7 @@ class CollectProviderReadingEvidence private constructor(
             snapshots = results.flatMap(ProviderReadingEvidenceCollection::snapshots),
             bindingCount = results.sumOf(ProviderReadingEvidenceCollection::bindingCount),
             partialEvidence = results.flatMap(ProviderReadingEvidenceCollection::partialEvidence),
+            cursorProgress = results.flatMap(ProviderReadingEvidenceCollection::cursorProgress),
             complete = results.all(ProviderReadingEvidenceCollection::complete),
         )
         val acceptedChapters = collection.snapshots.sumOf { it.evidence.size }
@@ -333,6 +342,31 @@ class CollectProviderReadingEvidence private constructor(
                 append(':')
                 append(target.registration.configurationFingerprint)
             }
+        }
+    }
+
+    /**
+     * Invoked only after RefreshChapterEvidence has durably reconciled this
+     * round's provisional observations. Never advance over unwritten pages.
+     */
+    suspend fun commitProvisionalCursors(progress: List<ProviderProvisionalCursorProgress>) {
+        val repository = provisionalCursorRepository ?: return
+        for (advance in progress) {
+            val registration = providerRegistry.registration(advance.ref.providerId) ?: continue
+            if (registration.lifecycleStatus != ProviderLifecycleStatus.ENABLED ||
+                registration.descriptor.version.code != advance.providerVersionCode ||
+                registration.configurationFingerprint != advance.configurationFingerprint
+            ) {
+                continue
+            }
+            val source = workSourceAssociationRepository?.get(advance.ref) ?: continue
+            if (source.canonicalTitleId != advance.canonicalTitleId ||
+                source.workVerification != ProviderWorkVerification.AUTHOR_CORROBORATED ||
+                source.editionQualification != ProviderSourceEditionQualification.UNRESOLVED
+            ) {
+                continue
+            }
+            repository.commit(advance)
         }
     }
 
@@ -1026,8 +1060,18 @@ class CollectProviderReadingEvidence private constructor(
         onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
     ): ProviderReadingEvidenceCollection {
         val evidence = mutableListOf<ChapterEvidence>()
+        val progress = mutableListOf<ProviderProvisionalCursorProgress>()
         for (source in sources.take(MAX_COVERAGE_CONTENDERS)) {
             if (!source.canCollectProvisionalChapters) continue
+            val versionCode = target.registration.descriptor.version.code
+            val fingerprint = target.registration.configurationFingerprint
+            val saved = provisionalCursorRepository?.get(
+                canonicalTitleId,
+                source.ref,
+                versionCode,
+                fingerprint,
+            )
+            if (saved != null && saved.completedPages >= MAX_PROVISIONAL_CURSOR_PAGES) continue
             val observedAt = clock()
             val sourceBinding = ProviderReadingBinding(
                 // Only an ephemeral transport to the existing paginated fetcher.
@@ -1048,6 +1092,8 @@ class CollectProviderReadingEvidence private constructor(
             val trustedPages = mutableListOf<Pair<List<ProviderChapterObservation>, Long>>()
             var lastPage = 0
             var activePage = 0
+            var lastAcceptedCursor: ProviderCursor? = saved?.nextCursor
+            var acceptedPages = 0
             val result = withTimeoutOrNull(MAX_WORK_SOURCE_COLLECTION_MILLIS) {
                 RefreshProviderReadingChapters(
                     gateway = gateway,
@@ -1056,6 +1102,10 @@ class CollectProviderReadingEvidence private constructor(
                     // snapshot. Never detach chapters from an unverified edition.
                     publishSnapshot = null,
                     clock = clock,
+                    onPageAccepted = { nextCursor ->
+                        lastAcceptedCursor = nextCursor
+                        acceptedPages++
+                    },
                     onPageStarted = { index ->
                         activePage = index
                         traceChapterRequest(canonicalTitleId, target, source.ref, index, DiagnosticOutcome.STARTED)
@@ -1090,7 +1140,11 @@ class CollectProviderReadingEvidence private constructor(
                             name = DiagnosticEventName.PROVIDER_READING_PAGE,
                         )
                     },
-                ).execute(sourceBinding)
+                ).execute(
+                    sourceBinding,
+                    startingCursor = saved?.nextCursor,
+                    allowPartialPageLimit = true,
+                )
             }
             if (result is ProviderCallResult.Failure &&
                 result.error.code in setOf(ProviderErrorCode.MALFORMED_RESULT, ProviderErrorCode.RESOURCE_LIMIT)
@@ -1141,11 +1195,27 @@ class CollectProviderReadingEvidence private constructor(
                 // Rehashing the same chapter IDs would allocate a second copy.
                 evidence += onPageCollected(source.ref, page, pageObservedAt)
             }
+            if (trustedPages.isNotEmpty() && acceptedPages > 0) {
+                val pageCount = (saved?.completedPages ?: 0) + acceptedPages
+                if (pageCount <= MAX_PROVISIONAL_CURSOR_PAGES) {
+                    progress += ProviderProvisionalCursorProgress(
+                        canonicalTitleId = canonicalTitleId,
+                        ref = source.ref,
+                        providerVersionCode = versionCode,
+                        configurationFingerprint = fingerprint,
+                        expectedCursor = saved?.nextCursor,
+                        nextCursor = lastAcceptedCursor,
+                        completedPages = pageCount,
+                        recordedAt = clock(),
+                    )
+                }
+            }
         }
         return ProviderReadingEvidenceCollection(
             bindingCount = 0,
             complete = false,
             partialEvidence = evidence,
+            cursorProgress = progress,
         )
     }
 

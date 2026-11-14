@@ -41,6 +41,7 @@ on:
     branches:
       - main
       - 'tsuzuki/**'
+      - 'fix/**'
       - 'fix/canonical-chapter-resolver-hardening'
       - 'audit/**'
       - 'feat/issue-155-independent-chapter-inventory'

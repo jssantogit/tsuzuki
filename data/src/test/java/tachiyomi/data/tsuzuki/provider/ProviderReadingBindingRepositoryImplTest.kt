@@ -21,6 +21,8 @@ import tachiyomi.domain.tsuzuki.provider.reading.MangaAllSourceSelection
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderCursor
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderProvisionalCursorProgress
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBinding
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderSourceEditionQualification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkSourceAssociation
@@ -259,6 +261,72 @@ class ProviderReadingBindingRepositoryImplTest {
         selections.get("title", "en") shouldBe english
         selections.select(english.copy(selectedAt = 50)) shouldBe true
         selections.get("title", "en") shouldBe english
+    }
+
+    @Test
+    fun `provisional cursor CAS rejects stale writers and other HID or configuration`() = runBlocking {
+        val cursors = ProviderProvisionalCursorRepositoryImpl(database)
+        val ref = ProviderBindingRef(
+            ProviderId("app.tsuzuki.mangaall"),
+            "en",
+            "mangafire:zk12",
+        )
+        val first = ProviderProvisionalCursorProgress(
+            canonicalTitleId = "title",
+            ref = ref,
+            providerVersionCode = 7,
+            configurationFingerprint = "config-a",
+            expectedCursor = null,
+            nextCursor = ProviderCursor("second-page"),
+            completedPages = 1,
+            recordedAt = 100,
+        )
+
+        cursors.get("title", ref, 7, "config-a") shouldBe null
+        cursors.commit(first)
+        cursors.get("title", ref, 7, "config-a")?.nextCursor shouldBe ProviderCursor("second-page")
+        cursors.get("title", ref.copy(externalWorkId = "mangafire:7p56"), 7, "config-a") shouldBe null
+        cursors.get("title", ref.copy(facetId = "pt-br"), 7, "config-a") shouldBe null
+        cursors.get("title", ref, 8, "config-a") shouldBe null
+        cursors.get("title", ref, 7, "config-b") shouldBe null
+
+        val second = first.copy(
+            expectedCursor = ProviderCursor("second-page"),
+            nextCursor = ProviderCursor("third-page"),
+            completedPages = 2,
+            recordedAt = 200,
+        )
+        cursors.commit(second)
+        cursors.commit(second.copy(nextCursor = ProviderCursor("outdated-page"), completedPages = 3))
+        cursors.get("title", ref, 7, "config-a")?.nextCursor shouldBe ProviderCursor("third-page")
+        cursors.get("title", ref, 7, "config-a")?.completedPages shouldBe 2
+        cursors.commit(
+            second.copy(
+                expectedCursor = ProviderCursor("third-page"),
+                nextCursor = null,
+                completedPages = 3,
+            ),
+        )
+        cursors.get("title", ref, 7, "config-a") shouldBe null
+    }
+
+    @Test
+    fun `provisional cursor survives repository reconstruction with same database`() = runBlocking {
+        val ref = ProviderBindingRef(ProviderId("app.tsuzuki.mangaall"), "en", "mangafire:7p56")
+        val checkpoint = ProviderProvisionalCursorProgress(
+            canonicalTitleId = "title",
+            ref = ref,
+            providerVersionCode = 7,
+            configurationFingerprint = "active",
+            expectedCursor = null,
+            nextCursor = ProviderCursor("page-nine"),
+            completedPages = 8,
+            recordedAt = 100,
+        )
+        ProviderProvisionalCursorRepositoryImpl(database).commit(checkpoint)
+        val reopened = ProviderProvisionalCursorRepositoryImpl(database)
+        reopened.get("title", ref, 7, "active")?.nextCursor shouldBe ProviderCursor("page-nine")
+        reopened.get("title", ref, 7, "active")?.completedPages shouldBe 8
     }
 
     private fun workSource(hid: String) = ProviderWorkSourceAssociation(

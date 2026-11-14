@@ -1,0 +1,23 @@
+-- This is an operational cursor, not an edition binding or canonical inventory.
+-- Version and active configuration are part of the key: stale providers cannot resume.
+CREATE TABLE tsuzuki_provider_provisional_cursors(
+    canonical_title_id TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    facet_id TEXT NOT NULL,
+    external_work_id TEXT NOT NULL,
+    provider_version_code INTEGER NOT NULL,
+    configuration_fingerprint TEXT NOT NULL,
+    next_cursor TEXT NOT NULL,
+    completed_pages INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (
+        canonical_title_id,
+        provider_id,
+        facet_id,
+        external_work_id,
+        provider_version_code,
+        configuration_fingerprint
+    ),
+    FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
+);
+

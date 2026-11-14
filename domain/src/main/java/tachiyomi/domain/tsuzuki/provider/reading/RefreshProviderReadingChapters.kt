@@ -19,6 +19,8 @@ class RefreshProviderReadingChapters internal constructor(
     private val onPageCollected: suspend (List<ProviderChapterObservation>, Long) -> Unit = { _, _ -> },
     private val onPageStarted: suspend (Int) -> Unit = {},
     private val onPageFinished: suspend (Int, Int?, ProviderErrorCode?, Long) -> Unit = { _, _, _, _ -> },
+    /** Called only after the fully validated page has been delivered to its provisional collector. */
+    private val onPageAccepted: suspend (ProviderCursor?) -> Unit = {},
 ) {
 
     constructor(
@@ -33,7 +35,15 @@ class RefreshProviderReadingChapters internal constructor(
 
     suspend fun execute(
         binding: ProviderReadingBinding,
+        startingCursor: ProviderCursor? = null,
+        allowPartialPageLimit: Boolean = false,
     ): ProviderCallResult<Int> {
+        require(startingCursor == null || publishSnapshot == null) {
+            "An authoritative snapshot cannot resume without its preceding pages"
+        }
+        require(!allowPartialPageLimit || publishSnapshot == null) {
+            "Only provisional sources can continue across page-limited rounds"
+        }
         if (binding.availability != ProviderBindingAvailability.AVAILABLE) {
             return failure(ProviderErrorCode.UNAVAILABLE)
         }
@@ -46,7 +56,8 @@ class RefreshProviderReadingChapters internal constructor(
         val observations = ArrayList<ProviderChapterObservation>()
         val seenChapterIds = hashSetOf<String>()
         val seenCursors = hashSetOf<String>()
-        var cursor: ProviderCursor? = null
+        startingCursor?.let { seenCursors += it.value }
+        var cursor: ProviderCursor? = startingCursor
 
         repeat(MAX_PAGES) {
             val pageIndex = it + 1
@@ -93,6 +104,7 @@ class RefreshProviderReadingChapters internal constructor(
             // Observed chapters may be used additively if a later page stalls. This is
             // not a complete snapshot and must never detach older Provider support.
             onPageCollected(page.items, snapshotObservedAt)
+            onPageAccepted(next)
             if (next == null) {
                 // A source-only portfolio scan must verify every page, cursor and
                 // chapter identity but must not build a redundant canonical
@@ -117,7 +129,14 @@ class RefreshProviderReadingChapters internal constructor(
             cursor = next
         }
 
-        return failure(ProviderErrorCode.RESOURCE_LIMIT)
+        // This is never an authoritative snapshot. All observed pages have
+        // already passed the strict per-page validation and can be committed
+        // additively before the next refresh resumes at the next cursor.
+        return if (allowPartialPageLimit) {
+            ProviderCallResult.Success(observations.size)
+        } else {
+            failure(ProviderErrorCode.RESOURCE_LIMIT)
+        }
     }
 
     private fun failure(code: ProviderErrorCode) =

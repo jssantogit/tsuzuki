@@ -1,0 +1,72 @@
+-- This is an operational cursor, not an edition binding or canonical inventory.
+-- Version and active configuration are part of the key: stale providers cannot resume.
+CREATE TABLE tsuzuki_provider_provisional_cursors(
+    canonical_title_id TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    facet_id TEXT NOT NULL,
+    external_work_id TEXT NOT NULL,
+    provider_version_code INTEGER NOT NULL,
+    configuration_fingerprint TEXT NOT NULL,
+    next_cursor TEXT NOT NULL,
+    completed_pages INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (
+        canonical_title_id,
+        provider_id,
+        facet_id,
+        external_work_id,
+        provider_version_code,
+        configuration_fingerprint
+    ),
+    FOREIGN KEY(canonical_title_id) REFERENCES tsuzuki_titles(id) ON DELETE CASCADE
+);
+
+getTsuzukiProviderProvisionalCursor:
+SELECT next_cursor, completed_pages
+FROM tsuzuki_provider_provisional_cursors
+WHERE canonical_title_id = :canonicalTitleId
+AND provider_id = :providerId
+AND facet_id = :facetId
+AND external_work_id = :externalWorkId
+AND provider_version_code = :providerVersionCode
+AND configuration_fingerprint = :configurationFingerprint
+LIMIT 1;
+
+advanceTsuzukiProviderProvisionalCursor:
+INSERT INTO tsuzuki_provider_provisional_cursors(
+    canonical_title_id, provider_id, facet_id, external_work_id,
+    provider_version_code, configuration_fingerprint, next_cursor,
+    completed_pages, updated_at
+)
+SELECT :canonicalTitleId, :providerId, :facetId, :externalWorkId,
+    :providerVersionCode, :configurationFingerprint, :nextCursor,
+    :completedPages, :updatedAt
+WHERE :expectedCursor IS NULL OR EXISTS (
+    SELECT 1 FROM tsuzuki_provider_provisional_cursors
+    WHERE canonical_title_id = :canonicalTitleId
+    AND provider_id = :providerId
+    AND facet_id = :facetId
+    AND external_work_id = :externalWorkId
+    AND provider_version_code = :providerVersionCode
+    AND configuration_fingerprint = :configurationFingerprint
+    AND next_cursor = :expectedCursor
+)
+ON CONFLICT(
+    canonical_title_id, provider_id, facet_id, external_work_id,
+    provider_version_code, configuration_fingerprint
+) DO UPDATE SET
+    next_cursor = excluded.next_cursor,
+    completed_pages = excluded.completed_pages,
+    updated_at = excluded.updated_at
+WHERE tsuzuki_provider_provisional_cursors.next_cursor = :expectedCursor
+AND excluded.completed_pages > tsuzuki_provider_provisional_cursors.completed_pages;
+
+finishTsuzukiProviderProvisionalCursor:
+DELETE FROM tsuzuki_provider_provisional_cursors
+WHERE canonical_title_id = :canonicalTitleId
+AND provider_id = :providerId
+AND facet_id = :facetId
+AND external_work_id = :externalWorkId
+AND provider_version_code = :providerVersionCode
+AND configuration_fingerprint = :configurationFingerprint
+AND next_cursor = :expectedCursor;
