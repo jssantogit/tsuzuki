@@ -29,6 +29,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.NoOpStructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.IntegrationRegistry
+import tachiyomi.domain.tsuzuki.integration.interactor.ResolveCanonicalMetadata
 import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshotRepository
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderId
@@ -98,6 +99,7 @@ class CollectProviderReadingEvidence private constructor(
     private val titleNameObservationRepository: TitleNameObservationRepository?,
     private val integrationRegistry: IntegrationRegistry?,
     private val canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository?,
+    private val canonicalMetadataResolver: ResolveCanonicalMetadata?,
     private val workSourceAssociationRepository: ProviderWorkSourceAssociationRepository?,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit,
 ) {
@@ -112,6 +114,7 @@ class CollectProviderReadingEvidence private constructor(
         titleNameObservationRepository: TitleNameObservationRepository,
         integrationRegistry: IntegrationRegistry,
         canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository,
+        canonicalMetadataResolver: ResolveCanonicalMetadata,
         workSourceAssociationRepository: ProviderWorkSourceAssociationRepository,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
@@ -124,6 +127,7 @@ class CollectProviderReadingEvidence private constructor(
         titleNameObservationRepository = titleNameObservationRepository,
         integrationRegistry = integrationRegistry,
         canonicalMetadataSnapshotRepository = canonicalMetadataSnapshotRepository,
+        canonicalMetadataResolver = canonicalMetadataResolver,
         workSourceAssociationRepository = workSourceAssociationRepository,
         constructorMarker = Unit,
     )
@@ -139,6 +143,7 @@ class CollectProviderReadingEvidence private constructor(
         titleNameObservationRepository: TitleNameObservationRepository? = null,
         integrationRegistry: IntegrationRegistry? = null,
         canonicalMetadataSnapshotRepository: CanonicalMetadataSnapshotRepository? = null,
+        canonicalMetadataResolver: ResolveCanonicalMetadata? = null,
         workSourceAssociationRepository: ProviderWorkSourceAssociationRepository? = null,
     ) : this(
         canonicalTitleRepository = canonicalTitleRepository,
@@ -151,6 +156,7 @@ class CollectProviderReadingEvidence private constructor(
         titleNameObservationRepository = titleNameObservationRepository,
         integrationRegistry = integrationRegistry,
         canonicalMetadataSnapshotRepository = canonicalMetadataSnapshotRepository,
+        canonicalMetadataResolver = canonicalMetadataResolver,
         workSourceAssociationRepository = workSourceAssociationRepository,
         constructorMarker = Unit,
     )
