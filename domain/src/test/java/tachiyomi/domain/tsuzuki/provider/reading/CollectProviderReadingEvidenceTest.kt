@@ -2984,6 +2984,12 @@ class CollectProviderReadingEvidenceTest {
         collector.commitProvisionalCursors(resumed.cursorProgress)
         cursors shouldBe emptyMap()
         cursorsRequested shouldBe listOf(null, "page-two", "page-two")
+        recorder.events.any {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.PERSIST &&
+                it.outcome == DiagnosticOutcome.REUSED &&
+                it.attributes["page_count"] == DiagnosticAttributeValue.Number(1)
+        } shouldBe true
         chapterWorkIds shouldBe listOf(dexWork, fireWork, fireWork, dexWork, fireWork)
         lookups shouldBe listOf("Oyasumi Punpun", "Oyasumi Punpun")
         bindings.getByTitle(title.id) shouldBe listOf(saved)
@@ -3039,7 +3045,9 @@ class CollectProviderReadingEvidenceTest {
                     when (request.binding.externalWorkId to request.cursor?.value) {
                         "source-first" to null -> ProviderCallResult.Success(
                             ProviderPage(
-                                items = listOf(ProviderChapterObservation("first-page-c1", "Chapter 1", rawNumber = 1.0)),
+                                items = listOf(
+                                    ProviderChapterObservation("first-page-c1", "Chapter 1", rawNumber = 1.0),
+                                ),
                                 nextCursor = ProviderCursor("first-next"),
                             ),
                         )
