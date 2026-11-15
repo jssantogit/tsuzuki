@@ -1,6 +1,7 @@
 package tachiyomi.domain.tsuzuki.provider.reading
 
 import tachiyomi.domain.tsuzuki.provider.ProviderId
+import java.text.Normalizer
 
 /**
  * Read-only work-level assessment for competing source HIDs.
@@ -119,13 +120,29 @@ object ProviderWorkSourcePortfolio {
             mangaFireUrlAttestsEditionVariant(providerId, candidate, normalizedBase)
     }
 
-    private fun normalizeCreator(name: String): String? =
-        name.trim().lowercase()
+    private fun normalizeCreator(name: String): String? {
+        val tokens = name.trim().lowercase()
             .split(CREATOR_SEPARATORS)
             .filter(String::isNotBlank)
             .takeIf { it.isNotEmpty() }
-            ?.sorted()
-            ?.joinToString(" ")
+            ?: return null
+        // This portfolio is only a source of *provisional* chapter evidence;
+        // it cannot auto-bind editions or grant Reader access. Full Japanese
+        // creator names commonly differ only by a transcribed long vowel:
+        // "KUI Ryoko" vs "Ryouko Kui" / "Ryōko Kui". Compare ALL name tokens,
+        // without surname-only/fuzzy matching. Do not normalize single-token
+        // pseudonyms (e.g. "ONE") into a broader identity.
+        val normalized = if (tokens.size >= 2) {
+            tokens.map { token ->
+                val withoutMacrons = Normalizer.normalize(token, Normalizer.Form.NFKD)
+                    .replace(CREATOR_COMBINING_MARKS, "")
+                JAPANESE_LONG_YO.replace(withoutMacrons) { match -> match.value.dropLast(1) }
+            }
+        } else {
+            tokens
+        }
+        return normalized.sorted().joinToString(" ")
+    }
 
     private fun normalizeTitle(title: String): String =
         title.trim().lowercase().replace(WHITESPACE, " ")
@@ -202,6 +219,8 @@ object ProviderWorkSourcePortfolio {
     )
     private val WHITESPACE = Regex("\\s+")
     private val CREATOR_SEPARATORS = Regex("[^\\p{L}\\p{N}]+")
+    private val CREATOR_COMBINING_MARKS = Regex("\\p{M}+")
+    private val JAPANESE_LONG_YO = Regex("(?:ry|ky|gy|sh|ch|j|ny|hy|by|py|my)ou")
     private val EDITION_MARKERS = listOf(
         "colored",
         "coloured",
