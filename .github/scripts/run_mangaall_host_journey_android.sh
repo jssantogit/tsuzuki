@@ -8,6 +8,7 @@ readonly runner='app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner'
 readonly output='.github/results/mangaall-host-journey-android'
 readonly host_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllSyntheticJourney_reconcilesCanonicalChaptersAndReaderPages'
 readonly code7_replay_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllCode7EmittedVectors_reconcileHostAndPreserveSourceIdentity'
+readonly diverse_journey_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllDiverseJourney_reconcilesUpdatesReaderAndRejectsPartialSnapshots'
 readonly code7_package_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllRealCode7Package_executesOfflineHttpCanonicalAndPages'
 readonly signed_code6_case='eu.kanade.tachiyomi.provider.repository.MangaAllSignedUpgradeIsolationTest#publishedCode6IndexVerifiesWithItsActualPinnedRootAndInstallsOriginalArtifact'
 readonly signed_upgrade_case='eu.kanade.tachiyomi.provider.repository.MangaAllSignedUpgradeIsolationTest#disposableSameRootCode6ToCode7UpdateRejectsTamperingAndRollsBackAtomically'
@@ -67,6 +68,7 @@ run_case() {
   printf 'MANGAALL_JOURNEY|phase=%s|outcome=PASS\n' "$label"
 }
 run_case 'SCRIPT_CANONICAL_HTTP_BYTES' "$host_case" 'mangaAllHostJourneyOptIn'
+run_case 'MANGAALL_13_FORMAT_CANONICAL_REFRESH_AND_READER' "$diverse_journey_case" 'mangaAllHostJourneyOptIn'
 run_case 'CODE7_JS_VECTORS_HOST_CANONICAL_AND_PAGES' "$code7_replay_case" 'mangaAllHostJourneyOptIn'
 run_case 'CODE7_REAL_TSZ_SCRIPT_CANONICAL_PAGES' "$code7_package_case" 'mangaAllHostJourneyOptIn'
 run_case 'OFFICIAL_SIGNED_CODE6_REPOSITORY_INSTALL' "$signed_code6_case" 'mangaAllSignedUpgradeOptIn'

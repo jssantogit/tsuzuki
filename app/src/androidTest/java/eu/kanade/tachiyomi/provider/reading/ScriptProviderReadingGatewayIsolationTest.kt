@@ -1086,6 +1086,229 @@ class ScriptProviderReadingGatewayIsolationTest {
         assertEquals(expected.keys, observed)
     }
 
+    /**
+     * Cross-format Host journey. These are recognizable curated work names, but
+     * every new HID/chapter/image is deliberately synthetic and scoped to this
+     * disposable runtime. Only Punpun and Koe HIDs were previously seen on A54.
+     * Neither source discovery nor provisional chapters authorizes a binding:
+     * USER_CONFIRMED below explicitly models the edition selected by a user.
+     *
+     * Validates the REAL Host gateway, canonical snapshot reconciliation,
+     * incremental refresh, exact-scoped Reader option and chapter-zero mapping.
+     * Actual public APIs and image pixels are independent acceptance gates.
+     */
+    @Test
+    fun mangaAllDiverseJourney_reconcilesUpdatesReaderAndRejectsPartialSnapshots() = runBlocking {
+        data class JourneyCase(
+            val id: String,
+            val title: String,
+            val format: String,
+            val workId: String,
+            val chapterZero: Boolean = false,
+            val stallOnce: Boolean = false,
+        )
+        val examples = listOf(
+            JourneyCase("punpun", "Oyasumi Punpun", "manga", "mangafire:zk12"),
+            JourneyCase("koe", "Koe no Katachi", "manga", "mangafire:7p56"),
+            JourneyCase("one-piece", "One Piece", "manga", "mangafire:fixture-one-piece", chapterZero = true),
+            JourneyCase("chainsaw", "Chainsaw Man", "manga", "mangafire:fixture-chainsaw", stallOnce = true),
+            JourneyCase("vagabond", "Vagabond", "manga", "mangafire:fixture-vagabond"),
+            JourneyCase("yotsuba", "Yotsuba to!", "manga", "mangafire:fixture-yotsuba"),
+            JourneyCase("mirai-nikki", "Mirai Nikki", "manga", "mangafire:fixture-mirai-nikki"),
+            JourneyCase("solo-leveling", "Solo Leveling", "manhwa", "mangafire:fixture-solo-leveling"),
+            JourneyCase("the-horizon", "The Horizon", "manhwa", "mangafire:fixture-the-horizon"),
+            JourneyCase("tower-of-god", "Tower of God", "webtoon", "mangafire:fixture-tower-of-god"),
+            JourneyCase("eleceed", "Eleceed", "webtoon", "mangafire:fixture-eleceed"),
+            JourneyCase("martial-peak", "Martial Peak", "manhua", "mangafire:fixture-martial-peak"),
+            JourneyCase("tales-demons", "Tales of Demons and Gods", "manhua", "mangafire:fixture-tales-demons"),
+        )
+        assertEquals(13, examples.size)
+        assertEquals(setOf("manga", "manhwa", "webtoon", "manhua"), examples.map { it.format }.toSet())
+        val providerId = ProviderId("app.tsuzuki.mangaall")
+        for (example in examples) {
+            // Each stage runs against the same real Host decoder and persistence
+            // repositories, but no original MangaFire address is contacted.
+            val canonicalTitleId = "matrix-" + example.id
+            val chapterRepository = InMemoryCanonicalChapterRepository()
+            val evidenceRepository = InMemoryChapterEvidenceRepository()
+            val reconcile = ReconcileChapterEvidence(
+                parser = ParseCanonicalChapterLabel(),
+                canonicalChapterRepository = chapterRepository,
+                evidenceRepository = evidenceRepository,
+            )
+            val binding = ProviderReadingBinding(
+                id = "user-confirmed-" + example.id,
+                canonicalTitleId = canonicalTitleId,
+                ref = ProviderBindingRef(providerId, "en", example.workId),
+                verification = ProviderBindingVerification.USER_CONFIRMED,
+                availability = ProviderBindingAvailability.AVAILABLE,
+                createdAt = 1L,
+                updatedAt = 1L,
+            )
+            fun script(updated: Boolean, stalled: Boolean = false): String {
+                val includeFour = if (updated) "true" else "false"
+                val includeZero = if (example.chapterZero) "true" else "false"
+                val rejectSecond = if (stalled) "true" else "false"
+                val workId = example.workId
+                val title = example.title
+                val scenarioId = example.id
+                return """
+                    const work = "$workId";
+                    const updated = $includeFour;
+                    const includeZero = $includeZero;
+                    const stalled = $rejectSecond;
+                    const chapter = (n) => ({
+                      providerChapterId: work + "-c" + n,
+                      rawLabel: "Chapter " + n,
+                      rawNumber: n,
+                      language: "en"
+                    });
+                    export default {
+                      reading: {
+                        lookup: async (request) => ({
+                          items: request.titles.includes("$title")
+                            ? [{externalWorkId: work, title: "$title", aliases: [], language: "en"}]
+                            : [],
+                          nextCursor: null
+                        }),
+                        chapters: async (request) => {
+                          if (request.binding.externalWorkId !== work ||
+                              request.binding.facetId !== "en") throw Error("Wrong edition");
+                          if (!request.cursor) return {
+                            items: includeZero ? [chapter(0), chapter(1), chapter(2)]
+                              : [chapter(1), chapter(2)],
+                            nextCursor: "second"
+                          };
+                          if (request.cursor !== "second") throw Error("Unexpected cursor");
+                          if (stalled) throw Error("Synthetic second page unavailable");
+                          return { items: updated ? [chapter(3), chapter(4)] : [chapter(3)],
+                            nextCursor: null };
+                        },
+                        pages: async (request) => {
+                          if (request.binding.externalWorkId !== work ||
+                              request.binding.facetId !== "en" ||
+                              !request.providerChapterId.startsWith(work + "-c")) {
+                            throw Error("Reader source or chapter mismatch");
+                          }
+                          const number = request.providerChapterId.slice((work + "-c").length);
+                          if (!/^[0-9]+$/.test(number)) throw Error("Invalid chapter");
+                          return { type: "page_list", pages: [{
+                            url: "https://mfcdn.cc/fixture/$scenarioId/" + number + ".png",
+                            headers: { Referer: "https://mangafire.to" }
+                          }] };
+                        }
+                      }
+                    };
+                """.trimIndent()
+            }
+            fun gatewayFor(
+                updated: Boolean,
+                stalled: Boolean = false,
+                onRegistered: (DefaultProviderRegistry) -> Unit,
+            ) =
+                gateway(
+                    main = script(updated, stalled),
+                    providerId = providerId,
+                    networkOrigins = setOf("https://mfcdn.cc", "https://mangafire.to"),
+                    localNetwork = false,
+                    onRegistry = onRegistered,
+                )
+
+            lateinit var firstRegistry: DefaultProviderRegistry
+            val originalGateway = gatewayFor(false) { firstRegistry = it }
+            val lookup = originalGateway.lookup(
+                providerId,
+                ProviderReadingLookupRequest(titles = listOf(example.title), requestedLanguage = "en"),
+            ) as ProviderCallResult.Success
+            assertEquals(example.workId, lookup.value.items.single().externalWorkId)
+            val refresh = RefreshProviderReadingChapters(
+                gateway = originalGateway,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                reconcileChapterEvidence = reconcile,
+            )
+            val initialCount = if (example.chapterZero) 4 else 3
+            assertEquals(ProviderCallResult.Success(initialCount), refresh.execute(binding))
+            val initialChapters = chapterRepository.getByCanonicalTitleId(canonicalTitleId)
+            assertEquals(initialCount, initialChapters.size)
+            val chapterOne = initialChapters.single { it.displayNumber == "1" }
+            val firstId = chapterOne.id
+
+            val originalResolver = ResolveProviderChapterReading(
+                canonicalChapterRepository = chapterRepository,
+                evidenceRepository = evidenceRepository,
+                bindingRepository = SingleProviderReadingBindingRepository(binding),
+                gateway = originalGateway,
+                providerRegistry = firstRegistry,
+            )
+            val originalOption = originalResolver.options(firstId).single()
+            assertEquals(example.workId, originalOption.externalWorkId)
+            assertEquals(example.workId + "-c1", originalOption.providerChapterId)
+            assertEquals("mangafire", originalOption.contentSourceId)
+            val attemptedForgery = originalResolver.preparedContent(
+                originalOption.copy(providerChapterId = "mangadex:foreign"),
+            )
+            assertTrue(attemptedForgery is ProviderCallResult.Failure)
+            val content = originalResolver.preparedContent(originalOption) as ProviderCallResult.Success
+            val pages = content.value as PreparedChapterContent.HttpPages
+            assertEquals("https://mfcdn.cc/fixture/" + example.id + "/1.png", pages.pages.single().url)
+
+            if (example.chapterZero) {
+                val zero = initialChapters.single { it.displayNumber == "0" }
+                val option = originalResolver.options(zero.id).single()
+                assertEquals(example.workId + "-c0", option.providerChapterId)
+                val prepared = originalResolver.preparedContent(option) as ProviderCallResult.Success
+                assertEquals(
+                    "https://mfcdn.cc/fixture/" + example.id + "/0.png",
+                    (prepared.value as PreparedChapterContent.HttpPages).pages.single().url,
+                )
+            }
+
+            if (example.stallOnce) {
+                lateinit var blockedRegistry: DefaultProviderRegistry
+                val blockedGateway = gatewayFor(false, stalled = true) { blockedRegistry = it }
+                val blockedRefresh = RefreshProviderReadingChapters(
+                    gateway = blockedGateway,
+                    evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                    reconcileChapterEvidence = reconcile,
+                )
+                assertTrue(blockedRefresh.execute(binding) is ProviderCallResult.Failure)
+                // A later page failure is not a completed empty source inventory
+                // and MUST NOT detach the previous canonical snapshot.
+                assertEquals(initialCount, chapterRepository.getByCanonicalTitleId(canonicalTitleId).size)
+            }
+            // Snapshot precedence uses observed time; advance the clock between
+            // two real Host refresh transactions without injecting fake timestamps.
+            kotlinx.coroutines.delay(20)
+            lateinit var updatedRegistry: DefaultProviderRegistry
+            val updatedGateway = gatewayFor(true) { updatedRegistry = it }
+            val updatedRefresh = RefreshProviderReadingChapters(
+                gateway = updatedGateway,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                reconcileChapterEvidence = reconcile,
+            )
+            assertEquals(ProviderCallResult.Success(initialCount + 1), updatedRefresh.execute(binding))
+            val laterChapters = chapterRepository.getByCanonicalTitleId(canonicalTitleId)
+            assertEquals(initialCount + 1, laterChapters.size)
+            assertEquals(firstId, laterChapters.single { it.displayNumber == "1" }.id)
+            val updatedResolver = ResolveProviderChapterReading(
+                canonicalChapterRepository = chapterRepository,
+                evidenceRepository = evidenceRepository,
+                bindingRepository = SingleProviderReadingBindingRepository(binding),
+                gateway = updatedGateway,
+                providerRegistry = updatedRegistry,
+            )
+            assertEquals(example.workId + "-c1", updatedResolver.options(firstId).single().providerChapterId)
+            val newLast = laterChapters.single { it.displayNumber == "4" }
+            val newOption = updatedResolver.options(newLast.id).single()
+            assertEquals(example.workId + "-c4", newOption.providerChapterId)
+            val newContent = updatedResolver.preparedContent(newOption) as ProviderCallResult.Success
+            assertEquals(
+                "https://mfcdn.cc/fixture/" + example.id + "/4.png",
+                (newContent.value as PreparedChapterContent.HttpPages).pages.single().url,
+            )
+        }
+    }
+
     @Test
     fun htmlDomProvider_parsesHostOwnedDocumentInsideIsolatedInvocation() = runBlocking {
         val server = MockWebServer()
