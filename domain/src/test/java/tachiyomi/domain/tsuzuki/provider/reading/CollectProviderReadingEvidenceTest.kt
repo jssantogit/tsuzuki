@@ -2978,8 +2978,10 @@ class CollectProviderReadingEvidenceTest {
 
         pageTwoFails = false
         val resumed = collector.execute(title.id)
+        resumed.bindingCount shouldBe 1
         resumed.snapshots.single().evidence shouldBe emptyList()
         resumed.partialEvidence.map { it.externalChapterKey } shouldBe listOf("mangafire:chapter-two")
+        resumed.partialEvidence.single().authority shouldBe ChapterEvidenceAuthority.PROVIDER_PROVISIONAL
         resumed.cursorProgress.single().expectedCursor shouldBe ProviderCursor("page-two")
         collector.commitProvisionalCursors(resumed.cursorProgress)
         cursors shouldBe emptyMap()
@@ -3074,6 +3076,7 @@ class CollectProviderReadingEvidenceTest {
         (result != null) shouldBe true
         result!!.complete shouldBe false
         result.partialEvidence.map { it.externalChapterKey } shouldBe listOf("first-page-c1")
+        result.cursorProgress.single().expectedCursor shouldBe null
         result.cursorProgress.single().ref.externalWorkId shouldBe "source-first"
         result.cursorProgress.single().nextCursor shouldBe ProviderCursor("first-next")
     }
