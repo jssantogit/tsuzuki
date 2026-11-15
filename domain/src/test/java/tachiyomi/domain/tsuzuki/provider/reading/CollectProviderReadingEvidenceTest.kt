@@ -688,6 +688,76 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `Ao no Hako serialized and oneshot remain ambiguous with same verified illustrator`(): Unit = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "Ao no Hako")
+        val id = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(title.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = title.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                artists = ProvenancedMetadata(listOf("Kouji Miura"), id, externalId = "ao-series"),
+                externalIds = mapOf(id to "ao-series"),
+            ),
+            refreshedAt = 42L,
+        )
+        val bindings = MemoryBindingRepository()
+        val recorder = CapturingProviderDiagnostics(captureActive = true)
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    "serial-identity",
+                                    title.displayTitle,
+                                    language = "en",
+                                    authors = listOf("Miura Kouji"),
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 200,
+                                ),
+                                ProviderWorkCandidate(
+                                    "oneshot-identity",
+                                    "Blue Box (Oneshot)",
+                                    aliases = listOf(title.displayTitle),
+                                    language = "en",
+                                    authors = listOf("Kouji Miura"),
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 1,
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Shared creator cannot resolve series vs oneshot chapters") },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            diagnostics = recorder,
+        )
+        val result = collector.execute(title.id)
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+        bindings.getByTitle(title.id) shouldBe emptyList()
+        val start = recorder.events.single {
+            it.name == DiagnosticEventName.PROVIDER_READING_EVIDENCE &&
+                it.stage == DiagnosticStage.SUMMARY &&
+                it.outcome == DiagnosticOutcome.STARTED
+        }
+        start.attributes["provider_canonical_credit_basis"] shouldBe DiagnosticAttributeValue.Code(
+            DiagnosticProviderCanonicalCreditBasis.ARTIST_ONLY,
+        )
+        (StructuredDiagnosticSanitizer.sanitize(start) != null) shouldBe true
+    }
+
+    @Test
     fun `cold metadata cache obtains verified authors before selecting source identity`(): Unit = runBlocking {
         val metadataId = IntegrationId("mal")
         val metadata = mockk<CanonicalMetadataSnapshotRepository>()
