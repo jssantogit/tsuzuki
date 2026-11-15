@@ -165,6 +165,7 @@ class ProviderHostInvocationFactory(
                                         ),
                                         failure = failure,
                                         operationId = operationId,
+                                        sourceHost = runCatching { java.net.URI(url).host }.getOrNull(),
                                     ),
                                 )
                             }
