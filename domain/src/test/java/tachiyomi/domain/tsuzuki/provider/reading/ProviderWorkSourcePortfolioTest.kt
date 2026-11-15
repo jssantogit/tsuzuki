@@ -19,6 +19,51 @@ class ProviderWorkSourcePortfolioTest {
     )
 
     @Test
+    fun `Dungeon Meshi known Ryoko romanizations allow source evidence but not editorial authority`() {
+        // Galaxy A54 code8 captured the *real* MangaFire HID 52020 with
+        // VERIFIED_WITH_ALIASES, 200 observed numeric chapters, and
+        // AUTHOR_CONFLICT. MangaFire publicly credits "KUI Ryoko"; independently
+        // sourced catalog credits include "Ryouko Kui" / "Ryōko Kui".
+        // Neither name spelling, source coverage nor exact work title
+        // grants a preferred edition or Reader authority.
+        val observed = original.copy(
+            externalWorkId = "mangafire:52020",
+            title = "Dungeon Meshi",
+            aliases = listOf("Delicious in Dungeon"),
+            authors = listOf("KUI Ryoko"),
+            detailOutcome = ProviderWorkDetailOutcome.VERIFIED_WITH_ALIASES,
+            coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+            coverageObservedCount = 200,
+            coverageMinMilli = 0,
+            coverageMaxMilli = 74_000,
+            coverageHasMore = true,
+        )
+        for (verifiedName in listOf("Ryouko Kui", "Ryōko Kui", "Kui Ryoko")) {
+            val portfolio = ProviderWorkSourcePortfolio.assess(
+                providerId = ProviderId("app.tsuzuki.mangaall"),
+                facetId = "en",
+                queryTitle = "Dungeon Meshi",
+                independentlyVerifiedAuthors = setOf(verifiedName),
+                candidates = listOf(observed),
+            )
+            portfolio.single().workVerification shouldBe ProviderWorkVerification.AUTHOR_CORROBORATED
+            portfolio.single().canCollectProvisionalChapters shouldBe true
+            portfolio.single().canPromoteChapters shouldBe false
+            portfolio.single().canOpenReader shouldBe false
+        }
+        // No surname-only, different given name, or title-only relaxation.
+        val other = ProviderWorkSourcePortfolio.assess(
+            providerId = ProviderId("app.tsuzuki.mangaall"),
+            facetId = "en",
+            queryTitle = "Dungeon Meshi",
+            independentlyVerifiedAuthors = setOf("Different Kui"),
+            candidates = listOf(observed),
+        )
+        other.single().workVerification shouldBe ProviderWorkVerification.AUTHOR_CONFLICT
+        other.single().canCollectProvisionalChapters shouldBe false
+    }
+
+    @Test
     fun `same work with two readable HIDs preserves both identities without choosing an edition`() {
         val portfolio = ProviderWorkSourcePortfolio.assess(
             providerId = ProviderId("app.tsuzuki.mangafire"),
