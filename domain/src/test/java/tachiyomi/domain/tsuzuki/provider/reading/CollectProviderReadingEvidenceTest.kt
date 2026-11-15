@@ -2837,6 +2837,38 @@ class CollectProviderReadingEvidenceTest {
         )
         val bindings = MemoryBindingRepository().apply { upsert(saved) }
         val associations = MemoryWorkSourceAssociationRepository()
+        val cursors = mutableMapOf<String, ProviderProvisionalCursorCheckpoint>()
+        val cursorRepository = object : ProviderProvisionalCursorRepository {
+            override suspend fun get(
+                canonicalTitleId: String,
+                ref: ProviderBindingRef,
+                providerVersionCode: Long,
+                configurationFingerprint: String,
+            ): ProviderProvisionalCursorCheckpoint? = cursors[ref.externalWorkId]?.takeIf {
+                it.canonicalTitleId == canonicalTitleId &&
+                    it.ref == ref &&
+                    it.providerVersionCode == providerVersionCode &&
+                    it.configurationFingerprint == configurationFingerprint
+            }
+
+            override suspend fun commit(progress: ProviderProvisionalCursorProgress) {
+                if (cursors[progress.ref.externalWorkId]?.nextCursor != progress.expectedCursor) return
+                if (progress.nextCursor == null) {
+                    cursors.remove(progress.ref.externalWorkId)
+                } else {
+                    cursors[progress.ref.externalWorkId] = ProviderProvisionalCursorCheckpoint(
+                        canonicalTitleId = progress.canonicalTitleId,
+                        ref = progress.ref,
+                        providerVersionCode = progress.providerVersionCode,
+                        configurationFingerprint = progress.configurationFingerprint,
+                        nextCursor = progress.nextCursor,
+                        completedPages = progress.completedPages,
+                    )
+                }
+            }
+        }
+        var pageTwoFails = true
+        val cursorsRequested = mutableListOf<String?>()
         val recorder = CapturingProviderDiagnostics(captureActive = true)
         val lookups = mutableListOf<String>()
         val chapterWorkIds = mutableListOf<String>()
@@ -2874,23 +2906,46 @@ class CollectProviderReadingEvidenceTest {
                 },
                 chaptersHandler = { request ->
                     chapterWorkIds += request.binding.externalWorkId
-                    ProviderCallResult.Success(
-                        ProviderPage(
-                            items = if (request.binding.externalWorkId == dexWork) {
-                                emptyList()
+                    if (request.binding.externalWorkId == dexWork) {
+                        ProviderCallResult.Success(ProviderPage(emptyList(), nextCursor = null))
+                    } else {
+                        cursorsRequested += request.cursor?.value
+                        when (request.cursor?.value) {
+                            null -> ProviderCallResult.Success(
+                                ProviderPage(
+                                    items = listOf(
+                                        ProviderChapterObservation(
+                                            providerChapterId = "mangafire:chapter-one",
+                                            rawLabel = "Chapter 1",
+                                            rawNumber = 1.0,
+                                            language = "en",
+                                        ),
+                                    ),
+                                    nextCursor = ProviderCursor("page-two"),
+                                ),
+                            )
+                            "page-two" -> if (pageTwoFails) {
+                                ProviderCallResult.Failure(
+                                    ProviderError(ProviderErrorCode.TIMEOUT, retryable = true),
+                                )
                             } else {
-                                listOf(
-                                    ProviderChapterObservation(
-                                        providerChapterId = "mangafire:chapter-one",
-                                        rawLabel = "Chapter 1",
-                                        rawNumber = 1.0,
-                                        language = "en",
+                                ProviderCallResult.Success(
+                                    ProviderPage(
+                                        items = listOf(
+                                            ProviderChapterObservation(
+                                                providerChapterId = "mangafire:chapter-two",
+                                                rawLabel = "Chapter 2",
+                                                rawNumber = 2.0,
+                                                language = "en",
+                                            ),
+                                        ),
+                                        nextCursor = null,
                                     ),
                                 )
-                            },
-                            nextCursor = null,
-                        ),
-                    )
+                            }
+                            else -> error("Unexpected provisional cursor")
+                        }
+                    }
                 },
                 expectedProviderId = mangaAll,
             ),
@@ -2899,6 +2954,7 @@ class CollectProviderReadingEvidenceTest {
             clock = { 42L },
             canonicalMetadataSnapshotRepository = metadata,
             workSourceAssociationRepository = associations,
+            provisionalCursorRepository = cursorRepository,
             diagnostics = recorder,
         )
 
@@ -2913,8 +2969,23 @@ class CollectProviderReadingEvidenceTest {
             ProviderBindingRef(mangaAll, "en", fireWork).evidenceProducerId()
         result.partialEvidence.single().authority shouldBe ChapterEvidenceAuthority.PROVIDER_PROVISIONAL
         result.complete shouldBe false
-        chapterWorkIds shouldBe listOf(dexWork, fireWork)
-        lookups shouldBe listOf("Oyasumi Punpun")
+        // The preferred MangaDex/en snapshot is still complete-empty. Only the
+        // alternative MangaFire HID gets an additive, durable continuation.
+        result.cursorProgress.single().nextCursor shouldBe ProviderCursor("page-two")
+        cursors shouldBe emptyMap()
+        collector.commitProvisionalCursors(result.cursorProgress)
+        cursors[fireWork]?.nextCursor shouldBe ProviderCursor("page-two")
+
+        pageTwoFails = false
+        val resumed = collector.execute(title.id)
+        resumed.snapshots.single().evidence shouldBe emptyList()
+        resumed.partialEvidence.map { it.externalChapterKey } shouldBe listOf("mangafire:chapter-two")
+        resumed.cursorProgress.single().expectedCursor shouldBe ProviderCursor("page-two")
+        collector.commitProvisionalCursors(resumed.cursorProgress)
+        cursors shouldBe emptyMap()
+        cursorsRequested shouldBe listOf(null, "page-two", "page-two")
+        chapterWorkIds shouldBe listOf(dexWork, fireWork, fireWork, dexWork, fireWork)
+        lookups shouldBe listOf("Oyasumi Punpun", "Oyasumi Punpun")
         bindings.getByTitle(title.id) shouldBe listOf(saved)
         associations.getByTitle(title.id).map { it.ref.externalWorkId } shouldBe listOf(fireWork)
         recorder.events.any {
