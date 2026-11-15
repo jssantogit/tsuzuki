@@ -494,7 +494,10 @@ class StructuredDiagnosticEventTest {
         // MangaAll prefixes real source HIDs. Dropping this field made the A54
         // candidate log unusable for differentiating competing source editions.
         val mangaAllId = sanitizeCandidate(
-            mapOf("provider_work_id" to DiagnosticAttributeValue.Text("mangafire:053")),
+            mapOf(
+                "provider_id" to DiagnosticAttributeValue.Text("app.tsuzuki.mangaall"),
+                "provider_work_id" to DiagnosticAttributeValue.Text("mangafire:053"),
+            ),
         )
         mangaAllId[DiagnosticAttribute.PROVIDER_WORK_ID] shouldBe
             DiagnosticAttributeValue.Text("mangafire:053")
@@ -505,8 +508,25 @@ class StructuredDiagnosticEventTest {
             "mangafire:" + "x".repeat(81),
             "untrusted:053",
         ).forEach { unsafe ->
-            sanitizeCandidate(mapOf("provider_work_id" to DiagnosticAttributeValue.Text(unsafe))) shouldBe emptyMap()
+            val checked = sanitizeCandidate(
+                mapOf(
+                    "provider_id" to DiagnosticAttributeValue.Text("app.tsuzuki.mangaall"),
+                    "provider_work_id" to DiagnosticAttributeValue.Text(unsafe),
+                ),
+            )
+            checked.containsKey(DiagnosticAttribute.PROVIDER_WORK_ID) shouldBe false
         }
+        // The same name may not escape through an unrelated Reader event or
+        // a different provider, even if its characters otherwise look safe.
+        sanitizeCandidate(
+            mapOf("provider_work_id" to DiagnosticAttributeValue.Text("mangafire:053")),
+        ) shouldBe emptyMap()
+        sanitizeCandidate(
+            mapOf(
+                "provider_id" to DiagnosticAttributeValue.Text("app.tsuzuki.other"),
+                "provider_work_id" to DiagnosticAttributeValue.Text("mangafire:053"),
+            ),
+        )[DiagnosticAttribute.PROVIDER_WORK_ID] shouldBe null
 
         safe[DiagnosticAttribute.PROVIDER_WORK_TITLE] shouldBe DiagnosticAttributeValue.Text("Vagabond")
         safe[DiagnosticAttribute.PROVIDER_WORK_URL] shouldBe
