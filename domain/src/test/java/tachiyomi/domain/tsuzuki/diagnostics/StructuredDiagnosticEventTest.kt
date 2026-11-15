@@ -491,6 +491,23 @@ class StructuredDiagnosticEventTest {
             ),
         )
         safe[DiagnosticAttribute.PROVIDER_WORK_ID] shouldBe DiagnosticAttributeValue.Text("qnlvj")
+        // MangaAll prefixes real source HIDs. Dropping this field made the A54
+        // candidate log unusable for differentiating competing source editions.
+        val mangaAllId = sanitizeCandidate(
+            mapOf("provider_work_id" to DiagnosticAttributeValue.Text("mangafire:053")),
+        )
+        mangaAllId[DiagnosticAttribute.PROVIDER_WORK_ID] shouldBe
+            DiagnosticAttributeValue.Text("mangafire:053")
+        listOf(
+            "mangafire:053?token=secret",
+            "mangafire:https://evil.example",
+            "mangafire:053\\nAuthorization: secret",
+            "mangafire:" + "x".repeat(81),
+            "untrusted:053",
+        ).forEach { unsafe ->
+            sanitizeCandidate(mapOf("provider_work_id" to DiagnosticAttributeValue.Text(unsafe))) shouldBe emptyMap()
+        }
+
         safe[DiagnosticAttribute.PROVIDER_WORK_TITLE] shouldBe DiagnosticAttributeValue.Text("Vagabond")
         safe[DiagnosticAttribute.PROVIDER_WORK_URL] shouldBe
             DiagnosticAttributeValue.Text("https://mangafire.to/title/qnlvj-vagabond22")
