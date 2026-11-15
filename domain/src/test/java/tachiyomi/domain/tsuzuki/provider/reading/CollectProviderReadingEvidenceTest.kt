@@ -2806,6 +2806,23 @@ class CollectProviderReadingEvidenceTest {
             DiagnosticAttributeValue.Text("mangafire:fire-two"),
             DiagnosticAttributeValue.Text("mangadex:verified-uuid"),
         )
+        // The real A54 MangaAll code7 delivered hundreds of per-HID pages, but
+        // only the standalone MangaFire package emitted page-level diagnostics.
+        val sourcePages = recorder.events.filter { it.name == DiagnosticEventName.PROVIDER_READING_PAGE_DETAIL }
+        sourcePages.shouldHaveSize(2)
+        sourcePages.map { it.attributes["provider_work_id"] }.toSet() shouldBe setOf(
+            DiagnosticAttributeValue.Text("mangafire:fire-one"),
+            DiagnosticAttributeValue.Text("mangafire:fire-two"),
+        )
+        sourcePages.forEach { page ->
+            page.attributes["page_index"] shouldBe DiagnosticAttributeValue.Number(1)
+            page.attributes["item_count"] shouldBe DiagnosticAttributeValue.Number(1)
+            page.attributes["chapter_number_min_milli"] shouldBe DiagnosticAttributeValue.Number(1000)
+            page.attributes["mangaall_network_source"] shouldBe
+                DiagnosticAttributeValue.Code(DiagnosticMangaAllNetworkSource.MANGAFIRE)
+            val workId = requireNotNull(page.attributes["provider_work_id"])
+            StructuredDiagnosticSanitizer.sanitize(page)?.attributes?.values?.contains(workId) shouldBe true
+        }
     }
 
     @Test

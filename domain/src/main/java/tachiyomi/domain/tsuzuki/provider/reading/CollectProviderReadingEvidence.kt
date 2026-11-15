@@ -1726,7 +1726,10 @@ class CollectProviderReadingEvidence private constructor(
         pageNumber: Int,
         page: List<ProviderChapterObservation>,
     ) {
-        if (!diagnostics.detailedCaptureActive || target.registration.descriptor.id.value != "app.tsuzuki.mangafire") {
+        val providerId = target.registration.descriptor.id.value
+        val mangaAllFire = providerId == "app.tsuzuki.mangaall" &&
+            MangaAllReadingIdentity.sourceId(sourceRef) == "mangafire"
+        if (!diagnostics.detailedCaptureActive || (providerId != "app.tsuzuki.mangafire" && !mangaAllFire)) {
             return
         }
         runCatching {
@@ -1741,6 +1744,12 @@ class CollectProviderReadingEvidence private constructor(
             val attributes = buildMap<String, DiagnosticAttributeValue> {
                 put("provider_id", DiagnosticAttributeValue.Text(target.registration.descriptor.id.value))
                 put("provider_work_id", DiagnosticAttributeValue.Text(sourceRef.externalWorkId))
+                if (mangaAllFire) {
+                    put(
+                        "mangaall_network_source",
+                        DiagnosticAttributeValue.Code(DiagnosticMangaAllNetworkSource.MANGAFIRE),
+                    )
+                }
                 diagnostics.canonicalTitleReference(titleId)?.let {
                     put("canonical_title_ref", DiagnosticAttributeValue.Text(it))
                 }

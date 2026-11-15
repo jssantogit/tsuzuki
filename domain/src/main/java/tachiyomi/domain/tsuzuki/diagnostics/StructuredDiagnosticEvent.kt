@@ -659,7 +659,12 @@ object StructuredDiagnosticSanitizer {
     private val providerErrorCodePattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
 
     // Detailed capture accepts only bounded MangaFire public title paths, never query strings or credentials.
-    private val providerWorkIdPattern = Regex("^[A-Za-z0-9_-]{1,80}$")
+    // MangaAll identities include a closed internal source prefix. Keep public work IDs
+    // for candidate comparison without allowing arbitrary namespaces, URL syntax or tokens.
+    private val providerWorkIdPattern = Regex(
+        "^(?:[A-Za-z0-9_-]{1,80}|mangafire:[A-Za-z0-9_-]{1,80}|" +
+            "mangadot:[A-Za-z0-9_-]{1,80}|mangadex:[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12})$",
+    )
     private val providerChapterIdPattern = Regex("^[0-9]{1,32}$")
     private val providerWorkUrlPattern = Regex("^https://mangafire\\.to/title/[A-Za-z0-9-]{2,160}/?$")
     private val p2pEventPattern = Regex("^[A-Z][A-Z0-9_]{0,63}$")
@@ -710,6 +715,22 @@ object StructuredDiagnosticSanitizer {
         val attributes = event.attributes.mapNotNull { (key, value) ->
             val attribute = DiagnosticAttribute.entries.firstOrNull { it.name.toAttributeKey() == key }
                 ?: return@mapNotNull null
+            if (attribute == DiagnosticAttribute.PROVIDER_WORK_ID &&
+                value is DiagnosticAttributeValue.Text &&
+                ':' in value.value
+            ) {
+                // A namespaced ID is public MangaAll work identity only in
+                // internally authored detailed chapter-capture events. Never
+                // copy a provider-supplied token-like ID into Reader telemetry.
+                val sourceEvent = event.name in setOf(
+                    DiagnosticEventName.PROVIDER_READING_CANDIDATE,
+                    DiagnosticEventName.PROVIDER_READING_PAGE_DETAIL,
+                    DiagnosticEventName.PROVIDER_READING_SOURCE_ASSOCIATION,
+                )
+                val mangaAllContext = event.attributes["provider_id"] ==
+                    DiagnosticAttributeValue.Text("app.tsuzuki.mangaall")
+                if (!sourceEvent || !mangaAllContext) return@mapNotNull null
+            }
             sanitizeAttribute(attribute, value)?.let { attribute to it }
         }.toMap()
 
