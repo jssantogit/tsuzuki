@@ -4,6 +4,7 @@ import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderBrowserFailure
@@ -50,4 +51,65 @@ class ProviderBrowserDiagnosticTraceTest {
             sanitized.attributes.size shouldBe 1
         }
     }
+
+    @Test
+    fun `main frame HTTP challenge is not a successful browser response`() {
+        classifyProviderBrowserMainFrameHttpFailure(
+            403,
+            mapOf("Cf-Mitigated" to "challenge"),
+        ) shouldBe ProviderBrowserFailure.UPSTREAM_CHALLENGE
+        classifyProviderBrowserMainFrameHttpFailure(
+            403,
+            emptyMap(),
+        ) shouldBe ProviderBrowserFailure.HTTP_REJECTED
+        classifyProviderBrowserMainFrameHttpFailure(
+            503,
+            mapOf("cf-mitigated" to "managed"),
+        ) shouldBe ProviderBrowserFailure.HTTP_REJECTED
+        classifyProviderBrowserMainFrameHttpFailure(
+            200,
+            mapOf("cf-mitigated" to "challenge"),
+        ) shouldBe null
+    }
+
+    @Test
+    fun `browser source family is closed for MangaAll and never exports raw host`() {
+        val event = ProviderBrowserDiagnostic(
+            phase = ProviderBrowserDiagnosticPhase.FAILED,
+            elapsedMs = 12,
+            failure = ProviderBrowserFailure.UPSTREAM_CHALLENGE,
+            operationId = operation,
+            sourceHost = "mangafire.to",
+        ).toStructuredDiagnosticEvent("app.tsuzuki.mangaall", session, 2000)
+        val sanitized = requireNotNull(StructuredDiagnosticSanitizer.sanitize(event))
+        sanitized.attributes[DiagnosticAttribute.MANGAALL_NETWORK_SOURCE] shouldBe
+            DiagnosticAttributeValue.Code(DiagnosticMangaAllNetworkSource.MANGAFIRE)
+        sanitized.attributes[DiagnosticAttribute.PROVIDER_BROWSER_FAILURE] shouldBe
+            DiagnosticAttributeValue.Code(DiagnosticProviderBrowserFailure.UPSTREAM_CHALLENGE)
+        sanitized.attributes.size shouldBe 3
+        val foreign = ProviderBrowserDiagnostic(
+            phase = ProviderBrowserDiagnosticPhase.FAILED,
+            elapsedMs = 12,
+            failure = ProviderBrowserFailure.HTTP_REJECTED,
+            operationId = operation,
+            sourceHost = "credentials.attacker.example",
+        ).toStructuredDiagnosticEvent("app.tsuzuki.mangaall", session, 2000)
+        val safeForeign = requireNotNull(StructuredDiagnosticSanitizer.sanitize(foreign))
+        safeForeign.attributes.containsKey(DiagnosticAttribute.MANGAALL_NETWORK_SOURCE) shouldBe false
+        safeForeign.attributes.values.toString().contains("attacker") shouldBe false
+    }
+
+    @Test
+    fun `browser challenge and rejected HTTP messages are classified without upstream exception text`() {
+        classifyProviderBrowserFailure(
+            tachiyomi.core.provider.runtime.ProviderHostServiceException("Provider browser upstream challenge"),
+        ) shouldBe ProviderBrowserFailure.UPSTREAM_CHALLENGE
+        classifyProviderBrowserFailure(
+            tachiyomi.core.provider.runtime.ProviderHostServiceException("Provider browser HTTP response rejected"),
+        ) shouldBe ProviderBrowserFailure.HTTP_REJECTED
+        classifyProviderBrowserFailure(
+            tachiyomi.core.provider.runtime.ProviderHostServiceException("untrusted HTML payload"),
+        ) shouldBe ProviderBrowserFailure.UNKNOWN
+    }
+
 }
