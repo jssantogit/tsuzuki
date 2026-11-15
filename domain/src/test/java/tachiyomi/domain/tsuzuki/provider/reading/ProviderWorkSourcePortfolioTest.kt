@@ -61,6 +61,8 @@ class ProviderWorkSourcePortfolioTest {
         )
         other.single().workVerification shouldBe ProviderWorkVerification.AUTHOR_CONFLICT
         other.single().canCollectProvisionalChapters shouldBe false
+        other.single().canPromoteChapters shouldBe false
+        other.single().canOpenReader shouldBe false
     }
 
     @Test
