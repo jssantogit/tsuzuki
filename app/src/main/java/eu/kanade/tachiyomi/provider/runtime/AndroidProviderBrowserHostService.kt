@@ -141,6 +141,24 @@ class AndroidProviderBrowserHostService(
                         }
                     }
 
+                    override fun onReceivedHttpError(
+                        view: WebView?,
+                        request: WebResourceRequest?,
+                        errorResponse: WebResourceResponse?,
+                    ) {
+                        if (request?.isForMainFrame != true || errorResponse == null) return
+                        val failure = classifyProviderBrowserMainFrameHttpFailure(
+                            errorResponse.statusCode,
+                            errorResponse.responseHeaders.orEmpty(),
+                        ) ?: return
+                        val reason = if (failure == ProviderBrowserFailure.UPSTREAM_CHALLENGE) {
+                            "Provider browser upstream challenge"
+                        } else {
+                            "Provider browser HTTP response rejected"
+                        }
+                        complete(Result.failure(ProviderHostServiceException(reason)))
+                    }
+
                     override fun onPageFinished(
                         view: WebView?,
                         url: String?,
