@@ -1086,7 +1086,6 @@ class ScriptProviderReadingGatewayIsolationTest {
         assertEquals(expected.keys, observed)
     }
 
-
     /**
      * Cross-format Host journey. These are recognizable curated work names, but
      * every new HID/chapter/image is deliberately synthetic and scoped to this
@@ -1202,7 +1201,11 @@ class ScriptProviderReadingGatewayIsolationTest {
                     };
                 """.trimIndent()
             }
-            fun gatewayFor(updated: Boolean, stalled: Boolean = false, onRegistered: (DefaultProviderRegistry) -> Unit) =
+            fun gatewayFor(
+                updated: Boolean,
+                stalled: Boolean = false,
+                onRegistered: (DefaultProviderRegistry) -> Unit,
+            ) =
                 gateway(
                     main = script(updated, stalled),
                     providerId = providerId,
