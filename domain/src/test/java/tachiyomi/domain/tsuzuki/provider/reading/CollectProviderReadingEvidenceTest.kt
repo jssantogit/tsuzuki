@@ -541,6 +541,130 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `verified artist credit corroborates manga source creator without replacing its edition`(): Unit = runBlocking {
+        // Published Akame ga Kill! credits the story to Takahiro and art to
+        // Tetsuya Tashiro. The source may expose either role as "authors".
+        // Both fields must be independently tied to this canonical work.
+        val title = canonicalTitle.copy(displayTitle = "Akame ga Kill!")
+        val mal = IntegrationId("mal")
+        val mu = IntegrationId("mangaupdates")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(title.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = title.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Takahiro"), mal, externalId = "mal-work"),
+                artists = ProvenancedMetadata(listOf("Tetsuya Tashiro"), mu, externalId = "mu-work"),
+                externalIds = mapOf(mal to "mal-work", mu to "mu-work"),
+            ),
+            refreshedAt = 42L,
+        )
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    "creator-verified",
+                                    title.displayTitle,
+                                    language = "en",
+                                    authors = listOf("Tashiro Tetsuya"),
+                                ),
+                                ProviderWorkCandidate(
+                                    "unrelated",
+                                    title.displayTitle,
+                                    language = "en",
+                                    authors = listOf("Other Creator"),
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = {
+                    it.binding.externalWorkId shouldBe "creator-verified"
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(ProviderChapterObservation("chapter-one", "Chapter 1")),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+        )
+
+        val result = collector.execute(title.id)
+        result.complete shouldBe true
+        result.bindingCount shouldBe 1
+        result.evidence.single().externalChapterKey shouldBe "chapter-one"
+        bindings.getByTitle(title.id).single().ref.externalWorkId shouldBe "creator-verified"
+    }
+
+    @Test
+    fun `artist credit with foreign external identity cannot disambiguate source works`(): Unit = runBlocking {
+        val title = canonicalTitle.copy(displayTitle = "Akame ga Kill!")
+        val mal = IntegrationId("mal")
+        val mu = IntegrationId("mangaupdates")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(title.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = title.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Takahiro"), mal, externalId = "mal-work"),
+                artists = ProvenancedMetadata(listOf("Tetsuya Tashiro"), mu, externalId = "different-work"),
+                externalIds = mapOf(mal to "mal-work", mu to "mu-work"),
+            ),
+            refreshedAt = 42L,
+        )
+        val bindings = MemoryBindingRepository()
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(title),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = listOf(
+                                ProviderWorkCandidate(
+                                    "unverified-artist",
+                                    title.displayTitle,
+                                    language = "en",
+                                    authors = listOf("Tashiro Tetsuya"),
+                                ),
+                                ProviderWorkCandidate(
+                                    "unrelated",
+                                    title.displayTitle,
+                                    language = "en",
+                                    authors = listOf("Another Author"),
+                                ),
+                            ),
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { error("Unverified artist must not request chapters") },
+            ),
+            bindingRepository = bindings,
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+        )
+        val result = collector.execute(title.id)
+        result.complete shouldBe false
+        result.bindingCount shouldBe 0
+        result.evidence shouldBe emptyList()
+        bindings.getByTitle(title.id) shouldBe emptyList()
+    }
+
+    @Test
     fun `cold metadata cache obtains verified authors before selecting source identity`(): Unit = runBlocking {
         val metadataId = IntegrationId("mal")
         val metadata = mockk<CanonicalMetadataSnapshotRepository>()
