@@ -242,6 +242,7 @@ enum class DiagnosticAttribute {
     PROVIDER_COVERAGE_HAS_MORE,
     PROVIDER_WORK_VERIFICATION,
     PROVIDER_CANONICAL_AUTHOR_STATE,
+    PROVIDER_CANONICAL_CREDIT_BASIS,
     PROVIDER_EDITION_QUALIFICATION,
     PROVIDER_HTTP_FAILURE,
     MANGAALL_NETWORK_SOURCE,
@@ -522,6 +523,14 @@ enum class DiagnosticProviderCanonicalAuthorState : DiagnosticSafeCode {
     METADATA_MISSING,
     FETCH_FAILED,
     FETCH_TIMEOUT,
+}
+
+/** Verified canonical staff-role provenance, no author names or integration IDs. */
+enum class DiagnosticProviderCanonicalCreditBasis : DiagnosticSafeCode {
+    NONE,
+    AUTHOR_ONLY,
+    ARTIST_ONLY,
+    AUTHOR_AND_ARTIST,
 }
 
 enum class DiagnosticProviderEditionQualification : DiagnosticSafeCode {
@@ -869,6 +878,8 @@ object StructuredDiagnosticSanitizer {
             ?.takeIf { it.value is DiagnosticProviderWorkVerification }
         DiagnosticAttribute.PROVIDER_CANONICAL_AUTHOR_STATE -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderCanonicalAuthorState }
+        DiagnosticAttribute.PROVIDER_CANONICAL_CREDIT_BASIS -> (value as? DiagnosticAttributeValue.Code)
+            ?.takeIf { it.value is DiagnosticProviderCanonicalCreditBasis }
         DiagnosticAttribute.PROVIDER_EDITION_QUALIFICATION -> (value as? DiagnosticAttributeValue.Code)
             ?.takeIf { it.value is DiagnosticProviderEditionQualification }
         DiagnosticAttribute.PROVIDER_READER_MAPPED_SOURCE_INELIGIBILITY_REASON ->
