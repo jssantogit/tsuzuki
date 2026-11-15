@@ -18,6 +18,7 @@ import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCandidateReason
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCanonicalAuthorState
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderCanonicalCreditBasis
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderDetailOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderEditionQualification
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
@@ -186,7 +187,8 @@ class CollectProviderReadingEvidence private constructor(
         // deduplicates concurrent fetches and never authorizes title-only HIDs.
         // Test fixtures without that resolver use the isolated snapshot store.
         var canonicalAuthorState = DiagnosticProviderCanonicalAuthorState.METADATA_MISSING
-        val canonicalAuthors = try {
+        var canonicalCreditBasis = DiagnosticProviderCanonicalCreditBasis.NONE
+        val canonicalCreators = try {
             val cached = if (canonicalMetadataResolver != null) {
                 canonicalMetadataResolver.cached(canonicalTitleId)
             } else {
@@ -209,29 +211,38 @@ class CollectProviderReadingEvidence private constructor(
                 null
             }
             metadata?.let { resolved ->
-                // A manga's creator may appear in upstream credits as either
-                // writer or illustrator (Akame ga Kill!: Takahiro / Tetsuya
-                // Tashiro). Both staff roles belong to the canonical work,
-                // but ONLY when their own provider+external-ID provenance is
-                // independently verified. Never borrow one role's ID for the
-                // other or treat a title match as a verified identity.
-                sequenceOf(resolved.authors, resolved.artists)
-                    .filterNotNull()
-                    .filter { credit ->
+                // A publisher may credit a work to a writer and an illustrator.
+                // Treat either as independent work-level corroboration only
+                // when that staff role's own Provider/external-ID provenance
+                // matches the active canonical metadata identity. Neither role
+                // alone proves a preferred translation or chapter edition.
+                val verifiedAuthors = resolved.authors
+                    ?.takeIf { credit ->
                         credit.externalId != null &&
                             resolved.externalIds[credit.providerId] == credit.externalId
                     }
-                    .flatMap { it.value.asSequence() }
-                    .mapNotNull(::normalizedCreator)
-                    .toSet()
-                    .takeIf { it.isNotEmpty() }
-            }?.also {
-                    canonicalAuthorState = if (cached != null) {
-                        DiagnosticProviderCanonicalAuthorState.VERIFIED_CACHED
-                    } else {
-                        DiagnosticProviderCanonicalAuthorState.VERIFIED_FETCHED
+                    ?.value.orEmpty().mapNotNull(::normalizedCreator).toSet()
+                val verifiedArtists = resolved.artists
+                    ?.takeIf { credit ->
+                        credit.externalId != null &&
+                            resolved.externalIds[credit.providerId] == credit.externalId
                     }
+                    ?.value.orEmpty().mapNotNull(::normalizedCreator).toSet()
+                canonicalCreditBasis = when {
+                    verifiedAuthors.isNotEmpty() && verifiedArtists.isNotEmpty() ->
+                        DiagnosticProviderCanonicalCreditBasis.AUTHOR_AND_ARTIST
+                    verifiedAuthors.isNotEmpty() -> DiagnosticProviderCanonicalCreditBasis.AUTHOR_ONLY
+                    verifiedArtists.isNotEmpty() -> DiagnosticProviderCanonicalCreditBasis.ARTIST_ONLY
+                    else -> DiagnosticProviderCanonicalCreditBasis.NONE
                 }
+                (verifiedAuthors + verifiedArtists).takeIf { it.isNotEmpty() }
+            }?.also {
+                canonicalAuthorState = if (cached != null) {
+                    DiagnosticProviderCanonicalAuthorState.VERIFIED_CACHED
+                } else {
+                    DiagnosticProviderCanonicalAuthorState.VERIFIED_FETCHED
+                }
+            }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
@@ -247,6 +258,7 @@ class CollectProviderReadingEvidence private constructor(
             DiagnosticOutcome.STARTED,
             targets = targets.size,
             canonicalAuthorState = canonicalAuthorState,
+            canonicalCreditBasis = canonicalCreditBasis,
         )
 
         val results = coroutineScope {
@@ -267,7 +279,7 @@ class CollectProviderReadingEvidence private constructor(
                                 canonicalTitleId = canonicalTitleId,
                                 titles = queryTitles,
                                 target = target,
-                                canonicalAuthors = canonicalAuthors,
+                                canonicalCreators = canonicalCreators,
                                 onStageChanged = { activeStage = it },
                                 onPreferredBindingSelected = { preferredBindingSelected = true },
                                 onProvisionalCursorReady = { readyCursors += it },
@@ -388,7 +400,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalTitleId: String,
         titles: List<String>,
         target: ReadingTarget,
-        canonicalAuthors: Set<String>?,
+        canonicalCreators: Set<String>?,
         onStageChanged: (DiagnosticStage) -> Unit,
         onPreferredBindingSelected: () -> Unit,
         onProvisionalCursorReady: (ProviderProvisionalCursorProgress) -> Unit,
@@ -409,7 +421,7 @@ class CollectProviderReadingEvidence private constructor(
                     canonicalTitleId = canonicalTitleId,
                     titles = titles,
                     target = target,
-                    canonicalAuthors = canonicalAuthors,
+                    canonicalCreators = canonicalCreators,
                 )
             ) {
                 is ProviderCallResult.Failure -> return ProviderReadingEvidenceCollection(complete = false)
@@ -519,14 +531,14 @@ class CollectProviderReadingEvidence private constructor(
                         result.value == 0 &&
                         target.registration.descriptor.id.value == "app.tsuzuki.mangaall" &&
                         target.facetId == "en" &&
-                        canonicalAuthors != null &&
+                        canonicalCreators != null &&
                         workSourceAssociationRepository != null
                     ) {
                         collectEmptyBindingAlternatives(
                             canonicalTitleId = canonicalTitleId,
                             titles = titles,
                             target = target,
-                            canonicalAuthors = canonicalAuthors,
+                            canonicalCreators = canonicalCreators,
                             preferredRef = binding.ref,
                             onPageCollected = onPageCollected,
                             onProvisionalCursorReady = onProvisionalCursorReady,
@@ -562,7 +574,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalTitleId: String,
         titles: List<String>,
         target: ReadingTarget,
-        canonicalAuthors: Set<String>?,
+        canonicalCreators: Set<String>?,
     ): ProviderCallResult<BindingDiscovery> {
         // Work IDs are private to this Provider and are only used to narrow
         // earlier matches. They never cross a source, title, edition or facet.
@@ -622,7 +634,7 @@ class CollectProviderReadingEvidence private constructor(
             // Source association is deliberately a shadow work-level portfolio.
             // Multiple corroborated HIDs never become one preferred edition or
             // Reader authority merely because their authors/title match.
-            observeSourcePortfolio(canonicalTitleId, title, target, canonicalAuthors, matches)
+            observeSourcePortfolio(canonicalTitleId, title, target, canonicalCreators, matches)
                 .forEach { assessment -> collectedWorkSources[assessment.ref] = assessment }
             if (!lookup.complete) {
                 // MangaAll can have more upstream source pages than the Host's
@@ -674,16 +686,16 @@ class CollectProviderReadingEvidence private constructor(
             // A missing creator, two same-author HIDs, or an explicit edition
             // qualifier remains unresolved.
             val authorCorroborated = matches.takeIf { it.size > 1 }?.singleOrNull { contender ->
-                canonicalAuthors != null &&
+                canonicalCreators != null &&
                     !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
                         target.registration.descriptor.id,
                         contender,
                         title,
                     ) &&
-                    contender.authors.any { normalizedCreator(it) in canonicalAuthors } &&
+                    contender.authors.any { normalizedCreator(it) in canonicalCreators } &&
                     matches.filter { it.externalWorkId != contender.externalWorkId }.all { rival ->
                         rival.authors.isNotEmpty() &&
-                            rival.authors.none { normalizedCreator(it) in canonicalAuthors }
+                            rival.authors.none { normalizedCreator(it) in canonicalCreators }
                     }
             }
             // Only one currently readable English source may be selected when
@@ -695,14 +707,14 @@ class CollectProviderReadingEvidence private constructor(
             val uniqueReadable = matches
                 .takeIf { priorAmbiguous == null && it.size in 2..MAX_COVERAGE_CONTENDERS }
                 ?.takeIf {
-                    canonicalAuthors != null && it.all { work ->
+                    canonicalCreators != null && it.all { work ->
                         !ProviderWorkSourcePortfolio.hasSourceAttestedAlternateEdition(
                             target.registration.descriptor.id,
                             work,
                             title,
                         ) &&
                             work.authors.isNotEmpty() &&
-                            work.authors.any { normalizedCreator(it) in canonicalAuthors }
+                            work.authors.any { normalizedCreator(it) in canonicalCreators }
                     }
                 }
                 ?.singleOrNull { work ->
@@ -872,7 +884,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalTitleId: String,
         queryTitle: String,
         target: ReadingTarget,
-        canonicalAuthors: Set<String>?,
+        canonicalCreators: Set<String>?,
         matches: List<ProviderWorkCandidate>,
     ): List<ProviderWorkSourceAssessment> {
         val repository = workSourceAssociationRepository ?: return emptyList()
@@ -890,7 +902,7 @@ class CollectProviderReadingEvidence private constructor(
             providerId = target.registration.descriptor.id,
             facetId = target.facetId,
             queryTitle = queryTitle,
-            independentlyVerifiedAuthors = canonicalAuthors,
+            independentlyVerifiedAuthors = canonicalCreators,
             candidates = trusted,
         )
         val retained = mutableListOf<ProviderWorkSourceAssessment>()
@@ -939,7 +951,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalTitleId: String,
         titles: List<String>,
         target: ReadingTarget,
-        canonicalAuthors: Set<String>,
+        canonicalCreators: Set<String>,
         preferredRef: ProviderBindingRef,
         onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
         onProvisionalCursorReady: (ProviderProvisionalCursorProgress) -> Unit,
@@ -967,7 +979,7 @@ class CollectProviderReadingEvidence private constructor(
                         providerId = target.registration.descriptor.id,
                         facetId = target.facetId,
                         queryTitle = title,
-                        independentlyVerifiedAuthors = canonicalAuthors,
+                        independentlyVerifiedAuthors = canonicalCreators,
                         candidates = trusted,
                     ).any { it.ref != preferredRef && it.canCollectProvisionalChapters }
                 },
@@ -1017,7 +1029,7 @@ class CollectProviderReadingEvidence private constructor(
                 canonicalTitleId,
                 title,
                 target,
-                canonicalAuthors,
+                canonicalCreators,
                 matches,
             ).filter { assessment ->
                 assessment.ref != preferredRef && assessment.canCollectProvisionalChapters
@@ -1776,6 +1788,7 @@ class CollectProviderReadingEvidence private constructor(
         errorCode: ProviderErrorCode? = null,
         malformedStage: DiagnosticProviderMalformedResultStage? = null,
         canonicalAuthorState: DiagnosticProviderCanonicalAuthorState? = null,
+        canonicalCreditBasis: DiagnosticProviderCanonicalCreditBasis? = null,
         name: DiagnosticEventName = DiagnosticEventName.PROVIDER_READING_EVIDENCE,
     ) {
         runCatching {
@@ -1791,6 +1804,9 @@ class CollectProviderReadingEvidence private constructor(
                 lookupDecision?.let { put("lookup_decision", DiagnosticAttributeValue.Code(it)) }
                 canonicalAuthorState?.let {
                     put("provider_canonical_author_state", DiagnosticAttributeValue.Code(it))
+                }
+                canonicalCreditBasis?.let {
+                    put("provider_canonical_credit_basis", DiagnosticAttributeValue.Code(it))
                 }
                 observed?.let { put("observation_count", DiagnosticAttributeValue.Number(it.toLong())) }
                 pageCount?.let { put("page_count", DiagnosticAttributeValue.Number(it.toLong())) }
