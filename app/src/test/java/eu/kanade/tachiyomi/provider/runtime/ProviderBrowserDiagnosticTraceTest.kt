@@ -4,8 +4,8 @@ import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttribute
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
-import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticMangaAllNetworkSource
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticOutcome
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderBrowserFailure
 import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticSanitizer
@@ -111,5 +111,4 @@ class ProviderBrowserDiagnosticTraceTest {
             tachiyomi.core.provider.runtime.ProviderHostServiceException("untrusted HTML payload"),
         ) shouldBe ProviderBrowserFailure.UNKNOWN
     }
-
 }
