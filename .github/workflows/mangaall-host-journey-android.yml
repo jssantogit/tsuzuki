@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - 'tsuzuki/provider-platform-mangaall-host-journey-*'
+      - 'fix/mangaall-host-full-journey-*'
     paths:
       - '.github/workflows/mangaall-host-journey-android.yml'
       - '.github/scripts/run_mangaall_host_journey_android.sh'
