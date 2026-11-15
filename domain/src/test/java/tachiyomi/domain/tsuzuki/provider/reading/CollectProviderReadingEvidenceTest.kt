@@ -2995,6 +2995,82 @@ class CollectProviderReadingEvidenceTest {
     }
 
     @Test
+    fun `outer Provider deadline salvages reconciled source pages and their provisional cursor`() = runTest {
+        val metadataId = IntegrationId("mal")
+        val metadata = mockk<CanonicalMetadataSnapshotRepository>()
+        coEvery { metadata.get(canonicalTitle.id) } returns CanonicalMetadataSnapshot(
+            canonicalTitleId = canonicalTitle.id,
+            configurationFingerprint = "current",
+            metadata = ResolvedMetadata(
+                authors = ProvenancedMetadata(listOf("Hiromu Arakawa"), metadataId, externalId = "verified"),
+                externalIds = mapOf(metadataId to "verified"),
+            ),
+            refreshedAt = 42L,
+        )
+        val deadlineBlocker = CompletableDeferred<Unit>()
+        val cursorRepository = mockk<ProviderProvisionalCursorRepository>()
+        coEvery { cursorRepository.get(any(), any(), any(), any()) } returns null
+        val collector = CollectProviderReadingEvidence(
+            canonicalTitleRepository = titleRepository(canonicalTitle),
+            providerRegistry = registry(),
+            gateway = gateway(
+                lookupHandler = {
+                    kotlinx.coroutines.delay(16_000)
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            listOf("source-first", "source-second").map { workId ->
+                                ProviderWorkCandidate(
+                                    externalWorkId = workId,
+                                    title = "Dandadan",
+                                    authors = listOf("Hiromu Arakawa"),
+                                    detailOutcome = ProviderWorkDetailOutcome.VERIFIED_NO_ALIASES,
+                                    coverageOutcome = ProviderCoverageOutcome.OBSERVED,
+                                    coverageObservedCount = 2,
+                                    coverageMinMilli = 1_000,
+                                    coverageMaxMilli = 2_000,
+                                    coverageHasMore = true,
+                                )
+                            },
+                            nextCursor = null,
+                        ),
+                    )
+                },
+                chaptersHandler = { request ->
+                    when (request.binding.externalWorkId to request.cursor?.value) {
+                        "source-first" to null -> ProviderCallResult.Success(
+                            ProviderPage(
+                                items = listOf(ProviderChapterObservation("first-page-c1", "Chapter 1", rawNumber = 1.0)),
+                                nextCursor = ProviderCursor("first-next"),
+                            ),
+                        )
+                        "source-first" to "first-next" -> ProviderCallResult.Failure(
+                            ProviderError(ProviderErrorCode.TIMEOUT, retryable = true),
+                        )
+                        "source-second" to null -> {
+                            deadlineBlocker.await()
+                            error("Unreachable source page")
+                        }
+                        else -> error("Unexpected chapter request")
+                    }
+                },
+            ),
+            bindingRepository = MemoryBindingRepository(),
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = { 42L },
+            canonicalMetadataSnapshotRepository = metadata,
+            workSourceAssociationRepository = MemoryWorkSourceAssociationRepository(),
+            provisionalCursorRepository = cursorRepository,
+        )
+
+        val result = withTimeoutOrNull(21_000) { collector.execute(canonicalTitle.id) }
+        (result != null) shouldBe true
+        result!!.complete shouldBe false
+        result.partialEvidence.map { it.externalChapterKey } shouldBe listOf("first-page-c1")
+        result.cursorProgress.single().ref.externalWorkId shouldBe "source-first"
+        result.cursorProgress.single().nextCursor shouldBe ProviderCursor("first-next")
+    }
+
+    @Test
     fun `empty MangaAll binding does not borrow unverified or explicitly colored sources`() = runBlocking<Unit> {
         val mangaAll = ProviderId("app.tsuzuki.mangaall")
         val title = canonicalTitle.copy(displayTitle = "Oyasumi Punpun")
