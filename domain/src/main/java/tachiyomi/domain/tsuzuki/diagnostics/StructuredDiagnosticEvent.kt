@@ -426,6 +426,8 @@ enum class DiagnosticProviderCandidateReason : DiagnosticSafeCode {
 
 /** Closed source-enrichment outcomes: no upstream response text or secrets. */
 enum class DiagnosticProviderBrowserFailure : DiagnosticSafeCode {
+    UPSTREAM_CHALLENGE,
+    HTTP_REJECTED,
     TIMEOUT,
     NAVIGATION,
     TLS,
