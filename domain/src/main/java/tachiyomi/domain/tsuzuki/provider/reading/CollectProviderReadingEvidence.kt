@@ -208,18 +208,24 @@ class CollectProviderReadingEvidence private constructor(
             } else {
                 null
             }
-            metadata?.authors
-                ?.takeIf { author ->
-                    // Never let an unrelated metadata identity or an unverified
-                    // external ID certify a source work's creator.
-                    author.externalId != null &&
-                        metadata.externalIds[author.providerId] == author.externalId
-                }
-                ?.value
-                ?.mapNotNull(::normalizedCreator)
-                ?.toSet()
-                ?.takeIf { it.isNotEmpty() }
-                ?.also {
+            metadata?.let { resolved ->
+                // A manga's creator may appear in upstream credits as either
+                // writer or illustrator (Akame ga Kill!: Takahiro / Tetsuya
+                // Tashiro). Both staff roles belong to the canonical work,
+                // but ONLY when their own provider+external-ID provenance is
+                // independently verified. Never borrow one role's ID for the
+                // other or treat a title match as a verified identity.
+                sequenceOf(resolved.authors, resolved.artists)
+                    .filterNotNull()
+                    .filter { credit ->
+                        credit.externalId != null &&
+                            resolved.externalIds[credit.providerId] == credit.externalId
+                    }
+                    .flatMap { it.value.asSequence() }
+                    .mapNotNull(::normalizedCreator)
+                    .toSet()
+                    .takeIf { it.isNotEmpty() }
+            }?.also {
                     canonicalAuthorState = if (cached != null) {
                         DiagnosticProviderCanonicalAuthorState.VERIFIED_CACHED
                     } else {
