@@ -16,6 +16,8 @@ enum class ProviderBrowserDiagnosticPhase {
 }
 
 enum class ProviderBrowserFailure {
+    UPSTREAM_CHALLENGE,
+    HTTP_REJECTED,
     TIMEOUT,
     NAVIGATION,
     TLS,
@@ -31,10 +33,13 @@ data class ProviderBrowserDiagnostic(
     val elapsedMs: Long,
     val operationId: String,
     val failure: ProviderBrowserFailure? = null,
+    val sourceHost: String? = null,
 )
 
 /** Matches only known, internally authored error messages. Never store the message itself. */
 internal fun classifyProviderBrowserFailure(error: Throwable): ProviderBrowserFailure = when (error.message) {
+    "Provider browser upstream challenge" -> ProviderBrowserFailure.UPSTREAM_CHALLENGE
+    "Provider browser HTTP response rejected" -> ProviderBrowserFailure.HTTP_REJECTED
     "Provider browser operation timed out" -> ProviderBrowserFailure.TIMEOUT
     "Provider browser navigation failed" -> ProviderBrowserFailure.NAVIGATION
     "Provider browser TLS validation failed" -> ProviderBrowserFailure.TLS
@@ -55,6 +60,11 @@ internal fun ProviderBrowserDiagnostic.toStructuredDiagnosticEvent(
 ): StructuredDiagnosticEvent {
     val attributes = buildMap<String, DiagnosticAttributeValue> {
         put("provider_id", DiagnosticAttributeValue.Text(providerId))
+        if (providerId == "app.tsuzuki.mangaall") {
+            sourceHost?.let(::sourceFamilyForMangaAllHost)?.let { source ->
+                put("mangaall_network_source", DiagnosticAttributeValue.Code(source))
+            }
+        }
         failure?.let {
             put(
                 "provider_browser_failure",
@@ -82,4 +92,21 @@ internal fun ProviderBrowserDiagnostic.toStructuredDiagnosticEvent(
         durationMillis = elapsedMs.coerceIn(0, 86_400_000),
         attributes = attributes,
     )
+}
+
+/**
+ * Fail closed on main-frame HTTP errors. A challenge marker means that the
+ * browser reached an interstitial, not that the source API returned JSON.
+ * Ignore all response bodies and all other upstream header values.
+ */
+internal fun classifyProviderBrowserMainFrameHttpFailure(
+    statusCode: Int,
+    responseHeaders: Map<String, String>,
+): ProviderBrowserFailure? {
+    if (statusCode !in 400..599) return null
+    val challenge = responseHeaders.any { (name, value) ->
+        name.equals("cf-mitigated", ignoreCase = true) &&
+            value.trim().equals("challenge", ignoreCase = true)
+    }
+    return if (challenge) ProviderBrowserFailure.UPSTREAM_CHALLENGE else ProviderBrowserFailure.HTTP_REJECTED
 }
