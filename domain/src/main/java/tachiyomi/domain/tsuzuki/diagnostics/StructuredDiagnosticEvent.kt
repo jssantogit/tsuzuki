@@ -715,6 +715,22 @@ object StructuredDiagnosticSanitizer {
         val attributes = event.attributes.mapNotNull { (key, value) ->
             val attribute = DiagnosticAttribute.entries.firstOrNull { it.name.toAttributeKey() == key }
                 ?: return@mapNotNull null
+            if (attribute == DiagnosticAttribute.PROVIDER_WORK_ID &&
+                value is DiagnosticAttributeValue.Text &&
+                ':' in value.value
+            ) {
+                // A namespaced ID is public MangaAll work identity only in
+                // internally authored detailed chapter-capture events. Never
+                // copy a provider-supplied token-like ID into Reader telemetry.
+                val sourceEvent = event.name in setOf(
+                    DiagnosticEventName.PROVIDER_READING_CANDIDATE,
+                    DiagnosticEventName.PROVIDER_READING_PAGE_DETAIL,
+                    DiagnosticEventName.PROVIDER_READING_SOURCE_ASSOCIATION,
+                )
+                val mangaAllContext = event.attributes["provider_id"] ==
+                    DiagnosticAttributeValue.Text("app.tsuzuki.mangaall")
+                if (!sourceEvent || !mangaAllContext) return@mapNotNull null
+            }
             sanitizeAttribute(attribute, value)?.let { attribute to it }
         }.toMap()
 
