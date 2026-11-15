@@ -251,6 +251,9 @@ class CollectProviderReadingEvidence private constructor(
                         // Keep accepted pages across the bounded coroutine cancellation. They
                         // remain additive evidence only, not an authoritative full inventory.
                         val partial = mutableListOf<ChapterEvidence>()
+                        // Source progress can finish before the 20 s Provider deadline.
+                        // Retain it only after those pages entered the provisional evidence buffer.
+                        val readyCursors = mutableListOf<ProviderProvisionalCursorProgress>()
                         var activeStage = DiagnosticStage.LOOKUP
                         var preferredBindingSelected = false
                         val finished = withTimeoutOrNull(MAX_PROVIDER_COLLECTION_MILLIS) {
@@ -261,6 +264,7 @@ class CollectProviderReadingEvidence private constructor(
                                 canonicalAuthors = canonicalAuthors,
                                 onStageChanged = { activeStage = it },
                                 onPreferredBindingSelected = { preferredBindingSelected = true },
+                                onProvisionalCursorReady = { readyCursors += it },
                                 onPageCollected = { binding, page, observedAt ->
                                     evidenceAdapter.toEvidence(
                                         canonicalTitleId = canonicalTitleId,
@@ -296,7 +300,11 @@ class CollectProviderReadingEvidence private constructor(
                                 finished == null -> partial.toList()
                                 else -> finished.partialEvidence
                             },
-                            cursorProgress = if (stillEnabled) finished?.cursorProgress.orEmpty() else emptyList(),
+                            cursorProgress = if (stillEnabled) {
+                                finished?.cursorProgress ?: readyCursors.toList()
+                            } else {
+                                emptyList()
+                            },
                         )
                     }
                 }
@@ -377,6 +385,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalAuthors: Set<String>?,
         onStageChanged: (DiagnosticStage) -> Unit,
         onPreferredBindingSelected: () -> Unit,
+        onProvisionalCursorReady: (ProviderProvisionalCursorProgress) -> Unit,
         onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
     ): ProviderReadingEvidenceCollection {
         return try {
@@ -406,6 +415,7 @@ class CollectProviderReadingEvidence private constructor(
                             target = target,
                             sources = discovery.value.workSources,
                             onPageCollected = onPageCollected,
+                            onProvisionalCursorReady = onProvisionalCursorReady,
                         )
                     } else {
                         ProviderReadingEvidenceCollection(complete = !discovery.value.unresolved)
@@ -513,6 +523,7 @@ class CollectProviderReadingEvidence private constructor(
                             canonicalAuthors = canonicalAuthors,
                             preferredRef = binding.ref,
                             onPageCollected = onPageCollected,
+                            onProvisionalCursorReady = onProvisionalCursorReady,
                         )
                     } else {
                         null
@@ -524,6 +535,7 @@ class CollectProviderReadingEvidence private constructor(
                         // non-exhaustive, even if the preferred snapshot is complete.
                         complete = fallback?.complete ?: true,
                         partialEvidence = fallback?.partialEvidence.orEmpty(),
+                        cursorProgress = fallback?.cursorProgress.orEmpty(),
                     )
                 }
             }
@@ -924,6 +936,7 @@ class CollectProviderReadingEvidence private constructor(
         canonicalAuthors: Set<String>,
         preferredRef: ProviderBindingRef,
         onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
+        onProvisionalCursorReady: (ProviderProvisionalCursorProgress) -> Unit,
     ): ProviderReadingEvidenceCollection {
         var allLookupsComplete = titles.size <= MAX_EMPTY_BINDING_FALLBACK_QUERIES
         for ((queryIndex, title) in titles.take(MAX_EMPTY_BINDING_FALLBACK_QUERIES).withIndex()) {
@@ -1018,6 +1031,7 @@ class CollectProviderReadingEvidence private constructor(
                     target = target,
                     sources = verified,
                     onPageCollected = onPageCollected,
+                    onProvisionalCursorReady = onProvisionalCursorReady,
                 )
             }
         }
@@ -1058,6 +1072,7 @@ class CollectProviderReadingEvidence private constructor(
         target: ReadingTarget,
         sources: List<ProviderWorkSourceAssessment>,
         onPageCollected: suspend (ProviderBindingRef, List<ProviderChapterObservation>, Long) -> List<ChapterEvidence>,
+        onProvisionalCursorReady: (ProviderProvisionalCursorProgress) -> Unit,
     ): ProviderReadingEvidenceCollection {
         val evidence = mutableListOf<ChapterEvidence>()
         val progress = mutableListOf<ProviderProvisionalCursorProgress>()
@@ -1071,6 +1086,17 @@ class CollectProviderReadingEvidence private constructor(
                 versionCode,
                 fingerprint,
             )
+            if (saved != null) {
+                // Content-free evidence that a previous refresh resumed this HID;
+                // no raw cursor, title or chapter identifier is exported.
+                trace(
+                    canonicalTitleId,
+                    target,
+                    DiagnosticStage.PERSIST,
+                    DiagnosticOutcome.REUSED,
+                    pageCount = saved.completedPages,
+                )
+            }
             if (saved != null && saved.completedPages >= MAX_PROVISIONAL_CURSOR_PAGES) continue
             val observedAt = clock()
             val sourceBinding = ProviderReadingBinding(
@@ -1198,7 +1224,7 @@ class CollectProviderReadingEvidence private constructor(
             if (trustedPages.isNotEmpty() && acceptedPages > 0) {
                 val pageCount = (saved?.completedPages ?: 0) + acceptedPages
                 if (pageCount <= MAX_PROVISIONAL_CURSOR_PAGES) {
-                    progress += ProviderProvisionalCursorProgress(
+                    val advance = ProviderProvisionalCursorProgress(
                         canonicalTitleId = canonicalTitleId,
                         ref = source.ref,
                         providerVersionCode = versionCode,
@@ -1208,6 +1234,10 @@ class CollectProviderReadingEvidence private constructor(
                         completedPages = pageCount,
                         recordedAt = clock(),
                     )
+                    progress += advance
+                    // Safe for the outer deadline: the validated source pages have
+                    // already been converted to additive evidence by onPageCollected.
+                    onProvisionalCursorReady(advance)
                 }
             }
         }
