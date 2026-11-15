@@ -69,7 +69,7 @@ internal fun ProviderHttpDiagnostic.toStructuredDiagnosticEvent(
 // No arbitrary Host-provided network hostname enters diagnostics. This closed
 // classification is limited to MangaAll's declared first-party metadata and
 // image origins; unexpected hosts remain unclassified and are never exported.
-private fun sourceFamilyForMangaAllHost(host: String): DiagnosticMangaAllNetworkSource? {
+internal fun sourceFamilyForMangaAllHost(host: String): DiagnosticMangaAllNetworkSource? {
     val value = host.lowercase()
     return when {
         value == "api.mangadex.org" ||
