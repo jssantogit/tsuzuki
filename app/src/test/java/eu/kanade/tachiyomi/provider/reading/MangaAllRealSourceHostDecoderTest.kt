@@ -6,9 +6,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.io.File
 import java.security.MessageDigest
 
@@ -47,10 +47,15 @@ class MangaAllRealSourceHostDecoderTest {
         }
         val canonical = outer.toString()
         val digest = MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray())
-            .joinToString("") { "%02x".format(it) }
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
         val signed = JsonObject(outer + ("sha256" to
             kotlinx.serialization.json.JsonPrimitive(digest))).toString()
         MangaAllRealSourceReplay.validate(signed).size shouldBe 0
+        assertThrows<IllegalArgumentException> {
+            MangaAllRealSourceReplay.validate(signed.replace(
+                "\"NOT_EXECUTED_HOST\"", "\"CANONICAL_COMPLETE\"",
+            ))
+        }
         assertThrows<IllegalArgumentException> {
             MangaAllRealSourceReplay.validate(signed.replace("NO_WORK_ASSIGNED", "SOURCE_ATTEMPTS_RECORDED"))
         }
