@@ -243,6 +243,9 @@ internal object MangaAllRealSourceReplay {
             if (case.replayCompleteness != "LOOKUP_CHAPTERS_ONLY") {
                 return@map Report(case.id, case.replayCompleteness, 0, 0, 0, 0, 0)
             }
+            // The same validated case-scoped capture must serve every Host V1 request.
+            // Requests cannot borrow replies from another title, facet or cursor.
+            val tape = MangaAllCapturedRequestTape(case.records)
             var lookupDecoded = 0
             var chapterDecoded = 0
             var typedFailure = 0
@@ -255,7 +258,17 @@ internal object MangaAllRealSourceReplay {
                     continue
                 }
                 if (record.string("outcome") == "SOURCE_ERROR") {
-                    sourceError++
+                    if (operation == "lookup" || operation == "chapters") {
+                        val recordedRequest = record["request"]!!.jsonObject
+                        try {
+                            tape.replay(operation, recordedRequest)
+                            error("Captured upstream error was replayed as a successful response")
+                        } catch (_: MangaAllCapturedSourceErrorException) {
+                            sourceError++
+                        }
+                    } else {
+                        sourceError++
+                    }
                     continue
                 }
                 val expectedRequest = record["request"]!!.jsonObject
@@ -267,8 +280,8 @@ internal object MangaAllRealSourceReplay {
                         require(request.providerId == PROVIDER_ID)
                         require(request.artifactVersionCode == parsed.manifest.version.code)
                         require(request.capabilityId == "reading.$operation")
-                        matchRequest(operation, expectedRequest, json.parseToJsonElement(input).jsonObject)
-                        ProviderRuntimeInvocationResponse.success(response.toString())
+                        val captured = tape.replay(operation, json.parseToJsonElement(input).jsonObject)
+                        ProviderRuntimeInvocationResponse.success(captured.toString())
                     },
                     invocationIdFactory = { "real-source-decoder" },
                 )
@@ -339,6 +352,9 @@ internal object MangaAllRealSourceReplay {
                     chapterDecoded++
                 }
             }
+            require(tape.replayGapCount == 0) {
+                "REPLAY_GAP: a production Host decoding request lacked a matching real capture"
+            }
             val coverage = cursorCoverage(case.records)
             val sourceState = when {
                 sourceError > 0 || typedFailure > 0 -> "INCONCLUSIVE_UPSTREAM"
@@ -361,25 +377,6 @@ internal object MangaAllRealSourceReplay {
                 orphanContinuations = coverage.orphanContinuations,
                 abandonedContinuations = coverage.abandonedContinuations,
             )
-        }
-    }
-
-    private fun matchRequest(operation: String, recorded: JsonObject, runtime: JsonObject) {
-        // Diagnostics v1 and v2 have identical signed code8 editorial and
-        // coverage opt-in effects. Compare material source request dimensions.
-        if (operation == "lookup") {
-            require(recorded["titles"] == runtime["titles"])
-            require(recorded.string("requestedLanguage") == runtime.string("requestedLanguage"))
-            require(recorded.string("cursor") == runtime.string("cursor"))
-            require(recorded.number("editorialEvidenceVersion") == runtime.number("editorialEvidenceVersion"))
-            require(recorded.number("coverageEvidenceVersion") == runtime.number("coverageEvidenceVersion"))
-        } else {
-            val old = recorded["binding"]!!.jsonObject
-            val now = runtime["binding"]!!.jsonObject
-            for (key in listOf("providerId", "facetId", "externalWorkId")) {
-                require(old.string(key) == now.string(key))
-            }
-            require(recorded.string("cursor") == runtime.string("cursor"))
         }
     }
 
