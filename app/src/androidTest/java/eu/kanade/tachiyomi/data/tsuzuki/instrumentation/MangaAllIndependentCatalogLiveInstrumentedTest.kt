@@ -79,12 +79,18 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
         var conclusive = 0
         for ((index, line) in selected) {
             val work = parseWork(line)
-            val report = try {
-                withTimeout(35_000L) {
-                    bootstrap.execute(work.title, work.format)
+            val report = if (work.format == CatalogItemFormat.NOVEL) {
+                // Production MangaUpdates search explicitly excludes 'novel'.
+                // An empty response here would NOT certify absence of a novel.
+                MangaAllCatalogIdentityResult(status = MangaAllCatalogIdentityStatus.CATALOG_FORMAT_UNSUPPORTED)
+            } else {
+                try {
+                    withTimeout(35_000L) {
+                        bootstrap.execute(work.title, work.format)
+                    }
+                } catch (_: TimeoutCancellationException) {
+                    MangaAllCatalogIdentityResult(status = MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE)
                 }
-            } catch (_: TimeoutCancellationException) {
-                MangaAllCatalogIdentityResult(status = MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE)
             }
             if (report.status in setOf(
                     MangaAllCatalogIdentityStatus.RESOLVED,
