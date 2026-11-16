@@ -1,10 +1,10 @@
 package tachiyomi.domain.tsuzuki.catalog.interactor
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItem
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogPage
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogQuery
@@ -163,7 +163,7 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
     @Test
     fun `cancelled lookup propagates rather than becoming a false empty catalog`() = runTest {
         val mal = source("mal", searchResult = { throw CancellationException("cancelled") })
-        assertThrows<CancellationException> {
+        shouldThrow<CancellationException> {
             ResolveMangaAllIndependentCatalogIdentity(registry(mal)).execute("Work")
         }
     }
