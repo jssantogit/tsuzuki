@@ -98,8 +98,10 @@ class ResolveMangaAllIndependentCatalogIdentity(
         // This is the same verified cross-provider identity merger used by
         // SearchIntegrations; it never merges by title similarity alone.
         val exact = mergeCatalogItemsByVerifiedIdentity(observed).filter { item ->
-            (format == null || format == CatalogItemFormat.UNKNOWN ||
-                item.format == CatalogItemFormat.UNKNOWN || item.format == format) &&
+            (
+                format == null || format == CatalogItemFormat.UNKNOWN ||
+                    item.format == CatalogItemFormat.UNKNOWN || item.format == format
+                ) &&
                 (listOf(item.title) + item.titles.values).any { normalize(it) == normalize(query) }
         }
         val fields = MangaAllCatalogIdentityResult(
@@ -129,11 +131,12 @@ class ResolveMangaAllIndependentCatalogIdentity(
         }
         val detailError = detail?.exceptionOrNull()
         if (detailError is CancellationException) throw detailError
-        val verified = detail?.getOrNull()?.takeIf { it.provider == selected.provider &&
-            it.providerId == selected.providerId &&
-            (listOf(it.title) + it.titles.values).any { name ->
-                normalize(name) == normalize(query) || normalize(name) == normalize(selected.title)
-            }
+        val verified = detail?.getOrNull()?.takeIf {
+            it.provider == selected.provider &&
+                it.providerId == selected.providerId &&
+                (listOf(it.title) + it.titles.values).any { name ->
+                    normalize(name) == normalize(query) || normalize(name) == normalize(selected.title)
+                }
         } ?: return@coroutineScope fields.copy(status = MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED)
 
         fields.copy(
