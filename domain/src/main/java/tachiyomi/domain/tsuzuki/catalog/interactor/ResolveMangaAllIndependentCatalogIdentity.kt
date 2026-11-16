@@ -66,8 +66,14 @@ class ResolveMangaAllIndependentCatalogIdentity(
         // A reading provider can never self-corroborate its own candidate.
         val sources = registry.searchProviders()
             .filterNot { it.integrationId.value.startsWith("app.tsuzuki.mangaall") }
-            .distinctBy { it.integrationId }
             .sortedBy { it.integrationId.value }
+        if (sources.size != sources.distinctBy { it.integrationId }.size) {
+            return@coroutineScope MangaAllCatalogIdentityResult(
+                status = MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE,
+                catalogsQueried = sources.size,
+                catalogsFailed = sources.size,
+            )
+        }
         if (sources.isEmpty()) {
             return@coroutineScope MangaAllCatalogIdentityResult(
                 status = MangaAllCatalogIdentityStatus.CATALOG_UNAVAILABLE,
@@ -134,6 +140,9 @@ class ResolveMangaAllIndependentCatalogIdentity(
         val verified = detail?.getOrNull()?.takeIf {
             it.provider == selected.provider &&
                 it.providerId == selected.providerId &&
+                selected.externalIds.all { (provider, id) ->
+                    it.externalIds[provider] == null || it.externalIds[provider] == id
+                } &&
                 (listOf(it.title) + it.titles.values).any { name ->
                     normalize(name) == normalize(query) || normalize(name) == normalize(selected.title)
                 }
@@ -180,6 +189,15 @@ class ResolveMangaAllIndependentCatalogIdentity(
                     return@withTimeoutOrNull SourceSearchResult(failed = true)
                 }
                 seen += page.items
+                val reportedTotal = page.totalCount
+                if (reportedTotal != null && (
+                        reportedTotal < seen.size ||
+                            (!page.hasNextPage && reportedTotal > seen.size) ||
+                            (page.hasNextPage && reportedTotal == seen.size)
+                        )
+                ) {
+                    return@withTimeoutOrNull SourceSearchResult(seen)
+                }
                 if (!page.hasNextPage) return@withTimeoutOrNull SourceSearchResult(seen, complete = true)
                 if (page.items.isEmpty()) return@withTimeoutOrNull SourceSearchResult(seen)
                 offset += page.items.size
