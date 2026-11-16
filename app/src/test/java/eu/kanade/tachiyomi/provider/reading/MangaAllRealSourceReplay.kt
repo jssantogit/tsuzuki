@@ -100,9 +100,13 @@ internal object MangaAllRealSourceReplay {
             require(value.string("canonicalStage") == "NOT_EXECUTED_HOST")
             require(value.string("readerStage") == "PAGE_METADATA_ONLY_NOT_REPLAYABLE")
             val state = value.string("replayCompleteness").orEmpty()
-            require(state in setOf(
-                "LOOKUP_CHAPTERS_ONLY", "INCOMPLETE_REJECTED_FIELDS", "INCOMPLETE_BUDGET_EXCEEDED",
-            ))
+            require(
+                state in setOf(
+                    "LOOKUP_CHAPTERS_ONLY",
+                    "INCOMPLETE_REJECTED_FIELDS",
+                    "INCOMPLETE_BUDGET_EXCEEDED",
+                ),
+            )
             val records = value["records"]?.jsonArray ?: error("Records missing")
             require(records.size <= 128)
             val list = records.mapIndexed { index, raw ->
@@ -111,14 +115,20 @@ internal object MangaAllRealSourceReplay {
                 require(record.string("operation") in setOf("lookup", "chapters", "pages"))
                 require(record.string("outcome") in setOf("RESULT", "SOURCE_FAILURE", "SOURCE_ERROR"))
                 require(record["request"] is JsonObject)
-                if (record.string("outcome") != "SOURCE_ERROR") require(record["response"] is JsonObject)
+                if (record.string("outcome") != "SOURCE_ERROR") {
+                    require(record["response"] is JsonObject)
+                }
                 if (record.string("operation") == "pages") {
                     require(record.string("replayability") == "READER_URLS_REDACTED")
                     require(record["response"]?.jsonObject?.get("pages") == null)
                 }
                 record
             }
-            Case(value.string("caseId")!!, state, list)
+            Case(
+                id = value.string("caseId")!!,
+                replayCompleteness = state,
+                records = list,
+            )
         }
     }
 
@@ -184,8 +194,14 @@ internal object MangaAllRealSourceReplay {
             var pagesSkipped = 0
             for (record in case.records) {
                 val operation = record.string("operation")!!
-                if (operation == "pages") { pagesSkipped++; continue }
-                if (record.string("outcome") == "SOURCE_ERROR") { sourceError++; continue }
+                if (operation == "pages") {
+                    pagesSkipped++
+                    continue
+                }
+                if (record.string("outcome") == "SOURCE_ERROR") {
+                    sourceError++
+                    continue
+                }
                 val expectedRequest = record["request"]!!.jsonObject
                 val response = record["response"]!!.jsonObject
                 val gateway = ScriptProviderReadingGateway(
@@ -215,7 +231,9 @@ internal object MangaAllRealSourceReplay {
                         require(decoded.error.sourceFailureCode?.name == response.string("lookupFailureCode"))
                         typedFailure++
                     } else {
-                        require(decoded is ProviderCallResult.Success) { "Host failed real lookup decode" }
+                        require(decoded is ProviderCallResult.Success) {
+                            "Host failed real lookup decode"
+                        }
                         val observed = response["items"]!!.jsonArray
                         require(decoded.value.items.size == observed.size)
                         decoded.value.items.zip(observed).forEach { (candidate, raw) ->
@@ -223,8 +241,10 @@ internal object MangaAllRealSourceReplay {
                             require(workId.matches(candidate.externalWorkId))
                             require(candidate.externalWorkId == source.string("externalWorkId"))
                             require(candidate.title == source.string("title"))
-                            require(candidate.authors == (source["authors"] as? JsonArray)
-                                ?.map { it.jsonPrimitive.content }.orEmpty())
+                            require(
+                                candidate.authors == (source["authors"] as? JsonArray)
+                                    ?.map { it.jsonPrimitive.content }.orEmpty(),
+                            )
                         }
                         require(decoded.value.nextCursor?.value == response.string("nextCursor"))
                         lookupDecoded++
@@ -244,7 +264,9 @@ internal object MangaAllRealSourceReplay {
                             cursor = expectedRequest.string("cursor")?.let(::ProviderCursor),
                         ),
                     )
-                    require(decoded is ProviderCallResult.Success) { "Host failed real chapter decode" }
+                    require(decoded is ProviderCallResult.Success) {
+                        "Host failed real chapter decode"
+                    }
                     val observed = response["items"]!!.jsonArray
                     require(decoded.value.items.size == observed.size)
                     decoded.value.items.zip(observed).forEach { (chapter, raw) ->
@@ -312,8 +334,11 @@ internal object MangaAllRealSourceReplay {
 
     private fun JsonObject.string(key: String): String? {
         val primitive = get(key)
-        return if (primitive == null || primitive is JsonNull) null
-        else (primitive as? JsonPrimitive)?.content
+        return if (primitive == null || primitive is JsonNull) {
+            null
+        } else {
+            (primitive as? JsonPrimitive)?.content
+        }
     }
 
     private fun JsonObject.number(key: String): Long? = string(key)?.toLongOrNull()
