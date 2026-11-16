@@ -32,11 +32,12 @@ internal class MangaAllCapturedRequestTape(records: List<JsonObject>) {
         get() = consumed.size
 
     internal fun replay(operation: String, hostRequest: JsonObject): JsonObject {
-        val index = entries.indexOfFirst { (position, entry) ->
+        val index = entries.indices.firstOrNull { position ->
+            val entry = entries[position]
             position !in consumed &&
                 entry.operation == operation &&
                 matches(operation, entry.record["request"] as? JsonObject, hostRequest)
-        }
+        } ?: -1
         if (index < 0) {
             replayGapCount++
             throw MangaAllReplayGapException()
