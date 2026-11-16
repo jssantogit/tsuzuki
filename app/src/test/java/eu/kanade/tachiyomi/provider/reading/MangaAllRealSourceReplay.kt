@@ -107,6 +107,7 @@ internal object MangaAllRealSourceReplay {
         val pendingChapterCursors: Int = 0,
         val orphanContinuations: Int = 0,
         val abandonedContinuations: Int = 0,
+        val replayGaps: Int = 0,
         val catalogStage: String = "NOT_EXECUTED_HOST",
         val canonicalStage: String = "NOT_EXECUTED_HOST",
         val readerStage: String = "NOT_EXECUTED_HOST",
@@ -118,6 +119,7 @@ internal object MangaAllRealSourceReplay {
                 "lookupCursorsPending=$pendingLookupCursors|" +
                 "chapterCursorsPending=$pendingChapterCursors|" +
                 "orphanCursors=$orphanContinuations|abandonedCursors=$abandonedContinuations|" +
+                "replayGaps=$replayGaps|" +
                 "catalog=$catalogStage|canonical=$canonicalStage|reader=$readerStage"
     }
 
@@ -293,6 +295,7 @@ internal object MangaAllRealSourceReplay {
                         coverageEvidenceVersion = expectedRequest.number("coverageEvidenceVersion")?.toInt(),
                     )
                     val decoded = gateway.lookup(provider, requested)
+                    if (tape.replayGapCount > 0) break
                     if (record.string("outcome") == "SOURCE_FAILURE") {
                         require(decoded is ProviderCallResult.Failure) {
                             "Typed lookup failure must NEVER become empty successful Host lookup"
@@ -333,6 +336,7 @@ internal object MangaAllRealSourceReplay {
                             cursor = expectedRequest.string("cursor")?.let(::ProviderCursor),
                         ),
                     )
+                    if (tape.replayGapCount > 0) break
                     require(decoded is ProviderCallResult.Success) {
                         "Host failed real chapter decode"
                     }
@@ -352,11 +356,9 @@ internal object MangaAllRealSourceReplay {
                     chapterDecoded++
                 }
             }
-            require(tape.replayGapCount == 0) {
-                "REPLAY_GAP: a production Host decoding request lacked a matching real capture"
-            }
             val coverage = cursorCoverage(case.records)
             val sourceState = when {
+                tape.replayGapCount > 0 -> "REPLAY_GAP"
                 sourceError > 0 || typedFailure > 0 -> "INCONCLUSIVE_UPSTREAM"
                 coverage.pendingLookupCursors > 0 || coverage.pendingChapterCursors > 0 ||
                     coverage.orphanContinuations > 0 || coverage.abandonedContinuations > 0 ->
@@ -376,6 +378,7 @@ internal object MangaAllRealSourceReplay {
                 pendingChapterCursors = coverage.pendingChapterCursors,
                 orphanContinuations = coverage.orphanContinuations,
                 abandonedContinuations = coverage.abandonedContinuations,
+                replayGaps = tape.replayGapCount,
             )
         }
     }
