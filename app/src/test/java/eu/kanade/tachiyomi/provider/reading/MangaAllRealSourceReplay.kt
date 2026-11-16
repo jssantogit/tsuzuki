@@ -50,6 +50,51 @@ internal object MangaAllRealSourceReplay {
         val records: List<JsonObject>,
     )
 
+    internal data class CursorCoverage(
+        val pendingLookupCursors: Int,
+        val pendingChapterCursors: Int,
+        val orphanContinuations: Int,
+        val abandonedContinuations: Int,
+    )
+
+    /**
+     * Tracks real, Host-shaped page cursors by exact source query/binding.
+     * A bounded live probe can stop even when HTTP 200 and every observed
+     * page decode succeeded. This never certifies a complete work inventory.
+     */
+    internal fun cursorCoverage(records: List<JsonObject>): CursorCoverage {
+        val waiting = mutableMapOf<String, String>()
+        var orphan = 0
+        var abandoned = 0
+        for (record in records) {
+            val operation = record.string("operation")
+            if (operation != "lookup" && operation != "chapters") continue
+            val request = record["request"]?.jsonObject ?: error("Source cursor request missing")
+            val key = if (operation == "lookup") {
+                "lookup:" + request["titles"].toString() + ":" +
+                    request.string("requestedLanguage").orEmpty()
+            } else {
+                val binding = request["binding"]?.jsonObject ?: error("Source binding missing")
+                "chapters:" + binding.string("providerId") + ":" +
+                    binding.string("facetId") + ":" + binding.string("externalWorkId")
+            }
+            val submitted = request.string("cursor")
+            val expected = waiting.remove(key)
+            if (expected != null && expected != submitted) abandoned++
+            if (submitted != null && expected != submitted) orphan++
+            if (record.string("outcome") == "RESULT") {
+                val next = record["response"]?.jsonObject?.string("nextCursor")
+                if (next != null) waiting[key] = next
+            }
+        }
+        return CursorCoverage(
+            pendingLookupCursors = waiting.keys.count { it.startsWith("lookup:") },
+            pendingChapterCursors = waiting.keys.count { it.startsWith("chapters:") },
+            orphanContinuations = orphan,
+            abandonedContinuations = abandoned,
+        )
+    }
+
     internal data class Report(
         val id: String,
         val sourceState: String,
@@ -58,6 +103,10 @@ internal object MangaAllRealSourceReplay {
         val typedSourceFailures: Int,
         val upstreamErrors: Int,
         val pageMetadataOnly: Int,
+        val pendingLookupCursors: Int = 0,
+        val pendingChapterCursors: Int = 0,
+        val orphanContinuations: Int = 0,
+        val abandonedContinuations: Int = 0,
         val catalogStage: String = "NOT_EXECUTED_HOST",
         val canonicalStage: String = "NOT_EXECUTED_HOST",
         val readerStage: String = "NOT_EXECUTED_HOST",
@@ -66,6 +115,9 @@ internal object MangaAllRealSourceReplay {
             "case=$id|source=$sourceState|lookup=$lookupDecoded|" +
                 "chapters=$chapterPagesDecoded|typedFailure=$typedSourceFailures|" +
                 "upstreamError=$upstreamErrors|pagesMetadata=$pageMetadataOnly|" +
+                "lookupCursorsPending=$pendingLookupCursors|" +
+                "chapterCursorsPending=$pendingChapterCursors|" +
+                "orphanCursors=$orphanContinuations|abandonedCursors=$abandonedContinuations|" +
                 "catalog=$catalogStage|canonical=$canonicalStage|reader=$readerStage"
     }
 
@@ -287,18 +339,27 @@ internal object MangaAllRealSourceReplay {
                     chapterDecoded++
                 }
             }
+            val coverage = cursorCoverage(case.records)
+            val sourceState = when {
+                sourceError > 0 || typedFailure > 0 -> "INCONCLUSIVE_UPSTREAM"
+                coverage.pendingLookupCursors > 0 || coverage.pendingChapterCursors > 0 ||
+                    coverage.orphanContinuations > 0 || coverage.abandonedContinuations > 0 ->
+                    "INCOMPLETE_CAPTURE_CURSOR"
+                lookupDecoded + chapterDecoded == 0 -> "NO_REPLAYABLE_SOURCE_RESPONSE"
+                else -> "REAL_RESPONSES_DECODED_NOT_CANONICAL"
+            }
             Report(
                 id = case.id,
-                sourceState = if (sourceError > 0 || typedFailure > 0) {
-                    "INCONCLUSIVE_UPSTREAM"
-                } else {
-                    "REAL_RESPONSES_DECODED_NOT_CANONICAL"
-                },
+                sourceState = sourceState,
                 lookupDecoded = lookupDecoded,
                 chapterPagesDecoded = chapterDecoded,
                 typedSourceFailures = typedFailure,
                 upstreamErrors = sourceError,
                 pageMetadataOnly = pagesSkipped,
+                pendingLookupCursors = coverage.pendingLookupCursors,
+                pendingChapterCursors = coverage.pendingChapterCursors,
+                orphanContinuations = coverage.orphanContinuations,
+                abandonedContinuations = coverage.abandonedContinuations,
             )
         }
     }
