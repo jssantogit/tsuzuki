@@ -36,6 +36,7 @@ enum class MangaAllCatalogIdentityStatus {
     CATALOG_UNAVAILABLE,
     CATALOG_INCOMPLETE,
     CATALOG_UNVERIFIED,
+    CATALOG_FORMAT_UNSUPPORTED,
 }
 
 data class MangaAllCatalogIdentityResult(
