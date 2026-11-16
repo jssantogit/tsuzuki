@@ -1,0 +1,101 @@
+name: MangaAll real-source Host decoder (catalog/canonical/Reader not yet executed)
+
+# Opt-in only. This stage consumes the real normalized source envelope from
+# the original signed MangaAll code8, not synthetic response bodies.
+# Host catalog bootstrap, chapter reconciliation, SQLite and Reader are not
+# executed here; do not advertise this as end-to-end canonical success.
+on:
+  workflow_dispatch:
+    inputs:
+      works:
+        description: '1-30 arbitrary works; one per line, optional manga :: Title etc.'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-real-host-decoder-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-provider-to-host-decoder:
+    name: Real code8 JS / actual Host Kotlin gateway — shard ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - name: Checkout current production Host
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout pinned Provider source and signed package (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 99f3565a1e1edc0d8ed249b7597006c897f02636
+          path: mangaall-signed-source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify signed repository root, package SHA and exact live JavaScript bytes
+        working-directory: mangaall-signed-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tooling/verify_index.mjs
+          python3 tooling/build_provider.py providers/mangaall /tmp/mangaall-host-source.tsz
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          data=json.loads(Path('dist/index.payload.json').read_text())
+          assert data['repositoryId']=='app.tsuzuki.providers' and data['sequence']==34
+          items=[x for x in data['providers'] if x['providerId']=='app.tsuzuki.mangaall']
+          assert len(items)==1 and items[0]['versionCode']==8
+          digest=items[0]['sha256']
+          assert hashlib.sha256(Path('/tmp/mangaall-host-source.tsz').read_bytes()).hexdigest()==digest
+          assert hashlib.sha256(Path('dist/providers/app.tsuzuki.mangaall-8.tsz').read_bytes()).hexdigest()==digest
+          print('MANGAALL_HOST_SIGNED_PARITY|root=VERIFIED|code=8|indexSequence=34')
+          PY
+      - name: Fetch actual upstream lookup/chapter envelopes for arbitrary works
+        working-directory: mangaall-signed-source
+        env:
+          MANGAALL_SUITE: custom
+          MANGAALL_BATCH: '1'
+          MANGAALL_WORKS: ${{ inputs.works }}
+          MANGAALL_SHARD_INDEX: ${{ matrix.shard }}
+          MANGAALL_SHARD_COUNT: '3'
+        run: |
+          node tooling/mangaall_live_matrix.mjs --live \
+            --output mangaall-live-matrix-${{ matrix.shard }}.json \
+            --real-envelopes mangaall-real-envelopes-${{ matrix.shard }}.json
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Decode real captured source results through production Host V1 gateway
+        env:
+          MANGAALL_REAL_REPLAY_REQUIRED: '1'
+          MANGAALL_REAL_ENVELOPES_FILE: ${{ github.workspace }}/mangaall-signed-source/mangaall-real-envelopes-${{ matrix.shard }}.json
+          MANGAALL_SIGNED_PACKAGE_FILE: ${{ github.workspace }}/mangaall-signed-source/dist/providers/app.tsuzuki.mangaall-8.tsz
+        run: |
+          ./gradlew :app:testDebugUnitTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSourceHostDecoderTest
+      - name: Preserve bounded real source and Host decoder verdicts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mangaall-real-host-decoder-${{ matrix.shard }}
+          path: |
+            mangaall-signed-source/mangaall-live-matrix-*.json
+            mangaall-signed-source/mangaall-real-envelopes-*.json
+            app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealSourceHostDecoderTest.xml
+          if-no-files-found: warn
+          retention-days: 3
