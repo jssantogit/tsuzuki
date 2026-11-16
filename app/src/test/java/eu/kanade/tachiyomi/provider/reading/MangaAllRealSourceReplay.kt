@@ -175,12 +175,16 @@ internal object MangaAllRealSourceReplay {
             },
         )
         val packageSource = ActiveProviderScriptPackageSource {
-            if (it == provider) ActiveProviderScriptPackage(
-                repositoryId = REPOSITORY_ID,
-                versionCode = parsed.manifest.version.code,
-                bytes = signedPackageBytes,
-                parsed = parsed,
-            ) else null
+            if (it == provider) {
+                ActiveProviderScriptPackage(
+                    repositoryId = REPOSITORY_ID,
+                    versionCode = parsed.manifest.version.code,
+                    bytes = signedPackageBytes,
+                    parsed = parsed,
+                )
+            } else {
+                null
+            }
         }
 
         return cases.map { case ->
