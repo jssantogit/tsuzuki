@@ -4,6 +4,7 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -60,6 +61,42 @@ class MangaAllRealSourceHostDecoderTest {
         assertThrows<IllegalArgumentException> {
             MangaAllRealSourceReplay.validate(signed.replace(digest, "0".repeat(64)))
         }
+    }
+
+    @Test
+    fun `captured real call cursor coverage distinguishes incomplete pages and broken continuations`() {
+        // CONTRACT-ONLY transport pages, deliberately no candidate/author/HID
+        // records. They are not marketed as a live work or a canonical test.
+        fun lookup(requestCursor: String?, nextCursor: String?): JsonObject {
+            val before = requestCursor?.let { "\"$it\"" } ?: "null"
+            val after = nextCursor?.let { "\"$it\"" } ?: "null"
+            return Json.parseToJsonElement(
+                """{"operation":"lookup","outcome":"RESULT",
+                   "request":{"titles":["CONTRACT_ONLY_QUERY"],"requestedLanguage":"en","cursor":$before},
+                   "response":{"items":[],"nextCursor":$after}}""",
+            ).jsonObject
+        }
+        val firstPage = lookup(null, "cursor-2")
+        val unfinished = MangaAllRealSourceReplay.cursorCoverage(listOf(firstPage))
+        unfinished.pendingLookupCursors shouldBe 1
+        unfinished.orphanContinuations shouldBe 0
+
+        val complete = MangaAllRealSourceReplay.cursorCoverage(
+            listOf(firstPage, lookup("cursor-2", null)),
+        )
+        complete.pendingLookupCursors shouldBe 0
+        complete.orphanContinuations shouldBe 0
+
+        val disconnected = MangaAllRealSourceReplay.cursorCoverage(
+            listOf(firstPage, lookup("wrong-cursor", null)),
+        )
+        disconnected.orphanContinuations shouldBe 1
+        disconnected.abandonedContinuations shouldBe 1
+
+        // A terminal empty response only certifies *this* source query;
+        // without independent catalog identity it is not canonical NO_CHAPTERS.
+        MangaAllRealSourceReplay.cursorCoverage(listOf(lookup(null, null)))
+            .pendingLookupCursors shouldBe 0
     }
 
     @Test
