@@ -48,13 +48,11 @@ class MangaAllRealSourceHostDecoderTest {
         val canonical = outer.toString()
         val digest = MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray())
             .joinToString("") { "%02x".format(it.toInt() and 0xff) }
-        val signed = JsonObject(outer + ("sha256" to
-            kotlinx.serialization.json.JsonPrimitive(digest))).toString()
+        val signed = JsonObject(outer + mapOf("sha256" to kotlinx.serialization.json.JsonPrimitive(digest))).toString()
         MangaAllRealSourceReplay.validate(signed).size shouldBe 0
+        val forged = signed.replace("\"NOT_EXECUTED_HOST\"", "\"CANONICAL_COMPLETE\"")
         assertThrows<IllegalArgumentException> {
-            MangaAllRealSourceReplay.validate(signed.replace(
-                "\"NOT_EXECUTED_HOST\"", "\"CANONICAL_COMPLETE\"",
-            ))
+            MangaAllRealSourceReplay.validate(forged)
         }
         assertThrows<IllegalArgumentException> {
             MangaAllRealSourceReplay.validate(signed.replace("NO_WORK_ASSIGNED", "SOURCE_ATTEMPTS_RECORDED"))
@@ -74,8 +72,10 @@ class MangaAllRealSourceHostDecoderTest {
                 "Explicit real Host gate requires both genuine signed package and live source capture"
             }
         }
-        assumeTrue(!capture.isNullOrBlank() && !packagePath.isNullOrBlank(),
-            "Only the opt-in REAL source-capture workflow supplies external data")
+        assumeTrue(
+            !capture.isNullOrBlank() && !packagePath.isNullOrBlank(),
+            "Only the opt-in REAL source-capture workflow supplies external data",
+        )
 
         val reports = MangaAllRealSourceReplay.decode(
             captureText = File(requireNotNull(capture)).readText(),
