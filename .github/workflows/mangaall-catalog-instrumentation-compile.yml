@@ -37,5 +37,9 @@ jobs:
         run: |
           bash -n .github/scripts/run_mangaall_live_catalog_android.sh
           ./gradlew :app:spotlessKotlinCheck
+      - name: Verify independent catalog resolver contract on this exact revision
+        run: |
+          ./gradlew :domain:testDebugUnitTest \
+            --tests tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentityTest
       - name: Compile production debug Host and live catalog instrumented test
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
