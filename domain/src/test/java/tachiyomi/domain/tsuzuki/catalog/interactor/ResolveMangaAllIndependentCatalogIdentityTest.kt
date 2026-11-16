@@ -109,6 +109,38 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
     }
 
     @Test
+    fun `terminal catalog page contradicting its real total count is incomplete`() = runTest {
+        val mal = source("mal", search = {
+            CatalogPage(listOf(item("mal", "42", "Work")), false, totalCount = 30)
+        }, detail = { error("Never certify a partial catalog response") })
+        val result = ResolveMangaAllIndependentCatalogIdentity(registry(mal)).execute("Work")
+        result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE
+        result.identity shouldBe null
+    }
+
+    @Test
+    fun `duplicate enabled catalog registration is not silently reduced to the first one`() = runTest {
+        val mal = source("mal", search = {
+            CatalogPage(listOf(item("mal", "42", "Work")), false)
+        }, detail = { error("Conflicting registrations cannot authorize an identity") })
+        val result = ResolveMangaAllIndependentCatalogIdentity(registry(mal, mal)).execute("Work")
+        result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE
+        result.identity shouldBe null
+    }
+
+    @Test
+    fun `detail endpoint cannot contradict a provider-published external id crosswalk`() = runTest {
+        val mal = source("mal", search = {
+            CatalogPage(listOf(item("mal", "42", "Work", externalIds = mapOf("mangaupdates" to "71"))), false)
+        }, detail = {
+            item("mal", "42", "Work", externalIds = mapOf("mangaupdates" to "different"))
+        })
+        val result = ResolveMangaAllIndependentCatalogIdentity(registry(mal)).execute("Work")
+        result.status shouldBe MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED
+        result.identity shouldBe null
+    }
+
+    @Test
     fun `detail endpoint must confirm the same provider and exact external id`() = runTest {
         val mal = source("mal", search = {
             CatalogPage(listOf(item("mal", "42", "Work")), false)
