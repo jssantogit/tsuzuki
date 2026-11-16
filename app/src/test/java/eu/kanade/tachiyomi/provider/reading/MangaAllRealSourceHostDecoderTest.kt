@@ -4,8 +4,8 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
