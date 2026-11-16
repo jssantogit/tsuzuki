@@ -107,6 +107,7 @@ internal object MangaAllRealSourceReplay {
         val pendingChapterCursors: Int = 0,
         val orphanContinuations: Int = 0,
         val abandonedContinuations: Int = 0,
+        val replayGaps: Int = 0,
         val catalogStage: String = "NOT_EXECUTED_HOST",
         val canonicalStage: String = "NOT_EXECUTED_HOST",
         val readerStage: String = "NOT_EXECUTED_HOST",
@@ -118,6 +119,7 @@ internal object MangaAllRealSourceReplay {
                 "lookupCursorsPending=$pendingLookupCursors|" +
                 "chapterCursorsPending=$pendingChapterCursors|" +
                 "orphanCursors=$orphanContinuations|abandonedCursors=$abandonedContinuations|" +
+                "replayGaps=$replayGaps|" +
                 "catalog=$catalogStage|canonical=$canonicalStage|reader=$readerStage"
     }
 
@@ -243,6 +245,9 @@ internal object MangaAllRealSourceReplay {
             if (case.replayCompleteness != "LOOKUP_CHAPTERS_ONLY") {
                 return@map Report(case.id, case.replayCompleteness, 0, 0, 0, 0, 0)
             }
+            // The same validated case-scoped capture must serve every Host V1 request.
+            // Requests cannot borrow replies from another title, facet or cursor.
+            val tape = MangaAllCapturedRequestTape(case.records)
             var lookupDecoded = 0
             var chapterDecoded = 0
             var typedFailure = 0
@@ -255,7 +260,17 @@ internal object MangaAllRealSourceReplay {
                     continue
                 }
                 if (record.string("outcome") == "SOURCE_ERROR") {
-                    sourceError++
+                    if (operation == "lookup" || operation == "chapters") {
+                        val recordedRequest = record["request"]!!.jsonObject
+                        try {
+                            tape.replay(operation, recordedRequest)
+                            error("Captured upstream error was replayed as a successful response")
+                        } catch (_: MangaAllCapturedSourceErrorException) {
+                            sourceError++
+                        }
+                    } else {
+                        sourceError++
+                    }
                     continue
                 }
                 val expectedRequest = record["request"]!!.jsonObject
@@ -267,8 +282,8 @@ internal object MangaAllRealSourceReplay {
                         require(request.providerId == PROVIDER_ID)
                         require(request.artifactVersionCode == parsed.manifest.version.code)
                         require(request.capabilityId == "reading.$operation")
-                        matchRequest(operation, expectedRequest, json.parseToJsonElement(input).jsonObject)
-                        ProviderRuntimeInvocationResponse.success(response.toString())
+                        val captured = tape.replay(operation, json.parseToJsonElement(input).jsonObject)
+                        ProviderRuntimeInvocationResponse.success(captured.toString())
                     },
                     invocationIdFactory = { "real-source-decoder" },
                 )
@@ -280,6 +295,7 @@ internal object MangaAllRealSourceReplay {
                         coverageEvidenceVersion = expectedRequest.number("coverageEvidenceVersion")?.toInt(),
                     )
                     val decoded = gateway.lookup(provider, requested)
+                    if (tape.replayGapCount > 0) break
                     if (record.string("outcome") == "SOURCE_FAILURE") {
                         require(decoded is ProviderCallResult.Failure) {
                             "Typed lookup failure must NEVER become empty successful Host lookup"
@@ -320,6 +336,7 @@ internal object MangaAllRealSourceReplay {
                             cursor = expectedRequest.string("cursor")?.let(::ProviderCursor),
                         ),
                     )
+                    if (tape.replayGapCount > 0) break
                     require(decoded is ProviderCallResult.Success) {
                         "Host failed real chapter decode"
                     }
@@ -341,6 +358,7 @@ internal object MangaAllRealSourceReplay {
             }
             val coverage = cursorCoverage(case.records)
             val sourceState = when {
+                tape.replayGapCount > 0 -> "REPLAY_GAP"
                 sourceError > 0 || typedFailure > 0 -> "INCONCLUSIVE_UPSTREAM"
                 coverage.pendingLookupCursors > 0 || coverage.pendingChapterCursors > 0 ||
                     coverage.orphanContinuations > 0 || coverage.abandonedContinuations > 0 ->
@@ -360,26 +378,8 @@ internal object MangaAllRealSourceReplay {
                 pendingChapterCursors = coverage.pendingChapterCursors,
                 orphanContinuations = coverage.orphanContinuations,
                 abandonedContinuations = coverage.abandonedContinuations,
+                replayGaps = tape.replayGapCount,
             )
-        }
-    }
-
-    private fun matchRequest(operation: String, recorded: JsonObject, runtime: JsonObject) {
-        // Diagnostics v1 and v2 have identical signed code8 editorial and
-        // coverage opt-in effects. Compare material source request dimensions.
-        if (operation == "lookup") {
-            require(recorded["titles"] == runtime["titles"])
-            require(recorded.string("requestedLanguage") == runtime.string("requestedLanguage"))
-            require(recorded.string("cursor") == runtime.string("cursor"))
-            require(recorded.number("editorialEvidenceVersion") == runtime.number("editorialEvidenceVersion"))
-            require(recorded.number("coverageEvidenceVersion") == runtime.number("coverageEvidenceVersion"))
-        } else {
-            val old = recorded["binding"]!!.jsonObject
-            val now = runtime["binding"]!!.jsonObject
-            for (key in listOf("providerId", "facetId", "externalWorkId")) {
-                require(old.string(key) == now.string(key))
-            }
-            require(recorded.string("cursor") == runtime.string("cursor"))
         }
     }
 
