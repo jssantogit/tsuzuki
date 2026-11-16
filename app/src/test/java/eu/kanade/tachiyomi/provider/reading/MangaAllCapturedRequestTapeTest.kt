@@ -58,7 +58,8 @@ class MangaAllCapturedRequestTapeTest {
 
     @Test
     fun `chapter binding and facet must match exactly even when work id is identical`() {
-        val exact = """{"binding":{"providerId":"app.tsuzuki.mangaall","facetId":"en","externalWorkId":"mangadex:contract"},"cursor":null}"""
+        val exact = """{"binding":{"providerId":"app.tsuzuki.mangaall","facetId":"en",""" +
+            """"externalWorkId":"mangadex:contract"},"cursor":null}"""
         val tape = MangaAllCapturedRequestTape(listOf(record("chapters", exact)))
         assertThrows<MangaAllReplayGapException> {
             tape.replay("chapters", request(exact.replace("\"en\"", "\"pt-br\"")))
