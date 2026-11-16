@@ -27,6 +27,7 @@ O mesmo workflow agora também inclui **três shards Android paralelas** que con
 - `CATALOG_INCOMPLETE`: alguma integração habilitada falhou, a paginação foi interrompida ou o total relatado contradiz os resultados.
 - `CATALOG_UNAVAILABLE`: a integração real não está acessível neste runner; não equivale a obra inexistente.
 - `CATALOG_UNVERIFIED`: o endpoint de detalhes não confirmou ID/título/crosswalk ou não estava acessível.
+- `CATALOG_FORMAT_UNSUPPORTED`: o catálogo MangaUpdates usado neste gate exclui novels da busca; para `web_novel` e `light_novel`, a ausência de resultados não permite declarar `NOT_FOUND`.
 - `CATALOG_NOT_FOUND`: só quando as fontes de catálogo consultadas responderam integralmente e nenhum título/alias exato apareceu.
 - `RESOLVED`: o catálogo independente confirmou a identidade exata pelo próprio ID no endpoint de detalhes; `creatorsAttested` indica se houve créditos de autor/artista, **não** autoriza automaticamente uma edição MangaAll.
 
