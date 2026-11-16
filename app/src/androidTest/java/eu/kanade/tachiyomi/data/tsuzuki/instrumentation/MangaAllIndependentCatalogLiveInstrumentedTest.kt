@@ -146,7 +146,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
     private fun normalizedTitle(title: String): String =
         Normalizer.normalize(title, Normalizer.Form.NFKC)
             .trim()
-            .replace(Regex("""\\s+"""), " ")
+            .replace(Regex("""\s+"""), " ")
             .lowercase()
 
     private fun sha256(input: String): String =
