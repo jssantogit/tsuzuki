@@ -45,7 +45,12 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
         assertEquals("true", args.getString("mangaAllLiveCatalogOptIn"))
         val target = instrument.targetContext
         assertEquals("app.tsuzuki.dev", target.packageName)
-        assertTrue("Live catalog CI is restricted to an emulator", Build.FINGERPRINT.contains("generic"))
+        assertTrue(
+            "Live catalog CI is restricted to an emulator",
+            Build.FINGERPRINT.contains("generic") ||
+                Build.HARDWARE in setOf("ranchu", "goldfish") ||
+                Build.PRODUCT.startsWith("sdk_gphone"),
+        )
 
         val encoded = requireNotNull(args.getString("worksBase64")) { "Missing arbitrary work input" }
         val works = Base64.decode(encoded, Base64.NO_WRAP).toString(Charsets.UTF_8)
@@ -86,7 +91,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                     MangaAllCatalogIdentityStatus.CATALOG_NOT_FOUND,
                 )
             ) conclusive++
-            val line = buildString {
+            val reportLine = buildString {
                 append("MANGAALL_REAL_CATALOG|mode=DIRECT_LIVE_ANDROID_CATALOG_ONLY")
                 append("|case=").append(index)
                 append("|queryHash=").append(sha256(work.title).take(12))
@@ -100,7 +105,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 append("|creatorsAttested=").append(report.creatorsAttested)
                 append("|canonical=NOT_EXECUTED_HOST|reader=NOT_EXECUTED_HOST")
             }
-            instrument.sendStatus(1, Bundle().apply { putString("stream", line) })
+            instrument.sendStatus(1, Bundle().apply { putString("stream", reportLine) })
         }
         instrument.sendStatus(1, Bundle().apply {
             putString(
@@ -121,6 +126,7 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
         val pieces = input.split("::", limit = 2)
         if (pieces.size == 1) return Work(input, null)
         val format = when (pieces[0].trim().lowercase().replace('-', '_')) {
+            "unknown" -> CatalogItemFormat.UNKNOWN
             "manga" -> CatalogItemFormat.MANGA
             "manhwa" -> CatalogItemFormat.MANHWA
             "manhua" -> CatalogItemFormat.MANHUA
