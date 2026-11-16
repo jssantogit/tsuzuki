@@ -89,7 +89,8 @@ class MangaAllCapturedRequestTapeTest {
 
     @Test
     fun `redacted Reader pages are never replayed as actual image responses`() {
-        val pageRequest = """{"binding":{"providerId":"app.tsuzuki.mangaall","facetId":"en","externalWorkId":"mangadex:contract"},"providerChapterId":"mangadex:chapter"}"""
+        val pageRequest = """{"binding":{"providerId":"app.tsuzuki.mangaall","facetId":"en",""" +
+            """"externalWorkId":"mangadex:contract"},"providerChapterId":"mangadex:chapter"}"""
         val tape = MangaAllCapturedRequestTape(
             listOf(record("pages", pageRequest, response = """{"type":"page_list","pageCount":1}""")),
         )
