@@ -26,6 +26,7 @@ import tachiyomi.domain.tsuzuki.integration.RatingsProvider
 import tachiyomi.domain.tsuzuki.integration.SearchProvider
 import tachiyomi.domain.tsuzuki.integration.TrackingProvider
 import java.security.MessageDigest
+import java.text.Normalizer
 
 /**
  * LIVE, opt-in, disposable-emulator catalog probe. Unlike the offline contract
@@ -93,8 +94,8 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
             ) conclusive++
             val reportLine = buildString {
                 append("MANGAALL_REAL_CATALOG|mode=DIRECT_LIVE_ANDROID_CATALOG_ONLY")
-                append("|case=").append(index)
-                append("|queryHash=").append(sha256(work.title).take(12))
+                append("|case=user-").append(sha256(normalizedTitle(work.title)).take(12))
+                append("|index=").append(index)
                 append("|source=MANGAUPDATES_PRODUCTION")
                 append("|outcome=").append(report.status)
                 append("|candidates=").append(report.candidateCount)
@@ -139,6 +140,14 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
         require(format != null && pieces[1].isNotBlank()) { "Unsupported work prefix or blank title" }
         return Work(pieces[1].trim(), format)
     }
+
+    // Match tooling/mangaall_generic_works.mjs case identity, so both live
+    // shards can be joined without exposing the original title text.
+    private fun normalizedTitle(title: String): String =
+        Normalizer.normalize(title, Normalizer.Form.NFKC)
+            .trim()
+            .replace(Regex("""\\s+"""), " ")
+            .lowercase()
 
     private fun sha256(input: String): String =
         MessageDigest.getInstance("SHA-256")
