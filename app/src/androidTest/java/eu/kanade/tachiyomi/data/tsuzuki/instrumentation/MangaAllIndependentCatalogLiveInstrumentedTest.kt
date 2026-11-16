@@ -97,7 +97,9 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                     MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS,
                     MangaAllCatalogIdentityStatus.CATALOG_NOT_FOUND,
                 )
-            ) conclusive++
+            ) {
+                conclusive++
+            }
             val reportLine = buildString {
                 append("MANGAALL_REAL_CATALOG|mode=DIRECT_LIVE_ANDROID_CATALOG_ONLY")
                 append("|case=user-").append(sha256(normalizedTitle(work.title)).take(12))
@@ -114,13 +116,16 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
             }
             instrument.sendStatus(1, Bundle().apply { putString("stream", reportLine) })
         }
-        instrument.sendStatus(1, Bundle().apply {
-            putString(
-                "stream",
-                "MANGAALL_REAL_CATALOG_BATCH|selected=${selected.size}|conclusive=$conclusive|" +
-                    "catalog=MANGAUPDATES_PRODUCTION|canonical=NOT_EXECUTED_HOST",
-            )
-        })
+        instrument.sendStatus(
+            1,
+            Bundle().apply {
+                putString(
+                    "stream",
+                    "MANGAALL_REAL_CATALOG_BATCH|selected=${selected.size}|conclusive=$conclusive|" +
+                        "catalog=MANGAUPDATES_PRODUCTION|canonical=NOT_EXECUTED_HOST",
+                )
+            },
+        )
         assertTrue(
             "All assigned catalog lookups were inconclusive (runner network/metadata unavailable)",
             selected.isEmpty() || conclusive > 0,
