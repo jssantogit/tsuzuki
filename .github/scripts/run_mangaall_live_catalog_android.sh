@@ -18,6 +18,8 @@ if [ "${#target_apks[@]}" -ne 1 ] || [ "${#test_apks[@]}" -ne 1 ]; then
   exit 3
 fi
 cleanup() {
+  # Raw upstream exception text may contain response URLs; never retain it as a CI artifact.
+  rm -f "$out/instrumentation-internal.txt"
   adb shell am force-stop "$app" >/dev/null 2>&1 || true
   adb shell pm clear "$app" >/dev/null 2>&1 || true
 }
