@@ -95,7 +95,8 @@ class ResolveMangaAllIndependentCatalogIdentityTest {
         }, detail = { item("mal", "42", "Work") })
         val result = ResolveMangaAllIndependentCatalogIdentity(registry(mal)).execute("Work")
         result.status shouldBe MangaAllCatalogIdentityStatus.RESOLVED
-        offsets shouldBe listOf(0, 25)
+        // Advance by the number actually received, never skip real candidates.
+        offsets shouldBe listOf(0, 1)
     }
 
     @Test
