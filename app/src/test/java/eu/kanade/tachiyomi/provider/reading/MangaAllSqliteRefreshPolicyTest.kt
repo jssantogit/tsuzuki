@@ -122,8 +122,9 @@ class MangaAllSqliteRefreshPolicyTest {
                 refresh.execute(title.id, forceRefresh = true).isSuccess shouldBe true
                 val rows = sqlite.evidenceRepository.getByCanonicalTitleId(title.id)
                 rows.single { it.evidence.producerId == PRODUCER }.mappedCanonicalChapterId shouldBe null
-                (rows.single { it.evidence.producerId == sourceB.producerId }
-                    .mappedCanonicalChapterId != null) shouldBe true
+                val rivalStillMapped = rows.single { it.evidence.producerId == sourceB.producerId }
+                    .mappedCanonicalChapterId != null
+                rivalStillMapped shouldBe true
                 sqlite.chapterRepository.getChaptersByCanonicalTitleId(title.id).size shouldBe 1
             }
         }
