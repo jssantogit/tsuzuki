@@ -186,21 +186,45 @@ internal object MangaAllRealSourceReplay {
         }
     }
 
-    internal suspend fun decode(
-        captureText: String,
+    /**
+     * Exact signed Host gateway shared by decoder checks and the canonical
+     * collector replay. The invoker rejects any request not present on the
+     * captured tape; it does not implement its own candidate selection.
+     */
+    internal class PreparedPackage(
+        val provider: ProviderId,
+        val registry: DefaultProviderRegistry,
+        private val packageSource: ActiveProviderScriptPackageSource,
+        private val providerVersionCode: Long,
+    ) {
+        fun gateway(tape: MangaAllCapturedRequestTape) = ScriptProviderReadingGateway(
+            registry = registry,
+            packageSource = packageSource,
+            invokePackage = ProviderPackageCapabilityInvoker { request, _, input, _ ->
+                require(request.providerId == PROVIDER_ID)
+                require(request.artifactVersionCode == providerVersionCode)
+                val operation = request.capabilityId.removePrefix("reading.")
+                require(operation in setOf("lookup", "chapters"))
+                val captured = tape.replay(operation, json.parseToJsonElement(input).jsonObject)
+                ProviderRuntimeInvocationResponse.success(captured.toString())
+            },
+            invocationIdFactory = { "real-source-canonical-replay" },
+        )
+    }
+
+    internal fun prepare(
         signedPackageBytes: ByteArray,
-    ): List<Report> {
-        val cases = validate(captureText)
-        val batch = json.parseToJsonElement(captureText).jsonObject
-        require(sha256(signedPackageBytes) == batch.string("packageSha256")) {
-            "Host must use the actual signed provider archive, never a reconstructed mock"
+        expectedSha256: String,
+        expectedVersionCode: Long,
+    ): PreparedPackage {
+        require(digest.matches(expectedSha256) && sha256(signedPackageBytes) == expectedSha256) {
+            "Host must use the exact signed MangaAll package captured by the Provider"
         }
         val parsed = ProviderPackageParser().parse(signedPackageBytes)
         require(parsed.manifest.id == PROVIDER_ID)
-        require(parsed.manifest.version.code == batch.number("providerVersionCode"))
+        require(parsed.manifest.version.code == expectedVersionCode)
         require(parsed.manifest.capabilities.any { it.id == "reading.lookup" && it.version == 1 })
         require(parsed.manifest.capabilities.any { it.id == "reading.chapters" && it.version == 1 })
-
         val provider = ProviderId(PROVIDER_ID)
         val descriptor = ProviderDescriptor(
             id = provider,
@@ -228,7 +252,7 @@ internal object MangaAllRealSourceReplay {
                 )
             },
         )
-        val packageSource = ActiveProviderScriptPackageSource {
+        val source = ActiveProviderScriptPackageSource {
             if (it == provider) {
                 ActiveProviderScriptPackage(
                     repositoryId = REPOSITORY_ID,
@@ -240,6 +264,23 @@ internal object MangaAllRealSourceReplay {
                 null
             }
         }
+        return PreparedPackage(provider, registry, source, expectedVersionCode)
+    }
+
+    internal suspend fun decode(
+        captureText: String,
+        signedPackageBytes: ByteArray,
+    ): List<Report> {
+        val cases = validate(captureText)
+        val batch = json.parseToJsonElement(captureText).jsonObject
+        require(sha256(signedPackageBytes) == batch.string("packageSha256")) {
+            "Host must use the actual signed provider archive, never a reconstructed mock"
+        }
+        val prepared = prepare(
+            signedPackageBytes = signedPackageBytes,
+            expectedSha256 = batch.string("packageSha256")!!,
+            expectedVersionCode = batch.number("providerVersionCode")!!,
+        )
 
         return cases.map { case ->
             if (case.replayCompleteness != "LOOKUP_CHAPTERS_ONLY") {
@@ -248,6 +289,7 @@ internal object MangaAllRealSourceReplay {
             // The same validated case-scoped capture must serve every Host V1 request.
             // Requests cannot borrow replies from another title, facet or cursor.
             val tape = MangaAllCapturedRequestTape(case.records)
+            val gateway = prepared.gateway(tape)
             var lookupDecoded = 0
             var chapterDecoded = 0
             var typedFailure = 0
@@ -275,18 +317,6 @@ internal object MangaAllRealSourceReplay {
                 }
                 val expectedRequest = record["request"]!!.jsonObject
                 val response = record["response"]!!.jsonObject
-                val gateway = ScriptProviderReadingGateway(
-                    registry = registry,
-                    packageSource = packageSource,
-                    invokePackage = ProviderPackageCapabilityInvoker { request, _, input, _ ->
-                        require(request.providerId == PROVIDER_ID)
-                        require(request.artifactVersionCode == parsed.manifest.version.code)
-                        require(request.capabilityId == "reading.$operation")
-                        val captured = tape.replay(operation, json.parseToJsonElement(input).jsonObject)
-                        ProviderRuntimeInvocationResponse.success(captured.toString())
-                    },
-                    invocationIdFactory = { "real-source-decoder" },
-                )
                 if (operation == "lookup") {
                     val requested = ProviderReadingLookupRequest(
                         titles = expectedRequest["titles"]!!.jsonArray.map { it.jsonPrimitive.content },
@@ -294,7 +324,7 @@ internal object MangaAllRealSourceReplay {
                         requestedLanguage = expectedRequest.string("requestedLanguage"),
                         coverageEvidenceVersion = expectedRequest.number("coverageEvidenceVersion")?.toInt(),
                     )
-                    val decoded = gateway.lookup(provider, requested)
+                    val decoded = gateway.lookup(prepared.provider, requested)
                     if (tape.replayGapCount > 0) break
                     if (record.string("outcome") == "SOURCE_FAILURE") {
                         require(decoded is ProviderCallResult.Failure) {
@@ -325,12 +355,12 @@ internal object MangaAllRealSourceReplay {
                     val bindingObject = expectedRequest["binding"]!!.jsonObject
                     require(workId.matches(bindingObject.string("externalWorkId").orEmpty()))
                     val binding = ProviderBindingRef(
-                        providerId = provider,
+                        providerId = prepared.provider,
                         facetId = bindingObject.string("facetId"),
                         externalWorkId = bindingObject.string("externalWorkId")!!,
                     )
                     val decoded = gateway.chapters(
-                        provider,
+                        prepared.provider,
                         ProviderReadingChaptersRequest(
                             binding = binding,
                             cursor = expectedRequest.string("cursor")?.let(::ProviderCursor),
