@@ -73,10 +73,12 @@ internal object MangaAllLiveCatalogAttestations {
             val crosswalk = row["externalIds"]!!.jsonObject.mapValues { (_, value) ->
                 value.jsonPrimitive.content
             }
-            require(crosswalk.size <= 16 && crosswalk.all { (provider, externalId) ->
-                opaqueId.matches(provider) && !provider.startsWith("app.tsuzuki.") &&
-                    opaqueId.matches(externalId)
-            })
+            require(
+                crosswalk.size <= 16 && crosswalk.all { (provider, externalId) ->
+                    opaqueId.matches(provider) && !provider.startsWith("app.tsuzuki.") &&
+                        opaqueId.matches(externalId)
+                },
+            )
             val credits = row.bool("creatorsAttested")
             val queried = row.int("catalogsQueried")
             val failed = row.int("catalogsFailed")
