@@ -84,7 +84,9 @@ internal class MangaAllDisposableSqlite private constructor(
                     throw error
                 }
             } catch (error: Throwable) {
-                if (previous == null) System.clearProperty("org.sqlite.lib.path") else {
+                if (previous == null) {
+                    System.clearProperty("org.sqlite.lib.path")
+                } else {
                     System.setProperty("org.sqlite.lib.path", previous)
                 }
                 directory.toFile().deleteRecursively()
