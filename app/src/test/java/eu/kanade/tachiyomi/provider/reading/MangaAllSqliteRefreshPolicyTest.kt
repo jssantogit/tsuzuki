@@ -84,6 +84,50 @@ class MangaAllSqliteRefreshPolicyTest {
         }
     }
 
+    @Test
+    fun `complete empty snapshot detaches only the exact Provider binding and retains rival source support`() =
+        runBlocking {
+            MangaAllDisposableSqlite.open().use { sqlite ->
+                val title = canonicalTitle()
+                sqlite.titleRepository.insert(title)
+                val sourceA = evidence("first", "Chapter 1", 100L)
+                val sourceB = sourceA.copy(
+                    id = "contract-source-b",
+                    producerId = "provider-binding:another-source",
+                )
+                val collector = mockk<CollectProviderReadingEvidence>()
+                coEvery { collector.execute(title.id) } returnsMany listOf(
+                    ProviderReadingEvidenceCollection(
+                        snapshots = listOf(
+                            snapshot(100L, listOf(sourceA)),
+                            tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingEvidenceSnapshot(
+                                producerId = sourceB.producerId,
+                                observedAt = 100L,
+                                evidence = listOf(sourceB),
+                            ),
+                        ),
+                        bindingCount = 2,
+                        complete = true,
+                    ),
+                    ProviderReadingEvidenceCollection(
+                        snapshots = listOf(snapshot(300L, emptyList())),
+                        bindingCount = 2,
+                        complete = true,
+                    ),
+                )
+                val refresh = refresh(sqlite, collector)
+                refresh.execute(title.id, forceRefresh = true).isSuccess shouldBe true
+                sqlite.evidenceRepository.getByCanonicalTitleId(title.id).size shouldBe 2
+
+                refresh.execute(title.id, forceRefresh = true).isSuccess shouldBe true
+                val rows = sqlite.evidenceRepository.getByCanonicalTitleId(title.id)
+                rows.single { it.evidence.producerId == PRODUCER }.mappedCanonicalChapterId shouldBe null
+                (rows.single { it.evidence.producerId == sourceB.producerId }
+                    .mappedCanonicalChapterId != null) shouldBe true
+                sqlite.chapterRepository.getChaptersByCanonicalTitleId(title.id).size shouldBe 1
+            }
+        }
+
     private fun snapshot(at: Long, evidence: List<ChapterEvidence>) =
         tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingEvidenceSnapshot(
             producerId = PRODUCER,
