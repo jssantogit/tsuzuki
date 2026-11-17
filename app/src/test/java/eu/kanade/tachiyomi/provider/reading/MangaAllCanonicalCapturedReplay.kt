@@ -6,6 +6,12 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityStatus
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticAttributeValue
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticEventName
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticStage
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticEvent
+import tachiyomi.domain.tsuzuki.diagnostics.StructuredDiagnosticRecorder
 import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshot
 import tachiyomi.domain.tsuzuki.integration.repository.CanonicalMetadataSnapshotRepository
 import tachiyomi.domain.tsuzuki.model.CanonicalIdentityState
@@ -38,13 +44,38 @@ internal object MangaAllCanonicalCapturedReplay {
         val provisionalObservations: Int = 0,
         val partialObservations: Int = 0,
         val collectorComplete: Boolean = false,
+        val lookupDecisions: String = "NONE",
     ) {
         fun toClosedLine(): String =
             "mode=CAPTURED_REAL_PROVIDER_REPLAY|catalogEvidence=DIRECT_LIVE_ANDROID_CATALOG_ONLY|" +
                 "case=$caseId|catalog=$catalog|collector=$stage|gaps=$replayGaps|" +
                 "sourceErrors=$upstreamErrors|bindings=$bindingCount|snapshots=$snapshotCount|" +
                 "provisional=$provisionalObservations|partial=$partialObservations|" +
-                "complete=$collectorComplete|sqlite=NOT_EXECUTED_HOST|reader=NOT_EXECUTED_HOST"
+                "complete=$collectorComplete|lookupDecisions=$lookupDecisions|" +
+                "sqlite=NOT_EXECUTED_HOST|reader=NOT_EXECUTED_HOST"
+    }
+
+    /** Closed, count-only reasons; no candidate titles, links or private source IDs. */
+    internal fun summarizeDecisions(decisions: List<DiagnosticProviderLookupDecision>): String =
+        decisions.groupingBy { it }.eachCount().entries
+            .sortedBy { it.key.name }
+            .joinToString(",") { (decision, count) -> "${decision.name}:$count" }
+            .ifEmpty { "NONE" }
+
+    private class CollectorDiagnostics : StructuredDiagnosticRecorder {
+        override val sessionId: String = "00000000-0000-0000-0000-000000000000"
+        val decisions = mutableListOf<DiagnosticProviderLookupDecision>()
+
+        override fun canonicalTitleReference(canonicalTitleId: String): String? = null
+        override fun mihonMangaReference(mihonMangaId: Long): String? = null
+
+        override fun record(event: StructuredDiagnosticEvent) {
+            if (event.name != DiagnosticEventName.PROVIDER_READING_EVIDENCE ||
+                event.stage != DiagnosticStage.LOOKUP
+            ) return
+            val value = (event.attributes["lookup_decision"] as? DiagnosticAttributeValue.Code)?.value
+            (value as? DiagnosticProviderLookupDecision)?.let(decisions::add)
+        }
     }
 
     /**
@@ -101,6 +132,7 @@ internal object MangaAllCanonicalCapturedReplay {
                 metadata = proven,
                 refreshedAt = 1L,
             )
+            val diagnostics = CollectorDiagnostics()
             val collector = CollectProviderReadingEvidence(
                 canonicalTitleRepository = titleRepository,
                 providerRegistry = packageSource.registry,
@@ -108,6 +140,7 @@ internal object MangaAllCanonicalCapturedReplay {
                 bindingRepository = IsolatedBindingStore(),
                 evidenceAdapter = ProviderChapterEvidenceAdapter(),
                 clock = { 1L },
+                diagnostics = diagnostics,
                 canonicalMetadataSnapshotRepository = snapshots,
             )
             val collected = collector.execute(canonicalTitleId)
@@ -126,6 +159,7 @@ internal object MangaAllCanonicalCapturedReplay {
                 provisionalObservations = collected.evidence.size,
                 partialObservations = collected.partialEvidence.size,
                 collectorComplete = collected.complete,
+                lookupDecisions = summarizeDecisions(diagnostics.decisions),
             )
         }
         return resolvedCases + missingCatalogReports(
