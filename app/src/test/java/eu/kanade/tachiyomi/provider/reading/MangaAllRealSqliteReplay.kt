@@ -8,6 +8,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityStatus
+import tachiyomi.domain.tsuzuki.chapter.evidence.CanonicalChapterConfirmation
 import tachiyomi.domain.tsuzuki.chapter.evidence.ReconcileChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.evidence.RefreshChapterEvidence
 import tachiyomi.domain.tsuzuki.chapter.interactor.ParseCanonicalChapterLabel
@@ -52,6 +53,9 @@ internal object MangaAllRealSqliteReplay {
         val sqliteEvidenceRows: Int = 0,
         val sqliteMappedRows: Int = 0,
         val sqliteChapterRows: Int = 0,
+        val sqliteConfirmedRows: Int = 0,
+        val sqliteProvisionalRows: Int = 0,
+        val sqliteConflictedRows: Int = 0,
         val uiQueryChapterRows: Int = 0,
         val refreshOutcome: String = "NOT_EXECUTED_HOST",
         val lookupDecisions: String = "NONE",
@@ -64,6 +68,8 @@ internal object MangaAllRealSqliteReplay {
                 "provisional=$provisionalEvidenceCount|partial=$partialEvidenceCount|" +
                 "sqliteBindings=$sqliteBindingRows|sqliteEvidence=$sqliteEvidenceRows|" +
                 "sqliteMapped=$sqliteMappedRows|sqliteChapters=$sqliteChapterRows|" +
+                "confirmed=$sqliteConfirmedRows|provisionalChapters=$sqliteProvisionalRows|" +
+                "conflicted=$sqliteConflictedRows|" +
                 "uiRepositoryChapters=$uiQueryChapterRows|refresh=$refreshOutcome|" +
                 "lookupDecisions=$lookupDecisions|uiPixels=NOT_EXECUTED_HOST|" +
                 "reader=NOT_EXECUTED_HOST"
@@ -238,6 +244,15 @@ internal object MangaAllRealSqliteReplay {
                     sqliteEvidenceRows = persistedEvidence.size,
                     sqliteMappedRows = mapped,
                     sqliteChapterRows = persistedChapters.size,
+                    sqliteConfirmedRows = persistedChapters.count {
+                        it.confirmation == CanonicalChapterConfirmation.CONFIRMED
+                    },
+                    sqliteProvisionalRows = persistedChapters.count {
+                        it.confirmation == CanonicalChapterConfirmation.PROVISIONAL
+                    },
+                    sqliteConflictedRows = persistedChapters.count {
+                        it.confirmation == CanonicalChapterConfirmation.CONFLICTED
+                    },
                     uiQueryChapterRows = uiRepositoryChapters.size,
                     refreshOutcome = diagnostics.refreshCode(),
                     lookupDecisions = diagnostics.decisionSummary(),
