@@ -62,7 +62,9 @@ class MangaAllLiveCatalogAttestationsTest {
             MangaAllLiveCatalogAttestations.parse(altered)
         }
         assertThrows<IllegalArgumentException> {
-            MangaAllLiveCatalogAttestations.parse(original.replace("DIRECT_LIVE_ANDROID_CATALOG_ONLY", "CANONICAL_DONE"))
+            MangaAllLiveCatalogAttestations.parse(
+                original.replace("DIRECT_LIVE_ANDROID_CATALOG_ONLY", "CANONICAL_DONE"),
+            )
         }
     }
 
