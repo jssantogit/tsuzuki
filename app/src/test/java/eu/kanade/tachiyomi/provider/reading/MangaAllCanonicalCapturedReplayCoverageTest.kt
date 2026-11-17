@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.provider.reading
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderLookupDecision
 
 /**
  * Contract-only SHA keys, no forged manga candidates, catalog credits or chapters.
@@ -18,6 +19,19 @@ class MangaAllCanonicalCapturedReplayCoverageTest {
         missing.map { it.caseId } shouldContainExactly listOf("user-first", "user-third")
         missing.map { it.stage } shouldContainExactly listOf("CATALOG_CAPTURE_MISSING", "CATALOG_CAPTURE_MISSING")
         missing.all { !it.collectorComplete && it.provisionalObservations == 0 } shouldBe true
+    }
+
+    @Test
+    fun `ambiguous edition outcomes are preserved as closed diagnostic codes`() {
+        val decisions = MangaAllCanonicalCapturedReplay.summarizeDecisions(
+            listOf(
+                DiagnosticProviderLookupDecision.MULTIPLE_PRIMARY_IDENTITIES,
+                DiagnosticProviderLookupDecision.AMBIGUOUS_EDITION,
+                DiagnosticProviderLookupDecision.AMBIGUOUS_EDITION,
+            ),
+        )
+        decisions shouldBe "AMBIGUOUS_EDITION:2,MULTIPLE_PRIMARY_IDENTITIES:1"
+        MangaAllCanonicalCapturedReplay.summarizeDecisions(emptyList()) shouldBe "NONE"
     }
 
     @Test
