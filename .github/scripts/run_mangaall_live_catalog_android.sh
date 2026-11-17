@@ -41,6 +41,10 @@ timeout --foreground 900s adb shell am instrument -w -r \
 # digests leave the disposable runner. Do not upload raw instrumentation logs.
 grep -E 'MANGAALL_REAL_CATALOG(\||_BATCH\|)' "$raw" > "$out/catalog-report.txt" || true
 grep -E 'INSTRUMENTATION_CODE:|OK \([0-9]+ test' "$raw" > "$out/instrumentation-status.txt" || true
+# Strictly validate the encoded real catalog identity/author claims before
+# exporting them. No stdout from the HTTP client is retained by this script.
+python3 .github/scripts/validate_mangaall_catalog_attestation.py \
+  "$raw" "$out/catalog-attestations.json"
 if [ "$status" -ne 0 ] || ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw" ||
   ! grep -Fq 'OK (1 test)' "$raw" || ! grep -Fq 'MANGAALL_REAL_CATALOG_BATCH|' "$out/catalog-report.txt"; then
   echo "MANGAALL_LIVE_CATALOG_GATE|outcome=FAIL|shard=$MANGAALL_SHARD_INDEX|runnerExit=$status" >&2

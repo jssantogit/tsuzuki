@@ -10,6 +10,11 @@ import eu.kanade.tachiyomi.data.tsuzuki.integration.MangaUpdatesIntegrationProvi
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,6 +22,7 @@ import org.junit.runner.RunWith
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityResult
 import tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogIdentityStatus
 import tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentity
+import tachiyomi.domain.tsuzuki.catalog.interactor.toCanonicalReadingMetadata
 import tachiyomi.domain.tsuzuki.catalog.model.CatalogItemFormat
 import tachiyomi.domain.tsuzuki.integration.ChapterEvidenceProvider
 import tachiyomi.domain.tsuzuki.integration.DiscoveryProvider
@@ -92,7 +98,50 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                     MangaAllCatalogIdentityResult(status = MangaAllCatalogIdentityStatus.CATALOG_INCOMPLETE)
                 }
             }
-            if (report.status in setOf(
+            // Only the independently corroborated detail ID may supply Host creator provenance.
+            val attested = if (
+                report.status == MangaAllCatalogIdentityStatus.RESOLVED &&
+                report.toCanonicalReadingMetadata() == null
+            ) {
+                report.copy(
+                    status = MangaAllCatalogIdentityStatus.CATALOG_UNVERIFIED,
+                    identity = null,
+                    creatorsAttested = false,
+                )
+            } else {
+                report
+            }
+            val attestationJson = buildJsonObject {
+                put("schemaVersion", 1)
+                put("mode", "DIRECT_LIVE_ANDROID_CATALOG_ONLY")
+                put("caseId", "user-" + sha256(normalizedTitle(work.title)).take(12))
+                put("query", work.title)
+                put("status", attested.status.name)
+                put("catalogSource", "mangaupdates")
+                put("provider", attested.identity?.provider.orEmpty())
+                put("providerId", attested.identity?.providerId.orEmpty())
+                put("title", attested.identity?.title.orEmpty())
+                putJsonArray("authors") { attested.identity?.authors?.forEach { add(it) } }
+                putJsonArray("artists") { attested.identity?.artists?.forEach { add(it) } }
+                putJsonObject("externalIds") {
+                    attested.identity?.externalIds?.forEach { (provider, id) -> put(provider, id) }
+                }
+                put("creatorsAttested", attested.creatorsAttested)
+                put("catalogsQueried", attested.catalogsQueried)
+                put("catalogsFailed", attested.catalogsFailed)
+                put("canonical", "NOT_EXECUTED_HOST")
+            }
+            val attestationBase64 = Base64.encodeToString(
+                attestationJson.toString().toByteArray(Charsets.UTF_8),
+                Base64.NO_WRAP,
+            )
+            instrument.sendStatus(
+                1,
+                Bundle().apply {
+                    putString("stream", "MANGAALL_CATALOG_ATTESTATION|$attestationBase64")
+                },
+            )
+            if (attested.status in setOf(
                     MangaAllCatalogIdentityStatus.RESOLVED,
                     MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS,
                     MangaAllCatalogIdentityStatus.CATALOG_NOT_FOUND,
@@ -105,13 +154,13 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 append("|case=user-").append(sha256(normalizedTitle(work.title)).take(12))
                 append("|index=").append(index)
                 append("|source=MANGAUPDATES_PRODUCTION")
-                append("|outcome=").append(report.status)
-                append("|candidates=").append(report.candidateCount)
-                append("|catalogs=").append(report.catalogsQueried)
-                append("|failedCatalogs=").append(report.catalogsFailed)
-                append("|provider=").append(report.identity?.provider.orEmpty())
-                append("|providerId=").append(report.identity?.providerId.orEmpty())
-                append("|creatorsAttested=").append(report.creatorsAttested)
+                append("|outcome=").append(attested.status)
+                append("|candidates=").append(attested.candidateCount)
+                append("|catalogs=").append(attested.catalogsQueried)
+                append("|failedCatalogs=").append(attested.catalogsFailed)
+                append("|provider=").append(attested.identity?.provider.orEmpty())
+                append("|providerId=").append(attested.identity?.providerId.orEmpty())
+                append("|creatorsAttested=").append(attested.creatorsAttested)
                 append("|canonical=NOT_EXECUTED_HOST|reader=NOT_EXECUTED_HOST")
             }
             instrument.sendStatus(1, Bundle().apply { putString("stream", reportLine) })

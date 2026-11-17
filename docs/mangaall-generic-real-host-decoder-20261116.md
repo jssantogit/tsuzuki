@@ -1,6 +1,6 @@
 # MangaAll — CI genérica de dados reais até o decoder Kotlin do Host (2026-11-16)
 
-**Estado atual:** Provider source real → Host V1 decoder real; a PR #210 acrescenta consulta **separada** a catálogo independente com Kotlin de produção em emulador Android opt-in. Ainda não há integração das identidades com reconciliação canônica, SQLite, escolha de fonte no Reader ou pixels. [Issue #207](https://github.com/jssantogit/tsuzuki/issues/207) acompanha o objetivo end-to-end.
+**Estado da etapa #211:** Provider real assinado → decoder Kotlin de produção; catálogo independente real no emulador Android → atestação de ID/autoria; combinação por SHA → execução de `CollectProviderReadingEvidence` Kotlin no Host com respostas reais capturadas. **Ainda faltam** `RefreshChapterEvidence` / `ReconcileChapterEvidence`, SQLite/UI, escolha de fonte no Reader e pixels. [Issue #207](https://github.com/jssantogit/tsuzuki/issues/207) acompanha o objetivo end-to-end.
 
 ## Como executar para obras arbitrárias
 
@@ -33,18 +33,26 @@ O mesmo workflow agora também inclui **três shards Android paralelas** que con
 
 O probe Android atual usa **apenas MangaUpdates**, embora o interactor aceite todas as integrações reais habilitadas pelo `IntegrationRegistry`. Logo, seu status `RESOLVED` é limitado à autoridade independente consultada; não comprova consenso entre catálogos ainda não integrados ao gate. A instrumentação exige **emulador descartável e build `app.tsuzuki.dev`**, não toca na biblioteca física do usuário. O script envia apenas códigos fechados, números, IDs públicos e um hash derivado do título; não preserva stdout bruto com URLs de respostas. A CI de compilação `mangaall-catalog-instrumentation-compile.yml` valida o harness sem chamar rede externa.
 
-**Distinção importante:** este catálogo live é um estágio **paralelo** ao decodificador Host. Ainda não cria título canônico no SQLite descartável nem fornece metadata/autor ao `CollectProviderReadingEvidence`. A captura MangaAll continua `CAPTURED_REAL_PROVIDER_REPLAY` e a resolução de catálogo, quando efetivamente executada na instrumentação, é `DIRECT_LIVE_ANDROID_CATALOG_ONLY`. Não há `DIRECT_LIVE_ANDROID` de leitura nem aceite end-to-end; o próximo passo segue conectar essas duas linhas à reconciliação e à UI.
+**Distinção importante:** o catálogo live opera em job Android separado; a PR #211 agrega atestação por obra ao artefato, transferindo identidade/autor comprovados para `CollectProviderReadingEvidence` numa execução JVM com o `ScriptProviderReadingGateway` de produção. O Host cria apenas um título efêmero de teste, **não grava estado canônico em SQLite** nem declara edição/Reader prontos. A captura MangaAll continua `CAPTURED_REAL_PROVIDER_REPLAY`; a consulta de catálogo continua `DIRECT_LIVE_ANDROID_CATALOG_ONLY`. Não há `DIRECT_LIVE_ANDROID` de leitura nem aceite end-to-end.
+
+## Extensão da PR #211 — catálogo real + coletor canônico (sem SQLite)
+
+Na execução manual opt-in, depois de concluídas as 3 shards de consultas HTTP reais do MangaAll e as 3 shards Android do catálogo independente, o job `canonical-collector-real-replay` aguarda os dois artefatos por shard. A instrumentação exporta uma atestação restrita com `caseId=user-<SHA>`, identidade, autoria, créditos e IDs externos retornados do próprio `MangaUpdatesIntegrationProvider` (não do MangaAll). O script `validate_mangaall_catalog_attestation.py` rejeita identidade sem comprovação, campos extras, autoria contraditória, títulos sem hash correspondente e lotes inválidos; um shard sem obras precisa relatar explicitamente `selected=0`. Não são persistidos logs HTTP brutos.
+
+O novo `MangaAllCanonicalCapturedReplay` valida o .tsz assinado e os checksums originais, une casos pelo ID calculado da entrada real e passa uma fita de envelopes ao `ScriptProviderReadingGateway` de produção. Executa `CollectProviderReadingEvidence` Kotlin real com metadata autoral de procedência independente, em repositórios efêmeros de teste. O teste **não injeta capítulos ou HIDs artificiais**. Se o catálogo não resolver a obra, não escolhe um homônimo; se uma obra da fonte não tiver resposta de catálogo, registra `CATALOG_CAPTURE_MISSING`. Se o Host pedir outro título, cursor ou binding, registra `REPLAY_GAP`.
+
+Os relatórios `MANGAALL_CANONICAL_COLLECTOR` distinguem `COLLECT_EXECUTED_NOT_RECONCILED`, `COLLECT_PARTIAL`, `REPLAY_GAP`, `CATALOG_CAPTURE_MISSING` e demais estados inconclusivos. Contagens de observações são do coletor, **nunca** capítulos canônicos persistidos. O próximo estágio da #207 é executar `RefreshChapterEvidence` e `ReconcileChapterEvidence` com repositórios SQLDelight de banco descartável, verificar os capítulos realmente consultáveis na UI e separar pixels de imagem para Android autorizado.
 
 ## O que NÃO pode ser declarado por esta etapa
 
 - O arquivo `.tsz` é realmente assinado; a **disponibilidade** da fonte varia por ambiente. MangaFire pode responder 403/challenge no GitHub runner mesmo funcionando no A54, logo `NO_CHAPTERS` exigiria um inventário de fonte completo e autoridade independente — não só HTTP200 ou `nextCursor=null` isolado.
-- Um envelope não contém a identidade canônica/autoria verificada pelo catálogo do Tsuzuki. `CollectProviderReadingEvidence`, `RefreshChapterEvidence`, `ReconcileChapterEvidence` e a consulta SQL de capítulos canônicos **não são executados aqui**. Não transferir autoria do próprio MangaAll para se autocorroborar.
+- As atestações do catálogo agora oferecem identidade/autoria independente e o **coletor Kotlin é executado** no estágio #211. Isso **não** valida qual edição deve ser lida, nem executa `RefreshChapterEvidence`, `ReconcileChapterEvidence`, SQLite/UI ou Reader. Nunca transferir autoria do próprio MangaAll para autocorroborar.
 - O Reader recebe apenas a contagem/tipo de páginas com URLs confidenciais/CDN omitidas. `READY` e URLs não são pixels desenhados, nem leitura validada.
 - O probe de fonte intencionalmente amostra HIDs/candidatos sob orçamento; um retorno de decoder positivo não é um atestado de *todas* as edições existentes.
 
 ## Próxima etapa de engenharia (#207)
 
-**Bootstrap canônico real, independente e resistente à ambiguidade** usando os providers de catálogo de produção do Tsuzuki: título idêntico sem identidade verificável não é autor confiável; quando há concorrentes ainda legítimos, reportar `CATALOG_AMBIGUOUS` e nunca selecionar o primeiro. Se a origem não estiver acessível, `CATALOG_UNAVAILABLE`.
+**Próxima fronteira: persistência canônica.** Com o catálogo independente e `CollectProviderReadingEvidence` reais já conectados pelo replay, o próximo trabalho é acionar `RefreshChapterEvidence`/`ReconcileChapterEvidence`, verificar snapshots/progresso em SQLite descartável e consulta UI, sem escolher o primeiro homônimo nem descartar observações parciais.
 
 Com identidade confirmada e hashes da captura validados, conectar envelopes de chamadas a um `ProviderReadingGateway` reversível e *acionado* pelo Host; executar `CollectProviderReadingEvidence` real, atualização, `ReconcileChapterEvidence`, persistência descartável e consulta de capítulos exibidos, preservando `PROVIDER_SNAPSHOT_WRITE` vs `DELTA_WRITE` e progresso. Se o Host solicitar uma combinação de título/cursor/HID ausente da captura, reportar `REPLAY_GAP` (incompleto) em vez de fabricar resposta.
 

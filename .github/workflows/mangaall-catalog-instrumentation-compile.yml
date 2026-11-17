@@ -8,8 +8,13 @@ on:
       - '.github/workflows/mangaall-real-host-decoder.yml'
       - '.github/workflows/mangaall-catalog-instrumentation-compile.yml'
       - '.github/scripts/run_mangaall_live_catalog_android.sh'
+      - '.github/scripts/validate_mangaall_catalog_attestation.py'
+      - '.github/scripts/test_validate_mangaall_catalog_attestation.py'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllIndependentCatalogLiveInstrumentedTest.kt'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/reading/MangaAll*.kt'
       - 'domain/src/main/java/tachiyomi/domain/tsuzuki/catalog/interactor/ResolveMangaAllIndependentCatalogIdentity.kt'
+      - 'domain/src/main/java/tachiyomi/domain/tsuzuki/catalog/interactor/MangaAllCatalogCanonicalMetadata.kt'
+      - 'domain/src/test/java/tachiyomi/domain/tsuzuki/catalog/interactor/MangaAllCatalogCanonicalMetadataTest.kt'
   workflow_dispatch:
 
 permissions:
@@ -36,10 +41,23 @@ jobs:
       - name: Validate opt-in Android runner shell and Kotlin format
         run: |
           bash -n .github/scripts/run_mangaall_live_catalog_android.sh
-          ./gradlew :app:spotlessKotlinCheck
+          ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck
       - name: Verify independent catalog resolver contract on this exact revision
         run: |
           ./gradlew :domain:testDebugUnitTest \
             --tests tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentityTest
+      - name: Verify real catalog artifact sanitization without network or created candidates
+        run: python3 -m unittest discover -s .github/scripts -p 'test_validate_mangaall_catalog_attestation.py'
+      - name: Verify independent identity to canonical metadata provenance
+        run: |
+          ./gradlew :domain:testDebugUnitTest \
+            --tests tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogCanonicalMetadataTest
+      - name: Verify Host catalog proof parser and source replay contract
+        run: |
+          ./gradlew :app:testDebugUnitTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllLiveCatalogAttestationsTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllCapturedRequestTapeTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSourceHostDecoderTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllCanonicalCapturedReplayCoverageTest
       - name: Compile production debug Host and live catalog instrumented test
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
