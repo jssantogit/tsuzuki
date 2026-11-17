@@ -1,6 +1,5 @@
 package eu.kanade.tachiyomi.provider.reading
 
-import io.mockk.coAnswers
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
