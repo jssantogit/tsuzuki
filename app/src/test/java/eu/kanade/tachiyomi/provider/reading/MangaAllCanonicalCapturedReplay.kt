@@ -40,7 +40,8 @@ internal object MangaAllCanonicalCapturedReplay {
         val collectorComplete: Boolean = false,
     ) {
         fun toClosedLine(): String =
-            "case=$caseId|catalog=$catalog|collector=$stage|gaps=$replayGaps|" +
+            "mode=CAPTURED_REAL_PROVIDER_REPLAY|catalogEvidence=DIRECT_LIVE_ANDROID_CATALOG_ONLY|" +
+                "case=$caseId|catalog=$catalog|collector=$stage|gaps=$replayGaps|" +
                 "sourceErrors=$upstreamErrors|bindings=$bindingCount|snapshots=$snapshotCount|" +
                 "provisional=$provisionalObservations|partial=$partialObservations|" +
                 "complete=$collectorComplete|sqlite=NOT_EXECUTED_HOST|reader=NOT_EXECUTED_HOST"
