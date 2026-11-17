@@ -41,5 +41,17 @@ jobs:
         run: |
           ./gradlew :domain:testDebugUnitTest \
             --tests tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentityTest
+      - name: Verify real catalog artifact sanitization without network or created candidates
+        run: python3 -m unittest discover -s .github/scripts -p 'test_validate_mangaall_catalog_attestation.py'
+      - name: Verify independent identity to canonical metadata provenance
+        run: |
+          ./gradlew :domain:testDebugUnitTest \
+            --tests tachiyomi.domain.tsuzuki.catalog.interactor.MangaAllCatalogCanonicalMetadataTest
+      - name: Verify Host catalog proof parser and source replay contract
+        run: |
+          ./gradlew :app:testDebugUnitTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllLiveCatalogAttestationsTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllCapturedRequestTapeTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSourceHostDecoderTest
       - name: Compile production debug Host and live catalog instrumented test
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
