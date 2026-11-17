@@ -151,3 +151,72 @@ jobs:
           path: .github/results/mangaall-live-catalog-*/
           if-no-files-found: warn
           retention-days: 3
+
+
+  canonical-collector-real-replay:
+    name: Catalog + signed MangaAll → real Kotlin collector (pre-SQLite) shard ${{ matrix.shard }}
+    needs: [real-provider-to-host-decoder, independent-catalog-android]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - name: Checkout Host canonical engine
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout immutable official MangaAll code8 package
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 99f3565a1e1edc0d8ed249b7597006c897f02636
+          path: signed-mangaall
+          persist-credentials: false
+      - name: Retrieve original real-source envelopes from matching shard
+        uses: actions/download-artifact@v4
+        with:
+          name: mangaall-real-host-decoder-${{ matrix.shard }}
+          path: real-source
+      - name: Retrieve independently observed Android catalog proof
+        uses: actions/download-artifact@v4
+        with:
+          name: mangaall-live-catalog-${{ matrix.shard }}
+          path: real-catalog
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Verify exact shard, source/canonical artifact presence and original package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t sources < <(find real-source -type f -name 'mangaall-real-envelopes-${{ matrix.shard }}.json')
+          mapfile -t catalogs < <(find real-catalog -type f -name 'catalog-attestations.json')
+          test "${#sources[@]}" = 1
+          test "${#catalogs[@]}" = 1
+          test -s "${sources[0]}"
+          test -s "${catalogs[0]}"
+          test -s signed-mangaall/dist/providers/app.tsuzuki.mangaall-8.tsz
+          printf 'MANGAALL_REAL_ENVELOPES_FILE=%s/%s\n' "$PWD" "${sources[0]}" >> "$GITHUB_ENV"
+          printf 'MANGAALL_REAL_CATALOG_FILE=%s/%s\n' "$PWD" "${catalogs[0]}" >> "$GITHUB_ENV"
+          printf 'MANGAALL_SIGNED_PACKAGE_FILE=%s/signed-mangaall/dist/providers/app.tsuzuki.mangaall-8.tsz\n' \
+            "$PWD" >> "$GITHUB_ENV"
+      - name: Real Kotlin CollectProviderReadingEvidence with original HTTP captures (no SQLite claim)
+        env:
+          MANGAALL_CANONICAL_COLLECT_REQUIRED: '1'
+        run: |
+          ./gradlew :app:testDebugUnitTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest
+      - name: Preserve typed stage results, never claim reconciled chapter totals
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mangaall-canonical-collector-replay-${{ matrix.shard }}
+          path: |
+            app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest.xml
+          if-no-files-found: warn
+          retention-days: 3
