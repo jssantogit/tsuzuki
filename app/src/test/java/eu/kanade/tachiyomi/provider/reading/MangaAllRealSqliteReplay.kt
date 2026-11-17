@@ -217,11 +217,13 @@ internal object MangaAllRealSqliteReplay {
                         row.evidence.producerId to key
                     }
                 }.toSet()
-                check(submitted.all { observation ->
-                    observation.externalChapterKey?.let { key ->
-                        observation.producerId to key in persistedKeys
-                    } == true
-                }) {
+                check(
+                    submitted.all { observation ->
+                        observation.externalChapterKey?.let { key ->
+                            observation.producerId to key in persistedKeys
+                        } == true
+                    },
+                ) {
                     "SQLDELIGHT_ACCEPTED_PROVIDER_EVIDENCE_MISSING"
                 }
                 val stage = when {
