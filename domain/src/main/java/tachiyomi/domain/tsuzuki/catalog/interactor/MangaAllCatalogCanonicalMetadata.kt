@@ -24,7 +24,9 @@ fun MangaAllCatalogIdentityResult.toCanonicalReadingMetadata(): ResolvedMetadata
             provider.isBlank() || provider.startsWith("app.tsuzuki.mangaall") ||
                 id.isBlank() || id.length > 512 || (provider == providerId && id != workId)
         }
-    ) return null
+    ) {
+        return null
+    }
 
     val observedCreators = verified.authors.isNotEmpty() || verified.artists.isNotEmpty()
     if (observedCreators != creatorsAttested) return null
