@@ -61,7 +61,7 @@ internal object MangaAllLiveCatalogAttestations {
             require(row.str("canonical") == "NOT_EXECUTED_HOST")
             require(row.str("catalogSource") == "mangaupdates")
             val query = row.str("query")
-            require(query.isNotBlank() && query.length <= 180 && query.none { it.isISOControl() })
+            require(query.isNotBlank() && query.length <= 180 && query.none { Character.isISOControl(it) })
             val id = row.str("caseId")
             require(id == caseId(query) && seen.add(id)) { "Work hash mismatched or duplicated" }
             val outcome = MangaAllCatalogIdentityStatus.valueOf(row.str("status"))
@@ -139,7 +139,7 @@ internal object MangaAllLiveCatalogAttestations {
             val primitive = element as? JsonPrimitive
             require(primitive?.isString == true)
             primitive.content.also { name ->
-                require(name.isNotBlank() && name.length <= 128 && name.none { it.isISOControl() })
+                require(name.isNotBlank() && name.length <= 128 && name.none { Character.isISOControl(it) })
             }
         }
     }
