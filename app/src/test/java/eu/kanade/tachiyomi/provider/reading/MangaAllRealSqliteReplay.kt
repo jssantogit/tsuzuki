@@ -191,6 +191,8 @@ internal object MangaAllRealSqliteReplay {
                     structuredDiagnostics = diagnostics,
                 )
                 val completed = refresh.execute(canonicalId, forceRefresh = true)
+                check(completed.isSuccess) { "SQLDELIGHT_CANONICAL_REFRESH_FAILED" }
+                check(calls == 1) { "PROVIDER_COLLECTOR_CALL_COUNT_MISMATCH" }
                 val persistedChapters = sqlite.chapterRepository.getByCanonicalTitleId(canonicalId)
                 val uiRepositoryChapters = sqlite.chapterRepository.getChaptersByCanonicalTitleId(canonicalId)
                 check(persistedChapters.map { it.id }.toSet() == uiRepositoryChapters.map { it.id }.toSet()) {
@@ -198,24 +200,40 @@ internal object MangaAllRealSqliteReplay {
                 }
                 val persistedEvidence = sqlite.evidenceRepository.getByCanonicalTitleId(canonicalId)
                 val mapped = persistedEvidence.count { it.mappedCanonicalChapterId != null }
-                val snapshot = collected
+                val snapshot = checkNotNull(collected) { "REAL_COLLECTOR_RESULT_MISSING" }
+                // A successful RefreshChapterEvidence must durably preserve
+                // EVERY accepted real Provider observation, including incomplete
+                // pages. Parser/editorial ambiguity may leave evidence unmapped,
+                // but it may never silently discard that evidence.
+                val submitted = snapshot.evidence + snapshot.partialEvidence
+                val persistedKeys = persistedEvidence.mapNotNull { row ->
+                    row.evidence.externalChapterKey?.let { key ->
+                        row.evidence.producerId to key
+                    }
+                }.toSet()
+                check(submitted.all { observation ->
+                    observation.externalChapterKey?.let { key ->
+                        observation.producerId to key in persistedKeys
+                    } == true
+                }) {
+                    "SQLDELIGHT_ACCEPTED_PROVIDER_EVIDENCE_MISSING"
+                }
                 val stage = when {
-                    completed.isFailure -> "SQLDELIGHT_REFRESH_FAILED"
                     tape.replayGapCount > 0 -> "REPLAY_GAP"
                     tape.upstreamErrorCount > 0 -> "INCONCLUSIVE_UPSTREAM"
-                    snapshot == null -> "COLLECTOR_NOT_CALLED"
                     !snapshot.complete -> "SQLDELIGHT_PARTIAL_ONLY"
+                    submitted.isEmpty() -> "SQLDELIGHT_FLOW_EXECUTED_NO_EVIDENCE_PROVEN"
                     else -> "SQLDELIGHT_REFRESH_RECONCILED"
                 }
                 initial.copy(
                     stage = stage,
                     sourceGaps = tape.replayGapCount,
                     upstreamErrors = tape.upstreamErrorCount,
-                    collectorCalled = calls == 1,
-                    collectorComplete = snapshot?.complete == true,
-                    snapshotCount = snapshot?.snapshots?.size ?: 0,
-                    provisionalEvidenceCount = snapshot?.evidence?.size ?: 0,
-                    partialEvidenceCount = snapshot?.partialEvidence?.size ?: 0,
+                    collectorCalled = true,
+                    collectorComplete = snapshot.complete,
+                    snapshotCount = snapshot.snapshots.size,
+                    provisionalEvidenceCount = snapshot.evidence.size,
+                    partialEvidenceCount = snapshot.partialEvidence.size,
                     sqliteBindingRows = sqlite.bindingRepository.getByTitle(canonicalId).size,
                     sqliteEvidenceRows = persistedEvidence.size,
                     sqliteMappedRows = mapped,
