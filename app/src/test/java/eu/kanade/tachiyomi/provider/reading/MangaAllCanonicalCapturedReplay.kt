@@ -72,7 +72,9 @@ internal object MangaAllCanonicalCapturedReplay {
         override fun record(event: StructuredDiagnosticEvent) {
             if (event.name != DiagnosticEventName.PROVIDER_READING_EVIDENCE ||
                 event.stage != DiagnosticStage.LOOKUP
-            ) return
+            ) {
+                return
+            }
             val value = (event.attributes["lookup_decision"] as? DiagnosticAttributeValue.Code)?.value
             (value as? DiagnosticProviderLookupDecision)?.let(decisions::add)
         }
