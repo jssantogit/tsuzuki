@@ -79,6 +79,16 @@ class CatalogAttestationContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             attestation.decode_log('{"caseId": "user-123"}')
 
+    def test_only_explicit_zero_assigned_batch_can_legitimately_have_no_catalog_rows(self):
+        empty_shard = (
+            "INSTRUMENTATION_STATUS: stream="
+            "MANGAALL_REAL_CATALOG_BATCH|selected=0|conclusive=0|"
+            "catalog=MANGAUPDATES_PRODUCTION|canonical=NOT_EXECUTED_HOST"
+        )
+        self.assertEqual(attestation.decode_log(empty_shard), [])
+        with self.assertRaises(ValueError):
+            attestation.decode_log("MANGAALL_REAL_CATALOG_BATCH|selected=1|conclusive=0|")
+
     def test_reject_external_id_conflicts_and_unbounded_text(self):
         row = resolved()
         row["caseId"] = attestation.case_id(row["query"])
