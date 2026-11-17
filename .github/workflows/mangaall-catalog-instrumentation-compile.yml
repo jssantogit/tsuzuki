@@ -58,6 +58,8 @@ jobs:
             --tests eu.kanade.tachiyomi.provider.reading.MangaAllLiveCatalogAttestationsTest \
             --tests eu.kanade.tachiyomi.provider.reading.MangaAllCapturedRequestTapeTest \
             --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSourceHostDecoderTest \
-            --tests eu.kanade.tachiyomi.provider.reading.MangaAllCanonicalCapturedReplayCoverageTest
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllCanonicalCapturedReplayCoverageTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllSqliteRefreshPolicyTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest
       - name: Compile production debug Host and live catalog instrumented test
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
