@@ -8,13 +8,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.App
 import eu.kanade.tachiyomi.data.tsuzuki.integration.MangaUpdatesIntegrationProvider
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -135,9 +135,12 @@ class MangaAllIndependentCatalogLiveInstrumentedTest {
                 attestationJson.toString().toByteArray(Charsets.UTF_8),
                 Base64.NO_WRAP,
             )
-            instrument.sendStatus(1, Bundle().apply {
-                putString("stream", "MANGAALL_CATALOG_ATTESTATION|$attestationBase64")
-            })
+            instrument.sendStatus(
+                1,
+                Bundle().apply {
+                    putString("stream", "MANGAALL_CATALOG_ATTESTATION|$attestationBase64")
+                },
+            )
             if (attested.status in setOf(
                     MangaAllCatalogIdentityStatus.RESOLVED,
                     MangaAllCatalogIdentityStatus.CATALOG_AMBIGUOUS,
