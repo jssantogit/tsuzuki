@@ -122,7 +122,7 @@ def decode_log(log_text):
         if len(rows) > 30:
             raise ValueError("Too many catalog attestations")
     if not rows and not re.search(
-        r"MANGAALL_REAL_CATALOG_BATCH\\|selected=0\\|", log_text
+        r"MANGAALL_REAL_CATALOG_BATCH\|selected=0\|", log_text
     ):
         raise ValueError("No attestation from the independent Android catalog")
     return rows
