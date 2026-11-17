@@ -47,6 +47,15 @@ internal object MangaAllCanonicalCapturedReplay {
                 "complete=$collectorComplete|sqlite=NOT_EXECUTED_HOST|reader=NOT_EXECUTED_HOST"
     }
 
+    /**
+     * Source work IDs are authenticated by the validated real Provider batch.
+     * A missing catalog attestation can never turn that work into a false pass.
+     */
+    internal fun missingCatalogReports(sourceIds: List<String>, catalogIds: Set<String>): List<Report> =
+        sourceIds.filterNot(catalogIds::contains).map { id ->
+            Report(caseId = id, catalog = "CATALOG_CAPTURE_MISSING", stage = "CATALOG_CAPTURE_MISSING")
+        }
+
     internal suspend fun run(
         sourceCaptureText: String,
         catalogCaptureText: String,
@@ -61,7 +70,7 @@ internal object MangaAllCanonicalCapturedReplay {
         require(sourceCases.map { it.id }.distinct().size == sourceCases.size)
         val byId = sourceCases.associateBy { it.id }
         require(catalogCases.map { it.id }.distinct().size == catalogCases.size)
-        return catalogCases.map { catalog ->
+        val resolvedCases = catalogCases.map { catalog ->
             val outcome = catalog.outcome
             val base = Report(catalog.id, catalog = outcome.name, stage = "CATALOG_NOT_RESOLVED")
             val proven = catalog.canonicalMetadata
@@ -119,6 +128,10 @@ internal object MangaAllCanonicalCapturedReplay {
                 collectorComplete = collected.complete,
             )
         }
+        return resolvedCases + missingCatalogReports(
+            sourceIds = sourceCases.map { it.id },
+            catalogIds = catalogCases.mapTo(mutableSetOf()) { it.id },
+        )
     }
 
     /** Test-only in-memory bindings, never the user's installed library/edition. */
