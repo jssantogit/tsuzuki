@@ -1,9 +1,9 @@
-name: MangaAll real-source Host decoder + independent live catalog (canonical/Reader not yet executed)
+name: MangaAll real source + independent catalog + SQLDelight Host replay (Reader pixels excluded)
 
 # Opt-in only. This stage consumes the real normalized source envelope from
 # the original signed MangaAll code8, not synthetic response bodies.
 # The independent catalog is queried with production Android integration code;
-# canonical reconciliation, SQLite and Reader are still NOT executed here.
+# final Android Reader pixels are NOT executed; disposable SQLDelight is covered.
 # Never advertise a source response or a catalog title match as canonical E2E.
 on:
   workflow_dispatch:
@@ -154,7 +154,7 @@ jobs:
 
 
   canonical-collector-real-replay:
-    name: Catalog + signed MangaAll → real Kotlin collector (pre-SQLite) shard ${{ matrix.shard }}
+    name: Catalog + signed MangaAll → Host SQLite refresh shard ${{ matrix.shard }}
     needs: [real-provider-to-host-decoder, independent-catalog-android]
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -205,18 +205,21 @@ jobs:
           printf 'MANGAALL_REAL_CATALOG_FILE=%s/%s\n' "$PWD" "${catalogs[0]}" >> "$GITHUB_ENV"
           printf 'MANGAALL_SIGNED_PACKAGE_FILE=%s/signed-mangaall/dist/providers/app.tsuzuki.mangaall-8.tsz\n' \
             "$PWD" >> "$GITHUB_ENV"
-      - name: Real Kotlin CollectProviderReadingEvidence with original HTTP captures (no SQLite claim)
+      - name: Real Kotlin collector, RefreshChapterEvidence, ReconcileChapterEvidence and SQLite/JDBC
         env:
           MANGAALL_CANONICAL_COLLECT_REQUIRED: '1'
+          MANGAALL_REAL_SQLITE_REQUIRED: '1'
         run: |
           ./gradlew :app:testDebugUnitTest \
-            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest
-      - name: Preserve typed stage results, never claim reconciled chapter totals
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest
+      - name: Preserve Host SQLDelight and source verdicts without claiming Reader pixels
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mangaall-canonical-collector-replay-${{ matrix.shard }}
           path: |
             app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest.xml
+            app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest.xml
           if-no-files-found: warn
           retention-days: 3

@@ -1,6 +1,6 @@
-# MangaAll — CI genérica de dados reais até o decoder Kotlin do Host (2026-11-16)
+# MangaAll — CI genérica de dados reais até a reconciliação SQLDelight do Host
 
-**Estado da etapa #211:** Provider real assinado → decoder Kotlin de produção; catálogo independente real no emulador Android → atestação de ID/autoria; combinação por SHA → execução de `CollectProviderReadingEvidence` Kotlin no Host com respostas reais capturadas. **Ainda faltam** `RefreshChapterEvidence` / `ReconcileChapterEvidence`, SQLite/UI, escolha de fonte no Reader e pixels. [Issue #207](https://github.com/jssantogit/tsuzuki/issues/207) acompanha o objetivo end-to-end.
+**Em validação na [PR #212](https://github.com/jssantogit/tsuzuki/pull/212):** capturas reais do MangaAll code8 assinado e atestações reais do catálogo independente passam pelo `CollectProviderReadingEvidence`, `RefreshChapterEvidence` e `ReconcileChapterEvidence` **de produção**. O Host grava num SQLite descartável usando os mesmos repositórios SQLDelight do aplicativo e lê de volta o inventário com `CanonicalChapterRepositoryImpl`. Não é uma instalação física, nem prova de UI Compose ou pixels do Reader. [Issue #207](https://github.com/jssantogit/tsuzuki/issues/207) permanece aberta.
 
 ## Como executar para obras arbitrárias
 
@@ -43,18 +43,26 @@ O novo `MangaAllCanonicalCapturedReplay` valida o .tsz assinado e os checksums o
 
 Os relatórios `MANGAALL_CANONICAL_COLLECTOR` distinguem `COLLECT_EXECUTED_NOT_RECONCILED`, `COLLECT_PARTIAL`, `REPLAY_GAP`, `CATALOG_CAPTURE_MISSING` e demais estados inconclusivos. Contagens de observações são do coletor, **nunca** capítulos canônicos persistidos. O próximo estágio da #207 é executar `RefreshChapterEvidence` e `ReconcileChapterEvidence` com repositórios SQLDelight de banco descartável, verificar os capítulos realmente consultáveis na UI e separar pixels de imagem para Android autorizado.
 
+## Extensão da PR #212 — refresh e reconciliação REAL em SQLite descartável
+
+Um quarto estágio por shard reutiliza os **mesmos envelopes HTTP reais e catalogação independente** das etapas anteriores. O teste `MangaAllRealSqliteRefreshTest` roda `RefreshChapterEvidence.execute(forceRefresh=true)` com o coletor real do Domain, um `ScriptProviderReadingGateway` de produção e o tape estrito de chamadas capturadas. Não há capítulos, candidatos ou autores sintéticos no modo opt-in LIVE. `REPLAY_GAP`, `CATALOG_CAPTURE_MISSING` e `INCONCLUSIVE_UPSTREAM` permanecem explícitos.
+
+Cada obra elegível recebe um banco `JdbcSqliteDriver.IN_MEMORY` isolado, com o esquema `Database.Schema` e as implementações **concretas** `CanonicalTitleRepositoryImpl`, `CanonicalMetadataSnapshotRepositoryImpl`, `ProviderReadingBindingRepositoryImpl`, `CanonicalChapterRepositoryImpl` e `ChapterEvidenceRepositoryImpl`. O título e identidade externa vêm da verificação real do catálogo; metadados/autores são gravados com sua proveniência. A chamada do coletor é observada por um proxy de teste transparente, que apenas encaminha ao método real e registra o resultado **uma única vez**; nunca fornece resposta mockada de capítulos. Os provedores editoriais não relacionados não são simulados: este é o caminho provider-only do refresh.
+
+`ReconcileChapterEvidence` efetua os writes reais. O teste relê IDs de capítulo e a query do repositório usada pelos consumidores da UI, conta evidências totais/mapeadas e capítulos confirmados, provisórios e conflitantes. Uma verificação fail-closed exige que cada observação de capítulo aceita pelo coletor esteja persistida, **mesmo se o parser não autorizar mapeamento canônico**. O relatório `MANGAALL_REAL_SQLITE_REFRESH` não marca como capítulo ausente qualquer prova parcial, erro de rede ou lacuna de captura.
+
+Testes offline **contratuais** (não anunciados como consultas live) cobrem: snapshot completo, página parcial aditiva, snapshot vazio completo e isolamento de suporte entre duas fontes distintas. A CI normal executa esses testes e a compilação Android. Só `workflow_dispatch` com 1–30 títulos aciona HTTP real e produz o relatório SQL por obra. Nenhuma imagem ou payload CDN é reproduzida.
+
 ## O que NÃO pode ser declarado por esta etapa
 
 - O arquivo `.tsz` é realmente assinado; a **disponibilidade** da fonte varia por ambiente. MangaFire pode responder 403/challenge no GitHub runner mesmo funcionando no A54, logo `NO_CHAPTERS` exigiria um inventário de fonte completo e autoridade independente — não só HTTP200 ou `nextCursor=null` isolado.
-- As atestações do catálogo agora oferecem identidade/autoria independente e o **coletor Kotlin é executado** no estágio #211. Isso **não** valida qual edição deve ser lida, nem executa `RefreshChapterEvidence`, `ReconcileChapterEvidence`, SQLite/UI ou Reader. Nunca transferir autoria do próprio MangaAll para autocorroborar.
+- A etapa #212 executa **refresh, reconciliação e SQLDelight**, mas somente em banco descartável e com evidência provida pela captura. A consulta do repositório canônico não é a renderização da lista Compose, nem prova seleção/abertura de capítulo no Reader. Não transportar autoria do próprio MangaAll para autocorroborar.
 - O Reader recebe apenas a contagem/tipo de páginas com URLs confidenciais/CDN omitidas. `READY` e URLs não são pixels desenhados, nem leitura validada.
 - O probe de fonte intencionalmente amostra HIDs/candidatos sob orçamento; um retorno de decoder positivo não é um atestado de *todas* as edições existentes.
 
 ## Próxima etapa de engenharia (#207)
 
-**Próxima fronteira: persistência canônica.** Com o catálogo independente e `CollectProviderReadingEvidence` reais já conectados pelo replay, o próximo trabalho é acionar `RefreshChapterEvidence`/`ReconcileChapterEvidence`, verificar snapshots/progresso em SQLite descartável e consulta UI, sem escolher o primeiro homônimo nem descartar observações parciais.
-
-Com identidade confirmada e hashes da captura validados, conectar envelopes de chamadas a um `ProviderReadingGateway` reversível e *acionado* pelo Host; executar `CollectProviderReadingEvidence` real, atualização, `ReconcileChapterEvidence`, persistência descartável e consulta de capítulos exibidos, preservando `PROVIDER_SNAPSHOT_WRITE` vs `DELTA_WRITE` e progresso. Se o Host solicitar uma combinação de título/cursor/HID ausente da captura, reportar `REPLAY_GAP` (incompleto) em vez de fabricar resposta.
+Após a validação/merge da #212, o próximo estágio da #207 é conferir o pipeline real de consulta da lista da UI e a resolução de **fonte de leitura + capítulo** do Reader com as evidências SQL já mapeadas. A renderização efetiva de imagens exige um teste Android/CDN separado e autorizado. Preservar progresso de usuário e distinguir snapshots completos (`PROVIDER_SNAPSHOT_WRITE`) de evidência provisória (`DELTA_WRITE`) em todos os testes. Se o Host pedir um cursor/HID ausente da captura, continuar classificando `REPLAY_GAP` como incompleto.
 
 Por fim, verificar a escolha do capítulo/fonte no Reader; imagens/pixels exigem teste online Android separado e autorização do CDN. A execução com captura chama-se `CAPTURED_REAL_PROVIDER_REPLAY`, nunca `DIRECT_LIVE_ANDROID`.
 
