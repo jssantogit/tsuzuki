@@ -1,4 +1,4 @@
-name: MangaAll real-source Host decoder + independent live catalog (canonical/Reader not yet executed)
+name: MangaAll real source + independent catalog + SQLDelight Host replay (Reader pixels excluded)
 
 # Opt-in only. This stage consumes the real normalized source envelope from
 # the original signed MangaAll code8, not synthetic response bodies.
@@ -213,7 +213,7 @@ jobs:
           ./gradlew :app:testDebugUnitTest \
             --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest \
             --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest
-      - name: Preserve typed stage results, never claim reconciled chapter totals
+      - name: Preserve Host SQLDelight and source verdicts without claiming Reader pixels
         if: always()
         uses: actions/upload-artifact@v4
         with:
