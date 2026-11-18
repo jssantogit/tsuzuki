@@ -118,6 +118,9 @@ class MangaAllLiveAndroidReaderInstrumentedTest {
         var viewerLoaded: Boolean = false,
         var pixelCopied: Boolean = false,
         var phase: String = "BOOTSTRAP",
+        var pageErrorCode: String = "NONE",
+        var pageErrorStage: String = "NONE",
+        var pageHttpStatus: Int = 0,
     ) {
         fun resultCode(): String = if (pixelCopied) "RENDERED_PIXELS" else stage
     }
@@ -280,6 +283,9 @@ class MangaAllLiveAndroidReaderInstrumentedTest {
                     append("|readerViewLoaded=").append(state.viewerLoaded)
                     append("|windowPixelCopy=").append(state.pixelCopied)
                     append("|activityNavigation=NOT_EXECUTED")
+                    append("|pageErrorCode=").append(state.pageErrorCode)
+                    append("|pageErrorStage=").append(state.pageErrorStage)
+                    append("|pageHttpStatus=").append(state.pageHttpStatus)
                 }
                 instrumentation.sendStatus(1, Bundle().apply { putString("stream", line) })
             }
@@ -413,7 +419,10 @@ class MangaAllLiveAndroidReaderInstrumentedTest {
             if (options.size != 1) continue
             state.phase = "PAGES"
             val result = reader.preparedContent(options.single())
-            if (result !is ProviderCallResult.Success) {
+            if (result is ProviderCallResult.Failure) {
+                state.pageErrorCode = result.error.code.name
+                state.pageErrorStage = result.error.pageFailureStage?.name ?: "NONE"
+                state.pageHttpStatus = result.error.httpStatus ?: 0
                 state.stage = "PROVIDER_PAGES_NOT_READY"
                 continue
             }
