@@ -18,6 +18,7 @@ def line(work, index, stage, decoded, viewer, pixels):
         f"|pageMetadata=5|bitmapDecoded={str(decoded).lower()}"
         f"|readerViewLoaded={str(viewer).lower()}|windowPixelCopy={str(pixels).lower()}"
         "|activityNavigation=NOT_EXECUTED"
+        "|pageErrorCode=NONE|pageErrorStage=NONE|pageHttpStatus=0"
     )
 
 
@@ -73,6 +74,21 @@ class RealReaderTransportTest(unittest.TestCase):
             validator.validate(
                 item.replace("mode=DIRECT_LIVE_ANDROID_READER_VIEW", "mode=FAKE_SUCCESS")
                 + "\n" + batch(1, 0), "Work", 0, 1
+            )
+
+    def test_pages_http_status_requires_real_typed_source_error(self):
+        item = line("Work", 0, "PROVIDER_PAGES_NOT_READY", False, False, False)
+        valid = item.replace(
+            "pageErrorCode=NONE|pageErrorStage=NONE|pageHttpStatus=0",
+            "pageErrorCode=SOURCE_READ_ERROR|pageErrorStage=EXTERNAL_CHAPTER|pageHttpStatus=403"
+        )
+        report = validator.validate(valid + "\\n" + batch(1, 0), "Work", 0, 1)
+        self.assertEqual(report["cases"][0]["pageHttpStatus"], 403)
+        self.assertEqual(report["cases"][0]["pageErrorStage"], "EXTERNAL_CHAPTER")
+        with self.assertRaises(ValueError):
+            validator.validate(
+                item.replace("pageHttpStatus=0", "pageHttpStatus=403")
+                + "\\n" + batch(1, 0), "Work", 0, 1
             )
 
     def test_cannot_upgrade_metadata_only_to_rendered(self):
