@@ -10,7 +10,11 @@ on:
       - '.github/scripts/run_mangaall_live_catalog_android.sh'
       - '.github/scripts/validate_mangaall_catalog_attestation.py'
       - '.github/scripts/test_validate_mangaall_catalog_attestation.py'
+      - '.github/scripts/run_mangaall_live_reader_android.sh'
+      - '.github/scripts/validate_mangaall_live_reader.py'
+      - '.github/scripts/test_validate_mangaall_live_reader.py'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllIndependentCatalogLiveInstrumentedTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllLive*.kt'
       - 'app/src/test/java/eu/kanade/tachiyomi/provider/reading/MangaAll*.kt'
       - 'domain/src/main/java/tachiyomi/domain/tsuzuki/catalog/interactor/ResolveMangaAllIndependentCatalogIdentity.kt'
       - 'domain/src/main/java/tachiyomi/domain/tsuzuki/catalog/interactor/MangaAllCatalogCanonicalMetadata.kt'
@@ -41,6 +45,7 @@ jobs:
       - name: Validate opt-in Android runner shell and Kotlin format
         run: |
           bash -n .github/scripts/run_mangaall_live_catalog_android.sh
+          bash -n .github/scripts/run_mangaall_live_reader_android.sh
           ./gradlew :app:spotlessKotlinCheck :domain:spotlessKotlinCheck
       - name: Verify independent catalog resolver contract on this exact revision
         run: |
@@ -48,6 +53,8 @@ jobs:
             --tests tachiyomi.domain.tsuzuki.catalog.interactor.ResolveMangaAllIndependentCatalogIdentityTest
       - name: Verify real catalog artifact sanitization without network or created candidates
         run: python3 -m unittest discover -s .github/scripts -p 'test_validate_mangaall_catalog_attestation.py'
+      - name: Verify live Reader pixel attestations reject fake and missing results
+        run: python3 -m unittest discover -s .github/scripts -p 'test_validate_mangaall_live_reader.py'
       - name: Verify independent identity to canonical metadata provenance
         run: |
           ./gradlew :domain:testDebugUnitTest \
