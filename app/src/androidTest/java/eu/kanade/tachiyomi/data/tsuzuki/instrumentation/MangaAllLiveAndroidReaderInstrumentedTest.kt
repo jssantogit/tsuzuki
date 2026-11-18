@@ -4,13 +4,11 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.PixelFormat
 import android.graphics.PixelCopy
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
 import android.util.Base64
 import android.view.ViewGroup
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -368,6 +366,7 @@ class MangaAllLiveAndroidReaderInstrumentedTest {
             gateway = gateway,
             bindingRepository = bindings,
             evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            clock = System::currentTimeMillis,
             canonicalMetadataSnapshotRepository = metadataRepository,
             workSourceAssociationRepository = workSources,
             provisionalCursorRepository = cursors,
