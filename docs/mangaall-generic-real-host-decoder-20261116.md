@@ -1,6 +1,6 @@
-# MangaAll — CI genérica de dados reais até a reconciliação SQLDelight do Host
+# MangaAll — CI genérica real do catálogo até capítulos SQL e opções de leitura Reader
 
-**Em validação na [PR #212](https://github.com/jssantogit/tsuzuki/pull/212):** capturas reais do MangaAll code8 assinado e atestações reais do catálogo independente passam pelo `CollectProviderReadingEvidence`, `RefreshChapterEvidence` e `ReconcileChapterEvidence` **de produção**. O Host grava num SQLite descartável usando os mesmos repositórios SQLDelight do aplicativo e lê de volta o inventário com `CanonicalChapterRepositoryImpl`. Não é uma instalação física, nem prova de UI Compose ou pixels do Reader. [Issue #207](https://github.com/jssantogit/tsuzuki/issues/207) permanece aberta.
+**Após [PR #212](https://github.com/jssantogit/tsuzuki/pull/212) mesclada (40b2791b) e [#213](https://github.com/jssantogit/tsuzuki/pull/213) em validação:** capturas HTTP reais do MangaAll code8 assinado + atestação real de catálogo independente → `CollectProviderReadingEvidence` → `RefreshChapterEvidence` → `ReconcileChapterEvidence` → SQLDelight real em memória → `ResolveProviderChapterReading.options()` e `auditNoMatch()` sobre uma **amostra declarada** dos capítulos persistidos. Isso verifica opções de fonte/identidade, **não** entrega de páginas, escolha efetiva do usuário, pixels do Reader nem montagem visual Compose. [Issue #207](https://github.com/jssantogit/tsuzuki/issues/207) permanece aberta.
 
 ## Como executar para obras arbitrárias
 
@@ -53,17 +53,27 @@ Cada obra elegível recebe um banco `JdbcSqliteDriver.IN_MEMORY` isolado, com o 
 
 Testes offline **contratuais** (não anunciados como consultas live) cobrem: snapshot completo, página parcial aditiva, snapshot vazio completo e isolamento de suporte entre duas fontes distintas. A CI normal executa esses testes e a compilação Android. Só `workflow_dispatch` com 1–30 títulos aciona HTTP real e produz o relatório SQL por obra. Nenhuma imagem ou payload CDN é reproduzida.
 
+## Extensão #213 — Reader source/chapter gate sobre SQLDelight real (sem CDN)
+
+O Host agora persiste também a associação por HID/faceta de fonte (`ProviderWorkSourceAssociationRepositoryImpl`) e checkpoints provisórios de paginação (`ProviderProvisionalCursorRepositoryImpl`). Isso é indispensável: **evidência de capítulo persistida não basta** para que o Reader aceite um HID; o `ResolveProviderChapterReading` exige fonte elegível, autoria corroborada ou edição confirmada, ausência de desqualificação editorial, capítulo mapeado e identidade/idioma consistentes. Nenhuma associação é criada por inferência nem promovida por título.
+
+Depois do refresh, `MangaAllReaderSqliteProbe` consulta uma amostra determinística de **até 12 capítulos SQL por obra**, incluindo início/fim e casos de numeração especial quando disponíveis, através do resolvedor Reader Kotlin de produção. O relatório inclui `readerSampled`, `readerUnique`, `readerAmbiguous`, `readerMissing`, `readerNoSourceReasons` com **códigos fechados**, além do número de associações persistidas. Se não há opções, `auditNoMatch` atribui uma razão em vez de informar simplesmente `NO_CHAPTERS`. Se houver múltiplas opções sem escolha explícita, não é feita escolha automática. Uma amostra não prova todos os capítulos e nunca é descrita como tal.
+
+Testes **contratuais offline**, separados do fluxo LIVE, exercitam a relação entre SQLDelight e `ResolveProviderChapterReading`, `SelectMangaAllSource`, `ResolveMangaAllSelectedChapter`: um capítulo mapeado com fonte corroborada é elegível; uma preferência explícita de teste pode selecionar o capítulo exato; um HID sem associação, autoria conflitante, idioma incompatível ou capítulo ausente nunca se torna legível. Isso **simula uma escolha explícita somente no teste**, não instala ou altera preferências do usuário nem escolhe a edição automaticamente na execução real.
+
+A fita assinada existente remove propositalmente URLs, headers, dados CDN e corpo de páginas: **nunca executar ou declarar `delivery()`/`preparedContent()` real a partir desses metadados**. Marcar `pages=METADATA_ONLY_NOT_REPLAYABLE`, `uiPixels=NOT_EXECUTED_HOST`. O último estágio da #207 exige uma execução Android online separada/autorizada para páginas e renderização, ou um transportador seguro novo capaz de capturar respostas sem expor credenciais.
+
 ## O que NÃO pode ser declarado por esta etapa
 
 - O arquivo `.tsz` é realmente assinado; a **disponibilidade** da fonte varia por ambiente. MangaFire pode responder 403/challenge no GitHub runner mesmo funcionando no A54, logo `NO_CHAPTERS` exigiria um inventário de fonte completo e autoridade independente — não só HTTP200 ou `nextCursor=null` isolado.
-- A etapa #212 executa **refresh, reconciliação e SQLDelight**, mas somente em banco descartável e com evidência provida pela captura. A consulta do repositório canônico não é a renderização da lista Compose, nem prova seleção/abertura de capítulo no Reader. Não transportar autoria do próprio MangaAll para autocorroborar.
+- A etapa #213 executa **resolução de opções de capítulo/fonte no Reader**, mas sobre uma amostra declarada de capítulos persistidos em banco descartável. Não executa páginas/CDN, preferência explícita real nem UI Compose. Não transportar autoria do próprio MangaAll para autocorroborar.
 - O Reader recebe apenas a contagem/tipo de páginas com URLs confidenciais/CDN omitidas. `READY` e URLs não são pixels desenhados, nem leitura validada.
 - O probe de fonte intencionalmente amostra HIDs/candidatos sob orçamento; um retorno de decoder positivo não é um atestado de *todas* as edições existentes.
 
 ## Próxima etapa de engenharia (#207)
 
-Após a validação/merge da #212, o próximo estágio da #207 é conferir o pipeline real de consulta da lista da UI e a resolução de **fonte de leitura + capítulo** do Reader com as evidências SQL já mapeadas. A renderização efetiva de imagens exige um teste Android/CDN separado e autorizado. Preservar progresso de usuário e distinguir snapshots completos (`PROVIDER_SNAPSHOT_WRITE`) de evidência provisória (`DELTA_WRITE`) em todos os testes. Se o Host pedir um cursor/HID ausente da captura, continuar classificando `REPLAY_GAP` como incompleto.
+Depois da validação da #213, a #207 ainda precisa de um gate Android com dados reais para abertura do capítulo no Reader, chamada `ProviderReadingGateway.pages`/pré-carregamento, proteção de autoridade de CDN e prova de páginas efetivamente exibidas. Não simular metadados de página como pixels. Verificar também a lista Compose e o estado de progresso real num banco isolado. O replay com captura chama-se `CAPTURED_REAL_PROVIDER_REPLAY`, não `DIRECT_LIVE_ANDROID`.
 
-Por fim, verificar a escolha do capítulo/fonte no Reader; imagens/pixels exigem teste online Android separado e autorização do CDN. A execução com captura chama-se `CAPTURED_REAL_PROVIDER_REPLAY`, nunca `DIRECT_LIVE_ANDROID`.
+Um `REPLAY_GAP` de título/cursor/HID, um upstream 403 ou uma resolução de fonte sem opções ainda exigem diagnóstico; nenhum dos três comprova ausência de capítulos.
 
 Este documento não é aceite físico do Host nem do MangaAll; serve para executar o estágio real que já existe sem confundi-lo com a meta final.
