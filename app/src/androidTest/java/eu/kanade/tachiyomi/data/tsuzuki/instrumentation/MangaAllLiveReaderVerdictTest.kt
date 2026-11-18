@@ -60,6 +60,22 @@ class MangaAllLiveReaderVerdictTest {
     }
 
     @Test
+    fun uniformBlackScreenCannotQualifyAsReaderImagePixels() {
+        val uniform = android.graphics.Bitmap.createBitmap(8, 8, android.graphics.Bitmap.Config.ARGB_8888)
+        val content = android.graphics.Bitmap.createBitmap(8, 8, android.graphics.Bitmap.Config.ARGB_8888)
+        try {
+            uniform.eraseColor(android.graphics.Color.BLACK)
+            content.eraseColor(android.graphics.Color.WHITE)
+            content.setPixel(3, 3, android.graphics.Color.BLACK)
+            assertEquals(false, MangaAllLiveReaderVerdict.hasImageContrast(uniform))
+            assertEquals(true, MangaAllLiveReaderVerdict.hasImageContrast(content))
+        } finally {
+            uniform.recycle()
+            content.recycle()
+        }
+    }
+
+    @Test
     fun downloadedBytesCanNeverProvePixelsWithoutActualViewer() {
         assertEquals(
             "PAGES_NOT_OBTAINED",
