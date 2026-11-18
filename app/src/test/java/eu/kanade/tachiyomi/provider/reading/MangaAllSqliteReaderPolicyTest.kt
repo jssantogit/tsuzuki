@@ -117,6 +117,44 @@ class MangaAllSqliteReaderPolicyTest {
         }
     }
 
+    @Test
+    fun `two corroborated sources for one SQL chapter remain ambiguous instead of choosing first`() = runBlocking {
+        MangaAllDisposableSqlite.open().use { sqlite ->
+            sqlite.titleRepository.insert(title())
+            val first = source()
+            val second = ProviderBindingRef(PROVIDER_ID, "en", "mangafire:work-2")
+            sqlite.workSourceRepository.observe(
+                association(first, ProviderWorkVerification.AUTHOR_CORROBORATED),
+            ) shouldBe true
+            sqlite.workSourceRepository.observe(
+                association(second, ProviderWorkVerification.AUTHOR_CORROBORATED),
+            ) shouldBe true
+            ReconcileChapterEvidence(
+                ParseCanonicalChapterLabel(),
+                sqlite.chapterRepository,
+                sqlite.evidenceRepository,
+            ).execute(
+                TITLE_ID,
+                listOf(
+                    evidence(first),
+                    evidence(second).copy(
+                        id = "contract-reader-observation-second",
+                        externalChapterKey = "mangafire:chapter-2",
+                    ),
+                ),
+            )
+            val persisted = sqlite.chapterRepository.getChaptersByCanonicalTitleId(TITLE_ID)
+            persisted.size shouldBe 1
+            val reader = resolver(sqlite)
+            val options = reader.options(persisted.single().id)
+            options.size shouldBe 2
+            reader.uniqueUserConfirmedOption(persisted.single().id, options) shouldBe null
+            val result = MangaAllReaderSqliteProbe.inspect(persisted, reader)
+            result.ambiguousOptions shouldBe 1
+            result.sourceStage shouldBe "READER_OPTIONS_AMBIGUOUS"
+        }
+    }
+
     private fun title() = CanonicalTitle(
         id = TITLE_ID,
         displayTitle = "CONTRACT_ONLY_TITLE",
