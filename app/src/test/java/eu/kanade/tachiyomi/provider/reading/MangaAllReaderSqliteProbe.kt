@@ -39,10 +39,11 @@ internal object MangaAllReaderSqliteProbe {
     internal fun sample(chapters: List<CanonicalChapter>, max: Int = 12): List<CanonicalChapter> {
         require(max in 1..32)
         if (chapters.size <= max) return chapters
-        val selected = linkedSetOf<Int>()
-        val spread = minOf(max - 3, chapters.size)
+        if (max == 1) return chapters.take(1)
+        val selected = linkedSetOf(0, chapters.lastIndex)
+        val spread = (max - 3).coerceAtLeast(2)
         for (position in 0 until spread) {
-            selected += position * (chapters.lastIndex) / (spread - 1).coerceAtLeast(1)
+            selected += position * chapters.lastIndex / (spread - 1)
         }
         for (position in chapters.indices) {
             val chapter = chapters[position]
@@ -55,8 +56,11 @@ internal object MangaAllReaderSqliteProbe {
                 if (selected.size >= max) break
             }
         }
-        selected += chapters.lastIndex
-        return selected.sorted().take(max).map(chapters::get)
+        for (position in 0 until max) {
+            if (selected.size >= max) break
+            selected += position * chapters.lastIndex / (max - 1)
+        }
+        return selected.sorted().map(chapters::get)
     }
 
     internal suspend fun inspect(
