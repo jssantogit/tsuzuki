@@ -1,9 +1,9 @@
-name: MangaAll real source + independent catalog + SQLDelight Host replay (Reader pixels excluded)
+name: MangaAll real source + catalog + SQLDelight Host + Android Reader pixel proof
 
 # Opt-in only. This stage consumes the real normalized source envelope from
 # the original signed MangaAll code8, not synthetic response bodies.
 # The independent catalog is queried with production Android integration code;
-# final Android Reader pixels are NOT executed; disposable SQLDelight is covered.
+# final Android Reader view pixels are tested in a separate real-network emulator.
 # Never advertise a source response or a catalog title match as canonical E2E.
 on:
   workflow_dispatch:
@@ -221,5 +221,91 @@ jobs:
           path: |
             app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest.xml
             app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest.xml
+          if-no-files-found: warn
+          retention-days: 3
+
+
+  live-android-reader-pixels:
+    name: Official code8 → canonical SQL → real Reader HTTP and pixels — shard ${{ matrix.shard }}
+    # Execute the Android Reader diagnostic even when a preceding Host replay
+    # found upstream HTTP403 or REPLAY_GAP. Do not turn that into NO_CHAPTERS.
+    if: ${{ !cancelled() }}
+    needs: [real-provider-to-host-decoder, independent-catalog-android, canonical-collector-real-replay]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - name: Checkout Host Android Reader code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout pinned signed MangaAll code8 distribution
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 99f3565a1e1edc0d8ed249b7597006c897f02636
+          path: signed-mangaall
+          persist-credentials: false
+      - name: Authenticate signed source artifact before packaging test-only assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path("signed-mangaall")
+          index = json.loads((root / "dist/index.payload.json").read_text())
+          assert index["repositoryId"] == "app.tsuzuki.providers"
+          assert index["sequence"] == 34
+          matching = [p for p in index["providers"] if p["providerId"] == "app.tsuzuki.mangaall"]
+          assert len(matching) == 1 and matching[0]["versionCode"] == 8
+          package = root / "dist/providers/app.tsuzuki.mangaall-8.tsz"
+          digest = hashlib.sha256(package.read_bytes()).hexdigest()
+          assert digest == matching[0]["sha256"]
+          asset = Path("app/src/androidTest/assets/mangaall/live-code8-package.tsz")
+          asset.parent.mkdir(parents=True, exist_ok=True)
+          asset.write_bytes(package.read_bytes())
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write(f"MANGAALL_SIGNED_SHA256={digest}\n")
+          print("MANGAALL_LIVE_ANDROID_PACKAGE|id=app.tsuzuki.mangaall|version=8|root=VERIFIED")
+          PY
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Build disposable debug application and real Reader instrumentation
+        run: |
+          bash -n .github/scripts/run_mangaall_live_reader_android.sh
+          python3 -m unittest discover -s .github/scripts -p 'test_validate_mangaall_live_reader.py'
+          ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Open real MangaAll pages in Android production Reader image view
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        env:
+          MANGAALL_WORKS: ${{ inputs.works }}
+          MANGAALL_SHARD_INDEX: ${{ matrix.shard }}
+          MANGAALL_SHARD_COUNT: '3'
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaall_live_reader_android.sh
+      - name: Preserve only closed, validated Android Reader stage results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mangaall-real-reader-pixels-${{ matrix.shard }}
+          path: .github/results/mangaall-live-reader-*/reader-verdict.json
           if-no-files-found: warn
           retention-days: 3
