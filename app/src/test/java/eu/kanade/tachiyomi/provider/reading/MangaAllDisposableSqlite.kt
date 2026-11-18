@@ -16,6 +16,8 @@ import tachiyomi.data.tsuzuki.CanonicalTitleRepositoryImpl
 import tachiyomi.data.tsuzuki.chapter.ChapterEvidenceRepositoryImpl
 import tachiyomi.data.tsuzuki.integration.CanonicalMetadataSnapshotRepositoryImpl
 import tachiyomi.data.tsuzuki.provider.ProviderReadingBindingRepositoryImpl
+import tachiyomi.data.tsuzuki.provider.ProviderWorkSourceAssociationRepositoryImpl
+import tachiyomi.data.tsuzuki.provider.MangaAllSourceSelectionRepositoryImpl
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -32,6 +34,8 @@ internal class MangaAllDisposableSqlite private constructor(
     val titleRepository = CanonicalTitleRepositoryImpl(database)
     val metadataRepository = CanonicalMetadataSnapshotRepositoryImpl(database)
     val bindingRepository = ProviderReadingBindingRepositoryImpl(database)
+    val workSourceRepository = ProviderWorkSourceAssociationRepositoryImpl(database)
+    val sourceSelectionRepository = MangaAllSourceSelectionRepositoryImpl(database)
     val chapterRepository = CanonicalChapterRepositoryImpl(database)
     val evidenceRepository = ChapterEvidenceRepositoryImpl(database)
 
