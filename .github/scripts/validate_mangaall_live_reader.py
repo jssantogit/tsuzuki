@@ -24,7 +24,8 @@ BATCH = re.compile(
 FIELDS = (
     "case", "index", "mode", "stage", "catalog", "sqliteChapters",
     "readerOptions", "pageMetadata", "bitmapDecoded", "readerViewLoaded",
-    "windowPixelCopy", "activityNavigation",
+    "windowPixelCopy", "activityNavigation", "pageErrorCode",
+    "pageErrorStage", "pageHttpStatus",
 )
 CLOSED = re.compile(r"[A-Z][A-Z0-9_]{0,80}\Z")
 NONNEG = re.compile(r"\d{1,6}\Z")
@@ -68,8 +69,19 @@ def validate(instrumentation, works, shard_index, shard_count):
             raise ValueError("Incorrect Reader evidence level")
         if record["activityNavigation"] != "NOT_EXECUTED":
             raise ValueError("View-only probe cannot claim Activity navigation")
-        if not CLOSED.fullmatch(record["stage"]) or not CLOSED.fullmatch(record["catalog"]):
+        if any(not CLOSED.fullmatch(record[field]) for field in (
+            "stage", "catalog", "pageErrorCode", "pageErrorStage"
+        )):
             raise ValueError("Non-closed stage or catalog status")
+        if not NONNEG.fullmatch(record["pageHttpStatus"]):
+            raise ValueError("Invalid source HTTP status")
+        record["pageHttpStatus"] = int(record["pageHttpStatus"])
+        if record["pageHttpStatus"] not in (0, *range(100, 600)):
+            raise ValueError("Invalid source HTTP range")
+        if record["pageErrorCode"] == "NONE" and (
+            record["pageErrorStage"] != "NONE" or record["pageHttpStatus"]
+        ):
+            raise ValueError("Pages failure claims without typed Provider error")
         for field in ("sqliteChapters", "readerOptions", "pageMetadata"):
             if not NONNEG.fullmatch(record[field]):
                 raise ValueError("Invalid observed count")
