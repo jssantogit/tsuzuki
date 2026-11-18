@@ -20,7 +20,6 @@ internal object MangaAllLiveReaderVerdict {
         return false
     }
 
-
     fun classify(
         pageMetadata: Boolean,
         downloaded: Boolean,
