@@ -25,6 +25,7 @@ import tachiyomi.domain.tsuzuki.model.ExternalIdentity
 import tachiyomi.domain.tsuzuki.provider.reading.CollectProviderReadingEvidence
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterEvidenceAdapter
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingEvidenceCollection
+import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 
 /**
  * LIVE OPT-IN: executes actual CollectProviderReadingEvidence through the real
@@ -58,6 +59,13 @@ internal object MangaAllRealSqliteReplay {
         val uiQueryChapterRows: Int = 0,
         val refreshOutcome: String = "NOT_EXECUTED_HOST",
         val lookupDecisions: String = "NONE",
+        val sourceAssociations: Int = 0,
+        val readerStage: String = "NOT_EXECUTED_HOST",
+        val readerInspected: Int = 0,
+        val readerUniqueOptions: Int = 0,
+        val readerAmbiguousOptions: Int = 0,
+        val readerNoOptions: Int = 0,
+        val readerNoSourceReasons: String = "NONE",
     ) {
         fun toClosedLine(): String =
             "mode=CAPTURED_REAL_PROVIDER_REPLAY|catalogEvidence=DIRECT_LIVE_ANDROID_CATALOG_ONLY|" +
@@ -70,8 +78,11 @@ internal object MangaAllRealSqliteReplay {
                 "confirmed=$sqliteConfirmedRows|provisionalChapters=$sqliteProvisionalRows|" +
                 "conflicted=$sqliteConflictedRows|" +
                 "uiRepositoryChapters=$uiQueryChapterRows|refresh=$refreshOutcome|" +
-                "lookupDecisions=$lookupDecisions|uiPixels=NOT_EXECUTED_HOST|" +
-                "reader=NOT_EXECUTED_HOST"
+                "lookupDecisions=$lookupDecisions|sourceAssociations=$sourceAssociations|" +
+                "reader=$readerStage|readerSampled=$readerInspected|" +
+                "readerUnique=$readerUniqueOptions|readerAmbiguous=$readerAmbiguousOptions|" +
+                "readerMissing=$readerNoOptions|readerNoSourceReasons=$readerNoSourceReasons|" +
+                "pages=METADATA_ONLY_NOT_REPLAYABLE|uiPixels=NOT_EXECUTED_HOST"
     }
 
     private class ClosedDiagnostics : StructuredDiagnosticRecorder {
@@ -168,6 +179,8 @@ internal object MangaAllRealSqliteReplay {
                     clock = { 1L },
                     diagnostics = diagnostics,
                     canonicalMetadataSnapshotRepository = sqlite.metadataRepository,
+                    workSourceAssociationRepository = sqlite.workSourceRepository,
+                    provisionalCursorRepository = sqlite.provisionalCursorRepository,
                 )
                 // Only a transparent test observation proxy. Refresh invokes
                 // the REAL collector once; no Provider results are fabricated.
@@ -225,6 +238,17 @@ internal object MangaAllRealSqliteReplay {
                 ) {
                     "SQLDELIGHT_ACCEPTED_PROVIDER_EVIDENCE_MISSING"
                 }
+                val reader = MangaAllReaderSqliteProbe.inspect(
+                    chapters = uiRepositoryChapters,
+                    resolver = ResolveProviderChapterReading(
+                        canonicalChapterRepository = sqlite.chapterRepository,
+                        evidenceRepository = sqlite.evidenceRepository,
+                        bindingRepository = sqlite.bindingRepository,
+                        workSourceAssociationRepository = sqlite.workSourceRepository,
+                        providerRegistry = prepared.registry,
+                        gateway = prepared.gateway(tape),
+                    ),
+                )
                 val stage = when {
                     tape.replayGapCount > 0 -> "REPLAY_GAP"
                     tape.upstreamErrorCount > 0 -> "INCONCLUSIVE_UPSTREAM"
@@ -257,6 +281,13 @@ internal object MangaAllRealSqliteReplay {
                     uiQueryChapterRows = uiRepositoryChapters.size,
                     refreshOutcome = diagnostics.refreshCode(),
                     lookupDecisions = diagnostics.decisionSummary(),
+                    sourceAssociations = sqlite.workSourceRepository.getByTitle(canonicalId).size,
+                    readerStage = reader.sourceStage,
+                    readerInspected = reader.inspectedChapters,
+                    readerUniqueOptions = reader.withOneOption,
+                    readerAmbiguousOptions = reader.ambiguousOptions,
+                    readerNoOptions = reader.withoutOptions,
+                    readerNoSourceReasons = reader.unavailableReasons,
                 )
             }
         }
