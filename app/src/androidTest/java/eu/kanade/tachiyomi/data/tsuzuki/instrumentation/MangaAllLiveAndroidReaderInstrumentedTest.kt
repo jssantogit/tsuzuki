@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.PixelCopy
+import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -501,24 +502,45 @@ class MangaAllLiveAndroidReaderInstrumentedTest {
         val copied = if (succeeded) {
             val width = activity.window.decorView.width
             val height = activity.window.decorView.height
-            if (width <= 0 || height <= 0) {
+            if (!view.isShown || width <= 0 || height <= 0 || view.width <= 0 || view.height <= 0) {
                 false
             } else {
-                val screenshot = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                val latch = CountDownLatch(1)
-                var result = -1
-                PixelCopy.request(
-                    activity.window,
-                    screenshot,
-                    { code ->
-                        result = code
-                        latch.countDown()
-                    },
-                    Handler(Looper.getMainLooper()),
+                val origin = IntArray(2)
+                view.getLocationInWindow(origin)
+                val region = Rect(
+                    origin[0].coerceAtLeast(0),
+                    origin[1].coerceAtLeast(0),
+                    (origin[0] + view.width).coerceAtMost(width),
+                    (origin[1] + view.height).coerceAtMost(height),
                 )
-                val completed = latch.await(8, TimeUnit.SECONDS)
-                screenshot.recycle()
-                completed && result == PixelCopy.SUCCESS
+                if (region.width() <= 0 || region.height() <= 0) {
+                    false
+                } else {
+                    val screenshot = Bitmap.createBitmap(
+                        minOf(region.width(), 256),
+                        minOf(region.height(), 384),
+                        Bitmap.Config.ARGB_8888,
+                    )
+                    try {
+                        val latch = CountDownLatch(1)
+                        var result = -1
+                        PixelCopy.request(
+                            activity.window,
+                            region,
+                            screenshot,
+                            { code ->
+                                result = code
+                                latch.countDown()
+                            },
+                            Handler(Looper.getMainLooper()),
+                        )
+                        latch.await(8, TimeUnit.SECONDS) &&
+                            result == PixelCopy.SUCCESS &&
+                            MangaAllLiveReaderVerdict.hasImageContrast(screenshot)
+                    } finally {
+                        screenshot.recycle()
+                    }
+                }
             }
         } else {
             false
