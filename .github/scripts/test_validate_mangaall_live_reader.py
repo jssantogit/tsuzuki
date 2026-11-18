@@ -82,13 +82,13 @@ class RealReaderTransportTest(unittest.TestCase):
             "pageErrorCode=NONE|pageErrorStage=NONE|pageHttpStatus=0",
             "pageErrorCode=SOURCE_READ_ERROR|pageErrorStage=EXTERNAL_CHAPTER|pageHttpStatus=403"
         )
-        report = validator.validate(valid + "\\n" + batch(1, 0), "Work", 0, 1)
+        report = validator.validate(valid + "\n" + batch(1, 0), "Work", 0, 1)
         self.assertEqual(report["cases"][0]["pageHttpStatus"], 403)
         self.assertEqual(report["cases"][0]["pageErrorStage"], "EXTERNAL_CHAPTER")
         with self.assertRaises(ValueError):
             validator.validate(
                 item.replace("pageHttpStatus=0", "pageHttpStatus=403")
-                + "\\n" + batch(1, 0), "Work", 0, 1
+                + "\n" + batch(1, 0), "Work", 0, 1
             )
 
     def test_cannot_upgrade_metadata_only_to_rendered(self):
