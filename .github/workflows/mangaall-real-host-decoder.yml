@@ -248,6 +248,12 @@ jobs:
           ref: 99f3565a1e1edc0d8ed249b7597006c897f02636
           path: signed-mangaall
           persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify official Provider repository signature/index
+        working-directory: signed-mangaall
+        run: node tooling/verify_index.mjs
       - name: Authenticate signed source artifact before packaging test-only assets
         shell: bash
         run: |
