@@ -1659,7 +1659,7 @@ class ScriptProviderReadingGatewayIsolationTest {
     @Test(timeout = 180_000L)
     fun mangaAllSignedCode8LivePages_downloadAndDecodeAtMostTwo() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val args = instrumentation.arguments
+        val args = InstrumentationRegistry.getArguments()
         assertEquals("true", args.getString("mangaAllLivePageOptIn"))
         assertEquals("app.tsuzuki.dev", instrumentation.targetContext.packageName)
         val workId = requireNotNull(args.getString("providerWorkId"))
