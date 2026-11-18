@@ -125,7 +125,10 @@ class MangaAllLiveAndroidReaderInstrumentedTest {
     fun signedMangaAllRealReaderPagesRenderInDisposableAndroidEmulator() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
-        assumeTrue("Real source network runs only in explicit workflow_dispatch", args.getString("mangaAllLiveReaderOptIn") == "true")
+        assumeTrue(
+            "Real source network runs only in explicit workflow_dispatch",
+            args.getString("mangaAllLiveReaderOptIn") == "true",
+        )
         val context = instrumentation.targetContext
         assertEquals("app.tsuzuki.dev", context.packageName)
         assertTrue(
@@ -507,7 +510,10 @@ class MangaAllLiveAndroidReaderInstrumentedTest {
                 PixelCopy.request(
                     activity.window,
                     screenshot,
-                    { code -> result = code; latch.countDown() },
+                    { code ->
+                        result = code
+                        latch.countDown()
+                    },
                     Handler(Looper.getMainLooper()),
                 )
                 val completed = latch.await(8, TimeUnit.SECONDS)
