@@ -1648,7 +1648,6 @@ class ScriptProviderReadingGatewayIsolationTest {
         assertEquals(emptyList<Any>(), resolver.options(chapters.single().id))
     }
 
-
     /**
      * Opt-in, direct-live Android transport gate for the ORIGINAL published code8.
      *
