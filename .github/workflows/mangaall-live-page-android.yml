@@ -1,4 +1,4 @@
-name: MangaAll signed code8 — Android live page decode (manual, no Reader UI pixels)
+name: MangaAll signed code8 — Android live pages and Reader pixels (manual)
 
 # PR: compile only. Live CDN traffic happens ONLY on explicit workflow_dispatch.
 on:
@@ -7,8 +7,18 @@ on:
       - '.github/workflows/mangaall-live-page-android.yml'
       - '.github/scripts/run_mangaall_live_pages_android.sh'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllReaderJourneyFixture.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/CanonicalReaderSourceSwitchInstrumentedTest.kt'
   workflow_dispatch:
     inputs:
+      gate_mode:
+        description: 'transport = decode only; reader = real CDN pixels in ReaderActivity'
+        required: true
+        default: reader
+        type: choice
+        options:
+          - transport
+          - reader
       provider_work_id:
         description: 'Exact source ID observed in the real source run (e.g. mangafire:<HID>)'
         required: true
@@ -51,13 +61,14 @@ jobs:
 
   live-android-page-decoder:
     if: github.event_name == 'workflow_dispatch'
-    name: Original signed code8 -> LIVE pages -> Host decode (NOT ReaderActivity pixels)
+    name: Original signed code8 -> LIVE pages -> transport or ReaderActivity pixels
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       MANGAALL_WORK_ID: ${{ inputs.provider_work_id }}
       MANGAALL_CHAPTER_ID: ${{ inputs.provider_chapter_id }}
       MANGAALL_LANGUAGE: ${{ inputs.facet_language }}
+      MANGAALL_GATE_MODE: ${{ inputs.gate_mode }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Checkout immutable published code8 source, read-only
@@ -111,7 +122,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Query LIVE pages and decode at most two via production Host loader
+      - name: Query LIVE pages and optionally show CDN pixels in the real ReaderActivity
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 35
