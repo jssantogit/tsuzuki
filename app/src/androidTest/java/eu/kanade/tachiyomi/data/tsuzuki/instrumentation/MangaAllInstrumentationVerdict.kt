@@ -16,11 +16,23 @@ import androidx.test.platform.app.InstrumentationRegistry
 internal object MangaAllInstrumentationVerdict {
     private val permitted = listOf(
         Regex("""MANGAALL_STATUS_PROBE\|outcome=VISIBLE"""),
-        Regex("""MANGAALL_BATCH_DISCOVERY\|outcome=INCONCLUSIVE\|reason=[A-Z_]{3,64}"""),
+        Regex("""MANGAALL_BATCH_AUDIT\\|outcome=INCONCLUSIVE\\|reason=[A-Z_]{3,64}"""),
         Regex(
-            """MANGAALL_BATCH_DISCOVERY\|outcome=SELECTED""" +
-                """\|workId=(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}""" +
-                """\|chapterId=[A-Za-z0-9._:-]{1,160}\|language=[a-z]{2}(-[a-z]{2})?""",
+            """MANGAALL_BATCH_AUDIT\\|outcome=COMPLETE\\|sources=3""" +
+                """\\|titleParity=(CONSISTENT|VARIANCE|UNVERIFIED)""" +
+                """\\|authorParity=(CONSISTENT|VARIANCE|UNVERIFIED)""",
+        ),
+        Regex(
+            """MANGAALL_BATCH_SOURCE\\|source=(mangadex|mangadot|mangafire)""" +
+                """\\|outcome=(MISSING|AMBIGUOUS|CHAPTERS_UNAVAILABLE|CHAPTER_ONE_NOT_ATTESTED|""" +
+                """CHAPTER_CURSOR_LIMIT|AMBIGUOUS_CHAPTER_ONE|INVALID_SOURCE_IDENTITY)""" +
+                """\\|candidates=[0-9]{1,5}""",
+        ),
+        Regex(
+            """MANGAALL_BATCH_SOURCE\\|source=(mangadex|mangadot|mangafire)""" +
+                """\\|outcome=READY\\|candidates=1""" +
+                """\\|workId=(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}""" +
+                """\\|chapterId=[A-Za-z0-9._:-]{1,160}\\|language=en""",
         ),
         Regex("""MANGAALL_LIVE_PAGE_GATE\|outcome=INCONCLUSIVE\|reason=[A-Z_]{3,64}"""),
         Regex(
