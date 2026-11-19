@@ -1770,10 +1770,10 @@ class ScriptProviderReadingGatewayIsolationTest {
                             ),
                         )
                     }
-                    if (response is ProviderCallResult.Failure) {
+                    if (response !is ProviderCallResult.Success) {
                         // Structured Host error only. Never emit response bodies,
                         // upstream URLs, headers, provider IDs or raw exceptions.
-                        val error = response.error
+                        val error = (response as ProviderCallResult.Failure).error
                         MangaAllInstrumentationVerdict.publish(
                             "MANGAALL_BATCH_AUDIT|outcome=INCONCLUSIVE|reason=LOOKUP_UNAVAILABLE" +
                                 "|code=${error.code.name}" +
