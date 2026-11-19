@@ -1,111 +1,51 @@
-# MangaAll — lote sequencial de títulos reais no Android (code8)
+# MangaAll — gate Android unificado (3 fontes, code8 assinado)
 
-## Objetivo
+## Escopo corrigido
 
-Aceitar de **1 a 30 títulos na ordem informada** e testar cada um, sem
-solicitar `provider_work_id` ou `provider_chapter_id` na interface GitHub.
-O lote usa o **mesmo** pacote original MangaAll 0.5.3/code8, root assinado
-seq34, sem modificação do JavaScript. O APK `app.tsuzuki.dev` é efêmero,
-executado em emulador descartável. A issue #207 segue aberta até prova online
-e aceitação editorial/física completas.
+**MangaAll é um único Provider (app.tsuzuki.mangaall)**. O router original assinado consulta MangaDex, MangaDot e MangaFire juntos, devolvendo identidades distintas por fonte. O desenho antigo de escolher uma fonte por workflow não representava o comportamento real e foi substituído.
 
-## Execução pela interface do GitHub
+O novo lote recebe **uma lista ordenada de 1–30 títulos** e um modo reader/transport. Para cada título chama o Host MangaAll uma vez por página de cursor, inspecionando a união das três fontes. O teste mantém a faceta inglesa (en), a única anunciada pelos três adaptadores code8; outro idioma não pode ser apresentado como auditoria de três fontes.
 
-Em **Actions → MangaAll signed code8 — sequential Android live manga batch →
-Run workflow**, use a branch com o workflow (após merge, `main`):
+## Entrada
 
-- **titles**: `Attack on Titan, Boku no Hero, Dragon Ball`
-  (também aceita linhas separadas ou JSON
-  `["Attack on Titan","Boku no Hero","Dragon Ball"]`).
-  Em títulos contendo vírgulas, use necessariamente JSON.
-- **source**: `mangafire`, `mangadex` ou `mangadot`. A escolha da fonte
-  é explícita para todos os títulos do lote; nunca se troca de fonte após
-  falha nem se inferem edições por popularidade.
-- **facet_language**: `en` para MangaFire, que só anuncia inglês;
-  nas outras fontes, escolha a faceta anunciada (por exemplo `pt-br`).
-- **gate_mode**: `reader` para imagens reais no ReaderActivity, ou
-  `transport` para download/decodificação sem pixels de tela.
+No GitHub Actions, abrir o workflow MangaAll signed code8 — unified three-source Android live manga batch, selecionar Run workflow e informar os títulos, por exemplo:
 
-A seleção automática vale **somente dentro do teste descartável**.
-Um título/alias idêntico numa fonte não constitui confirmação canônica
-editorial: o sistema não cria biblioteca real nem vínculo permanente.
+~~~json
+["Death Note", "Naruto", "Bleach"]
+~~~
 
-## Execução por commit, sem botão Run workflow
+Escolher reader para testar pixels reais no ReaderActivity, ou transport para download/decodificação Android, sem evidência visual. **Não existe seletor de fonte.**
 
-1. Crie uma branch `mangaall-live/minha-rodada` a partir da `main`
-   **que já contenha este workflow**.
-2. Edite o arquivo versionado `.github/mangaall-live-batch.json`,
-   por exemplo:
+Para iniciar pelo commit, criar branch mangaall-live/minha-rodada a partir da main já atualizada e modificar o manifesto .github/mangaall-live-batch.json:
 
-   ```json
-   {
-     "mode": "reader",
-     "source": "mangafire",
-     "language": "en",
-     "titles": ["Attack on Titan", "Boku no Hero", "Dragon Ball"]
-   }
-   ```
+~~~json
+{
+  "mode": "reader",
+  "language": "en",
+  "titles": ["Death Note", "Naruto", "Bleach"]
+}
+~~~
 
-3. Faça commit e push **da mudança nesse arquivo**. O evento `push`
-   ativa o workflow apenas em `mangaall-live/**` e somente se o manifesto
-   foi modificado; commits normais na `main` ou PRs não rodam LIVE.
-   Novos commits na mesma branch substituem a execução anterior se ela
-   ainda estiver em andamento. A ordem dos títulos é preservada.
+Um push que modifica especificamente esse manifesto numa branch mangaall-live/** aciona o workflow. Commits normais na main e PRs não geram tráfego live.
 
-O botão manual usa os campos informados; o gatilho de commit lê o
-manifesto. Não se usa a lista salva para substituir silenciosamente um
-input manual.
+## Inspeção conjunta, não picks arbitrários
 
-## Como cada caso é processado
+1. Uma chamada ao gateway original do MangaAll faz fan-out às três fontes; consumimos até oito páginas de lookup com cursor e exigimos conclusão real. Um resultado incompleto não vira ausência de obra.
+2. Os candidatos são separados por prefixo de identidade. Cada fonte registra MISSING, AMBIGUOUS (dois ou mais IDs distintos), ou um candidato único. Se a mesma identidade mudar título entre páginas, ou a faceta entrar em conflito, o auditor encerra como inconclusivo.
+3. Candidatos únicos são investigados com chapters() da sua fonte e seu binding exato, até doze páginas. Só um capítulo 1 único, sem volume, habilita a prova de páginas desse binding.
+4. O auditor registra consistência/variação de títulos principais e autoria disponíveis, sem divulgar nomes retornados ou IDs da fonte. VARIANCE é sinal de análise editorial pendente; UNVERIFIED significa metadado insuficiente.
+5. **Uma fonte ambígua não bloqueia as outras duas.** Cada binding READY é testado no Reader/transport, em ordem, enquanto fontes ambíguas permanecem inconclusivas. Não há autoescolha de edition, ranking, HID nem capítulo estrangeiro.
+6. O relatório JSON final registra três linhas por título (fonte, contagem de candidatos, estágio de descoberta, resultado do Reader e motivo), além da comparação de metadados. Um título só passa o gate técnico completo se as três fontes passarem sem variação de metadados identificada. Caso contrário fica INCONCLUSIVE ou FAIL, mas os outros títulos continuam.
 
-Um único runner Android serial executa, para cada título:
+## Limites e segurança
 
-1. Limpa a aplicação efêmera, envia o título codificado em Base64 via ADB,
-   valida `code8` assinado e invoca o `ScriptProviderReadingGateway.lookup()`
-   no Android com o título, idioma e fonte selecionados.
-2. Percorre **até seis páginas de lookup**, com cursores exatos e orçamento
-   de tempo. Exige **um único** work ID da fonte selecionada cujo título
-   ou alias coincida após normalização de caixa, acentos e espaços.
-   Qualquer candidato adicional igual/ambíguo, falha HTTP ou cursor
-   incompleto resulta em **INCONCLUSIVE**, nunca pick automático.
-3. Usa o binding exato retornado para buscar **até doze páginas** de
-   `chapters()`, exigindo um único capítulo número 1, sem volume e na
-   mesma faceta de idioma. A ausência em inventário parcial é inconclusiva.
-4. Passa os IDs somente **internamente** ao runner Android de leitura
-   (`transport` ou `reader`), que **revalida** o binding/capítulo no
-   Host. A opção do Reader é selecionada pelo card real; não existe
-   bypass de 403/challenge, credenciais nem substituição de edição.
-5. Registra `PASS`, `INCONCLUSIVE` ou `FAIL` com motivo fechado,
-   limpa dados do caso e segue para o título seguinte, mesmo quando
-   um dos anteriores ficou inconclusivo.
+- O lookup, inventário de candidatos e diagnóstico de conflitos são **integrados em um Provider MangaAll**. A prova de pixels, por enquanto, roda sequencialmente em fixtures Reader descartáveis para cada binding elegível; isso ainda NÃO comprova três opções coexistindo numa mesma sessão visual da biblioteca real. Um teste específico de paridade no mesmo Reader fica pendente.
+- A correspondência textual de títulos/aliases e três imagens carregadas não atestam que são a mesma edição editorial. O arquivo de resultado registra editorialIdentityVerified=false.
+- MangaDex permanece development-only no pacote code8, sujeito aos seus gates próprios de atribuição, remoção e imagens; este teste não equivale à sua publicação.
+- Não exportamos URLs, headers, cookies, IDs observados, respostas remotas, screenshots nem bytes de mangá aos artefatos CI. Somente títulos declarados pelo operador e códigos de diagnóstico fechados.
+- Ausência de título/capítulo só é afirmada se inventário correspondente foi concluído; timeouts, challenges e cursores limitados são inconclusivos.
+- Nenhuma alteração do provider publicado, app de produção ou instalação no Galaxy A54.
 
-A condição do Reader ainda exige que o capítulo de teste efêmero
-seja compatível com Ch. 1 sem volume. Não há afirmação de que a edição
-seja original, nem comprovação do catálogo independente.
+O run antigo #44521594314 mostrou AMBIGUOUS_SOURCE_MATCH para os três títulos **dentro de MangaFire somente** e não deve ser usado para concluir nada sobre conflitos entre as fontes juntas. Link: https://github.com/jssantogit/tsuzuki/actions/runs/44521594314
 
-## Saída, limites e segurança
-
-O log do workflow mostra somente `case=1/3`, etapa e código de resultado.
-O artefato `summary.json` contém **os títulos fornecidos pelo operador**,
-ordem e resultados fechados. Não retém IDs técnicos retornados pela fonte,
-respostas de lookup, URLs, headers, cookies, imagens nem screenshots; a
-instrumentação privada fica na memória do runner e arquivos temporários
-são apagados após cada caso. Artefatos expiram em 3 dias.
-
-O job é **verde só se todos os títulos passarem**. Um caso
-`INCONCLUSIVE` não é interpretado como `NO_CHAPTERS` ou como PASS
-falso; o lote continua e o workflow termina não aceito.
-
-A ordem serial reduz concorrência, mas um lote de 30 obras pode levar
-bastante tempo e esbarrar no limite de seis horas do GitHub Actions.
-Começar com 3–5 títulos costuma produzir diagnóstico mais claro.
-Não há APK A54, publication de provider, mudança de produção nem uso de
-dados privados.
-
-**Validação deste incremento:** testes locais de parser Python e compilação
-Android via GitHub Actions devem ser confirmados na PR específica. Os
-testes offline verdes da PR #215 não demonstram execução real do novo lote.
-
-Referências: [workflows de páginas](https://github.com/jssantogit/tsuzuki/actions/workflows/mangaall-live-page-android.yml),
-[issue #207](https://github.com/jssantogit/tsuzuki/issues/207),
-[runbook anterior](mangaall-live-android-page-gate-20261118.md).
+Issue de acompanhamento: https://github.com/jssantogit/tsuzuki/issues/207
