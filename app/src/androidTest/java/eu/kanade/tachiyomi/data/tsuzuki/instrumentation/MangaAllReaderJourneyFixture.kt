@@ -317,18 +317,44 @@ internal class MangaAllReaderJourneyFixture(
         val evidenceRepository = ChapterEvidenceRepositoryImpl(database)
         val bindingRepository = ProviderReadingBindingRepositoryImpl(database)
         bindingRepository.upsert(binding)
-        val refresh = RefreshProviderReadingChapters(
-            gateway = gateway,
-            evidenceAdapter = ProviderChapterEvidenceAdapter(clock = { System.currentTimeMillis() }),
-            reconcileChapterEvidence = ReconcileChapterEvidence(
-                parser = ParseCanonicalChapterLabel(),
-                canonicalChapterRepository = canonicalRepository,
-                evidenceRepository = evidenceRepository,
-            ),
+        val reconciler = ReconcileChapterEvidence(
+            parser = ParseCanonicalChapterLabel(),
+            canonicalChapterRepository = canonicalRepository,
+            evidenceRepository = evidenceRepository,
         )
-        val refreshed = refresh.execute(binding)
-        assertTrue("MangaAll SCRIPT chapter refresh must succeed: $refreshed", refreshed is ProviderCallResult.Success)
-        assertEquals(1, (refreshed as ProviderCallResult.Success).value)
+        if (liveTarget != null) {
+            // The test title is disposable: a source chapter observation cannot
+            // attest a real catalog edition. Require chapter one and never
+            // treat this bounded first page as a complete source inventory.
+            val observed = withTimeout(40_000L) {
+                gateway.chapters(providerId, ProviderReadingChaptersRequest(binding.ref))
+            }
+            if (observed !is ProviderCallResult.Success) return "CHAPTER_ATTESTATION_UNAVAILABLE"
+            val matching = observed.value.items.filter {
+                it.providerChapterId == sourceChapterId &&
+                    (it.language == null || it.language == liveTarget.language)
+            }
+            if (matching.size != 1) return "CHAPTER_NOT_ATTESTED_IN_FIRST_PAGE"
+            val selected = matching.single()
+            if (selected.rawNumber != 1.0 || selected.volume != null || selected.rawLabel.isBlank()) {
+                return "CHAPTER_IDENTITY_NOT_COMPATIBLE_WITH_TEST_FIXTURE"
+            }
+            val evidence = ProviderChapterEvidenceAdapter().toEvidence(
+                canonicalTitleId = chapter.canonicalTitleId,
+                binding = binding.ref,
+                observations = listOf(selected),
+            )
+            reconciler.execute(chapter.canonicalTitleId, evidence)
+        } else {
+            val refresh = RefreshProviderReadingChapters(
+                gateway = gateway,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(clock = { System.currentTimeMillis() }),
+                reconcileChapterEvidence = reconciler,
+            )
+            val refreshed = refresh.execute(binding)
+            assertTrue("MangaAll SCRIPT chapter refresh must succeed: $refreshed", refreshed is ProviderCallResult.Success)
+            assertEquals(1, (refreshed as ProviderCallResult.Success).value)
+        }
         val resolver = ResolveProviderChapterReading(
             canonicalChapterRepository = canonicalRepository,
             evidenceRepository = evidenceRepository,
@@ -337,6 +363,9 @@ internal class MangaAllReaderJourneyFixture(
             providerRegistry = registry,
         )
         val options = resolver.options(chapter.id)
+        if (liveTarget != null && (options.size != 1 || options.single().providerChapterId != sourceChapterId)) {
+            return "CHAPTER_MAPPING_UNRESOLVED"
+        }
         assertEquals("Provider snapshot must reconcile to the exact canonical Reader chapter", 1, options.size)
         selectedOption = options.single()
         assertEquals(providerId, selectedOption.providerId)
