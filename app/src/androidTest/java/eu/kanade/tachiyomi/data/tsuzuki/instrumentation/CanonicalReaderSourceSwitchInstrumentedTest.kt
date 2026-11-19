@@ -192,7 +192,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                     "CHAPTER_ATTESTATION_UNAVAILABLE"
                 }
                 if (preflight != null) {
-                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=" + preflight)
+                    MangaAllInstrumentationVerdict.publish("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=" + preflight)
                     return@withFixture
                 }
                 reader.viewModel.openContentSelector()
@@ -236,15 +236,15 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                             reader.viewModel.state.value.currentChapter,
                         )
                     }
-                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CDN_OR_READER_UNAVAILABLE")
+                    MangaAllInstrumentationVerdict.publish("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CDN_OR_READER_UNAVAILABLE")
                     return@withFixture
                 }
                 if (!hasLiveReaderPixelEvidence(reader)) {
-                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=SCREEN_PIXELS_NOT_ATTESTED")
+                    MangaAllInstrumentationVerdict.publish("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=SCREEN_PIXELS_NOT_ATTESTED")
                     return@withFixture
                 }
                 assertEquals(fixture.chapter.id, reader.viewModel.state.value.activeCanonicalChapterId)
-                println(
+                MangaAllInstrumentationVerdict.publish(
                     "MANGAALL_LIVE_PAGE_GATE|outcome=PASS|provenance=DIRECT_LIVE_ANDROID" +
                         "|pagesDecoded=1|readerActivityPixels=REAL_CDN_VISIBLE",
                 )
