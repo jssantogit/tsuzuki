@@ -17,6 +17,7 @@ readonly continuous_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.Canon
 readonly real_code7_reader_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#mangaAllOriginalCode7TszSourceTap503RetryRendersCdnPixels'
 readonly real_code8_reader_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#mangaAllPublishedCode8TszSourceTap503RetryRendersCdnPixels'
 readonly verdict_probe_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllLiveVerdictProtocol_emitsAndroidStatusStream'
+readonly v2_readonly_probe_case='eu.kanade.tachiyomi.provider.reading.MangaAllLookupV2ReadOnlyDiagnosticsTest#mangaAllUnsignedV2ReadOnlyContract_rejectsCanonicalPromotionAndForeignSource'
 readonly source_row_case='eu.kanade.presentation.reader.MangaAllReaderSourceCardInstrumentedTest#tappingMangaAllSourcePassesExactVerifiedChapterOptionWithoutCrossSourceSelection'
 
 mkdir -p "$output"
@@ -91,6 +92,7 @@ if [ "${MANGAALL_CODE8_ONLY:-0}" = "1" ]; then
       exit 1
     fi
   done
+  run_case 'UNSIGNED_V2_READONLY_TRI_SOURCE_CONTRACT' "$v2_readonly_probe_case" 'mangaAllStatusProbeOptIn'
   run_case 'CODE8_PUBLISHED_TSZ_CONTINUOUS_READER_TAP_503_RETRY_PIXELS' "$real_code8_reader_case" 'androidSourceSwitchOptIn'
   echo 'MANGAALL_JOURNEY|pipeline=PUBLISHED_CODE8_OFFLINE_READER|outcome=PASS|readerPixels=DECODED_SYNTHETIC_HTTP|liveCdn=NOT_TESTED'
   exit 0
