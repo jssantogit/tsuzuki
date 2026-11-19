@@ -93,7 +93,7 @@ class MangaAllBatchContractTest(unittest.TestCase):
         absent = (
             "INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_DISCOVERY|"
             "outcome=INCONCLUSIVE|reason=LOOKUP_UNAVAILABLE"
-            "\\nOK (1 test)\\nINSTRUMENTATION_CODE: -1"
+            "\nOK (1 test)\nINSTRUMENTATION_CODE: -1"
         )
         self.assertEqual(
             batch._parse_discovery(absent, 0, plan)[:2], ("INCONCLUSIVE", "LOOKUP_UNAVAILABLE")
