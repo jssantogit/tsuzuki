@@ -319,6 +319,100 @@ class ScriptProviderReadingGatewayIsolationTest {
         assertEquals("UNAVAILABLE", (futureDenied as ProviderCallResult.Failure).error.code.name)
     }
 
+    /**
+     * Synthetic SCRIPT code9, but actual isolated Android runtime transport.
+     * One MangaAll provider, three source statuses on page one, then only
+     * MangaDot's bounded retry on page two. No pages/CDN are requested.
+     */
+    @Test
+    fun mangaAllV2Code9OptIn_accumulatesActualRuntimePagesWithoutReaderGrants() = runBlocking {
+        val provider = ProviderId("app.tsuzuki.mangaall")
+        val main = """
+            const cursor = '{"v":1,"remaining":{"mangadot":{"c":null,"r":1}}}';
+            const item = source => ({
+              source, externalWorkId: source + ":naruto-fixture",
+              title: "Naruto", aliases: [], authors: [],
+              bindingEligible: false, editorialIdentityVerified: false
+            });
+            const ok = source => ({
+              source, attempts: 1, status: "SUCCESS_PAGE", pageComplete: true,
+              observedCandidates: 1, observationsTruncated: false,
+              unsafeCandidate: false, failure: null
+            });
+            const none = source => ({
+              source, attempts: 0, status: "NOT_QUERIED", pageComplete: null,
+              observedCandidates: 0, observationsTruncated: false,
+              unsafeCandidate: false, failure: null
+            });
+            export default {
+              reading: {
+                lookup: async request => {
+                  if (request.diagnosticsVersion !== 2) {
+                    return {items: [], nextCursor: null};
+                  }
+                  if (request.cursor && request.cursor !== cursor) {
+                    throw Error("unrecognized test cursor");
+                  }
+                  const first = !request.cursor;
+                  return {
+                    contractVersion: 2,
+                    providerId: "app.tsuzuki.mangaall",
+                    state: "PARTIAL_EVIDENCE",
+                    lookupComplete: false,
+                    canContinue: first,
+                    continuationCursor: first ? cursor : null,
+                    sourceStatuses: first
+                      ? [
+                          ok("mangadex"),
+                          {
+                            source: "mangadot", attempts: 1, status: "FAILED",
+                            pageComplete: null, observedCandidates: 0,
+                            observationsTruncated: false, unsafeCandidate: false,
+                            failure: {code: "CHALLENGE_BLOCKED", httpStatus: 403, retryable: true}
+                          },
+                          ok("mangafire")
+                        ]
+                      : [none("mangadex"), ok("mangadot"), none("mangafire")],
+                    observedCandidates: first
+                      ? [item("mangadex"), item("mangafire")]
+                      : [item("mangadot")],
+                    eligibleForCanonicalBinding: false,
+                    eligibleForReader: false,
+                    provenance: "UNSIGNED_CANDIDATE_NOT_LIVE"
+                  };
+                },
+                chapters: async () => { throw Error("chapters not permitted in this fixture"); },
+                pages: async () => { throw Error("pages not permitted in this fixture"); }
+              }
+            };
+        """.trimIndent()
+        val gateway = gateway(
+            main = main,
+            providerId = provider,
+            networkOrigins = emptySet(),
+            localNetwork = false,
+            repositoryId = "app.tsuzuki.providers",
+            packageVersionCode = 9,
+            packageVersionName = "0.5.4-dev-unsigned",
+            experimentalV2OptIn = true,
+        )
+        val result = gateway.auditMangaAllV2ReadOnly(
+            provider,
+            ProviderReadingLookupRequest(titles = listOf("Naruto"), requestedLanguage = "en"),
+        )
+        assertTrue(result is ProviderCallResult.Success)
+        val snapshot = (result as ProviderCallResult.Success).value
+        assertEquals(MangaAllLookupV2ReadOnlyCursorAccumulator.Verdict.COMPLETE_OBSERVED, snapshot.verdict)
+        assertEquals(2, snapshot.pages)
+        assertEquals(null, snapshot.nextCursor)
+        assertEquals(listOf(1, 2, 1), snapshot.sourceHistory.map { it.pagesQueried })
+        assertEquals(listOf(1, 1, 1), snapshot.sourceHistory.map { it.observedCandidates })
+        assertTrue(snapshot.sourceHistory[1].hadFailure)
+        assertEquals("CHALLENGE_BLOCKED", snapshot.sourceHistory[1].lastFailureCode)
+        assertEquals(3, snapshot.observedWorks.size)
+        assertTrue(snapshot.observedWorks.all { it.sourceWorkId.startsWith(it.source + ":") })
+    }
+
     @Test
     fun chapterPagination_invokesSecondPageThroughIsolatedRuntimeBeforeDeadline() = runBlocking {
         val server = MockWebServer()
