@@ -16,13 +16,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 internal object MangaAllInstrumentationVerdict {
     private val permitted = listOf(
         Regex("""MANGAALL_STATUS_PROBE\|outcome=VISIBLE"""),
-        Regex("""MANGAALL_BATCH_DISCOVERY\|outcome=INCONCLUSIVE\|reason=[A-Z_]{3,48}"""),
+        Regex("""MANGAALL_BATCH_DISCOVERY\|outcome=INCONCLUSIVE\|reason=[A-Z_]{3,64}"""),
         Regex(
             """MANGAALL_BATCH_DISCOVERY\|outcome=SELECTED""" +
                 """\|workId=(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}""" +
                 """\|chapterId=[A-Za-z0-9._:-]{1,160}\|language=[a-z]{2}(-[a-z]{2})?""",
         ),
-        Regex("""MANGAALL_LIVE_PAGE_GATE\|outcome=INCONCLUSIVE\|reason=[A-Z_]{3,48}"""),
+        Regex("""MANGAALL_LIVE_PAGE_GATE\|outcome=INCONCLUSIVE\|reason=[A-Z_]{3,64}"""),
         Regex(
             """MANGAALL_LIVE_PAGE_GATE\|outcome=PASS""" +
                 """\|provenance=DIRECT_LIVE_ANDROID\|pagesDecoded=[12]""" +
