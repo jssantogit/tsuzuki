@@ -16,6 +16,7 @@ readonly ui_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalRead
 readonly continuous_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#mangaAllScriptSourceTapFailureAndRetryPublishesDecodedReaderPixels'
 readonly real_code7_reader_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#mangaAllOriginalCode7TszSourceTap503RetryRendersCdnPixels'
 readonly real_code8_reader_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#mangaAllPublishedCode8TszSourceTap503RetryRendersCdnPixels'
+readonly verdict_probe_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllLiveVerdictProtocol_emitsAndroidStatusStream'
 readonly source_row_case='eu.kanade.presentation.reader.MangaAllReaderSourceCardInstrumentedTest#tappingMangaAllSourcePassesExactVerifiedChapterOptionWithoutCrossSourceSelection'
 
 mkdir -p "$output"
@@ -72,6 +73,12 @@ run_case() {
 # every time the code8 Reader acceptance test is reviewed. The full original
 # suite remains accessible through workflow_dispatch with default scope.
 if [ "${MANGAALL_CODE8_ONLY:-0}" = "1" ]; then
+  run_case 'LIVE_VERDICT_INSTRUMENTATION_STATUS_PROTOCOL' "$verdict_probe_case" 'mangaAllStatusProbeOptIn'
+  if ! grep -Fxq 'INSTRUMENTATION_STATUS: stream=MANGAALL_STATUS_PROBE|outcome=VISIBLE' \
+      "$output/LIVE_VERDICT_INSTRUMENTATION_STATUS_PROTOCOL.txt"; then
+    echo 'MANGAALL_JOURNEY|phase=LIVE_VERDICT_INSTRUMENTATION_STATUS_PROTOCOL|outcome=FAIL|reason=STATUS_STREAM_MISSING' >&2
+    exit 1
+  fi
   run_case 'CODE8_PUBLISHED_TSZ_CONTINUOUS_READER_TAP_503_RETRY_PIXELS' "$real_code8_reader_case" 'androidSourceSwitchOptIn'
   echo 'MANGAALL_JOURNEY|pipeline=PUBLISHED_CODE8_OFFLINE_READER|outcome=PASS|readerPixels=DECODED_SYNTHETIC_HTTP|liveCdn=NOT_TESTED'
   exit 0
