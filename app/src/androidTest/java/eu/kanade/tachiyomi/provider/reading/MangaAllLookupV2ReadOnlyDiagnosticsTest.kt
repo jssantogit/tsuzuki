@@ -267,4 +267,81 @@ class MangaAllLookupV2ReadOnlyDiagnosticsTest {
             )
         assertNull(conflictingAudit.accept(changedTitle.toString(), firstPage.nextCursor))
     }
+
+    @Test
+    fun mangaAllUnsignedV2CursorHistory_boundsEightPagesAndRejectsReplay() {
+        fun simulatedPage(index: Int, next: String): JSONObject {
+            val first = index == 1
+            return full()
+                .put("state", "PARTIAL_EVIDENCE")
+                .put("lookupComplete", false)
+                .put("canContinue", true)
+                .put("continuationCursor", next)
+                .put(
+                    "sourceStatuses",
+                    if (first) {
+                        JSONArray()
+                            .put(source("mangadex"))
+                            .put(source("mangadot", "SUCCESS_PAGE", 1, false))
+                            .put(source("mangafire"))
+                    } else {
+                        JSONArray()
+                            .put(source("mangadex", "NOT_QUERIED", 0, null))
+                            .put(source("mangadot", "SUCCESS_PAGE", 1, false))
+                            .put(source("mangafire", "NOT_QUERIED", 0, null))
+                    },
+                )
+                .put(
+                    "observedCandidates",
+                    if (first) {
+                        JSONArray()
+                            .put(candidate("mangadex", "mangadex:one"))
+                            .put(candidate("mangadot", "mangadot:two"))
+                            .put(candidate("mangafire", "mangafire:three"))
+                    } else {
+                        JSONArray().put(candidate("mangadot", "mangadot:two"))
+                    },
+                )
+        }
+
+        val bounded = MangaAllLookupV2ReadOnlyCursorAccumulator()
+        var cursor: String? = null
+        for (index in 1..8) {
+            val payload = simulatedPage(
+                index,
+                """{"v":1,"remaining":{"mangadot":"${index + 1}"}}""",
+            )
+            val result = requireNotNull(bounded.accept(payload.toString(), cursor))
+            assertEquals(
+                if (index < 8) {
+                    MangaAllLookupV2ReadOnlyCursorAccumulator.Verdict.IN_PROGRESS
+                } else {
+                    MangaAllLookupV2ReadOnlyCursorAccumulator.Verdict.INCONCLUSIVE
+                },
+                result.verdict,
+            )
+            cursor = result.nextCursor
+            assertEquals(index, result.pages)
+        }
+        assertNull(cursor)
+        assertNull(bounded.accept(simulatedPage(9, """{"v":1,"remaining":{"mangadot":"10"}}""").toString()))
+
+        val repeated = MangaAllLookupV2ReadOnlyCursorAccumulator()
+        val first = requireNotNull(
+            repeated.accept(simulatedPage(1, """{"v":1,"remaining":{"mangadot":"2"}}""").toString()),
+        )
+        assertNull(
+            repeated.accept(
+                simulatedPage(2, """{"v":1,"remaining":{"mangadot":"2"}}""").toString(),
+                first.nextCursor,
+            ),
+        )
+
+        val malformed = MangaAllLookupV2ReadOnlyCursorAccumulator()
+        assertNull(
+            malformed.accept(
+                simulatedPage(1, """{"v":1,"remaining":{"mangadot":2}}""").toString(),
+            ),
+        )
+    }
 }
