@@ -25,7 +25,7 @@ nenhuma URL, header, imagem ou log bruto.
 3. O workflow verifica o índice assinado oficial (seq. 34) e o hash do
    archive code8 no commit fixo do repositório Provider. O arquivo `.tsz`
    é incorporado somente como asset de `AndroidTest`, sem publicação.
-4. O teste chama `pages()` no gateway SCRIPT/QuickJS e usa a política
+4. O teste consulta primeiro `chapters()` no mesmo binding/faceta em uma página real de inventário, exigindo que o ID escolhido apareça exatamente uma vez. Um capítulo encontrado somente em outro cursor é **inconclusivo** no escopo desta prova limitada, não ausente. Depois chama `pages()` no gateway SCRIPT/QuickJS e usa a política
    de origens e o carregador HTTP do próprio Host para **até duas páginas**.
    Verifica se o download completou e o Android conseguiu decodificar
    bitmaps reais. Janela máxima individual: chamadas de rede 25s;
@@ -40,7 +40,7 @@ nenhuma URL, header, imagem ou log bruto.
 - `PASS|provenance=DIRECT_LIVE_ANDROID|pagesDecoded=1/2`:
   imagem(ns) original(is) do upstream carregada(s) e decodificada(s)
   pelo Host Android. **Não prova pixels visíveis no Reader**.
-- `INCONCLUSIVE`: origem bloqueada, API indisponível, páginas vazias,
+- `INCONCLUSIVE`: origem bloqueada, capítulo não atestado na primeira página, API indisponível, páginas vazias,
   CDN inacessível ou dados que não foram decodificados. Não transforma
   403/challenge ou timeout em `NO_CHAPTERS` ou evidência editorial.
 - `FAIL`: instrumentação, contrato de entrada, política de ambiente,
