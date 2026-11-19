@@ -378,8 +378,8 @@ class ScriptProviderReadingGateway internal constructor(
         providerId: ProviderId,
         capability: ProviderCapabilityRef,
         inputJson: String,
-        decode: (String, ActiveProviderScriptPackage) -> T,
         packageGate: (ActiveProviderScriptPackage) -> Boolean = { true },
+        decode: (String, ActiveProviderScriptPackage) -> T,
     ): ProviderCallResult<T> {
         registry.awaitReady()
         val registration = registry.registration(providerId)
