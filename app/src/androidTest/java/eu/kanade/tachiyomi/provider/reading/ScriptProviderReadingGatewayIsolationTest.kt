@@ -1705,112 +1705,112 @@ class ScriptProviderReadingGatewayIsolationTest {
         try {
             withTimeout(235_000L) {
                 val observedWorkIds = linkedSetOf<String>()
-            var lookupCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
-            val seenLookupCursors = hashSetOf<String>()
-            var lookupCompleted = false
-            for (index in 0 until 6) {
-                val response = withTimeout(50_000L) {
-                    gateway.lookup(
-                        providerId,
-                        ProviderReadingLookupRequest(
-                            titles = listOf(title),
-                            cursor = lookupCursor,
-                            requestedLanguage = language,
-                        ),
-                    )
-                }
-                if (response !is ProviderCallResult.Success) {
-                    inconclusive("LOOKUP_UNAVAILABLE")
-                    return@runBlocking
-                }
-                response.value.items.asSequence()
-                    .filter { it.externalWorkId.startsWith("$source:") }
-                    .filter { it.language == null || it.language == language }
-                    .filter {
-                        normalize(it.title) == normalize(title) ||
-                            it.aliases.any { alias -> normalize(alias) == normalize(title) }
+                var lookupCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
+                val seenLookupCursors = hashSetOf<String>()
+                var lookupCompleted = false
+                for (index in 0 until 6) {
+                    val response = withTimeout(50_000L) {
+                        gateway.lookup(
+                            providerId,
+                            ProviderReadingLookupRequest(
+                                titles = listOf(title),
+                                cursor = lookupCursor,
+                                requestedLanguage = language,
+                            ),
+                        )
                     }
-                    .map { it.externalWorkId }
-                    .forEach(observedWorkIds::add)
-                if (observedWorkIds.size > 1) {
-                    inconclusive("AMBIGUOUS_SOURCE_MATCH")
-                    return@runBlocking
+                    if (response !is ProviderCallResult.Success) {
+                        inconclusive("LOOKUP_UNAVAILABLE")
+                        return@withTimeout
+                    }
+                    response.value.items.asSequence()
+                        .filter { it.externalWorkId.startsWith("$source:") }
+                        .filter { it.language == null || it.language == language }
+                        .filter {
+                            normalize(it.title) == normalize(title) ||
+                                it.aliases.any { alias -> normalize(alias) == normalize(title) }
+                        }
+                        .map { it.externalWorkId }
+                        .forEach { observedWorkIds.add(it) }
+                    if (observedWorkIds.size > 1) {
+                        inconclusive("AMBIGUOUS_SOURCE_MATCH")
+                        return@withTimeout
+                    }
+                    val next = response.value.nextCursor
+                    if (next == null) {
+                        lookupCompleted = true
+                        break
+                    }
+                    if (!seenLookupCursors.add(next.toString())) {
+                        inconclusive("LOOKUP_CURSOR_LIMIT")
+                        return@withTimeout
+                    }
+                    lookupCursor = next
                 }
-                val next = response.value.nextCursor
-                if (next == null) {
-                    lookupCompleted = true
-                    break
-                }
-                if (!seenLookupCursors.add(next.toString())) {
+                if (!lookupCompleted) {
                     inconclusive("LOOKUP_CURSOR_LIMIT")
-                    return@runBlocking
+                    return@withTimeout
                 }
-                lookupCursor = next
-            }
-            if (!lookupCompleted) {
-                inconclusive("LOOKUP_CURSOR_LIMIT")
-                return@runBlocking
-            }
-            if (observedWorkIds.size != 1) {
-                inconclusive("NO_EXACT_SOURCE_MATCH")
-                return@runBlocking
-            }
-            val workId = observedWorkIds.single()
-            if (!Regex("(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}").matches(workId)) {
-                inconclusive("INVALID_SOURCE_IDENTITY")
-                return@runBlocking
-            }
-            val binding = ProviderBindingRef(providerId, language, workId)
-            val chapterOneIds = linkedSetOf<String>()
-            var chapterCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
-            val seenChapterCursors = hashSetOf<String>()
-            var chaptersCompleted = false
-            for (index in 0 until 12) {
-                val response = withTimeout(50_000L) {
-                    gateway.chapters(
-                        providerId,
-                        ProviderReadingChaptersRequest(binding, cursor = chapterCursor),
-                    )
+                if (observedWorkIds.size != 1) {
+                    inconclusive("NO_EXACT_SOURCE_MATCH")
+                    return@withTimeout
                 }
-                if (response !is ProviderCallResult.Success) {
-                    inconclusive("CHAPTERS_UNAVAILABLE")
-                    return@runBlocking
+                val workId = observedWorkIds.single()
+                if (!Regex("(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}").matches(workId)) {
+                    inconclusive("INVALID_SOURCE_IDENTITY")
+                    return@withTimeout
                 }
-                response.value.items.asSequence()
-                    .filter { it.rawNumber == 1.0 && it.volume == null }
-                    .filter { it.language == null || it.language == language }
-                    .map { it.providerChapterId }
-                    .forEach(chapterOneIds::add)
-                if (chapterOneIds.size > 1) {
-                    inconclusive("AMBIGUOUS_CHAPTER_ONE")
-                    return@runBlocking
+                val binding = ProviderBindingRef(providerId, language, workId)
+                val chapterOneIds = linkedSetOf<String>()
+                var chapterCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
+                val seenChapterCursors = hashSetOf<String>()
+                var chaptersCompleted = false
+                for (index in 0 until 12) {
+                    val response = withTimeout(50_000L) {
+                        gateway.chapters(
+                            providerId,
+                            ProviderReadingChaptersRequest(binding, cursor = chapterCursor),
+                        )
+                    }
+                    if (response !is ProviderCallResult.Success) {
+                        inconclusive("CHAPTERS_UNAVAILABLE")
+                        return@withTimeout
+                    }
+                    response.value.items.asSequence()
+                        .filter { it.rawNumber == 1.0 && it.volume == null }
+                        .filter { it.language == null || it.language == language }
+                        .map { it.providerChapterId }
+                        .forEach { chapterOneIds.add(it) }
+                    if (chapterOneIds.size > 1) {
+                        inconclusive("AMBIGUOUS_CHAPTER_ONE")
+                        return@withTimeout
+                    }
+                    val next = response.value.nextCursor
+                    if (next == null) {
+                        chaptersCompleted = true
+                        break
+                    }
+                    if (!seenChapterCursors.add(next.toString())) {
+                        inconclusive("CHAPTER_CURSOR_LIMIT")
+                        return@withTimeout
+                    }
+                    chapterCursor = next
                 }
-                val next = response.value.nextCursor
-                if (next == null) {
-                    chaptersCompleted = true
-                    break
-                }
-                if (!seenChapterCursors.add(next.toString())) {
+                if (!chaptersCompleted) {
                     inconclusive("CHAPTER_CURSOR_LIMIT")
-                    return@runBlocking
+                    return@withTimeout
                 }
-                chapterCursor = next
-            }
-            if (!chaptersCompleted) {
-                inconclusive("CHAPTER_CURSOR_LIMIT")
-                return@runBlocking
-            }
-            if (chapterOneIds.size != 1) {
-                inconclusive("CHAPTER_ONE_NOT_ATTESTED")
-                return@runBlocking
-            }
-            val chapterId = chapterOneIds.single()
-            if (!Regex("[A-Za-z0-9._:-]{1,160}").matches(chapterId)) {
-                inconclusive("INVALID_SOURCE_IDENTITY")
-                return@runBlocking
-            }
-            // IDs are an internal handoff to the NEXT isolated instrumentation
-            // invocation. The runner exports only per-title closed verdicts.
+                if (chapterOneIds.size != 1) {
+                    inconclusive("CHAPTER_ONE_NOT_ATTESTED")
+                    return@withTimeout
+                }
+                val chapterId = chapterOneIds.single()
+                if (!Regex("[A-Za-z0-9._:-]{1,160}").matches(chapterId)) {
+                    inconclusive("INVALID_SOURCE_IDENTITY")
+                    return@withTimeout
+                }
+                // IDs are an internal handoff to the NEXT isolated instrumentation
+                // invocation. The runner exports only per-title closed verdicts.
                 println(
                     "MANGAALL_BATCH_DISCOVERY|outcome=SELECTED|workId=$workId" +
                         "|chapterId=$chapterId|language=$language",
