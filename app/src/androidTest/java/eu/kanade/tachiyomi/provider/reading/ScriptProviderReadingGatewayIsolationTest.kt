@@ -1662,7 +1662,10 @@ class ScriptProviderReadingGatewayIsolationTest {
         val args = InstrumentationRegistry.getArguments()
         assertEquals("true", args.getString("mangaAllLiveBatchOptIn"))
         assertEquals("app.tsuzuki.dev", instrumentation.targetContext.packageName)
-        val title = requireNotNull(args.getString("mangaAllBatchTitle")).trim()
+        val title = android.util.Base64.decode(
+            requireNotNull(args.getString("mangaAllBatchTitleBase64")),
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP,
+        ).toString(Charsets.UTF_8).trim()
         val source = requireNotNull(args.getString("mangaAllBatchSource"))
         val language = requireNotNull(args.getString("facetLanguage"))
         require(title.length in 2..120 && title.none { it.isISOControl() || it == '|' })
@@ -1700,7 +1703,8 @@ class ScriptProviderReadingGatewayIsolationTest {
             .replace(Regex("\\s+"), " ")
 
         try {
-            val observedWorkIds = linkedSetOf<String>()
+            withTimeout(235_000L) {
+                val observedWorkIds = linkedSetOf<String>()
             var lookupCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
             val seenLookupCursors = hashSetOf<String>()
             var lookupCompleted = false
@@ -1807,10 +1811,11 @@ class ScriptProviderReadingGatewayIsolationTest {
             }
             // IDs are an internal handoff to the NEXT isolated instrumentation
             // invocation. The runner exports only per-title closed verdicts.
-            println(
-                "MANGAALL_BATCH_DISCOVERY|outcome=SELECTED|workId=$workId" +
-                    "|chapterId=$chapterId|language=$language",
-            )
+                println(
+                    "MANGAALL_BATCH_DISCOVERY|outcome=SELECTED|workId=$workId" +
+                        "|chapterId=$chapterId|language=$language",
+                )
+            }
         } catch (error: kotlinx.coroutines.TimeoutCancellationException) {
             inconclusive("UPSTREAM_TIMEOUT")
         }
