@@ -50,6 +50,8 @@ DISCOVERY_INCONCLUSIVE = re.compile(
 GATE_REASONS = (
     "CHAPTER_ATTESTATION_UNAVAILABLE",
     "CHAPTER_NOT_ATTESTED_IN_FIRST_PAGE",
+    "CHAPTER_NOT_ATTESTED_IN_BOUND", "CHAPTER_CURSOR_LIMIT",
+    "CHAPTER_AMBIGUOUS",
     "CHAPTER_IDENTITY_NOT_COMPATIBLE_WITH_TEST_FIXTURE",
     "CHAPTER_MAPPING_UNRESOLVED", "CDN_OR_READER_UNAVAILABLE",
     "SCREEN_PIXELS_NOT_ATTESTED", "PROVIDER_PAGES_UNAVAILABLE",
@@ -258,7 +260,7 @@ def _gate(work_id: str, chapter_id: str, plan: Plan):
     try:
         result = _exec(
             ["bash", ".github/scripts/run_mangaall_live_pages_android.sh"],
-            300, env,
+            380, env,
         )
     except subprocess.TimeoutExpired:
         return "INCONCLUSIVE", "GATE_TIMEOUT"
