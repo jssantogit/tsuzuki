@@ -213,9 +213,8 @@ def _parse_discovery(stdout: str, code: int, plan: Plan):
             count = int(count_text)
             if (
                 source != source_expected
-                or (outcome == "MISSING") != (count == 0)
-                or (outcome == "AMBIGUOUS") != (count > 1)
-                and outcome in {"MISSING", "AMBIGUOUS"}
+                or (outcome == "MISSING" and count != 0)
+                or (outcome == "AMBIGUOUS" and count <= 1)
                 or (outcome not in {"MISSING", "AMBIGUOUS"} and count != 1)
             ):
                 return "FAIL", "INVALID_SOURCE_VERDICT", [], {}
