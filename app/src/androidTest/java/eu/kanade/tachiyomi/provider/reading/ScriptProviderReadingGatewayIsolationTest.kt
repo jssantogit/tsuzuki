@@ -1654,18 +1654,35 @@ class ScriptProviderReadingGatewayIsolationTest {
     fun mangaAllLiveVerdictProtocol_emitsAndroidStatusStream() {
         assertEquals("true", InstrumentationRegistry.getArguments().getString("mangaAllStatusProbeOptIn"))
         MangaAllInstrumentationVerdict.publish("MANGAALL_STATUS_PROBE|outcome=VISIBLE")
+        // Contract-only markers; never evidence of real source coverage.
+        // Check the actual adb/am-instrument status channel before live traffic.
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_BATCH_SOURCE|source=mangadex|outcome=READY|candidates=1" +
+                "|workId=mangadex:11111111-2222-4333-8444-555555555555" +
+                "|chapterId=mangadex:aaaa1111-2222-4333-8444-555555555555|language=en",
+        )
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_BATCH_SOURCE|source=mangadot|outcome=AMBIGUOUS|candidates=2",
+        )
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_BATCH_SOURCE|source=mangafire|outcome=MISSING|candidates=0",
+        )
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_BATCH_AUDIT|outcome=COMPLETE|sources=3" +
+                "|titleParity=VARIANCE|authorParity=UNVERIFIED",
+        )
     }
 
     /**
-     * Opt-in live discovery, scoped to one operator-named title and one
-     * explicitly selected source. Matching a source's title/alias is not
-     * independent editorial proof, never an implicit edition confirmation.
+     * Live MangaAll integration audit. One request enters the SINGLE original
+     * signed code8 Host router, which fans out to all three source adapters.
      *
-     * The shell harness hides this private work/chapter hand-off from CI logs
-     * and never uses a lookup cursor or source ID from another title.
+     * A source-specific ambiguity MUST NOT prevent inspection of another
+     * source. Do not convert matching titles into editorial edition grants:
+     * even three successful image paths are not author/edition confirmation.
      */
-    @Test(timeout = 270_000L)
-    fun mangaAllSignedCode8LiveBatchDiscoverChapterOne() = runBlocking {
+    @Test(timeout = 540_000L)
+    fun mangaAllSignedCode8LiveBatchAuditAllSources() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
         assertEquals("true", args.getString("mangaAllLiveBatchOptIn"))
@@ -1674,12 +1691,10 @@ class ScriptProviderReadingGatewayIsolationTest {
             requireNotNull(args.getString("mangaAllBatchTitleBase64")),
             android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP,
         ).toString(Charsets.UTF_8).trim()
-        val source = requireNotNull(args.getString("mangaAllBatchSource"))
         val language = requireNotNull(args.getString("facetLanguage"))
         require(title.length in 2..120 && title.none { it.isISOControl() || it == '|' })
-        require(source in setOf("mangadex", "mangadot", "mangafire"))
-        require(Regex("[a-z]{2}(-[a-z]{2})?").matches(language))
-        require(source != "mangafire" || language == "en")
+        // English is the only facet shared by ALL THREE published adapters.
+        require(language == "en")
 
         val packageBytes = instrumentation.context.assets
             .open("mangaall/code8-published-package.tsz").use { it.readBytes() }
@@ -1699,9 +1714,12 @@ class ScriptProviderReadingGatewayIsolationTest {
             baseHttpClient = OkHttpClient.Builder()
                 .callTimeout(25, java.util.concurrent.TimeUnit.SECONDS).build(),
         )
+        val sources = listOf("mangadex", "mangadot", "mangafire")
 
         fun inconclusive(reason: String) {
-            MangaAllInstrumentationVerdict.publish("MANGAALL_BATCH_DISCOVERY|outcome=INCONCLUSIVE|reason=$reason")
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_BATCH_AUDIT|outcome=INCONCLUSIVE|reason=$reason",
+            )
         }
 
         fun normalize(value: String): String = java.text.Normalizer
@@ -1710,13 +1728,33 @@ class ScriptProviderReadingGatewayIsolationTest {
             .lowercase(java.util.Locale.ROOT)
             .replace(Regex("\\s+"), " ")
 
+        fun sourceVerdict(
+            source: String,
+            outcome: String,
+            candidates: Int,
+            workId: String? = null,
+            chapterId: String? = null,
+        ) {
+            val ready = if (workId != null && chapterId != null) {
+                "|workId=$workId|chapterId=$chapterId|language=$language"
+            } else {
+                ""
+            }
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_BATCH_SOURCE|source=$source|outcome=$outcome|candidates=$candidates$ready",
+            )
+        }
+
         try {
-            withTimeout(235_000L) {
-                val observedWorkIds = linkedSetOf<String>()
+            withTimeout(500_000L) {
+                val observed = sources.associateWith {
+                    linkedMapOf<String, tachiyomi.domain.tsuzuki.provider.reading.ProviderWorkCandidate>()
+                }
                 var lookupCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
                 val seenLookupCursors = hashSetOf<String>()
                 var lookupCompleted = false
-                for (index in 0 until 6) {
+                // Never interpret a partial provider result as a complete catalog.
+                for (index in 0 until 8) {
                     val response = withTimeout(50_000L) {
                         gateway.lookup(
                             providerId,
@@ -1731,18 +1769,25 @@ class ScriptProviderReadingGatewayIsolationTest {
                         inconclusive("LOOKUP_UNAVAILABLE")
                         return@withTimeout
                     }
-                    response.value.items.asSequence()
-                        .filter { it.externalWorkId.startsWith("$source:") }
-                        .filter { it.language == null || it.language == language }
-                        .filter {
-                            normalize(it.title) == normalize(title) ||
-                                it.aliases.any { alias -> normalize(alias) == normalize(title) }
+                    for (candidate in response.value.items) {
+                        val source = sources.firstOrNull {
+                            candidate.externalWorkId.startsWith("$it:")
                         }
-                        .map { it.externalWorkId }
-                        .forEach { observedWorkIds.add(it) }
-                    if (observedWorkIds.size > 1) {
-                        inconclusive("AMBIGUOUS_SOURCE_MATCH")
-                        return@withTimeout
+                        if (source == null) {
+                            inconclusive("INVALID_SOURCE_IDENTITY")
+                            return@withTimeout
+                        }
+                        if (candidate.language != null && candidate.language != language) {
+                            inconclusive("SOURCE_LANGUAGE_CONFLICT")
+                            return@withTimeout
+                        }
+                        val known = requireNotNull(observed[source])
+                        val prior = known[candidate.externalWorkId]
+                        if (prior != null && normalize(prior.title) != normalize(candidate.title)) {
+                            inconclusive("SOURCE_IDENTITY_CONFLICT")
+                            return@withTimeout
+                        }
+                        known[candidate.externalWorkId] = candidate
                     }
                     val next = response.value.nextCursor
                     if (next == null) {
@@ -1759,69 +1804,98 @@ class ScriptProviderReadingGatewayIsolationTest {
                     inconclusive("LOOKUP_CURSOR_LIMIT")
                     return@withTimeout
                 }
-                if (observedWorkIds.size != 1) {
-                    inconclusive("NO_EXACT_SOURCE_MATCH")
-                    return@withTimeout
+
+                // Metadata signals are diagnostics, NOT editorial proof that
+                // every source HID represents the same edition.
+                val uniqueWorks = sources.mapNotNull { observed[it]?.values?.singleOrNull() }
+                val titleParity = when {
+                    uniqueWorks.size < 2 -> "UNVERIFIED"
+                    uniqueWorks.map { normalize(it.title) }.distinct().size == 1 -> "CONSISTENT"
+                    else -> "VARIANCE"
                 }
-                val workId = observedWorkIds.single()
-                if (!Regex("(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}").matches(workId)) {
-                    inconclusive("INVALID_SOURCE_IDENTITY")
-                    return@withTimeout
+                val authors = uniqueWorks.map { candidate ->
+                    candidate.authors.map(::normalize).filter(String::isNotBlank).toSet()
+                }.filter { it.isNotEmpty() }
+                val authorParity = when {
+                    authors.size < 2 -> "UNVERIFIED"
+                    authors.indices.any { left ->
+                        (left + 1 until authors.size).any { right ->
+                            authors[left].intersect(authors[right]).isEmpty()
+                        }
+                    } -> "VARIANCE"
+                    else -> "CONSISTENT"
                 }
-                val binding = ProviderBindingRef(providerId, language, workId)
-                val chapterOneIds = linkedSetOf<String>()
-                var chapterCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
-                val seenChapterCursors = hashSetOf<String>()
-                var chaptersCompleted = false
-                for (index in 0 until 12) {
-                    val response = withTimeout(50_000L) {
-                        gateway.chapters(
-                            providerId,
-                            ProviderReadingChaptersRequest(binding, cursor = chapterCursor),
-                        )
+
+                // Work on every source independently AFTER the unified lookup.
+                // Ambiguous editions remain visible; they do not suppress the
+                // other sources' chapter evidence or Reader pixel probes.
+                for (source in sources) {
+                    val matches = requireNotNull(observed[source])
+                    val count = matches.size
+                    if (count == 0) {
+                        sourceVerdict(source, "MISSING", count)
+                        continue
                     }
-                    if (response !is ProviderCallResult.Success) {
-                        inconclusive("CHAPTERS_UNAVAILABLE")
-                        return@withTimeout
+                    if (count > 1) {
+                        sourceVerdict(source, "AMBIGUOUS", count)
+                        continue
                     }
-                    response.value.items.asSequence()
-                        .filter { it.rawNumber == 1.0 && it.volume == null }
-                        .filter { it.language == null || it.language == language }
-                        .map { it.providerChapterId }
-                        .forEach { chapterOneIds.add(it) }
-                    if (chapterOneIds.size > 1) {
-                        inconclusive("AMBIGUOUS_CHAPTER_ONE")
-                        return@withTimeout
+                    val workId = matches.keys.single()
+                    if (!Regex("(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}").matches(workId)) {
+                        sourceVerdict(source, "INVALID_SOURCE_IDENTITY", count)
+                        continue
                     }
-                    val next = response.value.nextCursor
-                    if (next == null) {
-                        chaptersCompleted = true
-                        break
+                    val binding = ProviderBindingRef(providerId, language, workId)
+                    val chapters = linkedSetOf<String>()
+                    val seenChapterCursors = hashSetOf<String>()
+                    var chapterCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
+                    var complete = false
+                    var failed = false
+                    for (page in 0 until 12) {
+                        val response = withTimeout(35_000L) {
+                            gateway.chapters(
+                                providerId,
+                                ProviderReadingChaptersRequest(binding, cursor = chapterCursor),
+                            )
+                        }
+                        if (response !is ProviderCallResult.Success) {
+                            failed = true
+                            break
+                        }
+                        response.value.items.asSequence()
+                            .filter { it.rawNumber == 1.0 && it.volume == null }
+                            .filter { it.language == null || it.language == language }
+                            .map { it.providerChapterId }
+                            .forEach { chapters.add(it) }
+                        val next = response.value.nextCursor
+                        if (next == null) {
+                            complete = true
+                            break
+                        }
+                        if (!seenChapterCursors.add(next.toString())) {
+                            break
+                        }
+                        chapterCursor = next
                     }
-                    if (!seenChapterCursors.add(next.toString())) {
-                        inconclusive("CHAPTER_CURSOR_LIMIT")
-                        return@withTimeout
+                    val status = when {
+                        failed -> "CHAPTERS_UNAVAILABLE"
+                        !complete -> "CHAPTER_CURSOR_LIMIT"
+                        chapters.isEmpty() -> "CHAPTER_ONE_NOT_ATTESTED"
+                        chapters.size > 1 -> "AMBIGUOUS_CHAPTER_ONE"
+                        !Regex("[A-Za-z0-9._:-]{1,160}").matches(chapters.single()) -> {
+                            "INVALID_SOURCE_IDENTITY"
+                        }
+                        else -> "READY"
                     }
-                    chapterCursor = next
+                    if (status == "READY") {
+                        sourceVerdict(source, status, count, workId, chapters.single())
+                    } else {
+                        sourceVerdict(source, status, count)
+                    }
                 }
-                if (!chaptersCompleted) {
-                    inconclusive("CHAPTER_CURSOR_LIMIT")
-                    return@withTimeout
-                }
-                if (chapterOneIds.size != 1) {
-                    inconclusive("CHAPTER_ONE_NOT_ATTESTED")
-                    return@withTimeout
-                }
-                val chapterId = chapterOneIds.single()
-                if (!Regex("[A-Za-z0-9._:-]{1,160}").matches(chapterId)) {
-                    inconclusive("INVALID_SOURCE_IDENTITY")
-                    return@withTimeout
-                }
-                // IDs are an internal handoff to the NEXT isolated instrumentation
-                // invocation. The runner exports only per-title closed verdicts.
                 MangaAllInstrumentationVerdict.publish(
-                    "MANGAALL_BATCH_DISCOVERY|outcome=SELECTED|workId=$workId" +
-                        "|chapterId=$chapterId|language=$language",
+                    "MANGAALL_BATCH_AUDIT|outcome=COMPLETE|sources=3" +
+                        "|titleParity=$titleParity|authorParity=$authorParity",
                 )
             }
         } catch (error: kotlinx.coroutines.TimeoutCancellationException) {

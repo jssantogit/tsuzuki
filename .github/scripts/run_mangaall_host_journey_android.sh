@@ -79,6 +79,17 @@ if [ "${MANGAALL_CODE8_ONLY:-0}" = "1" ]; then
     echo 'MANGAALL_JOURNEY|phase=LIVE_VERDICT_INSTRUMENTATION_STATUS_PROTOCOL|outcome=FAIL|reason=STATUS_STREAM_MISSING' >&2
     exit 1
   fi
+  for marker in \
+    'INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_SOURCE|source=mangadex|outcome=READY|candidates=1|workId=mangadex:11111111-2222-4333-8444-555555555555|chapterId=mangadex:aaaa1111-2222-4333-8444-555555555555|language=en' \
+    'INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_SOURCE|source=mangadot|outcome=AMBIGUOUS|candidates=2' \
+    'INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_SOURCE|source=mangafire|outcome=MISSING|candidates=0' \
+    'INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_AUDIT|outcome=COMPLETE|sources=3|titleParity=VARIANCE|authorParity=UNVERIFIED'
+  do
+    if ! grep -Fxq "$marker" "$output/LIVE_VERDICT_INSTRUMENTATION_STATUS_PROTOCOL.txt"; then
+      echo 'MANGAALL_JOURNEY|phase=LIVE_VERDICT_INSTRUMENTATION_STATUS_PROTOCOL|outcome=FAIL|reason=TRI_SOURCE_STATUS_MISSING' >&2
+      exit 1
+    fi
+  done
   run_case 'CODE8_PUBLISHED_TSZ_CONTINUOUS_READER_TAP_503_RETRY_PIXELS' "$real_code8_reader_case" 'androidSourceSwitchOptIn'
   echo 'MANGAALL_JOURNEY|pipeline=PUBLISHED_CODE8_OFFLINE_READER|outcome=PASS|readerPixels=DECODED_SYNTHETIC_HTTP|liveCdn=NOT_TESTED'
   exit 0
