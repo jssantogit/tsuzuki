@@ -2285,6 +2285,10 @@ class ScriptProviderReadingGatewayIsolationTest {
         onRegistry: (DefaultProviderRegistry) -> Unit = {},
         packageBytesOverride: ByteArray? = null,
         baseHttpClient: OkHttpClient = OkHttpClient(),
+        repositoryId: String = REPOSITORY_ID,
+        packageVersionCode: Long = 1L,
+        packageVersionName: String = "1.0.1",
+        experimentalV2OptIn: Boolean = false,
     ): ScriptProviderReadingGateway {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val storageRoot = File(context.cacheDir, "provider-reading-gateway").apply {
@@ -2297,13 +2301,15 @@ class ScriptProviderReadingGatewayIsolationTest {
             browserOrigins = browserOrigins,
             localNetwork = localNetwork,
             includePages = includePages,
+            versionCode = packageVersionCode,
+            versionName = packageVersionName,
         )
         val parsed = ProviderPackageParser().parse(packageBytes)
         val descriptor = ProviderDescriptor(
             id = providerId,
             name = "Reading Fixture",
             version = ProviderVersion(parsed.manifest.version.name, parsed.manifest.version.code),
-            origin = ProviderOrigin.Repository(REPOSITORY_ID),
+            origin = ProviderOrigin.Repository(repositoryId),
             runtime = ProviderRuntimeKind.SCRIPT,
             capabilities = buildSet {
                 add(ProviderCapabilities.ReadingLookupV1)
@@ -2350,7 +2356,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             registry = registry,
             packageSource = ActiveProviderScriptPackageSource {
                 ActiveProviderScriptPackage(
-                    repositoryId = REPOSITORY_ID,
+                    repositoryId = repositoryId,
                     versionCode = parsed.manifest.version.code,
                     bytes = packageBytes,
                     parsed = parsed,
@@ -2358,6 +2364,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             },
             runtimeClient = runtimeClient,
             managedResources = managedFileStore,
+            enableExperimentalMangaAllV2 = experimentalV2OptIn,
         )
     }
 
@@ -2420,6 +2427,8 @@ class ScriptProviderReadingGatewayIsolationTest {
         browserOrigins: Set<String>,
         localNetwork: Boolean,
         includePages: Boolean = true,
+        versionCode: Long = 1L,
+        versionName: String = "1.0.1",
     ): ByteArray {
         fun origins(values: Set<String>) =
             values.joinToString(prefix = "[", postfix = "]") { value -> """"$value"""" }
@@ -2430,7 +2439,7 @@ class ScriptProviderReadingGatewayIsolationTest {
               "manifestVersion": 1,
               "id": "${providerId.value}",
               "name": "Reading Fixture",
-              "version": {"name": "1.0.1", "code": 1},
+              "version": {"name": "$versionName", "code": $versionCode},
               "minHostApi": 1,
               "entrypoint": "main.js",
               "capabilities": [
