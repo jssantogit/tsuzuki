@@ -22,30 +22,42 @@ MANIFEST = ROOT / ".github/mangaall-live-batch.json"
 RESULT = ROOT / ".github/results/mangaall-live-pages-android/summary.json"
 PACKAGE = "app.tsuzuki.dev"
 RUNNER = "app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner"
+SOURCES = ("mangadex", "mangadot", "mangafire")
 DISCOVERY_TEST = (
     "eu.kanade.tachiyomi.provider.reading."
     "ScriptProviderReadingGatewayIsolationTest#"
-    "mangaAllSignedCode8LiveBatchDiscoverChapterOne"
+    "mangaAllSignedCode8LiveBatchAuditAllSources"
 )
 ID_PATTERN = re.compile(r"(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}")
 CHAPTER_PATTERN = re.compile(r"[A-Za-z0-9._:-]{1,160}")
 LANGUAGE_PATTERN = re.compile(r"[a-z]{2}(?:-[a-z]{2})?")
-SELECTED = re.compile(
-    r"(?m)^INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_DISCOVERY\|outcome=SELECTED"
+SOURCE_LINE = re.compile(
+    r"(?m)^INSTRUMENTATION_STATUS: stream=(MANGAALL_BATCH_SOURCE\|[^\r\n]+)$"
+)
+AUDIT_LINE = re.compile(
+    r"(?m)^INSTRUMENTATION_STATUS: stream=(MANGAALL_BATCH_AUDIT\|[^\r\n]+)$"
+)
+SOURCE_READY = re.compile(
+    r"MANGAALL_BATCH_SOURCE\|source=(mangadex|mangadot|mangafire)"
+    r"\|outcome=READY\|candidates=1"
     r"\|workId=((?:mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128})"
-    r"\|chapterId=([A-Za-z0-9._:-]{1,160})"
-    r"\|language=([a-z]{2}(?:-[a-z]{2})?)"
+    r"\|chapterId=([A-Za-z0-9._:-]{1,160})\|language=en"
 )
-DISCOVERY_REASONS = (
-    "LOOKUP_UNAVAILABLE", "AMBIGUOUS_SOURCE_MATCH",
-    "LOOKUP_CURSOR_LIMIT", "NO_EXACT_SOURCE_MATCH",
-    "INVALID_SOURCE_IDENTITY", "CHAPTERS_UNAVAILABLE",
-    "AMBIGUOUS_CHAPTER_ONE", "CHAPTER_CURSOR_LIMIT",
-    "CHAPTER_ONE_NOT_ATTESTED", "UPSTREAM_TIMEOUT",
+SOURCE_OTHER = re.compile(
+    r"MANGAALL_BATCH_SOURCE\|source=(mangadex|mangadot|mangafire)"
+    r"\|outcome=(MISSING|AMBIGUOUS|CHAPTERS_UNAVAILABLE|CHAPTER_ONE_NOT_ATTESTED|"
+    r"CHAPTER_CURSOR_LIMIT|AMBIGUOUS_CHAPTER_ONE|INVALID_SOURCE_IDENTITY)"
+    r"\|candidates=([0-9]{1,5})"
 )
-DISCOVERY_INCONCLUSIVE = re.compile(
-    r"(?m)^INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_DISCOVERY\|outcome=INCONCLUSIVE\|reason=("
-    + "|".join(DISCOVERY_REASONS) + r")"
+AUDIT_COMPLETE = re.compile(
+    r"MANGAALL_BATCH_AUDIT\|outcome=COMPLETE\|sources=3"
+    r"\|titleParity=(CONSISTENT|VARIANCE|UNVERIFIED)"
+    r"\|authorParity=(CONSISTENT|VARIANCE|UNVERIFIED)"
+)
+AUDIT_INCONCLUSIVE = re.compile(
+    r"MANGAALL_BATCH_AUDIT\|outcome=INCONCLUSIVE\|reason="
+    r"(LOOKUP_UNAVAILABLE|LOOKUP_CURSOR_LIMIT|INVALID_SOURCE_IDENTITY|"
+    r"SOURCE_LANGUAGE_CONFLICT|SOURCE_IDENTITY_CONFLICT|UPSTREAM_TIMEOUT)"
 )
 GATE_REASONS = (
     "CHAPTER_ATTESTATION_UNAVAILABLE",
@@ -73,7 +85,6 @@ GATE_PASS = re.compile(
 @dataclass(frozen=True)
 class Plan:
     titles: tuple[str, ...]
-    source: str
     language: str
     mode: str
 
@@ -109,7 +120,7 @@ def _validated_title(value: object) -> str:
 def parse_plan(data: object) -> Plan:
     if not isinstance(data, dict):
         raise ValueError("INVALID_PLAN")
-    if set(data) != {"titles", "source", "language", "mode"}:
+    if set(data) != {"titles", "language", "mode"}:
         raise ValueError("UNEXPECTED_PLAN_FIELDS")
     raw_titles = data["titles"]
     if isinstance(raw_titles, str):
@@ -120,16 +131,14 @@ def parse_plan(data: object) -> Plan:
     names = [unicodedata.normalize("NFKD", t).casefold() for t in titles]
     if len(set(names)) != len(names):
         raise ValueError("DUPLICATE_TITLE")
-    source, language, mode = (data[k] for k in ("source", "language", "mode"))
-    if source not in ("mangadex", "mangadot", "mangafire"):
-        raise ValueError("INVALID_SOURCE")
-    if not isinstance(language, str) or not LANGUAGE_PATTERN.fullmatch(language):
-        raise ValueError("INVALID_LANGUAGE")
-    if source == "mangafire" and language != "en":
-        raise ValueError("UNSUPPORTED_FACET")
+    language, mode = data["language"], data["mode"]
+    # All three published code8 sub-sources announce English. Portuguese is a
+    # different, two-source audit, never mislabeled "tri-source complete".
+    if language != "en":
+        raise ValueError("INVALID_TRI_SOURCE_FACET")
     if mode not in ("reader", "transport"):
         raise ValueError("INVALID_MODE")
-    return Plan(titles, source, language, mode)
+    return Plan(titles, language, mode)
 
 
 def read_plan(environ: dict[str, str], manifest: Path = MANIFEST) -> Plan:
@@ -142,7 +151,6 @@ def read_plan(environ: dict[str, str], manifest: Path = MANIFEST) -> Plan:
         raise ValueError("EVENT_NOT_ALLOWED")
     return parse_plan({
         "titles": environ.get("MANGAALL_BATCH_TITLES", ""),
-        "source": environ.get("MANGAALL_BATCH_SOURCE", "mangafire"),
         "language": environ.get("MANGAALL_BATCH_LANGUAGE", "en"),
         "mode": environ.get("MANGAALL_BATCH_MODE", "reader"),
     })
@@ -166,25 +174,61 @@ def _instrumentation_good(stdout: str, returncode: int) -> bool:
 
 
 def _parse_discovery(stdout: str, code: int, plan: Plan):
+    """Require a COMPLETE three-source audit, never a single-source handoff."""
     if not _instrumentation_good(stdout, code):
-        return "FAIL", "DISCOVERY_INSTRUMENTATION", None
-    selected = set(SELECTED.findall(stdout))
-    if selected:
-        if len(selected) != 1:
-            return "FAIL", "CONFLICTING_DISCOVERY_RECORDS", None
-        work_id, chapter_id, language = next(iter(selected))
-        if (
-            not ID_PATTERN.fullmatch(work_id)
-            or not work_id.startswith(plan.source + ":")
-            or not CHAPTER_PATTERN.fullmatch(chapter_id)
-            or language != plan.language
-        ):
-            return "FAIL", "INVALID_DISCOVERY_HANDOFF", None
-        return "SELECTED", "EXACT_SOURCE_CHAPTER_ONE", (work_id, chapter_id)
-    inconclusive = set(DISCOVERY_INCONCLUSIVE.findall(stdout))
-    if len(inconclusive) == 1:
-        return "INCONCLUSIVE", next(iter(inconclusive)), None
-    return "FAIL", "MISSING_DISCOVERY_VERDICT", None
+        return "FAIL", "DISCOVERY_INSTRUMENTATION", [], {}
+    audits = AUDIT_LINE.findall(stdout)
+    if len(audits) != 1:
+        return "FAIL", "MISSING_OR_CONFLICTING_AUDIT", [], {}
+    if AUDIT_INCONCLUSIVE.fullmatch(audits[0]):
+        reason = AUDIT_INCONCLUSIVE.fullmatch(audits[0]).group(1)
+        return "INCONCLUSIVE", reason, [], {}
+    summary = AUDIT_COMPLETE.fullmatch(audits[0])
+    if summary is None:
+        return "FAIL", "INVALID_AUDIT_CONTRACT", [], {}
+
+    lines = SOURCE_LINE.findall(stdout)
+    if len(lines) != len(SOURCES):
+        return "FAIL", "MISSING_SOURCE_VERDICTS", [], {}
+    records = []
+    for source_expected, line in zip(SOURCES, lines):
+        ready = SOURCE_READY.fullmatch(line)
+        other = SOURCE_OTHER.fullmatch(line)
+        if ready:
+            source, work_id, chapter_id = ready.groups()
+            if (
+                source != source_expected
+                or not ID_PATTERN.fullmatch(work_id)
+                or not work_id.startswith(source + ":")
+                or not CHAPTER_PATTERN.fullmatch(chapter_id)
+                or not chapter_id.startswith(source + ":")
+            ):
+                return "FAIL", "INVALID_SOURCE_HANDOFF", [], {}
+            records.append({
+                "source": source, "discovery": "READY", "candidates": 1,
+                "handoff": (work_id, chapter_id),
+            })
+        elif other:
+            source, outcome, count_text = other.groups()
+            count = int(count_text)
+            if (
+                source != source_expected
+                or (outcome == "MISSING") != (count == 0)
+                or (outcome == "AMBIGUOUS") != (count > 1)
+                and outcome in {"MISSING", "AMBIGUOUS"}
+                or (outcome not in {"MISSING", "AMBIGUOUS"} and count != 1)
+            ):
+                return "FAIL", "INVALID_SOURCE_VERDICT", [], {}
+            records.append({
+                "source": source, "discovery": outcome, "candidates": count,
+                "handoff": None,
+            })
+        else:
+            return "FAIL", "INVALID_SOURCE_VERDICT", [], {}
+
+    return "COMPLETE", "TRI_SOURCE_LOOKUP", records, {
+        "titleParity": summary.group(1), "authorParity": summary.group(2),
+    }
 
 
 def _parse_gate(stdout: str, code: int, plan: Plan):
@@ -230,22 +274,21 @@ def _install_test_apks() -> None:
 def _discover(title: str, plan: Plan):
     clean = _exec(["adb", "shell", "pm", "clear", PACKAGE], 20)
     if clean.returncode or "Success" not in clean.stdout:
-        return "FAIL", "APP_RESET_FAILED", None
+        return "FAIL", "APP_RESET_FAILED", [], {}
     cmd = [
         "adb", "shell", "am", "instrument", "-w", "-r",
         "-e", "class", DISCOVERY_TEST,
         "-e", "mangaAllLiveBatchOptIn", "true",
         "-e", "mangaAllBatchTitleBase64", base64.urlsafe_b64encode(title.encode("utf-8")).decode("ascii"),
-        "-e", "mangaAllBatchSource", plan.source,
         "-e", "facetLanguage", plan.language,
         RUNNER,
     ]
     try:
-        outcome = _exec(cmd, 250)
+        outcome = _exec(cmd, 520)
     except subprocess.TimeoutExpired:
-        return "INCONCLUSIVE", "DISCOVERY_TIMEOUT", None
+        return "INCONCLUSIVE", "DISCOVERY_TIMEOUT", [], {}
     except OSError:
-        return "FAIL", "DISCOVERY_INSTRUMENTATION", None
+        return "FAIL", "DISCOVERY_INSTRUMENTATION", [], {}
     return _parse_discovery(outcome.stdout, outcome.returncode, plan)
 
 
@@ -275,17 +318,48 @@ def execute(plan: Plan) -> int:
     try:
         _install_test_apks()
         for index, title in enumerate(plan.titles, 1):
-            print(f"MANGAALL_BATCH|case={index}/{len(plan.titles)}|stage=START")
-            status, reason, handoff = _discover(title, plan)
-            if handoff is not None:
-                status, reason = _gate(*handoff, plan)
+            print(f"MANGAALL_BATCH|case={index}/{len(plan.titles)}|stage=UNIFIED_LOOKUP")
+            discovery, reason, records, parity = _discover(title, plan)
+            source_results = []
+            if discovery == "COMPLETE":
+                for record in records:
+                    source = record["source"]
+                    status, source_reason = "INCONCLUSIVE", record["discovery"]
+                    if record["handoff"] is not None:
+                        status, source_reason = _gate(*record["handoff"], plan)
+                    elif record["discovery"] == "INVALID_SOURCE_IDENTITY":
+                        status, source_reason = "FAIL", "INVALID_SOURCE_IDENTITY"
+                    source_results.append({
+                        "source": source, "candidates": record["candidates"],
+                        "discovery": record["discovery"],
+                        "outcome": status, "reason": source_reason,
+                    })
+                    print(
+                        f"MANGAALL_BATCH|case={index}/{len(plan.titles)}|source={source}"
+                        f"|candidates={record['candidates']}|outcome={status}|reason={source_reason}"
+                    )
+                if any(x["outcome"] == "FAIL" for x in source_results):
+                    outcome, reason = "FAIL", "SOURCE_PIPELINE_FAILURE"
+                elif "VARIANCE" in parity.values():
+                    outcome, reason = "INCONCLUSIVE", "CROSS_SOURCE_METADATA_VARIANCE"
+                elif all(x["outcome"] == "PASS" for x in source_results):
+                    # Transport/pixel acceptance, NOT editorial work/edition proof.
+                    outcome, reason = "PASS", "TRI_SOURCE_READER_OR_TRANSPORT"
+                else:
+                    outcome, reason = "INCONCLUSIVE", "SOURCE_COVERAGE_OR_EDITION_AMBIGUITY"
+            else:
+                outcome = discovery
             results.append({
-                "index": index, "title": title, "outcome": status, "reason": reason,
+                "index": index, "title": title, "outcome": outcome,
+                "reason": reason, "parity": parity, "sources": source_results,
             })
-            print(f"MANGAALL_BATCH|case={index}/{len(plan.titles)}|outcome={status}|reason={reason}")
+            print(
+                f"MANGAALL_BATCH|case={index}/{len(plan.titles)}"
+                f"|outcome={outcome}|reason={reason}"
+                f"|titleParity={parity.get('titleParity', 'UNVERIFIED')}"
+                f"|authorParity={parity.get('authorParity', 'UNVERIFIED')}"
+            )
     finally:
-        # Even failed batches cannot leave source IDs, cookies, raw logs or
-        # test app data on the runner/emulator.
         for args in (
             ["adb", "shell", "am", "force-stop", PACKAGE],
             ["adb", "shell", "pm", "clear", PACKAGE],
@@ -294,11 +368,11 @@ def execute(plan: Plan) -> int:
                 _exec(args, 15)
             except (OSError, subprocess.TimeoutExpired):
                 pass
-        raw = RESULT.parent / "instrumentation-private.txt"
-        raw.unlink(missing_ok=True)
+        (RESULT.parent / "instrumentation-private.txt").unlink(missing_ok=True)
         RESULT.write_text(json.dumps({
-            "schemaVersion": 1, "mode": plan.mode,
-            "source": plan.source, "language": plan.language,
+            "schemaVersion": 2, "provider": "app.tsuzuki.mangaall",
+            "sources": list(SOURCES), "mode": plan.mode, "language": plan.language,
+            "editorialIdentityVerified": False,
             "total": len(plan.titles), "completed": len(results),
             "passed": sum(x["outcome"] == "PASS" for x in results),
             "inconclusive": sum(x["outcome"] == "INCONCLUSIVE" for x in results),
@@ -313,7 +387,6 @@ def execute(plan: Plan) -> int:
             sum(x["outcome"] == "FAIL" for x in results),
         )
     )
-    # Explicitly fail-closed for unresolved or partial batches.
     return 0 if len(results) == len(plan.titles) and all(
         x["outcome"] == "PASS" for x in results
     ) else 2
@@ -332,8 +405,7 @@ def main() -> int:
         permitted = {
             "TITLES_NOT_ARRAY", "INVALID_TITLE", "INVALID_PLAN",
             "UNEXPECTED_PLAN_FIELDS", "INVALID_TITLE_COUNT", "DUPLICATE_TITLE",
-            "INVALID_SOURCE", "INVALID_LANGUAGE", "UNSUPPORTED_FACET",
-            "INVALID_MODE", "UNAUTHORIZED_PUSH_BRANCH", "EVENT_NOT_ALLOWED",
+            "INVALID_TRI_SOURCE_FACET", "INVALID_MODE", "UNAUTHORIZED_PUSH_BRANCH", "EVENT_NOT_ALLOWED",
             "APK_NOT_UNIQUE", "NOT_DISPOSABLE_EMULATOR", "APK_INSTALL_FAILED",
         }
         print("MANGAALL_BATCH|outcome=FAIL|reason=" + (
