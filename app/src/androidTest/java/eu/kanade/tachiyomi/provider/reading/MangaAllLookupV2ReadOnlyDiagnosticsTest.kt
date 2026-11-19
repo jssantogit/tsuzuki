@@ -169,8 +169,11 @@ class MangaAllLookupV2ReadOnlyDiagnosticsTest {
         assertEquals(MangaAllLookupV2ReadOnlyCursorAccumulator.Verdict.IN_PROGRESS, first.verdict)
         assertEquals(3, first.observedWorks.size)
         assertFalse(first.sourceHistory[1].completed)
-        assertEquals(403, MangaAllLookupV2ReadOnlyDiagnostics.decodeReadOnly(partial().toString())
-            ?.sources?.get(1)?.httpStatus)
+        assertEquals(
+            403,
+            MangaAllLookupV2ReadOnlyDiagnostics.decodeReadOnly(partial().toString())
+                ?.sources?.get(1)?.httpStatus,
+        )
 
         val retrySuccess = full()
             .put("state", "PARTIAL_EVIDENCE")
