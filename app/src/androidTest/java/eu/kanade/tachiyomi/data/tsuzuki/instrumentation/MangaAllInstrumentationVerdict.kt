@@ -18,6 +18,12 @@ internal object MangaAllInstrumentationVerdict {
         Regex("""MANGAALL_STATUS_PROBE\|outcome=VISIBLE"""),
         Regex("""MANGAALL_BATCH_AUDIT\|outcome=INCONCLUSIVE\|reason=[A-Z_]{3,64}"""),
         Regex(
+            """MANGAALL_BATCH_AUDIT\|outcome=INCONCLUSIVE\|reason=LOOKUP_UNAVAILABLE""" +
+                """\|code=[A-Z_]{3,40}\|sourceFailure=(NONE|CHALLENGE_BLOCKED|HTTP_ERROR|""" +
+                """INVALID_RESPONSE|UNCLASSIFIED_ERROR)""" +
+                """\|httpStatus=(NONE|[1-5][0-9]{2})\|retryable=(true|false)""",
+        ),
+        Regex(
             """MANGAALL_BATCH_AUDIT\|outcome=COMPLETE\|sources=3""" +
                 """\|titleParity=(CONSISTENT|VARIANCE|UNVERIFIED)""" +
                 """\|authorParity=(CONSISTENT|VARIANCE|UNVERIFIED)""",
