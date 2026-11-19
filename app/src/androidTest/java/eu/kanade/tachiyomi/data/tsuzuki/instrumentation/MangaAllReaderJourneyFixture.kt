@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.tsuzuki.instrumentation
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import kotlinx.coroutines.withTimeout
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.provider.reading.ActiveProviderScriptPackage
 import eu.kanade.tachiyomi.provider.reading.ActiveProviderScriptPackageSource
@@ -51,6 +52,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterEvidenceAdapter
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBinding
@@ -58,6 +60,7 @@ import tachiyomi.domain.tsuzuki.provider.reading.RefreshProviderReadingChapters
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipEntry
@@ -71,6 +74,18 @@ import java.util.zip.ZipOutputStream
  * Only its injected Provider registry and package source are synthetic. No
  * repository enrolment, signature trust or production Provider is modified.
  */
+internal data class MangaAllLiveReaderTarget(
+    val workId: String,
+    val chapterId: String,
+    val language: String,
+) {
+    init {
+        require(Regex("(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}").matches(workId))
+        require(Regex("[A-Za-z0-9._:-]{1,160}").matches(chapterId))
+        require(Regex("[a-z]{2}(-[a-z]{2})?").matches(language))
+    }
+}
+
 internal class MangaAllReaderJourneyFixture(
     private val context: Context,
     private val reader: ReaderActivity,
@@ -78,13 +93,15 @@ internal class MangaAllReaderJourneyFixture(
     private val chapter: CanonicalChapter,
     private val originalCode7Package: Boolean = false,
     private val originalCode8Package: Boolean = false,
+    private val liveTarget: MangaAllLiveReaderTarget? = null,
 ) : AutoCloseable {
     init {
         require(!(originalCode7Package && originalCode8Package)) { "Select exactly one original MangaAll package" }
+        require(liveTarget == null || originalCode8Package) { "Live Reader requires original code8" }
     }
     private val providerId = ProviderId("app.tsuzuki.mangaall")
-    private val workId = "mangafire:zk12"
-    private val sourceChapterId = if (originalCode7Package || originalCode8Package) {
+    private val workId = liveTarget?.workId ?: "mangafire:zk12"
+    private val sourceChapterId = liveTarget?.chapterId ?: if (originalCode7Package || originalCode8Package) {
         "mangafire:punpun-fixture-ch1"
     } else {
         "mangafire:chapter-one"
