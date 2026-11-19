@@ -77,10 +77,14 @@ internal class MangaAllReaderJourneyFixture(
     private val database: Database,
     private val chapter: CanonicalChapter,
     private val originalCode7Package: Boolean = false,
+    private val originalCode8Package: Boolean = false,
 ) : AutoCloseable {
+    init {
+        require(!(originalCode7Package && originalCode8Package)) { "Select exactly one original MangaAll package" }
+    }
     private val providerId = ProviderId("app.tsuzuki.mangaall")
     private val workId = "mangafire:zk12"
-    private val sourceChapterId = if (originalCode7Package) {
+    private val sourceChapterId = if (originalCode7Package || originalCode8Package) {
         "mangafire:punpun-fixture-ch1"
     } else {
         "mangafire:chapter-one"
@@ -164,7 +168,10 @@ internal class MangaAllReaderJourneyFixture(
             descriptor = ProviderDescriptor(
                 id = providerId,
                 name = "MangaAll (isolated test)",
-                version = ProviderVersion("0.5.2", 7),
+                version = ProviderVersion(
+                    if (originalCode8Package) "0.5.3" else "0.5.2",
+                    if (originalCode8Package) 8 else 7,
+                ),
                 origin = ProviderOrigin.Repository("mangaall-android-fixture"),
                 runtime = ProviderRuntimeKind.SCRIPT,
                 capabilities = setOf(
@@ -173,7 +180,7 @@ internal class MangaAllReaderJourneyFixture(
                     ProviderCapabilities.ReadingPagesV1,
                 ),
                 permissions = ProviderPermissionSet(
-                    network = if (originalCode7Package) {
+                    network = if (originalCode7Package || originalCode8Package) {
                         ProviderNetworkPermission(
                             setOf(
                                 "https://api.mangadex.org",
@@ -215,13 +222,20 @@ internal class MangaAllReaderJourneyFixture(
               }
             };
         """.trimIndent()
-        val bytes = if (originalCode7Package) {
-            InstrumentationRegistry.getInstrumentation().context.assets
+        val bytes = when {
+            originalCode8Package -> InstrumentationRegistry.getInstrumentation().context.assets
+                .open("mangaall/code8-published-package.tsz").use { it.readBytes() }
+            originalCode7Package -> InstrumentationRegistry.getInstrumentation().context.assets
                 .open("mangaall/code7-package.tsz").use { it.readBytes() }
-        } else {
-            syntheticPackage(origin, script)
+            else -> syntheticPackage(origin, script)
         }
         val parsed = ProviderPackageParser().parse(bytes)
+        if (originalCode8Package) {
+            assertEquals("app.tsuzuki.mangaall", parsed.manifest.id)
+            assertEquals("0.5.3", parsed.manifest.version.name)
+            assertEquals(8L, parsed.manifest.version.code)
+            assertTrue(parsed.entries.containsKey("modules/router.js"))
+        }
         if (originalCode7Package) {
             assertEquals("app.tsuzuki.mangaall", parsed.manifest.id)
             assertEquals("0.5.2", parsed.manifest.version.name)
@@ -246,7 +260,7 @@ internal class MangaAllReaderJourneyFixture(
             packageSource = ActiveProviderScriptPackageSource {
                 ActiveProviderScriptPackage(
                     repositoryId = "mangaall-android-fixture",
-                    versionCode = 7,
+                    versionCode = parsed.manifest.version.code,
                     bytes = bytes,
                     parsed = parsed,
                 )
@@ -256,7 +270,11 @@ internal class MangaAllReaderJourneyFixture(
                 hostInvocationFactory = ProviderHostInvocationFactory(
                     context = context,
                     storageRoot = runtimeCache.apply { deleteRecursively() },
-                    baseHttpClient = if (originalCode7Package) packagedCode7HttpClient() else OkHttpClient(),
+                    baseHttpClient = if (originalCode7Package || originalCode8Package) {
+                        packagedCode7HttpClient()
+                    } else {
+                        OkHttpClient()
+                    },
                 ),
             ),
         )
@@ -298,7 +316,7 @@ internal class MangaAllReaderJourneyFixture(
         assertEquals(providerId, selectedOption.providerId)
         assertEquals(workId, selectedOption.externalWorkId)
         assertEquals(sourceChapterId, selectedOption.providerChapterId)
-        if (originalCode7Package) {
+        if (originalCode7Package || originalCode8Package) {
             originalPageLoaderFactory = pageClientField.get(reader.viewModel)
             val images = packagedCode7ImageClient()
             val pageFactory: (CanonicalReaderTargetPlan.HttpPages) -> ReaderChapterLoader = { plan ->
