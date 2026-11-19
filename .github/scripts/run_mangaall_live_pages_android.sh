@@ -1,11 +1,23 @@
 #!/usr/bin/env bash
 # Manual-only live Android probe: original signed MangaAll code8 -> actual
-# reading.pages -> Host page loader -> decoded image bytes. NOT Reader UI pixels.
+# reading.pages -> Host loader -> optionally the actual ReaderActivity pixels.
 set -euo pipefail
 umask 077
 readonly app='app.tsuzuki.dev'
 readonly runner='app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner'
-readonly test_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllSignedCode8LivePages_downloadAndDecodeAtMostTwo'
+readonly mode="${MANGAALL_GATE_MODE:-transport}"
+case "$mode" in
+  transport)
+    test_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllSignedCode8LivePages_downloadAndDecodeAtMostTwo'
+    ;;
+  reader)
+    test_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#mangaAllPublishedCode8LiveReaderDisplaysCdnPixels'
+    ;;
+  *)
+    echo 'LIVE_PAGE_HARD_STOP|reason=INVALID_GATE_MODE' >&2
+    exit 2
+    ;;
+esac
 readonly output='.github/results/mangaall-live-pages-android'
 mkdir -p "$output"
 
@@ -45,13 +57,15 @@ status=0
 timeout --foreground 230s adb shell am instrument -w -r \
   -e class "$test_case" \
   -e mangaAllLivePageOptIn true \
+  -e mangaAllLiveReaderOptIn true \
+  -e androidSourceSwitchOptIn true \
   -e providerWorkId "$MANGAALL_WORK_ID" \
   -e providerChapterId "$MANGAALL_CHAPTER_ID" \
   -e facetLanguage "$MANGAALL_LANGUAGE" \
   "$runner" > "$raw" 2>&1 || status=$?
 
 # Export only an exact, closed vocabulary verdict (never arbitrary upstream text).
-grep -oE 'MANGAALL_LIVE_PAGE_GATE\|outcome=(INCONCLUSIVE\|reason=(CHAPTER_ATTESTATION_UNAVAILABLE|CHAPTER_NOT_ATTESTED_IN_FIRST_PAGE|PROVIDER_PAGES_UNAVAILABLE|NO_HTTP_PAGES|CDN_FETCH_UNAVAILABLE|INVALID_IMAGE_DIMENSIONS|IMAGE_DECODE_FAILED)|PASS\|provenance=DIRECT_LIVE_ANDROID\|pagesDecoded=[12]\|readerActivityPixels=NOT_TESTED)' \
+grep -oE 'MANGAALL_LIVE_PAGE_GATE\|outcome=(INCONCLUSIVE\|reason=(CHAPTER_ATTESTATION_UNAVAILABLE|CHAPTER_NOT_ATTESTED_IN_FIRST_PAGE|CHAPTER_IDENTITY_NOT_COMPATIBLE_WITH_TEST_FIXTURE|CHAPTER_MAPPING_UNRESOLVED|CDN_OR_READER_UNAVAILABLE|SCREEN_PIXELS_NOT_ATTESTED|PROVIDER_PAGES_UNAVAILABLE|NO_HTTP_PAGES|CDN_FETCH_UNAVAILABLE|INVALID_IMAGE_DIMENSIONS|IMAGE_DECODE_FAILED)|PASS\|provenance=DIRECT_LIVE_ANDROID\|pagesDecoded=[12]\|readerActivityPixels=(NOT_TESTED|REAL_CDN_VISIBLE))' \
   "$raw" | tail -n 1 > "$output/verdict.txt" || true
 if [ "$status" -ne 0 ] || ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw" ||
    ! grep -Fq 'OK (1 test)' "$raw" || [ ! -s "$output/verdict.txt" ]; then
@@ -63,4 +77,10 @@ if ! grep -Fq 'outcome=PASS|' "$output/verdict.txt"; then
   echo 'MANGAALL_LIVE_PAGE_GATE|gate=NOT_ACCEPTED|reason=EXTERNAL_ENVIRONMENT_INCONCLUSIVE'
   exit 2
 fi
-echo 'MANGAALL_LIVE_PAGE_GATE|gate=ANDROID_IMAGE_BYTES_ACCEPTED|readerActivityPixels=NOT_TESTED'
+if [ "$mode" = 'reader' ]; then
+  grep -Fq 'readerActivityPixels=REAL_CDN_VISIBLE' "$output/verdict.txt" || exit 1
+  echo 'MANGAALL_LIVE_PAGE_GATE|gate=ANDROID_REAL_CDN_READER_PIXELS_ACCEPTED'
+else
+  grep -Fq 'readerActivityPixels=NOT_TESTED' "$output/verdict.txt" || exit 1
+  echo 'MANGAALL_LIVE_PAGE_GATE|gate=ANDROID_IMAGE_BYTES_ACCEPTED|readerActivityPixels=NOT_TESTED'
+fi
