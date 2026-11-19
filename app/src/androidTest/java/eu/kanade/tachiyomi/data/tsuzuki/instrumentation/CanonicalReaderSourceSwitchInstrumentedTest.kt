@@ -162,6 +162,98 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         runMangaAllContinuousReaderJourney(originalCode7Package = false, originalCode8Package = true)
     }
 
+    /**
+     * Manual-only online experiment: exact operator-selected source chapter,
+     * real signed code8 JavaScript, real Host HTTPS/CDN, the production
+     * ReaderActivity and its actual on-screen image holder. The canonical
+     * title is a disposable test fixture; this does NOT verify editorial
+     * catalog identity, published installation or a physical device.
+     */
+    @Test(timeout = 300_000L)
+    fun mangaAllPublishedCode8LiveReaderDisplaysCdnPixels() {
+        requireOptIn()
+        val args = InstrumentationRegistry.getArguments()
+        assertEquals("true", args.getString("mangaAllLiveReaderOptIn"))
+        val target = MangaAllLiveReaderTarget(
+            workId = requireNotNull(args.getString("providerWorkId")),
+            chapterId = requireNotNull(args.getString("providerChapterId")),
+            language = requireNotNull(args.getString("facetLanguage")),
+        )
+        withFixture { fixture ->
+            fixture.launchReader()
+            val reader = awaitActivity(ReaderActivity::class.java)
+            awaitReaderPages(reader, fixture.sourceA.name, expectedCount = 10)
+            val initialChapter = requireNotNull(reader.viewModel.state.value.currentChapter)
+            val mangaAll = fixture.mangaAllJourney(reader, liveTarget = target)
+            try {
+                val preflight = try {
+                    runBlocking { mangaAll.attach() }
+                } catch (error: kotlinx.coroutines.TimeoutCancellationException) {
+                    "CHAPTER_ATTESTATION_UNAVAILABLE"
+                }
+                if (preflight != null) {
+                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=" + preflight)
+                    return@withFixture
+                }
+                reader.viewModel.openContentSelector()
+                awaitValue("the exact observed live MangaAll chapter option") {
+                    reader.viewModel.state.value.providerSourceOptions.singleOrNull()
+                        ?.takeIf { it == mangaAll.selectedOption }
+                }
+                val sourceName = when (target.workId.substringBefore(':')) {
+                    "mangadex" -> "MangaDex"
+                    "mangadot" -> "MangaDot"
+                    else -> "MangaFire"
+                }
+                val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+                assertTrue(
+                    "Exact live MangaAll source must be offered by the real Reader source card",
+                    device.wait(Until.hasObject(By.text(sourceName)), UI_TIMEOUT_MS),
+                )
+                device.findObject(By.text(sourceName)).click()
+                val readerReady = try {
+                    awaitValue("real CDN image to become the visible Reader chapter") {
+                        val state = reader.viewModel.state.value
+                        val page = state.currentChapter?.pages?.firstOrNull()
+                        val snapshot = readerViewSnapshot(reader)
+                        (
+                            state.activeCanonicalChapterId == fixture.chapter.id &&
+                                state.activeProviderSourceKey == mangaAll.selectedOption.readerSourceKey &&
+                                state.recovery == null && !state.sourceSelectionInProgress &&
+                                page?.status == Page.State.Ready && page.stream != null &&
+                                isCurrentPageImageVisible(snapshot.pager) &&
+                                reader.window.decorView.hasWindowFocus()
+                            ).takeIf { it }
+                    }
+                } catch (error: AssertionError) {
+                    false
+                }
+                if (!readerReady) {
+                    assertSame(
+                        "An unavailable CDN cannot rewrite the original canonical Reader chapter",
+                        initialChapter,
+                        reader.viewModel.state.value.currentChapter.takeIf {
+                            reader.viewModel.state.value.recovery != null
+                        } ?: initialChapter,
+                    )
+                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CDN_OR_READER_UNAVAILABLE")
+                    return@withFixture
+                }
+                if (!hasLiveReaderPixelEvidence(reader)) {
+                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=SCREEN_PIXELS_NOT_ATTESTED")
+                    return@withFixture
+                }
+                assertEquals(fixture.chapter.id, reader.viewModel.state.value.activeCanonicalChapterId)
+                println(
+                    "MANGAALL_LIVE_PAGE_GATE|outcome=PASS|provenance=DIRECT_LIVE_ANDROID" +
+                        "|pagesDecoded=1|readerActivityPixels=REAL_CDN_VISIBLE",
+                )
+            } finally {
+                mangaAll.close()
+            }
+        }
+    }
+
     private fun runMangaAllContinuousReaderJourney(
         originalCode7Package: Boolean,
         originalCode8Package: Boolean = false,
@@ -2096,13 +2188,15 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             reader: ReaderActivity,
             originalCode7Package: Boolean = false,
             originalCode8Package: Boolean = false,
+            liveTarget: MangaAllLiveReaderTarget? = null,
         ) = MangaAllReaderJourneyFixture(
             context = InstrumentationRegistry.getInstrumentation().targetContext,
             reader = reader,
             database = database,
             chapter = chapter,
             originalCode7Package = originalCode7Package,
-            originalCode8Package = originalCode8Package,
+            originalCode8Package = originalCode8Package || liveTarget != null,
+            liveTarget = liveTarget,
         )
 
         fun launchReader(
