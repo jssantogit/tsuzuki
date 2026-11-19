@@ -246,8 +246,9 @@ class ScriptProviderReadingGatewayIsolationTest {
             name: String,
             repository: String = "app.tsuzuki.providers",
             optIn: Boolean = true,
+            js: String = main,
         ) = gateway(
-            main = main,
+            main = js,
             providerId = mangaAll,
             networkOrigins = emptySet(),
             localNetwork = false,
@@ -293,6 +294,29 @@ class ScriptProviderReadingGatewayIsolationTest {
         )
         assertTrue(wrongFacet is ProviderCallResult.Failure)
         assertEquals("UNAVAILABLE", (wrongFacet as ProviderCallResult.Failure).error.code.name)
+
+        // A correctly versioned package returning the V1 page instead of V2
+        // must fail closed; it must not be decoded as an empty or valid audit.
+        val wrongEnvelopeJs = """
+            export default {
+              reading: {
+                lookup: async () => ({ items: [], nextCursor: null }),
+                chapters: async () => ({items: [], nextCursor: null}),
+                pages: async () => ({type: "page_list", pages: []})
+              }
+            };
+        """.trimIndent()
+        val malformed = fixture(9, "0.5.4-dev-unsigned", js = wrongEnvelopeJs)
+            .lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
+        assertTrue(malformed is ProviderCallResult.Failure)
+        assertEquals("MALFORMED_RESULT", (malformed as ProviderCallResult.Failure).error.code.name)
+
+        // Explicit version-code 10 is not implicitly accepted. Such a future
+        // upgrade needs a separately reviewed and authorized Host contract.
+        val futureDenied = fixture(10, "0.5.5-dev-unsigned")
+            .lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
+        assertTrue(futureDenied is ProviderCallResult.Failure)
+        assertEquals("UNAVAILABLE", (futureDenied as ProviderCallResult.Failure).error.code.name)
     }
 
     @Test
