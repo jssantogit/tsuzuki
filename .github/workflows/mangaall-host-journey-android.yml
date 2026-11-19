@@ -18,6 +18,12 @@ on:
       - 'app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt'
       - 'app/src/main/java/eu/kanade/tachiyomi/ui/reader/loader/ProviderHttpPageLoader.kt'
       - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ProviderHostInvocation.kt'
+  pull_request:
+    paths:
+      - '.github/workflows/mangaall-host-journey-android.yml'
+      - '.github/scripts/run_mangaall_host_journey_android.sh'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllReaderJourneyFixture.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/CanonicalReaderSourceSwitchInstrumentedTest.kt'
   workflow_dispatch:
 
 permissions:
@@ -191,7 +197,7 @@ jobs:
           disable-animations: true
           script: bash .github/scripts/run_mangaall_host_journey_android.sh
         env:
-          MANGAALL_CODE8_ONLY: ${{ startsWith(github.ref, 'refs/heads/feat/mangaall-live-android-page-gate-') && '1' || '0' }}
+          MANGAALL_CODE8_ONLY: ${{ (github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/feat/mangaall-live-android-page-gate-')) && '1' || '0' }}
       - name: Preserve bounded regression evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
