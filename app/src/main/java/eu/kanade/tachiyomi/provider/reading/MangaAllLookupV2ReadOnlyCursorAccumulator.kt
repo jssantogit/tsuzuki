@@ -55,6 +55,7 @@ internal class MangaAllLookupV2ReadOnlyCursorAccumulator(
         var completed: Boolean = false,
         var pagesQueried: Int = 0,
         var hadFailure: Boolean = false,
+        var tainted: Boolean = false,
         var lastFailureCode: String? = null,
     )
 
@@ -101,7 +102,7 @@ internal class MangaAllLookupV2ReadOnlyCursorAccumulator(
         for ((source, raw) in remaining) {
             val cursor = when (raw) {
                 is JsonPrimitive -> {
-                    if (!sourceCursor(raw)) return null
+                    if (raw == JsonNull || !sourceCursor(raw)) return null
                     CursorPart(retry = false, partialOffset = false)
                 }
                 is JsonObject -> {
@@ -111,7 +112,7 @@ internal class MangaAllLookupV2ReadOnlyCursorAccumulator(
                             (raw["r"] as? JsonPrimitive)?.intOrNull == 1 ->
                             CursorPart(retry = true, partialOffset = false)
                         raw.keys == setOf("c", "o") &&
-                            (raw["o"] as? JsonPrimitive)?.intOrNull in 0..200 ->
+                            ((raw["o"] as? JsonPrimitive)?.intOrNull?.let { it in 0..200 } == true) ->
                             CursorPart(retry = false, partialOffset = true)
                         else -> return null
                     }
@@ -153,6 +154,13 @@ internal class MangaAllLookupV2ReadOnlyCursorAccumulator(
                 continue
             }
             if (histories.getValue(source).completed) return reject()
+            if (audit.canContinue &&
+                observation.status == "SUCCESS_PAGE" &&
+                observation.pageComplete == false &&
+                continuation == null
+            ) {
+                return reject()
+            }
             if (continuation != null) {
                 if (observation.status == "FAILED") {
                     if (!continuation.retry || resumed?.retry == true) return reject()
@@ -191,13 +199,14 @@ internal class MangaAllLookupV2ReadOnlyCursorAccumulator(
                 history.completed = true
             }
             if (item.unsafeCandidate || item.observationsTruncated) {
+                history.tainted = true
                 history.hadFailure = true
                 history.lastFailureCode = "INCOMPLETE_SOURCE_OBSERVATION"
             }
         }
         pages++
         expectedCursor = audit.continuationCursor
-        val allComplete = histories.values.all { it.completed }
+        val allComplete = histories.values.all { it.completed && !it.tainted }
         val verdict = when {
             expectedCursor != null -> Verdict.IN_PROGRESS
             allComplete -> Verdict.COMPLETE_OBSERVED
