@@ -1649,6 +1649,174 @@ class ScriptProviderReadingGatewayIsolationTest {
     }
 
     /**
+     * Opt-in live discovery, scoped to one operator-named title and one
+     * explicitly selected source. Matching a source's title/alias is not
+     * independent editorial proof, never an implicit edition confirmation.
+     *
+     * The shell harness hides this private work/chapter hand-off from CI logs
+     * and never uses a lookup cursor or source ID from another title.
+     */
+    @Test(timeout = 270_000L)
+    fun mangaAllSignedCode8LiveBatchDiscoverChapterOne() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val args = InstrumentationRegistry.getArguments()
+        assertEquals("true", args.getString("mangaAllLiveBatchOptIn"))
+        assertEquals("app.tsuzuki.dev", instrumentation.targetContext.packageName)
+        val title = requireNotNull(args.getString("mangaAllBatchTitle")).trim()
+        val source = requireNotNull(args.getString("mangaAllBatchSource"))
+        val language = requireNotNull(args.getString("facetLanguage"))
+        require(title.length in 2..120 && title.none { it.isISOControl() || it == '|' })
+        require(source in setOf("mangadex", "mangadot", "mangafire"))
+        require(Regex("[a-z]{2}(-[a-z]{2})?").matches(language))
+        require(source != "mangafire" || language == "en")
+
+        val packageBytes = instrumentation.context.assets
+            .open("mangaall/code8-published-package.tsz").use { it.readBytes() }
+        val parsed = ProviderPackageParser().parse(packageBytes)
+        assertEquals("app.tsuzuki.mangaall", parsed.manifest.id)
+        assertEquals("0.5.3", parsed.manifest.version.name)
+        assertEquals(8L, parsed.manifest.version.code)
+        val providerId = ProviderId(parsed.manifest.id)
+        val gateway = gateway(
+            main = "",
+            providerId = providerId,
+            networkOrigins = requireNotNull(parsed.manifest.permissions.network).origins,
+            browserOrigins = parsed.manifest.permissions.browser?.origins.orEmpty(),
+            localNetwork = false,
+            packageBytesOverride = packageBytes,
+            facetLanguage = language,
+            baseHttpClient = OkHttpClient.Builder()
+                .callTimeout(25, java.util.concurrent.TimeUnit.SECONDS).build(),
+        )
+
+        fun inconclusive(reason: String) {
+            println("MANGAALL_BATCH_DISCOVERY|outcome=INCONCLUSIVE|reason=$reason")
+        }
+
+        fun normalize(value: String): String = java.text.Normalizer
+            .normalize(value.trim(), java.text.Normalizer.Form.NFKD)
+            .replace(Regex("\\p{M}+"), "")
+            .lowercase(java.util.Locale.ROOT)
+            .replace(Regex("\\s+"), " ")
+
+        try {
+            val observedWorkIds = linkedSetOf<String>()
+            var lookupCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
+            val seenLookupCursors = hashSetOf<String>()
+            var lookupCompleted = false
+            for (index in 0 until 6) {
+                val response = withTimeout(50_000L) {
+                    gateway.lookup(
+                        providerId,
+                        ProviderReadingLookupRequest(
+                            titles = listOf(title),
+                            cursor = lookupCursor,
+                            requestedLanguage = language,
+                        ),
+                    )
+                }
+                if (response !is ProviderCallResult.Success) {
+                    inconclusive("LOOKUP_UNAVAILABLE")
+                    return@runBlocking
+                }
+                response.value.items.asSequence()
+                    .filter { it.externalWorkId.startsWith("$source:") }
+                    .filter { it.language == null || it.language == language }
+                    .filter {
+                        normalize(it.title) == normalize(title) ||
+                            it.aliases.any { alias -> normalize(alias) == normalize(title) }
+                    }
+                    .map { it.externalWorkId }
+                    .forEach(observedWorkIds::add)
+                if (observedWorkIds.size > 1) {
+                    inconclusive("AMBIGUOUS_SOURCE_MATCH")
+                    return@runBlocking
+                }
+                val next = response.value.nextCursor
+                if (next == null) {
+                    lookupCompleted = true
+                    break
+                }
+                if (!seenLookupCursors.add(next.toString())) {
+                    inconclusive("LOOKUP_CURSOR_LIMIT")
+                    return@runBlocking
+                }
+                lookupCursor = next
+            }
+            if (!lookupCompleted) {
+                inconclusive("LOOKUP_CURSOR_LIMIT")
+                return@runBlocking
+            }
+            if (observedWorkIds.size != 1) {
+                inconclusive("NO_EXACT_SOURCE_MATCH")
+                return@runBlocking
+            }
+            val workId = observedWorkIds.single()
+            if (!Regex("(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}").matches(workId)) {
+                inconclusive("INVALID_SOURCE_IDENTITY")
+                return@runBlocking
+            }
+            val binding = ProviderBindingRef(providerId, language, workId)
+            val chapterOneIds = linkedSetOf<String>()
+            var chapterCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
+            val seenChapterCursors = hashSetOf<String>()
+            var chaptersCompleted = false
+            for (index in 0 until 12) {
+                val response = withTimeout(50_000L) {
+                    gateway.chapters(
+                        providerId,
+                        ProviderReadingChaptersRequest(binding, cursor = chapterCursor),
+                    )
+                }
+                if (response !is ProviderCallResult.Success) {
+                    inconclusive("CHAPTERS_UNAVAILABLE")
+                    return@runBlocking
+                }
+                response.value.items.asSequence()
+                    .filter { it.rawNumber == 1.0 && it.volume == null }
+                    .filter { it.language == null || it.language == language }
+                    .map { it.providerChapterId }
+                    .forEach(chapterOneIds::add)
+                if (chapterOneIds.size > 1) {
+                    inconclusive("AMBIGUOUS_CHAPTER_ONE")
+                    return@runBlocking
+                }
+                val next = response.value.nextCursor
+                if (next == null) {
+                    chaptersCompleted = true
+                    break
+                }
+                if (!seenChapterCursors.add(next.toString())) {
+                    inconclusive("CHAPTER_CURSOR_LIMIT")
+                    return@runBlocking
+                }
+                chapterCursor = next
+            }
+            if (!chaptersCompleted) {
+                inconclusive("CHAPTER_CURSOR_LIMIT")
+                return@runBlocking
+            }
+            if (chapterOneIds.size != 1) {
+                inconclusive("CHAPTER_ONE_NOT_ATTESTED")
+                return@runBlocking
+            }
+            val chapterId = chapterOneIds.single()
+            if (!Regex("[A-Za-z0-9._:-]{1,160}").matches(chapterId)) {
+                inconclusive("INVALID_SOURCE_IDENTITY")
+                return@runBlocking
+            }
+            // IDs are an internal handoff to the NEXT isolated instrumentation
+            // invocation. The runner exports only per-title closed verdicts.
+            println(
+                "MANGAALL_BATCH_DISCOVERY|outcome=SELECTED|workId=$workId" +
+                    "|chapterId=$chapterId|language=$language",
+            )
+        } catch (error: kotlinx.coroutines.TimeoutCancellationException) {
+            inconclusive("UPSTREAM_TIMEOUT")
+        }
+    }
+
+    /**
      * Opt-in, direct-live Android transport gate for the ORIGINAL published code8.
      *
      * IDs are taken verbatim from a separately observed Provider result and explicitly
