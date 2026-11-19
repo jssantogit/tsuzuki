@@ -51,7 +51,7 @@ timeout --foreground 230s adb shell am instrument -w -r \
   "$runner" > "$raw" 2>&1 || status=$?
 
 # Export only an exact, closed vocabulary verdict (never arbitrary upstream text).
-grep -oE 'MANGAALL_LIVE_PAGE_GATE\|outcome=(INCONCLUSIVE\|reason=(PROVIDER_PAGES_UNAVAILABLE|NO_HTTP_PAGES|CDN_FETCH_UNAVAILABLE|INVALID_IMAGE_DIMENSIONS|IMAGE_DECODE_FAILED)|PASS\|provenance=DIRECT_LIVE_ANDROID\|pagesDecoded=[12]\|readerActivityPixels=NOT_TESTED)' \
+grep -oE 'MANGAALL_LIVE_PAGE_GATE\|outcome=(INCONCLUSIVE\|reason=(CHAPTER_ATTESTATION_UNAVAILABLE|CHAPTER_NOT_ATTESTED_IN_FIRST_PAGE|PROVIDER_PAGES_UNAVAILABLE|NO_HTTP_PAGES|CDN_FETCH_UNAVAILABLE|INVALID_IMAGE_DIMENSIONS|IMAGE_DECODE_FAILED)|PASS\|provenance=DIRECT_LIVE_ANDROID\|pagesDecoded=[12]\|readerActivityPixels=NOT_TESTED)' \
   "$raw" | tail -n 1 > "$output/verdict.txt" || true
 if [ "$status" -ne 0 ] || ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw" ||
    ! grep -Fq 'OK (1 test)' "$raw" || [ ! -s "$output/verdict.txt" ]; then
