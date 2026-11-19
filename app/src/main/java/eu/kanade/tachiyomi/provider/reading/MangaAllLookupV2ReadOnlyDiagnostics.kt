@@ -18,7 +18,10 @@ internal object MangaAllLookupV2ReadOnlyDiagnostics {
     private val sources = listOf("mangadex", "mangadot", "mangafire")
     private val statuses = setOf("SUCCESS_PAGE", "FAILED", "NOT_QUERIED")
     private val failureCodes = setOf(
-        "CHALLENGE_BLOCKED", "HTTP_ERROR", "INVALID_RESPONSE", "UNCLASSIFIED_ERROR",
+        "CHALLENGE_BLOCKED",
+        "HTTP_ERROR",
+        "INVALID_RESPONSE",
+        "UNCLASSIFIED_ERROR",
     )
     private val id = Regex("[A-Za-z0-9._:-]{1,160}")
     private val unsafe = Regex("(?i)https?://|(?:cookie|authorization|bearer)\\s*:")
@@ -146,34 +149,48 @@ internal object MangaAllLookupV2ReadOnlyDiagnostics {
                 return null
             }
             when (source.status) {
-                "NOT_QUERIED" -> if (
-                    source.attempts != 0 ||
-                    source.pageComplete != null ||
-                    source.failure != null ||
-                    source.observedCandidates != 0 ||
-                    source.observationsTruncated ||
-                    source.unsafeCandidate
-                ) return null
+                "NOT_QUERIED" -> {
+                    if (
+                        source.attempts != 0 ||
+                        source.pageComplete != null ||
+                        source.failure != null ||
+                        source.observedCandidates != 0 ||
+                        source.observationsTruncated ||
+                        source.unsafeCandidate
+                    ) {
+                        return null
+                    }
+                }
 
-                "SUCCESS_PAGE" -> if (
-                    source.attempts != 1 ||
-                    source.pageComplete == null ||
-                    source.failure != null
-                ) return null
+                "SUCCESS_PAGE" -> {
+                    if (
+                        source.attempts != 1 ||
+                        source.pageComplete == null ||
+                        source.failure != null
+                    ) {
+                        return null
+                    }
+                }
 
-                "FAILED" -> if (
-                    source.attempts != 1 ||
-                    source.pageComplete != null ||
-                    source.failure == null ||
-                    source.observedCandidates != 0
-                ) return null
+                "FAILED" -> {
+                    if (
+                        source.attempts != 1 ||
+                        source.pageComplete != null ||
+                        source.failure == null ||
+                        source.observedCandidates != 0
+                    ) {
+                        return null
+                    }
+                }
             }
             source.failure?.let {
                 if (
                     it.code !in failureCodes ||
                     it.httpStatus?.let { http -> http !in 100..599 } == true ||
                     (it.code == "CHALLENGE_BLOCKED" && it.httpStatus?.let { http -> http in 200..299 } == true)
-                ) return null
+                ) {
+                    return null
+                }
             }
         }
         val complete = envelope.sourceStatuses.all {
@@ -206,7 +223,9 @@ internal object MangaAllLookupV2ReadOnlyDiagnostics {
                 candidate.authors.size > 20 ||
                 !candidate.aliases.all(::safeText) ||
                 !candidate.authors.all(::safeText)
-            ) return null
+            ) {
+                return null
+            }
             ObservedWork(
                 candidate.source,
                 candidate.externalWorkId,
