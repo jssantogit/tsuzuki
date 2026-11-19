@@ -118,8 +118,11 @@ class MangaAllLookupV2ReadOnlyDiagnosticsTest {
             full().put("provenance", "SIGNED_PROVIDER_DIRECT_LIVE"),
             full().put("headers", JSONObject().put("Authorization", "Bearer secret")),
             full().put("contractVersion", 1),
-            full().put("sourceStatuses", JSONArray().put(source("mangafire"))
-                .put(source("mangadot")).put(source("mangadex"))),
+            full().put(
+                "sourceStatuses",
+                JSONArray().put(source("mangafire"))
+                    .put(source("mangadot")).put(source("mangadex")),
+            ),
             JSONObject(full().toString()).also {
                 it.getJSONArray("observedCandidates").getJSONObject(0)
                     .put("bindingEligible", true)
