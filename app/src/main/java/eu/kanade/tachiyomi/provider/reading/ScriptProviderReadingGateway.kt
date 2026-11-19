@@ -219,6 +219,38 @@ class ScriptProviderReadingGateway internal constructor(
         }
     }
 
+    /**
+     * EXPERIMENTAL: collect one title's V2 read-only evidence through the
+     * same installed-package/runtime checks as each individual lookup.
+     * Cross-page results remain diagnostic, never Reader authorization.
+     */
+    internal suspend fun auditMangaAllV2ReadOnly(
+        providerId: ProviderId,
+        request: ProviderReadingLookupRequest,
+    ): ProviderCallResult<MangaAllLookupV2ReadOnlyCursorAccumulator.Snapshot> {
+        if (request.titles.size != 1 || request.cursor != null || request.requestedLanguage != "en") {
+            return malformed()
+        }
+        val accumulator = MangaAllLookupV2ReadOnlyCursorAccumulator()
+        var cursor: String? = null
+        repeat(8) {
+            val result = lookupMangaAllV2ReadOnly(
+                providerId,
+                request.copy(cursor = cursor?.let(::ProviderCursor)),
+            )
+            when (result) {
+                is ProviderCallResult.Failure -> return result
+                is ProviderCallResult.Success -> {
+                    val page = accumulator.acceptValidated(result.value, cursor)
+                        ?: return malformed()
+                    if (page.nextCursor == null) return ProviderCallResult.Success(page)
+                    cursor = page.nextCursor
+                }
+            }
+        }
+        return malformed()
+    }
+
     override suspend fun chapters(
         providerId: ProviderId,
         request: ProviderReadingChaptersRequest,
