@@ -158,6 +158,7 @@ class MangaAllLookupV2ReadOnlyDiagnosticsTest {
             ),
         )
     }
+
     /**
      * Even recovered retry pages remain observations; they never become
      * canonical work bindings or Reader grants.
@@ -266,5 +267,4 @@ class MangaAllLookupV2ReadOnlyDiagnosticsTest {
             )
         assertNull(conflictingAudit.accept(changedTitle.toString(), firstPage.nextCursor))
     }
-
 }
