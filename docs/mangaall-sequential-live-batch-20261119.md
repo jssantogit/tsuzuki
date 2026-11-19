@@ -49,3 +49,11 @@ Um push que modifica especificamente esse manifesto numa branch mangaall-live/**
 O run antigo #44521594314 mostrou AMBIGUOUS_SOURCE_MATCH para os três títulos **dentro de MangaFire somente** e não deve ser usado para concluir nada sobre conflitos entre as fontes juntas. Link: https://github.com/jssantogit/tsuzuki/actions/runs/44521594314
 
 Issue de acompanhamento: https://github.com/jssantogit/tsuzuki/issues/207
+
+## Resultado da primeira execução unificada e diagnóstico fechado
+
+A execução real [#44541077924](https://github.com/jssantogit/tsuzuki/actions/runs/44541077924/job/135619258485) validou o pacote original assinado, compilou e iniciou o emulador. O lookup unificado devolveu `INCONCLUSIVE|LOOKUP_UNAVAILABLE` para **Death Note, Naruto e Bleach**, sem chegar a capítulos/páginas em nenhuma das três obras. Resumo real `passed=0, inconclusive=3, failed=0`. Isso **não** demonstra indisponibilidade individual de qualquer fonte nem ausencia de obras; o router original retorna um erro global ao esgotar tentativas de uma fonte, descartando os resultados parciais. O Host também converte vários tipos de erro distintos para o mesmo `LOOKUP_UNAVAILABLE` no teste anterior.
+
+**Correção do harness:** quando o gateway devolve `ProviderCallResult.Failure`, o teste Android publica somente `ProviderErrorCode`, `ProviderLookupFailureCode`, HTTP status se presente e flag `retryable` (enums fechados, sem URLs, bodies, cookies, stack traces ou texto da fonte). O parser valida esses valores e guarda em `lookupError` por título, mantendo `lookupComplete=false` e resultados por fonte vazios **em vez de inventar três ausências**. O teste offline verifica o status pelo `am instrument`. Os testes Python simulados não publicam mais falsos PASS no log aberto da CI.
+
+Limite estrutural preservado: a versão assinada code8 continua falhando fechada se uma fonte impede a conclusão global. Para relatar candidatos parciais e simultaneamente atribuir falhas a cada adapter, será necessário um contrato de diagnóstico adicional no provider e nova publicação assinada; não se deve falsificar esse dado no harness ou trocar a auditoria conjunta por três buscas isoladas.
