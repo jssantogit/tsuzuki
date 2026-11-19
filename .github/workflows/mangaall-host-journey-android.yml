@@ -6,6 +6,7 @@ on:
     branches:
       - 'tsuzuki/provider-platform-mangaall-host-journey-*'
       - 'fix/mangaall-host-full-journey-*'
+      - 'feat/mangaall-live-android-page-gate-*'
     paths:
       - '.github/workflows/mangaall-host-journey-android.yml'
       - '.github/scripts/run_mangaall_host_journey_android.sh'
@@ -39,6 +40,13 @@ jobs:
           repository: jssantogit/providers-tsuzuki
           ref: e74a0ebb43ce27b3a237a80bf9d1c81df1397ee3
           path: code7-mangaall
+          persist-credentials: false
+      - name: Checkout immutable published MangaAll code8 from official repository (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 99f3565a1e1edc0d8ed249b7597006c897f02636
+          path: code8-published
           persist-credentials: false
       - name: Checkout immutable official signed sequence 32 / MangaAll code6 (read-only)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -80,6 +88,31 @@ jobs:
           shutil.copyfile(root/'dist/index.json', out/'code6-published-index.json')
           shutil.copyfile(root/'dist/enrollment.json', out/'code6-enrollment.json')
           print('MANGAALL_SIGNED_BASELINE|repository=app.tsuzuki.providers|sequence=32|providerCode=6|signature=VERIFIED|package=ORIGINAL')
+          PY
+      - name: Validate original official code8 signed root and stage immutable AndroidTest package
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C code8-published rev-parse HEAD)" = '99f3565a1e1edc0d8ed249b7597006c897f02636'
+          ( cd code8-published && node tooling/verify_index.mjs )
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import shutil
+          from pathlib import Path
+          root = Path('code8-published')
+          payload = json.loads((root/'dist/index.payload.json').read_text())
+          assert payload['repositoryId'] == 'app.tsuzuki.providers'
+          assert payload['sequence'] == 34
+          matches = [p for p in payload['providers'] if p['providerId'] == 'app.tsuzuki.mangaall']
+          assert len(matches) == 1
+          assert matches[0]['versionName'] == '0.5.3' and matches[0]['versionCode'] == 8
+          archive = root/'dist/providers/app.tsuzuki.mangaall-8.tsz'
+          assert hashlib.sha256(archive.read_bytes()).hexdigest() == matches[0]['sha256']
+          dest = Path('app/src/androidTest/assets/mangaall/code8-published-package.tsz')
+          dest.parent.mkdir(parents=True, exist_ok=True)
+          shutil.copyfile(archive, dest)
+          print('MANGAALL_PUBLISHED_CODE8_READER|signature=VERIFIED|sha=VERIFIED|http=CONTROLLED')
           PY
       - name: Generate code7 replay vectors from actual JS (offline fixture only)
         shell: bash
@@ -157,6 +190,8 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: bash .github/scripts/run_mangaall_host_journey_android.sh
+        env:
+          MANGAALL_CODE8_ONLY: ${{ startsWith(github.ref, 'refs/heads/feat/mangaall-live-android-page-gate-') && '1' || '0' }}
       - name: Preserve bounded regression evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
