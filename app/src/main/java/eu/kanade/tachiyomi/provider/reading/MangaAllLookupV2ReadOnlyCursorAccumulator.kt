@@ -132,8 +132,19 @@ internal class MangaAllLookupV2ReadOnlyCursorAccumulator(
      * identity and signed Host/Reader authorization are separate gates.
      */
     fun accept(payload: String, requestCursor: String? = null): Snapshot? {
-        if (closed || pages >= 8 || requestCursor != expectedCursor) return reject()
         val audit = MangaAllLookupV2ReadOnlyDiagnostics.decodeReadOnly(payload) ?: return reject()
+        return acceptValidated(audit, requestCursor)
+    }
+
+    /**
+     * Accept only a read-only audit already decoded and validated at the
+     * SCRIPT gateway boundary. This never creates a production work binding.
+     */
+    fun acceptValidated(
+        audit: MangaAllLookupV2ReadOnlyDiagnostics.ReadOnlyAudit,
+        requestCursor: String? = null,
+    ): Snapshot? {
+        if (closed || pages >= 8 || requestCursor != expectedCursor) return reject()
         val expected = if (pages == 0) {
             sourceOrder.toSet()
         } else {

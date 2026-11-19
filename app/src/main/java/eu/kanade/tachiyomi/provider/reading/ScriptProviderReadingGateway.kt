@@ -101,6 +101,7 @@ class ScriptProviderReadingGateway internal constructor(
     private val limits: ProviderRuntimeLimitsDto = ProviderRuntimeLimitsDto(),
     private val invocationIdFactory: () -> String = { "reading:${UUID.randomUUID()}" },
     private val managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
+    private val enableExperimentalMangaAllV2: Boolean = false,
 ) : ProviderReadingGateway {
 
     constructor(
@@ -109,12 +110,14 @@ class ScriptProviderReadingGateway internal constructor(
         runtimeClient: ProviderRuntimeClient,
         limits: ProviderRuntimeLimitsDto = ProviderRuntimeLimitsDto(),
         managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
+        enableExperimentalMangaAllV2: Boolean = false,
     ) : this(
         registry = registry,
         packageSource = packageSource,
         invokePackage = ProviderPackageCapabilityInvoker(runtimeClient::invokePackage),
         limits = limits,
         managedResources = managedResources,
+        enableExperimentalMangaAllV2 = enableExperimentalMangaAllV2,
     )
 
     private val json = Json {
@@ -176,6 +179,77 @@ class ScriptProviderReadingGateway internal constructor(
                 nextCursor = decoded.nextCursor?.let(::ProviderCursor),
             )
         }
+
+    /**
+     * EXPERIMENTAL / not wired into the production ProviderReadingGateway.
+     * Never invoke V2 against code8 or an unverified repository identity.
+     * A V2 response is read-only diagnostic evidence, not ProviderPage items,
+     * chapter binding or an authorized Reader source.
+     */
+    internal suspend fun lookupMangaAllV2ReadOnly(
+        providerId: ProviderId,
+        request: ProviderReadingLookupRequest,
+    ): ProviderCallResult<MangaAllLookupV2ReadOnlyDiagnostics.ReadOnlyAudit> {
+        if (
+            !enableExperimentalMangaAllV2 ||
+            providerId.value != MANGAALL_PROVIDER_ID ||
+            request.requestedLanguage != "en"
+        ) {
+            return unavailable()
+        }
+        return call(
+            providerId = providerId,
+            capability = tachiyomi.domain.tsuzuki.provider.ProviderCapabilities.ReadingLookupV1,
+            inputJson = json.encodeToString(
+                LookupRequestDto(
+                    titles = request.titles,
+                    cursor = request.cursor?.value,
+                    diagnosticsVersion = 2,
+                    requestedLanguage = request.requestedLanguage,
+                ),
+            ),
+            packageGate = { active ->
+                active.repositoryId == MANGAALL_TRUSTED_REPOSITORY &&
+                    active.versionCode == MANGAALL_V2_EXPERIMENTAL_VERSION &&
+                    active.parsed.manifest.version.name.startsWith("0.5.4")
+            },
+        ) { value, _ ->
+            MangaAllLookupV2ReadOnlyDiagnostics.decodeReadOnly(value)
+                ?: error("Malformed or unauthorized MangaAll V2 diagnostic envelope")
+        }
+    }
+
+    /**
+     * EXPERIMENTAL: collect one title's V2 read-only evidence through the
+     * same installed-package/runtime checks as each individual lookup.
+     * Cross-page results remain diagnostic, never Reader authorization.
+     */
+    internal suspend fun auditMangaAllV2ReadOnly(
+        providerId: ProviderId,
+        request: ProviderReadingLookupRequest,
+    ): ProviderCallResult<MangaAllLookupV2ReadOnlyCursorAccumulator.Snapshot> {
+        if (request.titles.size != 1 || request.cursor != null || request.requestedLanguage != "en") {
+            return malformed()
+        }
+        val accumulator = MangaAllLookupV2ReadOnlyCursorAccumulator()
+        var cursor: String? = null
+        repeat(8) {
+            val result = lookupMangaAllV2ReadOnly(
+                providerId,
+                request.copy(cursor = cursor?.let(::ProviderCursor)),
+            )
+            when (result) {
+                is ProviderCallResult.Failure -> return result
+                is ProviderCallResult.Success -> {
+                    val page = accumulator.acceptValidated(result.value, cursor)
+                        ?: return malformed()
+                    if (page.nextCursor == null) return ProviderCallResult.Success(page)
+                    cursor = page.nextCursor
+                }
+            }
+        }
+        return malformed()
+    }
 
     override suspend fun chapters(
         providerId: ProviderId,
@@ -304,6 +378,7 @@ class ScriptProviderReadingGateway internal constructor(
         providerId: ProviderId,
         capability: ProviderCapabilityRef,
         inputJson: String,
+        packageGate: (ActiveProviderScriptPackage) -> Boolean = { true },
         decode: (String, ActiveProviderScriptPackage) -> T,
     ): ProviderCallResult<T> {
         registry.awaitReady()
@@ -326,7 +401,7 @@ class ScriptProviderReadingGateway internal constructor(
             return unavailable(retryable = true)
         } ?: return unavailable()
 
-        if (!matchesRegistration(registration, active, capability)) {
+        if (!matchesRegistration(registration, active, capability) || !packageGate(active)) {
             return unavailable()
         }
 
@@ -616,6 +691,9 @@ class ScriptProviderReadingGateway internal constructor(
     )
 
     private companion object {
+        const val MANGAALL_PROVIDER_ID = "app.tsuzuki.mangaall"
+        const val MANGAALL_TRUSTED_REPOSITORY = "app.tsuzuki.providers"
+        const val MANGAALL_V2_EXPERIMENTAL_VERSION = 9L
         const val PAGE_LIST_TYPE = "page_list"
         const val PAGE_FAILURE_TYPE = "page_failure"
         const val MANAGED_FILE_TYPE = "managed_file"

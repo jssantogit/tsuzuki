@@ -20,6 +20,8 @@ readonly verdict_probe_case='eu.kanade.tachiyomi.provider.reading.ScriptProvider
 readonly v2_readonly_probe_case='eu.kanade.tachiyomi.provider.reading.MangaAllLookupV2ReadOnlyDiagnosticsTest#mangaAllUnsignedV2ReadOnlyContract_rejectsCanonicalPromotionAndForeignSource'
 readonly v2_cursor_probe_case='eu.kanade.tachiyomi.provider.reading.MangaAllLookupV2ReadOnlyDiagnosticsTest#mangaAllUnsignedV2CursorHistory_retainsThreeSourcesAcrossRetryAndRejectsConflicts'
 readonly v2_cursor_budget_case='eu.kanade.tachiyomi.provider.reading.MangaAllLookupV2ReadOnlyDiagnosticsTest#mangaAllUnsignedV2CursorHistory_boundsEightPagesAndRejectsReplay'
+readonly v2_host_invocation_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllV2Code9OptIn_routesOneReadOnlyDiagnosticAndRejectsWrongPackage'
+readonly v2_host_cursor_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllV2Code9OptIn_accumulatesActualRuntimePagesWithoutReaderGrants'
 readonly source_row_case='eu.kanade.presentation.reader.MangaAllReaderSourceCardInstrumentedTest#tappingMangaAllSourcePassesExactVerifiedChapterOptionWithoutCrossSourceSelection'
 
 mkdir -p "$output"
@@ -97,6 +99,8 @@ if [ "${MANGAALL_CODE8_ONLY:-0}" = "1" ]; then
   run_case 'UNSIGNED_V2_READONLY_TRI_SOURCE_CONTRACT' "$v2_readonly_probe_case" 'mangaAllStatusProbeOptIn'
   run_case 'UNSIGNED_V2_READONLY_CURSOR_HISTORY' "$v2_cursor_probe_case" 'mangaAllStatusProbeOptIn'
   run_case 'UNSIGNED_V2_CURSOR_BUDGET_AND_REPLAY' "$v2_cursor_budget_case" 'mangaAllStatusProbeOptIn'
+  run_case 'UNSIGNED_CODE9_V2_HOST_INVOCATION_VERSION_GATED' "$v2_host_invocation_case" 'mangaAllStatusProbeOptIn'
+  run_case 'UNSIGNED_CODE9_V2_HOST_RUNTIME_CURSOR_AUDIT' "$v2_host_cursor_case" 'mangaAllStatusProbeOptIn'
   run_case 'CODE8_PUBLISHED_TSZ_CONTINUOUS_READER_TAP_503_RETRY_PIXELS' "$real_code8_reader_case" 'androidSourceSwitchOptIn'
   echo 'MANGAALL_JOURNEY|pipeline=PUBLISHED_CODE8_OFFLINE_READER|outcome=PASS|readerPixels=DECODED_SYNTHETIC_HTTP|liveCdn=NOT_TESTED'
   exit 0

@@ -198,6 +198,221 @@ class ScriptProviderReadingGatewayIsolationTest {
         }
     }
 
+    /**
+     * EXPERIMENTAL: exercises actual isolated QuickJS/package invocation with
+     * synthetic, locally generated code9 bytes. No signed code9 exists yet.
+     * Reading.lookup V1 remains unchanged, and V2 cannot grant Reader pages.
+     */
+    @Test
+    fun mangaAllV2Code9OptIn_routesOneReadOnlyDiagnosticAndRejectsWrongPackage() = runBlocking {
+        val mangaAll = ProviderId("app.tsuzuki.mangaall")
+        val main = """
+            const readOnly = {
+              contractVersion: 2,
+              providerId: "app.tsuzuki.mangaall",
+              state: "COMPLETE_SINGLE_PAGE",
+              lookupComplete: true,
+              canContinue: false,
+              continuationCursor: null,
+              sourceStatuses: ["mangadex","mangadot","mangafire"].map(source => ({
+                source, attempts: 1, status: "SUCCESS_PAGE",
+                pageComplete: true, observedCandidates: 1,
+                observationsTruncated: false, unsafeCandidate: false, failure: null
+              })),
+              observedCandidates: ["mangadex","mangadot","mangafire"].map(source => ({
+                source, externalWorkId: source + ":naruto-fixture",
+                title: "Naruto", aliases: [], authors: [],
+                editorialIdentityVerified: false, bindingEligible: false
+              })),
+              eligibleForCanonicalBinding: false,
+              eligibleForReader: false,
+              provenance: "UNSIGNED_CANDIDATE_NOT_LIVE"
+            };
+            export default {
+              reading: {
+                lookup: async request => request.diagnosticsVersion === 2
+                  ? readOnly : {items: [], nextCursor: null},
+                chapters: async () => ({items: [], nextCursor: null}),
+                pages: async () => ({type: "page_list", pages: []})
+              }
+            };
+        """.trimIndent()
+        val titleRequest = ProviderReadingLookupRequest(
+            titles = listOf("Naruto"),
+            requestedLanguage = "en",
+        )
+        fun fixture(
+            code: Long,
+            name: String,
+            repository: String = "app.tsuzuki.providers",
+            optIn: Boolean = true,
+            js: String = main,
+        ) = gateway(
+            main = js,
+            providerId = mangaAll,
+            networkOrigins = emptySet(),
+            localNetwork = false,
+            repositoryId = repository,
+            packageVersionCode = code,
+            packageVersionName = name,
+            experimentalV2OptIn = optIn,
+        )
+
+        val eligible = fixture(9, "0.5.4-dev-unsigned")
+        val observed = eligible.lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
+        assertTrue(observed is ProviderCallResult.Success)
+        val audit = (observed as ProviderCallResult.Success).value
+        assertTrue(audit.lookupComplete)
+        assertEquals(3, audit.sources.size)
+        assertEquals(3, audit.observedWorks.size)
+        assertEquals(listOf("mangadex", "mangadot", "mangafire"), audit.sources.map { it.source })
+        assertEquals(null, audit.continuationCursor)
+        assertTrue(eligible.lookup(mangaAll, titleRequest) is ProviderCallResult.Success)
+
+        // A code8 package can never be invoked with diagnosticsVersion=2,
+        // even when a caller explicitly tries to opt into the experiment.
+        val versionDenied = fixture(8, "0.5.3").lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
+        assertTrue(versionDenied is ProviderCallResult.Failure)
+        assertEquals("UNAVAILABLE", (versionDenied as ProviderCallResult.Failure).error.code.name)
+
+        // The package's repository identity must come from a trusted
+        // registration and match the versioned provider artifact.
+        val foreignDenied = fixture(9, "0.5.4-dev-unsigned", "repo.foreign")
+            .lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
+        assertTrue(foreignDenied is ProviderCallResult.Failure)
+        assertEquals("UNAVAILABLE", (foreignDenied as ProviderCallResult.Failure).error.code.name)
+
+        // Opt-in is false by default, including for a nominal code9 fixture.
+        val disabled = fixture(9, "0.5.4-dev-unsigned", optIn = false)
+            .lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
+        assertTrue(disabled is ProviderCallResult.Failure)
+        assertEquals("UNAVAILABLE", (disabled as ProviderCallResult.Failure).error.code.name)
+
+        val wrongFacet = eligible.lookupMangaAllV2ReadOnly(
+            mangaAll,
+            ProviderReadingLookupRequest(titles = listOf("Naruto"), requestedLanguage = "pt-br"),
+        )
+        assertTrue(wrongFacet is ProviderCallResult.Failure)
+        assertEquals("UNAVAILABLE", (wrongFacet as ProviderCallResult.Failure).error.code.name)
+
+        // A correctly versioned package returning the V1 page instead of V2
+        // must fail closed; it must not be decoded as an empty or valid audit.
+        val wrongEnvelopeJs = """
+            export default {
+              reading: {
+                lookup: async () => ({ items: [], nextCursor: null }),
+                chapters: async () => ({items: [], nextCursor: null}),
+                pages: async () => ({type: "page_list", pages: []})
+              }
+            };
+        """.trimIndent()
+        val malformed = fixture(9, "0.5.4-dev-unsigned", js = wrongEnvelopeJs)
+            .lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
+        assertTrue(malformed is ProviderCallResult.Failure)
+        assertEquals("MALFORMED_RESULT", (malformed as ProviderCallResult.Failure).error.code.name)
+
+        // Explicit version-code 10 is not implicitly accepted. Such a future
+        // upgrade needs a separately reviewed and authorized Host contract.
+        val futureDenied = fixture(10, "0.5.5-dev-unsigned")
+            .lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
+        assertTrue(futureDenied is ProviderCallResult.Failure)
+        assertEquals("UNAVAILABLE", (futureDenied as ProviderCallResult.Failure).error.code.name)
+    }
+
+    /**
+     * Synthetic SCRIPT code9, but actual isolated Android runtime transport.
+     * One MangaAll provider, three source statuses on page one, then only
+     * MangaDot's bounded retry on page two. No pages/CDN are requested.
+     */
+    @Test
+    fun mangaAllV2Code9OptIn_accumulatesActualRuntimePagesWithoutReaderGrants() = runBlocking {
+        val provider = ProviderId("app.tsuzuki.mangaall")
+        val main = """
+            const cursor = '{"v":1,"remaining":{"mangadot":{"c":null,"r":1}}}';
+            const item = source => ({
+              source, externalWorkId: source + ":naruto-fixture",
+              title: "Naruto", aliases: [], authors: [],
+              bindingEligible: false, editorialIdentityVerified: false
+            });
+            const ok = source => ({
+              source, attempts: 1, status: "SUCCESS_PAGE", pageComplete: true,
+              observedCandidates: 1, observationsTruncated: false,
+              unsafeCandidate: false, failure: null
+            });
+            const none = source => ({
+              source, attempts: 0, status: "NOT_QUERIED", pageComplete: null,
+              observedCandidates: 0, observationsTruncated: false,
+              unsafeCandidate: false, failure: null
+            });
+            export default {
+              reading: {
+                lookup: async request => {
+                  if (request.diagnosticsVersion !== 2) {
+                    return {items: [], nextCursor: null};
+                  }
+                  if (request.cursor && request.cursor !== cursor) {
+                    throw Error("unrecognized test cursor");
+                  }
+                  const first = !request.cursor;
+                  return {
+                    contractVersion: 2,
+                    providerId: "app.tsuzuki.mangaall",
+                    state: "PARTIAL_EVIDENCE",
+                    lookupComplete: false,
+                    canContinue: first,
+                    continuationCursor: first ? cursor : null,
+                    sourceStatuses: first
+                      ? [
+                          ok("mangadex"),
+                          {
+                            source: "mangadot", attempts: 1, status: "FAILED",
+                            pageComplete: null, observedCandidates: 0,
+                            observationsTruncated: false, unsafeCandidate: false,
+                            failure: {code: "CHALLENGE_BLOCKED", httpStatus: 403, retryable: true}
+                          },
+                          ok("mangafire")
+                        ]
+                      : [none("mangadex"), ok("mangadot"), none("mangafire")],
+                    observedCandidates: first
+                      ? [item("mangadex"), item("mangafire")]
+                      : [item("mangadot")],
+                    eligibleForCanonicalBinding: false,
+                    eligibleForReader: false,
+                    provenance: "UNSIGNED_CANDIDATE_NOT_LIVE"
+                  };
+                },
+                chapters: async () => { throw Error("chapters not permitted in this fixture"); },
+                pages: async () => { throw Error("pages not permitted in this fixture"); }
+              }
+            };
+        """.trimIndent()
+        val gateway = gateway(
+            main = main,
+            providerId = provider,
+            networkOrigins = emptySet(),
+            localNetwork = false,
+            repositoryId = "app.tsuzuki.providers",
+            packageVersionCode = 9,
+            packageVersionName = "0.5.4-dev-unsigned",
+            experimentalV2OptIn = true,
+        )
+        val result = gateway.auditMangaAllV2ReadOnly(
+            provider,
+            ProviderReadingLookupRequest(titles = listOf("Naruto"), requestedLanguage = "en"),
+        )
+        assertTrue(result is ProviderCallResult.Success)
+        val snapshot = (result as ProviderCallResult.Success).value
+        assertEquals(MangaAllLookupV2ReadOnlyCursorAccumulator.Verdict.COMPLETE_OBSERVED, snapshot.verdict)
+        assertEquals(2, snapshot.pages)
+        assertEquals(null, snapshot.nextCursor)
+        assertEquals(listOf(1, 2, 1), snapshot.sourceHistory.map { it.pagesQueried })
+        assertEquals(listOf(1, 1, 1), snapshot.sourceHistory.map { it.observedCandidates })
+        assertTrue(snapshot.sourceHistory[1].hadFailure)
+        assertEquals("CHALLENGE_BLOCKED", snapshot.sourceHistory[1].lastFailureCode)
+        assertEquals(3, snapshot.observedWorks.size)
+        assertTrue(snapshot.observedWorks.all { it.sourceWorkId.startsWith(it.source + ":") })
+    }
+
     @Test
     fun chapterPagination_invokesSecondPageThroughIsolatedRuntimeBeforeDeadline() = runBlocking {
         val server = MockWebServer()
@@ -2285,6 +2500,10 @@ class ScriptProviderReadingGatewayIsolationTest {
         onRegistry: (DefaultProviderRegistry) -> Unit = {},
         packageBytesOverride: ByteArray? = null,
         baseHttpClient: OkHttpClient = OkHttpClient(),
+        repositoryId: String = REPOSITORY_ID,
+        packageVersionCode: Long = 1L,
+        packageVersionName: String = "1.0.1",
+        experimentalV2OptIn: Boolean = false,
     ): ScriptProviderReadingGateway {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val storageRoot = File(context.cacheDir, "provider-reading-gateway").apply {
@@ -2297,13 +2516,15 @@ class ScriptProviderReadingGatewayIsolationTest {
             browserOrigins = browserOrigins,
             localNetwork = localNetwork,
             includePages = includePages,
+            versionCode = packageVersionCode,
+            versionName = packageVersionName,
         )
         val parsed = ProviderPackageParser().parse(packageBytes)
         val descriptor = ProviderDescriptor(
             id = providerId,
             name = "Reading Fixture",
             version = ProviderVersion(parsed.manifest.version.name, parsed.manifest.version.code),
-            origin = ProviderOrigin.Repository(REPOSITORY_ID),
+            origin = ProviderOrigin.Repository(repositoryId),
             runtime = ProviderRuntimeKind.SCRIPT,
             capabilities = buildSet {
                 add(ProviderCapabilities.ReadingLookupV1)
@@ -2350,7 +2571,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             registry = registry,
             packageSource = ActiveProviderScriptPackageSource {
                 ActiveProviderScriptPackage(
-                    repositoryId = REPOSITORY_ID,
+                    repositoryId = repositoryId,
                     versionCode = parsed.manifest.version.code,
                     bytes = packageBytes,
                     parsed = parsed,
@@ -2358,6 +2579,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             },
             runtimeClient = runtimeClient,
             managedResources = managedFileStore,
+            enableExperimentalMangaAllV2 = experimentalV2OptIn,
         )
     }
 
@@ -2420,6 +2642,8 @@ class ScriptProviderReadingGatewayIsolationTest {
         browserOrigins: Set<String>,
         localNetwork: Boolean,
         includePages: Boolean = true,
+        versionCode: Long = 1L,
+        versionName: String = "1.0.1",
     ): ByteArray {
         fun origins(values: Set<String>) =
             values.joinToString(prefix = "[", postfix = "]") { value -> """"$value"""" }
@@ -2430,7 +2654,7 @@ class ScriptProviderReadingGatewayIsolationTest {
               "manifestVersion": 1,
               "id": "${providerId.value}",
               "name": "Reading Fixture",
-              "version": {"name": "1.0.1", "code": 1},
+              "version": {"name": "$versionName", "code": $versionCode},
               "minHostApi": 1,
               "entrypoint": "main.js",
               "capabilities": [
