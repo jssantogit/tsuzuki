@@ -1,36 +1,51 @@
-name: MangaAll signed code8 — Android live pages and Reader pixels (manual)
+name: MangaAll signed code8 — sequential Android live manga batch
 
-# PR: compile only. Live CDN traffic happens ONLY on explicit workflow_dispatch.
+# Pull requests only compile and run offline tests. Actual CDN traffic is
+# opt-in via workflow_dispatch or a manifest-changing commit on a dedicated
+# mangaall-live/* branch; ordinary commits to main never execute LIVE.
 on:
   pull_request:
     paths:
       - '.github/workflows/mangaall-live-page-android.yml'
       - '.github/scripts/run_mangaall_live_pages_android.sh'
+      - '.github/scripts/mangaall_live_batch.py'
+      - '.github/scripts/test_mangaall_live_batch.py'
+      - '.github/mangaall-live-batch.json'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllReaderJourneyFixture.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/CanonicalReaderSourceSwitchInstrumentedTest.kt'
+  push:
+    branches:
+      - 'mangaall-live/**'
+    paths:
+      - '.github/mangaall-live-batch.json'
   workflow_dispatch:
     inputs:
+      titles:
+        description: 'Titles in order: comma-separated or JSON array of 1–30 manga'
+        required: true
+        type: string
       gate_mode:
-        description: 'transport = decode only; reader = real CDN pixels in ReaderActivity'
+        description: 'transport: CDN decode only; reader: real CDN pixels in ReaderActivity'
         required: true
         default: reader
         type: choice
         options:
           - transport
           - reader
-      provider_work_id:
-        description: 'Exact source ID observed in the real source run (e.g. mangafire:<HID>)'
+      source:
+        description: 'Exact MangaAll upstream source (never inferred from title)'
         required: true
-        type: string
-      provider_chapter_id:
-        description: 'Exact chapter ID observed for that source (never guessed)'
-        required: true
-        type: string
+        default: mangafire
+        type: choice
+        options:
+          - mangafire
+          - mangadex
+          - mangadot
       facet_language:
-        description: 'Exact source language (e.g. en or pt-br)'
+        description: 'Exact upstream facet language (MangaFire only supports en)'
         required: true
-        default: 'en'
+        default: en
         type: string
 
 permissions:
@@ -47,8 +62,11 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Validate live-only shell safety and Kotlin style
-        run: bash -n .github/scripts/run_mangaall_live_pages_android.sh
+      - name: Verify batch parser, ordering, fail-closed semantics and shell syntax
+        run: |
+          bash -n .github/scripts/run_mangaall_live_pages_android.sh
+          python3 .github/scripts/test_mangaall_live_batch.py
+          GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/mangaall-live/contract python3 .github/scripts/mangaall_live_batch.py --check-plan
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           java-version-file: .github/.java-version
@@ -60,17 +78,21 @@ jobs:
         run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebugAndroidTest
 
   live-android-page-decoder:
-    if: github.event_name == 'workflow_dispatch'
-    name: Original signed code8 -> LIVE pages -> transport or ReaderActivity pixels
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/mangaall-live/'))
+    name: Sequential original code8 -> lookup -> chapter -> CDN Reader gate
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 360
     env:
-      MANGAALL_WORK_ID: ${{ inputs.provider_work_id }}
-      MANGAALL_CHAPTER_ID: ${{ inputs.provider_chapter_id }}
-      MANGAALL_LANGUAGE: ${{ inputs.facet_language }}
-      MANGAALL_GATE_MODE: ${{ inputs.gate_mode }}
+      MANGAALL_BATCH_TITLES: ${{ inputs.titles || '' }}
+      MANGAALL_BATCH_SOURCE: ${{ inputs.source || 'mangafire' }}
+      MANGAALL_BATCH_LANGUAGE: ${{ inputs.facet_language || 'en' }}
+      MANGAALL_BATCH_MODE: ${{ inputs.gate_mode || 'reader' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate source, language, ordered titles and number of cases (no network)
+        run: |
+          python3 .github/scripts/test_mangaall_live_batch.py
+          python3 .github/scripts/mangaall_live_batch.py --check-plan
       - name: Checkout immutable published code8 source, read-only
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -122,7 +144,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Query LIVE pages and optionally show CDN pixels in the real ReaderActivity
+      - name: Run each manga sequentially in one disposable Android emulator
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 35
@@ -130,12 +152,12 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: bash .github/scripts/run_mangaall_live_pages_android.sh
-      - name: Save closed verdict only — never URLs, headers, raw logs or image bytes
+          script: python3 .github/scripts/mangaall_live_batch.py
+      - name: Save ordered closed summary only — no source IDs, URLs, headers, logs or images
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: mangaall-live-android-page-verdict
-          path: .github/results/mangaall-live-pages-android/verdict.txt
+          name: mangaall-live-android-batch-summary
+          path: .github/results/mangaall-live-pages-android/summary.json
           if-no-files-found: warn
           retention-days: 3
