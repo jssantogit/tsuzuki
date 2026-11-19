@@ -14,6 +14,7 @@ import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderViewModel
 import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpChapterLoader
 import eu.kanade.tachiyomi.ui.reader.loader.ReaderChapterLoader
+import kotlinx.coroutines.withTimeout
 import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -54,10 +55,12 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterEvidenceAdapter
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBinding
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.RefreshProviderReadingChapters
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipEntry
@@ -71,16 +74,34 @@ import java.util.zip.ZipOutputStream
  * Only its injected Provider registry and package source are synthetic. No
  * repository enrolment, signature trust or production Provider is modified.
  */
+internal data class MangaAllLiveReaderTarget(
+    val workId: String,
+    val chapterId: String,
+    val language: String,
+) {
+    init {
+        require(Regex("(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}").matches(workId))
+        require(Regex("[A-Za-z0-9._:-]{1,160}").matches(chapterId))
+        require(Regex("[a-z]{2}(-[a-z]{2})?").matches(language))
+    }
+}
+
 internal class MangaAllReaderJourneyFixture(
     private val context: Context,
     private val reader: ReaderActivity,
     private val database: Database,
     private val chapter: CanonicalChapter,
     private val originalCode7Package: Boolean = false,
+    private val originalCode8Package: Boolean = false,
+    private val liveTarget: MangaAllLiveReaderTarget? = null,
 ) : AutoCloseable {
+    init {
+        require(!(originalCode7Package && originalCode8Package)) { "Select exactly one original MangaAll package" }
+        require(liveTarget == null || originalCode8Package) { "Live Reader requires original code8" }
+    }
     private val providerId = ProviderId("app.tsuzuki.mangaall")
-    private val workId = "mangafire:zk12"
-    private val sourceChapterId = if (originalCode7Package) {
+    private val workId = liveTarget?.workId ?: "mangafire:zk12"
+    private val sourceChapterId = liveTarget?.chapterId ?: if (originalCode7Package || originalCode8Package) {
         "mangafire:punpun-fixture-ch1"
     } else {
         "mangafire:chapter-one"
@@ -158,13 +179,22 @@ internal class MangaAllReaderJourneyFixture(
      * chapter already in the disposable Reader database, then replace only
      * the ReaderViewModel's provider resolver for this fixture.
      */
-    suspend fun attach() {
+    suspend fun attach(): String? {
         val origin = origin()
+        val liveSignedOrigins = liveTarget?.let {
+            val signed = InstrumentationRegistry.getInstrumentation().context.assets
+                .open("mangaall/code8-published-package.tsz").use { it.readBytes() }
+            val parsed = ProviderPackageParser().parse(signed)
+            requireNotNull(parsed.manifest.permissions.network).origins
+        }
         val registration = ProviderRegistration(
             descriptor = ProviderDescriptor(
                 id = providerId,
                 name = "MangaAll (isolated test)",
-                version = ProviderVersion("0.5.2", 7),
+                version = ProviderVersion(
+                    if (originalCode8Package) "0.5.3" else "0.5.2",
+                    if (originalCode8Package) 8 else 7,
+                ),
                 origin = ProviderOrigin.Repository("mangaall-android-fixture"),
                 runtime = ProviderRuntimeKind.SCRIPT,
                 capabilities = setOf(
@@ -173,7 +203,9 @@ internal class MangaAllReaderJourneyFixture(
                     ProviderCapabilities.ReadingPagesV1,
                 ),
                 permissions = ProviderPermissionSet(
-                    network = if (originalCode7Package) {
+                    network = if (liveSignedOrigins != null) {
+                        ProviderNetworkPermission(liveSignedOrigins, localNetwork = false)
+                    } else if (originalCode7Package || originalCode8Package) {
                         ProviderNetworkPermission(
                             setOf(
                                 "https://api.mangadex.org",
@@ -188,10 +220,10 @@ internal class MangaAllReaderJourneyFixture(
                     },
                 ),
                 settings = emptyList(),
-                contentLanguages = setOf("en"),
+                contentLanguages = setOf(liveTarget?.language ?: "en"),
             ),
             lifecycleStatus = ProviderLifecycleStatus.ENABLED,
-            facets = listOf(ProviderFacetRef(providerId, "en")),
+            facets = listOf(ProviderFacetRef(providerId, liveTarget?.language ?: "en")),
             configurationFingerprint = "android-journey",
         )
         val registry = DefaultProviderRegistry(registrations = { listOf(registration) })
@@ -215,13 +247,20 @@ internal class MangaAllReaderJourneyFixture(
               }
             };
         """.trimIndent()
-        val bytes = if (originalCode7Package) {
-            InstrumentationRegistry.getInstrumentation().context.assets
+        val bytes = when {
+            originalCode8Package -> InstrumentationRegistry.getInstrumentation().context.assets
+                .open("mangaall/code8-published-package.tsz").use { it.readBytes() }
+            originalCode7Package -> InstrumentationRegistry.getInstrumentation().context.assets
                 .open("mangaall/code7-package.tsz").use { it.readBytes() }
-        } else {
-            syntheticPackage(origin, script)
+            else -> syntheticPackage(origin, script)
         }
         val parsed = ProviderPackageParser().parse(bytes)
+        if (originalCode8Package) {
+            assertEquals("app.tsuzuki.mangaall", parsed.manifest.id)
+            assertEquals("0.5.3", parsed.manifest.version.name)
+            assertEquals(8L, parsed.manifest.version.code)
+            assertTrue(parsed.entries.containsKey("modules/router.js"))
+        }
         if (originalCode7Package) {
             assertEquals("app.tsuzuki.mangaall", parsed.manifest.id)
             assertEquals("0.5.2", parsed.manifest.version.name)
@@ -246,7 +285,7 @@ internal class MangaAllReaderJourneyFixture(
             packageSource = ActiveProviderScriptPackageSource {
                 ActiveProviderScriptPackage(
                     repositoryId = "mangaall-android-fixture",
-                    versionCode = 7,
+                    versionCode = parsed.manifest.version.code,
                     bytes = bytes,
                     parsed = parsed,
                 )
@@ -256,14 +295,19 @@ internal class MangaAllReaderJourneyFixture(
                 hostInvocationFactory = ProviderHostInvocationFactory(
                     context = context,
                     storageRoot = runtimeCache.apply { deleteRecursively() },
-                    baseHttpClient = if (originalCode7Package) packagedCode7HttpClient() else OkHttpClient(),
+                    baseHttpClient = when {
+                        liveTarget != null -> OkHttpClient.Builder()
+                            .callTimeout(25, TimeUnit.SECONDS).build()
+                        originalCode7Package || originalCode8Package -> packagedCode7HttpClient()
+                        else -> OkHttpClient()
+                    },
                 ),
             ),
         )
         val binding = ProviderReadingBinding(
             id = "mangaall-journey-${chapter.id}",
             canonicalTitleId = chapter.canonicalTitleId,
-            ref = ProviderBindingRef(providerId, "en", workId),
+            ref = ProviderBindingRef(providerId, liveTarget?.language ?: "en", workId),
             verification = ProviderBindingVerification.USER_CONFIRMED,
             availability = ProviderBindingAvailability.AVAILABLE,
             createdAt = 1,
@@ -273,18 +317,47 @@ internal class MangaAllReaderJourneyFixture(
         val evidenceRepository = ChapterEvidenceRepositoryImpl(database)
         val bindingRepository = ProviderReadingBindingRepositoryImpl(database)
         bindingRepository.upsert(binding)
-        val refresh = RefreshProviderReadingChapters(
-            gateway = gateway,
-            evidenceAdapter = ProviderChapterEvidenceAdapter(clock = { System.currentTimeMillis() }),
-            reconcileChapterEvidence = ReconcileChapterEvidence(
-                parser = ParseCanonicalChapterLabel(),
-                canonicalChapterRepository = canonicalRepository,
-                evidenceRepository = evidenceRepository,
-            ),
+        val reconciler = ReconcileChapterEvidence(
+            parser = ParseCanonicalChapterLabel(),
+            canonicalChapterRepository = canonicalRepository,
+            evidenceRepository = evidenceRepository,
         )
-        val refreshed = refresh.execute(binding)
-        assertTrue("MangaAll SCRIPT chapter refresh must succeed: $refreshed", refreshed is ProviderCallResult.Success)
-        assertEquals(1, (refreshed as ProviderCallResult.Success).value)
+        if (liveTarget != null) {
+            // The test title is disposable: a source chapter observation cannot
+            // attest a real catalog edition. Require chapter one and never
+            // treat this bounded first page as a complete source inventory.
+            val observed = withTimeout(40_000L) {
+                gateway.chapters(providerId, ProviderReadingChaptersRequest(binding.ref))
+            }
+            if (observed !is ProviderCallResult.Success) return "CHAPTER_ATTESTATION_UNAVAILABLE"
+            val matching = observed.value.items.filter {
+                it.providerChapterId == sourceChapterId &&
+                    (it.language == null || it.language == liveTarget.language)
+            }
+            if (matching.size != 1) return "CHAPTER_NOT_ATTESTED_IN_FIRST_PAGE"
+            val selected = matching.single()
+            if (selected.rawNumber != 1.0 || selected.volume != null || selected.rawLabel.isBlank()) {
+                return "CHAPTER_IDENTITY_NOT_COMPATIBLE_WITH_TEST_FIXTURE"
+            }
+            val evidence = ProviderChapterEvidenceAdapter().toEvidence(
+                canonicalTitleId = chapter.canonicalTitleId,
+                binding = binding.ref,
+                observations = listOf(selected),
+            )
+            reconciler.execute(chapter.canonicalTitleId, evidence)
+        } else {
+            val refresh = RefreshProviderReadingChapters(
+                gateway = gateway,
+                evidenceAdapter = ProviderChapterEvidenceAdapter(clock = { System.currentTimeMillis() }),
+                reconcileChapterEvidence = reconciler,
+            )
+            val refreshed = refresh.execute(binding)
+            assertTrue(
+                "MangaAll SCRIPT chapter refresh must succeed: $refreshed",
+                refreshed is ProviderCallResult.Success,
+            )
+            assertEquals(1, (refreshed as ProviderCallResult.Success).value)
+        }
         val resolver = ResolveProviderChapterReading(
             canonicalChapterRepository = canonicalRepository,
             evidenceRepository = evidenceRepository,
@@ -293,16 +366,27 @@ internal class MangaAllReaderJourneyFixture(
             providerRegistry = registry,
         )
         val options = resolver.options(chapter.id)
+        if (liveTarget != null && (options.size != 1 || options.single().providerChapterId != sourceChapterId)) {
+            return "CHAPTER_MAPPING_UNRESOLVED"
+        }
         assertEquals("Provider snapshot must reconcile to the exact canonical Reader chapter", 1, options.size)
         selectedOption = options.single()
         assertEquals(providerId, selectedOption.providerId)
         assertEquals(workId, selectedOption.externalWorkId)
         assertEquals(sourceChapterId, selectedOption.providerChapterId)
-        if (originalCode7Package) {
+        if (originalCode7Package || originalCode8Package) {
             originalPageLoaderFactory = pageClientField.get(reader.viewModel)
-            val images = packagedCode7ImageClient()
+            val images = if (liveTarget != null) {
+                OkHttpClient.Builder().callTimeout(25, TimeUnit.SECONDS).build()
+            } else {
+                packagedCode7ImageClient()
+            }
             val pageFactory: (CanonicalReaderTargetPlan.HttpPages) -> ReaderChapterLoader = { plan ->
-                ProviderHttpChapterLoader.from(context, plan, client = images)
+                // The published Provider may list hundreds of pages. Only the
+                // test's ephemeral loader is capped; original pages() output
+                // and production Reader loading semantics remain unchanged.
+                val bounded = if (liveTarget != null) plan.copy(pages = plan.pages.take(2)) else plan
+                ProviderHttpChapterLoader.from(context, bounded, client = images)
             }
             pageClientField.set(reader.viewModel, pageFactory)
             pageLoaderSwapped = true
@@ -310,6 +394,7 @@ internal class MangaAllReaderJourneyFixture(
         originalResolver = field.get(reader.viewModel)
         field.set(reader.viewModel, resolver)
         swapped = true
+        return null
     }
 
     /**

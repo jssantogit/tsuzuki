@@ -155,7 +155,109 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         runMangaAllContinuousReaderJourney(originalCode7Package = true)
     }
 
-    private fun runMangaAllContinuousReaderJourney(originalCode7Package: Boolean) {
+    /** The original published code8 .tsz traverses the SAME real ReaderActivity pixel path. */
+    @Test(timeout = 300_000L)
+    fun mangaAllPublishedCode8TszSourceTap503RetryRendersCdnPixels() {
+        requireOptIn()
+        runMangaAllContinuousReaderJourney(originalCode7Package = false, originalCode8Package = true)
+    }
+
+    /**
+     * Manual-only online experiment: exact operator-selected source chapter,
+     * real signed code8 JavaScript, real Host HTTPS/CDN, the production
+     * ReaderActivity and its actual on-screen image holder. The canonical
+     * title is a disposable test fixture; this does NOT verify editorial
+     * catalog identity, published installation or a physical device.
+     */
+    @Test(timeout = 300_000L)
+    fun mangaAllPublishedCode8LiveReaderDisplaysCdnPixels() {
+        requireOptIn()
+        val args = InstrumentationRegistry.getArguments()
+        assertEquals("true", args.getString("mangaAllLiveReaderOptIn"))
+        val target = MangaAllLiveReaderTarget(
+            workId = requireNotNull(args.getString("providerWorkId")),
+            chapterId = requireNotNull(args.getString("providerChapterId")),
+            language = requireNotNull(args.getString("facetLanguage")),
+        )
+        withFixture { fixture ->
+            fixture.launchReader()
+            val reader = awaitActivity(ReaderActivity::class.java)
+            awaitReaderPages(reader, fixture.sourceA.name, expectedCount = 10)
+            val initialChapter = requireNotNull(reader.viewModel.state.value.currentChapter)
+            val mangaAll = fixture.mangaAllJourney(reader, liveTarget = target)
+            try {
+                val preflight = try {
+                    runBlocking { mangaAll.attach() }
+                } catch (error: kotlinx.coroutines.TimeoutCancellationException) {
+                    "CHAPTER_ATTESTATION_UNAVAILABLE"
+                }
+                if (preflight != null) {
+                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=" + preflight)
+                    return@withFixture
+                }
+                reader.viewModel.openContentSelector()
+                awaitValue("the exact observed live MangaAll chapter option") {
+                    reader.viewModel.state.value.providerSourceOptions.singleOrNull()
+                        ?.takeIf { it == mangaAll.selectedOption }
+                }
+                val sourceName = when (target.workId.substringBefore(':')) {
+                    "mangadex" -> "MangaDex"
+                    "mangadot" -> "MangaDot"
+                    else -> "MangaFire"
+                }
+                val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+                assertTrue(
+                    "Exact live MangaAll source must be offered by the real Reader source card",
+                    device.wait(Until.hasObject(By.text(sourceName)), UI_TIMEOUT_MS),
+                )
+                device.findObject(By.text(sourceName)).click()
+                val readerReady = try {
+                    awaitValue("real CDN image to become the visible Reader chapter") {
+                        val state = reader.viewModel.state.value
+                        val page = state.currentChapter?.pages?.firstOrNull()
+                        val snapshot = readerViewSnapshot(reader)
+                        (
+                            state.activeCanonicalChapterId == fixture.chapter.id &&
+                                state.activeProviderSourceKey == mangaAll.selectedOption.readerSourceKey &&
+                                state.recovery == null && !state.sourceSelectionInProgress &&
+                                page?.status == Page.State.Ready && page.stream != null &&
+                                isCurrentPageImageVisible(snapshot.pager) &&
+                                reader.window.decorView.hasWindowFocus()
+                            ).takeIf { it }
+                    }
+                } catch (error: AssertionError) {
+                    false
+                }
+                if (!readerReady) {
+                    if (reader.viewModel.state.value.recovery != null) {
+                        assertSame(
+                            "A failed CDN must keep the prior Reader chapter session",
+                            initialChapter,
+                            reader.viewModel.state.value.currentChapter,
+                        )
+                    }
+                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CDN_OR_READER_UNAVAILABLE")
+                    return@withFixture
+                }
+                if (!hasLiveReaderPixelEvidence(reader)) {
+                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=SCREEN_PIXELS_NOT_ATTESTED")
+                    return@withFixture
+                }
+                assertEquals(fixture.chapter.id, reader.viewModel.state.value.activeCanonicalChapterId)
+                println(
+                    "MANGAALL_LIVE_PAGE_GATE|outcome=PASS|provenance=DIRECT_LIVE_ANDROID" +
+                        "|pagesDecoded=1|readerActivityPixels=REAL_CDN_VISIBLE",
+                )
+            } finally {
+                mangaAll.close()
+            }
+        }
+    }
+
+    private fun runMangaAllContinuousReaderJourney(
+        originalCode7Package: Boolean,
+        originalCode8Package: Boolean = false,
+    ) {
         val expectedMangaAllGreen = Color.rgb(12, 168, 82)
         // Guard the screenshot oracle itself: the first continuous E2E RED
         // rendered READY PNG pages, but the old color matcher only knew RED
@@ -179,7 +281,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "MANGAALL_INITIAL_READER")
             val previousSessionChapter = requireNotNull(reader.viewModel.state.value.currentChapter)
 
-            val mangaAll = fixture.mangaAllJourney(reader, originalCode7Package)
+            val mangaAll = fixture.mangaAllJourney(reader, originalCode7Package, originalCode8Package)
             try {
                 runBlocking { mangaAll.attach() }
 
@@ -1220,6 +1322,80 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         }
     }
 
+    /**
+     * Compare tonal structure in the in-memory original CDN bitmap with the
+     * focused, attached Reader image viewport captured in memory. No screenshot,
+     * page bytes, CDN URL or untrusted exception message is persisted or logged.
+     * A uniform/unclear image is inconclusive, never a false pixel PASS.
+     */
+    private fun hasLiveReaderPixelEvidence(reader: ReaderActivity): Boolean {
+        val snapshot = readerViewSnapshot(reader)
+        if (!isCurrentPageImageVisible(snapshot.pager) || !snapshot.windowHasFocus || snapshot.windowSecure) {
+            return false
+        }
+        val state = reader.viewModel.state.value
+        val page = state.currentChapter?.pages?.getOrNull(state.currentPage - 1) ?: return false
+        val stream = page.stream ?: return false
+        val originalBitmap = stream.invoke().use { input ->
+            android.graphics.BitmapFactory.decodeStream(
+                input,
+                null,
+                android.graphics.BitmapFactory.Options().apply { inSampleSize = 8 },
+            )
+        } ?: return false
+        try {
+            if (originalBitmap.width < 32 || originalBitmap.height < 32) return false
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            var imageRegion: android.graphics.Rect? = null
+            instrumentation.runOnMainSync {
+                val viewer = reader.viewModel.state.value.viewer as? PagerViewer ?: return@runOnMainSync
+                val holder = viewer.pager.children.filterIsInstance<PagerPageHolder>()
+                    .firstOrNull { it.page === page } ?: return@runOnMainSync
+                val view = holder.children.filterIsInstance<SubsamplingScaleImageView>()
+                    .firstOrNull { it.isShown && it.isReady } ?: return@runOnMainSync
+                val pos = IntArray(2)
+                view.getLocationOnScreen(pos)
+                imageRegion = android.graphics.Rect(pos[0], pos[1], pos[0] + view.width, pos[1] + view.height)
+            }
+            val screenshot = UiDevice.getInstance(instrumentation).takeScreenshot() ?: return false
+            try {
+                val visible = imageRegion ?: return false
+                if (!visible.intersect(0, 0, screenshot.width, screenshot.height)) return false
+                if (visible.width() < 100 || visible.height() < 100) return false
+                val sourceBins = livePageTones(
+                    originalBitmap,
+                    android.graphics.Rect(0, 0, originalBitmap.width, originalBitmap.height),
+                )
+                val screenBins = livePageTones(screenshot, visible)
+                val sourceMin = maxOf(3, sourceBins.sum() / 300)
+                val screenMin = maxOf(3, screenBins.sum() / 300)
+                return (0..7).count { sourceBins[it] >= sourceMin && screenBins[it] >= screenMin } >= 2 &&
+                    isCurrentPageImageVisible(readerViewSnapshot(reader).pager)
+            } finally {
+                screenshot.recycle()
+            }
+        } finally {
+            originalBitmap.recycle()
+        }
+    }
+
+    private fun livePageTones(bitmap: Bitmap, region: android.graphics.Rect): IntArray {
+        val bins = IntArray(8)
+        val left = region.left + region.width() / 12
+        val top = region.top + region.height() / 12
+        val right = region.right - region.width() / 12
+        val bottom = region.bottom - region.height() / 12
+        val stride = maxOf(1, minOf(region.width(), region.height()) / 70)
+        for (y in top until bottom step stride) {
+            for (x in left until right step stride) {
+                val color = bitmap.getPixel(x, y)
+                val luminance = (Color.red(color) * 3 + Color.green(color) * 6 + Color.blue(color)) / 10
+                bins[(luminance / 32).coerceIn(0, 7)]++
+            }
+        }
+        return bins
+    }
+
     private fun awaitImagePixels(
         reader: ReaderActivity,
         fixture: SourceSwitchFixture,
@@ -2085,12 +2261,16 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         fun mangaAllJourney(
             reader: ReaderActivity,
             originalCode7Package: Boolean = false,
+            originalCode8Package: Boolean = false,
+            liveTarget: MangaAllLiveReaderTarget? = null,
         ) = MangaAllReaderJourneyFixture(
             context = InstrumentationRegistry.getInstrumentation().targetContext,
             reader = reader,
             database = database,
             chapter = chapter,
             originalCode7Package = originalCode7Package,
+            originalCode8Package = originalCode8Package || liveTarget != null,
+            liveTarget = liveTarget,
         )
 
         fun launchReader(

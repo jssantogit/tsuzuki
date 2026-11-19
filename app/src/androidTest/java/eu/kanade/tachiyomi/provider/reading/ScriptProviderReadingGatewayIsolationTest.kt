@@ -1648,6 +1648,155 @@ class ScriptProviderReadingGatewayIsolationTest {
         assertEquals(emptyList<Any>(), resolver.options(chapters.single().id))
     }
 
+    /**
+     * Opt-in, direct-live Android transport gate for the ORIGINAL published code8.
+     *
+     * IDs are taken verbatim from a separately observed Provider result and explicitly
+     * supplied by the operator. No test chooses a title, edition, author or chapter;
+     * this is not a canonical ReaderActivity/pixel acceptance test.
+     */
+    @Test(timeout = 180_000L)
+    fun mangaAllSignedCode8LivePages_downloadAndDecodeAtMostTwo() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val args = InstrumentationRegistry.getArguments()
+        assertEquals("true", args.getString("mangaAllLivePageOptIn"))
+        assertEquals("app.tsuzuki.dev", instrumentation.targetContext.packageName)
+        val workId = requireNotNull(args.getString("providerWorkId"))
+        val chapterId = requireNotNull(args.getString("providerChapterId"))
+        val language = requireNotNull(args.getString("facetLanguage"))
+        require(Regex("(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}").matches(workId))
+        require(Regex("[A-Za-z0-9._:-]{1,160}").matches(chapterId))
+        require(Regex("[a-z]{2}(-[a-z]{2})?").matches(language))
+        val archive = instrumentation.context.assets.open("mangaall/code8-published-package.tsz")
+            .use { it.readBytes() }
+        val parsed = ProviderPackageParser().parse(archive)
+        assertEquals("app.tsuzuki.mangaall", parsed.manifest.id)
+        assertEquals(8L, parsed.manifest.version.code)
+        val providerId = ProviderId(parsed.manifest.id)
+        val permission = requireNotNull(parsed.manifest.permissions.network)
+        val networkClient = OkHttpClient.Builder()
+            .callTimeout(25, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+        val actualGateway = gateway(
+            main = "",
+            providerId = providerId,
+            networkOrigins = permission.origins,
+            browserOrigins = parsed.manifest.permissions.browser?.origins.orEmpty(),
+            localNetwork = false,
+            packageBytesOverride = archive,
+            facetLanguage = language,
+            baseHttpClient = networkClient,
+        )
+        val binding = ProviderBindingRef(providerId, language, workId)
+        // The caller's chapter ID is not itself evidence that it belongs to the
+        // chosen source work. Require an exact, source-scoped observation on the
+        // first real chapter page; never fall back to a title or another edition.
+        // This bounded proof is NOT an exhaustive inventory (other cursors may exist).
+        val chapterAttestation = withTimeout(35_000L) {
+            actualGateway.chapters(
+                providerId,
+                ProviderReadingChaptersRequest(binding),
+            )
+        }
+        if (chapterAttestation !is ProviderCallResult.Success) {
+            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_ATTESTATION_UNAVAILABLE")
+            return@runBlocking
+        }
+        val matchingChapters = chapterAttestation.value.items.count {
+            it.providerChapterId == chapterId &&
+                (it.language == null || it.language == language)
+        }
+        if (matchingChapters != 1) {
+            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_NOT_ATTESTED_IN_FIRST_PAGE")
+            return@runBlocking
+        }
+        val response = withTimeout(60_000L) {
+            actualGateway.pages(
+                providerId,
+                ProviderReadingPagesRequest(
+                    binding = binding,
+                    providerChapterId = chapterId,
+                ),
+            )
+        }
+        if (response !is ProviderCallResult.Success) {
+            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=PROVIDER_PAGES_UNAVAILABLE")
+            return@runBlocking
+        }
+        val delivery = response.value as? ProviderReadingDelivery.PageList
+        if (delivery == null || delivery.pages.isEmpty()) {
+            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=NO_HTTP_PAGES")
+            return@runBlocking
+        }
+        val selected = delivery.pages.take(2).map { page ->
+            PreparedHttpPage(
+                url = page.url,
+                headers = page.headers,
+                allowedOrigins = page.allowedOrigins,
+                allowLocalNetwork = page.allowLocalNetwork,
+            )
+        }
+        val plan = CanonicalReaderTargetPlan.HttpPages(
+            canonicalChapterId = "disposable-mangaall-live-probe",
+            pages = selected,
+        )
+        val readerLoader = ProviderHttpChapterLoader.from(
+            instrumentation.targetContext,
+            plan,
+            client = networkClient,
+        )
+        val readerChapter = ReaderChapter(
+            ChapterImpl().apply {
+                id = Long.MIN_VALUE
+                url = "provider-pages:disposable-mangaall-live-probe"
+                name = "Live page transport probe"
+            },
+        )
+        var decoded = 0
+        try {
+            readerLoader.loadChapter(readerChapter)
+            for (page in requireNotNull(readerChapter.pages)) {
+                withTimeout(35_000L) {
+                    requireNotNull(readerChapter.pageLoader).loadPage(page)
+                }
+                if (page.status != Page.State.Ready || page.stream == null) {
+                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CDN_FETCH_UNAVAILABLE")
+                    return@runBlocking
+                }
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                requireNotNull(page.stream).invoke().use {
+                    BitmapFactory.decodeStream(it, null, bounds)
+                }
+                if (bounds.outWidth !in 1..12000 || bounds.outHeight !in 1..12000) {
+                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=INVALID_IMAGE_DIMENSIONS")
+                    return@runBlocking
+                }
+                val sample = generateSequence(1) { it * 2 }
+                    .first { maxOf(bounds.outWidth / it, bounds.outHeight / it) <= 4096 }
+                val bitmap = requireNotNull(page.stream).invoke().use {
+                    BitmapFactory.decodeStream(
+                        it,
+                        null,
+                        BitmapFactory.Options().apply { inSampleSize = sample },
+                    )
+                }
+                if (bitmap == null) {
+                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=IMAGE_DECODE_FAILED")
+                    return@runBlocking
+                }
+                bitmap.recycle()
+                decoded++
+            }
+            assertTrue("At least one original CDN image must decode", decoded > 0)
+            println(
+                "MANGAALL_LIVE_PAGE_GATE|outcome=PASS|provenance=DIRECT_LIVE_ANDROID" +
+                    "|pagesDecoded=$decoded|readerActivityPixels=NOT_TESTED",
+            )
+        } finally {
+            readerChapter.pageLoader?.recycle()
+        }
+    }
+
     private suspend fun readFirstProviderPage(
         pageList: ProviderReadingDelivery.PageList,
         canonicalChapterId: String,
@@ -1822,6 +1971,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         localNetwork: Boolean,
         managedFiles: ProviderManagedFileStore? = null,
         includePages: Boolean = true,
+        facetLanguage: String = "en",
         onBindingPhase: (ProviderRuntimeBindingPhase) -> Unit = {},
         onRegistry: (DefaultProviderRegistry) -> Unit = {},
         packageBytesOverride: ByteArray? = null,
@@ -1860,7 +2010,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                     .takeIf { browserOrigins.isNotEmpty() },
             ),
             settings = emptyList(),
-            contentLanguages = setOf("en"),
+            contentLanguages = setOf(facetLanguage),
         )
         val registry = DefaultProviderRegistry(
             registrations = {
@@ -1868,7 +2018,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                     ProviderRegistration(
                         descriptor = descriptor,
                         lifecycleStatus = ProviderLifecycleStatus.ENABLED,
-                        facets = listOf(ProviderFacetRef(providerId, "en")),
+                        facets = listOf(ProviderFacetRef(providerId, facetLanguage)),
                         configurationFingerprint = "instrumentation",
                     ),
                 )
