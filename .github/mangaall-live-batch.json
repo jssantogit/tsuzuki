@@ -1,10 +1,10 @@
 {
   "mode": "reader",
-  "source": "mangafire",
+  "source": "mangadot",
   "language": "en",
   "titles": [
-    "Attack on Titan",
-    "Boku no Hero",
-    "Dragon Ball"
+    "Death Note",
+    "Naruto",
+    "Bleach"
   ]
 }
