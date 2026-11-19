@@ -1,4 +1,4 @@
-name: MangaAll signed code8 — sequential Android live manga batch
+name: MangaAll signed code8 — unified three-source Android live manga batch
 
 # Pull requests only compile and run offline tests. Actual CDN traffic is
 # opt-in via workflow_dispatch or a manifest-changing commit on a dedicated
@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       titles:
-        description: 'Titles in order: comma-separated or JSON array of 1–30 manga'
+        description: 'MangaAll unified: ordered titles (all 3 sources; English facet)'
         required: true
         type: string
       gate_mode:
@@ -33,20 +33,6 @@ on:
         options:
           - transport
           - reader
-      source:
-        description: 'Exact MangaAll upstream source (never inferred from title)'
-        required: true
-        default: mangafire
-        type: choice
-        options:
-          - mangafire
-          - mangadex
-          - mangadot
-      facet_language:
-        description: 'Exact upstream facet language (MangaFire only supports en)'
-        required: true
-        default: en
-        type: string
 
 permissions:
   contents: read
@@ -79,17 +65,16 @@ jobs:
 
   live-android-page-decoder:
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/mangaall-live/'))
-    name: Sequential original code8 -> lookup -> chapter -> CDN Reader gate
+    name: Unified code8 lookup -> 3-source audit -> source Reader gates
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     env:
       MANGAALL_BATCH_TITLES: ${{ inputs.titles || '' }}
-      MANGAALL_BATCH_SOURCE: ${{ inputs.source || 'mangafire' }}
-      MANGAALL_BATCH_LANGUAGE: ${{ inputs.facet_language || 'en' }}
+      MANGAALL_BATCH_LANGUAGE: en
       MANGAALL_BATCH_MODE: ${{ inputs.gate_mode || 'reader' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Validate source, language, ordered titles and number of cases (no network)
+      - name: Validate tri-source English audit, ordered titles and case limits (offline)
         run: |
           python3 .github/scripts/test_mangaall_live_batch.py
           python3 .github/scripts/mangaall_live_batch.py --check-plan
@@ -144,7 +129,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Run each manga sequentially in one disposable Android emulator
+      - name: Run each manga through the unified three-source Android gate
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 35
@@ -153,7 +138,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: python3 .github/scripts/mangaall_live_batch.py
-      - name: Save ordered closed summary only — no source IDs, URLs, headers, logs or images
+      - name: Save per-title and per-source closed audit (no IDs, URLs or images)
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
