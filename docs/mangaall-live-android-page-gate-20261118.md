@@ -14,6 +14,23 @@ Este gate não remove essa proteção nem transporta URLs de CDN em artefatos:
 o Android consulta o provider **diretamente** na execução e não exporta
 nenhuma URL, header, imagem ou log bruto.
 
+## Gate visual offline independente: code8 original no ReaderActivity
+
+O workflow `mangaall-host-journey-android.yml` foi estendido para verificar
+o **pacote original distribuído 0.5.3/code8**, índice assinado seq34 e SHA,
+sem substituir seu JavaScript. Em um emulador descartável, o teste
+`mangaAllPublishedCode8TszSourceTap503RetryRendersCdnPixels` utiliza os
+componentes reais `ReaderActivity`, `ReaderViewModel`, runtime SCRIPT,
+seleção de fonte e pipeline de renderização, simulando HTTP 503 e retry
+contra respostas controladas. O teste exige regiões com pixels verdes da
+imagem PNG de fixture na tela e preservação da sessão anterior.
+
+Esse gate é **offline**, não prova disponibilidade de MangaFire/CDN
+externa nem que imagens remotas apareçam na tela. Na PR, roda
+apenas essa regressão; o workflow histórico completo permanece disponível
+manualmente. Não há mudança de DI de produção, confiança assinada,
+instalação física nem estado de biblioteca do usuário.
+
 ## Execução manual (depois que o workflow estiver na main)
 
 1. Execute o workflow `MangaAll signed code8 — Android live page decode`
