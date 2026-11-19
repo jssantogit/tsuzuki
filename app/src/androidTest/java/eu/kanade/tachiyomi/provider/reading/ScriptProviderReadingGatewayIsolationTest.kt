@@ -1671,6 +1671,11 @@ class ScriptProviderReadingGatewayIsolationTest {
             "MANGAALL_BATCH_AUDIT|outcome=COMPLETE|sources=3" +
                 "|titleParity=VARIANCE|authorParity=UNVERIFIED",
         )
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_BATCH_AUDIT|outcome=INCONCLUSIVE|reason=LOOKUP_UNAVAILABLE" +
+                "|code=SOURCE_READ_ERROR|sourceFailure=CHALLENGE_BLOCKED" +
+                "|httpStatus=403|retryable=true",
+        )
     }
 
     /**
@@ -1765,8 +1770,17 @@ class ScriptProviderReadingGatewayIsolationTest {
                             ),
                         )
                     }
-                    if (response !is ProviderCallResult.Success) {
-                        inconclusive("LOOKUP_UNAVAILABLE")
+                    if (response is ProviderCallResult.Failure) {
+                        // Structured Host error only. Never emit response bodies,
+                        // upstream URLs, headers, provider IDs or raw exceptions.
+                        val error = response.error
+                        MangaAllInstrumentationVerdict.publish(
+                            "MANGAALL_BATCH_AUDIT|outcome=INCONCLUSIVE|reason=LOOKUP_UNAVAILABLE" +
+                                "|code=${error.code.name}" +
+                                "|sourceFailure=${error.sourceFailureCode?.name ?: "NONE"}" +
+                                "|httpStatus=${error.httpStatus?.toString() ?: "NONE"}" +
+                                "|retryable=${error.retryable}",
+                        )
                         return@withTimeout
                     }
                     for (candidate in response.value.items) {
