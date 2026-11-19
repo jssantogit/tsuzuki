@@ -172,7 +172,7 @@ internal object MangaAllLookupV2ReadOnlyDiagnostics {
                 if (
                     it.code !in failureCodes ||
                     it.httpStatus?.let { http -> http !in 100..599 } == true ||
-                    (it.code == "CHALLENGE_BLOCKED" && it.httpStatus in 200..299)
+                    (it.code == "CHALLENGE_BLOCKED" && it.httpStatus?.let { http -> http in 200..299 } == true)
                 ) return null
             }
         }
@@ -183,11 +183,11 @@ internal object MangaAllLookupV2ReadOnlyDiagnostics {
                 !it.unsafeCandidate
         } && !envelope.canContinue
         if (
-            envelope.lookupComplete != complete ||
-            (envelope.state == "COMPLETE_SINGLE_PAGE") != envelope.lookupComplete ||
+            (envelope.lookupComplete && !complete) ||
+            ((envelope.state == "COMPLETE_SINGLE_PAGE") != envelope.lookupComplete) ||
             envelope.state !in setOf("COMPLETE_SINGLE_PAGE", "PARTIAL_EVIDENCE", "INCONCLUSIVE") ||
-            (envelope.state == "PARTIAL_EVIDENCE") != envelope.observedCandidates.isNotEmpty() &&
-            !envelope.lookupComplete ||
+            ((envelope.state == "PARTIAL_EVIDENCE") !=
+                (envelope.observedCandidates.isNotEmpty() && !envelope.lookupComplete)) ||
             (envelope.state == "INCONCLUSIVE" && envelope.observedCandidates.isNotEmpty())
         ) {
             return null
