@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.data.tsuzuki.instrumentation
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
-import kotlinx.coroutines.withTimeout
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.provider.reading.ActiveProviderScriptPackage
 import eu.kanade.tachiyomi.provider.reading.ActiveProviderScriptPackageSource
@@ -15,6 +14,7 @@ import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderViewModel
 import eu.kanade.tachiyomi.ui.reader.loader.ProviderHttpChapterLoader
 import eu.kanade.tachiyomi.ui.reader.loader.ReaderChapterLoader
+import kotlinx.coroutines.withTimeout
 import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -52,10 +52,10 @@ import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
-import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterEvidenceAdapter
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterReadingOption
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBinding
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.RefreshProviderReadingChapters
 import tachiyomi.domain.tsuzuki.provider.reading.ResolveProviderChapterReading
 import java.io.ByteArrayOutputStream
@@ -352,7 +352,10 @@ internal class MangaAllReaderJourneyFixture(
                 reconcileChapterEvidence = reconciler,
             )
             val refreshed = refresh.execute(binding)
-            assertTrue("MangaAll SCRIPT chapter refresh must succeed: $refreshed", refreshed is ProviderCallResult.Success)
+            assertTrue(
+                "MangaAll SCRIPT chapter refresh must succeed: $refreshed",
+                refreshed is ProviderCallResult.Success,
+            )
             assertEquals(1, (refreshed as ProviderCallResult.Success).value)
         }
         val resolver = ResolveProviderChapterReading(
