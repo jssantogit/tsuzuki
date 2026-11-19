@@ -1798,7 +1798,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 }
                 val authors = uniqueWorks.map { candidate ->
                     candidate.authors.map(::normalize).filter(String::isNotBlank).toSet()
-                }.filter(Set<String>::isNotEmpty)
+                }.filter { it.isNotEmpty() }
                 val authorParity = when {
                     authors.size < 2 -> "UNVERIFIED"
                     authors.indices.any { left ->
