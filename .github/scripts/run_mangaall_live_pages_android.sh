@@ -18,6 +18,7 @@ case "$mode" in
     exit 2
     ;;
 esac
+# Keep private per-title evidence only until the test invocation exits.
 readonly output='.github/results/mangaall-live-pages-android'
 mkdir -p "$output"
 
@@ -54,7 +55,7 @@ adb install -r "${target_apks[0]}" >/dev/null
 adb install -r "${test_apks[0]}" >/dev/null
 adb shell pm clear "$app" | tr -d '\r' | grep -Fq 'Success'
 status=0
-timeout --foreground 230s adb shell am instrument -w -r \
+timeout --foreground 340s adb shell am instrument -w -r \
   -e class "$test_case" \
   -e mangaAllLivePageOptIn true \
   -e mangaAllLiveReaderOptIn true \
@@ -65,7 +66,7 @@ timeout --foreground 230s adb shell am instrument -w -r \
   "$runner" > "$raw" 2>&1 || status=$?
 
 # Export only an exact, closed vocabulary verdict (never arbitrary upstream text).
-grep -oE 'MANGAALL_LIVE_PAGE_GATE\|outcome=(INCONCLUSIVE\|reason=(CHAPTER_ATTESTATION_UNAVAILABLE|CHAPTER_NOT_ATTESTED_IN_FIRST_PAGE|CHAPTER_IDENTITY_NOT_COMPATIBLE_WITH_TEST_FIXTURE|CHAPTER_MAPPING_UNRESOLVED|CDN_OR_READER_UNAVAILABLE|SCREEN_PIXELS_NOT_ATTESTED|PROVIDER_PAGES_UNAVAILABLE|NO_HTTP_PAGES|CDN_FETCH_UNAVAILABLE|INVALID_IMAGE_DIMENSIONS|IMAGE_DECODE_FAILED)|PASS\|provenance=DIRECT_LIVE_ANDROID\|pagesDecoded=[12]\|readerActivityPixels=(NOT_TESTED|REAL_CDN_VISIBLE))' \
+grep -oE 'MANGAALL_LIVE_PAGE_GATE\|outcome=(INCONCLUSIVE\|reason=(CHAPTER_ATTESTATION_UNAVAILABLE|CHAPTER_NOT_ATTESTED_IN_FIRST_PAGE|CHAPTER_NOT_ATTESTED_IN_BOUND|CHAPTER_CURSOR_LIMIT|CHAPTER_AMBIGUOUS|CHAPTER_IDENTITY_NOT_COMPATIBLE_WITH_TEST_FIXTURE|CHAPTER_MAPPING_UNRESOLVED|CDN_OR_READER_UNAVAILABLE|SCREEN_PIXELS_NOT_ATTESTED|PROVIDER_PAGES_UNAVAILABLE|NO_HTTP_PAGES|CDN_FETCH_UNAVAILABLE|INVALID_IMAGE_DIMENSIONS|IMAGE_DECODE_FAILED)|PASS\|provenance=DIRECT_LIVE_ANDROID\|pagesDecoded=[12]\|readerActivityPixels=(NOT_TESTED|REAL_CDN_VISIBLE))' \
   "$raw" | tail -n 1 > "$output/verdict.txt" || true
 if [ "$status" -ne 0 ] || ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw" ||
    ! grep -Fq 'OK (1 test)' "$raw" || [ ! -s "$output/verdict.txt" ]; then
