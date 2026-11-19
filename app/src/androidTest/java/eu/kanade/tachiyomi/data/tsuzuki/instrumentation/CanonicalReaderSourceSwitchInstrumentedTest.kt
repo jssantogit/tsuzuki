@@ -229,13 +229,13 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                     false
                 }
                 if (!readerReady) {
-                    assertSame(
-                        "An unavailable CDN cannot rewrite the original canonical Reader chapter",
-                        initialChapter,
-                        reader.viewModel.state.value.currentChapter.takeIf {
-                            reader.viewModel.state.value.recovery != null
-                        } ?: initialChapter,
-                    )
+                    if (reader.viewModel.state.value.recovery != null) {
+                        assertSame(
+                            "A failed CDN must keep the prior Reader chapter session",
+                            initialChapter,
+                            reader.viewModel.state.value.currentChapter,
+                        )
+                    }
                     println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CDN_OR_READER_UNAVAILABLE")
                     return@withFixture
                 }
@@ -1320,6 +1320,80 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                 error,
             )
         }
+    }
+
+    /**
+     * Compare tonal structure in the in-memory original CDN bitmap with the
+     * focused, attached Reader image viewport captured in memory. No screenshot,
+     * page bytes, CDN URL or untrusted exception message is persisted or logged.
+     * A uniform/unclear image is inconclusive, never a false pixel PASS.
+     */
+    private fun hasLiveReaderPixelEvidence(reader: ReaderActivity): Boolean {
+        val snapshot = readerViewSnapshot(reader)
+        if (!isCurrentPageImageVisible(snapshot.pager) || !snapshot.windowHasFocus || snapshot.windowSecure) {
+            return false
+        }
+        val state = reader.viewModel.state.value
+        val page = state.currentChapter?.pages?.getOrNull(state.currentPage - 1) ?: return false
+        val stream = page.stream ?: return false
+        val originalBitmap = stream.invoke().use { input ->
+            android.graphics.BitmapFactory.decodeStream(
+                input,
+                null,
+                android.graphics.BitmapFactory.Options().apply { inSampleSize = 8 },
+            )
+        } ?: return false
+        try {
+            if (originalBitmap.width < 32 || originalBitmap.height < 32) return false
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            var imageRegion: android.graphics.Rect? = null
+            instrumentation.runOnMainSync {
+                val viewer = reader.viewModel.state.value.viewer as? PagerViewer ?: return@runOnMainSync
+                val holder = viewer.pager.children.filterIsInstance<PagerPageHolder>()
+                    .firstOrNull { it.page === page } ?: return@runOnMainSync
+                val view = holder.children.filterIsInstance<SubsamplingScaleImageView>()
+                    .firstOrNull { it.isShown && it.isReady } ?: return@runOnMainSync
+                val pos = IntArray(2)
+                view.getLocationOnScreen(pos)
+                imageRegion = android.graphics.Rect(pos[0], pos[1], pos[0] + view.width, pos[1] + view.height)
+            }
+            val screenshot = UiDevice.getInstance(instrumentation).takeScreenshot() ?: return false
+            try {
+                val visible = imageRegion ?: return false
+                if (!visible.intersect(0, 0, screenshot.width, screenshot.height)) return false
+                if (visible.width() < 100 || visible.height() < 100) return false
+                val sourceBins = livePageTones(
+                    originalBitmap,
+                    android.graphics.Rect(0, 0, originalBitmap.width, originalBitmap.height),
+                )
+                val screenBins = livePageTones(screenshot, visible)
+                val sourceMin = maxOf(3, sourceBins.sum() / 300)
+                val screenMin = maxOf(3, screenBins.sum() / 300)
+                return (0..7).count { sourceBins[it] >= sourceMin && screenBins[it] >= screenMin } >= 2 &&
+                    isCurrentPageImageVisible(readerViewSnapshot(reader).pager)
+            } finally {
+                screenshot.recycle()
+            }
+        } finally {
+            originalBitmap.recycle()
+        }
+    }
+
+    private fun livePageTones(bitmap: Bitmap, region: android.graphics.Rect): IntArray {
+        val bins = IntArray(8)
+        val left = region.left + region.width() / 12
+        val top = region.top + region.height() / 12
+        val right = region.right - region.width() / 12
+        val bottom = region.bottom - region.height() / 12
+        val stride = maxOf(1, minOf(region.width(), region.height()) / 70)
+        for (y in top until bottom step stride) {
+            for (x in left until right step stride) {
+                val color = bitmap.getPixel(x, y)
+                val luminance = (Color.red(color) * 3 + Color.green(color) * 6 + Color.blue(color)) / 10
+                bins[(luminance / 32).coerceIn(0, 7)]++
+            }
+        }
+        return bins
     }
 
     private fun awaitImagePixels(
