@@ -83,7 +83,8 @@ if [ "${MANGAALL_CODE8_ONLY:-0}" = "1" ]; then
     'INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_SOURCE|source=mangadex|outcome=READY|candidates=1|workId=mangadex:11111111-2222-4333-8444-555555555555|chapterId=mangadex:aaaa1111-2222-4333-8444-555555555555|language=en' \
     'INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_SOURCE|source=mangadot|outcome=AMBIGUOUS|candidates=2' \
     'INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_SOURCE|source=mangafire|outcome=MISSING|candidates=0' \
-    'INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_AUDIT|outcome=COMPLETE|sources=3|titleParity=VARIANCE|authorParity=UNVERIFIED'
+    'INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_AUDIT|outcome=COMPLETE|sources=3|titleParity=VARIANCE|authorParity=UNVERIFIED' \
+    'INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_AUDIT|outcome=INCONCLUSIVE|reason=LOOKUP_UNAVAILABLE|code=SOURCE_READ_ERROR|sourceFailure=CHALLENGE_BLOCKED|httpStatus=403|retryable=true'
   do
     if ! grep -Fxq "$marker" "$output/LIVE_VERDICT_INSTRUMENTATION_STATUS_PROTOCOL.txt"; then
       echo 'MANGAALL_JOURNEY|phase=LIVE_VERDICT_INSTRUMENTATION_STATUS_PROTOCOL|outcome=FAIL|reason=TRI_SOURCE_STATUS_MISSING' >&2
