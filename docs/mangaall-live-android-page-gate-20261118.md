@@ -1,9 +1,12 @@
 # MangaAll — primeiro gate Android online de páginas reais (code8)
 
-**Escopo:** gate `DIRECT_LIVE_ANDROID` manual, em emulador descartável,
-para `ProviderReadingGateway.pages` do pacote publicado
-`app.tsuzuki.mangaall` 0.5.3/code8 e o carregador `ProviderHttpChapterLoader`.
-Não envolve `ReaderActivity`, pixels de tela, seleção Compose nem o Galaxy A54.
+**Escopo:** dois gates de execução **manual** para o pacote publicado
+`app.tsuzuki.mangaall` 0.5.3/code8, em `app.tsuzuki.dev` descartável:
+`transport` (decodificação de até duas imagens da CDN pelo Host) e `reader`
+(a mesma CDN real no `ReaderActivity` de produção e comprovação visual
+conservadora). O modo `reader` é **transporte/UI em título de teste**:
+não atesta identidade editorial do catálogo independente nem aceita obra
+real na biblioteca. Não instala APK no Galaxy A54.
 
 ## Por que é separado
 
@@ -31,46 +34,67 @@ apenas essa regressão; o workflow histórico completo permanece disponível
 manualmente. Não há mudança de DI de produção, confiança assinada,
 instalação física nem estado de biblioteca do usuário.
 
-## Execução manual (depois que o workflow estiver na main)
+## Execução manual (quando o workflow estiver na main)
 
-1. Execute o workflow `MangaAll signed code8 — Android live page decode`
-   via **Run workflow**. Não há `schedule` nem execução online por PR.
-2. Informe `provider_work_id`, `provider_chapter_id` e `facet_language`
-   **observados** numa execução de fonte real/Host. Não inventar IDs, não
-   selecionar automaticamente uma edição apenas pelo título e não usar
-   credenciais, cookies ou headers privados como entradas.
-3. O workflow verifica o índice assinado oficial (seq. 34) e o hash do
-   archive code8 no commit fixo do repositório Provider. O arquivo `.tsz`
-   é incorporado somente como asset de `AndroidTest`, sem publicação.
-4. O teste consulta primeiro `chapters()` no mesmo binding/faceta em uma página real de inventário, exigindo que o ID escolhido apareça exatamente uma vez. Um capítulo encontrado somente em outro cursor é **inconclusivo** no escopo desta prova limitada, não ausente. Depois chama `pages()` no gateway SCRIPT/QuickJS e usa a política
-   de origens e o carregador HTTP do próprio Host para **até duas páginas**.
-   Verifica se o download completou e o Android conseguiu decodificar
-   bitmaps reais. Janela máxima individual: chamadas de rede 25s;
-   timeout instrumentado de 180s. O teste não contabiliza páginas de
-   um inventário canônico nem salva progresso.
-5. Somente `verdict.txt` com status fechado é retido por três dias.
-   Logs HTTP e URLs são descartados após o emulador. O teste usa
-   `app.tsuzuki.dev` e verifica a propriedade de emulador descartável.
+1. Abra o workflow `MangaAll signed code8 — Android live pages and Reader pixels`
+   via **Run workflow**. Não há execução LIVE automática, por PR ou por schedule.
+2. Escolha `gate_mode=transport` para download/decodificação sem UI, ou
+   `gate_mode=reader` para imagem realmente exibida no Reader. Informe o
+   `provider_work_id`, `provider_chapter_id` e `facet_language`
+   **observados** no MangaAll real. Não invente IDs nem use cookies,
+   credenciais, URLs ou headers privados como argumentos.
+3. O runner valida o pacote original oficial e o índice assinado seq34,
+   SHA-256 e versionCode8 antes de incorporar o `.tsz` ao AndroidTest.
+   A aplicação e os dados são descartáveis; nada é publicado ou inscrito
+   num repositório/raiz de confiança do usuário.
+4. Os dois modos chamam `chapters()` com o mesmo binding de fonte e faceta,
+   exigindo o ID exato na primeira página de inventário. A ausência na amostra
+   é inconclusiva; não se declara `NO_CHAPTERS`. O modo `transport`
+   prossegue para `pages()` e até duas imagens pelo loader real.
+5. O modo `reader` somente aceita um capítulo fonte explicitamente observado
+   como **capítulo 1 sem volume**, compatível com o capítulo de teste efêmero.
+   Concilia apenas essa evidência sem afirmar completude nem identidade
+   editorial independente, abre a mesma `ReaderActivity`, toca a linha
+   de fonte Compose e recebe a imagem pelo loader HTTP de produção. Somente
+   no test harness se limita o loader a duas páginas; não muda a fábrica
+   de páginas nem a UI de produção.
+6. A prova visual exige estado `Page.Ready` com stream, chave de fonte correta,
+   `SubsamplingScaleImageView` anexada, pronta e visível, janela focada e
+   pelo menos duas classes tonais comuns entre a imagem decodificada e a
+   captura **em memória** da região visual. Uma página uniforme ou ambígua
+   não recebe PASS. O processo nunca grava as imagens, screenshots nem
+   URLs da CDN em arquivos ou logs.
+7. A CI retém somente `verdict.txt` com código fechado por três dias;
+   `app.tsuzuki.dev` é limpa no final. Erros e desafios HTTP não autorizam
+   rebind de edição, bypass de proteção de sites ou inferência editorial.
 
-## Critério de aceite
+## Critério de aceite e estado
 
-- `PASS|provenance=DIRECT_LIVE_ANDROID|pagesDecoded=1/2`:
-  imagem(ns) original(is) do upstream carregada(s) e decodificada(s)
-  pelo Host Android. **Não prova pixels visíveis no Reader**.
-- `INCONCLUSIVE`: origem bloqueada, capítulo não atestado na primeira página, API indisponível, páginas vazias,
-  CDN inacessível ou dados que não foram decodificados. Não transforma
-  403/challenge ou timeout em `NO_CHAPTERS` ou evidência editorial.
-- `FAIL`: instrumentação, contrato de entrada, política de ambiente,
-  pacote assinado ou teste quebrado. Um resultado inconclusivo impede
-  o gate online de ficar verde, mas preserva a razão fechada.
+- `transport PASS|pagesDecoded=1/2|readerActivityPixels=NOT_TESTED`:
+  bits reais da CDN carregados e decodificados pelo Host Android; não é
+  prova de imagem visível no Reader.
+- `reader PASS|pagesDecoded=1|readerActivityPixels=REAL_CDN_VISIBLE`:
+  requisição de páginas do pacote original code8, clique de fonte e imagem
+  real decodificada com evidência de pixels na janela do Reader descartável.
+  **Não** prova a identidade editorial da obra, instalação de assinatura
+  no A54 nem permanência de progresso em dados físicos.
+- `INCONCLUSIVE`: fonte/CDN bloqueada, página fora da primeira janela
+  de capítulos, volume/número incompatível com o fixture, conflito, CDN
+  indisponível ou imagem sem amostra visual suficiente. Não equivale a
+  `NO_CHAPTERS`, nem transforma uma edição em outra.
+- `FAIL`: quebra de instrumento/contrato, parâmetro inválido, assinatura
+  incorreta ou exceção inesperada. Inconclusivo não recebe gate verde.
 
-**Próximo incremento, ainda NÃO implementado neste gate:** combinar o
-provider original code8, associação canônica validada, seleção real do
-Reader e imagens de rede numa mesma `ReaderActivity`, com prova de
-holder anexado e pixels efetivamente renderizados (sem comparar cores
-sintéticas numa imagem real). Reutilizar os testes de screenshot/pager
-do `CanonicalReaderSourceSwitchInstrumentedTest` mantendo autorização
-de fonte, isolamento e sem bloquear toda PR em rede externa.
+**Validação implementada:** [CI compile #44506722152](https://github.com/jssantogit/tsuzuki/actions/runs/44506722152)
+**SUCCESS** e [CI Android offline #44506722008](https://github.com/jssantogit/tsuzuki/actions/runs/44506722008)
+**SUCCESS**, com `CODE8_PUBLISHED_TSZ_CONTINUOUS_READER_TAP_503_RETRY_PIXELS=PASS`.
+Esses dois resultados não executaram `workflow_dispatch`; nenhum
+byte remoto de CDN ou screenshot real pode ser declarado testado.
+
+**Pendente na #207:** execução manual LIVE quando o workflow estiver na
+`main`, prova real da rede externa no emulador e ligação editorial canônica
+validada contra catálogo independente/SQL, seguida de smoke físico A54.
+Não há merge, publicação de provider nem instalação física nesta PR.
 
 Referências: [issue #207](https://github.com/jssantogit/tsuzuki/issues/207),
 [workflow canônico](https://github.com/jssantogit/tsuzuki/actions/workflows/mangaall-real-host-decoder.yml),
