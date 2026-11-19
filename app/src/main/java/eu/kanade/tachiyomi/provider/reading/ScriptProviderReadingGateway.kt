@@ -773,6 +773,7 @@ class ScriptProviderReadingGateway internal constructor(
         const val MANGAALL_PROVIDER_ID = "app.tsuzuki.mangaall"
         const val MANGAALL_TRUSTED_REPOSITORY = "app.tsuzuki.providers"
         const val MANGAALL_V2_EXPERIMENTAL_VERSION = 9L
+
         // Current pinned P-256 SPKI fingerprint; code9 release is reviewed only
         // for this trust root. Key rotation requires an explicit new gate.
         const val MANGAALL_TRUST_ANCHOR_SHA256 =
