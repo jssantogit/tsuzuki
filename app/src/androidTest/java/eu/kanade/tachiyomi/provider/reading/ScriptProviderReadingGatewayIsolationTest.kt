@@ -1828,7 +1828,7 @@ class ScriptProviderReadingGatewayIsolationTest {
      * supplied by the operator. No test chooses a title, edition, author or chapter;
      * this is not a canonical ReaderActivity/pixel acceptance test.
      */
-    @Test(timeout = 180_000L)
+    @Test(timeout = 300_000L)
     fun mangaAllSignedCode8LivePages_downloadAndDecodeAtMostTwo() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
@@ -1865,22 +1865,46 @@ class ScriptProviderReadingGatewayIsolationTest {
         // chosen source work. Require an exact, source-scoped observation on the
         // first real chapter page; never fall back to a title or another edition.
         // This bounded proof is NOT an exhaustive inventory (other cursors may exist).
-        val chapterAttestation = withTimeout(35_000L) {
-            actualGateway.chapters(
-                providerId,
-                ProviderReadingChaptersRequest(binding),
-            )
+        // A long-running manga may place chapter one on a later cursor.
+        // Do not claim a complete negative result from the first source page.
+        val matchingChapters = linkedSetOf<String>()
+        val chapterCursors = hashSetOf<String>()
+        var chapterCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
+        var inventoryComplete = false
+        for (index in 0 until 12) {
+            val chapterAttestation = withTimeout(35_000L) {
+                actualGateway.chapters(
+                    providerId,
+                    ProviderReadingChaptersRequest(binding, cursor = chapterCursor),
+                )
+            }
+            if (chapterAttestation !is ProviderCallResult.Success) {
+                println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_ATTESTATION_UNAVAILABLE")
+                return@runBlocking
+            }
+            chapterAttestation.value.items.asSequence()
+                .filter {
+                    it.providerChapterId == chapterId &&
+                        (it.language == null || it.language == language)
+                }
+                .map { it.providerChapterId }
+                .forEach { matchingChapters.add(it) }
+            val next = chapterAttestation.value.nextCursor
+            if (next == null) {
+                inventoryComplete = true
+                break
+            }
+            if (!chapterCursors.add(next.toString())) {
+                break
+            }
+            chapterCursor = next
         }
-        if (chapterAttestation !is ProviderCallResult.Success) {
-            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_ATTESTATION_UNAVAILABLE")
+        if (!inventoryComplete) {
+            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_CURSOR_LIMIT")
             return@runBlocking
         }
-        val matchingChapters = chapterAttestation.value.items.count {
-            it.providerChapterId == chapterId &&
-                (it.language == null || it.language == language)
-        }
-        if (matchingChapters != 1) {
-            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_NOT_ATTESTED_IN_FIRST_PAGE")
+        if (matchingChapters.size != 1) {
+            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_NOT_ATTESTED_IN_BOUND")
             return@runBlocking
         }
         val response = withTimeout(60_000L) {
