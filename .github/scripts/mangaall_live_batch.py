@@ -59,6 +59,22 @@ AUDIT_INCONCLUSIVE = re.compile(
     r"(LOOKUP_UNAVAILABLE|LOOKUP_CURSOR_LIMIT|INVALID_SOURCE_IDENTITY|"
     r"SOURCE_LANGUAGE_CONFLICT|SOURCE_IDENTITY_CONFLICT|UPSTREAM_TIMEOUT)"
 )
+HOST_FAILURE_CODES = frozenset((
+    "UNAVAILABLE", "HOST_ERROR", "PACKAGE_INVALID", "MALFORMED_REQUEST",
+    "SOURCE_TOO_LARGE", "SOURCE_READ_ERROR", "INVOCATION_CONFLICT",
+    "PERMISSION_DENIED", "HOST_API_UNSUPPORTED", "SCRIPT_ERROR",
+    "TIMEOUT", "RUNTIME_DIED", "NETWORK_POLICY",
+    "CHAPTER_IDENTITY_UNVERIFIED", "NETWORK_ERROR", "BROWSER_ERROR",
+    "RESOURCE_LIMIT", "MALFORMED_RESULT", "AUTH_REQUIRED",
+    "ACQUISITION_FAILED",
+))
+AUDIT_LOOKUP_FAILURE = re.compile(
+    r"MANGAALL_BATCH_AUDIT\|outcome=INCONCLUSIVE\|reason=LOOKUP_UNAVAILABLE"
+    r"\|code=([A-Z_]{3,40})"
+    r"\|sourceFailure=(NONE|CHALLENGE_BLOCKED|HTTP_ERROR|INVALID_RESPONSE|UNCLASSIFIED_ERROR)"
+    r"\|httpStatus=(NONE|[1-5][0-9]{2})"
+    r"\|retryable=(true|false)"
+)
 GATE_REASONS = (
     "CHAPTER_ATTESTATION_UNAVAILABLE",
     "CHAPTER_NOT_ATTESTED_IN_FIRST_PAGE",
@@ -180,6 +196,23 @@ def _parse_discovery(stdout: str, code: int, plan: Plan):
     audits = AUDIT_LINE.findall(stdout)
     if len(audits) != 1:
         return "FAIL", "MISSING_OR_CONFLICTING_AUDIT", [], {}
+    detailed = AUDIT_LOOKUP_FAILURE.fullmatch(audits[0])
+    if detailed:
+        code, source_kind, status, retryable = detailed.groups()
+        if (
+            code not in HOST_FAILURE_CODES
+            or (source_kind == "NONE" and status != "NONE")
+            or (source_kind != "NONE" and code != "SOURCE_READ_ERROR")
+        ):
+            return "FAIL", "INVALID_LOOKUP_ERROR", [], {}
+        return "INCONCLUSIVE", "LOOKUP_UNAVAILABLE", [], {
+            "lookupError": {
+                "code": code,
+                "sourceFailure": source_kind,
+                "httpStatus": None if status == "NONE" else int(status),
+                "retryable": retryable == "true",
+            },
+        }
     if AUDIT_INCONCLUSIVE.fullmatch(audits[0]):
         reason = AUDIT_INCONCLUSIVE.fullmatch(audits[0]).group(1)
         return "INCONCLUSIVE", reason, [], {}
@@ -350,7 +383,13 @@ def execute(plan: Plan) -> int:
                 outcome = discovery
             results.append({
                 "index": index, "title": title, "outcome": outcome,
-                "reason": reason, "parity": parity, "sources": source_results,
+                "reason": reason, "lookupComplete": discovery == "COMPLETE",
+                "parity": {
+                    key: parity[key] for key in ("titleParity", "authorParity")
+                    if key in parity
+                },
+                "lookupError": parity.get("lookupError"),
+                "sources": source_results,
             })
             print(
                 f"MANGAALL_BATCH|case={index}/{len(plan.titles)}"
