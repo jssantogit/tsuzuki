@@ -248,6 +248,8 @@ class ScriptProviderReadingGatewayIsolationTest {
             optIn: Boolean = true,
             js: String = main,
             allowFixture: Boolean = true,
+            forgeSignedRecord: Boolean = false,
+            swapPackageAfterInvoke: Boolean = false,
         ) = gateway(
             main = js,
             providerId = mangaAll,
@@ -258,6 +260,8 @@ class ScriptProviderReadingGatewayIsolationTest {
             packageVersionName = name,
             experimentalV2OptIn = optIn,
             allowUnsignedFixture = allowFixture,
+            forgeInstalledRecord = forgeSignedRecord,
+            swapPackageAfterFirstRead = swapPackageAfterInvoke,
         )
 
         val eligible = fixture(9, "0.5.4-dev-unsigned")
@@ -330,6 +334,32 @@ class ScriptProviderReadingGatewayIsolationTest {
         assertEquals(
             "UNAVAILABLE",
             (noFixturePermission as ProviderCallResult.Failure).error.code.name,
+        )
+
+        // A caller-supplied hash/root pair does not establish a verified
+        // installation; only the actual stored signed-artifact source can.
+        val forgedLedger = fixture(
+            9,
+            "0.5.4",
+            forgeSignedRecord = true,
+        ).lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
+        assertTrue(forgedLedger is ProviderCallResult.Failure)
+        assertEquals(
+            "UNAVAILABLE",
+            (forgedLedger as ProviderCallResult.Failure).error.code.name,
+        )
+
+        // A package replaced while QuickJS was running cannot return a
+        // successful audit even when ID/version/repository stay identical.
+        val changedDuringInvoke = fixture(
+            9,
+            "0.5.4-dev-unsigned",
+            swapPackageAfterInvoke = true,
+        ).lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
+        assertTrue(changedDuringInvoke is ProviderCallResult.Failure)
+        assertEquals(
+            "UNAVAILABLE",
+            (changedDuringInvoke as ProviderCallResult.Failure).error.code.name,
         )
 
         // A JS field cannot claim an installed/signed package. The Host
@@ -2543,6 +2573,8 @@ class ScriptProviderReadingGatewayIsolationTest {
         packageVersionName: String = "1.0.1",
         experimentalV2OptIn: Boolean = false,
         allowUnsignedFixture: Boolean = true,
+        forgeInstalledRecord: Boolean = false,
+        swapPackageAfterFirstRead: Boolean = false,
     ): ScriptProviderReadingGateway {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val storageRoot = File(context.cacheDir, "provider-reading-gateway").apply {
@@ -2606,12 +2638,45 @@ class ScriptProviderReadingGatewayIsolationTest {
             bindingObserver = onBindingPhase,
         )
 
+        val swappedBytes = if (swapPackageAfterFirstRead) {
+            tsz(
+                main = main + "\n// second package with identical ID and version",
+                providerId = providerId,
+                networkOrigins = networkOrigins,
+                browserOrigins = browserOrigins,
+                localNetwork = localNetwork,
+                includePages = includePages,
+                versionCode = packageVersionCode,
+                versionName = packageVersionName,
+            )
+        } else {
+            packageBytes
+        }
+        val swappedParsed = if (swapPackageAfterFirstRead) {
+            ProviderPackageParser().parse(swappedBytes)
+        } else {
+            parsed
+        }
+        val sourceReads = AtomicInteger(0)
         val source = ActiveProviderScriptPackageSource {
+            val swapped = swapPackageAfterFirstRead && sourceReads.incrementAndGet() > 1
+            val selectedBytes = if (swapped) swappedBytes else packageBytes
+            val selectedParsed = if (swapped) swappedParsed else parsed
             ActiveProviderScriptPackage(
                 repositoryId = repositoryId,
-                versionCode = parsed.manifest.version.code,
-                bytes = packageBytes,
-                parsed = parsed,
+                versionCode = selectedParsed.manifest.version.code,
+                bytes = selectedBytes,
+                parsed = selectedParsed,
+                installedArtifactSha256 = if (forgeInstalledRecord) {
+                    tachiyomi.core.provider.supplychain.sha256Hex(selectedBytes)
+                } else {
+                    null
+                },
+                repositoryTrustAnchorSha256 = if (forgeInstalledRecord) {
+                    "20875348d95649ff0009e329f0d43de1b84ccf8af7966c215d5e0f449e697159"
+                } else {
+                    null
+                },
             )
         }
         if (!allowUnsignedFixture) {
