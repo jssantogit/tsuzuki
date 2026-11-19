@@ -203,8 +203,10 @@ internal object MangaAllLookupV2ReadOnlyDiagnostics {
             (envelope.lookupComplete && !complete) ||
             ((envelope.state == "COMPLETE_SINGLE_PAGE") != envelope.lookupComplete) ||
             envelope.state !in setOf("COMPLETE_SINGLE_PAGE", "PARTIAL_EVIDENCE", "INCONCLUSIVE") ||
-            ((envelope.state == "PARTIAL_EVIDENCE") !=
-                (envelope.observedCandidates.isNotEmpty() && !envelope.lookupComplete)) ||
+            (
+                (envelope.state == "PARTIAL_EVIDENCE") !=
+                    (envelope.observedCandidates.isNotEmpty() && !envelope.lookupComplete)
+                ) ||
             (envelope.state == "INCONCLUSIVE" && envelope.observedCandidates.isNotEmpty())
         ) {
             return null
