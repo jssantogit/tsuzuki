@@ -1684,6 +1684,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             browserOrigins = parsed.manifest.permissions.browser?.origins.orEmpty(),
             localNetwork = false,
             packageBytesOverride = archive,
+            facetLanguage = language,
             baseHttpClient = networkClient,
         )
         val response = withTimeout(60_000L) {
@@ -1947,6 +1948,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         localNetwork: Boolean,
         managedFiles: ProviderManagedFileStore? = null,
         includePages: Boolean = true,
+        facetLanguage: String = "en",
         onBindingPhase: (ProviderRuntimeBindingPhase) -> Unit = {},
         onRegistry: (DefaultProviderRegistry) -> Unit = {},
         packageBytesOverride: ByteArray? = null,
@@ -1985,7 +1987,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                     .takeIf { browserOrigins.isNotEmpty() },
             ),
             settings = emptyList(),
-            contentLanguages = setOf("en"),
+            contentLanguages = setOf(facetLanguage),
         )
         val registry = DefaultProviderRegistry(
             registrations = {
@@ -1993,7 +1995,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                     ProviderRegistration(
                         descriptor = descriptor,
                         lifecycleStatus = ProviderLifecycleStatus.ENABLED,
-                        facets = listOf(ProviderFacetRef(providerId, "en")),
+                        facets = listOf(ProviderFacetRef(providerId, facetLanguage)),
                         configurationFingerprint = "instrumentation",
                     ),
                 )
