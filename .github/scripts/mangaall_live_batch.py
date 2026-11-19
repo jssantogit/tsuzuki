@@ -7,6 +7,7 @@ and HTTP traces remain transient and are NEVER emitted in GitHub Actions logs.
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -232,7 +233,7 @@ def _discover(title: str, plan: Plan):
         "adb", "shell", "am", "instrument", "-w", "-r",
         "-e", "class", DISCOVERY_TEST,
         "-e", "mangaAllLiveBatchOptIn", "true",
-        "-e", "mangaAllBatchTitle", title,
+        "-e", "mangaAllBatchTitleBase64", base64.urlsafe_b64encode(title.encode("utf-8")).decode("ascii"),
         "-e", "mangaAllBatchSource", plan.source,
         "-e", "facetLanguage", plan.language,
         RUNNER,
@@ -241,6 +242,8 @@ def _discover(title: str, plan: Plan):
         outcome = _exec(cmd, 250)
     except subprocess.TimeoutExpired:
         return "INCONCLUSIVE", "DISCOVERY_TIMEOUT", None
+    except OSError:
+        return "FAIL", "DISCOVERY_INSTRUMENTATION", None
     return _parse_discovery(outcome.stdout, outcome.returncode, plan)
 
 
@@ -259,6 +262,8 @@ def _gate(work_id: str, chapter_id: str, plan: Plan):
         )
     except subprocess.TimeoutExpired:
         return "INCONCLUSIVE", "GATE_TIMEOUT"
+    except OSError:
+        return "FAIL", "GATE_INSTRUMENTATION"
     return _parse_gate(result.stdout, result.returncode, plan)
 
 
