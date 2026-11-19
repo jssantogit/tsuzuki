@@ -294,7 +294,7 @@ class MangaAllLookupV2ReadOnlyDiagnosticsTest {
 
         val origin = MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance(
             classification =
-                MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance.Classification.UNSIGNED_TEST_FIXTURE,
+            MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance.Classification.UNSIGNED_TEST_FIXTURE,
             repositoryId = "app.tsuzuki.providers",
             versionCode = 9,
             artifactSha256 = "a".repeat(64),
