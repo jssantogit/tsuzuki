@@ -267,6 +267,12 @@ class ScriptProviderReadingGatewayIsolationTest {
         assertEquals(3, audit.observedWorks.size)
         assertEquals(listOf("mangadex", "mangadot", "mangafire"), audit.sources.map { it.source })
         assertEquals(null, audit.continuationCursor)
+        assertEquals(
+            MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance.Classification.UNSIGNED_TEST_FIXTURE,
+            audit.hostProvenance?.classification,
+        )
+        assertEquals(64, audit.hostProvenance?.artifactSha256?.length)
+        assertEquals(null, audit.hostProvenance?.trustAnchorSha256)
         assertTrue(eligible.lookup(mangaAll, titleRequest) is ProviderCallResult.Success)
 
         // A code8 package can never be invoked with diagnosticsVersion=2,
@@ -310,6 +316,19 @@ class ScriptProviderReadingGatewayIsolationTest {
             .lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
         assertTrue(malformed is ProviderCallResult.Failure)
         assertEquals("MALFORMED_RESULT", (malformed as ProviderCallResult.Failure).error.code.name)
+
+        // A JS field cannot claim an installed/signed package. The Host
+        // independently derives its package identity from trusted storage.
+        val selfDeclaredSigned = fixture(
+            9,
+            "0.5.4-dev-unsigned",
+            js = main.replace("UNSIGNED_CANDIDATE_NOT_LIVE", "V2_READONLY_OBSERVATION"),
+        ).lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
+        assertTrue(selfDeclaredSigned is ProviderCallResult.Failure)
+        assertEquals(
+            "MALFORMED_RESULT",
+            (selfDeclaredSigned as ProviderCallResult.Failure).error.code.name,
+        )
 
         // Explicit version-code 10 is not implicitly accepted. Such a future
         // upgrade needs a separately reviewed and authorized Host contract.
@@ -410,6 +429,10 @@ class ScriptProviderReadingGatewayIsolationTest {
         assertTrue(snapshot.sourceHistory[1].hadFailure)
         assertEquals("CHALLENGE_BLOCKED", snapshot.sourceHistory[1].lastFailureCode)
         assertEquals(3, snapshot.observedWorks.size)
+        assertEquals(
+            MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance.Classification.UNSIGNED_TEST_FIXTURE,
+            snapshot.hostProvenance?.classification,
+        )
         assertTrue(snapshot.observedWorks.all { it.sourceWorkId.startsWith(it.source + ":") })
     }
 
@@ -2577,9 +2600,10 @@ class ScriptProviderReadingGatewayIsolationTest {
                     parsed = parsed,
                 )
             },
-            runtimeClient = runtimeClient,
+            invokePackage = ProviderPackageCapabilityInvoker(runtimeClient::invokePackage),
             managedResources = managedFileStore,
             enableExperimentalMangaAllV2 = experimentalV2OptIn,
+            allowUnsignedMangaAllV2Fixtures = true,
         )
     }
 
