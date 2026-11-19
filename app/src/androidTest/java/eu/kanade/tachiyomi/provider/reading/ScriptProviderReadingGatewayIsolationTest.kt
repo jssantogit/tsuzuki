@@ -1654,6 +1654,23 @@ class ScriptProviderReadingGatewayIsolationTest {
     fun mangaAllLiveVerdictProtocol_emitsAndroidStatusStream() {
         assertEquals("true", InstrumentationRegistry.getArguments().getString("mangaAllStatusProbeOptIn"))
         MangaAllInstrumentationVerdict.publish("MANGAALL_STATUS_PROBE|outcome=VISIBLE")
+        // Contract-only markers; never evidence of real source coverage.
+        // Check the actual adb/am-instrument status channel before live traffic.
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_BATCH_SOURCE|source=mangadex|outcome=READY|candidates=1" +
+                "|workId=mangadex:11111111-2222-4333-8444-555555555555" +
+                "|chapterId=mangadex:aaaa1111-2222-4333-8444-555555555555|language=en",
+        )
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_BATCH_SOURCE|source=mangadot|outcome=AMBIGUOUS|candidates=2",
+        )
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_BATCH_SOURCE|source=mangafire|outcome=MISSING|candidates=0",
+        )
+        MangaAllInstrumentationVerdict.publish(
+            "MANGAALL_BATCH_AUDIT|outcome=COMPLETE|sources=3" +
+                "|titleParity=VARIANCE|authorParity=UNVERIFIED",
+        )
     }
 
     /**
