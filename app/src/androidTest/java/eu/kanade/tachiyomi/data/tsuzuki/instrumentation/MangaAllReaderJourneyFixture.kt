@@ -326,16 +326,34 @@ internal class MangaAllReaderJourneyFixture(
             // The test title is disposable: a source chapter observation cannot
             // attest a real catalog edition. Require chapter one and never
             // treat this bounded first page as a complete source inventory.
-            val observed = withTimeout(40_000L) {
-                gateway.chapters(providerId, ProviderReadingChaptersRequest(binding.ref))
+            val selectedChapters = mutableListOf<tachiyomi.domain.tsuzuki.provider.reading.ProviderChapterObservation>()
+            val seenCursors = hashSetOf<String>()
+            var cursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
+            var inventoryComplete = false
+            for (index in 0 until 12) {
+                val observed = withTimeout(35_000L) {
+                    gateway.chapters(
+                        providerId,
+                        ProviderReadingChaptersRequest(binding.ref, cursor = cursor),
+                    )
+                }
+                if (observed !is ProviderCallResult.Success) return "CHAPTER_ATTESTATION_UNAVAILABLE"
+                selectedChapters += observed.value.items.filter {
+                    it.providerChapterId == sourceChapterId &&
+                        (it.language == null || it.language == liveTarget.language)
+                }
+                val next = observed.value.nextCursor
+                if (next == null) {
+                    inventoryComplete = true
+                    break
+                }
+                if (!seenCursors.add(next.toString())) return "CHAPTER_CURSOR_LIMIT"
+                cursor = next
             }
-            if (observed !is ProviderCallResult.Success) return "CHAPTER_ATTESTATION_UNAVAILABLE"
-            val matching = observed.value.items.filter {
-                it.providerChapterId == sourceChapterId &&
-                    (it.language == null || it.language == liveTarget.language)
-            }
-            if (matching.size != 1) return "CHAPTER_NOT_ATTESTED_IN_FIRST_PAGE"
-            val selected = matching.single()
+            if (!inventoryComplete) return "CHAPTER_CURSOR_LIMIT"
+            if (selectedChapters.isEmpty()) return "CHAPTER_NOT_ATTESTED_IN_BOUND"
+            if (selectedChapters.size != 1) return "CHAPTER_AMBIGUOUS"
+            val selected = selectedChapters.single()
             if (selected.rawNumber != 1.0 || selected.volume != null || selected.rawLabel.isBlank()) {
                 return "CHAPTER_IDENTITY_NOT_COMPATIBLE_WITH_TEST_FIXTURE"
             }

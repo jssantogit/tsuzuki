@@ -1649,13 +1649,186 @@ class ScriptProviderReadingGatewayIsolationTest {
     }
 
     /**
+     * Opt-in live discovery, scoped to one operator-named title and one
+     * explicitly selected source. Matching a source's title/alias is not
+     * independent editorial proof, never an implicit edition confirmation.
+     *
+     * The shell harness hides this private work/chapter hand-off from CI logs
+     * and never uses a lookup cursor or source ID from another title.
+     */
+    @Test(timeout = 270_000L)
+    fun mangaAllSignedCode8LiveBatchDiscoverChapterOne() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val args = InstrumentationRegistry.getArguments()
+        assertEquals("true", args.getString("mangaAllLiveBatchOptIn"))
+        assertEquals("app.tsuzuki.dev", instrumentation.targetContext.packageName)
+        val title = android.util.Base64.decode(
+            requireNotNull(args.getString("mangaAllBatchTitleBase64")),
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP,
+        ).toString(Charsets.UTF_8).trim()
+        val source = requireNotNull(args.getString("mangaAllBatchSource"))
+        val language = requireNotNull(args.getString("facetLanguage"))
+        require(title.length in 2..120 && title.none { it.isISOControl() || it == '|' })
+        require(source in setOf("mangadex", "mangadot", "mangafire"))
+        require(Regex("[a-z]{2}(-[a-z]{2})?").matches(language))
+        require(source != "mangafire" || language == "en")
+
+        val packageBytes = instrumentation.context.assets
+            .open("mangaall/code8-published-package.tsz").use { it.readBytes() }
+        val parsed = ProviderPackageParser().parse(packageBytes)
+        assertEquals("app.tsuzuki.mangaall", parsed.manifest.id)
+        assertEquals("0.5.3", parsed.manifest.version.name)
+        assertEquals(8L, parsed.manifest.version.code)
+        val providerId = ProviderId(parsed.manifest.id)
+        val gateway = gateway(
+            main = "",
+            providerId = providerId,
+            networkOrigins = requireNotNull(parsed.manifest.permissions.network).origins,
+            browserOrigins = parsed.manifest.permissions.browser?.origins.orEmpty(),
+            localNetwork = false,
+            packageBytesOverride = packageBytes,
+            facetLanguage = language,
+            baseHttpClient = OkHttpClient.Builder()
+                .callTimeout(25, java.util.concurrent.TimeUnit.SECONDS).build(),
+        )
+
+        fun inconclusive(reason: String) {
+            println("MANGAALL_BATCH_DISCOVERY|outcome=INCONCLUSIVE|reason=$reason")
+        }
+
+        fun normalize(value: String): String = java.text.Normalizer
+            .normalize(value.trim(), java.text.Normalizer.Form.NFKD)
+            .replace(Regex("\\p{M}+"), "")
+            .lowercase(java.util.Locale.ROOT)
+            .replace(Regex("\\s+"), " ")
+
+        try {
+            withTimeout(235_000L) {
+                val observedWorkIds = linkedSetOf<String>()
+                var lookupCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
+                val seenLookupCursors = hashSetOf<String>()
+                var lookupCompleted = false
+                for (index in 0 until 6) {
+                    val response = withTimeout(50_000L) {
+                        gateway.lookup(
+                            providerId,
+                            ProviderReadingLookupRequest(
+                                titles = listOf(title),
+                                cursor = lookupCursor,
+                                requestedLanguage = language,
+                            ),
+                        )
+                    }
+                    if (response !is ProviderCallResult.Success) {
+                        inconclusive("LOOKUP_UNAVAILABLE")
+                        return@withTimeout
+                    }
+                    response.value.items.asSequence()
+                        .filter { it.externalWorkId.startsWith("$source:") }
+                        .filter { it.language == null || it.language == language }
+                        .filter {
+                            normalize(it.title) == normalize(title) ||
+                                it.aliases.any { alias -> normalize(alias) == normalize(title) }
+                        }
+                        .map { it.externalWorkId }
+                        .forEach { observedWorkIds.add(it) }
+                    if (observedWorkIds.size > 1) {
+                        inconclusive("AMBIGUOUS_SOURCE_MATCH")
+                        return@withTimeout
+                    }
+                    val next = response.value.nextCursor
+                    if (next == null) {
+                        lookupCompleted = true
+                        break
+                    }
+                    if (!seenLookupCursors.add(next.toString())) {
+                        inconclusive("LOOKUP_CURSOR_LIMIT")
+                        return@withTimeout
+                    }
+                    lookupCursor = next
+                }
+                if (!lookupCompleted) {
+                    inconclusive("LOOKUP_CURSOR_LIMIT")
+                    return@withTimeout
+                }
+                if (observedWorkIds.size != 1) {
+                    inconclusive("NO_EXACT_SOURCE_MATCH")
+                    return@withTimeout
+                }
+                val workId = observedWorkIds.single()
+                if (!Regex("(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}").matches(workId)) {
+                    inconclusive("INVALID_SOURCE_IDENTITY")
+                    return@withTimeout
+                }
+                val binding = ProviderBindingRef(providerId, language, workId)
+                val chapterOneIds = linkedSetOf<String>()
+                var chapterCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
+                val seenChapterCursors = hashSetOf<String>()
+                var chaptersCompleted = false
+                for (index in 0 until 12) {
+                    val response = withTimeout(50_000L) {
+                        gateway.chapters(
+                            providerId,
+                            ProviderReadingChaptersRequest(binding, cursor = chapterCursor),
+                        )
+                    }
+                    if (response !is ProviderCallResult.Success) {
+                        inconclusive("CHAPTERS_UNAVAILABLE")
+                        return@withTimeout
+                    }
+                    response.value.items.asSequence()
+                        .filter { it.rawNumber == 1.0 && it.volume == null }
+                        .filter { it.language == null || it.language == language }
+                        .map { it.providerChapterId }
+                        .forEach { chapterOneIds.add(it) }
+                    if (chapterOneIds.size > 1) {
+                        inconclusive("AMBIGUOUS_CHAPTER_ONE")
+                        return@withTimeout
+                    }
+                    val next = response.value.nextCursor
+                    if (next == null) {
+                        chaptersCompleted = true
+                        break
+                    }
+                    if (!seenChapterCursors.add(next.toString())) {
+                        inconclusive("CHAPTER_CURSOR_LIMIT")
+                        return@withTimeout
+                    }
+                    chapterCursor = next
+                }
+                if (!chaptersCompleted) {
+                    inconclusive("CHAPTER_CURSOR_LIMIT")
+                    return@withTimeout
+                }
+                if (chapterOneIds.size != 1) {
+                    inconclusive("CHAPTER_ONE_NOT_ATTESTED")
+                    return@withTimeout
+                }
+                val chapterId = chapterOneIds.single()
+                if (!Regex("[A-Za-z0-9._:-]{1,160}").matches(chapterId)) {
+                    inconclusive("INVALID_SOURCE_IDENTITY")
+                    return@withTimeout
+                }
+                // IDs are an internal handoff to the NEXT isolated instrumentation
+                // invocation. The runner exports only per-title closed verdicts.
+                println(
+                    "MANGAALL_BATCH_DISCOVERY|outcome=SELECTED|workId=$workId" +
+                        "|chapterId=$chapterId|language=$language",
+                )
+            }
+        } catch (error: kotlinx.coroutines.TimeoutCancellationException) {
+            inconclusive("UPSTREAM_TIMEOUT")
+        }
+    }
+
+    /**
      * Opt-in, direct-live Android transport gate for the ORIGINAL published code8.
      *
      * IDs are taken verbatim from a separately observed Provider result and explicitly
      * supplied by the operator. No test chooses a title, edition, author or chapter;
      * this is not a canonical ReaderActivity/pixel acceptance test.
      */
-    @Test(timeout = 180_000L)
+    @Test(timeout = 300_000L)
     fun mangaAllSignedCode8LivePages_downloadAndDecodeAtMostTwo() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
@@ -1692,22 +1865,46 @@ class ScriptProviderReadingGatewayIsolationTest {
         // chosen source work. Require an exact, source-scoped observation on the
         // first real chapter page; never fall back to a title or another edition.
         // This bounded proof is NOT an exhaustive inventory (other cursors may exist).
-        val chapterAttestation = withTimeout(35_000L) {
-            actualGateway.chapters(
-                providerId,
-                ProviderReadingChaptersRequest(binding),
-            )
+        // A long-running manga may place chapter one on a later cursor.
+        // Do not claim a complete negative result from the first source page.
+        val matchingChapters = linkedSetOf<String>()
+        val chapterCursors = hashSetOf<String>()
+        var chapterCursor: tachiyomi.domain.tsuzuki.provider.ProviderCursor? = null
+        var inventoryComplete = false
+        for (index in 0 until 12) {
+            val chapterAttestation = withTimeout(35_000L) {
+                actualGateway.chapters(
+                    providerId,
+                    ProviderReadingChaptersRequest(binding, cursor = chapterCursor),
+                )
+            }
+            if (chapterAttestation !is ProviderCallResult.Success) {
+                println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_ATTESTATION_UNAVAILABLE")
+                return@runBlocking
+            }
+            chapterAttestation.value.items.asSequence()
+                .filter {
+                    it.providerChapterId == chapterId &&
+                        (it.language == null || it.language == language)
+                }
+                .map { it.providerChapterId }
+                .forEach { matchingChapters.add(it) }
+            val next = chapterAttestation.value.nextCursor
+            if (next == null) {
+                inventoryComplete = true
+                break
+            }
+            if (!chapterCursors.add(next.toString())) {
+                break
+            }
+            chapterCursor = next
         }
-        if (chapterAttestation !is ProviderCallResult.Success) {
-            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_ATTESTATION_UNAVAILABLE")
+        if (!inventoryComplete) {
+            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_CURSOR_LIMIT")
             return@runBlocking
         }
-        val matchingChapters = chapterAttestation.value.items.count {
-            it.providerChapterId == chapterId &&
-                (it.language == null || it.language == language)
-        }
-        if (matchingChapters != 1) {
-            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_NOT_ATTESTED_IN_FIRST_PAGE")
+        if (matchingChapters.size != 1) {
+            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_NOT_ATTESTED_IN_BOUND")
             return@runBlocking
         }
         val response = withTimeout(60_000L) {
