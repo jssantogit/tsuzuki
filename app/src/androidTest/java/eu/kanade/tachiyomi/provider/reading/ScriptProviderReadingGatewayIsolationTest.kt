@@ -1687,11 +1687,34 @@ class ScriptProviderReadingGatewayIsolationTest {
             facetLanguage = language,
             baseHttpClient = networkClient,
         )
+        val binding = ProviderBindingRef(providerId, language, workId)
+        // The caller's chapter ID is not itself evidence that it belongs to the
+        // chosen source work. Require an exact, source-scoped observation on the
+        // first real chapter page; never fall back to a title or another edition.
+        // This bounded proof is NOT an exhaustive inventory (other cursors may exist).
+        val chapterAttestation = withTimeout(35_000L) {
+            actualGateway.chapters(
+                providerId,
+                ProviderReadingChaptersRequest(binding),
+            )
+        }
+        if (chapterAttestation !is ProviderCallResult.Success) {
+            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_ATTESTATION_UNAVAILABLE")
+            return@runBlocking
+        }
+        val matchingChapters = chapterAttestation.value.items.count {
+            it.providerChapterId == chapterId &&
+                (it.language == null || it.language == language)
+        }
+        if (matchingChapters != 1) {
+            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_NOT_ATTESTED_IN_FIRST_PAGE")
+            return@runBlocking
+        }
         val response = withTimeout(60_000L) {
             actualGateway.pages(
                 providerId,
                 ProviderReadingPagesRequest(
-                    binding = ProviderBindingRef(providerId, language, workId),
+                    binding = binding,
                     providerChapterId = chapterId,
                 ),
             )
