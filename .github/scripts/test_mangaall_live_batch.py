@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Offline fail-closed contracts for the UNIFIED three-source MangaAll batch."""
+import io
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from contextlib import redirect_stdout
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -154,6 +156,31 @@ class MangaAllUnifiedBatchContractTest(unittest.TestCase):
         parsed = batch._parse_discovery(output, 0, batch.parse_plan(self.data))
         self.assertEqual(parsed, ("INCONCLUSIVE", "LOOKUP_UNAVAILABLE", [], {}))
 
+    def test_unavailable_lookup_retains_only_safe_host_error_telemetry(self):
+        plan = batch.parse_plan(self.data)
+        for code, kind, http_status, retry in (
+            ("SOURCE_READ_ERROR", "CHALLENGE_BLOCKED", "403", "true"),
+            ("SOURCE_READ_ERROR", "HTTP_ERROR", "503", "true"),
+            ("TIMEOUT", "NONE", "NONE", "true"),
+            ("SCRIPT_ERROR", "NONE", "NONE", "false"),
+        ):
+            marker = (
+                "INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_AUDIT|"
+                "outcome=INCONCLUSIVE|reason=LOOKUP_UNAVAILABLE"
+                f"|code={code}|sourceFailure={kind}|httpStatus={http_status}"
+                f"|retryable={retry}"
+                "\nOK (1 test)\nINSTRUMENTATION_CODE: -1"
+            )
+            outcome, reason, records, detail = batch._parse_discovery(marker, 0, plan)
+            self.assertEqual((outcome, reason, records),
+                             ("INCONCLUSIVE", "LOOKUP_UNAVAILABLE", []))
+            self.assertEqual(detail["lookupError"]["code"], code)
+            self.assertEqual(detail["lookupError"]["sourceFailure"], kind)
+        forged = marker.replace("code=SCRIPT_ERROR", "code=SECRETS")
+        self.assertEqual(batch._parse_discovery(forged, 0, plan)[0], "FAIL")
+        invalid = marker.replace("sourceFailure=NONE", "sourceFailure=HTTP_ERROR")
+        self.assertEqual(batch._parse_discovery(invalid, 0, plan)[0], "FAIL")
+
     def test_sequential_title_batch_keeps_all_three_source_results(self):
         plan = batch.parse_plan(self.data)
         with tempfile.TemporaryDirectory() as root:
@@ -177,7 +204,11 @@ class MangaAllUnifiedBatchContractTest(unittest.TestCase):
                     }),
                 ]
                 gate.return_value = ("PASS", "READER_CDN_PIXELS")
-                self.assertEqual(batch.execute(plan), 2)
+                # Unit-test synthetic PASS markers must never resemble LIVE
+                # outcomes in the GitHub Actions open build logs.
+                with redirect_stdout(io.StringIO()) as captured:
+                    self.assertEqual(batch.execute(plan), 2)
+                self.assertIn("MANGAALL_BATCH|summary=COMPLETE", captured.getvalue())
                 self.assertEqual(
                     [call.args[0] for call in discover.call_args_list],
                     self.data["titles"],
