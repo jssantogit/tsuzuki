@@ -1,0 +1,10 @@
+{
+  "mode": "reader",
+  "source": "mangafire",
+  "language": "en",
+  "titles": [
+    "Attack on Titan",
+    "Boku no Hero",
+    "Dragon Ball"
+  ]
+}
