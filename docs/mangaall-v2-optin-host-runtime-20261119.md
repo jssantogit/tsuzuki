@@ -61,6 +61,36 @@ the following offline tests on a disposable emulator:
 The existing V2 strict parser, bounded history and signed code8 Reader
 HTTP-synthetic pixel regressions remain mandatory.
 
+## Host-derived installation provenance — additional safety boundary
+
+The experimental Host now attaches a **Host-created** `HostProvenance` to V2
+read-only observations, including version code and SHA-256 of the exact
+executed package. Only `StoredProviderScriptPackageSource` can qualify as
+`SIGNED_INSTALLATION`: it rechecks the verified installation ledger,
+the package SHA-256, the repository identity, and the pinned P-256
+trust-anchor fingerprint. The first signed code9 is explicitly limited to
+the reviewed `0.5.4` package and current trust root.
+
+An isolated, unsigned test fixture can produce only
+`UNSIGNED_TEST_FIXTURE`, and only through a private test-only constructor
+flag. The normal runtime constructor cannot turn a synthetic archive into
+signed V2 by enabling the general experiment. JS must supply a strict
+`V2_READONLY_OBSERVATION` wire marker on the future signed package; this
+marker never establishes installation trust on its own. A signed-package
+identity is derived by the Host from the installed verified-artifact ledger,
+not from the response or a caller-provided string.
+
+Each V2 invocation now reloads the package after QuickJS to deny a
+revocation, rollback or replacement during the request. Cursor accumulation
+pins the Host-provenance tuple: page two from a different package digest or
+trust origin cannot complete page one's evidence.
+
+Instrumented emulator case:
+`UNSIGNED_CODE9_V2_HOST_PROVENANCE_PINNING` checks forged signed claims,
+cross-package cursor refusal and stable-source acceptance using offline
+synthetic envelopes. **No signed code9 exists yet**, and this adds no
+Reader, canonical-binding or CDN grants.
+
 ## Unfinished gates
 
 1. The **test fixture is not a trusted published package**. The
@@ -68,11 +98,11 @@ HTTP-synthetic pixel regressions remain mandatory.
    still the only source of actual installed package trust. The
    development-only constructor opt-in does not sign a package.
 2. Complete a security/release review and sign/publish code9+
-   through a separately approved index update, with explicit V2
-   provenance that distinguishes actual signed provider code9 from
-   the current experimental `UNSIGNED_CANDIDATE_NOT_LIVE` marker.
-   Currently the read-only decoder intentionally accepts only the
-   latter marker.
+   through the separately approved index update. The decoder accepts the
+   neutral `V2_READONLY_OBSERVATION` marker ONLY when Host-derived
+   package provenance is signed-installation qualified. The staged
+   provider still emits `UNSIGNED_CANDIDATE_NOT_LIVE`; the code9 source
+   migration, index publication and real-install test remain pending.
 3. Test real three-source host availability without bypassing
    HTTP403/challenges. A captured/replayed envelope and synthetic
    QuickJS/HTTP fixture are **not direct-live CDN pixels**.
