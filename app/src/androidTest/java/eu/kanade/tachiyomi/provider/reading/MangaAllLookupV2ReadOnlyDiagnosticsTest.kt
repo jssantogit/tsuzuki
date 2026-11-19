@@ -158,4 +158,110 @@ class MangaAllLookupV2ReadOnlyDiagnosticsTest {
             ),
         )
     }
+    /**
+     * Even recovered retry pages remain observations; they never become
+     * canonical work bindings or Reader grants.
+     */
+    @Test
+    fun mangaAllUnsignedV2CursorHistory_retainsThreeSourcesAcrossRetryAndRejectsConflicts() {
+        val audit = MangaAllLookupV2ReadOnlyCursorAccumulator()
+        val first = requireNotNull(audit.accept(partial().toString()))
+        assertEquals(MangaAllLookupV2ReadOnlyCursorAccumulator.Verdict.IN_PROGRESS, first.verdict)
+        assertEquals(3, first.observedWorks.size)
+        assertFalse(first.sourceHistory[1].completed)
+        assertEquals(403, MangaAllLookupV2ReadOnlyDiagnostics.decodeReadOnly(partial().toString())
+            ?.sources?.get(1)?.httpStatus)
+
+        val retrySuccess = full()
+            .put("state", "PARTIAL_EVIDENCE")
+            .put("lookupComplete", false)
+            .put(
+                "sourceStatuses",
+                JSONArray()
+                    .put(source("mangadex", "NOT_QUERIED", 0, null))
+                    .put(source("mangadot"))
+                    .put(source("mangafire", "NOT_QUERIED", 0, null)),
+            )
+            .put(
+                "observedCandidates",
+                JSONArray().put(candidate("mangadot", "mangadot:four")),
+            )
+        val recovered = requireNotNull(audit.accept(retrySuccess.toString(), first.nextCursor))
+        assertEquals(MangaAllLookupV2ReadOnlyCursorAccumulator.Verdict.COMPLETE_OBSERVED, recovered.verdict)
+        assertEquals(4, recovered.observedWorks.size)
+        assertEquals(listOf(true, true, true), recovered.sourceHistory.map { it.completed })
+        assertEquals(listOf(1, 2, 1), recovered.sourceHistory.map { it.pagesQueried })
+        assertEquals(true, recovered.sourceHistory[1].hadFailure)
+        assertEquals("CHALLENGE_BLOCKED", recovered.sourceHistory[1].lastFailureCode)
+        assertNull(audit.accept(retrySuccess.toString(), first.nextCursor))
+
+        val blockedAudit = MangaAllLookupV2ReadOnlyCursorAccumulator()
+        val blockedFirst = requireNotNull(blockedAudit.accept(partial().toString()))
+        val blockedPage = full()
+            .put("state", "INCONCLUSIVE")
+            .put("lookupComplete", false)
+            .put(
+                "sourceStatuses",
+                JSONArray()
+                    .put(source("mangadex", "NOT_QUERIED", 0, null))
+                    .put(
+                        source(
+                            "mangadot",
+                            "FAILED",
+                            0,
+                            null,
+                            JSONObject().put("code", "CHALLENGE_BLOCKED")
+                                .put("httpStatus", 403).put("retryable", true),
+                        ),
+                    )
+                    .put(source("mangafire", "NOT_QUERIED", 0, null)),
+            )
+            .put("observedCandidates", JSONArray())
+        val blocked = requireNotNull(blockedAudit.accept(blockedPage.toString(), blockedFirst.nextCursor))
+        assertEquals(MangaAllLookupV2ReadOnlyCursorAccumulator.Verdict.INCONCLUSIVE, blocked.verdict)
+        assertEquals(3, blocked.observedWorks.size)
+        assertFalse(blocked.sourceHistory[1].completed)
+
+        val wrongCursorAudit = MangaAllLookupV2ReadOnlyCursorAccumulator()
+        requireNotNull(wrongCursorAudit.accept(partial().toString()))
+        assertNull(wrongCursorAudit.accept(retrySuccess.toString(), """{"v":1,"remaining":{"mangadex":"2"}}"""))
+
+        val unexpectedSourceAudit = MangaAllLookupV2ReadOnlyCursorAccumulator()
+        val unexpectedFirst = requireNotNull(unexpectedSourceAudit.accept(partial().toString()))
+        assertNull(unexpectedSourceAudit.accept(full().toString(), unexpectedFirst.nextCursor))
+
+        val conflictingAudit = MangaAllLookupV2ReadOnlyCursorAccumulator()
+        val paginated = full()
+            .put("state", "PARTIAL_EVIDENCE")
+            .put("lookupComplete", false)
+            .put("canContinue", true)
+            .put("continuationCursor", """{"v":1,"remaining":{"mangafire":"2"}}""")
+            .put(
+                "sourceStatuses",
+                JSONArray()
+                    .put(source("mangadex"))
+                    .put(source("mangadot"))
+                    .put(source("mangafire", "SUCCESS_PAGE", 1, false)),
+            )
+        val firstPage = requireNotNull(conflictingAudit.accept(paginated.toString()))
+        val changedTitle = full()
+            .put("state", "PARTIAL_EVIDENCE")
+            .put("lookupComplete", false)
+            .put(
+                "sourceStatuses",
+                JSONArray()
+                    .put(source("mangadex", "NOT_QUERIED", 0, null))
+                    .put(source("mangadot", "NOT_QUERIED", 0, null))
+                    .put(source("mangafire")),
+            )
+            .put(
+                "observedCandidates",
+                JSONArray().put(
+                    candidate("mangafire", "mangafire:three")
+                        .put("title", "An unrelated work"),
+                ),
+            )
+        assertNull(conflictingAudit.accept(changedTitle.toString(), firstPage.nextCursor))
+    }
+
 }
