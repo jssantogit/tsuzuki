@@ -268,6 +268,74 @@ class MangaAllLookupV2ReadOnlyDiagnosticsTest {
         assertNull(conflictingAudit.accept(changedTitle.toString(), firstPage.nextCursor))
     }
 
+    /**
+     * Host provenance must be computed outside Provider JS and held constant
+     * for every cursor page. This is an OFFLINE test, not a signed install.
+     */
+    @Test
+    fun mangaAllV2HostProvenance_rejectsCrossArtifactPagesAndForgedSignedClaim() {
+        // The parser can validate a future neutral V2 wire marker, but it
+        // cannot by itself assign signed installation provenance.
+        val declared = full().put("provenance", "V2_READONLY_OBSERVATION")
+        assertNull(MangaAllLookupV2ReadOnlyDiagnostics.decodeReadOnly(declared.toString()))
+        val untrusted = requireNotNull(
+            MangaAllLookupV2ReadOnlyDiagnostics.decodeReadOnly(
+                declared.toString(),
+                expectedProviderMarker = "V2_READONLY_OBSERVATION",
+            ),
+        )
+        assertNull(untrusted.hostProvenance)
+        assertNull(
+            MangaAllLookupV2ReadOnlyDiagnostics.decodeReadOnly(
+                declared.put("hostProvenance", JSONObject().put("classification", "SIGNED_INSTALLATION")).toString(),
+                expectedProviderMarker = "V2_READONLY_OBSERVATION",
+            ),
+        )
+
+        val origin = MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance(
+            classification =
+                MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance.Classification.UNSIGNED_TEST_FIXTURE,
+            repositoryId = "app.tsuzuki.providers",
+            versionCode = 9,
+            artifactSha256 = "a".repeat(64),
+            trustAnchorSha256 = null,
+        )
+        val first = requireNotNull(
+            MangaAllLookupV2ReadOnlyDiagnostics.decodeReadOnly(partial().toString()),
+        ).copy(hostProvenance = origin)
+        val retry = full()
+            .put("state", "PARTIAL_EVIDENCE")
+            .put("lookupComplete", false)
+            .put(
+                "sourceStatuses",
+                JSONArray()
+                    .put(source("mangadex", "NOT_QUERIED", 0, null))
+                    .put(source("mangadot"))
+                    .put(source("mangafire", "NOT_QUERIED", 0, null)),
+            )
+            .put("observedCandidates", JSONArray().put(candidate("mangadot", "mangadot:four")))
+        val second = requireNotNull(MangaAllLookupV2ReadOnlyDiagnostics.decodeReadOnly(retry.toString()))
+        val switched = MangaAllLookupV2ReadOnlyCursorAccumulator()
+        val firstPage = requireNotNull(switched.acceptValidated(first))
+        assertEquals(origin, firstPage.hostProvenance)
+        assertNull(
+            switched.acceptValidated(
+                second.copy(hostProvenance = origin.copy(artifactSha256 = "b".repeat(64))),
+                firstPage.nextCursor,
+            ),
+        )
+        // Once an origin has changed, the old cursor history cannot resume.
+        assertNull(switched.acceptValidated(second.copy(hostProvenance = origin), firstPage.nextCursor))
+
+        val stable = MangaAllLookupV2ReadOnlyCursorAccumulator()
+        val initial = requireNotNull(stable.acceptValidated(first))
+        val final = requireNotNull(
+            stable.acceptValidated(second.copy(hostProvenance = origin), initial.nextCursor),
+        )
+        assertEquals(MangaAllLookupV2ReadOnlyCursorAccumulator.Verdict.COMPLETE_OBSERVED, final.verdict)
+        assertEquals(origin, final.hostProvenance)
+    }
+
     @Test
     fun mangaAllUnsignedV2CursorHistory_boundsEightPagesAndRejectsReplay() {
         fun simulatedPage(index: Int, next: String): JSONObject {
