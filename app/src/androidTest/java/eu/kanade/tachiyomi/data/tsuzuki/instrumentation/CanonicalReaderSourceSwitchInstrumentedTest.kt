@@ -155,7 +155,17 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         runMangaAllContinuousReaderJourney(originalCode7Package = true)
     }
 
-    private fun runMangaAllContinuousReaderJourney(originalCode7Package: Boolean) {
+    /** The original published code8 .tsz traverses the SAME real ReaderActivity pixel path. */
+    @Test(timeout = 300_000L)
+    fun mangaAllPublishedCode8TszSourceTap503RetryRendersCdnPixels() {
+        requireOptIn()
+        runMangaAllContinuousReaderJourney(originalCode7Package = false, originalCode8Package = true)
+    }
+
+    private fun runMangaAllContinuousReaderJourney(
+        originalCode7Package: Boolean,
+        originalCode8Package: Boolean = false,
+    ) {
         val expectedMangaAllGreen = Color.rgb(12, 168, 82)
         // Guard the screenshot oracle itself: the first continuous E2E RED
         // rendered READY PNG pages, but the old color matcher only knew RED
@@ -179,7 +189,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             awaitImagePixels(reader, fixture, Color.rgb(220, 40, 40), "MANGAALL_INITIAL_READER")
             val previousSessionChapter = requireNotNull(reader.viewModel.state.value.currentChapter)
 
-            val mangaAll = fixture.mangaAllJourney(reader, originalCode7Package)
+            val mangaAll = fixture.mangaAllJourney(reader, originalCode7Package, originalCode8Package)
             try {
                 runBlocking { mangaAll.attach() }
 
@@ -2085,12 +2095,14 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         fun mangaAllJourney(
             reader: ReaderActivity,
             originalCode7Package: Boolean = false,
+            originalCode8Package: Boolean = false,
         ) = MangaAllReaderJourneyFixture(
             context = InstrumentationRegistry.getInstrumentation().targetContext,
             reader = reader,
             database = database,
             chapter = chapter,
             originalCode7Package = originalCode7Package,
+            originalCode8Package = originalCode8Package,
         )
 
         fun launchReader(
