@@ -179,8 +179,14 @@ internal class MangaAllReaderJourneyFixture(
      * chapter already in the disposable Reader database, then replace only
      * the ReaderViewModel's provider resolver for this fixture.
      */
-    suspend fun attach() {
+    suspend fun attach(): String? {
         val origin = origin()
+        val liveSignedOrigins = liveTarget?.let {
+            val signed = InstrumentationRegistry.getInstrumentation().context.assets
+                .open("mangaall/code8-published-package.tsz").use { it.readBytes() }
+            val parsed = ProviderPackageParser().parse(signed)
+            requireNotNull(parsed.manifest.permissions.network).origins
+        }
         val registration = ProviderRegistration(
             descriptor = ProviderDescriptor(
                 id = providerId,
@@ -197,7 +203,9 @@ internal class MangaAllReaderJourneyFixture(
                     ProviderCapabilities.ReadingPagesV1,
                 ),
                 permissions = ProviderPermissionSet(
-                    network = if (originalCode7Package || originalCode8Package) {
+                    network = if (liveSignedOrigins != null) {
+                        ProviderNetworkPermission(liveSignedOrigins, localNetwork = false)
+                    } else if (originalCode7Package || originalCode8Package) {
                         ProviderNetworkPermission(
                             setOf(
                                 "https://api.mangadex.org",
@@ -212,10 +220,10 @@ internal class MangaAllReaderJourneyFixture(
                     },
                 ),
                 settings = emptyList(),
-                contentLanguages = setOf("en"),
+                contentLanguages = setOf(liveTarget?.language ?: "en"),
             ),
             lifecycleStatus = ProviderLifecycleStatus.ENABLED,
-            facets = listOf(ProviderFacetRef(providerId, "en")),
+            facets = listOf(ProviderFacetRef(providerId, liveTarget?.language ?: "en")),
             configurationFingerprint = "android-journey",
         )
         val registry = DefaultProviderRegistry(registrations = { listOf(registration) })
@@ -287,10 +295,11 @@ internal class MangaAllReaderJourneyFixture(
                 hostInvocationFactory = ProviderHostInvocationFactory(
                     context = context,
                     storageRoot = runtimeCache.apply { deleteRecursively() },
-                    baseHttpClient = if (originalCode7Package || originalCode8Package) {
-                        packagedCode7HttpClient()
-                    } else {
-                        OkHttpClient()
+                    baseHttpClient = when {
+                        liveTarget != null -> OkHttpClient.Builder()
+                            .callTimeout(25, TimeUnit.SECONDS).build()
+                        originalCode7Package || originalCode8Package -> packagedCode7HttpClient()
+                        else -> OkHttpClient()
                     },
                 ),
             ),
@@ -298,7 +307,7 @@ internal class MangaAllReaderJourneyFixture(
         val binding = ProviderReadingBinding(
             id = "mangaall-journey-${chapter.id}",
             canonicalTitleId = chapter.canonicalTitleId,
-            ref = ProviderBindingRef(providerId, "en", workId),
+            ref = ProviderBindingRef(providerId, liveTarget?.language ?: "en", workId),
             verification = ProviderBindingVerification.USER_CONFIRMED,
             availability = ProviderBindingAvailability.AVAILABLE,
             createdAt = 1,
@@ -333,7 +342,7 @@ internal class MangaAllReaderJourneyFixture(
         assertEquals(providerId, selectedOption.providerId)
         assertEquals(workId, selectedOption.externalWorkId)
         assertEquals(sourceChapterId, selectedOption.providerChapterId)
-        if (originalCode7Package || originalCode8Package) {
+        if ((originalCode7Package || originalCode8Package) && liveTarget == null) {
             originalPageLoaderFactory = pageClientField.get(reader.viewModel)
             val images = packagedCode7ImageClient()
             val pageFactory: (CanonicalReaderTargetPlan.HttpPages) -> ReaderChapterLoader = { plan ->
@@ -345,6 +354,7 @@ internal class MangaAllReaderJourneyFixture(
         originalResolver = field.get(reader.viewModel)
         field.set(reader.viewModel, resolver)
         swapped = true
+        return null
     }
 
     /**
