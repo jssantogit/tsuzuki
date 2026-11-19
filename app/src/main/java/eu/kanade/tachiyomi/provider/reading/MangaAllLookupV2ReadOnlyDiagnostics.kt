@@ -83,6 +83,8 @@ internal object MangaAllLookupV2ReadOnlyDiagnostics {
         val attempts: Int,
         val observedCount: Int,
         val pageComplete: Boolean?,
+        val observationsTruncated: Boolean,
+        val unsafeCandidate: Boolean,
         val failureCode: String?,
         val httpStatus: Int?,
         val retryable: Boolean?,
@@ -100,6 +102,8 @@ internal object MangaAllLookupV2ReadOnlyDiagnostics {
         val state: String,
         val lookupComplete: Boolean,
         val canContinue: Boolean,
+        /** Opaque Host continuation: diagnostics only, never a work binding. */
+        val continuationCursor: String?,
         val sources: List<SourceObservation>,
         val observedWorks: List<ObservedWork>,
     )
@@ -240,6 +244,7 @@ internal object MangaAllLookupV2ReadOnlyDiagnostics {
             envelope.state,
             envelope.lookupComplete,
             envelope.canContinue,
+            envelope.continuationCursor,
             envelope.sourceStatuses.map {
                 SourceObservation(
                     it.source,
@@ -247,6 +252,8 @@ internal object MangaAllLookupV2ReadOnlyDiagnostics {
                     it.attempts,
                     it.observedCandidates,
                     it.pageComplete,
+                    it.observationsTruncated,
+                    it.unsafeCandidate,
                     it.failure?.code,
                     it.failure?.httpStatus,
                     it.failure?.retryable,
