@@ -247,6 +247,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             repository: String = "app.tsuzuki.providers",
             optIn: Boolean = true,
             js: String = main,
+            allowFixture: Boolean = true,
         ) = gateway(
             main = js,
             providerId = mangaAll,
@@ -256,6 +257,7 @@ class ScriptProviderReadingGatewayIsolationTest {
             packageVersionCode = code,
             packageVersionName = name,
             experimentalV2OptIn = optIn,
+            allowUnsignedFixture = allowFixture,
         )
 
         val eligible = fixture(9, "0.5.4-dev-unsigned")
@@ -316,6 +318,19 @@ class ScriptProviderReadingGatewayIsolationTest {
             .lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
         assertTrue(malformed is ProviderCallResult.Failure)
         assertEquals("MALFORMED_RESULT", (malformed as ProviderCallResult.Failure).error.code.name)
+
+        // The normal Host runtime constructor does NOT accept unsigned
+        // archives even if experimental V2 is explicitly requested.
+        val noFixturePermission = fixture(
+            9,
+            "0.5.4-dev-unsigned",
+            allowFixture = false,
+        ).lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
+        assertTrue(noFixturePermission is ProviderCallResult.Failure)
+        assertEquals(
+            "UNAVAILABLE",
+            (noFixturePermission as ProviderCallResult.Failure).error.code.name,
+        )
 
         // A JS field cannot claim an installed/signed package. The Host
         // independently derives its package identity from trusted storage.
@@ -2527,6 +2542,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         packageVersionCode: Long = 1L,
         packageVersionName: String = "1.0.1",
         experimentalV2OptIn: Boolean = false,
+        allowUnsignedFixture: Boolean = true,
     ): ScriptProviderReadingGateway {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val storageRoot = File(context.cacheDir, "provider-reading-gateway").apply {
@@ -2590,16 +2606,26 @@ class ScriptProviderReadingGatewayIsolationTest {
             bindingObserver = onBindingPhase,
         )
 
+        val source = ActiveProviderScriptPackageSource {
+            ActiveProviderScriptPackage(
+                repositoryId = repositoryId,
+                versionCode = parsed.manifest.version.code,
+                bytes = packageBytes,
+                parsed = parsed,
+            )
+        }
+        if (!allowUnsignedFixture) {
+            return ScriptProviderReadingGateway(
+                registry = registry,
+                packageSource = source,
+                runtimeClient = runtimeClient,
+                managedResources = managedFileStore,
+                enableExperimentalMangaAllV2 = experimentalV2OptIn,
+            )
+        }
         return ScriptProviderReadingGateway(
             registry = registry,
-            packageSource = ActiveProviderScriptPackageSource {
-                ActiveProviderScriptPackage(
-                    repositoryId = repositoryId,
-                    versionCode = parsed.manifest.version.code,
-                    bytes = packageBytes,
-                    parsed = parsed,
-                )
-            },
+            packageSource = source,
             invokePackage = ProviderPackageCapabilityInvoker(runtimeClient::invokePackage),
             managedResources = managedFileStore,
             enableExperimentalMangaAllV2 = experimentalV2OptIn,
