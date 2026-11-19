@@ -44,6 +44,7 @@ internal class MangaAllLookupV2ReadOnlyCursorAccumulator(
         val sourceHistory: List<SourceHistory>,
         val observedWorks: List<MangaAllLookupV2ReadOnlyDiagnostics.ObservedWork>,
         val nextCursor: String?,
+        val hostProvenance: MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance? = null,
     )
 
     private data class CursorPart(
@@ -64,6 +65,7 @@ internal class MangaAllLookupV2ReadOnlyCursorAccumulator(
     private val works = linkedMapOf<String, MangaAllLookupV2ReadOnlyDiagnostics.ObservedWork>()
     private val seenCursors = hashSetOf<String>()
     private var pages = 0
+    private var hostProvenance: MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance? = null
     private var expectedCursor: String? = null
     private var closed = false
 
@@ -145,6 +147,8 @@ internal class MangaAllLookupV2ReadOnlyCursorAccumulator(
         requestCursor: String? = null,
     ): Snapshot? {
         if (closed || pages >= 8 || requestCursor != expectedCursor) return reject()
+        if (pages > 0 && audit.hostProvenance != hostProvenance) return reject()
+        if (pages == 0) hostProvenance = audit.hostProvenance
         val expected = if (pages == 0) {
             sourceOrder.toSet()
         } else {
@@ -244,6 +248,7 @@ internal class MangaAllLookupV2ReadOnlyCursorAccumulator(
             },
             observedWorks = works.values.toList(),
             nextCursor = expectedCursor,
+            hostProvenance = hostProvenance,
         )
     }
 }

@@ -98,6 +98,17 @@ internal object MangaAllLookupV2ReadOnlyDiagnostics {
         val authors: List<String>,
     )
 
+    /** Authoritative Host-installed package identity, never supplied by Provider JS. */
+    data class HostProvenance(
+        val classification: Classification,
+        val repositoryId: String,
+        val versionCode: Long,
+        val artifactSha256: String,
+        val trustAnchorSha256: String?,
+    ) {
+        enum class Classification { UNSIGNED_TEST_FIXTURE, SIGNED_INSTALLATION }
+    }
+
     data class ReadOnlyAudit(
         val state: String,
         val lookupComplete: Boolean,
@@ -106,6 +117,7 @@ internal object MangaAllLookupV2ReadOnlyDiagnostics {
         val continuationCursor: String?,
         val sources: List<SourceObservation>,
         val observedWorks: List<ObservedWork>,
+        val hostProvenance: HostProvenance? = null,
     )
 
     private fun safeText(value: String): Boolean =
@@ -117,7 +129,11 @@ internal object MangaAllLookupV2ReadOnlyDiagnostics {
      * Returns null on ANY incompatible/unsafe V2 response, including V1 pages.
      * The caller may use only diagnostic evidence; no binding API is provided.
      */
-    fun decodeReadOnly(payload: String): ReadOnlyAudit? {
+    fun decodeReadOnly(
+        payload: String,
+        expectedProviderMarker: String = UNSIGNED,
+    ): ReadOnlyAudit? {
+        if (expectedProviderMarker !in setOf(UNSIGNED, "V2_READONLY_OBSERVATION")) return null
         if (payload.toByteArray(Charsets.UTF_8).size > 48 * 1024) return null
         val envelope = try {
             json.decodeFromString<EnvelopeDto>(payload)
@@ -127,7 +143,7 @@ internal object MangaAllLookupV2ReadOnlyDiagnostics {
         if (
             envelope.contractVersion != 2 ||
             envelope.providerId != PROVIDER_ID ||
-            envelope.provenance != UNSIGNED ||
+            envelope.provenance != expectedProviderMarker ||
             envelope.eligibleForCanonicalBinding ||
             envelope.eligibleForReader ||
             envelope.sourceStatuses.map { it.source } != sources ||

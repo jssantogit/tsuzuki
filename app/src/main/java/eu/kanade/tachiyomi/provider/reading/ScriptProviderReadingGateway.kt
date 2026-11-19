@@ -17,6 +17,7 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
 import tachiyomi.core.provider.runtime.ProviderRuntimeLimitsDto
 import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
 import tachiyomi.core.provider.supplychain.ProviderArtifactStore
+import tachiyomi.core.provider.supplychain.sha256Hex
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
 import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderPageFailureStage
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilityRef
@@ -52,6 +53,9 @@ data class ActiveProviderScriptPackage(
     val versionCode: Long,
     val bytes: ByteArray,
     val parsed: ParsedProviderPackage,
+    /** Populated only by StoredProviderScriptPackageSource from the verified installation ledger. */
+    val installedArtifactSha256: String? = null,
+    val repositoryTrustAnchorSha256: String? = null,
 )
 
 fun interface ActiveProviderScriptPackageSource {
@@ -65,9 +69,14 @@ class StoredProviderScriptPackageSource(
 
     override suspend fun get(providerId: ProviderId): ActiveProviderScriptPackage? {
         val stored = artifactStore.current(providerId.value) ?: return null
-        if (stored.revoked) return null
+        if (stored.revoked || stored.providerId != providerId.value) return null
 
+        // The store's ledger was created by index-signature + artifact-digest
+        // verification at installation. Recheck the *actual* bytes, then
+        // reject a concurrent update, rollback or revocation during this read.
         val bytes = artifactStore.readCurrentArtifact(providerId.value)
+        val again = artifactStore.current(providerId.value) ?: return null
+        if (stored != again || sha256Hex(bytes) != stored.sha256) return null
         val parsed = parser.parse(bytes)
         if (
             parsed.manifest.id != providerId.value ||
@@ -81,6 +90,8 @@ class StoredProviderScriptPackageSource(
             versionCode = stored.versionCode,
             bytes = bytes,
             parsed = parsed,
+            installedArtifactSha256 = stored.sha256,
+            repositoryTrustAnchorSha256 = stored.repositoryTrustAnchorSha256,
         )
     }
 }
@@ -102,6 +113,8 @@ class ScriptProviderReadingGateway internal constructor(
     private val invocationIdFactory: () -> String = { "reading:${UUID.randomUUID()}" },
     private val managedResources: ProviderManagedResourceResolver = ProviderManagedResourceResolver.DenyAll,
     private val enableExperimentalMangaAllV2: Boolean = false,
+    /** Test-only; the public production constructor NEVER enables unsigned archives. */
+    private val allowUnsignedMangaAllV2Fixtures: Boolean = false,
 ) : ProviderReadingGateway {
 
     constructor(
@@ -208,15 +221,62 @@ class ScriptProviderReadingGateway internal constructor(
                     requestedLanguage = request.requestedLanguage,
                 ),
             ),
-            packageGate = { active ->
-                active.repositoryId == MANGAALL_TRUSTED_REPOSITORY &&
-                    active.versionCode == MANGAALL_V2_EXPERIMENTAL_VERSION &&
-                    active.parsed.manifest.version.name.startsWith("0.5.4")
-            },
-        ) { value, _ ->
-            MangaAllLookupV2ReadOnlyDiagnostics.decodeReadOnly(value)
+            packageGate = { active -> mangaAllV2HostProvenance(active) != null },
+            recheckPackageAfterInvocation = true,
+        ) { value, active ->
+            val provenance = mangaAllV2HostProvenance(active)
+                ?: error("MangaAll code9 provenance lost before decoding")
+            val declaredContract = when (provenance.classification) {
+                MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance.Classification.SIGNED_INSTALLATION ->
+                    "V2_READONLY_OBSERVATION"
+                MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance.Classification.UNSIGNED_TEST_FIXTURE ->
+                    "UNSIGNED_CANDIDATE_NOT_LIVE"
+            }
+            MangaAllLookupV2ReadOnlyDiagnostics.decodeReadOnly(value, declaredContract)
+                ?.copy(hostProvenance = provenance)
                 ?: error("Malformed or unauthorized MangaAll V2 diagnostic envelope")
         }
+    }
+
+    /**
+     * Only the installed artifact ledger can establish signed-package origin.
+     * An untrusted JS response declaring "signed" is never sufficient.
+     * Even SIGNED_INSTALLATION means package identity, NOT editorial authority,
+     * complete source availability or permission to read CDN images.
+     */
+    private fun mangaAllV2HostProvenance(
+        active: ActiveProviderScriptPackage,
+    ): MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance? {
+        if (
+            active.repositoryId != MANGAALL_TRUSTED_REPOSITORY ||
+            active.versionCode != MANGAALL_V2_EXPERIMENTAL_VERSION ||
+            active.parsed.manifest.id != MANGAALL_PROVIDER_ID ||
+            active.parsed.manifest.version.code != MANGAALL_V2_EXPERIMENTAL_VERSION
+        ) {
+            return null
+        }
+        val digest = sha256Hex(active.bytes)
+        val signed = packageSource is StoredProviderScriptPackageSource &&
+            active.installedArtifactSha256 == digest &&
+            active.repositoryTrustAnchorSha256 == MANGAALL_TRUST_ANCHOR_SHA256 &&
+            active.parsed.manifest.version.name == "0.5.4"
+        val fixture = allowUnsignedMangaAllV2Fixtures &&
+            packageSource !is StoredProviderScriptPackageSource &&
+            active.installedArtifactSha256 == null &&
+            active.repositoryTrustAnchorSha256 == null &&
+            active.parsed.manifest.version.name == "0.5.4-dev-unsigned"
+        if (!signed && !fixture) return null
+        return MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance(
+            classification = if (signed) {
+                MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance.Classification.SIGNED_INSTALLATION
+            } else {
+                MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance.Classification.UNSIGNED_TEST_FIXTURE
+            },
+            repositoryId = active.repositoryId,
+            versionCode = active.versionCode,
+            artifactSha256 = digest,
+            trustAnchorSha256 = if (signed) active.repositoryTrustAnchorSha256 else null,
+        )
     }
 
     /**
@@ -379,6 +439,7 @@ class ScriptProviderReadingGateway internal constructor(
         capability: ProviderCapabilityRef,
         inputJson: String,
         packageGate: (ActiveProviderScriptPackage) -> Boolean = { true },
+        recheckPackageAfterInvocation: Boolean = false,
         decode: (String, ActiveProviderScriptPackage) -> T,
     ): ProviderCallResult<T> {
         registry.awaitReady()
@@ -450,6 +511,24 @@ class ScriptProviderReadingGateway internal constructor(
         // a result issued under a stale registration/permission snapshot.
         if (registry.registration(providerId) != registration) {
             return unavailable()
+        }
+        if (recheckPackageAfterInvocation) {
+            // Same package SHA and origin must still be active AFTER QuickJS:
+            // revocation/replacement must not yield a successful audit.
+            val stillActive = try {
+                packageSource.get(providerId)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                null
+            }
+            if (
+                stillActive == null ||
+                !matchesRegistration(registration, stillActive, capability) ||
+                mangaAllV2HostProvenance(stillActive) != mangaAllV2HostProvenance(active)
+            ) {
+                return unavailable()
+            }
         }
 
         response.failure?.let { failure ->
@@ -694,6 +773,11 @@ class ScriptProviderReadingGateway internal constructor(
         const val MANGAALL_PROVIDER_ID = "app.tsuzuki.mangaall"
         const val MANGAALL_TRUSTED_REPOSITORY = "app.tsuzuki.providers"
         const val MANGAALL_V2_EXPERIMENTAL_VERSION = 9L
+
+        // Current pinned P-256 SPKI fingerprint; code9 release is reviewed only
+        // for this trust root. Key rotation requires an explicit new gate.
+        const val MANGAALL_TRUST_ANCHOR_SHA256 =
+            "20875348d95649ff0009e329f0d43de1b84ccf8af7966c215d5e0f449e697159"
         const val PAGE_LIST_TYPE = "page_list"
         const val PAGE_FAILURE_TYPE = "page_failure"
         const val MANAGED_FILE_TYPE = "managed_file"
