@@ -86,6 +86,18 @@ class MangaAllBatchContractTest(unittest.TestCase):
         self.assertEqual(result[0], "SELECTED")
         self.assertEqual(result[2], ("mangafire:z1r3l", "mangafire:chapter-example-1"))
         self.assertEqual(batch._parse_discovery(output, 1, plan)[0], "FAIL")
+        # A println/log message is not an AndroidJUnitRunner status record.
+        # Accept only statuses sent via Instrumentation.sendStatus(...).
+        without_status = output.replace("INSTRUMENTATION_STATUS: stream=", "")
+        self.assertEqual(batch._parse_discovery(without_status, 0, plan)[0], "FAIL")
+        absent = (
+            "INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_DISCOVERY|"
+            "outcome=INCONCLUSIVE|reason=LOOKUP_UNAVAILABLE"
+            "\nOK (1 test)\nINSTRUMENTATION_CODE: -1"
+        )
+        self.assertEqual(
+            batch._parse_discovery(absent, 0, plan)[:2], ("INCONCLUSIVE", "LOOKUP_UNAVAILABLE")
+        )
         self.assertEqual(
             batch._parse_discovery(output.replace("mangafire:z1r3l", "mangadot:z1r3l"), 0, plan)[0],
             "FAIL",

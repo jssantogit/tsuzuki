@@ -6,6 +6,7 @@ import android.graphics.Color
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.data.database.models.ChapterImpl
+import eu.kanade.tachiyomi.data.tsuzuki.instrumentation.MangaAllInstrumentationVerdict
 import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
 import eu.kanade.tachiyomi.provider.runtime.ProviderManagedFileStore
 import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeBindingPhase
@@ -1648,6 +1649,13 @@ class ScriptProviderReadingGatewayIsolationTest {
         assertEquals(emptyList<Any>(), resolver.options(chapters.single().id))
     }
 
+    /** Offline smoke: prove the am-instrument stream contains the closed verdict. */
+    @Test
+    fun mangaAllLiveVerdictProtocol_emitsAndroidStatusStream() {
+        assertEquals("true", InstrumentationRegistry.getArguments().getString("mangaAllStatusProbeOptIn"))
+        MangaAllInstrumentationVerdict.publish("MANGAALL_STATUS_PROBE|outcome=VISIBLE")
+    }
+
     /**
      * Opt-in live discovery, scoped to one operator-named title and one
      * explicitly selected source. Matching a source's title/alias is not
@@ -1693,7 +1701,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         )
 
         fun inconclusive(reason: String) {
-            println("MANGAALL_BATCH_DISCOVERY|outcome=INCONCLUSIVE|reason=$reason")
+            MangaAllInstrumentationVerdict.publish("MANGAALL_BATCH_DISCOVERY|outcome=INCONCLUSIVE|reason=$reason")
         }
 
         fun normalize(value: String): String = java.text.Normalizer
@@ -1811,7 +1819,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 }
                 // IDs are an internal handoff to the NEXT isolated instrumentation
                 // invocation. The runner exports only per-title closed verdicts.
-                println(
+                MangaAllInstrumentationVerdict.publish(
                     "MANGAALL_BATCH_DISCOVERY|outcome=SELECTED|workId=$workId" +
                         "|chapterId=$chapterId|language=$language",
                 )
@@ -1879,7 +1887,9 @@ class ScriptProviderReadingGatewayIsolationTest {
                 )
             }
             if (chapterAttestation !is ProviderCallResult.Success) {
-                println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_ATTESTATION_UNAVAILABLE")
+                MangaAllInstrumentationVerdict.publish(
+                    "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_ATTESTATION_UNAVAILABLE",
+                )
                 return@runBlocking
             }
             chapterAttestation.value.items.asSequence()
@@ -1900,11 +1910,15 @@ class ScriptProviderReadingGatewayIsolationTest {
             chapterCursor = next
         }
         if (!inventoryComplete) {
-            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_CURSOR_LIMIT")
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_CURSOR_LIMIT",
+            )
             return@runBlocking
         }
         if (matchingChapters.size != 1) {
-            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_NOT_ATTESTED_IN_BOUND")
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_NOT_ATTESTED_IN_BOUND",
+            )
             return@runBlocking
         }
         val response = withTimeout(60_000L) {
@@ -1917,12 +1931,16 @@ class ScriptProviderReadingGatewayIsolationTest {
             )
         }
         if (response !is ProviderCallResult.Success) {
-            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=PROVIDER_PAGES_UNAVAILABLE")
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=PROVIDER_PAGES_UNAVAILABLE",
+            )
             return@runBlocking
         }
         val delivery = response.value as? ProviderReadingDelivery.PageList
         if (delivery == null || delivery.pages.isEmpty()) {
-            println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=NO_HTTP_PAGES")
+            MangaAllInstrumentationVerdict.publish(
+                "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=NO_HTTP_PAGES",
+            )
             return@runBlocking
         }
         val selected = delivery.pages.take(2).map { page ->
@@ -1957,7 +1975,9 @@ class ScriptProviderReadingGatewayIsolationTest {
                     requireNotNull(readerChapter.pageLoader).loadPage(page)
                 }
                 if (page.status != Page.State.Ready || page.stream == null) {
-                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CDN_FETCH_UNAVAILABLE")
+                    MangaAllInstrumentationVerdict.publish(
+                        "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CDN_FETCH_UNAVAILABLE",
+                    )
                     return@runBlocking
                 }
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -1965,7 +1985,9 @@ class ScriptProviderReadingGatewayIsolationTest {
                     BitmapFactory.decodeStream(it, null, bounds)
                 }
                 if (bounds.outWidth !in 1..12000 || bounds.outHeight !in 1..12000) {
-                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=INVALID_IMAGE_DIMENSIONS")
+                    MangaAllInstrumentationVerdict.publish(
+                        "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=INVALID_IMAGE_DIMENSIONS",
+                    )
                     return@runBlocking
                 }
                 val sample = generateSequence(1) { it * 2 }
@@ -1978,14 +2000,16 @@ class ScriptProviderReadingGatewayIsolationTest {
                     )
                 }
                 if (bitmap == null) {
-                    println("MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=IMAGE_DECODE_FAILED")
+                    MangaAllInstrumentationVerdict.publish(
+                        "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=IMAGE_DECODE_FAILED",
+                    )
                     return@runBlocking
                 }
                 bitmap.recycle()
                 decoded++
             }
             assertTrue("At least one original CDN image must decode", decoded > 0)
-            println(
+            MangaAllInstrumentationVerdict.publish(
                 "MANGAALL_LIVE_PAGE_GATE|outcome=PASS|provenance=DIRECT_LIVE_ANDROID" +
                     "|pagesDecoded=$decoded|readerActivityPixels=NOT_TESTED",
             )

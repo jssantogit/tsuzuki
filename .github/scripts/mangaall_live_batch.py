@@ -31,7 +31,7 @@ ID_PATTERN = re.compile(r"(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}")
 CHAPTER_PATTERN = re.compile(r"[A-Za-z0-9._:-]{1,160}")
 LANGUAGE_PATTERN = re.compile(r"[a-z]{2}(?:-[a-z]{2})?")
 SELECTED = re.compile(
-    r"MANGAALL_BATCH_DISCOVERY\|outcome=SELECTED"
+    r"(?m)^INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_DISCOVERY\|outcome=SELECTED"
     r"\|workId=((?:mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128})"
     r"\|chapterId=([A-Za-z0-9._:-]{1,160})"
     r"\|language=([a-z]{2}(?:-[a-z]{2})?)"
@@ -44,7 +44,7 @@ DISCOVERY_REASONS = (
     "CHAPTER_ONE_NOT_ATTESTED", "UPSTREAM_TIMEOUT",
 )
 DISCOVERY_INCONCLUSIVE = re.compile(
-    r"MANGAALL_BATCH_DISCOVERY\|outcome=INCONCLUSIVE\|reason=("
+    r"(?m)^INSTRUMENTATION_STATUS: stream=MANGAALL_BATCH_DISCOVERY\|outcome=INCONCLUSIVE\|reason=("
     + "|".join(DISCOVERY_REASONS) + r")"
 )
 GATE_REASONS = (
