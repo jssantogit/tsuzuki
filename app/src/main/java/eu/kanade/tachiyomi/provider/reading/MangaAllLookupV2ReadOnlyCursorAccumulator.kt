@@ -75,7 +75,9 @@ internal class MangaAllLookupV2ReadOnlyCursorAccumulator(
 
     private fun sourceCursor(value: kotlinx.serialization.json.JsonElement?): Boolean {
         if (value == JsonNull) return true
-        val raw = (value as? JsonPrimitive)?.contentOrNull ?: return false
+        val primitive = value as? JsonPrimitive ?: return false
+        if (!primitive.isString) return false
+        val raw = primitive.contentOrNull ?: return false
         return raw.length in 1..64 &&
             raw.none { it.isISOControl() } &&
             !raw.contains("://") &&
@@ -205,9 +207,11 @@ internal class MangaAllLookupV2ReadOnlyCursorAccumulator(
             }
         }
         pages++
-        expectedCursor = audit.continuationCursor
+        val pageBudgetExhausted = pages == 8 && audit.continuationCursor != null
+        expectedCursor = if (pageBudgetExhausted) null else audit.continuationCursor
         val allComplete = histories.values.all { it.completed && !it.tainted }
         val verdict = when {
+            pageBudgetExhausted -> Verdict.INCONCLUSIVE
             expectedCursor != null -> Verdict.IN_PROGRESS
             allComplete -> Verdict.COMPLETE_OBSERVED
             else -> Verdict.INCONCLUSIVE
