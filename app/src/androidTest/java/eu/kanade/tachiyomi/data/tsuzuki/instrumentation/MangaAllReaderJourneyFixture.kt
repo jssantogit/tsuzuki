@@ -371,11 +371,19 @@ internal class MangaAllReaderJourneyFixture(
         assertEquals(providerId, selectedOption.providerId)
         assertEquals(workId, selectedOption.externalWorkId)
         assertEquals(sourceChapterId, selectedOption.providerChapterId)
-        if ((originalCode7Package || originalCode8Package) && liveTarget == null) {
+        if (originalCode7Package || originalCode8Package) {
             originalPageLoaderFactory = pageClientField.get(reader.viewModel)
-            val images = packagedCode7ImageClient()
+            val images = if (liveTarget != null) {
+                OkHttpClient.Builder().callTimeout(25, TimeUnit.SECONDS).build()
+            } else {
+                packagedCode7ImageClient()
+            }
             val pageFactory: (CanonicalReaderTargetPlan.HttpPages) -> ReaderChapterLoader = { plan ->
-                ProviderHttpChapterLoader.from(context, plan, client = images)
+                // The published Provider may list hundreds of pages. Only the
+                // test's ephemeral loader is capped; original pages() output
+                // and production Reader loading semantics remain unchanged.
+                val bounded = if (liveTarget != null) plan.copy(pages = plan.pages.take(2)) else plan
+                ProviderHttpChapterLoader.from(context, bounded, client = images)
             }
             pageClientField.set(reader.viewModel, pageFactory)
             pageLoaderSwapped = true
