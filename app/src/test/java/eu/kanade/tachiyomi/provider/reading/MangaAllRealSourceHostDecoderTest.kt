@@ -12,6 +12,14 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.io.File
 import java.security.MessageDigest
+import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
+import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
+import tachiyomi.domain.tsuzuki.provider.ProviderFacetRef
+import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
+import tachiyomi.domain.tsuzuki.provider.ProviderPermissionSet
+import tachiyomi.domain.tsuzuki.provider.ProviderRuntimeKind
+import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 
 /**
  * This test is NEVER a synthetic work matrix. The optional workflow passes
@@ -22,6 +30,26 @@ import java.security.MessageDigest
  * until #207 provides the corresponding production stages.
  */
 class MangaAllRealSourceHostDecoderTest {
+
+    @Test
+    fun `real V1 replay must register explicit English facet instead of an implicit null facet`() {
+        val id = ProviderId("app.tsuzuki.mangaall")
+        val descriptor = ProviderDescriptor(
+            id = id,
+            name = "MangaAll signed V1 contract only",
+            version = ProviderVersion("0.5.4", 9),
+            origin = ProviderOrigin.Repository("app.tsuzuki.providers"),
+            runtime = ProviderRuntimeKind.SCRIPT,
+            capabilities = setOf(ProviderCapabilities.ReadingLookupV1),
+            permissions = ProviderPermissionSet(),
+            settings = emptyList(),
+            contentLanguages = setOf("en"),
+        )
+        val registration = MangaAllRealSourceReplay.capturedEnglishRegistration(descriptor)
+        registration.facets shouldBe listOf(ProviderFacetRef(id, "en"))
+        registration.facets.size shouldBe 1
+        registration.facets.single().facetId shouldBe "en"
+    }
 
     @Test
     fun `tampering with captured real source metadata fails before Host decode`() {
