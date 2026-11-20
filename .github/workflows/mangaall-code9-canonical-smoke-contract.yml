@@ -56,6 +56,19 @@ jobs:
         run: |
           node tooling/verify_index.mjs
           node tooling/test_mangaall_signed_code9_smoke_gate.mjs
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Compile and run Host source/canonical/SQLite offline contract suites (no captured live data)
+        run: |
+          ./gradlew :app:spotlessKotlinCheck :app:testDebugUnitTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSourceHostDecoderTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest
       - name: Ensure Provider plan preserves exactly the ordered three titles and the same case IDs
         working-directory: signed-code9-smoke-source
         env:
