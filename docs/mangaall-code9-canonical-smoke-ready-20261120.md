@@ -29,7 +29,7 @@ Workflow:
    Strict NFKC/deduplicated case IDs, length and input boundaries, position
    preserved. No scripted or default network work is allowed on PR/commit.
 2. **Cryptographic source gate:** Provider source pinned to merge
-   `749101cb9bfe92e2ecdcc61a9248546f0b1f4626`
+   `564a2f526bc05761eb51cd2bf0ab63b02f33e466`
    (Provider PR #86), official published **P-256 signed index 35**,
    unique unified MangaAll **0.5.4/code9** SHA-256
    `d9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622`.
@@ -98,3 +98,9 @@ no matching work, empty chapters or successful pages.
 
 Progress tracked in [Host #207](https://github.com/jssantogit/tsuzuki/issues/207)
 and [Provider #72](https://github.com/jssantogit/providers-tsuzuki/issues/72).
+
+## First live-run regression — 2026-11-20
+
+[Host #44759250361](https://github.com/jssantogit/tsuzuki/actions/runs/44759250361) was genuinely started from owner [issue #230](https://github.com/jssantogit/tsuzuki/issues/230). P-256 index seq35 and original immutable code9 artifact passed. The source journey incorrectly sent `diagnosticsVersion:2` (a **V2-only diagnostic contract**) and then required V1 `items`; Naruto, Death Note and Bleach consequently failed as `INVALID_CONTRACT` on the runner. This was an instrumentation **protocol mistake, not evidence of missing manga**. [Provider #87](https://github.com/jssantogit/providers-tsuzuki/pull/87) merged the fix in **harness only**: explicit V1 request in the code9 canonical smoke, preserving the genuine published code9 signed archive unchanged. This Host follow-up pins the reviewed runner commit `564a2f526bc05761eb51cd2bf0ab63b02f33e466` and adds offline V1/V2 regression coverage. Do not re-use the failed response as a canonical pass.
+
+The same first run's independent Android MangaUpdates catalog returned `CATALOG_UNAVAILABLE` for all three titles. The Android runner marked that stage failing; **no independently corroborated canonical binding** was created. These statuses are not proof of absent titles or chapters, and must be diagnosed without acquiring user credentials, fake editorial evidence, or bypassing upstream restrictions.
