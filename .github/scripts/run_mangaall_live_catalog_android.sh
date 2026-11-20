@@ -40,16 +40,16 @@ timeout --foreground 900s adb shell am instrument -w -r \
 # Only publicly sourced IDs, closed status codes, bounded counts and title
 # digests leave the disposable runner. Do not upload raw instrumentation logs.
 grep -E 'MANGAALL_REAL_CATALOG(\||_BATCH\|)' "$raw" > "$out/catalog-report.txt" || true
-grep -E 'INSTRUMENTATION_CODE:|OK \([0-9]+ test' "$raw" > "$out/instrumentation-status.txt" || true
+grep -E 'INSTRUMENTATION_CODE:|INSTRUMENTATION_STATUS_CODE:|OK \([0-9]+ test' "$raw" > "$out/instrumentation-status.txt" || true
 # Strictly validate the encoded real catalog identity/author claims before
 # exporting them. No stdout from the HTTP client is retained by this script.
 python3 .github/scripts/validate_mangaall_catalog_attestation.py \
   "$raw" "$out/catalog-attestations.json"
-if [ "$status" -ne 0 ] || ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$raw" ||
-  ! grep -Fq 'OK (1 test)' "$raw" || ! grep -Fq 'MANGAALL_REAL_CATALOG_BATCH|' "$out/catalog-report.txt"; then
-  echo "MANGAALL_LIVE_CATALOG_GATE|outcome=FAIL|shard=$MANGAALL_SHARD_INDEX|runnerExit=$status" >&2
-  exit 1
-fi
-printf 'MANGAALL_LIVE_CATALOG_GATE|outcome=PASS|shard=%s|source=REAL_MANGAUPDATES|canonical=NOT_EXECUTED_HOST\n' \
-  "$MANGAALL_SHARD_INDEX"
+# The Android test runner does not always emit the optional 'OK (1 test)'
+# summary. Its final code alone may also follow a failed assertion. Verify
+# the actual per-test status, exact case IDs/order and real catalog attestation
+# for every requested title before treating this stage as a valid capture.
+# Inconclusive upstream CATALOG_UNAVAILABLE does NOT grant canonical identity.
+python3 .github/scripts/mangaall_catalog_instrumentation_gate.py \
+  "$raw" "$out/catalog-attestations.json" "$status"
 rm -f "$raw"
