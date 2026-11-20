@@ -24,9 +24,9 @@ import org.junit.runner.RunWith
 import tachiyomi.core.provider.packageformat.ProviderPackageActivator
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
 import tachiyomi.core.provider.supplychain.EnrolledProviderRepository
+import tachiyomi.core.provider.supplychain.FileProviderLocalConfigurationStore
 import tachiyomi.core.provider.supplychain.FileProviderRepositoryEnrollmentStore
 import tachiyomi.core.provider.supplychain.FileProviderRepositoryTrustStore
-import tachiyomi.core.provider.supplychain.FileProviderLocalConfigurationStore
 import tachiyomi.core.provider.supplychain.ProviderArtifactDescriptor
 import tachiyomi.core.provider.supplychain.ProviderArtifactStore
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEnrollment
@@ -51,12 +51,12 @@ import tachiyomi.domain.tsuzuki.model.CanonicalLibraryEntry
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.LibraryStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderId
-import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
-import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingBinding
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.reader.model.CanonicalChapterProgress
 import java.io.File
 import java.security.KeyPair
@@ -423,8 +423,11 @@ class MangaAllSignedUpgradeIsolationTest {
             manager.enroll(enrollment)
             val initial = manager.refresh(repositoryId)
             assertEquals(34L, initial.sequence)
-            assertEquals(8L, initial.entries.single { it.descriptor.providerId == providerId }
-                .descriptor.versionCode)
+            assertEquals(
+                8L,
+                initial.entries.single { it.descriptor.providerId == providerId }
+                    .descriptor.versionCode,
+            )
             manager.install(repositoryId, providerId)
             assertEquals(8L, store.current(providerId)?.versionCode)
             assertEquals(sha256Hex(code8), sha256Hex(store.readCurrentArtifact(providerId)))
