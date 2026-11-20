@@ -15,12 +15,12 @@ from validate_mangaall_catalog_attestation import case_id
 
 CLOSED = {"RESOLVED", "CATALOG_AMBIGUOUS", "CATALOG_NOT_FOUND"}
 BATCH = re.compile(
-    r"INSTRUMENTATION_STATUS: stream=MANGAALL_REAL_CATALOG_BATCH\\|"
-    r"selected=(\\d+)\\|conclusive=(\\d+)\\|catalog=MANGAUPDATES_PRODUCTION"
-    r"\\|canonical=NOT_EXECUTED_HOST"
+    r"INSTRUMENTATION_STATUS: stream=MANGAALL_REAL_CATALOG_BATCH\|"
+    r"selected=(\d+)\|conclusive=(\d+)\|catalog=MANGAUPDATES_PRODUCTION"
+    r"\|canonical=NOT_EXECUTED_HOST"
 )
-RESULT = re.compile(r"(?m)^INSTRUMENTATION_CODE: (-?\\d+)\\s*$")
-STATUS = re.compile(r"(?m)^INSTRUMENTATION_STATUS_CODE: (-?\\d+)\\s*$")
+RESULT = re.compile(r"(?m)^INSTRUMENTATION_CODE: (-?\d+)\s*$")
+STATUS = re.compile(r"(?m)^INSTRUMENTATION_STATUS_CODE: (-?\d+)\s*$")
 
 
 def validate(raw, artifact, works, shard_index=0, shard_count=1, exit_code=0):
