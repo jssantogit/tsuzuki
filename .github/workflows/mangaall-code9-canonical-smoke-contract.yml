@@ -10,6 +10,8 @@ on:
       - '.github/scripts/test_mangaall_catalog_instrumentation_gate.py'
       - '.github/scripts/run_mangaall_live_catalog_android.sh'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllIndependentCatalogLiveInstrumentedTest.kt'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/reading/MangaAllRealSourceReplay.kt'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/reading/MangaAllCapturedRequestTapeTest.kt'
       - '.github/workflows/mangaall-code9-canonical-smoke-contract.yml'
       - '.github/scripts/mangaall_code9_canonical_smoke_*.py'
       - '.github/scripts/test_mangaall_code9_canonical_smoke_*.py'
@@ -25,6 +27,8 @@ on:
       - '.github/scripts/test_mangaall_catalog_instrumentation_gate.py'
       - '.github/scripts/run_mangaall_live_catalog_android.sh'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllIndependentCatalogLiveInstrumentedTest.kt'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/reading/MangaAllRealSourceReplay.kt'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/reading/MangaAllCapturedRequestTapeTest.kt'
       - '.github/scripts/mangaall_code9_canonical_smoke_*.py'
       - '.github/scripts/test_mangaall_code9_canonical_smoke_*.py'
       - '.github/workflows/mangaall-code9-on-demand-command.yml'
@@ -64,7 +68,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: jssantogit/providers-tsuzuki
-          ref: 564a2f526bc05761eb51cd2bf0ab63b02f33e466
+          ref: c35b1bcac1ce02062f80e812517239e39adbcfd8
           path: signed-code9-smoke-source
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -89,7 +93,8 @@ jobs:
           ./gradlew :app:spotlessKotlinCheck :app:testDebugUnitTest \
             --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSourceHostDecoderTest \
             --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest \
-            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllCapturedRequestTapeTest
       - name: Ensure Provider plan preserves exactly the ordered three titles and the same case IDs
         working-directory: signed-code9-smoke-source
         env:
