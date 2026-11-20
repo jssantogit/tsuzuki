@@ -40,7 +40,8 @@ def parse_comment_event(event, run_attempt=1):
             "pull_request" in issue or
             not isinstance(comment, dict) or
             not isinstance(sender, dict) or
-            comment.get("user", {}).get("login") != OWNER or
+            not isinstance(comment.get("user"), dict) or
+            comment["user"].get("login") != OWNER or
             sender.get("login") != OWNER or
             comment.get("author_association") != "OWNER" or
             type(comment.get("id")) is not int or comment["id"] < 1):
