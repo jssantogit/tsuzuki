@@ -13,6 +13,7 @@ import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
+import tachiyomi.domain.tsuzuki.provider.ProviderFacetRef
 import tachiyomi.domain.tsuzuki.provider.ProviderId
 import tachiyomi.domain.tsuzuki.provider.ProviderLifecycleStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderOrigin
@@ -212,6 +213,21 @@ internal object MangaAllRealSourceReplay {
         )
     }
 
+    /**
+     * The collector discovers language facets from ProviderRegistration.facets,
+     * NOT from descriptor.contentLanguages. The signed V1 tape has only "en".
+     * Do not generate an implicit null facet or invent an uncaptured pt-br call.
+     */
+    internal fun capturedEnglishRegistration(descriptor: ProviderDescriptor): ProviderRegistration {
+        require(descriptor.contentLanguages == setOf("en"))
+        return ProviderRegistration(
+            descriptor = descriptor,
+            lifecycleStatus = ProviderLifecycleStatus.ENABLED,
+            facets = listOf(ProviderFacetRef(descriptor.id, "en")),
+            configurationFingerprint = "real-source-captured-only",
+        )
+    }
+
     internal fun prepare(
         signedPackageBytes: ByteArray,
         expectedSha256: String,
@@ -247,11 +263,7 @@ internal object MangaAllRealSourceReplay {
         val registry = DefaultProviderRegistry(
             registrations = {
                 listOf(
-                    ProviderRegistration(
-                        descriptor = descriptor,
-                        lifecycleStatus = ProviderLifecycleStatus.ENABLED,
-                        configurationFingerprint = "real-source-captured-only",
-                    ),
+                    capturedEnglishRegistration(descriptor),
                 )
             },
         )
