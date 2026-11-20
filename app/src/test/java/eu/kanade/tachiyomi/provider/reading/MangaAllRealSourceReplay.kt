@@ -239,7 +239,12 @@ internal object MangaAllRealSourceReplay {
             ),
             permissions = ProviderPermissionSet(),
             settings = emptyList(),
-            contentLanguages = setOf("en", "pt-br"),
+            // Test-only registry must represent EXACTLY the captured source
+            // facet. The live canonical V1 runner requests English only;
+            // registering pt-br would ask the strict tape for an uncaptured
+            // Portuguese lookup and falsely report a REPLAY_GAP. This never
+            // changes the signed package's actual en + pt-br capabilities.
+            contentLanguages = setOf("en"),
         )
         val registry = DefaultProviderRegistry(
             registrations = {
