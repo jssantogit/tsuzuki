@@ -28,6 +28,8 @@ class CanonicalCode9SmokeWorkflowTest(unittest.TestCase):
         registry = (ROOT / "app/src/test/java/eu/kanade/tachiyomi/provider/reading/MangaAllRealSourceReplay.kt").read_text(encoding="utf-8")
         self.assertIn('contentLanguages = setOf("en")', registry)
         self.assertNotIn('contentLanguages = setOf("en", "pt-br")', registry)
+        self.assertIn('facets = listOf(ProviderFacetRef(descriptor.id, "en"))', registry)
+        self.assertIn('capturedEnglishRegistration(descriptor)', registry)
 
     def test_one_ordered_work_vector_into_live_source_and_independent_catalog(self):
         text = WORKFLOW.read_text(encoding="utf-8")
