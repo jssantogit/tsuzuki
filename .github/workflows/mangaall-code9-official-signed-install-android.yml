@@ -1,0 +1,141 @@
+name: MangaAll code9 — official signed index and installed Host V2 Android
+
+# This does not run on normal commits and NEVER creates a signed index.
+# A manual run will FAIL until the Provider Publisher has genuinely signed
+# sequence 35/code9 with its original pinned P-256 key.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/mangaall-code9-official-signed-install-android.yml'
+      - '.github/scripts/run_mangaall_official_code9_install_android.sh'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/repository/MangaAllSignedUpgradeIsolationTest.kt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-code9-official-signed-install-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-only:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Inspect manual acceptance script (no signed code9 required)
+        run: bash -n .github/scripts/run_mangaall_official_code9_install_android.sh
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Compile signed-install instrumentation; NEVER run unsigned as official
+        run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebugAndroidTest
+
+  signed-install-android:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    steps:
+      - name: Checkout Host (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Checkout official, CURRENT Provider signed index (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: main
+          path: official-providers
+          persist-credentials: false
+      - name: Checkout immutable signed code8 baseline (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 99f3565a1e1edc0d8ed249b7597006c897f02636
+          path: original-code8
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Fail closed unless the REAL official signed index is code9 sequence35
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original-code8 rev-parse HEAD)" = 99f3565a1e1edc0d8ed249b7597006c897f02636
+          (cd original-code8 && node tooling/verify_index.mjs)
+          (cd official-providers && node tooling/verify_index.mjs)
+          (cd official-providers && python3 tooling/mangaall_code9_signed_release_audit.py --code8-snapshot ../original-code8)
+          echo 'MANGAALL_CODE9_P256|officialIndex=SEQUENCE35|signedArchive=VERIFIED|hostInstall=PENDING'
+      - name: Stage only authentic signed-index-bound archives/envelopes for AndroidTest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, shutil, hashlib
+          old = pathlib.Path('original-code8')
+          new = pathlib.Path('official-providers')
+          o = json.loads((old/'dist/index.payload.json').read_text())
+          n = json.loads((new/'dist/index.payload.json').read_text())
+          assert o['sequence'] == 34 and n['sequence'] == 35
+          old_match = [p for p in o['providers'] if p['providerId'] == 'app.tsuzuki.mangaall']
+          new_match = [p for p in n['providers'] if p['providerId'] == 'app.tsuzuki.mangaall']
+          assert len(old_match) == len(new_match) == 1
+          assert old_match[0]['versionCode'] == 8 and new_match[0]['versionCode'] == 9
+          old_archive = old/'dist/providers/app.tsuzuki.mangaall-8.tsz'
+          new_archive = new/'dist/providers/app.tsuzuki.mangaall-9.tsz'
+          assert hashlib.sha256(old_archive.read_bytes()).hexdigest() == old_match[0]['sha256']
+          assert hashlib.sha256(new_archive.read_bytes()).hexdigest() == new_match[0]['sha256']
+          dest = pathlib.Path('app/src/androidTest/assets/mangaall')
+          dest.mkdir(parents=True, exist_ok=True)
+          for original, name in (
+              (old/'dist/index.json', 'code8-published-index.json'),
+              (old_archive, 'code8-published-package.tsz'),
+              (new/'dist/index.json', 'code9-official-index.json'),
+              (new/'dist/enrollment.json', 'code9-official-enrollment.json'),
+              (new_archive, 'code9-official-package.tsz'),
+          ):
+              shutil.copyfile(original, dest/name)
+          print('MANGAALL_CODE9_ANDROID_ASSETS|originalCode8=P256_VERIFIED|code9=P256_VERIFIED|network=OFFLINE')
+          PY
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Compile isolated Host app and signed-index installation probe
+        run: |
+          bash -n .github/scripts/run_mangaall_official_code9_install_android.sh
+          ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM on disposable runner
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install original P-256-code8, upgrade to official P-256-code9 and run real QuickJS
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaall_official_code9_install_android.sh
+      - name: Retain status-only offline acceptance
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-code9-official-signed-host
+          path: .github/results/mangaall-code9-official-signed-install/**
+          if-no-files-found: ignore
+          retention-days: 3
