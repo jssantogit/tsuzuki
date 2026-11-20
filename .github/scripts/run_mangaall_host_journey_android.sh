@@ -23,6 +23,7 @@ readonly v2_cursor_budget_case='eu.kanade.tachiyomi.provider.reading.MangaAllLoo
 readonly v2_host_invocation_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllV2Code9OptIn_routesOneReadOnlyDiagnosticAndRejectsWrongPackage'
 readonly v2_host_cursor_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllV2Code9OptIn_accumulatesActualRuntimePagesWithoutReaderGrants'
 readonly v2_host_provenance_case='eu.kanade.tachiyomi.provider.reading.MangaAllLookupV2ReadOnlyDiagnosticsTest#mangaAllV2HostProvenance_rejectsCrossArtifactPagesAndForgedSignedClaim'
+readonly reviewed_code9_host_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllCode9ReviewedArchive_executesUnifiedV1AndRejectsUnsignedV2'
 readonly source_row_case='eu.kanade.presentation.reader.MangaAllReaderSourceCardInstrumentedTest#tappingMangaAllSourcePassesExactVerifiedChapterOptionWithoutCrossSourceSelection'
 
 mkdir -p "$output"
@@ -103,6 +104,7 @@ if [ "${MANGAALL_CODE8_ONLY:-0}" = "1" ]; then
   run_case 'UNSIGNED_CODE9_V2_HOST_INVOCATION_VERSION_GATED' "$v2_host_invocation_case" 'mangaAllStatusProbeOptIn'
   run_case 'UNSIGNED_CODE9_V2_HOST_RUNTIME_CURSOR_AUDIT' "$v2_host_cursor_case" 'mangaAllStatusProbeOptIn'
   run_case 'UNSIGNED_CODE9_V2_HOST_PROVENANCE_PINNING' "$v2_host_provenance_case" 'mangaAllStatusProbeOptIn'
+  run_case 'CODE9_REVIEWED_REAL_TSZ_HOST_V1_DENIES_UNSIGNED_V2' "$reviewed_code9_host_case" 'mangaAllStatusProbeOptIn'
   run_case 'CODE8_PUBLISHED_TSZ_CONTINUOUS_READER_TAP_503_RETRY_PIXELS' "$real_code8_reader_case" 'androidSourceSwitchOptIn'
   echo 'MANGAALL_JOURNEY|pipeline=PUBLISHED_CODE8_OFFLINE_READER|outcome=PASS|readerPixels=DECODED_SYNTHETIC_HTTP|liveCdn=NOT_TESTED'
   exit 0
