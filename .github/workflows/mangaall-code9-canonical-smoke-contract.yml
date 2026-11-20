@@ -10,6 +10,7 @@ on:
       - '.github/scripts/mangaall_code9_canonical_smoke_*.py'
       - '.github/scripts/test_mangaall_code9_canonical_smoke_*.py'
       - '.github/workflows/mangaall-code9-on-demand-command.yml'
+      - '.github/workflows/mangaall-code9-on-demand-selftest.yml'
       - '.github/scripts/mangaall_code9_smoke_comment_dispatch.py'
       - '.github/scripts/test_mangaall_code9_smoke_comment_dispatch.py'
   push:
@@ -19,6 +20,7 @@ on:
       - '.github/scripts/mangaall_code9_canonical_smoke_*.py'
       - '.github/scripts/test_mangaall_code9_canonical_smoke_*.py'
       - '.github/workflows/mangaall-code9-on-demand-command.yml'
+      - '.github/workflows/mangaall-code9-on-demand-selftest.yml'
       - '.github/scripts/mangaall_code9_smoke_comment_dispatch.py'
       - '.github/scripts/test_mangaall_code9_smoke_comment_dispatch.py'
 
