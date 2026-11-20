@@ -78,7 +78,7 @@ class CanonicalCode9ReportSafetyTest(unittest.TestCase):
         self.assertTrue(report.has_internal_replay_gap(summary))
         self.assertFalse(summary["canonicalGrantFromV2"])
 
-        def test_missing_or_foreign_evidence_is_rejected_even_if_other_stages_are_healthy(self):
+    def test_missing_or_foreign_evidence_is_rejected_even_if_other_stages_are_healthy(self):
         from copy import deepcopy
         original = incomplete_vector()
         for tweak in ("captureCode8", "indexRollback", "archiveMismatch",
