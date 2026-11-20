@@ -11,6 +11,7 @@ on:
       - 'test/mangaall-code9-signed-acceptance-*'
     paths:
       - '.github/workflows/mangaall-code9-official-signed-install-android.yml'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/repository/MangaAllSignedUpgradeIsolationTest.kt'
   pull_request:
     paths:
       - '.github/workflows/mangaall-code9-official-signed-install-android.yml'
@@ -51,9 +52,11 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
-       github.head_ref == 'test/mangaall-code9-signed-acceptance-p256-35') ||
+       (github.head_ref == 'test/mangaall-code9-signed-acceptance-p256-35' ||
+        github.head_ref == 'test/mangaall-code9-signed-acceptance-candidates-20261120')) ||
       (github.event_name == 'push' &&
-       github.ref == 'refs/heads/test/mangaall-code9-signed-acceptance-p256-35')
+       (github.ref == 'refs/heads/test/mangaall-code9-signed-acceptance-p256-35' ||
+        github.ref == 'refs/heads/test/mangaall-code9-signed-acceptance-candidates-20261120'))
     runs-on: ubuntu-24.04
     timeout-minutes: 85
     steps:

@@ -397,11 +397,26 @@ class MangaAllSignedUpgradeIsolationTest {
             synchronized(syntheticOrigins) { syntheticOrigins.add(origin) }
             val (status, body) = when {
                 origin == "https://api.mangadex.org" && uri.encodedPath == "/manga" ->
-                    200 to """{"result":"ok","data":[],"offset":0,"limit":25,"total":0}"""
+                    200 to """
+                        {
+                          "result":"ok",
+                          "data":[{
+                            "id":"11111111-1111-4111-8111-111111111111",
+                            "type":"manga",
+                            "attributes":{
+                              "title":{"en":"Naruto"},
+                              "altTitles":[{"en":"Naruto (Colored)"}]
+                            }
+                          }],
+                          "offset":0,
+                          "limit":25,
+                          "total":1
+                        }
+                    """.trimIndent()
                 origin == "https://mangadot.net" && uri.encodedPath == "/api/search" ->
-                    403 to """{"error":"synthetic challenge"}"""
+                    200 to """{"results":[{"manga_id":42,"title":"Naruto"}]}"""
                 origin == "https://mangafire.to" && uri.encodedPath == "/api/titles" ->
-                    200 to """{"items":[]}"""
+                    403 to """{"error":"synthetic challenge"}"""
                 else -> error("Unexpected source request, no external networking allowed")
             }
             Response.Builder()
@@ -491,17 +506,60 @@ class MangaAllSignedUpgradeIsolationTest {
             assertEquals(pinnedRoot, audit.hostProvenance?.trustAnchorSha256)
             assertEquals(listOf("mangadex", "mangadot", "mangafire"), audit.sources.map { it.source })
             assertEquals(
-                listOf("SUCCESS_PAGE", "FAILED", "SUCCESS_PAGE"),
+                listOf("SUCCESS_PAGE", "SUCCESS_PAGE", "FAILED"),
                 audit.sources.map { it.status },
             )
-            assertEquals("CHALLENGE_BLOCKED", audit.sources[1].failureCode)
-            assertEquals(403, audit.sources[1].httpStatus)
+            assertEquals("CHALLENGE_BLOCKED", audit.sources[2].failureCode)
+            assertEquals(403, audit.sources[2].httpStatus)
             assertFalse(audit.lookupComplete)
-            assertTrue(audit.observedWorks.isEmpty())
+            assertEquals("PARTIAL_EVIDENCE", audit.state)
+            assertEquals(2, audit.observedWorks.size)
+            assertEquals(
+                listOf("mangadex", "mangadot"),
+                audit.observedWorks.map { it.source },
+            )
+            assertEquals(
+                listOf(
+                    "mangadex:11111111-1111-4111-8111-111111111111",
+                    "mangadot:42",
+                ),
+                audit.observedWorks.map { it.sourceWorkId },
+            )
+            assertEquals(listOf("Naruto", "Naruto"), audit.observedWorks.map { it.title })
+            assertEquals(listOf("Naruto (Colored)"), audit.observedWorks[0].aliases)
+            assertTrue(audit.observedWorks[1].aliases.isEmpty())
+            assertTrue(audit.observedWorks.all { it.authors.isEmpty() })
             assertEquals(
                 setOf("https://api.mangadex.org", "https://mangadot.net", "https://mangafire.to"),
                 synchronized(syntheticOrigins) { syntheticOrigins.toSet() },
             )
+
+            // Real signed code9 + actual QuickJS + an installed Host ledger:
+            // two *competing* source IDs survive the third source's 403.
+            // Follow the actual V2 continuation through the same unified
+            // Provider and retain both observations, without editorial auto-pick.
+            val accumulated = gateway.auditMangaAllV2ReadOnly(ProviderId(providerId), request)
+            assertTrue(accumulated is ProviderCallResult.Success)
+            val snapshot = (accumulated as ProviderCallResult.Success).value
+            assertEquals(2, snapshot.pages)
+            assertEquals(
+                MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance.Classification.SIGNED_INSTALLATION,
+                snapshot.hostProvenance?.classification,
+            )
+            assertEquals(
+                "d9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622",
+                snapshot.hostProvenance?.artifactSha256,
+            )
+            assertEquals(2, snapshot.observedWorks.size)
+            assertEquals(
+                listOf("mangadex", "mangadot"),
+                snapshot.observedWorks.map { it.source },
+            )
+            assertEquals(
+                listOf("CHALLENGE_BLOCKED"),
+                snapshot.sourceHistory.filter { it.hadFailure }.map { it.lastFailureCode },
+            )
+            assertEquals(null, snapshot.nextCursor)
 
             // The source is an installation-trusted diagnostic channel, not a
             // canonical binding or Reader authorization. Rollback to code8
