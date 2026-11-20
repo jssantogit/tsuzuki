@@ -137,6 +137,25 @@ class CommentBridgeTest(unittest.TestCase):
             with self.subTest(body=body[:38]), self.assertRaises(ValueError):
                 smoke.parse_comment_event(fixture(body))
 
+    def test_workflow_always_on_demand_and_uses_owner_authorization(self):
+        wf = FILE.parents[1] / "workflows/mangaall-code9-on-demand-command.yml"
+        txt = wf.read_text(encoding="utf-8")
+        self.assertIn("  issue_comment:", txt)
+        self.assertNotIn("  pull_request:", txt)
+        self.assertNotIn("  push:", txt)
+        self.assertNotIn("  schedule:", txt)
+        self.assertNotIn("  workflow_dispatch:", txt)
+        self.assertIn("  actions: write", txt)
+        self.assertIn("github.event.issue.number == 230", txt)
+        self.assertIn("github.event.comment.user.login == 'jssantogit'", txt)
+        self.assertIn("github.event.comment.author_association == 'OWNER'", txt)
+        self.assertIn("github.run_attempt == 1", txt)
+        self.assertIn("steps.command.outputs.mode == 'smoke'", txt)
+        self.assertIn("steps.command.outputs.mode == 'plan'", txt)
+        self.assertIn("mangaall-code9-canonical-smoke.yml/dispatches", txt)
+        self.assertNotIn("publish.yml/dispatches", txt)
+        self.assertIn("204", txt)
+
     def test_main_does_not_write_workflow_dispatch_when_rejected(self):
         with tempfile.TemporaryDirectory() as td:
             event = Path(td) / "event.json"
