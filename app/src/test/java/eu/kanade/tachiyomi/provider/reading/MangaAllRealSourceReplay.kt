@@ -239,7 +239,10 @@ internal object MangaAllRealSourceReplay {
             ),
             permissions = ProviderPermissionSet(),
             settings = emptyList(),
-            contentLanguages = setOf("en", "pt-br"),
+            // Live signed-code9 capture currently records only the English facet.
+            // Scope this disposable replay registry to exactly that captured facet;
+            // production Provider language grants and declarations are unchanged.
+            contentLanguages = setOf("en"),
         )
         val registry = DefaultProviderRegistry(
             registrations = {

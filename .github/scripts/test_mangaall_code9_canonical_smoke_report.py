@@ -63,6 +63,21 @@ class CanonicalCode9ReportSafetyTest(unittest.TestCase):
         self.assertFalse(status["canonicalGrantFromV2"])
         self.assertEqual(status["readerPixels"], "NOT_TESTED_REAL_CDN")
 
+    def test_internal_replay_gap_must_fail_even_if_source_already_inconclusive(self):
+        from copy import deepcopy
+        original = incomplete_vector()
+        partial = report.merge(WORKS, "isolated", *original)
+        self.assertFalse(report.has_internal_replay_gap(partial),
+                         "source 403 is inconclusive, not a missing Host request")
+        broken = deepcopy(original)
+        broken[3][0]["gaps"] = "1"
+        broken[4][1]["replayGaps"] = "2"
+        summary = report.merge(WORKS, "isolated", *broken)
+        self.assertEqual([r["outcome"] for r in summary["results"]],
+                         ["REPLAY_GAP", "REPLAY_GAP", "INCONCLUSIVE_SOURCE"])
+        self.assertTrue(report.has_internal_replay_gap(summary))
+        self.assertFalse(summary["canonicalGrantFromV2"])
+
     def test_missing_or_foreign_evidence_is_rejected_even_if_other_stages_are_healthy(self):
         from copy import deepcopy
         original = incomplete_vector()

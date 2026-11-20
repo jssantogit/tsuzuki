@@ -57,6 +57,26 @@ class MangaAllCapturedRequestTapeTest {
     }
 
     @Test
+    fun `signed code9 English V1 lookup matches only the captured production wire fields`() {
+        // No diagnosticsVersion:2 (V2-only) or unsupported editorialEvidenceVersion
+        // may be synthesized into the signed-code9 canonical V1 capture.
+        val captured = """{"titles":["CONTRACT_ONLY"],"requestedLanguage":"en","coverageEvidenceVersion":1}"""
+        val tape = MangaAllCapturedRequestTape(listOf(record("lookup", captured)))
+        val wrongRequests = listOf(
+            captured.replace("\"en\"", "\"pt-br\""),
+            captured.replace("\"coverageEvidenceVersion\":1", "\"coverageEvidenceVersion\":2"),
+            captured.replace(",\"coverageEvidenceVersion\":1", ""),
+            captured.replace("CONTRACT_ONLY", "UNCAPTURED_WORK"),
+        )
+        wrongRequests.forEach { wire ->
+            assertThrows<MangaAllReplayGapException> { tape.replay("lookup", request(wire)) }
+        }
+        tape.replayGapCount shouldBe wrongRequests.size
+        tape.replay("lookup", request(captured))["items"].toString() shouldBe "[]"
+        tape.consumedCount shouldBe 1
+    }
+
+    @Test
     fun `chapter binding and facet must match exactly even when work id is identical`() {
         val exact = """{"binding":{"providerId":"app.tsuzuki.mangaall","facetId":"en",""" +
             """"externalWorkId":"mangadex:contract"},"cursor":null}"""

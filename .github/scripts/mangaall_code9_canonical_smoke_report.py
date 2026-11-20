@@ -152,6 +152,10 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
         "results": rows,
     }
 
+def has_internal_replay_gap(summary):
+    """Missing exact Host request/response tape is an internal failure, not source 403."""
+    return any(row["outcome"] == "REPLAY_GAP" for row in summary["results"])
+
 
 def main():
     if len(sys.argv) != 7:
@@ -169,6 +173,10 @@ def main():
     print("MANGAALL_CODE9_CANONICAL_SMOKE_REPORT|works=" + str(result["works"]) +
           "|outcomes=" + ",".join(f"{key}:{value}" for key, value in sorted(counts.items())) +
           "|readerCdnPixels=NOT_TESTED|bindingFromV2=DENIED")
+    if has_internal_replay_gap(result):
+        print("MANGAALL_CODE9_CANONICAL_SMOKE_GATE|outcome=FAIL|reason=REPLAY_GAP|readerCdnPixels=NOT_TESTED",
+              file=sys.stderr)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
