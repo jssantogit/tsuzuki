@@ -65,6 +65,8 @@ jobs:
         run: |
           node tooling/verify_index.mjs
           node tooling/test_mangaall_signed_code9_smoke_gate.mjs
+          node tooling/test_mangaall_live_journey.mjs
+          node tooling/test_mangaall_real_envelope_capture.mjs
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           java-version-file: .github/.java-version
