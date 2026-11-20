@@ -211,7 +211,7 @@ class ScriptProviderReadingGatewayIsolationTest {
     fun mangaAllCode9ReviewedArchive_executesUnifiedV1AndRejectsUnsignedV2() = runBlocking {
         val instrument = InstrumentationRegistry.getInstrumentation()
         assertEquals("app.tsuzuki.dev", instrument.targetContext.packageName)
-        assertEquals("true", instrument.arguments.getString("mangaAllStatusProbeOptIn"))
+        assertEquals("true", InstrumentationRegistry.getArguments().getString("mangaAllStatusProbeOptIn"))
         val packageBytes = instrument.context.assets.open("mangaall/code9-reviewed-unsigned.tsz")
             .use { it.readBytes() }
         val parsed = ProviderPackageParser().parse(packageBytes)
