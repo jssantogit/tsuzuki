@@ -84,12 +84,12 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
             source.get("selectionSource") != "USER_INPUT" or
             source.get("shardIndex") != 0 or source.get("shardCount") != 1):
         raise ValueError("Not an authentic sequence35/code9 capture identity")
-    if catalog.get("schemaVersion") != 1 or
+    if (catalog.get("schemaVersion") != 1 or
             catalog.get("origin") != "DIRECT_LIVE_ANDROID_CATALOG_ONLY" or
             catalog.get("canonicalStage") != "NOT_EXECUTED_HOST" or
             not isinstance(catalog.get("sha256"), str)):
         raise ValueError("Catalog proof cannot be promoted or spoofed")
-    if matrix.get("provider") != "app.tsuzuki.mangaall" or
+    if (matrix.get("provider") != "app.tsuzuki.mangaall" or
             matrix.get("version") != "0.5.4" or
             matrix.get("shardCount") != 1 or matrix.get("shardIndex") != 0 or
             matrix.get("selectionSource") != "USER_INPUT"):
