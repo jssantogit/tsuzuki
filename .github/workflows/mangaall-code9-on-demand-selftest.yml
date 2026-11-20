@@ -1,0 +1,22 @@
+name: MangaAll code9 — safe on-demand Actions dispatch selftest
+
+# Proves that the issue-comment bridge has Actions dispatch permission.
+# NO checkout, source HTTP, catalog access, Provider signing, Android or CDN.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch-accepted-no-network:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Prove only GitHub workflow_dispatch, no source execution
+        env:
+          EVENT_KIND: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          test "$EVENT_KIND" = workflow_dispatch
+          echo 'MANGAALL_ON_DEMAND_SELFTEST|dispatch=ACCEPTED|upstream=NONE|android=NOT_RUN|canonical=NOT_RUN|reader=NOT_RUN'
