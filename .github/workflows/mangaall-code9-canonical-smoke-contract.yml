@@ -6,6 +6,10 @@ on:
   pull_request:
     paths:
       - '.github/workflows/mangaall-code9-canonical-smoke.yml'
+      - '.github/scripts/mangaall_catalog_instrumentation_gate.py'
+      - '.github/scripts/test_mangaall_catalog_instrumentation_gate.py'
+      - '.github/scripts/run_mangaall_live_catalog_android.sh'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllIndependentCatalogLiveInstrumentedTest.kt'
       - '.github/workflows/mangaall-code9-canonical-smoke-contract.yml'
       - '.github/scripts/mangaall_code9_canonical_smoke_*.py'
       - '.github/scripts/test_mangaall_code9_canonical_smoke_*.py'
@@ -17,6 +21,10 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/mangaall-code9-canonical-smoke.yml'
+      - '.github/scripts/mangaall_catalog_instrumentation_gate.py'
+      - '.github/scripts/test_mangaall_catalog_instrumentation_gate.py'
+      - '.github/scripts/run_mangaall_live_catalog_android.sh'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllIndependentCatalogLiveInstrumentedTest.kt'
       - '.github/scripts/mangaall_code9_canonical_smoke_*.py'
       - '.github/scripts/test_mangaall_code9_canonical_smoke_*.py'
       - '.github/workflows/mangaall-code9-on-demand-command.yml'
@@ -40,6 +48,8 @@ jobs:
           python3 .github/scripts/test_mangaall_code9_canonical_smoke_plan.py
           python3 .github/scripts/test_mangaall_code9_canonical_smoke_report.py
           python3 .github/scripts/test_mangaall_code9_canonical_smoke_workflow.py
+          python3 .github/scripts/test_validate_mangaall_catalog_attestation.py
+          python3 .github/scripts/test_mangaall_catalog_instrumentation_gate.py
           python3 .github/scripts/test_mangaall_code9_smoke_comment_dispatch.py
       - name: Check one isolated vector with exact manual authorization (OFFLINE)
         env:
