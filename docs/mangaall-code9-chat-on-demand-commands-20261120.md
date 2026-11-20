@@ -50,6 +50,20 @@ permitidos, duplicatas, normalização NFKC, número de obras e comprimento
 bounded. Rejeita revisão/edição de comentários, comentários de PR,
 issues não autorizadas, remetente estrangeiro, rerun e comandos soltos.
 
+Um terceiro comando estritamente técnico verifica a **permissão real de
+workflow_dispatch**, sem consultar fontes ou emulador:
+
+```text
+/mangaall-selftest-dispatch
+```
+
+Esse comando só existe para comprovar que o token efêmero do job de
+`issue_comment` consegue despachar o workflow allowlistado
+[`mangaall-code9-on-demand-selftest.yml`](../.github/workflows/mangaall-code9-on-demand-selftest.yml),
+cuja única ação é registrar
+`MANGAALL_ON_DEMAND_SELFTEST|dispatch=ACCEPTED|upstream=NONE|android=NOT_RUN`.
+O selftest não aceita títulos nem executa o workflow de smoke.
+
 Quando `/mangaall-plan` passa, o Actions exibe
 `MANGAALL_ON_DEMAND_COMMAND|...|network=NONE` e **não** chama o workflow
 de smoke. Quando `/mangaall-smoke` passa, o gateway usa o token
@@ -57,7 +71,10 @@ de smoke. Quando `/mangaall-smoke` passa, o gateway usa o token
 `issues:read` para executar uma única requisição
 `POST /repos/jssantogit/tsuzuki/actions/workflows/mangaall-code9-canonical-smoke.yml/dispatches`
 com `ref=main`, vetor original, tier e o literal
-`I_ACCEPT_CODE9_CANONICAL_SMOKE`. Exige HTTP 204 do GitHub; não faz
+`I_ACCEPT_CODE9_CANONICAL_SMOKE`; o selftest despacha apenas o arquivo
+allowlistado de prova de permissão e usa `ref=main` sem outros inputs.
+O destino do POST é um de **exatamente dois workflows** fixados no código,
+jamais um URL fornecido pelo comentário. Exige HTTP 204 do GitHub; não faz
 tentativas de POST repetidas, para evitar executar múltiplos smokes num
 erro de rede incerto.
 

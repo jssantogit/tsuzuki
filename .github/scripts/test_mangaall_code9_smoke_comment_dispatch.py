@@ -71,6 +71,32 @@ class CommentBridgeTest(unittest.TestCase):
                 if old is not None:
                     os.environ["GITHUB_OUTPUT"] = old
 
+    def test_harmless_selftest_dispatch_proves_actions_permission_without_live_source(self):
+        event = fixture("/mangaall-selftest-dispatch")
+        parsed = smoke.parse_comment_event(event)
+        self.assertEqual(parsed["mode"], "selftest")
+        self.assertEqual(parsed["count"], 0)
+        self.assertEqual(parsed["works"], "")
+        self.assertEqual(smoke.workflow_dispatch_payload(parsed), {"ref": "main"})
+        for bad in (
+            "/mangaall-selftest-dispatch\nNaruto",
+            "Please /mangaall-selftest-dispatch",
+            "/mangaall-selftest-dispatch --publish",
+        ):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                smoke.parse_comment_event(fixture(bad))
+        with tempfile.TemporaryDirectory() as td:
+            event_file = Path(td) / "event.json"
+            payload_file = Path(td) / "payload.json"
+            event_file.write_text(json.dumps(event))
+            old = os.environ.pop("GITHUB_OUTPUT", None)
+            try:
+                self.assertEqual(smoke.main(["script", str(event_file), str(payload_file)]), 0)
+                self.assertEqual(json.loads(payload_file.read_text()), {"ref": "main"})
+            finally:
+                if old is not None:
+                    os.environ["GITHUB_OUTPUT"] = old
+
     def test_ten_to_thirty_stay_bounded_and_ordered(self):
         for count in (10, 20, 30):
             titles = "\n".join("manga :: Work " + str(i) for i in range(count))
@@ -133,6 +159,7 @@ class CommentBridgeTest(unittest.TestCase):
             "/mangaall-smoke isolated ; curl example.org\nNaruto\nDeath Note\nBleach",
             "/mangaall-smoke isolated\nNaruto\nDeath Note\nBleach\n" + ("A" * 8400),
             "/mangaall-smoke isolated\nNaruto\nDeath Note\nBleach\n--workflow=publish",
+            "/mangaall-selftest-dispatch\nNaruto",
         ]:
             with self.subTest(body=body[:38]), self.assertRaises(ValueError):
                 smoke.parse_comment_event(fixture(body))
@@ -152,9 +179,27 @@ class CommentBridgeTest(unittest.TestCase):
         self.assertIn("github.run_attempt == 1", txt)
         self.assertIn("steps.command.outputs.mode == 'smoke'", txt)
         self.assertIn("steps.command.outputs.mode == 'plan'", txt)
-        self.assertIn("mangaall-code9-canonical-smoke.yml/dispatches", txt)
+        self.assertIn("mangaall-code9-canonical-smoke.yml", txt)
+        self.assertIn("mangaall-code9-on-demand-selftest.yml", txt)
+        self.assertIn("TARGET_WORKFLOW/dispatches", txt)
+        self.assertIn("TARGET_NOT_ALLOWLISTED", txt)
         self.assertNotIn("publish.yml/dispatches", txt)
         self.assertIn("204", txt)
+
+    def test_selftest_workflow_never_uses_source_or_credentials(self):
+        wf = FILE.parents[1] / "workflows/mangaall-code9-on-demand-selftest.yml"
+        txt = wf.read_text(encoding="utf-8")
+        self.assertIn("  workflow_dispatch:", txt)
+        self.assertNotIn("  issue_comment:", txt)
+        self.assertNotIn("  push:", txt)
+        self.assertNotIn("  pull_request:", txt)
+        self.assertIn("upstream=NONE", txt)
+        self.assertIn("android=NOT_RUN", txt)
+        self.assertIn("reader=NOT_RUN", txt)
+        self.assertNotIn("Authorization: Bearer", txt)
+        self.assertNotIn("actions/checkout", txt)
+        self.assertNotIn("api.mangadex.org", txt)
+        self.assertNotIn("mangafire.to", txt)
 
     def test_main_does_not_write_workflow_dispatch_when_rejected(self):
         with tempfile.TemporaryDirectory() as td:
