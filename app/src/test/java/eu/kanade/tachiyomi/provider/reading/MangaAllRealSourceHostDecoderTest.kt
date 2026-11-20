@@ -100,6 +100,53 @@ class MangaAllRealSourceHostDecoderTest {
     }
 
     @Test
+    fun `signed code9 V1 canonical tape only accepts exact English Host lookup DTO`() {
+        // CONTRACT-ONLY empty pages; not a live source or editorial success.
+        // The 3-work live #44763491195 exposed a gap because the capture
+        // included unsupported editorialEvidenceVersion and extra pt-br facets.
+        val original = Json.parseToJsonElement(
+            """{"operation":"lookup","outcome":"RESULT",
+              "request":{"titles":["CONTRACT_ONLY_LOOKUP"],"cursor":null,
+                         "requestedLanguage":"en","coverageEvidenceVersion":1},
+              "response":{"items":[],"nextCursor":null}}""",
+        ).jsonObject
+        val hostV1 = original.getValue("request").jsonObject
+        val exact = MangaAllCapturedRequestTape(listOf(original))
+        exact.replay("lookup", hostV1) shouldBe original.getValue("response")
+        exact.consumedCount shouldBe 1
+        exact.replayGapCount shouldBe 0
+
+        val capturedWithUnsupportedField = Json.parseToJsonElement(
+            """{"operation":"lookup","outcome":"RESULT",
+              "request":{"titles":["CONTRACT_ONLY_LOOKUP"],"cursor":null,
+                         "requestedLanguage":"en","coverageEvidenceVersion":1,
+                         "editorialEvidenceVersion":1},
+              "response":{"items":[],"nextCursor":null}}""",
+        ).jsonObject
+        val extra = MangaAllCapturedRequestTape(listOf(capturedWithUnsupportedField))
+        assertThrows<MangaAllReplayGapException> { extra.replay("lookup", hostV1) }
+        extra.replayGapCount shouldBe 1
+
+        val uncapturedLanguage = Json.parseToJsonElement(
+            """{"titles":["CONTRACT_ONLY_LOOKUP"],"cursor":null,
+              "requestedLanguage":"pt-br","coverageEvidenceVersion":1}""",
+        ).jsonObject
+        val portuguese = MangaAllCapturedRequestTape(listOf(original))
+        assertThrows<MangaAllReplayGapException> {
+            portuguese.replay("lookup", uncapturedLanguage)
+        }
+        portuguese.replayGapCount shouldBe 1
+
+        val wrongCursor = Json.parseToJsonElement(
+            """{"titles":["CONTRACT_ONLY_LOOKUP"],"cursor":"uncaptured-cursor",
+              "requestedLanguage":"en","coverageEvidenceVersion":1}""",
+        ).jsonObject
+        assertThrows<MangaAllReplayGapException> {
+            MangaAllCapturedRequestTape(listOf(original)).replay("lookup", wrongCursor)
+        }
+    }
+
+    @Test
     fun `recorded source calls traverse actual Host ScriptProviderReadingGateway decoding`() = runBlocking {
         val capture = System.getenv("MANGAALL_REAL_ENVELOPES_FILE")
         val packagePath = System.getenv("MANGAALL_SIGNED_PACKAGE_FILE")
