@@ -54,7 +54,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: jssantogit/providers-tsuzuki
-          ref: 749101cb9bfe92e2ecdcc61a9248546f0b1f4626
+          ref: 564a2f526bc05761eb51cd2bf0ab63b02f33e466
           path: signed-code9-smoke-source
           persist-credentials: false
       - uses: actions/setup-node@v4
