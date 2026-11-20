@@ -1,0 +1,85 @@
+name: MangaAll signed code9 canonical smoke — OFFLINE contract readiness
+
+# This job NEVER opens source/catalog/CDN HTTP or installs a production Provider.
+# It only tests the wiring before a deliberate three-title manual live run.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mangaall-code9-canonical-smoke.yml'
+      - '.github/workflows/mangaall-code9-canonical-smoke-contract.yml'
+      - '.github/scripts/mangaall_code9_canonical_smoke_*.py'
+      - '.github/scripts/test_mangaall_code9_canonical_smoke_*.py'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mangaall-code9-canonical-smoke.yml'
+      - '.github/scripts/mangaall_code9_canonical_smoke_*.py'
+      - '.github/scripts/test_mangaall_code9_canonical_smoke_*.py'
+
+permissions:
+  contents: read
+
+jobs:
+  code9-canonical-smoke-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate 3-title and 10–30-title ordered vector boundaries (no traffic)
+        run: |
+          python3 .github/scripts/test_mangaall_code9_canonical_smoke_plan.py
+          python3 .github/scripts/test_mangaall_code9_canonical_smoke_report.py
+          python3 .github/scripts/test_mangaall_code9_canonical_smoke_workflow.py
+      - name: Check one isolated vector with exact manual authorization (OFFLINE)
+        env:
+          MANGAALL_WORKS: |
+            manga :: Naruto
+            manga :: Death Note
+            manga :: Bleach
+          MANGAALL_SMOKE_TIER: isolated
+          MANGAALL_SMOKE_ACK: I_ACCEPT_CODE9_CANONICAL_SMOKE
+        run: python3 .github/scripts/mangaall_code9_canonical_smoke_plan.py
+      - name: Checkout exact official signed code9 Provider and capture runner (read only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 749101cb9bfe92e2ecdcc61a9248546f0b1f4626
+          path: signed-code9-smoke-source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify real pinned P-256 index and source package; NO HTTP
+        working-directory: signed-code9-smoke-source
+        run: |
+          node tooling/verify_index.mjs
+          node tooling/test_mangaall_signed_code9_smoke_gate.mjs
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Compile and run Host source/canonical/SQLite offline contract suites (no captured live data)
+        run: |
+          ./gradlew :app:spotlessKotlinCheck :app:testDebugUnitTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSourceHostDecoderTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest
+      - name: Ensure Provider plan preserves exactly the ordered three titles and the same case IDs
+        working-directory: signed-code9-smoke-source
+        env:
+          MANGAALL_SUITE: custom
+          MANGAALL_BATCH: '1'
+          MANGAALL_WORKS: |
+            manga :: Naruto
+            manga :: Death Note
+            manga :: Bleach
+          MANGAALL_SHARD_INDEX: '0'
+          MANGAALL_SHARD_COUNT: '1'
+        run: |
+          node tooling/mangaall_live_matrix.mjs --plan > /tmp/mangaall-code9-smoke-plan.json
+          node -e "const x=require('/tmp/mangaall-code9-smoke-plan.json');if(x.selectedCaseCount!==3||x.inputCaseCount!==3||x.cases.map(y=>y.title).join('|')!=='Naruto|Death Note|Bleach'||x.authority!=='NO_SOURCE_OR_CANONICAL_EVIDENCE_COLLECTED')process.exit(1);console.log('MANGAALL_CODE9_SMOKE_CONTRACT|ordered=3|source=ONE_UNIFIED_MANGAALL|network=NONE|canonical=NOT_RUN')"

@@ -1,0 +1,326 @@
+name: MangaAll signed code9 — sequential canonical chapter + Reader smoke
+
+# Intentionally MANUAL ONLY. No commit, PR, cron or fixture can initiate
+# real MangaDex/MangaDot/MangaFire or independent catalog calls.
+# Source is official P-256 seq35/code9, not older signed code8 or unsigned V2.
+# Stage #1 accepts EXACTLY 3 works in the original input order.
+# Only after that is accepted, the 'scale' mode accepts 10-30 works.
+# Each work runs ONE MangaAll with all 3 source adapters together;
+# source responses can be PARTIAL and can NEVER auto-bind editorial identity.
+on:
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: 'isolated: exactly 3 works; scale: 10–30 after first acceptance'
+        type: choice
+        options:
+          - isolated
+          - scale
+        default: isolated
+        required: true
+      works:
+        description: 'One title per line, optional manga :: Title; kept in sequence'
+        required: true
+        type: string
+      acknowledge:
+        description: 'Type I_ACCEPT_CODE9_CANONICAL_SMOKE to opt in to real upstream+catalog'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mangaall-code9-canonical-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Validate vector, tier, order and manual consent WITHOUT NETWORK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test isolated/scale preflight (offline)
+        run: python3 .github/scripts/test_mangaall_code9_canonical_smoke_plan.py
+      - name: Fail closed before external traffic unless acknowledged and count verified
+        env:
+          MANGAALL_WORKS: ${{ inputs.works }}
+          MANGAALL_SMOKE_TIER: ${{ inputs.tier }}
+          MANGAALL_SMOKE_ACK: ${{ inputs.acknowledge }}
+        run: python3 .github/scripts/mangaall_code9_canonical_smoke_plan.py
+
+  real-provider-to-host-decoder:
+    needs: plan
+    name: Real signed code9 V1 source capture then production Host Kotlin V1 replay
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout current production Host
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout immutable current P-256 signed code9 Provider source (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 749101cb9bfe92e2ecdcc61a9248546f0b1f4626
+          path: mangaall-signed-source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify signed repository root, package SHA and exact live JavaScript bytes
+        working-directory: mangaall-signed-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tooling/verify_index.mjs
+          python3 tooling/build_provider.py providers/mangaall /tmp/mangaall-host-source.tsz
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          data=json.loads(Path('dist/index.payload.json').read_text())
+          assert data['repositoryId']=='app.tsuzuki.providers' and data['sequence']==35
+          items=[x for x in data['providers'] if x['providerId']=='app.tsuzuki.mangaall']
+          assert len(items)==1 and items[0]['versionCode']==9 and items[0]['versionName']=='0.5.4'
+          assert items[0]['sha256']=='d9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622'
+          digest=items[0]['sha256']
+          assert hashlib.sha256(Path('/tmp/mangaall-host-source.tsz').read_bytes()).hexdigest()==digest
+          assert hashlib.sha256(Path('dist/providers/app.tsuzuki.mangaall-9.tsz').read_bytes()).hexdigest()==digest
+          print('MANGAALL_CODE9_CANONICAL_SMOKE|source=P256_SIGNED|code=9|sequence=35|archive=REVIEWED_EXACT|authority=NO_EDITORIAL_BINDING')
+          PY
+      - name: Check Provider input agrees with ordered Host vector (offline)
+        working-directory: mangaall-signed-source
+        env:
+          MANGAALL_SUITE: custom
+          MANGAALL_SIGNED_CODE9_CANONICAL_SMOKE: I_ACCEPT_SIGNED_CODE9_CANONICAL_SMOKE
+          MANGAALL_BATCH: '1'
+          MANGAALL_WORKS: ${{ inputs.works }}
+          MANGAALL_SHARD_INDEX: '0'
+          MANGAALL_SHARD_COUNT: '1'
+        run: node tooling/mangaall_live_matrix.mjs --plan
+      - name: Fetch authentic signed code9 V1 lookup/chapter envelopes (one three-source lookup per title)
+        working-directory: mangaall-signed-source
+        env:
+          MANGAALL_SUITE: custom
+          MANGAALL_SIGNED_CODE9_CANONICAL_SMOKE: I_ACCEPT_SIGNED_CODE9_CANONICAL_SMOKE
+          MANGAALL_BATCH: '1'
+          MANGAALL_WORKS: ${{ inputs.works }}
+          MANGAALL_SHARD_INDEX: 0
+          MANGAALL_SHARD_COUNT: '1'
+        run: |
+          node tooling/mangaall_live_matrix.mjs --live \
+            --output mangaall-live-matrix-0.json \
+            --real-envelopes mangaall-real-envelopes-0.json
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Decode signed code9 source envelopes through production Host V1 gateway
+        env:
+          MANGAALL_REAL_REPLAY_REQUIRED: '1'
+          MANGAALL_REAL_ENVELOPES_FILE: ${{ github.workspace }}/mangaall-signed-source/mangaall-real-envelopes-0.json
+          MANGAALL_SIGNED_PACKAGE_FILE: ${{ github.workspace }}/mangaall-signed-source/dist/providers/app.tsuzuki.mangaall-9.tsz
+        run: |
+          ./gradlew :app:testDebugUnitTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSourceHostDecoderTest
+      - name: Preserve bounded real source and Host decoder verdicts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mangaall-real-host-decoder-0
+          path: |
+            mangaall-signed-source/mangaall-live-matrix-*.json
+            mangaall-signed-source/mangaall-real-envelopes-*.json
+            app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealSourceHostDecoderTest.xml
+          if-no-files-found: warn
+          retention-days: 3
+
+
+  independent-catalog-android:
+    needs: plan
+    name: Independent real MangaUpdates catalog / Android (same ordered titles)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout production Host and test-only live catalog runner
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Validate script and compile disposable debug host plus instrumentation
+        run: |
+          bash -n .github/scripts/run_mangaall_live_catalog_android.sh
+          ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM on GitHub-hosted emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Query independent catalog through production Tsuzuki integration, not MangaAll
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        env:
+          MANGAALL_WORKS: ${{ inputs.works }}
+          MANGAALL_SHARD_INDEX: 0
+          MANGAALL_SHARD_COUNT: '1'
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaall_live_catalog_android.sh
+      - name: Keep only sanitized independent catalog identity results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mangaall-live-catalog-0
+          path: .github/results/mangaall-live-catalog-*/
+          if-no-files-found: warn
+          retention-days: 3
+
+
+  canonical-collector-real-replay:
+    name: Real independent catalog + code9 signed source → canonical collector + SQLite
+    needs: [real-provider-to-host-decoder, independent-catalog-android]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout Host canonical engine
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout immutable official signed MangaAll code9 archive
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 749101cb9bfe92e2ecdcc61a9248546f0b1f4626
+          path: signed-mangaall
+          persist-credentials: false
+      - name: Retrieve original real-source envelopes from matching shard
+        uses: actions/download-artifact@v4
+        with:
+          name: mangaall-real-host-decoder-0
+          path: real-source
+      - name: Retrieve independently observed Android catalog proof
+        uses: actions/download-artifact@v4
+        with:
+          name: mangaall-live-catalog-0
+          path: real-catalog
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Verify matching source/canonical artifacts and exact code9 signed package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t sources < <(find real-source -type f -name 'mangaall-real-envelopes-0.json')
+          mapfile -t catalogs < <(find real-catalog -type f -name 'catalog-attestations.json')
+          test "${#sources[@]}" = 1
+          test "${#catalogs[@]}" = 1
+          test -s "${sources[0]}"
+          test -s "${catalogs[0]}"
+          test -s signed-mangaall/dist/providers/app.tsuzuki.mangaall-9.tsz
+          printf 'MANGAALL_REAL_ENVELOPES_FILE=%s/%s\n' "$PWD" "${sources[0]}" >> "$GITHUB_ENV"
+          printf 'MANGAALL_REAL_CATALOG_FILE=%s/%s\n' "$PWD" "${catalogs[0]}" >> "$GITHUB_ENV"
+          printf 'MANGAALL_SIGNED_PACKAGE_FILE=%s/signed-mangaall/dist/providers/app.tsuzuki.mangaall-9.tsz\n' \
+            "$PWD" >> "$GITHUB_ENV"
+      - name: Real Kotlin collector, RefreshChapterEvidence, ReconcileChapterEvidence and SQLite/JDBC (never auto-bind partial results)
+        env:
+          MANGAALL_CANONICAL_COLLECT_REQUIRED: '1'
+          MANGAALL_REAL_SQLITE_REQUIRED: '1'
+        run: |
+          ./gradlew :app:testDebugUnitTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest \
+            --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest
+      - name: Correlate signed code9 sources, independent catalog, real Kotlin collector and SQLite by original work ID hash
+        env:
+          MANGAALL_WORKS: ${{ inputs.works }}
+          MANGAALL_SMOKE_TIER: ${{ inputs.tier }}
+        run: |
+          set -euo pipefail
+          mapfile -t matrices < <(find real-source -type f -name 'mangaall-live-matrix-0.json')
+          mapfile -t source_cases < <(find real-source -type f -name 'mangaall-real-envelopes-0.json')
+          mapfile -t catalog_cases < <(find real-catalog -type f -name 'catalog-attestations.json')
+          test "${#matrices[@]}" = 1
+          test "${#source_cases[@]}" = 1
+          test "${#catalog_cases[@]}" = 1
+          python3 .github/scripts/mangaall_code9_canonical_smoke_report.py \
+            "${source_cases[0]}" "${matrices[0]}" "${catalog_cases[0]}" \
+            app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest.xml \
+            app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest.xml \
+            .github/results/mangaall-code9-canonical-smoke/summary.json
+      - name: Retain only sanitized per-work canonical smoke verdicts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mangaall-code9-canonical-smoke-per-work-summary
+          path: .github/results/mangaall-code9-canonical-smoke/summary.json
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Preserve Host SQLDelight and source verdicts without claiming Reader pixels
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mangaall-canonical-collector-replay-0
+          path: |
+            app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest.xml
+            app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest.xml
+          if-no-files-found: warn
+          retention-days: 3
+
+
+  reader-ui-regression:
+    name: ReaderActivity source navigation and chapter regression — synthetic offline ONLY
+    needs: [canonical-collector-real-replay]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify offline Reader regression harness shell contract
+        run: bash -n .github/scripts/run_canonical_v2_android.sh
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Compile production ReaderActivity and isolated instrumentation
+        run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM for disposable Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run actual ReaderActivity canonical source-switch regression, OFFLINE
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_canonical_v2_android.sh
+      - name: Preserve status-only synthetic Reader regression output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mangaall-code9-smoke-reader-ui-SYNTHETIC-only
+          path: .github/results/canonical-v2-android/**
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Explicit Reader limitations
+        run: echo 'MANGAALL_CODE9_SMOKE_READER|readerUi=SYNTHETIC_REGRESSION|sourceHttp=NOT_FROM_CAPTURE|cdnPixels=NOT_TESTED|canonicalBinding=NOT_AUTO_GRANTED'
