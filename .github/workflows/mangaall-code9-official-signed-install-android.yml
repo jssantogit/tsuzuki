@@ -1,10 +1,16 @@
 name: MangaAll code9 — official signed index and installed Host V2 Android
 
-# This does not run on normal commits and NEVER creates a signed index.
-# A manual run will FAIL until the Provider Publisher has genuinely signed
-# sequence 35/code9 with its original pinned P-256 key.
+# Official code9 P-256 installation is normally manual. A narrowly-scoped
+# opt-in TEST branch push can also run the exact same read-only acceptance,
+# after the operator has already published authentic code9/sequence35.
+# No signing, production device interaction or upstream HTTP is permitted.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'test/mangaall-code9-signed-acceptance-*'
+    paths:
+      - '.github/workflows/mangaall-code9-official-signed-install-android.yml'
   pull_request:
     paths:
       - '.github/workflows/mangaall-code9-official-signed-install-android.yml'
@@ -38,7 +44,7 @@ jobs:
         run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebugAndroidTest
 
   signed-install-android:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/test/mangaall-code9-signed-acceptance-'))
     runs-on: ubuntu-24.04
     timeout-minutes: 85
     steps:
@@ -90,6 +96,10 @@ jobs:
           new_match = [p for p in n['providers'] if p['providerId'] == 'app.tsuzuki.mangaall']
           assert len(old_match) == len(new_match) == 1
           assert old_match[0]['versionCode'] == 8 and new_match[0]['versionCode'] == 9
+          # Pin this acceptance to the actual operator-approved publication
+          # #44738222894; future releases must be reviewed separately.
+          assert old_match[0]['sha256'] == '4584482d186f2ddb9d5aeb15f98685df56bfa3d556ced4aa5bd51854a7391bb1'
+          assert new_match[0]['sha256'] == 'd9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622'
           old_archive = old/'dist/providers/app.tsuzuki.mangaall-8.tsz'
           new_archive = new/'dist/providers/app.tsuzuki.mangaall-9.tsz'
           assert hashlib.sha256(old_archive.read_bytes()).hexdigest() == old_match[0]['sha256']
