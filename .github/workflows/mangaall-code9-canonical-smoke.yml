@@ -243,6 +243,31 @@ jobs:
           ./gradlew :app:testDebugUnitTest \
             --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest \
             --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest
+      - name: Correlate signed code9 sources, independent catalog, real Kotlin collector and SQLite by original work ID hash
+        env:
+          MANGAALL_WORKS: ${{ inputs.works }}
+          MANGAALL_SMOKE_TIER: ${{ inputs.tier }}
+        run: |
+          set -euo pipefail
+          mapfile -t matrices < <(find real-source -type f -name 'mangaall-live-matrix-0.json')
+          mapfile -t source_cases < <(find real-source -type f -name 'mangaall-real-envelopes-0.json')
+          mapfile -t catalog_cases < <(find real-catalog -type f -name 'catalog-attestations.json')
+          test "${#matrices[@]}" = 1
+          test "${#source_cases[@]}" = 1
+          test "${#catalog_cases[@]}" = 1
+          python3 .github/scripts/mangaall_code9_canonical_smoke_report.py \
+            "${source_cases[0]}" "${matrices[0]}" "${catalog_cases[0]}" \
+            app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest.xml \
+            app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest.xml \
+            .github/results/mangaall-code9-canonical-smoke/summary.json
+      - name: Retain only sanitized per-work canonical smoke verdicts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mangaall-code9-canonical-smoke-per-work-summary
+          path: .github/results/mangaall-code9-canonical-smoke/summary.json
+          if-no-files-found: warn
+          retention-days: 3
       - name: Preserve Host SQLDelight and source verdicts without claiming Reader pixels
         if: always()
         uses: actions/upload-artifact@v4
