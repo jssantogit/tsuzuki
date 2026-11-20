@@ -17,7 +17,7 @@ SHA = "d9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622"
 SQL = "MANGAALL_REAL_SQLITE_REFRESH|"
 COL = "MANGAALL_CANONICAL_COLLECTOR|"
 CASE = re.compile(r"user-[a-f0-9]{12}\Z")
-SAFE = re.compile(r"[A-Z0-9_.,:-]{1,500}\Z")
+SAFE = re.compile(r"[A-Za-z0-9_.,:-]{1,500}\Z")
 
 
 def json_object(path, limit=4_000_000):
@@ -111,7 +111,7 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
         health = probe.get("httpBySource")
         if not isinstance(health, dict) or set(health) != {"MANGADEX", "MANGADOT", "MANGAFIRE"}:
             raise ValueError("Smoke must attribute HTTP health to exactly three sources")
-        source_incomplete = any(
+        source_incomplete = sources[cid].get("replayCompleteness") != "LOOKUP_CHAPTERS_ONLY" or any(
             isinstance(record, dict) and (
                 (record.get("blocked403") or 0) > 0 or
                 (record.get("transportFailed") or 0) > 0
@@ -122,7 +122,7 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
         sql = sqlites[cid]
         if not isinstance(cat, str) or not re.fullmatch(r"[A-Z_]+", cat):
             raise ValueError("Unclosed catalog status")
-        if sql.get("sqliteConfirmed", "0").isdigit() is False:
+        if not sql.get("confirmed", "0").isdigit():
             raise ValueError("Invalid SQLite confirmed chapter count")
         if col.get("gaps", "0") != "0" or sql.get("replayGaps", "0") != "0":
             outcome = "REPLAY_GAP"
@@ -130,7 +130,7 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
             outcome = "INCONCLUSIVE_SOURCE"
         elif cat != "RESOLVED":
             outcome = "INCONCLUSIVE_CATALOG"
-        elif int(sql.get("sqliteConfirmed", "0")) > 0:
+        elif int(sql.get("confirmed", "0")) > 0:
             outcome = "CHAPTER_EVIDENCE_OBSERVED_NEEDS_READER"
         else:
             outcome = "INCONCLUSIVE_CANONICAL_CHAPTERS"
@@ -140,7 +140,7 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
             "outcome": outcome,
             "sourceIncomplete": source_incomplete,
             "catalog": cat,
-            "sqliteConfirmed": int(sql.get("sqliteConfirmed", "0")),
+            "sqliteConfirmed": int(sql.get("confirmed", "0")),
             "readerPixels": "NOT_TESTED_REAL_CDN",
         })
     return {
