@@ -21,6 +21,8 @@ OWNER = "jssantogit"
 ISSUE_NUMBER = 230
 ISSUE_TITLE = "MangaAll — controle de smoke canônico sob demanda (3 ou 10–30 obras)"
 WORKFLOW = "mangaall-code9-canonical-smoke.yml"
+SELFTEST_WORKFLOW = "mangaall-code9-on-demand-selftest.yml"
+SELFTEST_COMMAND = "/mangaall-selftest-dispatch"
 MAX_COMMENT_BYTES = 8300
 COMMAND = re.compile(r"/mangaall-(smoke|plan) (isolated|scale)\Z")
 
@@ -49,6 +51,12 @@ def parse_comment_event(event, run_attempt=1):
     body = comment.get("body")
     if not isinstance(body, str) or len(body.encode("utf-8")) > MAX_COMMENT_BYTES:
         raise ValueError("INVALID_COMMENT_SIZE")
+    if body == SELFTEST_COMMAND:
+        return {
+            "mode": "selftest", "tier": "none", "works": "", "count": 0,
+            "case_ids": (), "comment_id": comment["id"],
+            "fingerprint": hashlib.sha256(body.encode("utf-8")).hexdigest()[:16],
+        }
     lines = body.splitlines()
     if not lines:
         raise ValueError("COMMAND_MISSING")
@@ -72,6 +80,8 @@ def parse_comment_event(event, run_attempt=1):
 
 
 def workflow_dispatch_payload(plan):
+    if plan["mode"] == "selftest":
+        return {"ref": "main"}
     if plan["mode"] != "smoke":
         raise ValueError("PLAN_ONLY_NEVER_DISPATCH")
     return {
@@ -109,7 +119,11 @@ def main(argv):
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
             stream.write("mode=" + plan["mode"] + "\n")
             stream.write("fingerprint=" + plan["fingerprint"] + "\n")
-    if plan["mode"] == "smoke":
+            stream.write(
+                "workflow=" + (SELFTEST_WORKFLOW if plan["mode"] == "selftest" else
+                               WORKFLOW if plan["mode"] == "smoke" else "none") + "\n"
+            )
+    if plan["mode"] in ("smoke", "selftest"):
         # Only the trusted owner comment may materialize an Actions dispatch.
         Path(argv[2]).write_text(
             json.dumps(workflow_dispatch_payload(plan), ensure_ascii=False, separators=(",", ":")),
