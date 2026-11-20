@@ -1,22 +1,18 @@
 name: MangaAll code9 — official signed index and installed Host V2 Android
 
-# Official code9 P-256 installation is normally manual. A narrowly-scoped
-# opt-in TEST branch push can also run the exact same read-only acceptance,
-# after the operator has already published authentic code9/sequence35.
-# No signing, production device interaction or upstream HTTP is permitted.
+# Actual P-256 code9 installation was proven in disposable emulator by
+# runs #44739129032 and #44743043672. The one-off trusted test-branch
+# triggers are now retired: only an explicitly dispatched workflow may run
+# any future signed-install emulator. PRs continue compilation-only.
+# No signing, publication, physical device, or upstream HTTP.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - 'test/mangaall-code9-signed-acceptance-*'
-    paths:
-      - '.github/workflows/mangaall-code9-official-signed-install-android.yml'
-      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/repository/MangaAllSignedUpgradeIsolationTest.kt'
   pull_request:
     paths:
       - '.github/workflows/mangaall-code9-official-signed-install-android.yml'
       - '.github/scripts/run_mangaall_official_code9_install_android.sh'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/repository/MangaAllSignedUpgradeIsolationTest.kt'
+      - '.github/scripts/test_mangaall_signed_install_manual_only.py'
 
 permissions:
   contents: read
@@ -32,8 +28,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Inspect manual acceptance script (no signed code9 required)
-        run: bash -n .github/scripts/run_mangaall_official_code9_install_android.sh
+      - name: Inspect manual acceptance script and deny automatic signed-install triggers
+        run: |
+          bash -n .github/scripts/run_mangaall_official_code9_install_android.sh
+          python3 .github/scripts/test_mangaall_signed_install_manual_only.py
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           java-version-file: .github/.java-version
@@ -45,18 +43,8 @@ jobs:
         run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebugAndroidTest
 
   signed-install-android:
-    # A PR may exercise the P-256 installation only for this exact, trusted
-    # in-repository acceptance branch after the genuine signed publication.
-    # Fork PRs and unrelated ordinary PRs retain compile-only coverage.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       (github.head_ref == 'test/mangaall-code9-signed-acceptance-p256-35' ||
-        github.head_ref == 'test/mangaall-code9-signed-acceptance-candidates-20261120')) ||
-      (github.event_name == 'push' &&
-       (github.ref == 'refs/heads/test/mangaall-code9-signed-acceptance-p256-35' ||
-        github.ref == 'refs/heads/test/mangaall-code9-signed-acceptance-candidates-20261120'))
+    # No branch or PR event can install even on a disposable emulator.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 85
     steps:

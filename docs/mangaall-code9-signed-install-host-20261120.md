@@ -1,69 +1,86 @@
-# MangaAll code9: official signed-index Host Android acceptance
+# MangaAll code9: official P-256 signed-index Host Android acceptance
 
-**Status: prepared but intentionally NOT RUN / NOT PASSED.** As of this
-change, the official Provider index remains **seq34, MangaAll code8**.
-The source for code9 is reviewed and promoted, but code9 has no
-authenticated publication. Fake index signatures and self-declared
-signed provenance must never satisfy this gate.
+**Status: ACTUAL SIGNED PACKAGE INSTALLED AND EXECUTED IN DISPOSABLE ANDROID EMULATOR.**
+This statement is supported by two green Android runs, not just Gradle
+compilation or an unsigned preview. **Source HTTP was synthetic in the Host
+emulator; live CDN image pixels and physical Galaxy A54 remain UNTESTED.**
 
-## True prerequisites
+## Published artifact and verified trust origin
 
-1. The provider operator reviews and authorizes an actual
-   `Publish repository` workflow_dispatch with literal
-   `mangaall_code9_authorization=PUBLISH_MANGAALL_CODE9`.
-2. The real P-256 root-signed official index then exposes **seq35**
-   binding `app.tsuzuki.mangaall` version **0.5.4/code9** with
-   the exact reviewed .tsz SHA. This must be corroborated through
-   the separate Provider `MangaAll code9 — verify officially signed
-   release (read-only)` audit, not assumed from manifest version.
+The operator explicitly authorized the real publication
+[Provider #44738222894](https://github.com/jssantogit/providers-tsuzuki/actions/runs/44738222894).
+The official index now has **sequence 35** under the original P-256 root
+`tsuzuki-provider-root-2026-02`, a *single* MangaAll `0.5.4/code9` entry
+and SHA-256
+`d9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622`.
+The original code8 `0.5.3/code8` (index sequence 34) remains archived and
+cryptographically verifiable.
 
-The new Host workflow `MangaAll code9 — official signed index and installed
-Host V2 Android` is **manual-only for actual installation**. Normal
-pull requests merely compile the Kotlin instrumentation and check the
-test script's shell syntax. It must FAIL CLOSED before the emulator if
-the official signed seq35 isn't found and P-256 verified.
+[Provider PR #83](https://github.com/jssantogit/providers-tsuzuki/pull/83),
+[CI #44740746693](https://github.com/jssantogit/providers-tsuzuki/actions/runs/44740746693)
+prove real signed-index verification, original code8/hash parity, pinned root,
+unchanged unrelated provider descriptors and **byte-for-byte equality** of
+the code9 artifact to its independently reviewed three-file source overlay.
+No fake signing key, forged Host provenance or self-declared Provider signature.
 
-## Actual Android signed-install test (once prerequisites are true)
+## Host Android verified outcomes
 
-- Retrieves *current official* signed Provider index and code9 package,
-  plus immutable signed code8 seq34 archived under git commit
-  `99f3565a1e1edc0d8ed249b7597006c897f02636`.
-- Verifies both original and new P-256 signatures, root fingerprint,
-  each archive SHA, all unchanged unrelated providers and code9 exact
-  reviewed-source byte parity. Copies the **real** packages and index
-  envelopes into temporary AndroidTest assets.
-- Runs a disposable **offline** emulator with `app.tsuzuki.dev` and
-  invokes only
-  `MangaAllSignedUpgradeIsolationTest.officiallySignedCode9FromIndex35_installsWithPinnedRootAndAuditsThreeSources`.
-- Uses real `ProviderRepositoryManager`, the *actual original*
-  signed index to install code8, then refreshes with the *actual new*
-  signed index seq35 and upgrades to code9 using the original P-256
-  repository key. No fake signature or non-original signing key.
-- Reads the installed ledger through `StoredProviderScriptPackageSource`,
-  requiring the precise artifact SHA and pinned root.
-- Through the real Host `ProviderRuntimeClient`, real isolated QuickJS
-  and production-style `ScriptProviderReadingGateway`, invokes code9
-  V2 diagnostic lookup; source HTTP is **synthetic** and intercepted,
-  all three MangaDex/MangaDot/MangaFire adapters run in the **same**
-  lookup with one source responding HTTP403. Requires attributed
-  partial evidence, no Reader/canonical authority, and Host-derived
-  `SIGNED_INSTALLATION`. After rollback to authentic code8, V2 must
-  be unavailable again.
-- Both emulator process and its file-backed artifact ledger are
-  disposable, with airplane mode enabled. Never writes a user's library,
-  installs onto Galaxy A54, or sends remote API/CDN requests.
+[Host PR #226](https://github.com/jssantogit/tsuzuki/pull/226),
+[Android #44739129032](https://github.com/jssantogit/tsuzuki/actions/runs/44739129032):
+**SUCCESS**, compiled and ran the authentic signed-index install test
+introduced by [Host PR #225](https://github.com/jssantogit/tsuzuki/pull/225).
+The test used `ProviderRepositoryManager` to install code8 from real P-256
+seq34, upgrade using genuine P-256 seq35, then checked installed SHA,
+`StoredProviderScriptPackageSource`, trust fingerprint, Host-derived
+`SIGNED_INSTALLATION`, the actual packaged JS executing in isolated QuickJS
+with MangaDex, MangaDot and MangaFire inside one V2 call, 403 challenge
+attribution, rollback and V2 rejection under code8.
 
-**Strict distinction:** this eventual PASS can certify *real signed
-package installation* and a synthetic-source V2 runtime, **not**
-live upstream availability, editorial matching, single-session Reader
-source switching, CDN rendering or true physical device stability.
-Those remain separately required and must preserve 403 fail-closed.
+[Host PR #227](https://github.com/jssantogit/tsuzuki/pull/227),
+[Android #44743043672](https://github.com/jssantogit/tsuzuki/actions/runs/44743043672):
+**SUCCESS**. Extended the same authentic signed-install test beyond empty
+source responses. Under **synthetic** source HTTP, MangaDex returns Naruto
+plus the alternate label `Naruto (Colored)`, MangaDot returns a separate
+Naruto candidate with a distinct source ID, and MangaFire returns HTTP403.
+The real QuickJS/Host V2 audit preserves the two identities as
+**read-only competing observations**, marks the third source
+`CHALLENGE_BLOCKED`, continues the bounded cursor history and never
+picks an editorial edition or grants a Reader binding. Rollback to code8
+still disables the V2 entrypoint. The full instrumented test and both
+Gradle jobs were green.
 
-The workflow does not publish, sign, upload packages, edit the
-signed index, require secrets, nor trigger a release. Current
-main/code8 index does not meet its prerequisites.
+Both runs used disposable **offline** Android emulators, intercepted source
+HTTP, the actual P-256-indexed Provider packages and real Host ledger/QuickJS.
+Neither run used the user's physical device, production library, external
+source HTTP or CDN pixels.
 
-Refs [Host #207](https://github.com/jssantogit/tsuzuki/issues/207),
-[Provider #72](https://github.com/jssantogit/providers-tsuzuki/issues/72),
-[Provider PR #80](https://github.com/jssantogit/providers-tsuzuki/pull/80)
-and [Host PR #224](https://github.com/jssantogit/tsuzuki/pull/224).
+## Complementary real upstream evidence, not Android proof
+
+[Provider PR #84](https://github.com/jssantogit/providers-tsuzuki/pull/84),
+[real upstream runner #44741273417](https://github.com/jssantogit/providers-tsuzuki/actions/runs/44741273417)
+queried the real **signed code9 source bytes** against all three sources in
+one MangaAll lookup for each of Naruto, Death Note and Bleach. Status-only
+results preserve healthy-source candidate counts and incomplete states:
+MangaFire was HTTP403 for all three titles; MangaDot had an
+`INVALID_RESPONSE` for Death Note. All three were **partial/inconclusive**.
+The runner did **not** install a Provider or verify chapters/CDN images.
+See [sanitized Provider evidence](https://github.com/jssantogit/providers-tsuzuki/blob/main/docs/mangaall-code9-real-three-source-run-20261120.md).
+
+## Safety after evidence collection
+
+The one-time signed-install branch triggers used for Host #226/#227 are
+retired by the follow-up cleanup. The official workflow
+`.github/workflows/mangaall-code9-official-signed-install-android.yml` now
+executes the real signed-install emulator **only on explicit
+`workflow_dispatch`**; ordinary PRs compile instrumentation only.
+`.github/scripts/test_mangaall_signed_install_manual_only.py` prevents
+accidentally reintroducing automatic signed-install triggers.
+
+The signed code9 V2 endpoint is still **experimental, read-only and opt-in**.
+A cryptographically verified installation does not by itself corroborate
+canonical title identity, authors, chapters, source choice, Reader navigation
+or display real CDN pixels. Such features require separate evidence and
+fail-closed handling of 403 challenges; no captcha bypass or cookie borrowing.
+
+Tracking: [Host #207](https://github.com/jssantogit/tsuzuki/issues/207),
+[Provider #72](https://github.com/jssantogit/providers-tsuzuki/issues/72).
