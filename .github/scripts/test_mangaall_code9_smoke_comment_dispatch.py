@@ -186,6 +186,21 @@ class CommentBridgeTest(unittest.TestCase):
         self.assertNotIn("publish.yml/dispatches", txt)
         self.assertIn("204", txt)
 
+    def test_selftest_workflow_never_uses_source_or_credentials(self):
+        wf = FILE.parents[1] / "workflows/mangaall-code9-on-demand-selftest.yml"
+        txt = wf.read_text(encoding="utf-8")
+        self.assertIn("  workflow_dispatch:", txt)
+        self.assertNotIn("  issue_comment:", txt)
+        self.assertNotIn("  push:", txt)
+        self.assertNotIn("  pull_request:", txt)
+        self.assertIn("upstream=NONE", txt)
+        self.assertIn("android=NOT_RUN", txt)
+        self.assertIn("reader=NOT_RUN", txt)
+        self.assertNotIn("Authorization: Bearer", txt)
+        self.assertNotIn("actions/checkout", txt)
+        self.assertNotIn("api.mangadex.org", txt)
+        self.assertNotIn("mangafire.to", txt)
+
     def test_main_does_not_write_workflow_dispatch_when_rejected(self):
         with tempfile.TemporaryDirectory() as td:
             event = Path(td) / "event.json"
