@@ -546,7 +546,10 @@ class MangaAllSignedUpgradeIsolationTest {
                 MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance.Classification.SIGNED_INSTALLATION,
                 snapshot.hostProvenance?.classification,
             )
-            assertEquals("d9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622", snapshot.hostProvenance?.artifactSha256)
+            assertEquals(
+                "d9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622",
+                snapshot.hostProvenance?.artifactSha256,
+            )
             assertEquals(2, snapshot.observedWorks.size)
             assertEquals(
                 listOf("mangadex", "mangadot"),
