@@ -64,7 +64,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: jssantogit/providers-tsuzuki
-          ref: c35b1bcac1ce02062f80e812517239e39adbcfd8
+          ref: cf93354bbc3290596f9664a222a8d6da5adeeef0
           path: mangaall-signed-source
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -200,7 +200,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: jssantogit/providers-tsuzuki
-          ref: c35b1bcac1ce02062f80e812517239e39adbcfd8
+          ref: cf93354bbc3290596f9664a222a8d6da5adeeef0
           path: signed-mangaall
           persist-credentials: false
       - name: Retrieve original real-source envelopes from matching shard
