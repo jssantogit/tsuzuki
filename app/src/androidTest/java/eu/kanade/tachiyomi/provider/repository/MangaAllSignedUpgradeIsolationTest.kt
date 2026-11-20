@@ -3,9 +3,18 @@ package eu.kanade.tachiyomi.provider.repository
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.App
+import eu.kanade.tachiyomi.provider.reading.MangaAllLookupV2ReadOnlyDiagnostics
+import eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGateway
+import eu.kanade.tachiyomi.provider.reading.StoredProviderScriptPackageSource
+import eu.kanade.tachiyomi.provider.runtime.ProviderHostInvocationFactory
+import eu.kanade.tachiyomi.provider.runtime.ProviderRuntimeClient
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -17,6 +26,7 @@ import tachiyomi.core.provider.packageformat.ProviderPackageParser
 import tachiyomi.core.provider.supplychain.EnrolledProviderRepository
 import tachiyomi.core.provider.supplychain.FileProviderRepositoryEnrollmentStore
 import tachiyomi.core.provider.supplychain.FileProviderRepositoryTrustStore
+import tachiyomi.core.provider.supplychain.FileProviderLocalConfigurationStore
 import tachiyomi.core.provider.supplychain.ProviderArtifactDescriptor
 import tachiyomi.core.provider.supplychain.ProviderArtifactStore
 import tachiyomi.core.provider.supplychain.ProviderRepositoryEnrollment
@@ -41,6 +51,8 @@ import tachiyomi.domain.tsuzuki.model.CanonicalLibraryEntry
 import tachiyomi.domain.tsuzuki.model.CanonicalTitle
 import tachiyomi.domain.tsuzuki.model.LibraryStatus
 import tachiyomi.domain.tsuzuki.provider.ProviderId
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingAvailability
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingVerification
@@ -316,6 +328,186 @@ class MangaAllSignedUpgradeIsolationTest {
             assertFalse(reopened.canRollback(providerId))
             assertEquals(1, reopened.repositories().size)
             assertSqliteContinuity()
+        }
+    }
+
+    /**
+     * Manual-only acceptance for the FUTURE officially P-256-indexed code9.
+     *
+     * This test cannot run until the real sequence-35 signed index exists;
+     * it never constructs its own "official" signature or substitutes a
+     * temporary key. The Host supply chain really verifies the index and
+     * installs the code9 archive into an ephemeral Android file ledger,
+     * then the real Host QuickJS executes V2 under its derived provenance.
+     * All source HTTP is synthetic and intercepted, never sent to the sites.
+     */
+    @Test
+    fun officiallySignedCode9FromIndex35_installsWithPinnedRootAndAuditsThreeSources() = runBlocking {
+        assertEquals(
+            "true",
+            InstrumentationRegistry.getArguments().getString("mangaAllSignedCode9OptIn"),
+        )
+        assertEquals(
+            "app.tsuzuki.dev",
+            InstrumentationRegistry.getInstrumentation().targetContext.packageName,
+        )
+        val source = InstrumentationRegistry.getInstrumentation().context
+        val oldIndex = decodeProviderSignedIndexEnvelope(
+            source.assets.open("mangaall/code8-published-index.json")
+                .bufferedReader().use { it.readText() },
+        )
+        val newIndex = decodeProviderSignedIndexEnvelope(
+            source.assets.open("mangaall/code9-official-index.json")
+                .bufferedReader().use { it.readText() },
+        )
+        val officialEnrollment = JSONObject(
+            source.assets.open("mangaall/code9-official-enrollment.json")
+                .bufferedReader().use { it.readText() },
+        )
+        val code8 = testAsset("mangaall/code8-published-package.tsz")
+        val code9 = testAsset("mangaall/code9-official-package.tsz")
+        val parser = ProviderPackageParser()
+        assertEquals("0.5.3", parser.parse(code8).manifest.version.name)
+        assertEquals(8L, parser.parse(code8).manifest.version.code)
+        assertEquals("0.5.4", parser.parse(code9).manifest.version.name)
+        assertEquals(9L, parser.parse(code9).manifest.version.code)
+        assertEquals("tsuzuki-provider-root-2026-02", oldIndex.keyId)
+        assertEquals(oldIndex.keyId, newIndex.keyId)
+        assertEquals(repositoryId, officialEnrollment.getString("repositoryId"))
+        assertEquals(indexUrl, officialEnrollment.getString("indexUrl"))
+        val enrollment = EnrolledProviderRepository(
+            displayName = officialEnrollment.getString("displayName"),
+            enrollment = ProviderRepositoryEnrollment(
+                repositoryId = repositoryId,
+                indexUrl = indexUrl,
+                signingKey = ProviderRepositorySigningKey(
+                    keyId = newIndex.keyId,
+                    publicKeyBase64 = officialEnrollment.getString("publicKeyBase64"),
+                ),
+            ),
+        )
+        val pinnedRoot = "20875348d95649ff0009e329f0d43de1b84ccf8af7966c215d5e0f449e697159"
+        assertEquals(pinnedRoot, enrollment.keyFingerprintSha256)
+        val syntheticOrigins = mutableSetOf<String>()
+        val interceptorClient = OkHttpClient.Builder().addInterceptor { chain ->
+            val uri = chain.request().url
+            assertEquals("GET", chain.request().method)
+            assertEquals("https", uri.scheme)
+            val origin = "https://" + uri.host
+            synchronized(syntheticOrigins) { syntheticOrigins.add(origin) }
+            val (status, body) = when {
+                origin == "https://api.mangadex.org" && uri.encodedPath == "/manga" ->
+                    200 to """{"result":"ok","data":[],"offset":0,"limit":25,"total":0}"""
+                origin == "https://mangadot.net" && uri.encodedPath == "/api/search" ->
+                    403 to """{"error":"synthetic challenge"}"""
+                origin == "https://mangafire.to" && uri.encodedPath == "/api/titles" ->
+                    200 to """{"items":[]}"""
+                else -> error("Unexpected source request, no external networking allowed")
+            }
+            Response.Builder()
+                .request(chain.request())
+                .protocol(Protocol.HTTP_1_1)
+                .code(status)
+                .message("Synthetic source fixture")
+                .body(body.toResponseBody())
+                .build()
+        }.build()
+        val transport = OfflineTransport().apply {
+            index = oldIndex
+            artifacts[artifactBase + "$providerId-8.tsz"] = code8
+            artifacts[artifactBase + "$providerId-9.tsz"] = code9
+        }
+        withDisposableRoot("official-code9") { root ->
+            val store = ProviderArtifactStore(File(root, "artifacts"))
+            val manager = manager(root, store, transport)
+            manager.enroll(enrollment)
+            val initial = manager.refresh(repositoryId)
+            assertEquals(34L, initial.sequence)
+            assertEquals(8L, initial.entries.single { it.descriptor.providerId == providerId }
+                .descriptor.versionCode)
+            manager.install(repositoryId, providerId)
+            assertEquals(8L, store.current(providerId)?.versionCode)
+            assertEquals(sha256Hex(code8), sha256Hex(store.readCurrentArtifact(providerId)))
+
+            // Switch only to the real index envelope signed by the publisher.
+            // No test signing/keygen or injected fake ledger root is accepted.
+            transport.index = newIndex
+            val updated = manager.refresh(repositoryId)
+            assertEquals(35L, updated.sequence)
+            val next = updated.entries.single { it.descriptor.providerId == providerId }
+            assertEquals(ProviderRepositoryEntryStatus.UPDATE_AVAILABLE, next.status)
+            assertEquals(9L, next.descriptor.versionCode)
+            assertEquals(sha256Hex(code9), next.descriptor.sha256)
+            manager.install(repositoryId, providerId)
+            val installed = store.current(providerId)!!
+            assertEquals(9L, installed.versionCode)
+            assertEquals(sha256Hex(code9), installed.sha256)
+            assertEquals(repositoryId, installed.repositoryId)
+            assertEquals(pinnedRoot, installed.repositoryTrustAnchorSha256)
+            assertEquals(8L, store.previous(providerId)?.versionCode)
+            assertEquals(1, manager.installed().size)
+
+            // Verify the Host genuinely re-reads its own installed ledger and
+            // package bytes rather than trusting provider-authored strings.
+            val source = StoredProviderScriptPackageSource(store)
+            val active = source.get(ProviderId(providerId))!!
+            assertEquals(9L, active.versionCode)
+            assertEquals(sha256Hex(code9), active.installedArtifactSha256)
+            assertEquals(pinnedRoot, active.repositoryTrustAnchorSha256)
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            val registry = InstalledScriptProviderRegistry(
+                artifactStore = store,
+                configurationStore = FileProviderLocalConfigurationStore(File(root, "local-config")),
+            )
+            val client = ProviderRuntimeClient(
+                context = context,
+                hostInvocationFactory = ProviderHostInvocationFactory(
+                    context = context,
+                    storageRoot = File(root, "runtime"),
+                    baseHttpClient = interceptorClient,
+                ),
+            )
+            val gateway = ScriptProviderReadingGateway(
+                registry = registry,
+                packageSource = source,
+                runtimeClient = client,
+                enableExperimentalMangaAllV2 = true,
+            )
+            val request = ProviderReadingLookupRequest(
+                titles = listOf("Naruto"),
+                requestedLanguage = "en",
+            )
+            val observed = gateway.lookupMangaAllV2ReadOnly(ProviderId(providerId), request)
+            assertTrue("Signed code9 must decode read-only diagnostics", observed is ProviderCallResult.Success)
+            val audit = (observed as ProviderCallResult.Success).value
+            assertEquals(
+                MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance.Classification.SIGNED_INSTALLATION,
+                audit.hostProvenance?.classification,
+            )
+            assertEquals(sha256Hex(code9), audit.hostProvenance?.artifactSha256)
+            assertEquals(pinnedRoot, audit.hostProvenance?.trustAnchorSha256)
+            assertEquals(listOf("mangadex", "mangadot", "mangafire"), audit.sources.map { it.source })
+            assertEquals(
+                listOf("SUCCESS_PAGE", "FAILED", "SUCCESS_PAGE"),
+                audit.sources.map { it.status },
+            )
+            assertEquals("CHALLENGE_BLOCKED", audit.sources[1].failureCode)
+            assertEquals(403, audit.sources[1].httpStatus)
+            assertFalse(audit.lookupComplete)
+            assertTrue(audit.observedWorks.isEmpty())
+            assertEquals(
+                setOf("https://api.mangadex.org", "https://mangadot.net", "https://mangafire.to"),
+                synchronized(syntheticOrigins) { syntheticOrigins.toSet() },
+            )
+
+            // The source is an installation-trusted diagnostic channel, not a
+            // canonical binding or Reader authorization. Rollback to code8
+            // immediately disables this V2 entrypoint.
+            manager.rollback(providerId)
+            assertEquals(8L, store.current(providerId)?.versionCode)
+            val denied = gateway.lookupMangaAllV2ReadOnly(ProviderId(providerId), request)
+            assertTrue(denied is ProviderCallResult.Failure)
+            assertEquals("UNAVAILABLE", (denied as ProviderCallResult.Failure).error.code.name)
         }
     }
 
