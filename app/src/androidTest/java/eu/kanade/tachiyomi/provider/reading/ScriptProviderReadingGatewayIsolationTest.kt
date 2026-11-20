@@ -199,6 +199,99 @@ class ScriptProviderReadingGatewayIsolationTest {
     }
 
     /**
+     * The actual, review-derived 0.5.4/code9 archive executes through Host
+     * QuickJS, with all three original source adapters making one bounded V1
+     * lookup. It has NO verified signed-index installation, so V2 MUST remain
+     * unavailable even if malicious callers supply a forged digest/root pair.
+     *
+     * The real host HTTP bridge is intercepted before network. No website,
+     * CDN, signed code9, production Reader or personal data is involved.
+     */
+    @Test
+    fun mangaAllCode9ReviewedArchive_executesUnifiedV1AndRejectsUnsignedV2() = runBlocking {
+        val instrument = InstrumentationRegistry.getInstrumentation()
+        assertEquals("app.tsuzuki.dev", instrument.targetContext.packageName)
+        assertEquals("true", instrument.arguments.getString("mangaAllStatusProbeOptIn"))
+        val packageBytes = instrument.context.assets.open("mangaall/code9-reviewed-unsigned.tsz")
+            .use { it.readBytes() }
+        val parsed = ProviderPackageParser().parse(packageBytes)
+        val provider = ProviderId("app.tsuzuki.mangaall")
+        assertEquals(provider.value, parsed.manifest.id)
+        assertEquals("0.5.4", parsed.manifest.version.name)
+        assertEquals(9L, parsed.manifest.version.code)
+        val networkOrigins = parsed.manifest.permissions.network!!.origins
+        val calls = mutableListOf<String>()
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val uri = chain.request().url
+            assertEquals("GET", chain.request().method)
+            assertEquals("https", uri.scheme)
+            val origin = "https://" + uri.host
+            assertTrue("Unexpected source outside code9 allowlist", origin in networkOrigins)
+            synchronized(calls) { calls.add(origin) }
+            val response = when {
+                origin == "https://api.mangadex.org" && uri.encodedPath == "/manga" ->
+                    200 to """{"result":"ok","data":[],"offset":0,"limit":25,"total":0}"""
+                origin == "https://mangadot.net" && uri.encodedPath == "/api/search" ->
+                    403 to """{"error":"synthetic blocked"}"""
+                origin == "https://mangafire.to" && uri.encodedPath == "/api/titles" ->
+                    200 to """{"items":[]}"""
+                else -> error("Unexpected code9 synthetic source request")
+            }
+            Response.Builder()
+                .request(chain.request())
+                .protocol(Protocol.HTTP_1_1)
+                .code(response.first)
+                .message("Synthetic offline source")
+                .body(response.second.toResponseBody())
+                .build()
+        }.build()
+        fun fromExactCode9(forgeSignedRecord: Boolean = false) = gateway(
+            main = "",
+            providerId = provider,
+            networkOrigins = networkOrigins,
+            browserOrigins = parsed.manifest.permissions.browser?.origins.orEmpty(),
+            localNetwork = false,
+            packageBytesOverride = packageBytes,
+            baseHttpClient = client,
+            repositoryId = "app.tsuzuki.providers",
+            packageVersionCode = 9,
+            packageVersionName = "0.5.4",
+            experimentalV2OptIn = true,
+            allowUnsignedFixture = !forgeSignedRecord,
+            forgeInstalledRecord = forgeSignedRecord,
+        )
+        val gateway = fromExactCode9()
+        val request = ProviderReadingLookupRequest(titles = listOf("Naruto"), requestedLanguage = "en")
+        val first = gateway.lookup(provider, request)
+        assertTrue(first is ProviderCallResult.Success)
+        val firstPage = (first as ProviderCallResult.Success).value
+        assertTrue(firstPage.items.isEmpty())
+        assertTrue(firstPage.nextCursor != null)
+        assertEquals(
+            setOf("https://api.mangadex.org", "https://mangadot.net", "https://mangafire.to"),
+            synchronized(calls) { calls.toSet() },
+        )
+        synchronized(calls) { calls.clear() }
+        val retried = gateway.lookup(provider, request.copy(cursor = firstPage.nextCursor))
+        assertTrue(retried is ProviderCallResult.Failure)
+        val secondOrigins = synchronized(calls) { calls.toList() }
+        assertEquals(listOf("https://mangadot.net"), secondOrigins)
+        synchronized(calls) { calls.clear() }
+
+        // Exact 0.5.4 bytes and neutral marker are insufficient without a
+        // StoredProviderScriptPackageSource backed by verified index ledger.
+        val v2Denied = gateway.lookupMangaAllV2ReadOnly(provider, request)
+        assertTrue(v2Denied is ProviderCallResult.Failure)
+        assertEquals("UNAVAILABLE", (v2Denied as ProviderCallResult.Failure).error.code.name)
+        assertTrue(synchronized(calls) { calls.isEmpty() })
+        val forged = fromExactCode9(forgeSignedRecord = true)
+            .lookupMangaAllV2ReadOnly(provider, request)
+        assertTrue(forged is ProviderCallResult.Failure)
+        assertEquals("UNAVAILABLE", (forged as ProviderCallResult.Failure).error.code.name)
+        assertTrue(synchronized(calls) { calls.isEmpty() })
+    }
+
+    /**
      * EXPERIMENTAL: exercises actual isolated QuickJS/package invocation with
      * synthetic, locally generated code9 bytes. No signed code9 exists yet.
      * Reading.lookup V1 remains unchanged, and V2 cannot grant Reader pages.
