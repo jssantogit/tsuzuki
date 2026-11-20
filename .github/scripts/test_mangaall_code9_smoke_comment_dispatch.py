@@ -4,11 +4,13 @@ import copy
 import importlib.util
 import json
 import os
+import sys
 from pathlib import Path
 import tempfile
 import unittest
 
 FILE = Path(__file__).with_name("mangaall_code9_smoke_comment_dispatch.py")
+sys.path.insert(0, str(FILE.parent))
 spec = importlib.util.spec_from_file_location("smoke_command", FILE)
 smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
