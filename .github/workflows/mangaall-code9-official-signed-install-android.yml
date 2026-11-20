@@ -44,7 +44,16 @@ jobs:
         run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebugAndroidTest
 
   signed-install-android:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/test/mangaall-code9-signed-acceptance-'))
+    # A PR may exercise the P-256 installation only for this exact, trusted
+    # in-repository acceptance branch after the genuine signed publication.
+    # Fork PRs and unrelated ordinary PRs retain compile-only coverage.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.head_ref == 'test/mangaall-code9-signed-acceptance-p256-35') ||
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/test/mangaall-code9-signed-acceptance-p256-35')
     runs-on: ubuntu-24.04
     timeout-minutes: 85
     steps:
