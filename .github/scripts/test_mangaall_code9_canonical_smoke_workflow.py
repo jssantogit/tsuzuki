@@ -23,7 +23,11 @@ class CanonicalCode9SmokeWorkflowTest(unittest.TestCase):
         self.assertIn("app.tsuzuki.mangaall-9.tsz", text)
         self.assertNotIn("app.tsuzuki.mangaall-8.tsz", text)
         self.assertNotIn("99f3565a1e1edc0d8ed249b7597006c897f02636", text)
-        self.assertIn("ref: 564a2f526bc05761eb51cd2bf0ab63b02f33e466", text)
+        self.assertIn("ref: c35b1bcac1ce02062f80e812517239e39adbcfd8", text)
+        self.assertNotIn("ref: 564a2f526bc05761eb51cd2bf0ab63b02f33e466", text)
+        registry = (ROOT / "app/src/test/java/eu/kanade/tachiyomi/provider/reading/MangaAllRealSourceReplay.kt").read_text(encoding="utf-8")
+        self.assertIn('contentLanguages = setOf("en")', registry)
+        self.assertNotIn('contentLanguages = setOf("en", "pt-br")', registry)
 
     def test_one_ordered_work_vector_into_live_source_and_independent_catalog(self):
         text = WORKFLOW.read_text(encoding="utf-8")
