@@ -54,6 +54,13 @@ jobs:
           ref: 99f3565a1e1edc0d8ed249b7597006c897f02636
           path: code8-published
           persist-credentials: false
+      - name: Checkout byte-reviewed, SOURCE-ONLY MangaAll code9 (not indexed or signed)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 1314775fd0637aef5b4d153eea423e35bc0e3ac3
+          path: code9-reviewed
+          persist-credentials: false
       - name: Checkout immutable official signed sequence 32 / MangaAll code6 (read-only)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -119,6 +126,34 @@ jobs:
           dest.parent.mkdir(parents=True, exist_ok=True)
           shutil.copyfile(archive, dest)
           print('MANGAALL_PUBLISHED_CODE8_READER|signature=VERIFIED|sha=VERIFIED|http=CONTROLLED')
+          PY
+      - name: Verify exact code9 source, original P-256 code8 index and build UNSIGNED AndroidTest package
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C code9-reviewed rev-parse HEAD)" = 1314775fd0637aef5b4d153eea423e35bc0e3ac3
+          (cd code9-reviewed && node tooling/verify_index.mjs)
+          python3 code9-reviewed/tooling/build_provider.py \
+            code9-reviewed/providers/mangaall \
+            app/src/androidTest/assets/mangaall/code9-reviewed-unsigned.tsz
+          python3 - <<'PY'
+          import hashlib, json, pathlib, sys, tempfile
+          source = pathlib.Path('code9-reviewed')
+          source_manifest = json.loads((source / 'providers/mangaall/manifest.json').read_text())
+          signed_index = json.loads((source / 'dist/index.payload.json').read_text())
+          assert source_manifest['version'] == {'name': '0.5.4', 'code': 9}
+          assert source_manifest['publication'] == 'release'
+          assert signed_index['sequence'] == 34
+          indexed = [p for p in signed_index['providers'] if p['providerId'] == 'app.tsuzuki.mangaall']
+          assert len(indexed) == 1 and indexed[0]['versionCode'] == 8
+          sys.path.insert(0, str(source / 'tooling'))
+          from mangaall_code9_review_source import materialize_review_code9
+          with tempfile.TemporaryDirectory(prefix='host-code9-review-parity-') as temp:
+              reviewed = materialize_review_code9(pathlib.Path(temp) / 'reviewed')
+              actual = pathlib.Path('app/src/androidTest/assets/mangaall/code9-reviewed-unsigned.tsz')
+              assert reviewed.read_bytes() == actual.read_bytes(), 'Unreviewed code9 package bytes'
+              assert hashlib.sha256(actual.read_bytes()).hexdigest() != indexed[0]['sha256']
+          print('CODE9_REVIEWED_TSZ|sha=REVIEWED_EXACT|sourceCode=9|signedIndex=CODE8_ONLY|network=OFFLINE|install=NONE')
           PY
       - name: Generate code7 replay vectors from actual JS (offline fixture only)
         shell: bash
