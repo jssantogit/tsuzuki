@@ -185,7 +185,10 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             chapterId = requireNotNull(args.getString("providerChapterId")),
             language = requireNotNull(args.getString("facetLanguage")),
         )
-        withFixture { fixture ->
+        val observedChapterNumber = requireNotNull(args.getString("providerChapterNumber"))
+            .toIntOrNull()?.takeIf { it in 1..9999 }
+            ?: error("Expected bounded signed-source chapter number")
+        withFixture(liveChapterNumber = observedChapterNumber) { fixture ->
             fixture.launchReader()
             val reader = awaitActivity(ReaderActivity::class.java)
             awaitReaderPages(reader, fixture.sourceA.name, expectedCount = 10)
@@ -1274,9 +1277,10 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
 
     private fun withFixture(
         sourceBBehavior: FixtureBehavior = FixtureBehavior(pageCount = 10),
+        liveChapterNumber: Int = 1,
         block: (SourceSwitchFixture) -> Unit,
     ) {
-        val fixture = SourceSwitchFixture.create(sourceBBehavior)
+        val fixture = SourceSwitchFixture.create(sourceBBehavior, liveChapterNumber)
         try {
             block(fixture)
         } finally {
@@ -3093,7 +3097,11 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
         )
 
         companion object {
-            fun create(sourceBBehavior: FixtureBehavior = FixtureBehavior(pageCount = 10)): SourceSwitchFixture {
+            fun create(
+                sourceBBehavior: FixtureBehavior = FixtureBehavior(pageCount = 10),
+                liveChapterNumber: Int = 1,
+            ): SourceSwitchFixture {
+                require(liveChapterNumber in 1..9999)
                 val instrumentation = InstrumentationRegistry.getInstrumentation()
                 val context = instrumentation.targetContext
                 assertEquals(
@@ -3128,6 +3136,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                         "reader-$runId-a" to fixtureTitle,
                         "reader-$runId-b" to fixtureTitle,
                     ),
+                    liveChapterNumber,
                 )
                 server.dispatcher = dispatcher
                 // MockWebServer.start() resolves "localhost" through Android DNS.
@@ -3224,11 +3233,11 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                         updatedAt = now,
                     )
                     val chapter = CanonicalChapter(
-                        id = "$titleId-chapter-1",
+                        id = "$titleId-chapter-$liveChapterNumber",
                         canonicalTitleId = titleId,
-                        displayNumber = "1",
+                        displayNumber = liveChapterNumber.toString(),
                         type = CanonicalChapterType.REGULAR,
-                        baseNumber = 1,
+                        baseNumber = liveChapterNumber,
                         confidence = 1.0,
                         createdAt = now,
                         updatedAt = now,
@@ -3371,6 +3380,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
     private class ReaderFixtureDispatcher(
         behaviors: Map<String, FixtureBehavior>,
         private val searchTitles: Map<String, String>,
+        private val fixtureChapterNumber: Int = 1,
     ) : Dispatcher() {
         private val behaviors = java.util.concurrent.ConcurrentHashMap(behaviors)
         private val pageRequestCounts =
@@ -3441,7 +3451,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                 val route = when (path) {
                     "/reader/$token/search" -> "search"
                     "/reader/$token/manga" -> "inventory"
-                    "/reader/$token/chapter-1" -> "pages"
+                    "/reader/$token/chapter-$fixtureChapterNumber" -> "pages"
                     else -> "other"
                 }
                 routeRequestCounts.computeIfAbsent("$token:$route") {
@@ -3474,9 +3484,12 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
                 }
                 if (path == "/reader/$token/manga") {
                     if (behavior.inventoryStatus != 200) return errorResponse(behavior.inventoryStatus)
-                    return textResponse("/reader/$token/chapter-1\tChapter 1\t1\tSynthetic group")
+                    return textResponse(
+                        "/reader/$token/chapter-$fixtureChapterNumber\t" +
+                            "Chapter $fixtureChapterNumber\t$fixtureChapterNumber\tSynthetic group",
+                    )
                 }
-                if (path == "/reader/$token/chapter-1") {
+                if (path == "/reader/$token/chapter-$fixtureChapterNumber") {
                     pageRequestCounts.computeIfAbsent(token) {
                         java.util.concurrent.atomic.AtomicInteger()
                     }.incrementAndGet()

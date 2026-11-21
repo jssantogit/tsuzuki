@@ -39,6 +39,10 @@ mkdir -p "$output"
 [[ "${MANGAALL_CHAPTER_ID:-}" =~ ^[A-Za-z0-9._:-]{1,160}$ ]] || {
   echo 'LIVE_PAGE_HARD_STOP|reason=INVALID_CHAPTER_ID' >&2; exit 2;
 }
+# Explicit test-only number; the signed chapter inventory is the final authority.
+[[ "${MANGAALL_CHAPTER_NUMBER:-1}" =~ ^[1-9][0-9]{0,3}$ ]] || {
+  echo 'LIVE_PAGE_HARD_STOP|reason=INVALID_CHAPTER_NUMBER' >&2; exit 2;
+}
 [[ "${MANGAALL_LANGUAGE:-}" =~ ^[a-z]{2}(-[a-z]{2})?$ ]] || {
   echo 'LIVE_PAGE_HARD_STOP|reason=INVALID_LANGUAGE' >&2; exit 2;
 }
@@ -72,6 +76,7 @@ timeout --foreground 340s adb shell am instrument -w -r \
   -e androidSourceSwitchOptIn true \
   -e providerWorkId "$MANGAALL_WORK_ID" \
   -e providerChapterId "$MANGAALL_CHAPTER_ID" \
+  -e providerChapterNumber "${MANGAALL_CHAPTER_NUMBER:-1}" \
   -e facetLanguage "$MANGAALL_LANGUAGE" \
   "$runner" > "$raw" 2>&1 || status=$?
 

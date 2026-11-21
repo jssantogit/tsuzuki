@@ -22,6 +22,11 @@ on:
         description: 'Exact chapter ID belonging to that source work'
         type: string
         required: true
+      chapter_number:
+        description: 'Exact observed chapter number (Reader fixture only; validated against signed chapter)'
+        type: string
+        required: false
+        default: '1'
       language:
         description: 'Captured language facet (English first)'
         type: choice
@@ -79,6 +84,7 @@ jobs:
       MANGAALL_GATE_MODE: ${{ inputs.mode }}
       MANGAALL_WORK_ID: ${{ inputs.work_id }}
       MANGAALL_CHAPTER_ID: ${{ inputs.chapter_id }}
+      MANGAALL_CHAPTER_NUMBER: ${{ inputs.chapter_number }}
       MANGAALL_LANGUAGE: ${{ inputs.language }}
       MANGAALL_READER_ACK: ${{ inputs.acknowledge }}
     steps:
@@ -96,6 +102,8 @@ jobs:
           assert os.environ['MANGAALL_READER_ACK'] == 'I_ACCEPT_SIGNED_CODE9_LIVE_READER', 'Missing manual consent'
           work = os.environ['MANGAALL_WORK_ID']
           chapter = os.environ['MANGAALL_CHAPTER_ID']
+          number = os.environ['MANGAALL_CHAPTER_NUMBER']
+          assert re.fullmatch(r'[1-9][0-9]{0,3}', number), 'Invalid chapter number'
           assert re.fullmatch(r'(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}', work), 'Invalid source HID'
           assert re.fullmatch(r'[A-Za-z0-9._:-]{1,160}', chapter), 'Invalid chapter HID'
           assert chapter.startswith(work.split(':', 1)[0] + ':'), 'Cross-source chapter prohibited'
