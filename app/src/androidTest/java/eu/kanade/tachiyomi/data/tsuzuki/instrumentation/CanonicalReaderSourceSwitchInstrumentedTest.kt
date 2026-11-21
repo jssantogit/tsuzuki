@@ -191,7 +191,9 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             awaitReaderPages(reader, fixture.sourceA.name, expectedCount = 10)
             val initialChapter = requireNotNull(reader.viewModel.state.value.currentChapter)
             val mangaAll = fixture.mangaAllJourney(
-                reader, originalCode9Package = code9, liveTarget = target,
+                reader,
+                originalCode9Package = code9,
+                liveTarget = target,
             )
             try {
                 val preflight = try {
