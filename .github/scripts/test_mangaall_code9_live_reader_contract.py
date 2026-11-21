@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Strict offline wiring regression for the opt-in signed code9 Android CDN gate."""
 from pathlib import Path
+import re
+import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -78,6 +80,50 @@ class SignedCode9LiveReaderContract(unittest.TestCase):
         self.assertIn("CHAPTER_NOT_ATTESTED_IN_BOUND", probe)
         self.assertIn("CHAPTER_IDENTITY_NOT_COMPATIBLE_WITH_TEST_FIXTURE", fixture)
         self.assertIn("MANGAALL_LIVE_PAGE_GATE|outcome=PASS|provenance=DIRECT_LIVE_ANDROID", reader)
+
+    def test_closed_code9_provider_pages_failure_preserves_only_typed_cause(self):
+        probe = PROBE.read_text(encoding="utf-8")
+        script = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("failure.error.code.name", probe)
+        self.assertIn('failure.error.pageFailureStage?.name ?: "NONE"', probe)
+        self.assertIn("signedCode == 9L", probe)
+        self.assertIn("providerError=(", script)
+        self.assertIn("pageFailureStage=(", script)
+        matched = re.search(r"grep -oE '([^']+)'", script)
+        self.assertIsNotNone(matched, "Only a closed status extractor may export logs")
+        extractor = matched.group(1)
+
+        def exported(line):
+            result = subprocess.run(
+                ["grep", "-oE", extractor],
+                input=line + "\n", text=True, capture_output=True, check=False,
+            )
+            return result.stdout.strip()
+
+        good = (
+            "INSTRUMENTATION_STATUS: stream=MANGAALL_LIVE_PAGE_GATE"
+            "|outcome=INCONCLUSIVE|reason=PROVIDER_PAGES_UNAVAILABLE"
+            "|providerError=SOURCE_READ_ERROR|pageFailureStage=AT_HOME_REQUEST_FAILED"
+        )
+        self.assertEqual(exported(good), good)
+        other = good.replace("AT_HOME_REQUEST_FAILED", "CHAPTER_WORK_MISMATCH")
+        self.assertEqual(exported(other), other)
+        no_stage = good.replace("AT_HOME_REQUEST_FAILED", "NONE")
+        self.assertEqual(exported(no_stage), no_stage)
+
+        # Unknown classes, exception messages and signed URLs cannot escape
+        # through the exported verdict, even when appended to a valid prefix.
+        for altered in (
+            good.replace("AT_HOME_REQUEST_FAILED", "SECRET_CDN_TOKEN"),
+            good.replace("SOURCE_READ_ERROR", "PRIVATE_HTTP_MESSAGE"),
+            good + "|url=https://private.example/image?token=secret",
+        ):
+            with self.subTest(altered=altered[-45:]):
+                output = exported(altered)
+                self.assertIn("PROVIDER_PAGES_UNAVAILABLE", output)
+                self.assertNotIn("SECRET_CDN_TOKEN", output)
+                self.assertNotIn("PRIVATE_HTTP_MESSAGE", output)
+                self.assertNotIn("https://", output)
 
     def test_only_instrumentation_can_export_closed_verdict(self):
         wf = WORKFLOW.read_text(encoding="utf-8")
