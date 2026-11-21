@@ -476,8 +476,10 @@ class ScriptProviderReadingGatewayIsolationTest {
         for (futureName in listOf("0.5.5-dev-unsigned", "0.5.5-dev", "0.5.5")) {
             val futureDenied = fixture(10, futureName)
                 .lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
-            assertTrue("unsigned code10 $futureName must never get Host V2 provenance",
-                futureDenied is ProviderCallResult.Failure)
+            assertTrue(
+                "unsigned code10 $futureName must never get Host V2 provenance",
+                futureDenied is ProviderCallResult.Failure,
+            )
             assertEquals(
                 "UNAVAILABLE",
                 (futureDenied as ProviderCallResult.Failure).error.code.name,
