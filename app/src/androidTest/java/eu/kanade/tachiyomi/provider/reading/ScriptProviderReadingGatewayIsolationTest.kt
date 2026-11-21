@@ -2325,7 +2325,7 @@ class ScriptProviderReadingGatewayIsolationTest {
         require(Regex("[A-Za-z0-9._:-]{1,160}").matches(chapterId))
         require(Regex("[a-z]{2}(-[a-z]{2})?").matches(language))
         val archive = instrumentation.context.assets
-            .open("mangaall/code${signedCode}-published-package.tsz").use { it.readBytes() }
+            .open("mangaall/code$signedCode-published-package.tsz").use { it.readBytes() }
         val parsed = ProviderPackageParser().parse(archive)
         assertEquals("app.tsuzuki.mangaall", parsed.manifest.id)
         assertEquals(signedCode, parsed.manifest.version.code)
