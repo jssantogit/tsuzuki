@@ -276,6 +276,12 @@ internal class MangaAllReaderJourneyFixture(
             assertEquals(if (originalCode9Package) "0.5.4" else "0.5.3", parsed.manifest.version.name)
             assertEquals(if (originalCode9Package) 9L else 8L, parsed.manifest.version.code)
             assertTrue(parsed.entries.containsKey("modules/router.js"))
+            if (originalCode9Package) {
+                assertEquals(
+                    "d9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622",
+                    tachiyomi.core.provider.supplychain.sha256Hex(bytes),
+                )
+            }
         }
         if (originalCode7Package) {
             assertEquals("app.tsuzuki.mangaall", parsed.manifest.id)
