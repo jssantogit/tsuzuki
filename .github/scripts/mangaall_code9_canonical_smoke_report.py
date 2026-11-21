@@ -71,6 +71,15 @@ def _by_case(rows, column):
     return values
 
 
+def bounded_count(value, label):
+    """Only finite, nonnegative closed counts are fit for a user-facing report."""
+    if type(value) is int and 0 <= value <= 999_999_999:
+        return value
+    if isinstance(value, str) and re.fullmatch(r"[0-9]{1,9}", value):
+        return int(value)
+    raise ValueError("Invalid closed counter: " + label)
+
+
 def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
     vector = parse_plan(works, tier, ACK)
     if (source.get("schemaVersion") != 1 or
@@ -122,15 +131,34 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
         sql = sqlites[cid]
         if not isinstance(cat, str) or not re.fullmatch(r"[A-Z_]+", cat):
             raise ValueError("Unclosed catalog status")
-        if not sql.get("confirmed", "0").isdigit():
-            raise ValueError("Invalid SQLite confirmed chapter count")
-        if col.get("gaps", "0") != "0" or sql.get("replayGaps", "0") != "0":
+        # These are only closed counters emitted by production Host tests.
+        # A partial, real source may persist provisional chapters and sampled
+        # Reader options without conferring canonical or CDN pixel authority.
+        counts = {key: bounded_count(sql.get(key), key) for key in (
+            "confirmed", "provisionalChapters", "sqliteChapters",
+            "sqliteEvidence", "sqliteMapped", "sqliteBindings",
+            "sourceAssociations", "readerSampled", "readerUnique",
+            "replayGaps",
+        )}
+        collector_gaps = bounded_count(col.get("gaps"), "collector gaps")
+        blocked = sorted(
+            key for key in health
+            if bounded_count(health[key].get("blocked403"), key + " blocked403") > 0
+        )
+        for key in health:
+            if not isinstance(health[key], dict):
+                raise ValueError("Malformed source health")
+            bounded_count(health[key].get("transportFailed"), key + " transportFailed")
+        if counts["readerUnique"] > counts["readerSampled"] or (
+                counts["sqliteMapped"] > counts["sqliteEvidence"]):
+            raise ValueError("Inconsistent Host observation counters")
+        if collector_gaps or counts["replayGaps"]:
             outcome = "REPLAY_GAP"
         elif source_incomplete:
             outcome = "INCONCLUSIVE_SOURCE"
         elif cat != "RESOLVED":
             outcome = "INCONCLUSIVE_CATALOG"
-        elif int(sql.get("confirmed", "0")) > 0:
+        elif counts["confirmed"] > 0:
             outcome = "CHAPTER_EVIDENCE_OBSERVED_NEEDS_READER"
         else:
             outcome = "INCONCLUSIVE_CANONICAL_CHAPTERS"
@@ -139,8 +167,17 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
             "caseId": cid,
             "outcome": outcome,
             "sourceIncomplete": source_incomplete,
+            "sourceHttp403": blocked,
             "catalog": cat,
-            "sqliteConfirmed": int(sql.get("confirmed", "0")),
+            "sqliteConfirmed": counts["confirmed"],
+            "sqliteProvisional": counts["provisionalChapters"],
+            "sqliteChapters": counts["sqliteChapters"],
+            "sqliteEvidence": counts["sqliteEvidence"],
+            "sqliteMapped": counts["sqliteMapped"],
+            "sqliteBindings": counts["sqliteBindings"],
+            "sourceAssociations": counts["sourceAssociations"],
+            "readerOptionsSampled": counts["readerSampled"],
+            "readerOptionsUnique": counts["readerUnique"],
             "readerPixels": "NOT_TESTED_REAL_CDN",
         })
     return {
