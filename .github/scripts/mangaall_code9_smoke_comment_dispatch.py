@@ -67,8 +67,9 @@ def parse_comment_event(event, run_attempt=1):
         raise ValueError("COMMAND_MISSING")
     reader_mode = READER_COMMAND.fullmatch(lines[0])
     if reader_mode:
-        if (len(lines) != 4 or not lines[1].startswith("work :: ") or
-                not lines[2].startswith("chapter :: ") or lines[3] != "language :: en"):
+        if (len(lines) not in (4, 5) or not lines[1].startswith("work :: ") or
+                not lines[2].startswith("chapter :: ") or lines[3] != "language :: en" or
+                (len(lines) == 5 and reader_mode.group(1) != "reader")):
             raise ValueError("INVALID_READER_VECTOR")
         work_id = lines[1][len("work :: "):]
         chapter_id = lines[2][len("chapter :: "):]
@@ -76,10 +77,21 @@ def parse_comment_event(event, run_attempt=1):
                 not READER_CHAPTER_ID.fullmatch(chapter_id) or
                 chapter_id.split(":", 1)[0] != work_id.split(":", 1)[0]):
             raise ValueError("INVALID_READER_IDENTITY")
+        # Legacy four-line Reader commands retain chapter one. Other chapters
+        # require an explicit integer number, verified against signed reading.chapters
+        # before the isolated Reader fixture is allowed to map it.
+        chapter_number = "1"
+        if len(lines) == 5:
+            if not lines[4].startswith("number :: "):
+                raise ValueError("INVALID_READER_NUMBER")
+            chapter_number = lines[4][len("number :: "):]
+            if not re.fullmatch(r"[1-9][0-9]{0,3}", chapter_number):
+                raise ValueError("INVALID_READER_NUMBER")
         return {
             "mode": "reader", "tier": "none", "works": "", "count": 1,
             "case_ids": (), "reader_mode": reader_mode.group(1),
             "work_id": work_id, "chapter_id": chapter_id, "language": "en",
+            "chapter_number": chapter_number,
             "comment_id": comment["id"],
             "fingerprint": hashlib.sha256(body.encode("utf-8")).hexdigest()[:16],
         }
@@ -111,6 +123,7 @@ def workflow_dispatch_payload(plan):
             "inputs": {
                 "work_id": plan["work_id"],
                 "chapter_id": plan["chapter_id"],
+                "chapter_number": plan["chapter_number"],
                 "language": "en",
                 "mode": plan["reader_mode"],
                 "acknowledge": READER_ACK,
