@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.provider.reading
 
 import io.kotest.matchers.shouldBe
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -57,22 +58,43 @@ class MangaAllCapturedRequestTapeTest {
     }
 
     @Test
-    fun `signed code9 English V1 lookup matches only the captured production wire fields`() {
-        // No diagnosticsVersion:2 (V2-only) or unsupported editorialEvidenceVersion
-        // may be synthesized into the signed-code9 canonical V1 capture.
-        val captured = """{"titles":["CONTRACT_ONLY"],"requestedLanguage":"en","coverageEvidenceVersion":1}"""
+    fun `signed code9 English V1 tape replays the actual Host serialized defaults`() {
+        // The public Domain request omits diagnostic/editorial versions, but
+        // the production ScriptProviderReadingGateway internal V1 DTO has both
+        // defaults and its Json serializer encodes them. A live capture must
+        // reproduce this exact wire behavior instead of guessing Domain shape.
+        val actualHostJson = Json {
+            encodeDefaults = true
+            explicitNulls = false
+            ignoreUnknownKeys = false
+        }.encodeToString(
+            ScriptProviderReadingGateway.LookupRequestDto(
+                titles = listOf("CONTRACT_ONLY"),
+                requestedLanguage = "en",
+                coverageEvidenceVersion = 1,
+            ),
+        )
+        val actualHostRequest = request(actualHostJson)
+        actualHostRequest["diagnosticsVersion"].toString() shouldBe "1"
+        actualHostRequest["editorialEvidenceVersion"].toString() shouldBe "1"
+        actualHostRequest["coverageEvidenceVersion"].toString() shouldBe "1"
+        actualHostRequest["requestedLanguage"].toString() shouldBe "\"en\""
+
+        val captured =
+            """{"titles":["CONTRACT_ONLY"],"requestedLanguage":"en","diagnosticsVersion":1,"editorialEvidenceVersion":1,"coverageEvidenceVersion":1}"""
         val tape = MangaAllCapturedRequestTape(listOf(record("lookup", captured)))
         val wrongRequests = listOf(
             captured.replace("\"en\"", "\"pt-br\""),
             captured.replace("\"coverageEvidenceVersion\":1", "\"coverageEvidenceVersion\":2"),
             captured.replace(",\"coverageEvidenceVersion\":1", ""),
+            captured.replace(",\"editorialEvidenceVersion\":1", ""),
             captured.replace("CONTRACT_ONLY", "UNCAPTURED_WORK"),
         )
         wrongRequests.forEach { wire ->
             assertThrows<MangaAllReplayGapException> { tape.replay("lookup", request(wire)) }
         }
         tape.replayGapCount shouldBe wrongRequests.size
-        tape.replay("lookup", request(captured))["items"].toString() shouldBe "[]"
+        tape.replay("lookup", actualHostRequest)["items"].toString() shouldBe "[]"
         tape.consumedCount shouldBe 1
     }
 
