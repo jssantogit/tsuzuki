@@ -97,6 +97,71 @@ class CommentBridgeTest(unittest.TestCase):
                 if old is not None:
                     os.environ["GITHUB_OUTPUT"] = old
 
+    def test_only_exact_owner_source_scoped_code9_reader_commands_dispatch(self):
+        work = "mangadex:239d6260-d71f-43b0-afff-074e3619e3de"
+        chapter = "mangadex:109de166-1a6d-4db2-a591-ebdb41647eea"
+        for mode in ("transport", "reader"):
+            command = (
+                "/mangaall-reader " + mode + "\\n" +
+                "work :: " + work + "\\n" +
+                "chapter :: " + chapter + "\\n" +
+                "language :: en"
+            )
+            plan = smoke.parse_comment_event(fixture(command))
+            self.assertEqual(plan["mode"], "reader")
+            self.assertEqual(plan["reader_mode"], mode)
+            self.assertEqual(plan["count"], 1)
+            self.assertEqual(plan["work_id"], work)
+            self.assertEqual(plan["chapter_id"], chapter)
+            self.assertEqual(smoke.READER_WORKFLOW, "mangaall-code9-live-reader-android.yml")
+            payload = smoke.workflow_dispatch_payload(plan)
+            self.assertEqual(payload["ref"], "main")
+            self.assertEqual(payload["inputs"], {
+                "work_id": work, "chapter_id": chapter, "language": "en",
+                "mode": mode, "acknowledge": smoke.READER_ACK,
+            })
+            with tempfile.TemporaryDirectory() as folder:
+                event_file = Path(folder) / "event.json"
+                dispatch = Path(folder) / "dispatch.json"
+                event_file.write_text(json.dumps(fixture(command)))
+                old = os.environ.pop("GITHUB_OUTPUT", None)
+                try:
+                    self.assertEqual(smoke.main(["script", str(event_file), str(dispatch)]), 0)
+                    self.assertEqual(json.loads(dispatch.read_text()), payload)
+                finally:
+                    if old is not None:
+                        os.environ["GITHUB_OUTPUT"] = old
+        invalid = (
+            "/mangaall-reader",
+            "/mangaall-reader scale",
+            "/mangaall-reader transport",
+            "/mangaall-reader transport\\nwork :: " + work +
+            "\\nchapter :: mangadot:123\\nlanguage :: en",
+            "/mangaall-reader transport\\nwork :: " + work +
+            "\\nchapter :: " + chapter + "\\nlanguage :: pt-br",
+            "/mangaall-reader transport\\nwork :: " + work +
+            "\\nchapter :: " + chapter + "\\nlanguage :: en\\nextra",
+            "/mangaall-reader transport\\nwork :: " + work +
+            "\\nchapter :: " + chapter + " ; curl bad.example\\nlanguage :: en",
+            "please /mangaall-reader reader\\nwork :: " + work +
+            "\\nchapter :: " + chapter + "\\nlanguage :: en",
+        )
+        for command in invalid:
+            with self.subTest(command=command[:65]), self.assertRaises(ValueError):
+                smoke.parse_comment_event(fixture(command))
+        attacker = fixture(
+            "/mangaall-reader transport\\nwork :: " + work +
+            "\\nchapter :: " + chapter + "\\nlanguage :: en"
+        )
+        attacker["sender"]["login"] = "not-owner"
+        with self.assertRaises(ValueError):
+            smoke.parse_comment_event(attacker)
+        with self.assertRaises(ValueError):
+            smoke.parse_comment_event(fixture(
+                "/mangaall-reader transport\\nwork :: " + work +
+                "\\nchapter :: " + chapter + "\\nlanguage :: en"
+            ), run_attempt=2)
+
     def test_ten_to_thirty_stay_bounded_and_ordered(self):
         for count in (10, 20, 30):
             titles = "\n".join("manga :: Work " + str(i) for i in range(count))
@@ -181,6 +246,8 @@ class CommentBridgeTest(unittest.TestCase):
         self.assertIn("steps.command.outputs.mode == 'plan'", txt)
         self.assertIn("mangaall-code9-canonical-smoke.yml", txt)
         self.assertIn("mangaall-code9-on-demand-selftest.yml", txt)
+        self.assertIn("mangaall-code9-live-reader-android.yml", txt)
+        self.assertIn("steps.command.outputs.mode == 'reader'", txt)
         self.assertIn("TARGET_WORKFLOW/dispatches", txt)
         self.assertIn("TARGET_NOT_ALLOWLISTED", txt)
         self.assertNotIn("publish.yml/dispatches", txt)
