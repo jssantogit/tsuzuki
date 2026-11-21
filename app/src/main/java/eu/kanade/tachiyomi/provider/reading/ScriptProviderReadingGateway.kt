@@ -225,7 +225,7 @@ class ScriptProviderReadingGateway internal constructor(
             recheckPackageAfterInvocation = true,
         ) { value, active ->
             val provenance = mangaAllV2HostProvenance(active)
-                ?: error("MangaAll code9 provenance lost before decoding")
+                ?: error("MangaAll signed-version provenance lost before decoding")
             val declaredContract = when (provenance.classification) {
                 MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance.Classification.SIGNED_INSTALLATION ->
                     "V2_READONLY_OBSERVATION"
@@ -247,11 +247,19 @@ class ScriptProviderReadingGateway internal constructor(
     private fun mangaAllV2HostProvenance(
         active: ActiveProviderScriptPackage,
     ): MangaAllLookupV2ReadOnlyDiagnostics.HostProvenance? {
+        // Only independently reviewed release generations are eligible.
+        // Development code10 and any later code11+ remain ineligible.
+        // An eligible version alone is NEVER sufficient to establish trust:
+        // all signed-installation checks below remain mandatory.
+        val releaseName = when (active.versionCode) {
+            9L -> "0.5.4"
+            10L -> "0.5.5"
+            else -> return null
+        }
         if (
             active.repositoryId != MANGAALL_TRUSTED_REPOSITORY ||
-            active.versionCode != MANGAALL_V2_EXPERIMENTAL_VERSION ||
             active.parsed.manifest.id != MANGAALL_PROVIDER_ID ||
-            active.parsed.manifest.version.code != MANGAALL_V2_EXPERIMENTAL_VERSION
+            active.parsed.manifest.version.code != active.versionCode
         ) {
             return null
         }
@@ -259,8 +267,11 @@ class ScriptProviderReadingGateway internal constructor(
         val signed = packageSource is StoredProviderScriptPackageSource &&
             active.installedArtifactSha256 == digest &&
             active.repositoryTrustAnchorSha256 == MANGAALL_TRUST_ANCHOR_SHA256 &&
-            active.parsed.manifest.version.name == "0.5.4"
-        val fixture = allowUnsignedMangaAllV2Fixtures &&
+            active.parsed.manifest.version.name == releaseName
+        // Historical unsigned code9 fixture only. Code10 can NEVER qualify
+        // from an unsigned test package, even with experimental opt-in.
+        val fixture = active.versionCode == 9L &&
+            allowUnsignedMangaAllV2Fixtures &&
             packageSource !is StoredProviderScriptPackageSource &&
             active.installedArtifactSha256 == null &&
             active.repositoryTrustAnchorSha256 == null &&
@@ -772,10 +783,8 @@ class ScriptProviderReadingGateway internal constructor(
     private companion object {
         const val MANGAALL_PROVIDER_ID = "app.tsuzuki.mangaall"
         const val MANGAALL_TRUSTED_REPOSITORY = "app.tsuzuki.providers"
-        const val MANGAALL_V2_EXPERIMENTAL_VERSION = 9L
-
-        // Current pinned P-256 SPKI fingerprint; code9 release is reviewed only
-        // for this trust root. Key rotation requires an explicit new gate.
+        // Same P-256 repository root must attest either signed code9 or future
+        // signed code10. Key rotation and code11+ require an explicit new gate.
         const val MANGAALL_TRUST_ANCHOR_SHA256 =
             "20875348d95649ff0009e329f0d43de1b84ccf8af7966c215d5e0f449e697159"
         const val PAGE_LIST_TYPE = "page_list"
