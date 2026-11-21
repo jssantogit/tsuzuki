@@ -55,7 +55,7 @@ internal object MangaAllInstrumentationVerdict {
                 """NONE|INVALID_CHAPTER_ID|CHAPTER_DETAIL_REQUEST_FAILED|CHAPTER_WORK_MISMATCH|""" +
                 """CHAPTER_LANGUAGE_MISMATCH|EXTERNAL_CHAPTER|AT_HOME_REQUEST_FAILED|""" +
                 """UNTRUSTED_IMAGE_ORIGIN|INVALID_PAGE_METADATA""" +
-                """)"""
+                """)""",
         ),
         Regex(
             """MANGAALL_LIVE_PAGE_GATE\|outcome=PASS""" +
