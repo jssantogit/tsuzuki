@@ -118,7 +118,7 @@ class CommentBridgeTest(unittest.TestCase):
             self.assertEqual(payload["ref"], "main")
             self.assertEqual(payload["inputs"], {
                 "work_id": work, "chapter_id": chapter, "language": "en",
-                "mode": mode, "acknowledge": smoke.READER_ACK,
+                "mode": mode, "chapter_number": "1", "acknowledge": smoke.READER_ACK,
             })
             with tempfile.TemporaryDirectory() as folder:
                 event_file = Path(folder) / "event.json"
@@ -131,6 +131,20 @@ class CommentBridgeTest(unittest.TestCase):
                 finally:
                     if old is not None:
                         os.environ["GITHUB_OUTPUT"] = old
+        # A non-one Reader fixture must state the actual signed-source chapter
+        # number. The old four-line command continues to mean chapter one.
+        chapter_336 = "mangadex:2af914dc-0d63-4ac0-875e-75390ce59390"
+        extended = (
+            "/mangaall-reader reader\nwork :: " + work +
+            "\nchapter :: " + chapter_336 + "\nlanguage :: en\nnumber :: 336"
+        )
+        extended_plan = smoke.parse_comment_event(fixture(extended))
+        self.assertEqual(extended_plan["chapter_number"], "336")
+        self.assertEqual(extended_plan["chapter_id"], chapter_336)
+        self.assertEqual(
+            smoke.workflow_dispatch_payload(extended_plan)["inputs"]["chapter_number"], "336"
+        )
+
         invalid = (
             "/mangaall-reader",
             "/mangaall-reader scale",
@@ -141,6 +155,16 @@ class CommentBridgeTest(unittest.TestCase):
             "\nchapter :: " + chapter + "\nlanguage :: pt-br",
             "/mangaall-reader transport\nwork :: " + work +
             "\nchapter :: " + chapter + "\nlanguage :: en\nextra",
+            "/mangaall-reader transport\nwork :: " + work +
+            "\nchapter :: " + chapter + "\nlanguage :: en\nnumber :: 336",
+            "/mangaall-reader reader\nwork :: " + work +
+            "\nchapter :: " + chapter + "\nlanguage :: en\nnumber :: 0",
+            "/mangaall-reader reader\nwork :: " + work +
+            "\nchapter :: " + chapter + "\nlanguage :: en\nnumber :: -1",
+            "/mangaall-reader reader\nwork :: " + work +
+            "\nchapter :: " + chapter + "\nlanguage :: en\nnumber :: 10000",
+            "/mangaall-reader reader\nwork :: " + work +
+            "\nchapter :: " + chapter + "\nlanguage :: en\nnumber :: 336; curl attacker",
             "/mangaall-reader transport\nwork :: " + work +
             "\nchapter :: " + chapter + " ; curl bad.example\nlanguage :: en",
             "please /mangaall-reader reader\nwork :: " + work +
