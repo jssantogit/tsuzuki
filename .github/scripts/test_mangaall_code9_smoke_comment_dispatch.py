@@ -102,9 +102,9 @@ class CommentBridgeTest(unittest.TestCase):
         chapter = "mangadex:109de166-1a6d-4db2-a591-ebdb41647eea"
         for mode in ("transport", "reader"):
             command = (
-                "/mangaall-reader " + mode + "\\n" +
-                "work :: " + work + "\\n" +
-                "chapter :: " + chapter + "\\n" +
+                "/mangaall-reader " + mode + "\n" +
+                "work :: " + work + "\n" +
+                "chapter :: " + chapter + "\n" +
                 "language :: en"
             )
             plan = smoke.parse_comment_event(fixture(command))
@@ -135,31 +135,31 @@ class CommentBridgeTest(unittest.TestCase):
             "/mangaall-reader",
             "/mangaall-reader scale",
             "/mangaall-reader transport",
-            "/mangaall-reader transport\\nwork :: " + work +
-            "\\nchapter :: mangadot:123\\nlanguage :: en",
-            "/mangaall-reader transport\\nwork :: " + work +
-            "\\nchapter :: " + chapter + "\\nlanguage :: pt-br",
-            "/mangaall-reader transport\\nwork :: " + work +
-            "\\nchapter :: " + chapter + "\\nlanguage :: en\\nextra",
-            "/mangaall-reader transport\\nwork :: " + work +
-            "\\nchapter :: " + chapter + " ; curl bad.example\\nlanguage :: en",
-            "please /mangaall-reader reader\\nwork :: " + work +
-            "\\nchapter :: " + chapter + "\\nlanguage :: en",
+            "/mangaall-reader transport\nwork :: " + work +
+            "\nchapter :: mangadot:123\nlanguage :: en",
+            "/mangaall-reader transport\nwork :: " + work +
+            "\nchapter :: " + chapter + "\nlanguage :: pt-br",
+            "/mangaall-reader transport\nwork :: " + work +
+            "\nchapter :: " + chapter + "\nlanguage :: en\nextra",
+            "/mangaall-reader transport\nwork :: " + work +
+            "\nchapter :: " + chapter + " ; curl bad.example\nlanguage :: en",
+            "please /mangaall-reader reader\nwork :: " + work +
+            "\nchapter :: " + chapter + "\nlanguage :: en",
         )
         for command in invalid:
             with self.subTest(command=command[:65]), self.assertRaises(ValueError):
                 smoke.parse_comment_event(fixture(command))
         attacker = fixture(
-            "/mangaall-reader transport\\nwork :: " + work +
-            "\\nchapter :: " + chapter + "\\nlanguage :: en"
+            "/mangaall-reader transport\nwork :: " + work +
+            "\nchapter :: " + chapter + "\nlanguage :: en"
         )
         attacker["sender"]["login"] = "not-owner"
         with self.assertRaises(ValueError):
             smoke.parse_comment_event(attacker)
         with self.assertRaises(ValueError):
             smoke.parse_comment_event(fixture(
-                "/mangaall-reader transport\\nwork :: " + work +
-                "\\nchapter :: " + chapter + "\\nlanguage :: en"
+                "/mangaall-reader transport\nwork :: " + work +
+                "\nchapter :: " + chapter + "\nlanguage :: en"
             ), run_attempt=2)
 
     def test_ten_to_thirty_stay_bounded_and_ordered(self):
