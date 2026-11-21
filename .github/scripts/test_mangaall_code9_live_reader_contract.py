@@ -11,6 +11,7 @@ SCRIPT = ROOT / ".github/scripts/run_mangaall_live_pages_android.sh"
 PROBE = ROOT / "app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt"
 READER = ROOT / "app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/CanonicalReaderSourceSwitchInstrumentedTest.kt"
 FIXTURE = ROOT / "app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllReaderJourneyFixture.kt"
+VERDICT = ROOT / "app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllInstrumentationVerdict.kt"
 
 SHA = "d9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622"
 PIN = "cf93354bbc3290596f9664a222a8d6da5adeeef0"
@@ -125,6 +126,53 @@ class SignedCode9LiveReaderContract(unittest.TestCase):
                 self.assertNotIn("PRIVATE_HTTP_MESSAGE", output)
                 self.assertNotIn("https://", output)
 
+    def test_android_status_accepts_same_closed_code9_page_error_as_bash(self):
+        kotlin = VERDICT.read_text(encoding="utf-8")
+        self.assertIn('Regex("""MANGAALL_LIVE_PAGE_GATE\\|outcome=INCONCLUSIVE\\|reason=[A-Z_]{3,64}""")',
+                      kotlin, "Legacy code8 generic status must stay valid")
+        comment = "// Accept only closed Host page diagnostic enums"
+        self.assertEqual(kotlin.count(comment), 1)
+        block = kotlin.split(comment, 1)[1]
+        match = re.search(
+            r'Regex\(\n((?:\s+"""[^\n]*?"""(?: \+|,)?\n)+)\s+\),',
+            block,
+        )
+        self.assertIsNotNone(match, "Signed-code9 typed status regex must be structurally present")
+        kotlin_regex = "".join(re.findall(r'"""(.*?)"""', match.group(1)))
+        self.assertIn(r"\|providerError=(", kotlin_regex)
+        self.assertIn(r"\|pageFailureStage=(", kotlin_regex)
+        shell = SCRIPT.read_text(encoding="utf-8")
+        bash_regexp = re.search(r"grep -oE '([^']+)'", shell).group(1)
+
+        samples = (
+            "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=PROVIDER_PAGES_UNAVAILABLE"
+            "|providerError=SOURCE_READ_ERROR|pageFailureStage=AT_HOME_REQUEST_FAILED",
+            "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=PROVIDER_PAGES_UNAVAILABLE"
+            "|providerError=NETWORK_POLICY|pageFailureStage=NONE",
+            "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=PROVIDER_PAGES_UNAVAILABLE"
+            "|providerError=MALFORMED_RESULT|pageFailureStage=CHAPTER_LANGUAGE_MISMATCH",
+        )
+        for sample in samples:
+            with self.subTest(sample=sample):
+                self.assertIsNotNone(re.fullmatch(kotlin_regex, sample))
+                decorated = "INSTRUMENTATION_STATUS: stream=" + sample
+                grep = subprocess.run(
+                    ["grep", "-oE", bash_regexp], input=decorated + "\n",
+                    text=True, capture_output=True, check=False,
+                )
+                self.assertEqual(grep.stdout.strip(), decorated)
+        for invalid in (
+            samples[0].replace("SOURCE_READ_ERROR", "PRIVATE_SCRIPT_EXCEPTION"),
+            samples[0].replace("AT_HOME_REQUEST_FAILED", "SECRET_ENDPOINT"),
+            samples[0] + "|cdn=https://bad.example/file?token=PRIVATE",
+        ):
+            with self.subTest(invalid=invalid[-70:]):
+                self.assertIsNone(re.fullmatch(kotlin_regex, invalid))
+        # A generic code8 outcome is still allowed, but an unknown suffix cannot
+        # turn into an authorized typed code9 diagnostic.
+        self.assertIn("MANGAALL_LIVE_PAGE_GATE\\|outcome=INCONCLUSIVE\\|reason=[A-Z_]{3,64}",
+                      kotlin)
+        
     def test_only_instrumentation_can_export_closed_verdict(self):
         wf = WORKFLOW.read_text(encoding="utf-8")
         script = SCRIPT.read_text(encoding="utf-8")
