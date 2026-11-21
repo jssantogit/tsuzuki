@@ -188,7 +188,13 @@ internal class MangaAllReaderJourneyFixture(
         val origin = origin()
         val liveSignedOrigins = liveTarget?.let {
             val signed = InstrumentationRegistry.getInstrumentation().context.assets
-                .open(if (originalCode9Package) "mangaall/code9-published-package.tsz" else "mangaall/code8-published-package.tsz")
+                .open(
+                    if (originalCode9Package) {
+                        "mangaall/code9-published-package.tsz"
+                    } else {
+                        "mangaall/code8-published-package.tsz"
+                    },
+                )
                 .use { it.readBytes() }
             val parsed = ProviderPackageParser().parse(signed)
             requireNotNull(parsed.manifest.permissions.network).origins
