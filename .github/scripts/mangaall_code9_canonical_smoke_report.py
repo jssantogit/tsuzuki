@@ -130,8 +130,8 @@ def reader_observation(counts):
 # work/chapter IDs or titles leave this function; source facts do not certify
 # the independent catalog's work, an editorial edition, or Reader pages.
 SOURCE_FAMILIES = ("MANGADEX", "MANGADOT", "MANGAFIRE")
-SOURCE_WORK_ID = re.compile(r"(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}\\Z")
-SOURCE_CHAPTER_ID = re.compile(r"(mangadex|mangadot|mangafire):[A-Za-z0-9._:-]{1,200}\\Z")
+SOURCE_WORK_ID = re.compile(r"(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}\Z")
+SOURCE_CHAPTER_ID = re.compile(r"(mangadex|mangadot|mangafire):[A-Za-z0-9._:-]{1,200}\Z")
 VERIFIED_DETAILS = frozenset(("VERIFIED_WITH_ALIASES", "VERIFIED_NO_ALIASES"))
 
 
@@ -173,7 +173,7 @@ def bounded_source_observations(source_case):
                     not isinstance(author, str) or not author for author in authors
                 ):
                     raise ValueError("Invalid signed source author evidence")
-                verified = item.get("detailOutcome") in VERIFIED_DETAILS
+                verified = isinstance(item.get("detailOutcome"), str) and item["detailOutcome"] in VERIFIED_DETAILS
                 coverage = item.get("coverageOutcome") == "OBSERVED"
                 observed_count = item.get("coverageObservedCount")
                 if observed_count is not None and (
@@ -203,7 +203,7 @@ def bounded_source_observations(source_case):
                 chapter_ids[name].add(chapter)
     return {
         name: {
-            "lookupPagesObserved": lookup_pages[name],
+            "lookupPagesWithCandidates": lookup_pages[name],
             "candidatesObserved": len(work_records[name]),
             "withSourceAuthors": sum(fields[0] for fields in work_records[name].values()),
             "withVerifiedSourceDetail": sum(fields[1] for fields in work_records[name].values()),
