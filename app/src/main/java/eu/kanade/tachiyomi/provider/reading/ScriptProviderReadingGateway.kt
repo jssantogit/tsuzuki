@@ -783,6 +783,7 @@ class ScriptProviderReadingGateway internal constructor(
     private companion object {
         const val MANGAALL_PROVIDER_ID = "app.tsuzuki.mangaall"
         const val MANGAALL_TRUSTED_REPOSITORY = "app.tsuzuki.providers"
+
         // Same P-256 repository root must attest either signed code9 or future
         // signed code10. Key rotation and code11+ require an explicit new gate.
         const val MANGAALL_TRUST_ANCHOR_SHA256 =
