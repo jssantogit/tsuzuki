@@ -41,6 +41,22 @@ internal object MangaAllInstrumentationVerdict {
                 """\|chapterId=[A-Za-z0-9._:-]{1,160}\|language=en""",
         ),
         Regex("""MANGAALL_LIVE_PAGE_GATE\|outcome=INCONCLUSIVE\|reason=[A-Z_]{3,64}"""),
+        // Accept only closed Host page diagnostic enums for the signed code9 live gate.
+        // Generic code8 inconclusive records above remain unchanged.
+        Regex(
+            """MANGAALL_LIVE_PAGE_GATE\|outcome=INCONCLUSIVE\|reason=PROVIDER_PAGES_UNAVAILABLE""" +
+            """\|providerError=(""" +
+            """UNAVAILABLE|HOST_ERROR|PACKAGE_INVALID|MALFORMED_REQUEST|SOURCE_TOO_LARGE|""" +
+            """SOURCE_READ_ERROR|INVOCATION_CONFLICT|PERMISSION_DENIED|""" +
+            """HOST_API_UNSUPPORTED|SCRIPT_ERROR|TIMEOUT|RUNTIME_DIED|NETWORK_POLICY|""" +
+            """CHAPTER_IDENTITY_UNVERIFIED|NETWORK_ERROR|BROWSER_ERROR|RESOURCE_LIMIT|""" +
+            """MALFORMED_RESULT|AUTH_REQUIRED|ACQUISITION_FAILED""" +
+            """)\|pageFailureStage=(""" +
+            """NONE|INVALID_CHAPTER_ID|CHAPTER_DETAIL_REQUEST_FAILED|CHAPTER_WORK_MISMATCH|""" +
+            """CHAPTER_LANGUAGE_MISMATCH|EXTERNAL_CHAPTER|AT_HOME_REQUEST_FAILED|""" +
+            """UNTRUSTED_IMAGE_ORIGIN|INVALID_PAGE_METADATA""" +
+            """)"""
+        ),
         Regex(
             """MANGAALL_LIVE_PAGE_GATE\|outcome=PASS""" +
                 """\|provenance=DIRECT_LIVE_ANDROID\|pagesDecoded=[12]""" +
