@@ -106,7 +106,9 @@ internal class MangaAllReaderJourneyFixture(
     }
     private val providerId = ProviderId("app.tsuzuki.mangaall")
     private val workId = liveTarget?.workId ?: "mangafire:zk12"
-    private val sourceChapterId = liveTarget?.chapterId ?: if (originalCode7Package || originalCode8Package || originalCode9Package) {
+    private val sourceChapterId = liveTarget?.chapterId ?: if (
+        originalCode7Package || originalCode8Package || originalCode9Package
+    ) {
         "mangafire:punpun-fixture-ch1"
     } else {
         "mangafire:chapter-one"
@@ -326,7 +328,8 @@ internal class MangaAllReaderJourneyFixture(
                     baseHttpClient = when {
                         liveTarget != null -> OkHttpClient.Builder()
                             .callTimeout(25, TimeUnit.SECONDS).build()
-                        originalCode7Package || originalCode8Package || originalCode9Package -> packagedCode7HttpClient()
+                        originalCode7Package || originalCode8Package ||
+                            originalCode9Package -> packagedCode7HttpClient()
                         else -> OkHttpClient()
                     },
                 ),
