@@ -93,15 +93,22 @@ internal class MangaAllReaderJourneyFixture(
     private val chapter: CanonicalChapter,
     private val originalCode7Package: Boolean = false,
     private val originalCode8Package: Boolean = false,
+    private val originalCode9Package: Boolean = false,
     private val liveTarget: MangaAllLiveReaderTarget? = null,
 ) : AutoCloseable {
     init {
-        require(!(originalCode7Package && originalCode8Package)) { "Select exactly one original MangaAll package" }
-        require(liveTarget == null || originalCode8Package) { "Live Reader requires original code8" }
+        require(listOf(originalCode7Package, originalCode8Package, originalCode9Package).count { it } <= 1) {
+            "Select at most one original MangaAll package"
+        }
+        require(liveTarget == null || originalCode8Package || originalCode9Package) {
+            "Live Reader requires an original published package"
+        }
     }
     private val providerId = ProviderId("app.tsuzuki.mangaall")
     private val workId = liveTarget?.workId ?: "mangafire:zk12"
-    private val sourceChapterId = liveTarget?.chapterId ?: if (originalCode7Package || originalCode8Package) {
+    private val sourceChapterId = liveTarget?.chapterId ?: if (
+        originalCode7Package || originalCode8Package || originalCode9Package
+    ) {
         "mangafire:punpun-fixture-ch1"
     } else {
         "mangafire:chapter-one"
@@ -183,7 +190,14 @@ internal class MangaAllReaderJourneyFixture(
         val origin = origin()
         val liveSignedOrigins = liveTarget?.let {
             val signed = InstrumentationRegistry.getInstrumentation().context.assets
-                .open("mangaall/code8-published-package.tsz").use { it.readBytes() }
+                .open(
+                    if (originalCode9Package) {
+                        "mangaall/code9-published-package.tsz"
+                    } else {
+                        "mangaall/code8-published-package.tsz"
+                    },
+                )
+                .use { it.readBytes() }
             val parsed = ProviderPackageParser().parse(signed)
             requireNotNull(parsed.manifest.permissions.network).origins
         }
@@ -192,8 +206,16 @@ internal class MangaAllReaderJourneyFixture(
                 id = providerId,
                 name = "MangaAll (isolated test)",
                 version = ProviderVersion(
-                    if (originalCode8Package) "0.5.3" else "0.5.2",
-                    if (originalCode8Package) 8 else 7,
+                    when {
+                        originalCode9Package -> "0.5.4"
+                        originalCode8Package -> "0.5.3"
+                        else -> "0.5.2"
+                    },
+                    when {
+                        originalCode9Package -> 9
+                        originalCode8Package -> 8
+                        else -> 7
+                    },
                 ),
                 origin = ProviderOrigin.Repository("mangaall-android-fixture"),
                 runtime = ProviderRuntimeKind.SCRIPT,
@@ -205,7 +227,7 @@ internal class MangaAllReaderJourneyFixture(
                 permissions = ProviderPermissionSet(
                     network = if (liveSignedOrigins != null) {
                         ProviderNetworkPermission(liveSignedOrigins, localNetwork = false)
-                    } else if (originalCode7Package || originalCode8Package) {
+                    } else if (originalCode7Package || originalCode8Package || originalCode9Package) {
                         ProviderNetworkPermission(
                             setOf(
                                 "https://api.mangadex.org",
@@ -248,6 +270,8 @@ internal class MangaAllReaderJourneyFixture(
             };
         """.trimIndent()
         val bytes = when {
+            originalCode9Package -> InstrumentationRegistry.getInstrumentation().context.assets
+                .open("mangaall/code9-published-package.tsz").use { it.readBytes() }
             originalCode8Package -> InstrumentationRegistry.getInstrumentation().context.assets
                 .open("mangaall/code8-published-package.tsz").use { it.readBytes() }
             originalCode7Package -> InstrumentationRegistry.getInstrumentation().context.assets
@@ -255,11 +279,17 @@ internal class MangaAllReaderJourneyFixture(
             else -> syntheticPackage(origin, script)
         }
         val parsed = ProviderPackageParser().parse(bytes)
-        if (originalCode8Package) {
+        if (originalCode8Package || originalCode9Package) {
             assertEquals("app.tsuzuki.mangaall", parsed.manifest.id)
-            assertEquals("0.5.3", parsed.manifest.version.name)
-            assertEquals(8L, parsed.manifest.version.code)
+            assertEquals(if (originalCode9Package) "0.5.4" else "0.5.3", parsed.manifest.version.name)
+            assertEquals(if (originalCode9Package) 9L else 8L, parsed.manifest.version.code)
             assertTrue(parsed.entries.containsKey("modules/router.js"))
+            if (originalCode9Package) {
+                assertEquals(
+                    "d9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622",
+                    tachiyomi.core.provider.supplychain.sha256Hex(bytes),
+                )
+            }
         }
         if (originalCode7Package) {
             assertEquals("app.tsuzuki.mangaall", parsed.manifest.id)
@@ -298,7 +328,8 @@ internal class MangaAllReaderJourneyFixture(
                     baseHttpClient = when {
                         liveTarget != null -> OkHttpClient.Builder()
                             .callTimeout(25, TimeUnit.SECONDS).build()
-                        originalCode7Package || originalCode8Package -> packagedCode7HttpClient()
+                        originalCode7Package || originalCode8Package ||
+                            originalCode9Package -> packagedCode7HttpClient()
                         else -> OkHttpClient()
                     },
                 ),
@@ -392,7 +423,7 @@ internal class MangaAllReaderJourneyFixture(
         assertEquals(providerId, selectedOption.providerId)
         assertEquals(workId, selectedOption.externalWorkId)
         assertEquals(sourceChapterId, selectedOption.providerChapterId)
-        if (originalCode7Package || originalCode8Package) {
+        if (originalCode7Package || originalCode8Package || originalCode9Package) {
             originalPageLoaderFactory = pageClientField.get(reader.viewModel)
             val images = if (liveTarget != null) {
                 OkHttpClient.Builder().callTimeout(25, TimeUnit.SECONDS).build()

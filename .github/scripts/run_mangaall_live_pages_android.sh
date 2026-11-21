@@ -6,12 +6,22 @@ umask 077
 readonly app='app.tsuzuki.dev'
 readonly runner='app.tsuzuki.dev.test/androidx.test.runner.AndroidJUnitRunner'
 readonly mode="${MANGAALL_GATE_MODE:-transport}"
+# The legacy code8 gate stays the default. Signed code9 is a separate,
+# manually authorized Android workflow and must be selected explicitly.
+readonly signed_code="${MANGAALL_SIGNED_CODE:-8}"
+case "$signed_code" in
+  8|9) ;;
+  *)
+    echo 'LIVE_PAGE_HARD_STOP|reason=UNRECOGNIZED_SIGNED_CODE' >&2
+    exit 2
+    ;;
+esac
 case "$mode" in
   transport)
-    test_case='eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllSignedCode8LivePages_downloadAndDecodeAtMostTwo'
+    test_case="eu.kanade.tachiyomi.provider.reading.ScriptProviderReadingGatewayIsolationTest#mangaAllSignedCode${signed_code}LivePages_downloadAndDecodeAtMostTwo"
     ;;
   reader)
-    test_case='eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#mangaAllPublishedCode8LiveReaderDisplaysCdnPixels'
+    test_case="eu.kanade.tachiyomi.data.tsuzuki.instrumentation.CanonicalReaderSourceSwitchInstrumentedTest#mangaAllPublishedCode${signed_code}LiveReaderDisplaysCdnPixels"
     ;;
   *)
     echo 'LIVE_PAGE_HARD_STOP|reason=INVALID_GATE_MODE' >&2
