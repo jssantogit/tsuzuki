@@ -2302,6 +2302,18 @@ class ScriptProviderReadingGatewayIsolationTest {
      */
     @Test(timeout = 300_000L)
     fun mangaAllSignedCode8LivePages_downloadAndDecodeAtMostTwo() = runBlocking {
+        runPublishedMangaAllLivePages(8L)
+    }
+
+    /** Real original P-256 signed code9, independent of the legacy code8 Android test. */
+    @Test(timeout = 300_000L)
+    fun mangaAllSignedCode9LivePages_downloadAndDecodeAtMostTwo() = runBlocking {
+        runPublishedMangaAllLivePages(9L)
+    }
+
+    private suspend fun runPublishedMangaAllLivePages(signedCode: Long) {
+        require(signedCode == 8L || signedCode == 9L)
+
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
         assertEquals("true", args.getString("mangaAllLivePageOptIn"))
@@ -2312,11 +2324,18 @@ class ScriptProviderReadingGatewayIsolationTest {
         require(Regex("(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}").matches(workId))
         require(Regex("[A-Za-z0-9._:-]{1,160}").matches(chapterId))
         require(Regex("[a-z]{2}(-[a-z]{2})?").matches(language))
-        val archive = instrumentation.context.assets.open("mangaall/code8-published-package.tsz")
-            .use { it.readBytes() }
+        val archive = instrumentation.context.assets
+            .open("mangaall/code${signedCode}-published-package.tsz").use { it.readBytes() }
         val parsed = ProviderPackageParser().parse(archive)
         assertEquals("app.tsuzuki.mangaall", parsed.manifest.id)
-        assertEquals(8L, parsed.manifest.version.code)
+        assertEquals(signedCode, parsed.manifest.version.code)
+        assertEquals(if (signedCode == 9L) "0.5.4" else "0.5.3", parsed.manifest.version.name)
+        if (signedCode == 9L) {
+            assertEquals(
+                "d9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622",
+                tachiyomi.core.provider.supplychain.sha256Hex(archive),
+            )
+        }
         val providerId = ProviderId(parsed.manifest.id)
         val permission = requireNotNull(parsed.manifest.permissions.network)
         val networkClient = OkHttpClient.Builder()
@@ -2354,7 +2373,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                 MangaAllInstrumentationVerdict.publish(
                     "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_ATTESTATION_UNAVAILABLE",
                 )
-                return@runBlocking
+                return
             }
             chapterAttestation.value.items.asSequence()
                 .filter {
@@ -2377,13 +2396,13 @@ class ScriptProviderReadingGatewayIsolationTest {
             MangaAllInstrumentationVerdict.publish(
                 "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_CURSOR_LIMIT",
             )
-            return@runBlocking
+            return
         }
         if (matchingChapters.size != 1) {
             MangaAllInstrumentationVerdict.publish(
                 "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_NOT_ATTESTED_IN_BOUND",
             )
-            return@runBlocking
+            return
         }
         val response = withTimeout(60_000L) {
             actualGateway.pages(
@@ -2398,14 +2417,14 @@ class ScriptProviderReadingGatewayIsolationTest {
             MangaAllInstrumentationVerdict.publish(
                 "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=PROVIDER_PAGES_UNAVAILABLE",
             )
-            return@runBlocking
+            return
         }
         val delivery = response.value as? ProviderReadingDelivery.PageList
         if (delivery == null || delivery.pages.isEmpty()) {
             MangaAllInstrumentationVerdict.publish(
                 "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=NO_HTTP_PAGES",
             )
-            return@runBlocking
+            return
         }
         val selected = delivery.pages.take(2).map { page ->
             PreparedHttpPage(
@@ -2442,7 +2461,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                     MangaAllInstrumentationVerdict.publish(
                         "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CDN_FETCH_UNAVAILABLE",
                     )
-                    return@runBlocking
+                    return
                 }
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 requireNotNull(page.stream).invoke().use {
@@ -2452,7 +2471,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                     MangaAllInstrumentationVerdict.publish(
                         "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=INVALID_IMAGE_DIMENSIONS",
                     )
-                    return@runBlocking
+                    return
                 }
                 val sample = generateSequence(1) { it * 2 }
                     .first { maxOf(bounds.outWidth / it, bounds.outHeight / it) <= 4096 }
@@ -2467,7 +2486,7 @@ class ScriptProviderReadingGatewayIsolationTest {
                     MangaAllInstrumentationVerdict.publish(
                         "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=IMAGE_DECODE_FAILED",
                     )
-                    return@runBlocking
+                    return
                 }
                 bitmap.recycle()
                 decoded++
