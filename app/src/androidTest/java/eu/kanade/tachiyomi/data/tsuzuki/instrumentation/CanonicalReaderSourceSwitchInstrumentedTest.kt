@@ -170,7 +170,13 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
      * catalog identity, published installation or a physical device.
      */
     @Test(timeout = 300_000L)
-    fun mangaAllPublishedCode8LiveReaderDisplaysCdnPixels() {
+    fun mangaAllPublishedCode8LiveReaderDisplaysCdnPixels() = runMangaAllPublishedLiveReader(code9 = false)
+
+    /** Manual-only original P-256 code9: source chapter attestation and actual CDN pixels in ReaderActivity. */
+    @Test(timeout = 300_000L)
+    fun mangaAllPublishedCode9LiveReaderDisplaysCdnPixels() = runMangaAllPublishedLiveReader(code9 = true)
+
+    private fun runMangaAllPublishedLiveReader(code9: Boolean) {
         requireOptIn()
         val args = InstrumentationRegistry.getArguments()
         assertEquals("true", args.getString("mangaAllLiveReaderOptIn"))
@@ -184,7 +190,9 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             val reader = awaitActivity(ReaderActivity::class.java)
             awaitReaderPages(reader, fixture.sourceA.name, expectedCount = 10)
             val initialChapter = requireNotNull(reader.viewModel.state.value.currentChapter)
-            val mangaAll = fixture.mangaAllJourney(reader, liveTarget = target)
+            val mangaAll = fixture.mangaAllJourney(
+                reader, originalCode9Package = code9, liveTarget = target,
+            )
             try {
                 val preflight = try {
                     runBlocking { mangaAll.attach() }
@@ -2268,6 +2276,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             reader: ReaderActivity,
             originalCode7Package: Boolean = false,
             originalCode8Package: Boolean = false,
+            originalCode9Package: Boolean = false,
             liveTarget: MangaAllLiveReaderTarget? = null,
         ) = MangaAllReaderJourneyFixture(
             context = InstrumentationRegistry.getInstrumentation().targetContext,
@@ -2275,7 +2284,8 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             database = database,
             chapter = chapter,
             originalCode7Package = originalCode7Package,
-            originalCode8Package = originalCode8Package || liveTarget != null,
+            originalCode8Package = originalCode8Package || (liveTarget != null && !originalCode9Package),
+            originalCode9Package = originalCode9Package,
             liveTarget = liveTarget,
         )
 
