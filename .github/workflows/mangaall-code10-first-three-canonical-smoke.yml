@@ -1,7 +1,8 @@
 name: MangaAll signed code10 — sequential canonical chapter + Reader smoke
 
-# Intentionally MANUAL ONLY. No commit, PR, cron or fixture can initiate
-# real MangaDex/MangaDot/MangaFire or independent catalog calls.
+# Explicitly authorized first 3-work code10 acceptance. Creation/update
+# of this exact trusted workflow triggers a bounded one-shot integration smoke.
+# No PR or general source commit triggers it; future runs can be manual.
 # Source is official P-256 seq36/code10, not older signed code8 or unsigned V2.
 # Stage #1 accepts EXACTLY 3 works in the original input order.
 # Only after that is accepted, the 'scale' mode accepts 10-30 works.
@@ -80,7 +81,7 @@ jobs:
           assert items[0]['sha256']=='bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f'
           digest=items[0]['sha256']
           assert hashlib.sha256(Path('/tmp/mangaall-host-source.tsz').read_bytes()).hexdigest()==digest
-          assert hashlib.sha256(Path('dist/providers/app.tsuzuki.mangaall-9.tsz').read_bytes()).hexdigest()==digest
+          assert hashlib.sha256(Path('dist/providers/app.tsuzuki.mangaall-10.tsz').read_bytes()).hexdigest()==digest
           print('MANGAALL_CODE10_CANONICAL_SMOKE|source=P256_SIGNED|code=10|sequence=36|archive=REVIEWED_EXACT|authority=NO_EDITORIAL_BINDING')
           PY
       - name: Check Provider input agrees with ordered Host vector (offline)
@@ -123,7 +124,7 @@ jobs:
         env:
           MANGAALL_REAL_REPLAY_REQUIRED: '1'
           MANGAALL_REAL_ENVELOPES_FILE: ${{ github.workspace }}/mangaall-signed-source/mangaall-real-envelopes-0.json
-          MANGAALL_SIGNED_PACKAGE_FILE: ${{ github.workspace }}/mangaall-signed-source/dist/providers/app.tsuzuki.mangaall-9.tsz
+          MANGAALL_SIGNED_PACKAGE_FILE: ${{ github.workspace }}/mangaall-signed-source/dist/providers/app.tsuzuki.mangaall-10.tsz
         run: |
           ./gradlew :app:testDebugUnitTest \
             --tests eu.kanade.tachiyomi.provider.reading.MangaAllRealSourceHostDecoderTest
@@ -232,10 +233,10 @@ jobs:
           test "${#catalogs[@]}" = 1
           test -s "${sources[0]}"
           test -s "${catalogs[0]}"
-          test -s signed-mangaall/dist/providers/app.tsuzuki.mangaall-9.tsz
+          test -s signed-mangaall/dist/providers/app.tsuzuki.mangaall-10.tsz
           printf 'MANGAALL_REAL_ENVELOPES_FILE=%s/%s\n' "$PWD" "${sources[0]}" >> "$GITHUB_ENV"
           printf 'MANGAALL_REAL_CATALOG_FILE=%s/%s\n' "$PWD" "${catalogs[0]}" >> "$GITHUB_ENV"
-          printf 'MANGAALL_SIGNED_PACKAGE_FILE=%s/signed-mangaall/dist/providers/app.tsuzuki.mangaall-9.tsz\n' \
+          printf 'MANGAALL_SIGNED_PACKAGE_FILE=%s/signed-mangaall/dist/providers/app.tsuzuki.mangaall-10.tsz\n' \
             "$PWD" >> "$GITHUB_ENV"
       - name: Real Kotlin collector, RefreshChapterEvidence, ReconcileChapterEvidence and SQLite/JDBC (never auto-bind partial results)
         env:
