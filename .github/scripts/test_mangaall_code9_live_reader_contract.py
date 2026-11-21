@@ -88,7 +88,7 @@ class SignedCode9LiveReaderContract(unittest.TestCase):
         self.assertNotIn("path: .github/results/mangaall-live-pages-android/instrumentation-private.txt", wf)
         self.assertIn('rm -f "$raw"', script)
         self.assertIn("adb shell pm clear", script)
-        self.assertIn('outcome=INCONCLUSIVE', script)
+        self.assertIn("outcome=(INCONCLUSIVE", script)
 
 
 if __name__ == "__main__":
