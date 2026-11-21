@@ -49,9 +49,11 @@ def incomplete_vector():
     collector = [{"case": cid, "gaps": "0"} for cid in IDS]
     sqlite = [{
         "case": cid, "replayGaps": "0", "confirmed": "20",
-        "provisionalChapters": "0", "sqliteChapters": "20",
+        "provisionalChapters": "0", "conflicted": "0", "sqliteChapters": "20",
         "sqliteEvidence": "20", "sqliteMapped": "20", "sqliteBindings": "0",
+        "uiRepositoryChapters": "20", "lookupDecisions": "NONE",
         "sourceAssociations": "0", "readerSampled": "0", "readerUnique": "0",
+        "readerAmbiguous": "0", "readerMissing": "0",
     } for cid in IDS]
     return source, matrix, catalog, collector, sqlite
 
@@ -74,13 +76,14 @@ class CanonicalCode9ReportSafetyTest(unittest.TestCase):
         for case in vector[4]:
             case["confirmed"] = "0"
             case["sqliteChapters"] = "0"
+            case["uiRepositoryChapters"] = "0"
             case["sqliteEvidence"] = "0"
             case["sqliteMapped"] = "0"
         for pos in (1, 2):
             vector[1]["cases"][pos]["httpBySource"]["MANGAFIRE"]["blocked403"] = 0
         bleach = vector[4][2]
         bleach.update({
-            "provisionalChapters": "6", "sqliteChapters": "6",
+            "provisionalChapters": "6", "sqliteChapters": "6", "uiRepositoryChapters": "6",
             "sqliteEvidence": "6", "sqliteMapped": "6", "sqliteBindings": "0",
             "sourceAssociations": "1", "readerSampled": "6", "readerUnique": "6",
         })
@@ -94,6 +97,52 @@ class CanonicalCode9ReportSafetyTest(unittest.TestCase):
                          [["MANGAFIRE"], [], []])
         self.assertEqual(result["readerPixels"], "NOT_TESTED_REAL_CDN")
         self.assertFalse(result["canonicalGrantFromV2"])
+        self.assertEqual(result["results"][2]["editorialObservation"], "PROVISIONAL_ASSOCIATION_ONLY")
+        self.assertEqual(result["results"][2]["readerObservation"], "SAMPLED_OPTIONS_NOT_CDN_PIXELS")
+
+    def test_ambiguity_and_reader_conflict_visible_even_with_upstream_403(self):
+        from copy import deepcopy
+        vector = deepcopy(incomplete_vector())
+        for case in vector[4]:
+            case.update({
+                "confirmed": "0", "sqliteChapters": "0", "uiRepositoryChapters": "0",
+                "sqliteEvidence": "0", "sqliteMapped": "0",
+            })
+        vector[4][0]["lookupDecisions"] = "MULTIPLE_PRIMARY_IDENTITIES:2,AMBIGUOUS_EDITION:1"
+        vector[4][1]["lookupDecisions"] = "NO_MATCH:2"
+        vector[4][2].update({
+            "provisionalChapters": "6", "sqliteChapters": "6",
+            "uiRepositoryChapters": "6", "sqliteEvidence": "6",
+            "sqliteMapped": "6", "sourceAssociations": "1",
+            "readerSampled": "6", "readerUnique": "5",
+            "readerAmbiguous": "1",
+        })
+        result = report.merge(WORKS, "isolated", *vector)
+        self.assertTrue(all(row["outcome"] == "INCONCLUSIVE_SOURCE" for row in result["results"]))
+        self.assertEqual(
+            [row["editorialObservation"] for row in result["results"]],
+            ["AMBIGUOUS_SOURCE_EDITION", "NO_CHAPTER_BINDING_OBSERVED", "PROVISIONAL_ASSOCIATION_ONLY"],
+        )
+        self.assertEqual(result["results"][0]["lookupDecisions"]["MULTIPLE_PRIMARY_IDENTITIES"], 2)
+        self.assertEqual(result["results"][2]["readerObservation"], "AMBIGUOUS_OPTIONS_IN_SAMPLE")
+        self.assertEqual(result["results"][2]["readerOptionsAmbiguous"], 1)
+        self.assertEqual(result["readerPixels"], "NOT_TESTED_REAL_CDN")
+
+    def test_closed_editorial_decisions_and_chapter_accounting_fail_closed(self):
+        from copy import deepcopy
+        for label, tweak in (
+            ("unknown", lambda v: v[4][0].update(lookupDecisions="USER_CONFIRMED:1")),
+            ("duplicate", lambda v: v[4][0].update(lookupDecisions="NO_MATCH:1,NO_MATCH:2")),
+            ("injected", lambda v: v[4][0].update(lookupDecisions="NO_MATCH:1;URL")),
+            ("missing", lambda v: v[4][0].pop("lookupDecisions")),
+            ("sqlite", lambda v: v[4][0].update(conflicted="1")),
+            ("ui", lambda v: v[4][0].update(uiRepositoryChapters="19")),
+            ("reader", lambda v: v[4][0].update(readerMissing="1")),
+        ):
+            vector = deepcopy(incomplete_vector())
+            tweak(vector)
+            with self.assertRaises(ValueError, msg=label):
+                report.merge(WORKS, "isolated", *vector)
 
     def test_missing_or_impossible_closed_chapter_counts_are_rejected(self):
         from copy import deepcopy

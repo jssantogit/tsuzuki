@@ -80,6 +80,52 @@ def bounded_count(value, label):
     raise ValueError("Invalid closed counter: " + label)
 
 
+# Independent diagnostic axis. A technically incomplete upstream response must not
+# hide why chapter evidence remained provisional, nor become an editorial grant.
+LOOKUP_DECISIONS = frozenset((
+    "SELECTED", "AUTHOR_CORROBORATED", "UNIQUE_READABLE_SOURCE",
+    "NO_MATCH", "MULTIPLE_PRIMARY_IDENTITIES", "AMBIGUOUS_EDITION",
+))
+
+
+def parse_lookup_decisions(raw):
+    if raw == "NONE":
+        return {}
+    if not isinstance(raw, str) or not raw or len(raw) > 300:
+        raise ValueError("Missing or oversized closed editorial decisions")
+    decisions = {}
+    for entry in raw.split(","):
+        code, sep, count = entry.partition(":")
+        if sep != ":" or code not in LOOKUP_DECISIONS or code in decisions:
+            raise ValueError("Unknown or duplicated editorial decision")
+        decisions[code] = bounded_count(count, "lookup decision")
+        if decisions[code] == 0:
+            raise ValueError("Zero editorial decision count")
+    return decisions
+
+
+def editorial_observation(counts, decisions):
+    # These describe observed Host/SQLite evidence, not permission to bind a
+    # source edition or a claim that remote chapter inventory is complete.
+    if counts["confirmed"] > 0:
+        return "CONFIRMED_ROWS_OBSERVED_NOT_READER_PROOF"
+    if counts["sqliteBindings"] > 0:
+        return "BOUND_WITHOUT_CONFIRMED_ROWS"
+    if counts["sourceAssociations"] or counts["provisionalChapters"]:
+        return "PROVISIONAL_ASSOCIATION_ONLY"
+    if any(decisions.get(code, 0) for code in ("MULTIPLE_PRIMARY_IDENTITIES", "AMBIGUOUS_EDITION")):
+        return "AMBIGUOUS_SOURCE_EDITION"
+    return "NO_CHAPTER_BINDING_OBSERVED"
+
+
+def reader_observation(counts):
+    if counts["readerAmbiguous"] > 0:
+        return "AMBIGUOUS_OPTIONS_IN_SAMPLE"
+    if counts["readerUnique"] > 0:
+        return "SAMPLED_OPTIONS_NOT_CDN_PIXELS"
+    return "NO_UNIQUE_OPTIONS_IN_SAMPLE"
+
+
 def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
     vector = parse_plan(works, tier, ACK)
     if (source.get("schemaVersion") != 1 or
@@ -135,11 +181,12 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
         # A partial, real source may persist provisional chapters and sampled
         # Reader options without conferring canonical or CDN pixel authority.
         counts = {key: bounded_count(sql.get(key), key) for key in (
-            "confirmed", "provisionalChapters", "sqliteChapters",
+            "confirmed", "provisionalChapters", "conflicted", "sqliteChapters",
             "sqliteEvidence", "sqliteMapped", "sqliteBindings",
-            "sourceAssociations", "readerSampled", "readerUnique",
-            "replayGaps",
+            "uiRepositoryChapters", "sourceAssociations", "readerSampled",
+            "readerUnique", "readerAmbiguous", "readerMissing", "replayGaps",
         )}
+        decisions = parse_lookup_decisions(sql.get("lookupDecisions"))
         collector_gaps = bounded_count(col.get("gaps"), "collector gaps")
         blocked = sorted(
             key for key in health
@@ -149,9 +196,13 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
             if not isinstance(health[key], dict):
                 raise ValueError("Malformed source health")
             bounded_count(health[key].get("transportFailed"), key + " transportFailed")
-        if counts["readerUnique"] > counts["readerSampled"] or (
-                counts["sqliteMapped"] > counts["sqliteEvidence"]):
-            raise ValueError("Inconsistent Host observation counters")
+        if (counts["sqliteMapped"] > counts["sqliteEvidence"] or
+                counts["confirmed"] + counts["provisionalChapters"] + counts["conflicted"] !=
+                counts["sqliteChapters"] or
+                counts["uiRepositoryChapters"] != counts["sqliteChapters"] or
+                counts["readerUnique"] + counts["readerAmbiguous"] + counts["readerMissing"] !=
+                counts["readerSampled"]):
+            raise ValueError("Inconsistent canonical SQLite/Reader observation counters")
         if collector_gaps or counts["replayGaps"]:
             outcome = "REPLAY_GAP"
         elif source_incomplete:
@@ -175,9 +226,16 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
             "sqliteEvidence": counts["sqliteEvidence"],
             "sqliteMapped": counts["sqliteMapped"],
             "sqliteBindings": counts["sqliteBindings"],
+            "sqliteConflicted": counts["conflicted"],
+            "uiRepositoryChapters": counts["uiRepositoryChapters"],
             "sourceAssociations": counts["sourceAssociations"],
+            "lookupDecisions": decisions,
+            "editorialObservation": editorial_observation(counts, decisions),
             "readerOptionsSampled": counts["readerSampled"],
             "readerOptionsUnique": counts["readerUnique"],
+            "readerOptionsAmbiguous": counts["readerAmbiguous"],
+            "readerOptionsMissing": counts["readerMissing"],
+            "readerObservation": reader_observation(counts),
             "readerPixels": "NOT_TESTED_REAL_CDN",
         })
     return {
