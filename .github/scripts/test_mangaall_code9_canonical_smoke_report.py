@@ -47,7 +47,12 @@ def incomplete_vector():
         "cases": [{"caseId": cid, "status": "RESOLVED"} for cid in IDS],
     }
     collector = [{"case": cid, "gaps": "0"} for cid in IDS]
-    sqlite = [{"case": cid, "replayGaps": "0", "confirmed": "20"} for cid in IDS]
+    sqlite = [{
+        "case": cid, "replayGaps": "0", "confirmed": "20",
+        "provisionalChapters": "0", "sqliteChapters": "20",
+        "sqliteEvidence": "20", "sqliteMapped": "20", "sqliteBindings": "0",
+        "sourceAssociations": "0", "readerSampled": "0", "readerUnique": "0",
+    } for cid in IDS]
     return source, matrix, catalog, collector, sqlite
 
 
@@ -62,6 +67,47 @@ class CanonicalCode9ReportSafetyTest(unittest.TestCase):
         self.assertTrue(all(r["sourceIncomplete"] for r in status["results"]))
         self.assertFalse(status["canonicalGrantFromV2"])
         self.assertEqual(status["readerPixels"], "NOT_TESTED_REAL_CDN")
+
+    def test_real_partial_chapters_are_visible_but_never_claimed_canonical(self):
+        from copy import deepcopy
+        vector = deepcopy(incomplete_vector())
+        for case in vector[4]:
+            case["confirmed"] = "0"
+            case["sqliteChapters"] = "0"
+            case["sqliteEvidence"] = "0"
+            case["sqliteMapped"] = "0"
+        for pos in (1, 2):
+            vector[1]["cases"][pos]["httpBySource"]["MANGAFIRE"]["blocked403"] = 0
+        bleach = vector[4][2]
+        bleach.update({
+            "provisionalChapters": "6", "sqliteChapters": "6",
+            "sqliteEvidence": "6", "sqliteMapped": "6", "sqliteBindings": "0",
+            "sourceAssociations": "1", "readerSampled": "6", "readerUnique": "6",
+        })
+        result = report.merge(WORKS, "isolated", *vector)
+        self.assertEqual([row["outcome"] for row in result["results"]],
+                         ["INCONCLUSIVE_SOURCE"] * 3)
+        self.assertEqual([row["sqliteConfirmed"] for row in result["results"]], [0] * 3)
+        self.assertEqual([row["sqliteProvisional"] for row in result["results"]], [0, 0, 6])
+        self.assertEqual([row["readerOptionsUnique"] for row in result["results"]], [0, 0, 6])
+        self.assertEqual([row["sourceHttp403"] for row in result["results"]],
+                         [["MANGAFIRE"], [], []])
+        self.assertEqual(result["readerPixels"], "NOT_TESTED_REAL_CDN")
+        self.assertFalse(result["canonicalGrantFromV2"])
+
+    def test_missing_or_impossible_closed_chapter_counts_are_rejected(self):
+        from copy import deepcopy
+        for field, value in (
+            ("provisionalChapters", None), ("readerUnique", "-1"),
+            ("readerUnique", "10000000000"), ("sqliteMapped", "22"),
+        ):
+            vector = deepcopy(incomplete_vector())
+            if value is None:
+                del vector[4][0][field]
+            else:
+                vector[4][0][field] = value
+            with self.assertRaises(ValueError, msg=field):
+                report.merge(WORKS, "isolated", *vector)
 
     def test_internal_replay_gap_must_fail_even_if_source_already_inconclusive(self):
         from copy import deepcopy
