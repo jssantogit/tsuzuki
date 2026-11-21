@@ -173,6 +173,23 @@ class SignedCode9LiveReaderContract(unittest.TestCase):
         self.assertIn("MANGAALL_LIVE_PAGE_GATE\\|outcome=INCONCLUSIVE\\|reason=[A-Z_]{3,64}",
                       kotlin)
         
+    def test_reader_fixture_uses_attested_chapter_number_not_chapter_one_alias(self):
+        reader = READER.read_text(encoding="utf-8")
+        fixture = FIXTURE.read_text(encoding="utf-8")
+        wf = WORKFLOW.read_text(encoding="utf-8")
+        script = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("MANGAALL_CHAPTER_NUMBER: ${{ inputs.chapter_number }}", wf)
+        self.assertIn("assert re.fullmatch(r'[1-9][0-9]{0,3}', number)", wf)
+        self.assertIn('providerChapterNumber "${MANGAALL_CHAPTER_NUMBER:-1}"', script)
+        self.assertIn('args.getString("providerChapterNumber")', reader)
+        self.assertIn('withFixture(liveChapterNumber = observedChapterNumber)', reader)
+        self.assertIn('displayNumber = liveChapterNumber.toString()', reader)
+        self.assertIn('baseNumber = liveChapterNumber,', reader)
+        self.assertIn('"/reader/$token/chapter-$fixtureChapterNumber"', reader)
+        self.assertIn('selected.rawNumber != expectedNumber', fixture)
+        self.assertIn('selected.volume != chapter.volume', fixture)
+        self.assertNotIn('selected.rawNumber != 1.0', fixture)
+
     def test_only_instrumentation_can_export_closed_verdict(self):
         wf = WORKFLOW.read_text(encoding="utf-8")
         script = SCRIPT.read_text(encoding="utf-8")
