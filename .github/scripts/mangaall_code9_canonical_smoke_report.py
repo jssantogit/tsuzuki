@@ -126,6 +126,94 @@ def reader_observation(counts):
     return "NO_UNIQUE_OPTIONS_IN_SAMPLE"
 
 
+# Snapshot-only observations from the original signed V1 capture. No source
+# work/chapter IDs or titles leave this function; source facts do not certify
+# the independent catalog's work, an editorial edition, or Reader pages.
+SOURCE_FAMILIES = ("MANGADEX", "MANGADOT", "MANGAFIRE")
+SOURCE_WORK_ID = re.compile(r"(mangadex|mangadot|mangafire):[A-Za-z0-9._-]{1,128}\\Z")
+SOURCE_CHAPTER_ID = re.compile(r"(mangadex|mangadot|mangafire):[A-Za-z0-9._:-]{1,200}\\Z")
+VERIFIED_DETAILS = frozenset(("VERIFIED_WITH_ALIASES", "VERIFIED_NO_ALIASES"))
+
+
+def bounded_source_observations(source_case):
+    records = source_case.get("records")
+    if not isinstance(records, list) or len(records) > 128:
+        raise ValueError("Missing or oversized signed source record stream")
+    work_records = {name: {} for name in SOURCE_FAMILIES}
+    chapter_ids = {name: set() for name in SOURCE_FAMILIES}
+    lookup_pages = {name: 0 for name in SOURCE_FAMILIES}
+    chapter_pages = {name: 0 for name in SOURCE_FAMILIES}
+    for record in records:
+        if not isinstance(record, dict):
+            raise ValueError("Malformed source observation record")
+        operation = record.get("operation")
+        if operation not in ("lookup", "chapters", "pages"):
+            raise ValueError("Unknown source operation in signed record")
+        if record.get("outcome") != "RESULT" or operation == "pages":
+            continue
+        response = record.get("response")
+        if not isinstance(response, dict) or not isinstance(response.get("items"), list):
+            raise ValueError("Signed source result lacks an observed item list")
+        items = response["items"]
+        if len(items) > (300 if operation == "lookup" else 4000):
+            raise ValueError("Oversized signed source result item list")
+        if operation == "lookup":
+            represented = set()
+            for item in items:
+                if not isinstance(item, dict):
+                    raise ValueError("Malformed signed lookup candidate")
+                identity = item.get("externalWorkId")
+                match = SOURCE_WORK_ID.fullmatch(identity) if isinstance(identity, str) else None
+                if not match:
+                    raise ValueError("Invalid signed source candidate identity")
+                name = match.group(1).upper()
+                represented.add(name)
+                authors = item.get("authors", [])
+                if not isinstance(authors, list) or len(authors) > 32 or any(
+                    not isinstance(author, str) or not author for author in authors
+                ):
+                    raise ValueError("Invalid signed source author evidence")
+                verified = item.get("detailOutcome") in VERIFIED_DETAILS
+                coverage = item.get("coverageOutcome") == "OBSERVED"
+                observed_count = item.get("coverageObservedCount")
+                if observed_count is not None and (
+                    type(observed_count) is not int or not 0 <= observed_count <= 1_000_000_000
+                ):
+                    raise ValueError("Invalid signed source coverage count")
+                positive = coverage and observed_count is not None and observed_count > 0
+                observed = work_records[name].setdefault(identity, [False, False, False])
+                observed[0] |= bool(authors)
+                observed[1] |= verified
+                observed[2] |= positive
+            for name in represented:
+                lookup_pages[name] += 1
+        else:
+            binding = record.get("request", {}).get("binding")
+            identity = binding.get("externalWorkId") if isinstance(binding, dict) else None
+            match = SOURCE_WORK_ID.fullmatch(identity) if isinstance(identity, str) else None
+            if not match:
+                raise ValueError("Invalid source-scoped chapter request")
+            name = match.group(1).upper()
+            chapter_pages[name] += 1
+            for item in items:
+                chapter = item.get("providerChapterId") if isinstance(item, dict) else None
+                cm = SOURCE_CHAPTER_ID.fullmatch(chapter) if isinstance(chapter, str) else None
+                if cm is None or cm.group(1) != match.group(1):
+                    raise ValueError("Foreign or malformed source chapter observation")
+                chapter_ids[name].add(chapter)
+    return {
+        name: {
+            "lookupPagesObserved": lookup_pages[name],
+            "candidatesObserved": len(work_records[name]),
+            "withSourceAuthors": sum(fields[0] for fields in work_records[name].values()),
+            "withVerifiedSourceDetail": sum(fields[1] for fields in work_records[name].values()),
+            "withPositiveSourceCoverage": sum(fields[2] for fields in work_records[name].values()),
+            "chapterPagesObserved": chapter_pages[name],
+            "chapterIdsObserved": len(chapter_ids[name]),
+        } for name in SOURCE_FAMILIES
+    }
+
+
 def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
     vector = parse_plan(works, tier, ACK)
     if (source.get("schemaVersion") != 1 or
@@ -187,6 +275,7 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
             "readerUnique", "readerAmbiguous", "readerMissing", "replayGaps",
         )}
         decisions = parse_lookup_decisions(sql.get("lookupDecisions"))
+        source_observations = bounded_source_observations(sources[cid])
         collector_gaps = bounded_count(col.get("gaps"), "collector gaps")
         blocked = sorted(
             key for key in health
@@ -229,6 +318,7 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
             "sqliteConflicted": counts["conflicted"],
             "uiRepositoryChapters": counts["uiRepositoryChapters"],
             "sourceAssociations": counts["sourceAssociations"],
+            "sourceWorkEvidence": source_observations,
             "lookupDecisions": decisions,
             "editorialObservation": editorial_observation(counts, decisions),
             "readerOptionsSampled": counts["readerSampled"],
