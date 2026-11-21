@@ -134,7 +134,7 @@ class SignedCode9LiveReaderContract(unittest.TestCase):
         self.assertEqual(kotlin.count(comment), 1)
         block = kotlin.split(comment, 1)[1]
         match = re.search(
-            r'Regex\(\n((?:\s+"""[^\n]*?"""(?: \+)?\n)+)\s+\),',
+            r'Regex\(\n((?:\s+"""[^\n]*?"""(?: \+|,)?\n)+)\s+\),',
             block,
         )
         self.assertIsNotNone(match, "Signed-code9 typed status regex must be structurally present")
