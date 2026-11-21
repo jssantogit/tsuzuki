@@ -468,12 +468,31 @@ class ScriptProviderReadingGatewayIsolationTest {
             (selfDeclaredSigned as ProviderCallResult.Failure).error.code.name,
         )
 
-        // Explicit version-code 10 is not implicitly accepted. Such a future
-        // upgrade needs a separately reviewed and authorized Host contract.
-        val futureDenied = fixture(10, "0.5.5-dev-unsigned")
+        // A future code10 V2 source is accepted ONLY as a real verified
+        // signed-installation ledger record, never from the unsigned
+        // 0.5.5-dev candidate or from an untrusted "release"-named fixture.
+        // This is a NEGATIVE synthetic test: positive code10 coverage must
+        // wait for an authorized P-256 signed 0.5.5 artifact.
+        for (futureName in listOf("0.5.5-dev-unsigned", "0.5.5-dev", "0.5.5")) {
+            val futureDenied = fixture(10, futureName)
+                .lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
+            assertTrue(
+                "unsigned code10 $futureName must never get Host V2 provenance",
+                futureDenied is ProviderCallResult.Failure,
+            )
+            assertEquals(
+                "UNAVAILABLE",
+                (futureDenied as ProviderCallResult.Failure).error.code.name,
+            )
+        }
+        val futureForged = fixture(10, "0.5.5", forgeSignedRecord = true)
             .lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
-        assertTrue(futureDenied is ProviderCallResult.Failure)
-        assertEquals("UNAVAILABLE", (futureDenied as ProviderCallResult.Failure).error.code.name)
+        assertTrue(futureForged is ProviderCallResult.Failure)
+        assertEquals("UNAVAILABLE", (futureForged as ProviderCallResult.Failure).error.code.name)
+        val futureWrongVersion = fixture(10, "0.5.6")
+            .lookupMangaAllV2ReadOnly(mangaAll, titleRequest)
+        assertTrue(futureWrongVersion is ProviderCallResult.Failure)
+        assertEquals("UNAVAILABLE", (futureWrongVersion as ProviderCallResult.Failure).error.code.name)
     }
 
     /**
