@@ -27,7 +27,7 @@ def incomplete_vector():
         "selectionSource": "USER_INPUT",
         "shardIndex": 0,
         "shardCount": 1,
-        "cases": [{"caseId": cid, "replayCompleteness": "LOOKUP_CHAPTERS_ONLY"} for cid in IDS],
+        "cases": [{"caseId": cid, "replayCompleteness": "LOOKUP_CHAPTERS_ONLY", "records": []} for cid in IDS],
     }
     matrix = {
         "provider": "app.tsuzuki.mangaall", "version": "0.5.4",
@@ -127,6 +127,89 @@ class CanonicalCode9ReportSafetyTest(unittest.TestCase):
         self.assertEqual(result["results"][2]["readerObservation"], "AMBIGUOUS_OPTIONS_IN_SAMPLE")
         self.assertEqual(result["results"][2]["readerOptionsAmbiguous"], 1)
         self.assertEqual(result["readerPixels"], "NOT_TESTED_REAL_CDN")
+
+
+    def test_signed_source_observations_remain_per_adapter_even_when_lookup_partial(self):
+        from copy import deepcopy
+        vector = deepcopy(incomplete_vector())
+        source = vector[0]["cases"][0]
+        source["records"] = [
+            {
+                "operation": "lookup", "outcome": "RESULT",
+                "response": {"items": [
+                    {"externalWorkId": "mangadex:11111111-1111-1111-1111-111111111111",
+                     "authors": ["Author A"], "detailOutcome": "VERIFIED_WITH_ALIASES",
+                     "coverageOutcome": "OBSERVED", "coverageObservedCount": 2},
+                    {"externalWorkId": "mangadot:555", "authors": [],
+                     "coverageOutcome": "UNKNOWN"},
+                    {"externalWorkId": "mangafire:abc", "authors": ["Author B"],
+                     "detailOutcome": "CHALLENGE_BLOCKED", "coverageOutcome": "UNKNOWN"},
+                ]},
+            },
+            {
+                "operation": "lookup", "outcome": "RESULT",
+                "response": {"items": [
+                    {"externalWorkId": "mangadex:11111111-1111-1111-1111-111111111111",
+                     "authors": ["Author A"], "detailOutcome": "VERIFIED_NO_ALIASES",
+                     "coverageOutcome": "OBSERVED", "coverageObservedCount": 2},
+                ]},
+            },
+            {
+                "operation": "chapters", "outcome": "RESULT",
+                "request": {"binding": {"externalWorkId": "mangadex:11111111-1111-1111-1111-111111111111"}},
+                "response": {"items": [
+                    {"providerChapterId": "mangadex:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"},
+                    {"providerChapterId": "mangadex:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"},
+                ]},
+            },
+        ]
+        result = report.merge(WORKS, "isolated", *vector)
+        row = result["results"][0]
+        self.assertEqual(row["outcome"], "INCONCLUSIVE_SOURCE")
+        self.assertEqual(row["sourceWorkEvidence"]["MANGADEX"], {
+            "lookupPagesWithCandidates": 2,
+            "candidatesObserved": 1,
+            "withSourceAuthors": 1,
+            "withVerifiedSourceDetail": 1,
+            "withPositiveSourceCoverage": 1,
+            "chapterPagesObserved": 1,
+            "chapterIdsObserved": 2,
+        })
+        self.assertEqual(row["sourceWorkEvidence"]["MANGADOT"]["candidatesObserved"], 1)
+        self.assertEqual(row["sourceWorkEvidence"]["MANGADOT"]["withSourceAuthors"], 0)
+        self.assertEqual(row["sourceWorkEvidence"]["MANGAFIRE"]["withVerifiedSourceDetail"], 0)
+        self.assertEqual(row["sqliteConfirmed"], 20)  # Offline counter fixture, not observed chapters.
+        self.assertFalse(result["canonicalGrantFromV2"])
+        self.assertEqual(result["readerPixels"], "NOT_TESTED_REAL_CDN")
+
+    def test_source_observation_rejects_foreign_chapters_and_malformed_candidate_fields(self):
+        from copy import deepcopy
+        for label, data in (
+            ("missing-records", None),
+            ("foreign-work", [{"operation": "lookup", "outcome": "RESULT",
+                              "response": {"items": [{"externalWorkId": "other:123"}]}}]),
+            ("foreign-chapter", [{
+                "operation": "chapters", "outcome": "RESULT",
+                "request": {"binding": {"externalWorkId": "mangadex:123"}},
+                "response": {"items": [{"providerChapterId": "mangadot:chapters:13"}]},
+            }]),
+            ("invalid-author", [{"operation": "lookup", "outcome": "RESULT",
+                                "response": {"items": [
+                                    {"externalWorkId": "mangadex:123", "authors": ["valid", 5]},
+                                ]}}]),
+            ("invalid-coverage", [{"operation": "lookup", "outcome": "RESULT",
+                                  "response": {"items": [
+                                      {"externalWorkId": "mangadex:123",
+                                       "coverageOutcome": "OBSERVED", "coverageObservedCount": -1},
+                                  ]}}]),
+        ):
+            vector = deepcopy(incomplete_vector())
+            if data is None:
+                vector[0]["cases"][0].pop("records")
+            else:
+                vector[0]["cases"][0]["records"] = data
+            with self.assertRaises(ValueError, msg=label):
+                report.merge(WORKS, "isolated", *vector)
 
     def test_closed_editorial_decisions_and_chapter_accounting_fail_closed(self):
         from copy import deepcopy
