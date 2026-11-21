@@ -385,7 +385,13 @@ internal class MangaAllReaderJourneyFixture(
             if (selectedChapters.isEmpty()) return "CHAPTER_NOT_ATTESTED_IN_BOUND"
             if (selectedChapters.size != 1) return "CHAPTER_AMBIGUOUS"
             val selected = selectedChapters.single()
-            if (selected.rawNumber != 1.0 || selected.volume != null || selected.rawLabel.isBlank()) {
+            // A disposable canonical fixture must reflect the *actual*
+            // source chapter number. Never remap a signed source chapter 336
+            // onto synthetic chapter 1 merely to satisfy the Reader test.
+            val expectedNumber = chapter.baseNumber?.toDouble()
+            if (expectedNumber == null || selected.rawNumber != expectedNumber ||
+                selected.volume != chapter.volume || selected.rawLabel.isBlank()
+            ) {
                 return "CHAPTER_IDENTITY_NOT_COMPATIBLE_WITH_TEST_FIXTURE"
             }
             val evidence = ProviderChapterEvidenceAdapter().toEvidence(
