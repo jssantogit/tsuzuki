@@ -2414,8 +2414,19 @@ class ScriptProviderReadingGatewayIsolationTest {
             )
         }
         if (response !is ProviderCallResult.Success) {
+            // Host ProviderError and its MangaDex page stage are already closed
+            // enums. Preserve them in test-only output; never export exception
+            // text, source URLs, HTTP bodies or volatile CDN URLs.
+            val failure = response as? ProviderCallResult.Failure
+            val closedCode9Cause = if (signedCode == 9L && failure != null) {
+                "|providerError=${failure.error.code.name}" +
+                    "|pageFailureStage=${failure.error.pageFailureStage?.name ?: "NONE"}"
+            } else {
+                ""
+            }
             MangaAllInstrumentationVerdict.publish(
-                "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=PROVIDER_PAGES_UNAVAILABLE",
+                "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=PROVIDER_PAGES_UNAVAILABLE" +
+                    closedCode9Cause,
             )
             return
         }
