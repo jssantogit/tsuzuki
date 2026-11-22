@@ -43,7 +43,9 @@ export async function createPlaywrightShapeSession({
       if (mode === 'cloudflare') {
         // Standard browser-side Cloudflare JS only: no CAPTCHA clicking or
         // solver injection, proxies, fingerprint changes or cookie export.
-        if (url.origin === ORIGIN && route.request().method() === 'GET') return route.continue();
+        if (url.origin === ORIGIN && (route.request().method() === 'GET' ||
+            (route.request().method() === 'POST' &&
+             url.pathname.startsWith('/cdn-cgi/challenge-platform/')))) return route.continue();
         if (url.origin === 'https://challenges.cloudflare.com' &&
             ['GET', 'POST'].includes(route.request().method())) return route.continue();
         return route.abort();
