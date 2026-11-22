@@ -7,10 +7,10 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.RandomAccessFile
+import java.nio.channels.OverlappingFileLockException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
-import java.nio.channels.OverlappingFileLockException
 import java.util.concurrent.ConcurrentHashMap
 
 class FileProviderStorageHostService(
