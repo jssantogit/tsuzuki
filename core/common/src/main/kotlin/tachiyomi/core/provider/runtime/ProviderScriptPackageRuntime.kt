@@ -98,11 +98,13 @@ class ProviderScriptPackageRuntime(
                 source = source,
                 resultMode = ResultMode.INVOCATION,
                 // Never infer this future permission from mere Host injection.
-                // A code10 package, another Provider, or absent manifest grant
-                // cannot access chapter snapshot methods through QuickJs.
+                // Only reading.chapters may use snapshots, even when an internal
+                // caller mistakenly passes an authorized Host object for lookup
+                // or reading.pages. Code10/foreign manifests remain denied.
                 hostServices = hostServices.copy(
                     mangaAllChapterSnapshot = hostServices.mangaAllChapterSnapshot?.takeIf {
-                        providerPackage.manifest.id == "app.tsuzuki.mangaall" &&
+                        capabilityId == "reading.chapters" &&
+                            providerPackage.manifest.id == "app.tsuzuki.mangaall" &&
                             providerPackage.manifest.version.code >= 11L &&
                             providerPackage.manifest.minHostApi >= 2 &&
                             providerPackage.manifest.permissions.mangaAllChapterSnapshot.enabled &&
