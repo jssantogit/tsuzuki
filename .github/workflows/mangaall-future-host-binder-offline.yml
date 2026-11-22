@@ -1,0 +1,89 @@
+name: MangaALL — future code11 Android Host Binder bridge (NONSHIPPING)
+
+# Contract/compile gate ONLY. No signed Provider install, live MangaDot,
+# CDN/Reader, instrumentation execution, APK publication or code11 release.
+on:
+  push:
+    branches: ['feat/mangaall-future-host-binder-code11-only-*']
+    paths:
+      - 'app/src/main/aidl/eu/kanade/tachiyomi/provider/runtime/IProviderHostBridge.aidl'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/**'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFuture*'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFuture*'
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureSnapshotServiceFactory.kt'
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/ProviderRuntimeProtocol.kt'
+      - '.github/workflows/mangaall-future-host-binder-offline.yml'
+  pull_request:
+    paths:
+      - 'app/src/main/aidl/eu/kanade/tachiyomi/provider/runtime/IProviderHostBridge.aidl'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/**'
+      - 'app/src/test/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFuture*'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFuture*'
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureSnapshotServiceFactory.kt'
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/ProviderRuntimeProtocol.kt'
+      - '.github/workflows/mangaall-future-host-binder-offline.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mangaall-future-host-binder-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  future-binder-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - name: Allowlist exact future Binder and test paths; protect published package
+        shell: bash
+        env:
+          GITHUB_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          set -euo pipefail
+          base="$(git merge-base origin/main HEAD)"
+          git diff --name-only "$base" HEAD | tee /tmp/mangaall-future-binder-files.txt
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            test "${GITHUB_HEAD_REF}" = 'feat/mangaall-future-host-binder-code11-only-20261122'
+            test "${GITHUB_HEAD_REPO}" = "${GITHUB_REPOSITORY}"
+          else
+            test "${GITHUB_REF_NAME}" = 'feat/mangaall-future-host-binder-code11-only-20261122'
+          fi
+          if grep -Ev '^(\.github/workflows/mangaall-future-host-(binder-offline|grant-offline)\.yml|core/common/src/main/kotlin/tachiyomi/core/provider/runtime/(MangaAllFutureSnapshotServiceFactory|ProviderRuntimeProtocol)\.kt|app/src/main/aidl/eu/kanade/tachiyomi/provider/runtime/IProviderHostBridge\.aidl|app/src/main/java/eu/kanade/tachiyomi/provider/runtime/(ProviderHostInvocation|ProviderRuntimeService|ScriptProviderCapabilityExecutor)\.kt|app/src/test/java/eu/kanade/tachiyomi/provider/runtime/(MangaAllFutureHostBinderPolicyTest|MangaAllFutureScriptExecutorGateTest)\.kt|app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureBinderSnapshotInstrumentedTest\.kt|docs/mangaall-future-host-binder-20261122\.md)$' /tmp/mangaall-future-binder-files.txt; then
+            echo '::error::Unexpected path in future Binder scope; signed assets and unrelated runtime must remain intact'
+            exit 1
+          fi
+          echo 'MANGAALL_FUTURE_BINDER|scope=CODE11_ONLY|signed_code10=UNCHANGED|publication=DENIED'
+      - name: Kotlin formatting in read-only mode
+        run: ./gradlew :core:common:spotlessKotlinCheck :app:spotlessKotlinCheck --stacktrace
+      - name: Full core/common and app JVM policy regression
+        run: |
+          ./gradlew :core:common:testDebugUnitTest :app:testDebugUnitTest --stacktrace
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          reports=list(Path('app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'))
+          assert reports, 'No app JUnit test reports'
+          expected={'MangaAllFutureHostBinderPolicyTest', 'MangaAllFutureScriptExecutorGateTest'}
+          seen=set()
+          for report in reports:
+              root=ET.parse(report).getroot()
+              assert int(root.get('failures','0'))==0 and int(root.get('errors','0'))==0
+              if int(root.get('tests','0'))>0:
+                  for test in expected:
+                      if test in report.name: seen.add(test)
+          assert seen==expected, 'Future Binder policy tests not discovered: '+repr(expected-seen)
+          print('MANGAALL_FUTURE_BINDER|JUNIT_POLICY=PASS|signed_code10_denied=true')
+          PY
+      - name: Compile Android AIDL and new future Binder androidTest source
+        run: ./gradlew :app:compileDebugAndroidTestKotlin --stacktrace
+      - name: Fail closed on accidental signing and publication
+        run: |
+          test ! -e 'app/src/main/assets/mangaall-code11.tsz'
+          echo 'MANGAALL_FUTURE_BINDER|BUILD_ONLY=PASS|real_android_emulator=NOT_RUN|source_http=NONE'
