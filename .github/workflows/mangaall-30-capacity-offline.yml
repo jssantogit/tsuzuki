@@ -8,11 +8,19 @@ on:
       - '.github/workflows/mangaall-30-capacity-offline.yml'
       - '.github/scripts/mangaall_30_host_readiness.py'
       - '.github/scripts/test_mangaall_30_host_readiness.py'
+      - '.github/scripts/mangaall_code10_canonical_smoke_report.py'
+      - '.github/scripts/test_mangaall_code10_canonical_smoke_report.py'
+      - '.github/scripts/mangaall_code10_scale30_aggregate.py'
+      - '.github/scripts/test_mangaall_code10_scale30_aggregate.py'
   pull_request:
     paths:
       - '.github/workflows/mangaall-30-capacity-offline.yml'
       - '.github/scripts/mangaall_30_host_readiness.py'
       - '.github/scripts/test_mangaall_30_host_readiness.py'
+      - '.github/scripts/mangaall_code10_canonical_smoke_report.py'
+      - '.github/scripts/test_mangaall_code10_canonical_smoke_report.py'
+      - '.github/scripts/mangaall_code10_scale30_aggregate.py'
+      - '.github/scripts/test_mangaall_code10_scale30_aggregate.py'
 
 permissions:
   contents: read
@@ -32,6 +40,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s .github/scripts -p 'test_mangaall_30_host_readiness.py' -v
+          python3 -m unittest discover -s .github/scripts -p 'test_mangaall_code10_canonical_smoke_report.py' -v
+          python3 -m unittest discover -s .github/scripts -p 'test_mangaall_code10_scale30_aggregate.py' -v
       - name: Declare exact scope and remaining signed code10 bottlenecks
         run: |
           {
