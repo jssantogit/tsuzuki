@@ -51,10 +51,10 @@ jobs:
           python3 .github/scripts/mangaall_30_host_readiness.py --plan
           python3 - <<'PY'
           import os, uuid
-          original=os.environ['MANGAALL_WORKS'].rstrip('\\n')
+          original=os.environ['MANGAALL_WORKS'].rstrip('\n')
           end='EOF_'+uuid.uuid4().hex
           with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as f:
-              f.write(f'works<<{end}\\n{original}\\n{end}\\n')
+              f.write(f'works<<{end}\n{original}\n{end}\n')
           print('MANGAALL_SCALE30_NETWORK_PLAN|titles=30|shards=3|perShard=10|signedCode10=UNCHANGED|catalog=INDEPENDENT|readerPixels=NOT_PROVEN')
           PY
 
