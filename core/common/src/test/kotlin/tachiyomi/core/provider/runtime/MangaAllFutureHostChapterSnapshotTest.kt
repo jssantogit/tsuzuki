@@ -11,10 +11,10 @@ import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
-import java.util.concurrent.atomic.AtomicInteger
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicInteger
 
 class MangaAllFutureHostChapterSnapshotTest {
     @TempDir
@@ -327,11 +327,16 @@ class MangaAllFutureHostChapterSnapshotTest {
         val forbiddenOrigin = broker(setOf("https://api.mangadex.org"))
         try {
             val service = MangaAllFutureHostChapterSnapshot(
-                owner, forbiddenOrigin, resources, storage,
+                owner,
+                forbiddenOrigin,
+                resources,
+                storage,
             )
-            (runCatching {
-                service.start("mangadot:131", "en")
-            }.exceptionOrNull() is ProviderNetworkPolicyException) shouldBe true
+            (
+                runCatching {
+                    service.start("mangadot:131", "en")
+                }.exceptionOrNull() is ProviderNetworkPolicyException
+                ) shouldBe true
             calls.get() shouldBe 0
         } finally {
             forbiddenOrigin.close()
@@ -340,11 +345,16 @@ class MangaAllFutureHostChapterSnapshotTest {
         val statusDenied = broker(setOf("https://mangadot.net"))
         try {
             val service = MangaAllFutureHostChapterSnapshot(
-                owner, statusDenied, resources, storage,
+                owner,
+                statusDenied,
+                resources,
+                storage,
             )
-            (runCatching {
-                service.start("mangadot:131", "en")
-            }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
+            (
+                runCatching {
+                    service.start("mangadot:131", "en")
+                }.exceptionOrNull() is ProviderHostServiceException
+                ) shouldBe true
             calls.get() shouldBe 1
             storage.get("mangaall_private_chapters_index") shouldBe null
         } finally {
