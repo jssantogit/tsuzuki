@@ -31,17 +31,41 @@ jobs:
           java-version-file: .github/.java-version
           distribution: temurin
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
-      - name: Restrict review to future Host and parser scope; deny signed assets
+      - name: Restrict review to future Host, separately gated Binder and parser scope
         shell: bash
+        env:
+          GITHUB_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           set -euo pipefail
           base="$(git merge-base origin/main HEAD)"
           git diff --name-only "$base" HEAD | tee /tmp/mangaall-future-host-changed.txt
-          if grep -E '^(providers/|dist/|app/|core/common/src/main/kotlin/tachiyomi/core/provider/supplychain/)' /tmp/mangaall-future-host-changed.txt; then
-            echo "::error::Signed package or unrelated production path changed"
+          if grep -E '^(providers/|dist/|core/common/src/main/kotlin/tachiyomi/core/provider/supplychain/)' /tmp/mangaall-future-host-changed.txt; then
+            echo "::error::Signed package or unrelated privileged source changed"
             exit 1
           fi
-          echo 'MANGAALL_FUTURE_GRANT|signed_code10=UNCHANGED|network=OFFLINE'
+          if grep -E '^app/' /tmp/mangaall-future-host-changed.txt; then
+            # Only the exact same-repository future Binder PR can touch App
+            # sources, and it MUST pass its separately gated compile/test CI.
+            if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ||
+                  "${GITHUB_HEAD_REF:-}" != 'feat/mangaall-future-host-binder-code11-only-20261122' ||
+                  "${GITHUB_HEAD_REPO:-}" != "${GITHUB_REPOSITORY}" ]]; then
+              echo "::error::App Binder code is forbidden outside the reviewed code11 branch"
+              exit 1
+            fi
+            for required in \
+              '.github/workflows/mangaall-future-host-binder-offline.yml' \
+              'app/src/main/aidl/eu/kanade/tachiyomi/provider/runtime/IProviderHostBridge.aidl' \
+              'app/src/test/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureHostBinderPolicyTest.kt' \
+              'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureBinderSnapshotInstrumentedTest.kt'; do
+              if ! grep -Fxq "$required" /tmp/mangaall-future-host-changed.txt; then
+                echo "::error::Future Android Binder gate or negative test coverage missing"
+                exit 1
+              fi
+            done
+            echo 'MANGAALL_FUTURE_GRANT|signed_code10=UNCHANGED|app_binder=SEPARATELY_GATED|network=OFFLINE'
+          else
+            echo 'MANGAALL_FUTURE_GRANT|signed_code10=UNCHANGED|network=OFFLINE'
+          fi
       - name: Kotlin formatter in read-only check mode
         run: ./gradlew :core:common:spotlessKotlinCheck --stacktrace
       - name: Full core common JVM suite with manifest rejection and Host JS bridge tests
