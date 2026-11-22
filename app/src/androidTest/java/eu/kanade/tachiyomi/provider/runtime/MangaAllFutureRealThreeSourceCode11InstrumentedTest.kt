@@ -188,8 +188,10 @@ class MangaAllFutureRealThreeSourceCode11InstrumentedTest {
             }
             assertTrue("MangaDex source evidence missing", "mangadex:$mangaDexId" in candidates)
             assertTrue("MangaDot source evidence missing", "mangadot:131" in candidates)
-            assertTrue("a source HTTP429 is incomplete, not canonical EMPTY",
-                lookupPage["nextCursor"] != JsonNull)
+            assertTrue(
+                "a source HTTP429 is incomplete, not canonical EMPTY",
+                lookupPage["nextCursor"] != JsonNull,
+            )
             assertTrue(mangaDex.get() >= 1)
             assertTrue(mangaDotSearch.get() >= 1)
             assertTrue(mangaFire.get() >= 1)
