@@ -91,7 +91,7 @@ class CanonicalCode10ReportTest(unittest.TestCase):
                     merge(WORKS, TIER, *values)
 
     def test_scale_30_shards_retain_global_positions_and_original_source_shard(self):
-        full = "\\n".join(f"manga :: Offline Scale Work {i:02d}" for i in range(1, 31))
+        full = "\n".join(f"manga :: Offline Scale Work {i:02d}" for i in range(1, 31))
         all_cases = parse_plan(full, "scale", ACK)
         observed = []
         for shard in range(3):
