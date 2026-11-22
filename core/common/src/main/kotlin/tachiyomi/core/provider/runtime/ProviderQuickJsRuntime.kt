@@ -329,7 +329,7 @@ private fun boundedMangaAllChapterSnapshotResult(value: String): String {
     val page = runCatching { HOST_JSON.parseToJsonElement(value) }.getOrNull() as? JsonObject
     val next = page?.get("nextCursor")
     if (page?.keys != setOf("items", "nextCursor") ||
-        page["items"] !is JsonArray ||
+        page?.get("items") !is JsonArray ||
         (next != JsonNull && (next !is JsonPrimitive || !next.isString))
     ) {
         throw ProviderHostServiceException("Future MangaALL chapter page is malformed")
