@@ -453,8 +453,10 @@ class MangaAllFutureHostChapterSnapshotTest {
         // could compare a different JSON shape than the persisted array.
         // Explicit listOf(row) yields the actual saved array-of-tuples shape.
         val first = originalRows.first()
-        (JsonArray(mutableListOf<JsonArray>() + first).toString() !=
-            JsonArray(listOf(first)).toString()) shouldBe true
+        (
+            JsonArray(mutableListOf<JsonArray>() + first).toString() !=
+                JsonArray(listOf(first)).toString()
+            ) shouldBe true
         for (row in originalRows) {
             val proposed = JsonArray(current + listOf(row)).toString()
             if (proposed.length > 48 * 1024 || proposed.encodeToByteArray().size > 48 * 1024) {
