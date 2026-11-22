@@ -28,6 +28,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           java-version-file: .github/.java-version
@@ -37,7 +38,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git diff --name-only HEAD^ HEAD | tee /tmp/mangaall-host-snapshot-changed.txt
+          base="$(git merge-base origin/main HEAD)"
+          test -n "$base"
+          git diff --name-only "$base" HEAD | tee /tmp/mangaall-host-snapshot-changed.txt
           if grep -E '^(providers/|dist/|app/src/|core/common/src/main/kotlin/tachiyomi/core/provider/runtime/(ProviderQuickJsRuntime|ProviderScriptPackageRuntime|ProviderHttpProtocol|ProviderHttpHostService)\.kt)' /tmp/mangaall-host-snapshot-changed.txt; then
             echo "::error::Signed Provider or production Host API touched by offline snapshot gate"
             exit 1
