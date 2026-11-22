@@ -18,7 +18,7 @@ class ProviderStateHostServicesTest {
     lateinit var tempDir: Path
 
     @Test
-    fun `provider storage survives runtime disposal and stays provider scoped`() = runBlocking {
+    fun `provider storage survives runtime disposal and stays provider scoped`(): Unit = runBlocking {
         val first = FileProviderStorageHostService(
             root = tempDir.resolve("storage").toFile(),
             providerId = "org.example.a",
@@ -39,7 +39,7 @@ class ProviderStateHostServicesTest {
     }
 
     @Test
-    fun `provider storage enforces key value entry and total quotas`() = runBlocking {
+    fun `provider storage enforces key value entry and total quotas`(): Unit = runBlocking {
         val storage = FileProviderStorageHostService(
             root = tempDir.resolve("quota").toFile(),
             providerId = "org.example.a",
@@ -140,7 +140,7 @@ class ProviderStateHostServicesTest {
     }
 
     @Test
-    fun `future MangaALL lock errors leave committed state intact`() = runBlocking {
+    fun `future MangaALL lock errors leave committed state intact`(): Unit = runBlocking {
         val root = tempDir.resolve("blocked-lock").toFile()
         val storage = FileProviderStorageHostService(root, "app.tsuzuki.mangaall")
         storage.set("existing", "preserved")
@@ -204,7 +204,7 @@ class ProviderStateHostServicesTest {
     }
 
     @Test
-    fun `secret service exposes only declared keys for the same provider`() = runBlocking {
+    fun `secret service exposes only declared keys for the same provider`(): Unit = runBlocking {
         var observedProvider: String? = null
         val secrets = ScopedProviderSecretsHostService(
             providerId = "org.example.reader",
@@ -221,7 +221,7 @@ class ProviderStateHostServicesTest {
     }
 
     @Test
-    fun `secret service accepts the configured limit and rejects one character beyond it`() = runBlocking {
+    fun `secret service accepts the configured limit and rejects one character beyond it`(): Unit = runBlocking {
         val allowed = ScopedProviderSecretsHostService(
             providerId = "org.example.reader",
             allowedKeys = setOf("session"),
@@ -240,7 +240,7 @@ class ProviderStateHostServicesTest {
     }
 
     @Test
-    fun `provider logging is bounded and strips control characters`() = runBlocking {
+    fun `provider logging is bounded and strips control characters`(): Unit = runBlocking {
         var logged = ""
         val service = BoundedProviderLogHostService(
             maxChars = 8,
