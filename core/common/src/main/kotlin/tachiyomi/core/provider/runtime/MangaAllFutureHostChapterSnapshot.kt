@@ -116,7 +116,19 @@ internal class MangaAllFutureHostChapterSnapshot(
         } catch (_: ProviderHostServiceException) {
             fail("SNAPSHOT_STORAGE_WRITE_FAILED")
         }
-        page(workId, language, 0, readIndex())
+        // A second Android process could publish a newer (possibly foreign
+        // work/facet) snapshot between our atomic replacement and the first
+        // page read. Never return its rows under the original workId. The
+        // storage layer uses process-wide + OS locks per operation; a later
+        // replacement between index/part reads still fails by generation.
+        val committed = readIndex()
+        if (committed.workId != workId ||
+            committed.language != language ||
+            committed.generation != nonce
+        ) {
+            fail("STALE_CHAPTER_SNAPSHOT")
+        }
+        page(workId, language, 0, committed)
     }
 
     suspend fun next(
