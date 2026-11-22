@@ -24,3 +24,9 @@ A Host caller may in the future explicitly inject `ProviderMangaAllChapterSnapsh
 - Host API >=2, new permission policy and signature/index updates require separate security and operator approval; no release/publication is allowed here.
 - Further multi-process locking, real Host Kotlin/SQLite work-level editorial corroboration, Android Reader CDN pixels and physical A54 validation remain.
 - Only after integrated three-source Naruto/Death Note/Bleach functional evidence may the existing explicit opt-in 30-work runner be executed, without weakening identity, provenance or rate-limit gates.
+
+## 2026-11-22 — raw QuickJs evaluation never gains code11 snapshot privilege
+
+The independent raw JavaScript path `ProviderQuickJsRuntime.evaluate` has no parsed/signed Provider manifest and therefore cannot authorize future chapter snapshots. Even if its caller accidentally injects `ProviderHostServices.mangaAllChapterSnapshot`, the raw VM strips this service before installing QuickJs bindings. Only `ProviderScriptPackageRuntime.invoke`, which separately checks exact future code11 manifest ID, API, source origin and independent permission, may use the native bridge. This protects the future Android Binder rollout from accidentally exposing snapshots through the legacy `evaluate()` endpoint.
+
+An offline test passes a maliciously injected native service and verifies `typeof tsuzuki.mangaAllChapterSnapshot` remains undefined, JS invocation fails without contacting native Host, and the historical raw QuickJs VM tests are explicitly typed as `Unit` so JUnit Jupiter truly discovers them. This is a **defensive nonshipping core boundary**, not authorization of any code11 package or change to the signed code10 artifact.
