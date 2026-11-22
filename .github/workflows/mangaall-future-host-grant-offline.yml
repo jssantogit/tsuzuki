@@ -59,8 +59,10 @@ jobs:
               for k in counts: counts[k]+=int(root.get(k,'0'))
               classes[f.name]=int(root.get('tests','0'))
           assert counts['failures']==0 and counts['errors']==0
-          for clazz in ['ProviderScriptPackageRuntimeTest','ProviderPackageParserTest','MangaAllFutureHostChapterSnapshotTest']:
+          for clazz in ['ProviderScriptPackageRuntimeTest','ProviderPackageParserTest','MangaAllFutureHostChapterSnapshotTest','ProviderQuickJsRuntimeTest']:
               assert sum(v for k,v in classes.items() if clazz in k)>0,clazz
+          raw=sum(v for k,v in classes.items() if 'ProviderQuickJsRuntimeTest' in k)
+          assert raw>=8, 'All raw QuickJs isolation regressions must be discovered'
           print('MANGAALL_FUTURE_GRANT|JUNIT='+str(counts['tests'])+'|closed=PASS')
           PY
       - name: Report closed JVM assertion failure type (no source data)
