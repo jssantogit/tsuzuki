@@ -30,7 +30,7 @@ export async function createPlaywrightShapeSession({
   if (!htmlPath || !fs.existsSync(htmlPath)) throw Error('Pinned solver HTML missing');
   const html = capKeiyoushiSolver(fs.readFileSync(htmlPath, 'utf8'));
   const { chromium } = browserStart ? { chromium: { launch: browserStart } } : await import('playwright');
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: process.env.MANGAALL_TEST_ONLY_HEADED !== '1' });
   const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: false });
   let page;
   let mode = 'shape';
