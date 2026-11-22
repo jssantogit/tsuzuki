@@ -20,7 +20,11 @@ CASE = re.compile(r"user-[a-f0-9]{12}\Z")
 SAFE = re.compile(r"[A-Za-z0-9_.,:-]{1,500}\Z")
 
 
-def json_object(path, limit=4_000_000):
+# Ten real works per shard may collectively exceed the original three-work
+# 4 MiB capture/report parsing allowance. Keep a strict 16 MiB bound here,
+# below the production Host decoder's separately enforced 35 MiB batch cap.
+# No external source URL, body or raw Reader pixel is exported by this gate.
+def json_object(path, limit=16_000_000):
     raw = Path(path).read_bytes()
     if len(raw) > limit:
         raise ValueError("Oversized canonical smoke artifact")
