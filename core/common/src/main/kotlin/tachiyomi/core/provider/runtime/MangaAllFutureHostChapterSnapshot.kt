@@ -41,7 +41,10 @@ internal class MangaAllFutureHostChapterSnapshot(
         }
     }
 
-    private val json = Json { isLenient = false; ignoreUnknownKeys = false }
+    private val json = Json {
+        isLenient = false
+        ignoreUnknownKeys = false
+    }
 
     suspend fun start(workId: String, language: String): MangaAllFutureChapterPage = lock.withLock {
         val id = requireScope(workId, language)
@@ -75,20 +78,24 @@ internal class MangaAllFutureHostChapterSnapshot(
 
         val parts = makeParts(tuples, nonce)
         val ranges = parts.map { it.size }
-        val index = JsonObject(mapOf(
-            "v" to JsonPrimitive(1),
-            "workId" to JsonPrimitive(workId),
-            "language" to JsonPrimitive(language),
-            "generation" to JsonPrimitive(nonce),
-            "expiresAt" to JsonPrimitive(now + TTL_MS),
-            "count" to JsonPrimitive(tuples.size),
-            "ranges" to JsonArray(ranges.map(::JsonPrimitive)),
-        )).toString()
-        val values = parts.map { p ->
-            JsonObject(mapOf(
+        val index = JsonObject(
+            mapOf(
+                "v" to JsonPrimitive(1),
+                "workId" to JsonPrimitive(workId),
+                "language" to JsonPrimitive(language),
                 "generation" to JsonPrimitive(nonce),
-                "rows" to JsonArray(p),
-            )).toString()
+                "expiresAt" to JsonPrimitive(now + TTL_MS),
+                "count" to JsonPrimitive(tuples.size),
+                "ranges" to JsonArray(ranges.map(::JsonPrimitive)),
+            ),
+        ).toString()
+        val values = parts.map { p ->
+            JsonObject(
+                mapOf(
+                    "generation" to JsonPrimitive(nonce),
+                    "rows" to JsonArray(p),
+                ),
+            ).toString()
         }
         val allValues = values + index
         if (allValues.any { it.length > MAX_STORAGE_VALUE || byteSize(it) > MAX_STORAGE_VALUE } ||
@@ -174,10 +181,12 @@ internal class MangaAllFutureHostChapterSnapshot(
     }
 
     private fun pageJson(items: List<JsonObject>, cursor: String?): String =
-        JsonObject(mapOf(
-            "items" to JsonArray(items),
-            "nextCursor" to (cursor?.let(::JsonPrimitive) ?: JsonNull),
-        )).toString()
+        JsonObject(
+            mapOf(
+                "items" to JsonArray(items),
+                "nextCursor" to (cursor?.let(::JsonPrimitive) ?: JsonNull),
+            ),
+        ).toString()
 
     private suspend fun readTuple(
         index: Index,
@@ -277,17 +286,25 @@ internal class MangaAllFutureHostChapterSnapshot(
                 ?: text(row["scanlator_name"], 1024)
             val kind = if (row["source"] == null || row["source"] == JsonNull ||
                 row["source"]?.primitiveText() == "user"
-            ) 0 else 1
+            ) {
+                0
+            } else {
+                1
+            }
             val date = row["date_added"]?.primitiveText()?.let { raw ->
                 runCatching { Instant.parse(raw).toEpochMilli() }.getOrNull()
             }
-            result += JsonArray(listOf(
-                JsonPrimitive(id), JsonPrimitive(number), JsonPrimitive(kind),
-                title?.let(::JsonPrimitive) ?: JsonNull,
-                lang?.let(::JsonPrimitive) ?: JsonNull,
-                scanlator?.let(::JsonPrimitive) ?: JsonNull,
-                date?.let(::JsonPrimitive) ?: JsonNull,
-            ))
+            result += JsonArray(
+                listOf(
+                    JsonPrimitive(id),
+                    JsonPrimitive(number),
+                    JsonPrimitive(kind),
+                    title?.let(::JsonPrimitive) ?: JsonNull,
+                    lang?.let(::JsonPrimitive) ?: JsonNull,
+                    scanlator?.let(::JsonPrimitive) ?: JsonNull,
+                    date?.let(::JsonPrimitive) ?: JsonNull,
+                ),
+            )
         }
         if (rows.isNotEmpty() && result.isEmpty() && rejectedFacet) {
             fail("INCONCLUSIVE_SOURCE_LANGUAGE")
@@ -303,8 +320,12 @@ internal class MangaAllFutureHostChapterSnapshot(
         val title = tuple[3].nullableString(3900)
         val lang = tuple[4].nullableString(16)
         val group = tuple[5].nullableString(1024)
-        val date = if (tuple[6] == JsonNull) null else tuple[6].primitiveLong()
-            ?: fail("CORRUPT_SNAPSHOT_TUPLE")
+        val date = if (tuple[6] == JsonNull) {
+            null
+        } else {
+            tuple[6].primitiveLong()
+                ?: fail("CORRUPT_SNAPSHOT_TUPLE")
+        }
         if (!ID.matches(id) || source !in 0L..1L || number < 0.0 ||
             !number.isFinite() || (lang != null && lang != language)
         ) {
@@ -316,15 +337,17 @@ internal class MangaAllFutureHostChapterSnapshot(
             number.toString()
         }
         val chapterId = "mangadot:" + (if (source == 0L) "uploads:" else "chapters:") + id
-        return JsonObject(mapOf(
-            "providerChapterId" to JsonPrimitive(chapterId),
-            "rawLabel" to JsonPrimitive("Ch. " + numberText + (title?.let { " " + it } ?: "")),
-            "rawNumber" to JsonPrimitive(number),
-            "title" to (title?.let(::JsonPrimitive) ?: JsonNull),
-            "language" to (lang?.let(::JsonPrimitive) ?: JsonNull),
-            "scanlationGroup" to (group?.let(::JsonPrimitive) ?: JsonNull),
-            "releaseDateMillis" to (date?.let(::JsonPrimitive) ?: JsonNull),
-        ))
+        return JsonObject(
+            mapOf(
+                "providerChapterId" to JsonPrimitive(chapterId),
+                "rawLabel" to JsonPrimitive("Ch. " + numberText + (title?.let { " " + it } ?: "")),
+                "rawNumber" to JsonPrimitive(number),
+                "title" to (title?.let(::JsonPrimitive) ?: JsonNull),
+                "language" to (lang?.let(::JsonPrimitive) ?: JsonNull),
+                "scanlationGroup" to (group?.let(::JsonPrimitive) ?: JsonNull),
+                "releaseDateMillis" to (date?.let(::JsonPrimitive) ?: JsonNull),
+            ),
+        )
     }
 
     private fun makeParts(rows: List<JsonArray>, nonce: String): List<List<JsonArray>> {
@@ -386,7 +409,9 @@ internal class MangaAllFutureHostChapterSnapshot(
 
     private fun JsonElement?.sourceId(): String? {
         val primitive = this as? JsonPrimitive ?: return null
-        val raw = if (primitive.isString) primitive.content else {
+        val raw = if (primitive.isString) {
+            primitive.content
+        } else {
             primitive.longOrNull?.takeIf { it > 0 }?.toString() ?: return null
         }
         return raw.takeIf(ID::matches)
