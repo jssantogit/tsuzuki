@@ -25,6 +25,14 @@ A Host caller may in the future explicitly inject `ProviderMangaAllChapterSnapsh
 - Further multi-process locking, real Host Kotlin/SQLite work-level editorial corroboration, Android Reader CDN pixels and physical A54 validation remain.
 - Only after integrated three-source Naruto/Death Note/Bleach functional evidence may the existing explicit opt-in 30-work runner be executed, without weakening identity, provenance or rate-limit gates.
 
+## 2026-11-22 — full core/common QuickJs-to-private-Host continuation fixture
+
+A new offline JUnit test creates a **synthetic 4,341-row (>2MiB) MangaDot-shaped source JSON array**, obtains it only through `ProviderHttpHostService.getResource`, writes an internal `MangaAllFutureHostChapterSnapshot`, and exposes its typed `MangaAllFutureChapterSnapshotHostBridge` only by explicit test injection into `ProviderScriptPackageRuntime`. A future-only code11 manifest with exact source network permission and `mangaAllChapterSnapshot.enabled=true` invokes `reading.chapters` through **fresh QuickJs isolates for every V1 continuation page**.
+
+The regression checks 4,341 unique source IDs in correct order, 17–32 pages at <=256 rows and <=48KiB UTF-8 + character output per page, **one source request for the complete snapshot**, signed-code10 denial of the same injected bridge, and failure of an expired-generation cursor after a second start. This connects the previously separate isolated Kotlin broker and JS tests, without any app/Binder service or external requests.
+
+**Still NONSHIPPING:** The Android production process uses `IProviderHostBridge.aidl` and explicit `ProviderHostModule` filters; neither currently contains this new snapshot capability. The checked synthetic QuickJs invocation does not mean Android app-side Binder routing, artifact-signature approval, canonical work identity, MangaFire transport, Reader pixels or a physical A54 is working. A distinct reviewed future-contract change is needed before production injection, followed by three-source acceptance. No original P-256 code10 package, manifest or publication changes occur.
+
 ## 2026-11-22 — raw QuickJs evaluation never gains code11 snapshot privilege
 
 The independent raw JavaScript path `ProviderQuickJsRuntime.evaluate` has no parsed/signed Provider manifest and therefore cannot authorize future chapter snapshots. Even if its caller accidentally injects `ProviderHostServices.mangaAllChapterSnapshot`, the raw VM strips this service before installing QuickJs bindings. Only `ProviderScriptPackageRuntime.invoke`, which separately checks exact future code11 manifest ID, API, source origin and independent permission, may use the native bridge. This protects the future Android Binder rollout from accidentally exposing snapshots through the legacy `evaluate()` endpoint.
