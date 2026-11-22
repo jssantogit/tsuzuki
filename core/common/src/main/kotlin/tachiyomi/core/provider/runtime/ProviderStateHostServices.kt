@@ -151,22 +151,29 @@ class FileProviderStorageHostService(
             heldMonitor = true
             RandomAccessFile(lockFile, "rw").use { file ->
                 file.channel.use { channel ->
-                    while (true) {
+                    var acquired = try {
+                        channel.tryLock()
+                    } catch (_: OverlappingFileLockException) {
+                        null
+                    }
+                    while (acquired == null) {
                         if (System.nanoTime() - startedAt >= LOCK_WAIT_NANOS) {
                             throw ProviderHostServiceException("Future MangaALL storage lock is busy")
                         }
-                        val acquired = try {
+                        Thread.sleep(LOCK_RETRY_MILLIS)
+                        acquired = try {
                             channel.tryLock()
                         } catch (_: OverlappingFileLockException) {
                             null
                         }
-                        if (acquired != null) {
-                            return acquired.use { block() }
-                        }
-                        Thread.sleep(LOCK_RETRY_MILLIS)
                     }
-                    @Suppress("UNREACHABLE_CODE")
-                    throw IllegalStateException("Unreachable storage lock")
+                    // A queued JVM caller cannot start a fresh OS-lock wait:
+                    // its total budget already began before monitor.tryLock.
+                    if (System.nanoTime() - startedAt >= LOCK_WAIT_NANOS) {
+                        acquired.close()
+                        throw ProviderHostServiceException("Future MangaALL storage lock is busy")
+                    }
+                    acquired.use { block() }
                 }
             }
         } catch (error: ProviderHostServiceException) {
