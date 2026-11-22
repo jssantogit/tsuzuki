@@ -57,6 +57,20 @@ internal object MangaAllInstrumentationVerdict {
                 """UNTRUSTED_IMAGE_ORIGIN|INVALID_PAGE_METADATA""" +
                 """)""",
         ),
+        // Code10 real Android chapter attestation: only closed Host diagnostic
+        // enums. Never publish upstream messages, response bodies or CDN URLs.
+        Regex(
+            """MANGAALL_LIVE_PAGE_GATE\|outcome=INCONCLUSIVE\|reason=CHAPTER_ATTESTATION_UNAVAILABLE""" +
+                """\|providerError=(""" +
+                """UNAVAILABLE|HOST_ERROR|PACKAGE_INVALID|MALFORMED_REQUEST|SOURCE_TOO_LARGE|""" +
+                """SOURCE_READ_ERROR|INVOCATION_CONFLICT|PERMISSION_DENIED|""" +
+                """HOST_API_UNSUPPORTED|SCRIPT_ERROR|TIMEOUT|RUNTIME_DIED|NETWORK_POLICY|""" +
+                """CHAPTER_IDENTITY_UNVERIFIED|NETWORK_ERROR|BROWSER_ERROR|RESOURCE_LIMIT|""" +
+                """MALFORMED_RESULT|AUTH_REQUIRED|ACQUISITION_FAILED""" +
+                """)\|sourceFailure=(NONE|CHALLENGE_BLOCKED|HTTP_ERROR|INVALID_RESPONSE|UNCLASSIFIED_ERROR)""" +
+                """\|httpStatus=(NONE|[1-5][0-9]{2})\|retryable=(true|false)""" +
+                """\|sourceRequests=([0-9]|[1-9][0-9])\|sourceHttp=(NONE|[1-5][0-9]{2})""",
+        ),
         Regex(
             """MANGAALL_LIVE_PAGE_GATE\|outcome=PASS""" +
                 """\|provenance=DIRECT_LIVE_ANDROID\|pagesDecoded=[12]""" +
