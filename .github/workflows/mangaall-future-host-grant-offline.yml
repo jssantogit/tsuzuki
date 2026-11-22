@@ -59,7 +59,7 @@ jobs:
               for k in counts: counts[k]+=int(root.get(k,'0'))
               classes[f.name]=int(root.get('tests','0'))
           assert counts['failures']==0 and counts['errors']==0
-          for clazz in ['ProviderScriptPackageRuntimeTest','ProviderPackageParserTest','MangaAllFutureHostChapterSnapshotTest']:
+          for clazz in ['ProviderScriptPackageRuntimeTest','ProviderPackageParserTest','MangaAllFutureHostChapterSnapshotTest','MangaAllFutureHostQuickJsContinuationTest']:
               assert sum(v for k,v in classes.items() if clazz in k)>0,clazz
           print('MANGAALL_FUTURE_GRANT|JUNIT='+str(counts['tests'])+'|closed=PASS')
           PY
