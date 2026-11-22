@@ -176,7 +176,13 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
     @Test(timeout = 300_000L)
     fun mangaAllPublishedCode9LiveReaderDisplaysCdnPixels() = runMangaAllPublishedLiveReader(code9 = true)
 
-    private fun runMangaAllPublishedLiveReader(code9: Boolean) {
+    /** Original signed code10, manual-only: exact source chapter, real CDN, real Reader pixels. */
+    @Test(timeout = 300_000L)
+    fun mangaAllPublishedCode10LiveReaderDisplaysCdnPixels() =
+        runMangaAllPublishedLiveReader(code9 = false, code10 = true)
+
+    private fun runMangaAllPublishedLiveReader(code9: Boolean, code10: Boolean = false) {
+        require(!code9 || !code10) { "At most one signed MangaAll generation" }
         requireOptIn()
         val args = InstrumentationRegistry.getArguments()
         assertEquals("true", args.getString("mangaAllLiveReaderOptIn"))
@@ -196,6 +202,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             val mangaAll = fixture.mangaAllJourney(
                 reader,
                 originalCode9Package = code9,
+                originalCode10Package = code10,
                 liveTarget = target,
             )
             try {
@@ -2283,6 +2290,7 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             originalCode7Package: Boolean = false,
             originalCode8Package: Boolean = false,
             originalCode9Package: Boolean = false,
+            originalCode10Package: Boolean = false,
             liveTarget: MangaAllLiveReaderTarget? = null,
         ) = MangaAllReaderJourneyFixture(
             context = InstrumentationRegistry.getInstrumentation().targetContext,
@@ -2290,8 +2298,10 @@ class CanonicalReaderSourceSwitchInstrumentedTest {
             database = database,
             chapter = chapter,
             originalCode7Package = originalCode7Package,
-            originalCode8Package = originalCode8Package || (liveTarget != null && !originalCode9Package),
+            originalCode8Package = originalCode8Package ||
+                (liveTarget != null && !originalCode9Package && !originalCode10Package),
             originalCode9Package = originalCode9Package,
+            originalCode10Package = originalCode10Package,
             liveTarget = liveTarget,
         )
 
