@@ -7,17 +7,13 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
-import org.junit.Rule
-import org.junit.Test
-import org.junit.rules.TemporaryFolder
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
 
 class MangaAllFutureHostChapterSnapshotTest {
-    @get:Rule
-    val tempFolder = TemporaryFolder()
-
-    private val tempDir: Path
-        get() = tempFolder.root.toPath()
+    @TempDir
+    lateinit var tempDir: Path
 
     private val providerId = "app.tsuzuki.mangaall"
     private val fixedClock = 1_783_000_000_000L
