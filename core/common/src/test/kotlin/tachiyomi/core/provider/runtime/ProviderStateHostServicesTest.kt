@@ -121,8 +121,10 @@ class ProviderStateHostServicesTest {
                 runBlocking { storage.set("later", "success") }
             }
             started.await(3, TimeUnit.SECONDS) shouldBe true
-            (runCatching { waiting.get(150, TimeUnit.MILLISECONDS) }
-                .exceptionOrNull() is TimeoutException) shouldBe true
+            (
+                runCatching { waiting.get(150, TimeUnit.MILLISECONDS) }
+                    .exceptionOrNull() is TimeoutException
+                ) shouldBe true
             child.waitFor(10, TimeUnit.SECONDS) shouldBe true
             child.exitValue() shouldBe 0
             waiting.get(10, TimeUnit.SECONDS)
@@ -145,8 +147,10 @@ class ProviderStateHostServicesTest {
         Files.delete(lockFile)
         Files.createDirectory(lockFile)
         try {
-            (runCatching { storage.set("uncommitted", "bad") }
-                .exceptionOrNull() is ProviderHostServiceException) shouldBe true
+            (
+                runCatching { storage.set("uncommitted", "bad") }
+                    .exceptionOrNull() is ProviderHostServiceException
+                ) shouldBe true
         } finally {
             Files.delete(lockFile)
         }
