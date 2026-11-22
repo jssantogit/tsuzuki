@@ -36,7 +36,7 @@ class MangaAllFutureHostBinderPolicyTest {
     )
 
     @Test
-    fun future_code11_snapshot_module_requires_exact_manifest_scope(): Unit {
+    fun future_code11_snapshot_module_requires_exact_manifest_scope() {
         val authorized = ProviderHostInvocationPolicy.fromManifest(manifest(), "future-allowed")
         authorized.mangaAllChapterSnapshotEnabled shouldBe true
         (ProviderHostModule.MANGAALL_CHAPTER_SNAPSHOT in authorized.allowedHostModules()) shouldBe true
@@ -59,7 +59,7 @@ class MangaAllFutureHostBinderPolicyTest {
     }
 
     @Test
-    fun future_snapshot_and_generic_storage_permissions_are_independent(): Unit {
+    fun future_snapshot_and_generic_storage_permissions_are_independent() {
         val normal = ProviderHostInvocationPolicy.fromManifest(
             manifest(code = 10, grant = false, storage = true),
             "storage-only",
@@ -76,7 +76,7 @@ class MangaAllFutureHostBinderPolicyTest {
     }
 
     @Test
-    fun hand_constructed_foreign_snapshot_policy_is_rejected(): Unit {
+    fun hand_constructed_foreign_snapshot_policy_is_rejected() {
         val invalid = runCatching {
             ProviderHostInvocationPolicy(
                 providerId = "foreign.reader",
