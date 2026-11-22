@@ -43,8 +43,8 @@ class MangaAllFutureHostChapterSnapshotTest {
     }
 
     private fun fixture(
-        rawSource: () -> String,
         existingStorage: FileProviderStorageHostService? = null,
+        rawSource: () -> String,
     ): Pair<MangaAllFutureHostChapterSnapshot, () -> Int> {
         val owner = ProviderResourceOwner(providerId, "test-invocation")
         val resources = ProviderResourceStore()
@@ -170,7 +170,7 @@ class MangaAllFutureHostChapterSnapshotTest {
         )
         repeat(6) { shared.set("other" + it, "a".repeat(60 * 1024)) }
         var current = source(400, 0)
-        val (service, _) = fixture({ current }, existingStorage = shared)
+        val (service, _) = fixture(existingStorage = shared) { current }
         val committed = service.start("mangadot:131", "en")
         val oldCursor = committed.nextCursor!!
         val oldIndex = shared.get("mangaall_private_chapters_index")
