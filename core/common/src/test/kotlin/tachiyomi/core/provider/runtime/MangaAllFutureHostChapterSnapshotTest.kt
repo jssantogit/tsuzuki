@@ -27,15 +27,17 @@ class MangaAllFutureHostChapterSnapshotTest {
         // Extra public API fields are deliberately omitted from the compact
         // seven-field metadata snapshot.
         val records = (1..count).map { number ->
-            JsonObject(mapOf(
-                "id" to JsonPrimitive(13100000 + number),
-                "chapter_number" to JsonPrimitive(number),
-                "language" to JsonPrimitive("en"),
-                "source" to JsonPrimitive("user"),
-                "chapter_title" to JsonPrimitive(title + " " + number),
-                "groups" to JsonArray(listOf(JsonObject(mapOf("name" to JsonPrimitive("Ju-Ni"))))),
-                "ignored" to JsonPrimitive("x".repeat(padding)),
-            ))
+            JsonObject(
+                mapOf(
+                    "id" to JsonPrimitive(13100000 + number),
+                    "chapter_number" to JsonPrimitive(number),
+                    "language" to JsonPrimitive("en"),
+                    "source" to JsonPrimitive("user"),
+                    "chapter_title" to JsonPrimitive(title + " " + number),
+                    "groups" to JsonArray(listOf(JsonObject(mapOf("name" to JsonPrimitive("Ju-Ni"))))),
+                    "ignored" to JsonPrimitive("x".repeat(padding)),
+                ),
+            )
         }
         return JsonArray(records).toString()
     }
@@ -108,24 +110,34 @@ class MangaAllFutureHostChapterSnapshotTest {
         val (service, calls) = fixture { source(400, 1) }
         val first = service.start("mangadot:131", "en")
         val cursor = first.nextCursor!!
-        (runCatching {
-            service.next("mangadot:999", "en", cursor)
-        }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
-        (runCatching {
-            service.next("mangadot:131", "pt-br", cursor)
-        }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
-        (runCatching {
-            service.next("mangadot:131", "en", cursor.replace(":256", ":99999"))
-        }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
+        (
+            runCatching {
+                service.next("mangadot:999", "en", cursor)
+            }.exceptionOrNull() is ProviderHostServiceException
+            ) shouldBe true
+        (
+            runCatching {
+                service.next("mangadot:131", "pt-br", cursor)
+            }.exceptionOrNull() is ProviderHostServiceException
+            ) shouldBe true
+        (
+            runCatching {
+                service.next("mangadot:131", "en", cursor.replace(":256", ":99999"))
+            }.exceptionOrNull() is ProviderHostServiceException
+            ) shouldBe true
         val second = service.start("mangadot:131", "en")
         (second.nextCursor != first.nextCursor) shouldBe true
-        (runCatching {
-            service.next("mangadot:131", "en", cursor)
-        }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
+        (
+            runCatching {
+                service.next("mangadot:131", "en", cursor)
+            }.exceptionOrNull() is ProviderHostServiceException
+            ) shouldBe true
         now += 5 * 60 * 1000 + 1
-        (runCatching {
-            service.next("mangadot:131", "en", second.nextCursor!!)
-        }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
+        (
+            runCatching {
+                service.next("mangadot:131", "en", second.nextCursor!!)
+            }.exceptionOrNull() is ProviderHostServiceException
+            ) shouldBe true
         calls() shouldBe 2
     }
 
@@ -142,25 +154,31 @@ class MangaAllFutureHostChapterSnapshotTest {
         service.next("mangadot:131", "en", next).items.isNotEmpty() shouldBe true
 
         current = """[{"id":17,"chapter_number":1,"language":"pt-br"}]"""
-        (runCatching {
-            service.start("mangadot:131", "en")
-        }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
+        (
+            runCatching {
+                service.start("mangadot:131", "en")
+            }.exceptionOrNull() is ProviderHostServiceException
+            ) shouldBe true
         service.next("mangadot:131", "en", next).items.isNotEmpty() shouldBe true
 
-        (runCatching {
-            service.start("mangadot:131", "fr")
-        }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
-        (runCatching {
-            MangaAllFutureHostChapterSnapshot(
-                ProviderResourceOwner("foreign.provider", "test"),
-                object : ProviderHttpHostService {
-                    override suspend fun getText(url: String) = ""
-                    override suspend fun getResource(url: String) =
-                        ProviderResourceHandle("none")
-                },
-                ProviderResourceStore(),
-                FileProviderStorageHostService(tempDir.resolve("foreign").toFile(), "foreign.provider"),
-            )
-        }.exceptionOrNull() is IllegalArgumentException) shouldBe true
+        (
+            runCatching {
+                service.start("mangadot:131", "fr")
+            }.exceptionOrNull() is ProviderHostServiceException
+            ) shouldBe true
+        (
+            runCatching {
+                MangaAllFutureHostChapterSnapshot(
+                    ProviderResourceOwner("foreign.provider", "test"),
+                    object : ProviderHttpHostService {
+                        override suspend fun getText(url: String) = ""
+                        override suspend fun getResource(url: String) =
+                            ProviderResourceHandle("none")
+                    },
+                    ProviderResourceStore(),
+                    FileProviderStorageHostService(tempDir.resolve("foreign").toFile(), "foreign.provider"),
+                )
+            }.exceptionOrNull() is IllegalArgumentException
+            ) shouldBe true
     }
 }
