@@ -333,6 +333,86 @@ class RefreshProviderReadingChaptersTest {
         accepted.last() shouldBe "cursor-32"
     }
 
+    @Test
+    fun `provisional MangaAll source scans 4341 unique chapters without a complete snapshot`() = runBlocking {
+        val pageSizes = List(16) { 256 } + 245
+        val accepted = mutableListOf<String?>()
+        val counts = mutableListOf<Pair<Int, Int>>()
+        val deliveredIds = hashSetOf<String>()
+        val refresher = RefreshProviderReadingChapters(
+            gateway = gateway { request ->
+                val pageIndex = request.cursor?.value?.removePrefix("page-")?.toInt() ?: 0
+                val items = (0 until pageSizes[pageIndex]).map { itemIndex ->
+                    val number = pageIndex * 256 + itemIndex + 1
+                    ProviderChapterObservation("mangadot-$number", "Chapter $number")
+                }
+                ProviderCallResult.Success(
+                    ProviderPage(
+                        items = items,
+                        nextCursor = if (pageIndex + 1 < pageSizes.size) {
+                            ProviderCursor("page-${pageIndex + 1}")
+                        } else {
+                            null
+                        },
+                    ),
+                )
+            },
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            publishSnapshot = null,
+            clock = { 42L },
+            onPageCollected = { page, observedAt ->
+                observedAt shouldBe 42L
+                page.forEach { deliveredIds.add(it.providerChapterId) shouldBe true }
+            },
+            onPageObserved = { pages, observations -> counts += pages to observations },
+            onPageAccepted = { cursor -> accepted += cursor?.value },
+        )
+
+        refresher.execute(binding, allowPartialPageLimit = true) shouldBe ProviderCallResult.Success(4_341)
+        counts.size shouldBe 17
+        counts.last() shouldBe (17 to 4_341)
+        deliveredIds.size shouldBe 4_341
+        accepted.size shouldBe 17
+        accepted.last() shouldBe null
+    }
+
+    @Test
+    fun `provisional large scan enforces 16000 cap and never accepts an overflow page`() = runBlocking {
+        suspend fun scan(lastPageCount: Int): Pair<ProviderCallResult<Int>, Pair<Int, Int>> {
+            var delivered = 0
+            var accepted = 0
+            val refresher = RefreshProviderReadingChapters(
+                gateway = gateway { request ->
+                    val pageIndex = request.cursor?.value?.removePrefix("batch-")?.toInt() ?: 0
+                    ProviderCallResult.Success(
+                        ProviderPage(
+                            items = (0 until if (pageIndex == 31) lastPageCount else 500).map { index ->
+                                ProviderChapterObservation("id-$pageIndex-$index", "Chapter $pageIndex-$index")
+                            },
+                            nextCursor = if (pageIndex == 31) null else ProviderCursor("batch-${pageIndex + 1}"),
+                        ),
+                    )
+                },
+                evidenceAdapter = ProviderChapterEvidenceAdapter(),
+                publishSnapshot = null,
+                onPageCollected = { page, _ -> delivered += page.size },
+                onPageAccepted = { accepted++ },
+            )
+            return refresher.execute(binding, allowPartialPageLimit = true) to (delivered to accepted)
+        }
+
+        val atCap = scan(lastPageCount = 500)
+        atCap.first shouldBe ProviderCallResult.Success(16_000)
+        atCap.second shouldBe (16_000 to 32)
+
+        val overflow = scan(lastPageCount = 501)
+        overflow.first shouldBe ProviderCallResult.Failure(
+            ProviderError(ProviderErrorCode.RESOURCE_LIMIT, retryable = false),
+        )
+        // The invalid final page is not delivered or checkpointed.
+        overflow.second shouldBe (15_500 to 31)
+    }
+
     private fun gateway(
         chapters: suspend (
             ProviderReadingChaptersRequest,
