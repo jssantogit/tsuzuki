@@ -76,7 +76,7 @@ internal class MangaAllFutureHostChapterSnapshot(
         val now = clock()
         if (now < 0 || now > Long.MAX_VALUE - TTL_MS) fail("INVALID_SNAPSHOT_CLOCK")
 
-        val parts = makeParts(tuples, nonce)
+        val parts = makeParts(tuples)
         val ranges = parts.map { it.size }
         val index = JsonObject(
             mapOf(
@@ -240,17 +240,18 @@ internal class MangaAllFutureHostChapterSnapshot(
         val nonce = obj["generation"]?.primitiveText() ?: fail("CORRUPT_SNAPSHOT_INDEX")
         if (!NONCE.matches(nonce)) fail("CORRUPT_SNAPSHOT_INDEX")
         val expiresAt = obj["expiresAt"]?.primitiveLong() ?: fail("CORRUPT_SNAPSHOT_INDEX")
-        val count = obj["count"]?.primitiveLong()?.toInt() ?: fail("CORRUPT_SNAPSHOT_INDEX")
+        val countLong = obj["count"]?.primitiveLong() ?: fail("CORRUPT_SNAPSHOT_INDEX")
         val parts = obj["ranges"] as? JsonArray ?: fail("CORRUPT_SNAPSHOT_INDEX")
-        if (expiresAt < 0 || count !in 0..MAX_ROWS || parts.size > MAX_PARTS ||
-            (count > 0 && parts.isEmpty())
+        if (expiresAt < 0 || countLong !in 0L..MAX_ROWS.toLong() || parts.size > MAX_PARTS ||
+            (countLong > 0L && parts.isEmpty())
         ) {
             fail("CORRUPT_SNAPSHOT_INDEX")
         }
+        val count = countLong.toInt()
         val ranges = parts.map { element ->
-            val num = element.primitiveLong()?.toInt() ?: fail("CORRUPT_SNAPSHOT_INDEX")
-            if (num !in 1..MAX_ROWS) fail("CORRUPT_SNAPSHOT_INDEX")
-            num
+            val number = element.primitiveLong() ?: fail("CORRUPT_SNAPSHOT_INDEX")
+            if (number !in 1L..MAX_ROWS.toLong()) fail("CORRUPT_SNAPSHOT_INDEX")
+            number.toInt()
         }
         if (ranges.sum() != count) fail("CORRUPT_SNAPSHOT_INDEX")
         return Index(workId, language, nonce, expiresAt, count, ranges)
@@ -350,7 +351,7 @@ internal class MangaAllFutureHostChapterSnapshot(
         )
     }
 
-    private fun makeParts(rows: List<JsonArray>, nonce: String): List<List<JsonArray>> {
+    private fun makeParts(rows: List<JsonArray>): List<List<JsonArray>> {
         val parts = mutableListOf<List<JsonArray>>()
         var current = mutableListOf<JsonArray>()
         var bodyBytes = 0
