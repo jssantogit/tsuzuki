@@ -28,6 +28,7 @@ import tachiyomi.core.provider.runtime.ProviderImageHostService
 import tachiyomi.core.provider.runtime.ProviderInvocationLimiter
 import tachiyomi.core.provider.runtime.ProviderLogHostService
 import tachiyomi.core.provider.runtime.ProviderManagedResourceFormat
+import tachiyomi.core.provider.runtime.ProviderMangaAllChapterSnapshotHostService
 import tachiyomi.core.provider.runtime.ProviderP2pAcquireRequest
 import tachiyomi.core.provider.runtime.ProviderP2pHostService
 import tachiyomi.core.provider.runtime.ProviderP2pProtocol
@@ -359,6 +360,24 @@ private fun IProviderHostBridge?.toHostServices(
     val bridge = this
 
     return ProviderHostServices(
+        mangaAllChapterSnapshot = if (ProviderHostModule.MANGAALL_CHAPTER_SNAPSHOT in allowedModules) {
+            object : ProviderMangaAllChapterSnapshotHostService {
+                override suspend fun start(workId: String, language: String): String =
+                    bridge.mangaAllChapterSnapshotStart(
+                        workId.boundedHostArg(128, "future chapter work ID"),
+                        language.boundedHostArg(16, "future chapter language"),
+                    ).orEmpty().boundedFutureChapterPage()
+
+                override suspend fun next(workId: String, language: String, cursor: String): String =
+                    bridge.mangaAllChapterSnapshotNext(
+                        workId.boundedHostArg(128, "future chapter work ID"),
+                        language.boundedHostArg(16, "future chapter language"),
+                        cursor.boundedHostArg(128, "future chapter cursor"),
+                    ).orEmpty().boundedFutureChapterPage()
+            }
+        } else {
+            null
+        },
         http = if (ProviderHostModule.HTTP in allowedModules) {
             object : ProviderHttpHostService {
                 override suspend fun request(request: ProviderHttpRequest): ProviderHttpResponse {
@@ -544,6 +563,15 @@ private fun IProviderHostBridge?.toHostServices(
             null
         },
     )
+}
+
+private fun String.boundedFutureChapterPage(): String {
+    if (length > 48 * 1024 || encodeToByteArray().size > 48 * 1024) {
+        throw tachiyomi.core.provider.runtime.ProviderHostServiceException(
+            "Future MangaALL snapshot result exceeds Binder limit",
+        )
+    }
+    return this
 }
 
 private fun String.boundedHostArg(
