@@ -1,0 +1,128 @@
+name: MangaALL MangaFire shape solver — test only (2 real works)
+# Explicit opt-in only. No production provider/app changes or publication.
+on:
+  workflow_dispatch:
+    inputs:
+      acknowledge:
+        description: 'Type I_ACCEPT_TEST_ONLY_AUTO_SHAPE for two signed-code10 works'
+        type: string
+        required: true
+  push:
+    branches: ['probe/mangaall-mangafire-shape-*']
+    paths: ['.github/mangaall-mangafire-shape-request.json']
+permissions:
+  contents: read
+concurrency:
+  group: mangaall-shape-experiment-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test-only-live:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify fixed two-work scope and explicit consent BEFORE external requests
+        id: approve
+        env:
+          EVENT: ${{ github.event_name }}
+          ACK: ${{ inputs.acknowledge }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          approved='I_ACCEPT_TEST_ONLY_AUTO_SHAPE'
+          fixed='manga :: Oyasumi Punpun\nmanga :: Koe no Katachi'
+          event=os.environ['EVENT']
+          if event=='push':
+              assert re.fullmatch(r'refs/heads/probe/mangaall-mangafire-shape-[a-z0-9-]{1,60}', os.environ['GITHUB_REF'])
+              raw=pathlib.Path('.github/mangaall-mangafire-shape-request.json').read_bytes()
+              assert len(raw)<=1024
+              request=json.loads(raw)
+              assert type(request) is dict and set(request)=={'works','acknowledge'}
+              assert request['works']==fixed and request['acknowledge']==approved
+          elif event=='workflow_dispatch':
+              assert os.environ['ACK']==approved
+          else:
+              raise ValueError('Explicit test-only invocation required')
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as out:
+              out.write('works<<END_WORKS\n'+fixed+'\nEND_WORKS\n')
+          print('MANGAALL_SHAPE_TEST_SCOPE|works=2|signedCode10=UNCHANGED|readerPixels=NOT_PROVEN')
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: ab97ebdaeb2a2130fe57b8c349908836a1d17708
+          path: mangaall-signed-source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline shape solver and Cloudflare distinction contract
+        run: node .github/scripts/test_mangaall_shape_test_core.mjs
+      - name: Verify published P-256 seq36 exact code10 JS archive
+        working-directory: mangaall-signed-source
+        run: |
+          set -euo pipefail
+          node tooling/verify_index.mjs
+          python3 tooling/build_provider.py providers/mangaall /tmp/mangaall-shape-probe.tsz
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          data=json.loads(Path('dist/index.payload.json').read_text())
+          assert data['repositoryId']=='app.tsuzuki.providers' and data['sequence']==36
+          items=[p for p in data['providers'] if p['providerId']=='app.tsuzuki.mangaall']
+          assert len(items)==1 and items[0]['versionCode']==10
+          digest='bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f'
+          assert items[0]['sha256']==digest
+          assert hashlib.sha256(Path('/tmp/mangaall-shape-probe.tsz').read_bytes()).hexdigest()==digest
+          PY
+      - name: Bound real source plan to the two known test titles
+        working-directory: mangaall-signed-source
+        env:
+          MANGAALL_SUITE: custom
+          MANGAALL_BATCH: '1'
+          MANGAALL_WORKS: ${{ steps.approve.outputs.works }}
+          MANGAALL_SHARD_INDEX: '0'
+          MANGAALL_SHARD_COUNT: '1'
+          MANGAALL_SIGNED_CODE10_CANONICAL_SMOKE: I_ACCEPT_SIGNED_CODE10_CANONICAL_SMOKE
+        run: node tooling/mangaall_live_matrix.mjs --plan
+      - name: Fetch pinned Keiyoushi Apache-2.0 solver for disposable browser
+        run: |
+          set -euo pipefail
+          file="$GITHUB_WORKSPACE/.github/scripts/keiyoushi-mangafire-solver.runtime.html"
+          curl -fsSL --retry 2 --max-time 30 \
+            'https://raw.githubusercontent.com/keiyoushi/extensions-source/5d54f0d02e2a7dbdda08e823de444f7527cc883c/src/all/mangafire/assets/solver.html' \
+            -o "$file"
+          test "$(git hash-object "$file")" = 'f975cc6b3951f1793e932a11f0422f2573ef3f26'
+      - name: Install ephemeral Chromium only on explicit experiment
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false --ignore-scripts --prefix "$GITHUB_WORKSPACE" playwright@1.56.1
+          "$GITHUB_WORKSPACE/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Probe real signed code10 with limited shape solver (never generic CF)
+        working-directory: mangaall-signed-source
+        env:
+          MANGAALL_SUITE: custom
+          MANGAALL_BATCH: '1'
+          MANGAALL_WORKS: ${{ steps.approve.outputs.works }}
+          MANGAALL_SHARD_INDEX: '0'
+          MANGAALL_SHARD_COUNT: '1'
+          MANGAALL_SIGNED_CODE10_CANONICAL_SMOKE: I_ACCEPT_SIGNED_CODE10_CANONICAL_SMOKE
+          MANGAALL_TEST_ONLY_AUTO_SHAPE: I_ACCEPT_TEST_ONLY_AUTO_SHAPE
+          MANGAALL_TEST_ONLY_SOLVER_HTML: ${{ github.workspace }}/.github/scripts/keiyoushi-mangafire-solver.runtime.html
+        run: |
+          node "$GITHUB_WORKSPACE/.github/scripts/mangaall_shape_test_launcher.mjs" --live \
+            --output mangaall-shape-test-matrix.json \
+            --real-envelopes mangaall-shape-test-envelopes.json
+      - name: Retain sanitized source observations, never cookies or solver data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mangaall-shape-test-source-only
+          path: |
+            mangaall-signed-source/mangaall-shape-test-matrix.json
+            mangaall-signed-source/mangaall-shape-test-envelopes.json
+          if-no-files-found: warn
+          retention-days: 3
