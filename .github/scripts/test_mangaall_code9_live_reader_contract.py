@@ -53,7 +53,7 @@ class SignedCode9LiveReaderContract(unittest.TestCase):
     def test_existing_code8_gate_kept_and_code9_explicit(self):
         script = SCRIPT.read_text(encoding="utf-8")
         self.assertIn('readonly signed_code="${MANGAALL_SIGNED_CODE:-8}"', script)
-        self.assertIn("8|9) ;;", script)
+        self.assertIn("8|9|10) ;;", script)
         self.assertIn("LIVE_PAGE_HARD_STOP|reason=UNRECOGNIZED_SIGNED_CODE", script)
         self.assertIn('Code${signed_code}LivePages_downloadAndDecodeAtMostTwo', script)
         self.assertIn('Code${signed_code}LiveReaderDisplaysCdnPixels', script)
