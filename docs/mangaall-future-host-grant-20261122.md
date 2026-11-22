@@ -15,7 +15,7 @@ The future manifest v1 gains optional `permissions.mangaAllChapterSnapshot.enabl
 
 This is a **separate, narrower permission than generic storage**. It does not grant `tsuzuki.storage` or arbitrary large HTTP bodies. Merely passing an injectable native Host object into `ProviderScriptPackageRuntime.invoke` never suffices: that runtime checks manifest ID, version, Host API, exact source origin, and permission before adding `tsuzuki.mangaAllChapterSnapshot` to the QuickJs environment. Signed code10 and all other packages lack it.
 
-A Host caller may in the future explicitly inject `ProviderMangaAllChapterSnapshotHostService`, with `start(workId, language)` and `next(workId, language, cursor)` that return bounded JSON. `MangaAllFutureChapterSnapshotHostBridge` adapts the internal typed pager to this shape; the QuickJs binding independently enforces ≤48KiB UTF-8/characters and JSON validity. It cannot change existing reading identities or implicitly authorize source selection.
+A Host caller may in the future explicitly inject `ProviderMangaAllChapterSnapshotHostService`, with `start(workId, language)` and `next(workId, language, cursor)` that return bounded JSON. `MangaAllFutureChapterSnapshotHostBridge` adapts the internal typed pager to this shape; the QuickJs binding independently enforces ≤48KiB UTF-8/characters, strict JSON lexical grammar (not merely permissive JsonElement parsing) and the exact `items[]` / `nextCursor` envelope. Unquoted tokens, malformed JSON values, wrong outer structure and oversized pages fail as Host errors. It cannot change existing reading identities or implicitly authorize source selection.
 
 ## Still missing before production
 
