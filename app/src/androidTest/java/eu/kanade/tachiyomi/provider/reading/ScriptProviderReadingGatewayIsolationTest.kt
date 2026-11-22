@@ -2372,7 +2372,21 @@ class ScriptProviderReadingGatewayIsolationTest {
         }
         val providerId = ProviderId(parsed.manifest.id)
         val permission = requireNotNull(parsed.manifest.permissions.network)
+        // Test-only counters. Observe only an exact allowlisted endpoint
+        // category and its closed HTTP status; never persist URLs or query values.
+        val mangaDexChapterRequests = AtomicInteger(0)
+        val mangaDexChapterStatus = AtomicInteger(0)
         val networkClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val request = chain.request()
+                val isChapterRequest = signedCode == 10L &&
+                    request.url.host == "api.mangadex.org" &&
+                    request.url.encodedPath == "/chapter"
+                if (isChapterRequest) mangaDexChapterRequests.incrementAndGet()
+                val response = chain.proceed(request)
+                if (isChapterRequest) mangaDexChapterStatus.set(response.code)
+                response
+            }
             .callTimeout(25, java.util.concurrent.TimeUnit.SECONDS)
             .build()
         val actualGateway = gateway(
@@ -2411,7 +2425,9 @@ class ScriptProviderReadingGatewayIsolationTest {
                     "|providerError=${failure.error.code.name}" +
                         "|sourceFailure=${failure.error.sourceFailureCode?.name ?: "NONE"}" +
                         "|httpStatus=${failure.error.httpStatus?.toString() ?: "NONE"}" +
-                        "|retryable=${failure.error.retryable}"
+                        "|retryable=${failure.error.retryable}" +
+                        "|sourceRequests=${mangaDexChapterRequests.get().coerceAtMost(99)}" +
+                        "|sourceHttp=${mangaDexChapterStatus.get().takeIf { it in 100..599 }?.toString() ?: "NONE"}"
                 } else {
                     ""
                 }
