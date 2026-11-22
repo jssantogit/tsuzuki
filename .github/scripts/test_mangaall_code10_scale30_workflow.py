@@ -45,7 +45,7 @@ class TestScale30WorkflowContract(unittest.TestCase):
         self.assertIn("mangaall-code10-canonical-smoke-per-work-summary-${{ matrix.shard }}", w)
         self.assertIn("mangaall-real-host-decoder-${{ matrix.shard }}", w)
         self.assertIn("mangaall-live-catalog-${{ matrix.shard }}", w)
-        self.assertIn("mangaall-code10_scale30_aggregate.py", w)
+        self.assertIn("mangaall_code10_scale30_aggregate.py", w)
         self.assertIn("needs: [aggregate-exact-30]", w)
         self.assertEqual(w.count("name: Real signed code10"), 1)
         self.assertIn("ReaderActivity source navigation and chapter regression — synthetic offline ONLY", w)
