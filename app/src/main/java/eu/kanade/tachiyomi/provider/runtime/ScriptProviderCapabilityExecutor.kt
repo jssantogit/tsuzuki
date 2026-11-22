@@ -141,23 +141,18 @@ class ScriptProviderCapabilityExecutor(
 
         val invocationId = invocationIdFactory(capability)
         val hostPolicy = try {
-            ProviderHostInvocationPolicy.fromManifest(
+            val manifestPolicy = ProviderHostInvocationPolicy.fromManifest(
                 manifest = active.parsed.manifest,
                 invocationId = invocationId,
-            ).copy(
+            )
+            val futureChaptersOnly = manifestPolicy.mangaAllChapterSnapshotEnabled &&
+                capability == tachiyomi.domain.tsuzuki.provider.ProviderCapabilities.ReadingChaptersV1
+            manifestPolicy.copy(
                 directP2pEnabled = privilegedHostGrants.directP2p,
                 approvedP2pSelection = privilegedHostGrants.approvedP2pSelection,
                 // Even a hypothetical signed code11 MangaALL package may use
                 // large chapter snapshots ONLY during reading.chapters.
-                mangaAllChapterSnapshotEnabled =
-                active.parsed.manifest.permissions.mangaAllChapterSnapshot.enabled &&
-                    capability == tachiyomi.domain.tsuzuki.provider.ProviderCapabilities.ReadingChaptersV1 &&
-                    active.parsed.manifest.id == "app.tsuzuki.mangaall" &&
-                    active.parsed.manifest.version.code >= 11L &&
-                    active.parsed.manifest.minHostApi >= 2 &&
-                    active.parsed.manifest.permissions.network?.localNetwork == false &&
-                    "https://mangadot.net" in
-                    active.parsed.manifest.permissions.network?.origins.orEmpty(),
+                mangaAllChapterSnapshotEnabled = futureChaptersOnly,
             )
         } catch (_: Throwable) {
             return malformed()
