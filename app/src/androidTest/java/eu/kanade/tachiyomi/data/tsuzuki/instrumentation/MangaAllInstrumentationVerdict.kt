@@ -68,7 +68,8 @@ internal object MangaAllInstrumentationVerdict {
                 """CHAPTER_IDENTITY_UNVERIFIED|NETWORK_ERROR|BROWSER_ERROR|RESOURCE_LIMIT|""" +
                 """MALFORMED_RESULT|AUTH_REQUIRED|ACQUISITION_FAILED""" +
                 """)\|sourceFailure=(NONE|CHALLENGE_BLOCKED|HTTP_ERROR|INVALID_RESPONSE|UNCLASSIFIED_ERROR)""" +
-                """\|httpStatus=(NONE|[1-5][0-9]{2})\|retryable=(true|false)""",
+                """\|httpStatus=(NONE|[1-5][0-9]{2})\|retryable=(true|false)""" +
+                """\|sourceRequests=([0-9]|[1-9][0-9])\|sourceHttp=(NONE|[1-5][0-9]{2})""",
         ),
         Regex(
             """MANGAALL_LIVE_PAGE_GATE\|outcome=PASS""" +
