@@ -18,8 +18,11 @@ class TestScale30WorkflowContract(unittest.TestCase):
     def test_on_demand_only_and_three_source_identity(self):
         w = self.data
         header = w.split("\npermissions:", 1)[0]
-        self.assertIn("on:\n  workflow_dispatch:\n", header)
-        self.assertNotRegex(header, r"(?m)^  (?:push|pull_request|schedule):")
+        self.assertIn("on:\n  push:\n", header)
+        self.assertIn("  workflow_dispatch:\n", header)
+        self.assertIn("branches: ['probe/mangaall-code10-scale30-*']", header)
+        self.assertIn("'.github/mangaall-code10-scale30-request.json'", header)
+        self.assertNotRegex(header, r"(?m)^  (?:pull_request|schedule):")
         self.assertIn("I_ACCEPT_SIGNED_CODE10_SCALE30_LIVE", header)
         self.assertIn("test \"$MANGAALL_SCALE30_ACK\" = 'I_ACCEPT_SIGNED_CODE10_SCALE30_LIVE'", w)
         self.assertIn("python3 .github/scripts/mangaall_30_host_readiness.py --plan", w)
@@ -53,6 +56,12 @@ class TestScale30WorkflowContract(unittest.TestCase):
     def test_output_multiline_and_no_synthetic_pass_promotion(self):
         w = self.data
         self.assertIn("works: ${{ steps.approve.outputs.works }}", w)
+        self.assertIn("MANGAALL_SCALE30_EVENT: ${{ github.event_name }}", w)
+        self.assertIn("MANGAALL_SCALE30_MANUAL_WORKS: ${{ inputs.works }}", w)
+        self.assertIn("set(request)=={'works','acknowledge'}", w)
+        self.assertIn("MANGAALL_SCALE30_ACK: ${{ steps.request.outputs.acknowledge }}", w)
+        self.assertIn("MANGAALL_WORKS: ${{ steps.request.outputs.works }}", w)
+        self.assertIn("Only manual or scoped one-shot commit can launch source traffic", w)
         self.assertIn("MANGAALL_WORKS: ${{ needs.plan.outputs.works }}", w)
         self.assertIn("original=os.environ['MANGAALL_WORKS'].rstrip('\\n')", w)
         self.assertIn("f.write(f'works<<{end}\\n{original}\\n{end}\\n')", w)
