@@ -10,6 +10,9 @@ import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import tachiyomi.core.provider.runtime.ProviderRuntimeFailureCode
+import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
+import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
 import tachiyomi.domain.tsuzuki.provider.ProviderFacetRef
@@ -125,6 +128,26 @@ class MangaAllRealSourceHostDecoderTest {
         // without independent catalog identity it is not canonical NO_CHAPTERS.
         MangaAllRealSourceReplay.cursorCoverage(listOf(lookup(null, null)))
             .pendingLookupCursors shouldBe 0
+    }
+
+    @Test
+    fun `oversized captured response is a closed real Host limit not a decoded chapter page`() {
+        val limit = ProviderRuntimeProtocol.MAX_RESULT_JSON_CHARS
+        fun payload(characters: Int): JsonObject {
+            val empty = buildJsonObject { put("payload", "") }
+            return buildJsonObject {
+                put("payload", "x".repeat(characters - empty.toString().length))
+            }
+        }
+        val within = payload(limit)
+        val oversized = payload(limit + 1)
+        within.toString().length shouldBe limit
+        oversized.toString().length shouldBe limit + 1
+        MangaAllRealSourceReplay.exceedsHostResultLimit(within) shouldBe false
+        MangaAllRealSourceReplay.exceedsHostResultLimit(oversized) shouldBe true
+        ProviderRuntimeInvocationResponse.success(within.toString()).failure shouldBe null
+        ProviderRuntimeInvocationResponse.success(oversized.toString()).failure shouldBe
+            ProviderRuntimeFailureCode.MALFORMED_RESULT
     }
 
     @Test
