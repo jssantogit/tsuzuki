@@ -2,10 +2,13 @@ package tachiyomi.core.provider.runtime
 
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -408,5 +411,86 @@ class MangaAllFutureHostChapterSnapshotTest {
         page.items[2]["releaseDateMillis"] shouldBe JsonNull
         page.items[4]["releaseDateMillis"]!!.jsonPrimitive.content shouldBe "0"
         requests() shouldBe 1
+    }
+
+    @Test
+    fun optimized_snapshot_chunking_is_byte_identical_to_reference_json_arrays_with_cjk(): Unit = runBlocking {
+        // Deliberately use a *quadratic reference* on just 400 synthetic rows
+        // to lock output compatibility. Production now performs each row's
+        // serialization once, not once per growing intermediate array.
+        val title = "界".repeat(30)
+        val storage = FileProviderStorageHostService(
+            root = tempDir.resolve("cjk-boundary-parity").toFile(),
+            providerId = providerId,
+        )
+        val (service, calls) = fixture(existingStorage = storage) {
+            source(400, padding = 0, title = title)
+        }
+        service.start("mangadot:131", "en")
+        val headerText = storage.get("mangaall_private_chapters_index")!!
+        val header = Json.parseToJsonElement(headerText).jsonObject
+        val generation = header["generation"]!!.jsonPrimitive.content
+        // Reuse the exact *serialized* compact tuples as chunker input.
+        // Rebuilding them manually from source metadata would accidentally
+        // test field normalization (including numeric rendering) instead of
+        // isolating the array-partition algorithm under test here.
+        val originalRows = header["ranges"]!!.jsonArray.indices.flatMap { index ->
+            val stored = storage.get("mangaall_private_chapters_part_$index")
+                ?: throw AssertionError("MANGAALL_CJK_PARITY|missingPart=$index")
+            Json.parseToJsonElement(stored).jsonObject["rows"]!!.jsonArray.map { it.jsonArray }
+        }
+        originalRows.size shouldBe 400
+        originalRows.map { it[0].jsonPrimitive.content } shouldBe
+            (1..400).map { (13100000 + it).toString() }
+        originalRows.first()[3].jsonPrimitive.content shouldBe "$title 1"
+        originalRows.first()[4].jsonPrimitive.content shouldBe "en"
+        originalRows.first()[5].jsonPrimitive.content shouldBe "Ju-Ni"
+        val referenceParts = mutableListOf<List<JsonArray>>()
+        var current = mutableListOf<JsonArray>()
+        // A JsonArray is itself Iterable<JsonElement>: current + row
+        // FLATTENS the tuple through Kotlin's plus(Iterable) overload.
+        // The original legacy budget check made exactly that mistake and
+        // could compare a different JSON shape than the persisted array.
+        // Explicit listOf(row) yields the actual saved array-of-tuples shape.
+        val first = originalRows.first()
+        (
+            JsonArray(mutableListOf<JsonArray>() + first).toString() !=
+                JsonArray(listOf(first)).toString()
+            ) shouldBe true
+        for (row in originalRows) {
+            val proposed = JsonArray(current + listOf(row)).toString()
+            if (proposed.length > 48 * 1024 || proposed.encodeToByteArray().size > 48 * 1024) {
+                referenceParts += current
+                current = mutableListOf()
+            }
+            current += row
+        }
+        if (current.isNotEmpty()) referenceParts += current
+        val referenceRanges = referenceParts.map { it.size }
+        val savedRanges = header["ranges"]!!.jsonArray.map { it.jsonPrimitive.content.toInt() }
+        if (referenceParts.size < 2 || savedRanges != referenceRanges) {
+            throw AssertionError(
+                "MANGAALL_CJK_PARITY|expectedRanges=$referenceRanges|storedRanges=$savedRanges",
+            )
+        }
+        for ((index, part) in referenceParts.withIndex()) {
+            val expected = JsonObject(
+                mapOf(
+                    "generation" to JsonPrimitive(generation),
+                    "rows" to JsonArray(part),
+                ),
+            ).toString()
+            val observed = storage.get("mangaall_private_chapters_part_$index")
+            if (observed != expected) {
+                val firstMismatch = expected.indices.firstOrNull { pos ->
+                    expected[pos] != observed?.getOrNull(pos)
+                } ?: expected.length
+                throw AssertionError(
+                    "MANGAALL_CJK_PARITY|part=$index|expectedChars=${expected.length}|" +
+                        "observedChars=${observed?.length}|firstMismatch=$firstMismatch",
+                )
+            }
+        }
+        calls() shouldBe 1
     }
 }

@@ -370,26 +370,40 @@ internal class MangaAllFutureHostChapterSnapshot(
     private fun makeParts(rows: List<JsonArray>): List<List<JsonArray>> {
         val parts = mutableListOf<List<JsonArray>>()
         var current = mutableListOf<JsonArray>()
+        // JsonArray.toString() has the exact wire shape "[" + comma-separated
+        // row.toString() values + "]". Track that shape incrementally instead
+        // of reserializing an ever-growing partial array for every chapter.
+        // Both UTF-16 characters and UTF-8 bytes remain independent quotas.
+        var partChars = 2 // '[' and ']'
+        var partBytes = 2
         var bodyBytes = 0
         for (row in rows) {
-            val proposed = current + row
-            val serialized = JsonArray(proposed).toString()
-            if (serialized.length > MAX_PART || byteSize(serialized) > MAX_PART) {
+            val serializedRow = row.toString()
+            val rowChars = serializedRow.length
+            val rowBytes = byteSize(serializedRow)
+            if (rowChars + 2 > MAX_PART || rowBytes + 2 > MAX_PART) {
+                fail("CHAPTER_ROW_EXCEEDS_STORAGE_PAGE")
+            }
+
+            val comma = if (current.isEmpty()) 0 else 1
+            if (partChars + comma + rowChars > MAX_PART ||
+                partBytes + comma + rowBytes > MAX_PART
+            ) {
                 if (current.isEmpty()) fail("CHAPTER_ROW_EXCEEDS_STORAGE_PAGE")
                 parts += current
-                bodyBytes += byteSize(JsonArray(current).toString())
-                current = mutableListOf(row)
-                val single = JsonArray(current).toString()
-                if (single.length > MAX_PART || byteSize(single) > MAX_PART) {
-                    fail("CHAPTER_ROW_EXCEEDS_STORAGE_PAGE")
-                }
-            } else {
-                current.add(row)
+                bodyBytes += partBytes
+                current = mutableListOf()
+                partChars = 2
+                partBytes = 2
             }
+            val separator = if (current.isEmpty()) 0 else 1
+            current.add(row)
+            partChars += separator + rowChars
+            partBytes += separator + rowBytes
         }
         if (current.isNotEmpty()) {
             parts += current
-            bodyBytes += byteSize(JsonArray(current).toString())
+            bodyBytes += partBytes
         }
         if (parts.size > MAX_PARTS || bodyBytes > MAX_SNAPSHOT) {
             fail("SNAPSHOT_EXCEEDS_PROVIDER_STORAGE_QUOTA")
