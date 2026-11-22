@@ -160,6 +160,9 @@ class MangaAllFutureHostQuickJsContinuationTest {
         (pages in 17..32) shouldBe true
         ids.size shouldBe 4341
         ids.distinct().size shouldBe 4341
+        // Check *every* source ID and its exact cross-page position. A test
+        // that checks only first/last/count would miss an interior swap.
+        ids shouldBe (1..4341).map { n -> "mangadot:uploads:" + (13100000 + n) }
         ids.first() shouldBe "mangadot:uploads:13100001"
         ids.last() shouldBe "mangadot:uploads:13104341"
         upstreamCalls shouldBe 1
