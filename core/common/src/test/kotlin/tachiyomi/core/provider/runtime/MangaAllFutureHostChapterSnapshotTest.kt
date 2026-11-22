@@ -361,6 +361,7 @@ class MangaAllFutureHostChapterSnapshotTest {
             statusDenied.close()
         }
     }
+
     @Test
     fun future_source_numeric_ids_numbers_and_explicit_utc_dates_match_signed_source_semantics(): Unit = runBlocking {
         // Fixed offline source fixture, never live MangaDot data. The source
@@ -408,5 +409,4 @@ class MangaAllFutureHostChapterSnapshotTest {
         page.items[4]["releaseDateMillis"]!!.jsonPrimitive.content shouldBe "0"
         requests() shouldBe 1
     }
-
 }
