@@ -46,6 +46,13 @@ jobs:
             exit 1
           fi
           echo 'MANGAALL_HOST_PRIVATE_SNAPSHOT|signed_code10=UNCHANGED|quickjs_bindings=UNCHANGED|network=NONE'
+      - name: Generate exact repo Kotlin formatting patch for review
+        shell: bash
+        run: |
+          ./gradlew :core:common:spotlessKotlinApply --stacktrace
+          echo 'MANGAALL_FORMAT_PATCH_BEGIN'
+          git diff -- core/common/src/main/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshot.kt core/common/src/test/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshotTest.kt
+          echo 'MANGAALL_FORMAT_PATCH_END'
       - name: Kotlin formatting
         run: ./gradlew :core:common:spotlessKotlinCheck --stacktrace
       - name: Full private snapshot capacity regression on JVM
