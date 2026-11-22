@@ -285,7 +285,15 @@ class ProviderScriptPackageRuntimeTest {
             ),
         )
         val runtime = ProviderScriptPackageRuntime()
-        for (badResult in listOf("not-json", "x".repeat(60 * 1024))) {
+        for (
+            badResult in listOf(
+                "not-json",
+                """{"items":[not-json],"nextCursor":null}""",
+                """{"items":[],"nextCursor":0}""",
+                """{"unrelated":1}""",
+                "x".repeat(60 * 1024),
+            )
+        ) {
             val bridge = object : ProviderMangaAllChapterSnapshotHostService {
                 override suspend fun start(workId: String, language: String) = badResult
                 override suspend fun next(workId: String, language: String, cursor: String) =
@@ -298,7 +306,6 @@ class ProviderScriptPackageRuntimeTest {
                 "{}",
                 ProviderHostServices(mangaAllChapterSnapshot = bridge),
             )
-            println("MANGAALL_FUTURE_BRIDGE_NEGATIVE|input=" + badResult.length + "|result=" + execution)
             execution shouldBe ProviderPackageExecution.Failure(ProviderPackageFailure.HOST_ERROR)
         }
     }
