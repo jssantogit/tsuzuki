@@ -454,9 +454,13 @@ class MangaAllFutureHostChapterSnapshotTest {
             current += row
         }
         if (current.isNotEmpty()) referenceParts += current
-        (referenceParts.size >= 2) shouldBe true
-        header["ranges"]!!.jsonArray.map { it.jsonPrimitive.content.toInt() } shouldBe
-            referenceParts.map { it.size }
+        val referenceRanges = referenceParts.map { it.size }
+        val savedRanges = header["ranges"]!!.jsonArray.map { it.jsonPrimitive.content.toInt() }
+        if (referenceParts.size < 2 || savedRanges != referenceRanges) {
+            throw AssertionError(
+                "MANGAALL_CJK_PARITY|expectedRanges=$referenceRanges|storedRanges=$savedRanges",
+            )
+        }
         for ((index, part) in referenceParts.withIndex()) {
             val expected = JsonObject(
                 mapOf(
@@ -464,7 +468,16 @@ class MangaAllFutureHostChapterSnapshotTest {
                     "rows" to JsonArray(part),
                 ),
             ).toString()
-            storage.get("mangaall_private_chapters_part_$index") shouldBe expected
+            val observed = storage.get("mangaall_private_chapters_part_$index")
+            if (observed != expected) {
+                val firstMismatch = expected.indices.firstOrNull { pos ->
+                    pos >= (observed?.length ?: 0) || expected[pos] != observed[pos]
+                } ?: expected.length
+                throw AssertionError(
+                    "MANGAALL_CJK_PARITY|part=$index|expectedChars=${expected.length}|" +
+                        "observedChars=${observed?.length}|firstMismatch=$firstMismatch",
+                )
+            }
         }
         calls() shouldBe 1
     }
