@@ -29,7 +29,7 @@ internal class MangaAllFutureHostChapterSnapshot(
     private val owner: ProviderResourceOwner,
     private val http: ProviderHttpHostService,
     private val resources: ProviderResourceStore,
-    private val storage: ProviderStorageHostService,
+    private val storage: FileProviderStorageHostService,
     private val clock: () -> Long = System::currentTimeMillis,
     private val generation: () -> String = {
         UUID.randomUUID().toString().replace("-", "").take(16)
@@ -105,14 +105,12 @@ internal class MangaAllFutureHostChapterSnapshot(
             fail("SNAPSHOT_EXCEEDS_PROVIDER_STORAGE_QUOTA")
         }
 
-        // Serialize competing work refreshes with continuation reads; publish
-        // the index LAST, so a half-written snapshot is never accepted as new.
-        clear()
+        // The typed Host-private storage operation checks the full provider
+        // state (including unrelated keys) and atomically replaces all reserved
+        // snapshot keys. Rejected new data cannot evict an older valid snapshot.
         try {
-            values.forEachIndexed { n, value -> storage.set(PART_PREFIX + n, value) }
-            storage.set(INDEX_KEY, index)
-        } catch (_: Exception) {
-            clear()
+            storage.replaceFutureMangaAllChapterSnapshot(index, values)
+        } catch (_: ProviderHostServiceException) {
             fail("SNAPSHOT_STORAGE_WRITE_FAILED")
         }
         page(workId, language, 0, readIndex())
@@ -278,13 +276,6 @@ internal class MangaAllFutureHostChapterSnapshot(
             }
             val id = row["id"].sourceId() ?: continue
             val number = row["chapter_number"].sourceNumber() ?: continue
-            if (!seen.add(id)) continue
-            val title = text(row["chapter_title"], 3900)
-            val groups = row["groups"] as? JsonArray
-            val firstGroup = groups?.firstOrNull() as? JsonObject
-            val scanlator = text(firstGroup?.get("name"), 1024)
-                ?: text(row["group_name"], 1024)
-                ?: text(row["scanlator_name"], 1024)
             val kind = if (row["source"] == null || row["source"] == JsonNull ||
                 row["source"]?.primitiveText() == "user"
             ) {
@@ -292,6 +283,15 @@ internal class MangaAllFutureHostChapterSnapshot(
             } else {
                 1
             }
+            // Full source chapter identity includes the upload/chapter kind:
+            // one numeric upstream ID can represent two separate chapters.
+            if (!seen.add("$kind:$id")) continue
+            val title = text(row["chapter_title"], 3900)
+            val groups = row["groups"] as? JsonArray
+            val firstGroup = groups?.firstOrNull() as? JsonObject
+            val scanlator = text(firstGroup?.get("name"), 1024)
+                ?: text(row["group_name"], 1024)
+                ?: text(row["scanlator_name"], 1024)
             val date = row["date_added"]?.primitiveText()?.let { raw ->
                 runCatching { Instant.parse(raw).toEpochMilli() }.getOrNull()
             }
@@ -379,11 +379,6 @@ internal class MangaAllFutureHostChapterSnapshot(
             fail("SNAPSHOT_EXCEEDS_PROVIDER_STORAGE_QUOTA")
         }
         return parts
-    }
-
-    private suspend fun clear() {
-        storage.remove(INDEX_KEY)
-        repeat(MAX_PARTS) { storage.remove(PART_PREFIX + it) }
     }
 
     private fun requireScope(workId: String, language: String): String {
