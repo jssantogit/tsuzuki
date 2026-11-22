@@ -90,6 +90,57 @@ class CanonicalCode10ReportTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "authentic sequence36"):
                     merge(WORKS, TIER, *values)
 
+    def test_scale_30_shards_retain_global_positions_and_original_source_shard(self):
+        full = "\n".join(f"manga :: Offline Scale Work {i:02d}" for i in range(1, 31))
+        all_cases = parse_plan(full, "scale", ACK)
+        observed = []
+        for shard in range(3):
+            with self.subTest(shard=shard):
+                ids = [x["caseId"] for idx, x in enumerate(all_cases) if idx % 3 == shard]
+                values = fixtures()
+                source, matrix, catalog, collectors, sqlites = values
+                source["shardIndex"], source["shardCount"] = shard, 3
+                matrix["shardIndex"], matrix["shardCount"] = shard, 3
+                source["cases"] = [
+                    {"caseId": case, "records": [], "replayCompleteness": "LOOKUP_CHAPTERS_ONLY"}
+                    for case in ids
+                ]
+                matrix["cases"] = [
+                    {"case": case, "lookupComplete": False, "httpBySource": {
+                        name: {"blocked403": int(name == "MANGAFIRE"), "transportFailed": 0}
+                        for name in ("MANGADEX", "MANGADOT", "MANGAFIRE")
+                    }} for case in ids
+                ]
+                catalog["cases"] = [{"caseId": case, "status": "UNAVAILABLE"} for case in ids]
+                collectors[:] = [{"case": case, "gaps": "0"} for case in ids]
+                sqlites[:] = [
+                    {"case": case, "lookupDecisions": "NONE",
+                     **{name: "0" for name in COUNT_FIELDS}} for case in ids
+                ]
+                report = merge(full, "scale", *values, shard_index=shard, shard_count=3)
+                self.assertEqual(report["works"], 10)
+                self.assertEqual(report["shardIndex"], shard)
+                self.assertEqual(report["shardCount"], 3)
+                self.assertEqual(report["fullVectorWorks"], 30)
+                self.assertEqual([x["position"] for x in report["results"]],
+                                 list(range(shard + 1, 31, 3)))
+                self.assertEqual([x["outcome"] for x in report["results"]],
+                                 ["INCONCLUSIVE_SOURCE"] * 10)
+                observed.extend(x["caseId"] for x in report["results"])
+                source["shardIndex"] = (shard + 1) % 3
+                with self.assertRaisesRegex(ValueError, "authentic sequence36"):
+                    merge(full, "scale", *values, shard_index=shard, shard_count=3)
+                source["shardIndex"] = shard
+                matrix["cases"][0]["case"] = all_cases[(shard + 1) % 3]["caseId"]
+                with self.assertRaisesRegex(ValueError, "case set differs|Duplicated"):
+                    merge(full, "scale", *values, shard_index=shard, shard_count=3)
+        self.assertEqual(set(observed), {x["caseId"] for x in all_cases})
+        self.assertEqual(len(observed), len(set(observed)))
+
+    def test_scale_cannot_forge_isolated_work_vector(self):
+        with self.assertRaisesRegex(ValueError, "exact 30-title scale"):
+            merge(WORKS, "isolated", *fixtures(), shard_index=0, shard_count=3)
+
     def test_case_substitution_never_becomes_canonical_evidence(self):
         values = fixtures()
         values[1]["cases"][0]["case"] = "user-aaaaaaaaaaaa"

@@ -1,0 +1,61 @@
+name: MangaALL — 30-work canonical Host capacity preflight (OFFLINE ONLY)
+# Preflight does NOT trigger 30 real network calls, emulators, source activation,
+# signing, release or editorial chapter grants.
+on:
+  push:
+    branches: ['prep/mangaall-30-canonical-capacity-audit-*']
+    paths:
+      - '.github/workflows/mangaall-30-capacity-offline.yml'
+      - '.github/scripts/mangaall_30_host_readiness.py'
+      - '.github/scripts/test_mangaall_30_host_readiness.py'
+      - '.github/scripts/mangaall_code10_canonical_smoke_report.py'
+      - '.github/scripts/test_mangaall_code10_canonical_smoke_report.py'
+      - '.github/scripts/mangaall_code10_scale30_aggregate.py'
+      - '.github/scripts/test_mangaall_code10_scale30_aggregate.py'
+      - '.github/scripts/test_mangaall_code10_scale30_workflow.py'
+      - '.github/workflows/mangaall-code10-scale30-canonical-smoke.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/mangaall-30-capacity-offline.yml'
+      - '.github/scripts/mangaall_30_host_readiness.py'
+      - '.github/scripts/test_mangaall_30_host_readiness.py'
+      - '.github/scripts/mangaall_code10_canonical_smoke_report.py'
+      - '.github/scripts/test_mangaall_code10_canonical_smoke_report.py'
+      - '.github/scripts/mangaall_code10_scale30_aggregate.py'
+      - '.github/scripts/test_mangaall_code10_scale30_aggregate.py'
+      - '.github/scripts/test_mangaall_code10_scale30_workflow.py'
+      - '.github/workflows/mangaall-code10-scale30-canonical-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  thirty-work-capacity-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify 30 exact unique operator slots and actual Host quotas (NO NETWORK)
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s .github/scripts -p 'test_mangaall_30_host_readiness.py' -v
+          python3 -m unittest discover -s .github/scripts -p 'test_mangaall_code10_canonical_smoke_report.py' -v
+          python3 -m unittest discover -s .github/scripts -p 'test_mangaall_code10_scale30_aggregate.py' -v
+          python3 -m unittest discover -s .github/scripts -p 'test_mangaall_code10_scale30_workflow.py' -v
+      - name: Declare exact scope and remaining signed code10 bottlenecks
+        run: |
+          {
+            echo '## MangaALL 30-work Host capacity audit — OFFLINE'
+            echo '30 distinct input slots → 3 shards of 10: VERIFIED BY TEST'
+            echo 'Host HTTP text 192 KiB, Host IPC 256 KiB: PRESERVED'
+            echo 'Script runtime output 64 KiB, per-invocation QuickJs: PRESERVED'
+            echo 'Optional storage 64 KiB/value, 512 KiB/provider; code10 permission disabled'
+            echo 'Large MangaDot upstream acquisition: NOT YET RESOLVED'
+            echo 'Real source, catalog, Kotlin/SQLite, CDN pixels for 30 works: NOT RUN'
+            echo 'New signed Provider or publication: NOT AUTHORIZED'
+          } >> "${GITHUB_STEP_SUMMARY}"
