@@ -3,6 +3,10 @@ name: MangaALL signed code10 — 30-work sharded canonical/SQLite evidence (ON D
 # operator authorization is required to send real 30-title source/catalog
 # requests. Original P-256 signed code10 remains immutable.
 on:
+  push:
+    branches: ['probe/mangaall-code10-scale30-*']
+    paths:
+      - '.github/mangaall-code10-scale30-request.json'
   workflow_dispatch:
     inputs:
       works:
@@ -38,11 +42,50 @@ jobs:
           python3 .github/scripts/test_mangaall_code10_canonical_smoke_report.py
           python3 .github/scripts/test_mangaall_30_host_readiness.py
           python3 .github/scripts/test_mangaall_code10_scale30_aggregate.py
+      - name: Read exactly scoped operator or one-shot commit request WITHOUT NETWORK
+        id: request
+        env:
+          MANGAALL_SCALE30_EVENT: ${{ github.event_name }}
+          MANGAALL_SCALE30_MANUAL_WORKS: ${{ inputs.works }}
+          MANGAALL_SCALE30_MANUAL_ACK: ${{ inputs.acknowledge }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, re, uuid
+          from importlib.machinery import SourceFileLoader
+          checker=SourceFileLoader(
+              'mangaall_code10_plan', '.github/scripts/mangaall_code10_canonical_smoke_plan.py',
+          ).load_module()
+          if os.environ['MANGAALL_SCALE30_EVENT'] == 'push':
+              ref=os.environ['GITHUB_REF']
+              assert re.fullmatch(r'refs/heads/probe/mangaall-code10-scale30-[a-z0-9-]{1,70}', ref), 'Invalid scale30 probe branch'
+              path=pathlib.Path('.github/mangaall-code10-scale30-request.json')
+              raw=path.read_bytes()
+              assert len(raw)<=9000, 'Oversized scale30 commit request'
+              request=json.loads(raw)
+              assert type(request) is dict and set(request)=={'works','acknowledge'}, 'Unknown request keys'
+              works, acknowledgement=request['works'], request['acknowledge']
+          elif os.environ['MANGAALL_SCALE30_EVENT'] == 'workflow_dispatch':
+              works=os.environ['MANGAALL_SCALE30_MANUAL_WORKS']
+              acknowledgement=os.environ['MANGAALL_SCALE30_MANUAL_ACK']
+          else:
+              raise ValueError('Only manual or scoped one-shot commit can launch source traffic')
+          assert acknowledgement=='I_ACCEPT_SIGNED_CODE10_SCALE30_LIVE', 'Explicit scale30 authorization required'
+          assert isinstance(works,str), 'Invalid work vector'
+          assert len(checker.parse_plan(
+              works, 'scale', 'I_ACCEPT_CODE10_CANONICAL_SMOKE',
+          ))==30, 'Exactly 30 individually validated works required'
+          end='END_'+uuid.uuid4().hex
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as out:
+              out.write(f'works<<{end}\\n{works.rstrip(chr(10))}\\n{end}\\n')
+              out.write('acknowledge=I_ACCEPT_SIGNED_CODE10_SCALE30_LIVE\\n')
+          print('MANGAALL_SCALE30_REQUEST|source=EXPLICIT_OPERATOR|works=30|internalSources=3|network=NOT_STARTED')
+          PY
       - name: Fail closed before external traffic unless acknowledged and count verified
         id: approve
         env:
-          MANGAALL_SCALE30_ACK: ${{ inputs.acknowledge }}
-          MANGAALL_WORKS: ${{ inputs.works }}
+          MANGAALL_SCALE30_ACK: ${{ steps.request.outputs.acknowledge }}
+          MANGAALL_WORKS: ${{ steps.request.outputs.works }}
           MANGAALL_SMOKE_TIER: scale
           MANGAALL_SMOKE_ACK: I_ACCEPT_CODE10_CANONICAL_SMOKE
         run: |
