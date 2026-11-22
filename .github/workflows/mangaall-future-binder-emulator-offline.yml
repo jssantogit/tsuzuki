@@ -1,0 +1,69 @@
+name: MangaALL — future code11 Android Binder 4341-row offline emulator acceptance
+
+# Read-only synthetic source; no code11 .tsz signing/install, no live source/CDN.
+# One disposable, source-network-disabled emulator only on exact internal branch.
+on:
+  push:
+    branches: ['test/mangaall-future-binder-android-emulator-offline-20261122']
+    paths:
+      - '.github/workflows/mangaall-future-binder-emulator-offline.yml'
+      - '.github/scripts/run_mangaall_future_binder_emulator_offline.sh'
+
+permissions:
+  contents: read
+concurrency:
+  group: mangaall-future-binder-emulator-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  offline-binder-android:
+    if: github.ref_name == 'test/mangaall-future-binder-android-emulator-offline-20261122'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Restrict source diff to nonshipping offline gate; no signed assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='d285c4605fa765fdc709c1122be9cb9067c2a2af'
+          test "$(git merge-base "$base" HEAD)" = "$base"
+          git diff --name-only "$base" HEAD | tee /tmp/mangaall-future-binder-android-paths.txt
+          test "$(wc -l < /tmp/mangaall-future-binder-android-paths.txt)" -eq 2
+          if grep -Ev '^\.github/(workflows/mangaall-future-binder-emulator-offline\.yml|scripts/run_mangaall_future_binder_emulator_offline\.sh)$' /tmp/mangaall-future-binder-android-paths.txt; then
+            echo '::error::Future Binder emulator test must not modify App, Provider, signing or release paths'
+            exit 1
+          fi
+          bash -n .github/scripts/run_mangaall_future_binder_emulator_offline.sh
+          echo 'MANGAALL_FUTURE_BINDER_ANDROID|diff=TEST_ONLY|signed_code10=UNCHANGED|upstream=OFFLINE'
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - name: Compile target and exact Android instrumentation APKs
+        run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Execute 4341-row synthetic Binder Android test with airplane mode
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaall_future_binder_emulator_offline.sh
+      - name: Preserve bounded offline failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-future-binder-offline-android
+          path: .github/results/mangaall-future-binder-emulator
+          if-no-files-found: ignore
+          retention-days: 2
