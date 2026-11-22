@@ -6,11 +6,13 @@ on:
     branches:
       - 'feat/mangaall-host-private-chapter-snapshot-*'
     paths:
+      - 'core/common/build.gradle.kts'
       - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshot.kt'
       - 'core/common/src/test/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshotTest.kt'
       - '.github/workflows/mangaall-host-private-chapter-snapshot-offline.yml'
   pull_request:
     paths:
+      - 'core/common/build.gradle.kts'
       - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshot.kt'
       - 'core/common/src/test/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshotTest.kt'
       - '.github/workflows/mangaall-host-private-chapter-snapshot-offline.yml'
