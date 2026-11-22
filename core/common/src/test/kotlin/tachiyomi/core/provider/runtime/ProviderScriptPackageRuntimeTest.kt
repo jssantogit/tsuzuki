@@ -291,13 +291,15 @@ class ProviderScriptPackageRuntimeTest {
                 override suspend fun next(workId: String, language: String, cursor: String) =
                     error("Not reached")
             }
-            runtime.invoke(
+            val execution = runtime.invoke(
                 pkg,
                 "reading.chapters",
                 1,
                 "{}",
                 ProviderHostServices(mangaAllChapterSnapshot = bridge),
-            ) shouldBe ProviderPackageExecution.Failure(ProviderPackageFailure.HOST_ERROR)
+            )
+            println("MANGAALL_FUTURE_BRIDGE_NEGATIVE|input=" + badResult.length + "|result=" + execution)
+            execution shouldBe ProviderPackageExecution.Failure(ProviderPackageFailure.HOST_ERROR)
         }
     }
 
