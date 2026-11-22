@@ -83,10 +83,10 @@ class TestScale30WorkflowContract(unittest.TestCase):
         fragment = self.data.split("id: request", 1)[1].split(
             "      - name: Fail closed before external traffic", 1
         )[0]
-        script = fragment.split("python3 - <<'PY'\\n", 1)[1].split("\\n          PY", 1)[0]
-        code = "\\n".join(line[10:] for line in script.splitlines()) + "\\n"
+        script = fragment.split("python3 - <<'PY'\n", 1)[1].split("\n          PY", 1)[0]
+        code = "\n".join(line[10:] for line in script.splitlines()) + "\n"
         compile(code, "<scale30-request-gate>", "exec")
-        vector = "\\n".join(f"manga :: Offline Work {i:02d}" for i in range(1, 31))
+        vector = "\n".join(f"manga :: Offline Work {i:02d}" for i in range(1, 31))
         ack = "I_ACCEPT_SIGNED_CODE10_SCALE30_LIVE"
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -121,7 +121,7 @@ class TestScale30WorkflowContract(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             written = output.read_text(encoding="utf-8")
             self.assertIn(vector, written)
-            self.assertIn("acknowledge=" + ack + "\\n", written)
+            self.assertIn("acknowledge=" + ack + "\n", written)
             self.assertIn("works<<END_", written)
             result = run("workflow_dispatch", vector, ack)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -131,7 +131,7 @@ class TestScale30WorkflowContract(unittest.TestCase):
             result = run("push", vector.replace("Offline Work 30", "Offline Work 01"), ack)
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(output.read_text(), "")
-            result = run("push", vector + "\\nmanga :: Unexpected Work", ack)
+            result = run("push", vector + "\nmanga :: Unexpected Work", ack)
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(output.read_text(), "")
 
