@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.testing.Test
+
 plugins {
     alias(mihonx.plugins.android.library)
     alias(mihonx.plugins.spotless)
@@ -17,6 +19,11 @@ kotlin {
             "-opt-in=kotlinx.serialization.ExperimentalSerializationApi",
         )
     }
+}
+
+// The module uses JUnit Jupiter; Android's default JUnit4 runner does not discover these tests.
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
 }
 
 configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
