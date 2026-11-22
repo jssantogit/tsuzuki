@@ -63,3 +63,25 @@ jobs:
               assert sum(v for k,v in classes.items() if clazz in k)>0,clazz
           print('MANGAALL_FUTURE_GRANT|JUNIT='+str(counts['tests'])+'|closed=PASS')
           PY
+      - name: Report closed JVM assertion failure type (no source data)
+        if: failure()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
+          for path in glob.glob('core/common/build/test-results/testDebugUnitTest/TEST-*.xml'):
+              root=ET.parse(path).getroot()
+              for test in root.findall('.//testcase'):
+                  failure=test.find('failure')
+                  if failure is None: continue
+                  message=failure.attrib.get('message','')[:500].replace('\n',' ')
+                  print('MANGAALL_JVM_FAILURE|class='+str(test.attrib.get('classname',''))+
+                        '|name='+str(test.attrib.get('name',''))+'|message='+message)
+              if 'ProviderScriptPackageRuntimeTest' in path:
+                  for text in root.findall('.//system-out'):
+                      if text.text:
+                          for line in text.text.splitlines():
+                              if line.startswith('MANGAALL_FUTURE_BRIDGE_NEGATIVE'):
+                                  print(line[:300])
+          PY
