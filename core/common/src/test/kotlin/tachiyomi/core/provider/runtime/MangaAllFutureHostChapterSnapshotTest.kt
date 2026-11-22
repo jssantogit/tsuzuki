@@ -471,7 +471,7 @@ class MangaAllFutureHostChapterSnapshotTest {
             val observed = storage.get("mangaall_private_chapters_part_$index")
             if (observed != expected) {
                 val firstMismatch = expected.indices.firstOrNull { pos ->
-                    pos >= (observed?.length ?: 0) || expected[pos] != observed[pos]
+                    expected[pos] != observed?.getOrNull(pos)
                 } ?: expected.length
                 throw AssertionError(
                     "MANGAALL_CJK_PARITY|part=$index|expectedChars=${expected.length}|" +
