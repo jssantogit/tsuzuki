@@ -413,6 +413,39 @@ class RefreshProviderReadingChaptersTest {
         overflow.second shouldBe (15_500 to 31)
     }
 
+    @Test
+    fun `provisional source rejects duplicate IDs across pages without accepting invalid continuation`() = runBlocking {
+        var acceptedPages = 0
+        val deliveredPages = mutableListOf<List<String>>()
+        val refresher = RefreshProviderReadingChapters(
+            gateway = gateway { request ->
+                ProviderCallResult.Success(
+                    ProviderPage(
+                        items = listOf(
+                            ProviderChapterObservation(
+                                "same-chapter",
+                                if (request.cursor == null) "Chapter 1" else "Chapter 1 duplicate",
+                            ),
+                        ),
+                        nextCursor = if (request.cursor == null) ProviderCursor("second") else null,
+                    ),
+                )
+            },
+            evidenceAdapter = ProviderChapterEvidenceAdapter(),
+            publishSnapshot = null,
+            onPageCollected = { page, _ ->
+                deliveredPages += page.map(ProviderChapterObservation::providerChapterId)
+            },
+            onPageAccepted = { acceptedPages++ },
+        )
+
+        refresher.execute(binding, allowPartialPageLimit = true) shouldBe ProviderCallResult.Failure(
+            ProviderError(ProviderErrorCode.MALFORMED_RESULT, retryable = false),
+        )
+        deliveredPages shouldBe listOf(listOf("same-chapter"))
+        acceptedPages shouldBe 1
+    }
+
     private fun gateway(
         chapters: suspend (
             ProviderReadingChaptersRequest,
