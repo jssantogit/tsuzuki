@@ -210,5 +210,5 @@ class ProviderQuickJsRuntimeTest {
             hostServices = services,
         ) shouldBe ProviderScriptExecution.Failure(ProviderScriptFailure.SCRIPT_ERROR)
         invoked shouldBe 0
-     }
+    }
 }
