@@ -68,7 +68,7 @@ class SignedCode10LiveReaderContract(unittest.TestCase):
         self.assertIn("originalCode10Package = originalCode10Package", reader)
         self.assertIn("originalCode10Package = code10", reader)
         self.assertIn("originalCode10Package: Boolean = false", fixture)
-        self.assertIn("mangaall/code10-published-package.tsz", gateway)
+        self.assertIn('open("mangaall/code$signedCode-published-package.tsz")', gateway)
         self.assertIn("mangaall/code10-published-package.tsz", fixture)
         self.assertIn(SHA, gateway)
         self.assertIn(SHA, fixture)
