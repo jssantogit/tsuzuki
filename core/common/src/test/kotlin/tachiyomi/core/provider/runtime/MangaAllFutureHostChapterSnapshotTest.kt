@@ -75,7 +75,7 @@ class MangaAllFutureHostChapterSnapshotTest {
     }
 
     @Test
-    fun host_reconstructs_4341_chapters_from_over_2mib_body_in_bounded_pages_across_calls() = runBlocking {
+    fun host_reconstructs_4341_chapters_from_over_2mib_body_in_bounded_pages_across_calls(): Unit = runBlocking {
         val body = source(4341)
         (body.toByteArray().size > 2 * 1024 * 1024) shouldBe true
         val (service, calls) = fixture { body }
@@ -106,7 +106,7 @@ class MangaAllFutureHostChapterSnapshotTest {
     }
 
     @Test
-    fun snapshot_cursor_is_work_facet_generation_and_ttl_scoped() = runBlocking {
+    fun snapshot_cursor_is_work_facet_generation_and_ttl_scoped(): Unit = runBlocking {
         val (service, calls) = fixture { source(400, 1) }
         val first = service.start("mangadot:131", "en")
         val cursor = first.nextCursor!!
@@ -142,7 +142,7 @@ class MangaAllFutureHostChapterSnapshotTest {
     }
 
     @Test
-    fun utf8_overbudget_and_invalid_source_do_not_evict_committed_snapshot() = runBlocking {
+    fun utf8_overbudget_and_invalid_source_do_not_evict_committed_snapshot(): Unit = runBlocking {
         var current = source(400, 1)
         val (service, _) = fixture { current }
         val first = service.start("mangadot:131", "en")
