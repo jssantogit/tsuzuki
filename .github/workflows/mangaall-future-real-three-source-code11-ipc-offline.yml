@@ -11,7 +11,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: mangaall-real-three-source-code11-ipc-\${{ github.ref }}
+  group: mangaall-real-three-source-code11-ipc-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   three-source-isolated-ipc:
