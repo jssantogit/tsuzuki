@@ -5,7 +5,7 @@ name: MangaAll signed code10 — real Android CDN transport and Reader pixels
 # an exact operator chapter HID; green canonical smoke never launches it.
 on:
   push:
-    branches: ['test/mangaall-code10-real-reader-cdn-opt-in-*']
+    branches: ['test/mangaall-code10-real-reader-cdn-opt-in-*', 'fix/mangaall-code10-real-reader-cdn-opt-in-*']
     paths:
       - '.github/workflows/mangaall-code10-live-reader-android.yml'
       - '.github/scripts/test_mangaall_code10_live_reader_contract.py'
