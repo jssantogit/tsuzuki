@@ -20,7 +20,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: mangaall-future-private-host-snapshot
+  group: mangaall-future-private-host-snapshot-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   kotlin-private-host-capacity:
