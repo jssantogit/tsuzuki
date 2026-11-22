@@ -12,7 +12,6 @@ import tachiyomi.core.provider.runtime.DefaultProviderDomHostService
 import tachiyomi.core.provider.runtime.DefaultProviderHttpHostService
 import tachiyomi.core.provider.runtime.FileProviderStorageHostService
 import tachiyomi.core.provider.runtime.MangaAllFutureSnapshotServiceFactory
-import tachiyomi.core.provider.runtime.ProviderMangaAllChapterSnapshotHostService
 import tachiyomi.core.provider.runtime.ProviderBrowserHostService
 import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderHostServices
@@ -289,6 +288,18 @@ class ProviderHostInvocationFactory(
     }
 }
 
+private fun String.boundedSnapshotArg(maxChars: Int, label: String): String {
+    if (length > maxChars) throw SecurityException("Future MangaALL $label exceeds IPC limit")
+    return this
+}
+
+private fun String.boundedSnapshotResult(): String {
+    if (length > 48 * 1024 || encodeToByteArray().size > 48 * 1024) {
+        throw SecurityException("Future MangaALL chapter page exceeds 48KiB Binder limit")
+    }
+    return this
+}
+
 private fun ProviderHttpDiagnostic.toRuntimeLogMessage(): String =
     buildString {
         append("host_http phase=")
@@ -392,18 +403,18 @@ private class ProviderHostBridgeAdapter(
     override fun mangaAllChapterSnapshotStart(workId: String?, language: String?): String =
         runBlocking {
             requireService(services.mangaAllChapterSnapshot, "mangaall-chapter-snapshot").start(
-                workId.orEmpty().boundedHostArg(128, "chapter work ID"),
-                language.orEmpty().boundedHostArg(16, "chapter language"),
-            )
+                workId.orEmpty().boundedSnapshotArg(128, "chapter work ID"),
+                language.orEmpty().boundedSnapshotArg(16, "chapter language"),
+            ).boundedSnapshotResult()
         }
 
     override fun mangaAllChapterSnapshotNext(workId: String?, language: String?, cursor: String?): String =
         runBlocking {
             requireService(services.mangaAllChapterSnapshot, "mangaall-chapter-snapshot").next(
-                workId.orEmpty().boundedHostArg(128, "chapter work ID"),
-                language.orEmpty().boundedHostArg(16, "chapter language"),
-                cursor.orEmpty().boundedHostArg(128, "chapter cursor"),
-            )
+                workId.orEmpty().boundedSnapshotArg(128, "chapter work ID"),
+                language.orEmpty().boundedSnapshotArg(16, "chapter language"),
+                cursor.orEmpty().boundedSnapshotArg(128, "chapter cursor"),
+            ).boundedSnapshotResult()
         }
 
     override fun storageGet(key: String?): String? =
