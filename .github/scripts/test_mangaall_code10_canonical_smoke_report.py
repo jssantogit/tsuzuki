@@ -73,6 +73,33 @@ class CanonicalCode10ReportTest(unittest.TestCase):
         self.assertEqual(result["readerPixels"], "NOT_TESTED_REAL_CDN")
         self.assertFalse(result["canonicalGrantFromV2"])
 
+    def test_real_host_limit_must_force_incomplete_even_with_successful_upstream(self):
+        values = fixtures()
+        source, matrix, catalog, collector, sqlite = values
+        for probe in matrix["cases"]:
+            probe["lookupComplete"] = True
+            for health in probe["httpBySource"].values():
+                health["blocked403"] = 0
+                health["transportFailed"] = 0
+        for item in catalog["cases"]:
+            item["status"] = "RESOLVED"
+        ids = [item["caseId"] for item in source["cases"]]
+        decoders = [
+            {"case": case, "source": "INCONCLUSIVE_HOST_RESULT_LIMIT" if i == 0
+             else "REAL_RESPONSES_DECODED_NOT_CANONICAL",
+             "hostResultLimit": "2" if i == 0 else "0", "replayGaps": "0"}
+            for i, case in enumerate(ids)
+        ]
+        report = merge(WORKS, TIER, *values, decoder_rows=decoders)
+        self.assertEqual(report["results"][0]["hostResultLimitResponses"], 2)
+        self.assertTrue(report["results"][0]["sourceIncomplete"])
+        self.assertEqual(report["results"][0]["outcome"], "INCONCLUSIVE_SOURCE")
+        self.assertEqual(report["results"][1]["hostResultLimitResponses"], 0)
+        self.assertEqual(report["results"][1]["outcome"], "INCONCLUSIVE_CANONICAL_CHAPTERS")
+        decoders[0]["source"] = "REAL_RESPONSES_DECODED_NOT_CANONICAL"
+        with self.assertRaisesRegex(ValueError, "not classified inconclusive"):
+            merge(WORKS, TIER, *values, decoder_rows=decoders)
+
     def test_historical_code9_and_unreleased_versions_cannot_pass_as_code10(self):
         for wrong_version in ("0.5.4", "0.5.5-dev", "0.5.6", ""):
             with self.subTest(version=wrong_version):

@@ -10,6 +10,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
+import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
@@ -24,6 +26,7 @@ import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderBindingRef
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCallResult
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderCursor
+import tachiyomi.domain.tsuzuki.provider.reading.ProviderErrorCode
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingChaptersRequest
 import tachiyomi.domain.tsuzuki.provider.reading.ProviderReadingLookupRequest
 import java.security.MessageDigest
@@ -109,6 +112,7 @@ internal object MangaAllRealSourceReplay {
         val orphanContinuations: Int = 0,
         val abandonedContinuations: Int = 0,
         val replayGaps: Int = 0,
+        val hostResultLimitFailures: Int = 0,
         val catalogStage: String = "NOT_EXECUTED_HOST",
         val canonicalStage: String = "NOT_EXECUTED_HOST",
         val readerStage: String = "NOT_EXECUTED_HOST",
@@ -120,8 +124,27 @@ internal object MangaAllRealSourceReplay {
                 "lookupCursorsPending=$pendingLookupCursors|" +
                 "chapterCursorsPending=$pendingChapterCursors|" +
                 "orphanCursors=$orphanContinuations|abandonedCursors=$abandonedContinuations|" +
-                "replayGaps=$replayGaps|" +
+                "replayGaps=$replayGaps|hostResultLimit=$hostResultLimitFailures|" +
                 "catalog=$catalogStage|canonical=$canonicalStage|reader=$readerStage"
+    }
+
+    /** The original production Host runtime rejects a single result over 64 KiB. */
+    internal fun exceedsHostResultLimit(response: JsonObject): Boolean =
+        response.toString().length > ProviderRuntimeProtocol.MAX_RESULT_JSON_CHARS
+
+    private fun expectedHostResultLimitFailure(
+        response: JsonObject,
+        result: ProviderCallResult<*>,
+    ): Boolean {
+        if (!exceedsHostResultLimit(response)) return false
+        require(
+            result is ProviderCallResult.Failure &&
+                result.error.code == ProviderErrorCode.MALFORMED_RESULT &&
+                result.error.malformedStage == DiagnosticProviderMalformedResultStage.RUNTIME_PAYLOAD,
+        ) {
+            "Oversized real signed source result must be rejected at the original Host boundary"
+        }
+        return true
     }
 
     internal fun validate(captureText: String): List<Case> {
@@ -310,6 +333,7 @@ internal object MangaAllRealSourceReplay {
             var typedFailure = 0
             var sourceError = 0
             var pagesSkipped = 0
+            var hostResultLimitFailures = 0
             for (record in case.records) {
                 val operation = record.string("operation")!!
                 if (operation == "pages") {
@@ -341,6 +365,13 @@ internal object MangaAllRealSourceReplay {
                     )
                     val decoded = gateway.lookup(prepared.provider, requested)
                     if (tape.replayGapCount > 0) break
+                    if (
+                        record.string("outcome") == "RESULT" &&
+                        expectedHostResultLimitFailure(response, decoded)
+                    ) {
+                        hostResultLimitFailures++
+                        continue
+                    }
                     if (record.string("outcome") == "SOURCE_FAILURE") {
                         require(decoded is ProviderCallResult.Failure) {
                             "Typed lookup failure must NEVER become empty successful Host lookup"
@@ -382,6 +413,10 @@ internal object MangaAllRealSourceReplay {
                         ),
                     )
                     if (tape.replayGapCount > 0) break
+                    if (expectedHostResultLimitFailure(response, decoded)) {
+                        hostResultLimitFailures++
+                        continue
+                    }
                     require(decoded is ProviderCallResult.Success) {
                         "Host failed real chapter decode"
                     }
@@ -404,6 +439,7 @@ internal object MangaAllRealSourceReplay {
             val coverage = cursorCoverage(case.records)
             val sourceState = when {
                 tape.replayGapCount > 0 -> "REPLAY_GAP"
+                hostResultLimitFailures > 0 -> "INCONCLUSIVE_HOST_RESULT_LIMIT"
                 sourceError > 0 || typedFailure > 0 -> "INCONCLUSIVE_UPSTREAM"
                 coverage.pendingLookupCursors > 0 || coverage.pendingChapterCursors > 0 ||
                     coverage.orphanContinuations > 0 || coverage.abandonedContinuations > 0 ->
@@ -424,6 +460,7 @@ internal object MangaAllRealSourceReplay {
                 orphanContinuations = coverage.orphanContinuations,
                 abandonedContinuations = coverage.abandonedContinuations,
                 replayGaps = tape.replayGapCount,
+                hostResultLimitFailures = hostResultLimitFailures,
             )
         }
     }

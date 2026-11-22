@@ -328,13 +328,16 @@ jobs:
           mapfile -t matrices < <(find real-source -type f -name 'mangaall-live-matrix-${{ matrix.shard }}.json')
           mapfile -t source_cases < <(find real-source -type f -name 'mangaall-real-envelopes-${{ matrix.shard }}.json')
           mapfile -t catalog_cases < <(find real-catalog -type f -name 'catalog-attestations.json')
+          mapfile -t decoder_xmls < <(find real-source -type f -name 'TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealSourceHostDecoderTest.xml')
           test "${#matrices[@]}" = 1
           test "${#source_cases[@]}" = 1
           test "${#catalog_cases[@]}" = 1
+          test "${#decoder_xmls[@]}" = 1
           python3 .github/scripts/mangaall_code10_canonical_smoke_report.py \
             "${source_cases[0]}" "${matrices[0]}" "${catalog_cases[0]}" \
             app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealCanonicalCollectorTest.xml \
             app/build/test-results/testDebugUnitTest/TEST-eu.kanade.tachiyomi.provider.reading.MangaAllRealSqliteRefreshTest.xml \
+            "${decoder_xmls[0]}" \
             .github/results/mangaall-code10-canonical-smoke/summary-${{ matrix.shard }}.json
       - name: Retain only sanitized per-work canonical smoke verdicts
         if: always()
