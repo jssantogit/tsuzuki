@@ -8,13 +8,17 @@ on:
     paths:
       - 'core/common/build.gradle.kts'
       - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshot.kt'
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/ProviderStateHostServices.kt'
       - 'core/common/src/test/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshotTest.kt'
+      - 'core/common/src/test/kotlin/tachiyomi/core/provider/runtime/ProviderStateHostServicesTest.kt'
       - '.github/workflows/mangaall-host-private-chapter-snapshot-offline.yml'
   pull_request:
     paths:
       - 'core/common/build.gradle.kts'
       - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshot.kt'
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/ProviderStateHostServices.kt'
       - 'core/common/src/test/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshotTest.kt'
+      - 'core/common/src/test/kotlin/tachiyomi/core/provider/runtime/ProviderStateHostServicesTest.kt'
       - '.github/workflows/mangaall-host-private-chapter-snapshot-offline.yml'
 
 permissions:
@@ -81,6 +85,8 @@ jobs:
         run: ./gradlew :core:common:spotlessKotlinCheck --stacktrace
       - name: Full private snapshot capacity regression on JVM
         run: ./gradlew :core:common:testDebugUnitTest --tests 'tachiyomi.core.provider.runtime.MangaAllFutureHostChapterSnapshotTest' --stacktrace
+      - name: Verify same-JVM and second-process MangaALL storage lock regressions
+        run: ./gradlew :core:common:testDebugUnitTest --tests 'tachiyomi.core.provider.runtime.ProviderStateHostServicesTest' --stacktrace
       - name: Regress all existing core-common JUnit Jupiter tests
         run: |
           ./gradlew :core:common:testDebugUnitTest --stacktrace
@@ -99,6 +105,8 @@ jobs:
               if 'MangaAllFutureHostChapterSnapshotTest' in report.name:
                   target+=int(root.get('tests','0'))
           assert target>=3, 'Future snapshot regression must run at least three JVM tests'
+          storage=sum(int(ET.parse(f).getroot().get('tests','0')) for f in reports if 'ProviderStateHostServicesTest' in f.name)
+          assert storage>=8, 'MangaALL cross-instance and cross-process JVM storage tests must be discovered'
           assert counts['failures']==0 and counts['errors']==0
           print('MANGAALL_HOST_PRIVATE_SNAPSHOT|JUNIT_CLASS_DISCOVERED='+str(target)+
                 '|CORE_COMMON_JUNIT_TESTS='+str(counts['tests'])+'|result=PASS')
