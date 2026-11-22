@@ -1,0 +1,22 @@
+# MangaALL — future signed-code11-only Android Host Binder wiring (NONSHIPPING)
+
+**Scope:** Host execution infrastructure only. No new Provider package is installed, signed or published; the original P-256 MangaALL 0.5.5/code10 sequence36 SHA256 `bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f` remains byte-identical. The Android code is dormant for code10 and ordinary Providers.
+
+## Narrow permission contract
+
+- The existing `ProviderPackageParser` only allows `permissions.mangaAllChapterSnapshot.enabled` for exact `app.tsuzuki.mangaall`, `version.code>=11`, `minHostApi>=2`, a declared `https://mangadot.net` network origin and `localNetwork=false`. Missing permission defaults false. Host `ProviderHostInvocationPolicy.fromManifest` independently checks the same conditions and rejects a hand-constructed foreign/local snapshot policy.
+- `ScriptProviderCapabilityExecutor` gets the parsed package from its installed artifact / registry path and *further* restricts the Host module to **`reading.chapters` only**. `reading.pages` and all other capabilities cannot call snapshot start/next. Generic storage permission remains independent and is not enabled by the new grant.
+- `ProviderHostModule.MANGAALL_CHAPTER_SNAPSHOT` is appended to the runtime module enum. The isolated runtime can only convert a granted module into the new bridge; `ProviderScriptPackageRuntime.invoke` still verifies actual parsed manifest permissions before QuickJs binding. Raw `ProviderQuickJsRuntime.evaluate` still strips the service unconditionally (Host #259).
+- `IProviderHostBridge.aidl` adds **two trailing methods** `mangaAllChapterSnapshotStart(workId,language)` and `mangaAllChapterSnapshotNext(workId,language,cursor)`, preserving earlier AIDL method ordering. Host factory constructs a private snapshot from the existing origin/DNS/redirect checked `DefaultProviderHttpHostService.getResource`, resource store and shared `FileProviderStorageHostService`, without widening ordinary HTTP text limits or the generic `tsuzuki.storage` permission.
+- The Binder adapter checks argument string lengths (workId <=128 chars, facet <=16, cursor <=128) and outputs (<=48KiB UTF-8 bytes AND JavaScript characters) on **both** sides of the process boundary. Native snapshot parser still enforces exact work/facet/generation cursor, source origin, TTL and shared storage quotas. HTTP errors/overquota/cursor races fail closed.
+
+## Tests
+
+- JVM policy fixtures in the Android app prove that code10, other provider IDs, wrong Host API/source origin, local-network grants and absent permission **do not** enable the new Host module. Separate test confirms that independent generic storage has no effect.
+- App executor fixture verifies that only a hypothetical installed future code11 `reading.chapters` invocation receives the module; `reading.pages` and code10 stay denied.
+- Android instrumentation **source compiles**, and a new targeted offline AIDL Stub test is included: injected OkHttp interceptor synthesizes 4,341 MangaDot-shaped chapter rows (>2MiB), reconstructs the exact ordered IDs via start/next within <=32 pages, checks <=48KiB outputs and one source request, and verifies that a code10 policy fails before any request. This is not yet claimed as an executed emulator/physical test.
+- Dedicated branch/PR CI checks exact changed-file allowlist (no signed/provider assets), Spotless, full `core/common`+app JVM tests and AndroidTest AIDL/Kotlin compile. The prior Host grant CI allows App changes **only** in this same-repo branch with the independent Binder workflow and negative tests.
+
+## What this does **not** prove
+
+No signed code11 package is currently installed, no **real isolated-process** future-code11 Binder invocation has been accepted, no live MangaDot chapter import on an A54, and no end-to-end Kotlin/SQLite three-source canonical edition/author acceptance or Reader CDN pixels from this future path. Before enabling a real release: run instrumented Binder/process gate in an emulator, verify signed-future-package artifact provenance and no change to code10 behavior, resolve remaining source normalization/edition authority questions, complete three-source functional reader and physical A54 validation. Do not execute the 30-title live acceptance until those prior gates establish functional results. No signing or publishing is authorized by this infrastructure PR.
