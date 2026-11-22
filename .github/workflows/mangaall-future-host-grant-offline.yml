@@ -59,7 +59,7 @@ jobs:
               for k in counts: counts[k]+=int(root.get(k,'0'))
               classes[f.name]=int(root.get('tests','0'))
           assert counts['failures']==0 and counts['errors']==0
-          for clazz in ['ProviderScriptPackageRuntimeTest','ProviderPackageParserTest','MangaAllFutureHostChapterSnapshotTest','ProviderQuickJsRuntimeTest']:
+          for clazz in ['ProviderScriptPackageRuntimeTest','ProviderPackageParserTest','MangaAllFutureHostChapterSnapshotTest','MangaAllFutureHostQuickJsContinuationTest','ProviderQuickJsRuntimeTest']:
               assert sum(v for k,v in classes.items() if clazz in k)>0,clazz
           raw=sum(v for k,v in classes.items() if 'ProviderQuickJsRuntimeTest' in k)
           assert raw>=8, 'All raw QuickJs isolation regressions must be discovered'
