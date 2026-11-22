@@ -147,11 +147,10 @@ class MangaAllFutureRealThreeSourceCode11InstrumentedTest {
                 fileName = "main.js",
                 hostModules = policy.allowedHostModules(),
                 limits = ProviderRuntimeLimitsDto(
-                    // Diagnostic-only upper envelope (protocol max 60s). The
-                    // previously tested 20s/10s budget timed out on real
-                    // three-source JS after successful unified lookup.
-                    wallClockTimeoutMs = 45_000L,
-                    jsExecutionTimeoutMs = 30_000L,
+                    // Regress the ORIGINAL 20s Host / 10s JS envelope after
+                    // the private chunking fix; never broaden the contract.
+                    wallClockTimeoutMs = 20_000L,
+                    jsExecutionTimeoutMs = 10_000L,
                 ),
             )
             return client.invokePackage(request, candidate, input, policy)
