@@ -33,12 +33,21 @@ export async function createPlaywrightShapeSession({
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: false });
   let page;
+  let mode = 'shape';
   let closed = false;
   const close = async () => { if (!closed) { closed = true; await browser.close(); } };
   try {
     page = await context.newPage();
     await context.route('**/*', (route) => {
       const url = new URL(route.request().url());
+      if (mode === 'cloudflare') {
+        // Standard browser-side Cloudflare JS only: no CAPTCHA clicking or
+        // solver injection, proxies, fingerprint changes or cookie export.
+        if (url.origin === ORIGIN && route.request().method() === 'GET') return route.continue();
+        if (url.origin === 'https://challenges.cloudflare.com' &&
+            ['GET', 'POST'].includes(route.request().method())) return route.continue();
+        return route.abort();
+      }
       if (url.href === SOLVER_URL) {
         return route.fulfill({ status: 200, contentType: 'text/html', body: html });
       }
@@ -56,6 +65,17 @@ export async function createPlaywrightShapeSession({
       window.bridge = { postMessage: (result) => window.__tsuzukiShapeTestDone(result) };
     });
     return {
+      async openCloudflareSession() {
+        mode = 'cloudflare';
+        try {
+          await page.goto(ORIGIN + '/', { waitUntil: 'domcontentloaded', timeout: 12_000 });
+          await page.waitForTimeout(8_000);
+          const cookies = await context.cookies(ORIGIN);
+          return cookies.some((cookie) => cookie.name === 'cf_clearance' && cookie.value.length > 0);
+        } catch {
+          return false;
+        }
+      },
       async solve() {
         let timeout;
         try {
