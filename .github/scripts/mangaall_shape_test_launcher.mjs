@@ -17,6 +17,6 @@ try {
   await import(pathToFileURL(path.resolve(process.cwd(), 'tooling/mangaall_live_matrix.mjs')).href);
 } finally {
   await recovery.close();
-  console.log('MANGAALL_MANGAFIRE_SHAPE_TEST|' + JSON.stringify(recovery.status));
+  console.log('MANGAALL_MANGAFIRE_SHAPE_TEST|' + JSON.stringify({ ...recovery.status, browser: process.env.MANGAALL_TEST_ONLY_HEADED === '1' ? 'HEADED_XVFB' : 'HEADLESS' }));
   globalThis.fetch = rawFetch;
 }
