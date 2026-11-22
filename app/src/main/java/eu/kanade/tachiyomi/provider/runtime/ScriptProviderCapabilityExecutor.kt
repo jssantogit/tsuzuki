@@ -144,7 +144,7 @@ class ScriptProviderCapabilityExecutor(
             ProviderHostInvocationPolicy.fromManifest(
                 manifest = active.parsed.manifest,
                 invocationId = invocationId,
-            ).copy(
+            ).forCapability(capability.id).copy(
                 directP2pEnabled = privilegedHostGrants.directP2p,
                 approvedP2pSelection = privilegedHostGrants.approvedP2pSelection,
             )

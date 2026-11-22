@@ -482,7 +482,7 @@ class ScriptProviderReadingGateway internal constructor(
             ProviderHostInvocationPolicy.fromManifest(
                 manifest = active.parsed.manifest,
                 invocationId = invocationId,
-            )
+            ).forCapability(capability.id)
         } catch (_: Throwable) {
             return malformed()
         }

@@ -11,6 +11,7 @@ import tachiyomi.core.provider.runtime.DefaultProviderCryptoHostService
 import tachiyomi.core.provider.runtime.DefaultProviderDomHostService
 import tachiyomi.core.provider.runtime.DefaultProviderHttpHostService
 import tachiyomi.core.provider.runtime.FileProviderStorageHostService
+import tachiyomi.core.provider.runtime.MangaAllFutureSnapshotServiceFactory
 import tachiyomi.core.provider.runtime.ProviderBrowserHostService
 import tachiyomi.core.provider.runtime.ProviderHostModule
 import tachiyomi.core.provider.runtime.ProviderHostServices
@@ -41,6 +42,8 @@ data class ProviderHostInvocationPolicy(
     val browserOrigins: Set<String> = emptySet(),
     val allowLocalNetwork: Boolean = false,
     val storageEnabled: Boolean = false,
+    /** Only from an explicitly validated future code11 MangaALL manifest. */
+    val mangaAllChapterSnapshotEnabled: Boolean = false,
     val allowedSecrets: Set<String> = emptySet(),
     val directP2pEnabled: Boolean = false,
     /** Host-created invocation selection; never serialized to Provider/Binder. */
@@ -50,10 +53,33 @@ data class ProviderHostInvocationPolicy(
     init {
         require(PROVIDER_ID.matches(providerId)) { "Provider ID is invalid" }
         require(INVOCATION_ID.matches(invocationId)) { "Provider invocation ID is invalid" }
+        require(
+            !mangaAllChapterSnapshotEnabled ||
+                (
+                    providerId == "app.tsuzuki.mangaall" &&
+                        "https://mangadot.net" in networkOrigins &&
+                        !allowLocalNetwork
+                    ),
+        ) { "Future MangaALL snapshot permission has an invalid Host scope" }
         require(maxHostOperations in 1..4096) {
             "Provider Host Service operation budget is outside supported bounds"
         }
     }
+
+    /**
+     * The future chapter snapshot is an operation-specific privilege, not a
+     * general Provider permission. Both normal script execution and the
+     * independent production reading gateway must apply this same reduction
+     * after inspecting the verified package manifest and before Binder.
+     *
+     * Never widen an existing false grant for any capability.
+     */
+    fun forCapability(capabilityId: String): ProviderHostInvocationPolicy =
+        if (capabilityId == "reading.chapters") {
+            this
+        } else {
+            copy(mangaAllChapterSnapshotEnabled = false)
+        }
 
     fun allowedHostModules(): Set<ProviderHostModule> = buildSet {
         add(ProviderHostModule.DOM)
@@ -66,6 +92,7 @@ data class ProviderHostInvocationPolicy(
         if (directP2pEnabled) add(ProviderHostModule.P2P)
         if (browserOrigins.isNotEmpty()) add(ProviderHostModule.BROWSER)
         if (storageEnabled) add(ProviderHostModule.STORAGE)
+        if (mangaAllChapterSnapshotEnabled) add(ProviderHostModule.MANGAALL_CHAPTER_SNAPSHOT)
         if (allowedSecrets.isNotEmpty()) add(ProviderHostModule.SECRETS)
     }
 
@@ -81,6 +108,13 @@ data class ProviderHostInvocationPolicy(
                 browserOrigins = manifest.permissions.browser?.origins.orEmpty(),
                 allowLocalNetwork = manifest.permissions.network?.localNetwork == true,
                 storageEnabled = manifest.permissions.storage.enabled,
+                mangaAllChapterSnapshotEnabled =
+                manifest.id == "app.tsuzuki.mangaall" &&
+                    manifest.version.code >= 11L &&
+                    manifest.minHostApi >= 2 &&
+                    manifest.permissions.mangaAllChapterSnapshot.enabled &&
+                    manifest.permissions.network?.localNetwork == false &&
+                    "https://mangadot.net" in manifest.permissions.network?.origins.orEmpty(),
                 allowedSecrets = manifest.permissions.secrets,
             )
 
@@ -185,8 +219,23 @@ class ProviderHostInvocationFactory(
                 }
             }
 
+        // The private snapshots use reserved shared storage even when the
+        // package has NO ordinary tsuzuki.storage permission. Do not broaden
+        // generic storage access as a side effect of this separate grant.
+        val nativeMangaAllSnapshot = if (policy.mangaAllChapterSnapshotEnabled) {
+            MangaAllFutureSnapshotServiceFactory.create(
+                owner = owner,
+                http = http ?: throw SecurityException("Future MangaALL snapshot requires permitted HTTP origin"),
+                resources = resources,
+                storage = FileProviderStorageHostService(storageRoot, policy.providerId),
+            )
+        } else {
+            null
+        }
+
         val services = ProviderHostServices(
             http = http,
+            mangaAllChapterSnapshot = nativeMangaAllSnapshot,
             p2p = if (policy.directP2pEnabled) {
                 approvedP2pServiceFactory?.invoke(
                     policy.providerId,
@@ -255,6 +304,18 @@ class ProviderHostInvocationFactory(
             .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xFF) }
         return "tsuzuki-provider-${digest.take(24)}"
     }
+}
+
+private fun String.boundedSnapshotArg(maxChars: Int, label: String): String {
+    if (length > maxChars) throw SecurityException("Future MangaALL $label exceeds IPC limit")
+    return this
+}
+
+private fun String.boundedSnapshotResult(): String {
+    if (length > 48 * 1024 || encodeToByteArray().size > 48 * 1024) {
+        throw SecurityException("Future MangaALL chapter page exceeds 48KiB Binder limit")
+    }
+    return this
 }
 
 private fun ProviderHttpDiagnostic.toRuntimeLogMessage(): String =
@@ -355,6 +416,23 @@ private class ProviderHostBridgeAdapter(
                 url.orEmpty(),
                 cssSelector.orEmpty(),
             )
+        }
+
+    override fun mangaAllChapterSnapshotStart(workId: String?, language: String?): String =
+        runBlocking {
+            requireService(services.mangaAllChapterSnapshot, "mangaall-chapter-snapshot").start(
+                workId.orEmpty().boundedSnapshotArg(128, "chapter work ID"),
+                language.orEmpty().boundedSnapshotArg(16, "chapter language"),
+            ).boundedSnapshotResult()
+        }
+
+    override fun mangaAllChapterSnapshotNext(workId: String?, language: String?, cursor: String?): String =
+        runBlocking {
+            requireService(services.mangaAllChapterSnapshot, "mangaall-chapter-snapshot").next(
+                workId.orEmpty().boundedSnapshotArg(128, "chapter work ID"),
+                language.orEmpty().boundedSnapshotArg(16, "chapter language"),
+                cursor.orEmpty().boundedSnapshotArg(128, "chapter cursor"),
+            ).boundedSnapshotResult()
         }
 
     override fun storageGet(key: String?): String? =
