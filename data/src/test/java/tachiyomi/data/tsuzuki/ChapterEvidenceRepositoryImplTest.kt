@@ -315,6 +315,68 @@ class ChapterEvidenceRepositoryImplTest {
     }
 
     @Test
+    fun `MangaAll provisional 4341 chapters safely resume through SQLite`() = runBlocking<Unit> {
+        val reconciler = ReconcileChapterEvidence(
+            ParseCanonicalChapterLabel(),
+            chapterRepository,
+            evidenceRepository,
+        )
+        val source = "app.tsuzuki.mangaall:en:bleach-source-hid"
+        val observations = (1..4_341).map { number ->
+            ChapterEvidence(
+                id = "mangaall-evidence-$number",
+                canonicalTitleId = "title-1",
+                producerKind = ProducerKind.PROVIDER,
+                producerId = source,
+                externalChapterKey = "mangadot-chapter-$number",
+                rawLabel = "Chapter $number",
+                rawNumber = number.toDouble(),
+                volume = null,
+                title = null,
+                observedAt = 10L,
+                confidence = 0.95,
+                authority = ChapterEvidenceAuthority.PROVIDER_PROVISIONAL,
+            )
+        }
+
+        // Simulate two accepted page groups separated by a lost invocation.
+        // Neither batch is a complete source snapshot, so stale rows must not be detached.
+        queryCounter.reset()
+        val start = System.nanoTime()
+        reconciler.execute("title-1", observations.take(2_048))
+        reconciler.execute("title-1", observations.drop(2_048))
+        val initialMs = (System.nanoTime() - start) / 1_000_000L
+        val initialQueryCount = queryCounter.executeQueryCount
+        val stored = evidenceRepository.getByCanonicalTitleId("title-1")
+        val chapters = chapterRepository.getByCanonicalTitleId("title-1")
+        stored shouldHaveSize 4_341
+        chapters shouldHaveSize 4_341
+        stored.mapNotNull { it.mappedCanonicalChapterId }.toSet() shouldBe chapters.map { it.id }.toSet()
+        chapters.all { it.confirmation.name == "PROVISIONAL" } shouldBe true
+        val originalEvidenceIds = stored.associate { it.evidence.externalChapterKey to it.evidence.id }
+        val originalChapterIds = stored.associate { it.evidence.externalChapterKey to it.mappedCanonicalChapterId }
+
+        // An unfinished cursor may replay the same validated pages with new transport IDs.
+        // The source-scoped external keys, canonical chapters and user state must stay stable.
+        val replayed = observations.take(2_048).map { observation ->
+            observation.copy(id = "replay-${observation.id}", observedAt = 11L)
+        }
+        reconciler.execute("title-1", replayed)
+        reconciler.execute("title-1", emptyList())
+        val afterReplay = evidenceRepository.getByCanonicalTitleId("title-1")
+        afterReplay shouldHaveSize 4_341
+        afterReplay.associate { it.evidence.externalChapterKey to it.evidence.id } shouldBe originalEvidenceIds
+        afterReplay.associate { it.evidence.externalChapterKey to it.mappedCanonicalChapterId } shouldBe
+            originalChapterIds
+        chapterRepository.getByCanonicalTitleId("title-1") shouldHaveSize 4_341
+        println(
+            "MANGAALL_SQLITE_CAPACITY|source_only=TRUE|partial_batches=2|" +
+                "rows=4341|canonical_grant=NONE|replay_duplicate_rows=0|" +
+                "first_ingest_ms=$initialMs|first_ingest_selects=$initialQueryCount",
+        )
+    }
+
+    @Test
     fun `support snapshot returns unique mapped chapter ids without per evidence queries`() = runBlocking<Unit> {
         chapterRepository.upsert(chapter("chapter-1", 1))
         chapterRepository.upsert(chapter("chapter-2", 2))
