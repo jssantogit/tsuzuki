@@ -315,7 +315,7 @@ class ChapterEvidenceRepositoryImplTest {
     }
 
     @Test
-    fun `MangaAll 4341 provisional chapters resume in SQLite without duplicates or editorial grants`() = runBlocking<Unit> {
+    fun `MangaAll provisional 4341 chapters safely resume through SQLite`() = runBlocking<Unit> {
         val reconciler = ReconcileChapterEvidence(
             ParseCanonicalChapterLabel(),
             chapterRepository,
