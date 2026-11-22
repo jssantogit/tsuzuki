@@ -192,13 +192,12 @@ class ProviderRuntimeIsolationTest {
                 override fun imagePixel(resourceHandle: String?, x: Int, y: Int): String =
                     throw UnsupportedOperationException()
                 override fun mangaAllChapterSnapshotStart(workId: String?, language: String?): String =
-                    throw UnsupportedOperationException("Legacy test Host must not expose future MangaALL snapshots")
+                    throw UnsupportedOperationException()
                 override fun mangaAllChapterSnapshotNext(
                     workId: String?,
                     language: String?,
                     cursor: String?,
-                ): String =
-                    throw UnsupportedOperationException("Legacy test Host must not expose future MangaALL snapshots")
+                ): String = throw UnsupportedOperationException()
                 override fun logInfo(message: String?) = Unit
             }
 
@@ -393,14 +392,13 @@ class ProviderRuntimeIsolationTest {
             throw UnsupportedOperationException()
 
         override fun mangaAllChapterSnapshotStart(workId: String?, language: String?): String =
-                    throw UnsupportedOperationException("Legacy test Host must not expose future MangaALL snapshots")
-                override fun mangaAllChapterSnapshotNext(
-                    workId: String?,
-                    language: String?,
-                    cursor: String?,
-                ): String =
-                    throw UnsupportedOperationException("Legacy test Host must not expose future MangaALL snapshots")
-                override fun logInfo(message: String?) = Unit
+            throw UnsupportedOperationException()
+        override fun mangaAllChapterSnapshotNext(
+            workId: String?,
+            language: String?,
+            cursor: String?,
+        ): String = throw UnsupportedOperationException()
+        override fun logInfo(message: String?) = Unit
     }
 
     private companion object {
