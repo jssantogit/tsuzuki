@@ -2404,8 +2404,20 @@ class ScriptProviderReadingGatewayIsolationTest {
                 )
             }
             if (chapterAttestation !is ProviderCallResult.Success) {
+                // Expose only the Host's closed error enums, not HTTP bodies,
+                // URL query strings, credentials or untrusted exception text.
+                val failure = chapterAttestation as? ProviderCallResult.Failure
+                val closedCode10Cause = if (signedCode == 10L && failure != null) {
+                    "|providerError=${failure.error.code.name}" +
+                        "|sourceFailure=${failure.error.sourceFailureCode?.name ?: "NONE"}" +
+                        "|httpStatus=${failure.error.httpStatus?.toString() ?: "NONE"}" +
+                        "|retryable=${failure.error.retryable}"
+                } else {
+                    ""
+                }
                 MangaAllInstrumentationVerdict.publish(
-                    "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_ATTESTATION_UNAVAILABLE",
+                    "MANGAALL_LIVE_PAGE_GATE|outcome=INCONCLUSIVE|reason=CHAPTER_ATTESTATION_UNAVAILABLE" +
+                        closedCode10Cause,
                 )
                 return
             }
