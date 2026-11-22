@@ -58,6 +58,47 @@ class FileProviderStorageHostService(
         }
     }
 
+    /**
+     * HOST-PRIVATE future MangaALL snapshot replacement; NOT exposed through the
+     * Provider storage interface or to QuickJs. Replace reserved keys with one
+     * atomic provider-state write, preserving unrelated entries and the previous
+     * snapshot if the combined state exceeds any quota.
+     */
+    internal suspend fun replaceFutureMangaAllChapterSnapshot(index: String, parts: List<String>) {
+        if (providerId != "app.tsuzuki.mangaall" || parts.size > 16) {
+            throw ProviderHostServiceException("Future MangaALL snapshot scope is invalid")
+        }
+        synchronized(lock) {
+            val replacement = readState().toMutableMap()
+            replacement.remove(FUTURE_MANGAALL_INDEX_KEY)
+            repeat(16) { replacement.remove(FUTURE_MANGAALL_PART_PREFIX + it) }
+
+            val newValues = parts.mapIndexed { n, value ->
+                FUTURE_MANGAALL_PART_PREFIX + n to value
+            } + (FUTURE_MANGAALL_INDEX_KEY to index)
+            for ((key, value) in newValues) {
+                validateKey(key)
+                if (value.length > maxValueChars ||
+                    value.encodeToByteArray().size > 64 * 1024
+                ) {
+                    throw ProviderHostServiceException("Future MangaALL snapshot value exceeds quota")
+                }
+                replacement[key] = value
+            }
+
+            if (replacement.size > maxEntries ||
+                replacement.values.sumOf(String::length) > maxTotalChars ||
+                replacement.values.sumOf { it.encodeToByteArray().size.toLong() } > maxTotalChars
+            ) {
+                throw ProviderHostServiceException("Future MangaALL snapshot exceeds shared provider quota")
+            }
+
+            // Same-filesystem atomic move; no clear-then-write intermediate
+            // state and no loss of other Provider keys on quota rejection.
+            writeState(replacement)
+        }
+    }
+
     override suspend fun remove(key: String) {
         synchronized(lock) {
             validateKey(key)
@@ -107,6 +148,8 @@ class FileProviderStorageHostService(
     private companion object {
         val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
         val STORAGE_KEY = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+        const val FUTURE_MANGAALL_INDEX_KEY = "mangaall_private_chapters_index"
+        const val FUTURE_MANGAALL_PART_PREFIX = "mangaall_private_chapters_part_"
     }
 }
 

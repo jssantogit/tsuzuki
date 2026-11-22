@@ -1,0 +1,76 @@
+name: MangaALL — future Host-private chapter snapshot Kotlin gate (OFFLINE)
+
+# NONSHIPPING: no live traffic, no release, no signed Provider changes.
+on:
+  push:
+    branches:
+      - 'feat/mangaall-host-private-chapter-snapshot-*'
+    paths:
+      - 'core/common/build.gradle.kts'
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshot.kt'
+      - 'core/common/src/test/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshotTest.kt'
+      - '.github/workflows/mangaall-host-private-chapter-snapshot-offline.yml'
+  pull_request:
+    paths:
+      - 'core/common/build.gradle.kts'
+      - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshot.kt'
+      - 'core/common/src/test/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureHostChapterSnapshotTest.kt'
+      - '.github/workflows/mangaall-host-private-chapter-snapshot-offline.yml'
+
+permissions:
+  contents: read
+concurrency:
+  group: mangaall-future-private-host-snapshot-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  kotlin-private-host-capacity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - name: Verify no production or signed release paths were changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$(git merge-base origin/main HEAD)"
+          test -n "$base"
+          git diff --name-only "$base" HEAD | tee /tmp/mangaall-host-snapshot-changed.txt
+          if grep -E '^(providers/|dist/|app/src/|core/common/src/main/kotlin/tachiyomi/core/provider/runtime/(ProviderQuickJsRuntime|ProviderScriptPackageRuntime|ProviderHttpProtocol|ProviderHttpHostService)\.kt)' /tmp/mangaall-host-snapshot-changed.txt; then
+            echo "::error::Signed Provider or production Host API touched by offline snapshot gate"
+            exit 1
+          fi
+          echo 'MANGAALL_HOST_PRIVATE_SNAPSHOT|signed_code10=UNCHANGED|quickjs_bindings=UNCHANGED|network=NONE'
+      - name: Kotlin formatting
+        run: ./gradlew :core:common:spotlessKotlinCheck --stacktrace
+      - name: Full private snapshot capacity regression on JVM
+        run: ./gradlew :core:common:testDebugUnitTest --tests 'tachiyomi.core.provider.runtime.MangaAllFutureHostChapterSnapshotTest' --stacktrace
+      - name: Regress all existing core-common JUnit Jupiter tests
+        run: |
+          ./gradlew :core:common:testDebugUnitTest --stacktrace
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          directory=Path('core/common/build/test-results/testDebugUnitTest')
+          reports=list(directory.glob('TEST-*.xml'))
+          assert reports, 'No JUnit reports discovered'
+          counts={'tests':0,'failures':0,'errors':0}
+          target=0
+          for report in reports:
+              root=ET.parse(report).getroot()
+              for key in counts:
+                  counts[key]+=int(root.get(key,'0'))
+              if 'MangaAllFutureHostChapterSnapshotTest' in report.name:
+                  target+=int(root.get('tests','0'))
+          assert target>=3, 'Future snapshot regression must run at least three JVM tests'
+          assert counts['failures']==0 and counts['errors']==0
+          print('MANGAALL_HOST_PRIVATE_SNAPSHOT|JUNIT_CLASS_DISCOVERED='+str(target)+
+                '|CORE_COMMON_JUNIT_TESTS='+str(counts['tests'])+'|result=PASS')
+          PY
