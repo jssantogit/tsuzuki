@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Source-only preflight of the 30-work scale workflow (no network)."""
 from pathlib import Path
+import os
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -73,6 +78,62 @@ class TestScale30WorkflowContract(unittest.TestCase):
         self.assertRegex(w, r"(?m)^  aggregate-exact-30:")
         self.assertIn("test \"${#summaries[@]}\" = 3", w)
         self.assertIn("mangaall-code10-scale30-aggregate", w)
+
+    def test_commit_and_manual_authorization_python_are_executable(self):
+        fragment = self.data.split("id: request", 1)[1].split(
+            "      - name: Fail closed before external traffic", 1
+        )[0]
+        script = fragment.split("python3 - <<'PY'\\n", 1)[1].split("\\n          PY", 1)[0]
+        code = "\\n".join(line[10:] for line in script.splitlines()) + "\\n"
+        compile(code, "<scale30-request-gate>", "exec")
+        vector = "\\n".join(f"manga :: Offline Work {i:02d}" for i in range(1, 31))
+        ack = "I_ACCEPT_SIGNED_CODE10_SCALE30_LIVE"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".github/scripts").mkdir(parents=True)
+            shutil.copy(
+                ROOT / ".github/scripts/mangaall_code10_canonical_smoke_plan.py",
+                root / ".github/scripts/mangaall_code10_canonical_smoke_plan.py",
+            )
+            request = root / ".github/mangaall-code10-scale30-request.json"
+            output = root / "github_output.txt"
+
+            def run(event, works, acknowledgement):
+                import json
+                output.write_text("", encoding="utf-8")
+                request.write_text(json.dumps({
+                    "works": works, "acknowledge": acknowledgement,
+                }), encoding="utf-8")
+                return subprocess.run(
+                    [sys.executable, "-c", code], cwd=root, text=True,
+                    capture_output=True, timeout=8,
+                    env={
+                        **os.environ,
+                        "MANGAALL_SCALE30_EVENT": event,
+                        "MANGAALL_SCALE30_MANUAL_WORKS": works,
+                        "MANGAALL_SCALE30_MANUAL_ACK": acknowledgement,
+                        "GITHUB_REF": "refs/heads/probe/mangaall-code10-scale30-audit",
+                        "GITHUB_OUTPUT": str(output),
+                    },
+                )
+
+            result = run("push", vector, ack)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            written = output.read_text(encoding="utf-8")
+            self.assertIn(vector, written)
+            self.assertIn("acknowledge=" + ack + "\\n", written)
+            self.assertIn("works<<END_", written)
+            result = run("workflow_dispatch", vector, ack)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            result = run("push", vector, "FAKE_CONSENT")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(output.read_text(), "")
+            result = run("push", vector.replace("Offline Work 30", "Offline Work 01"), ack)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(output.read_text(), "")
+            result = run("push", vector + "\\nmanga :: Unexpected Work", ack)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(output.read_text(), "")
 
     def test_original_three_title_workflow_unchanged_and_all_jobs_present(self):
         w = self.data
