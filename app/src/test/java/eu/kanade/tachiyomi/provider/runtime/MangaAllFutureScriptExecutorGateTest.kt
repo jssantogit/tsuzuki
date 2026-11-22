@@ -27,7 +27,11 @@ import tachiyomi.domain.tsuzuki.provider.ProviderVersion
 class MangaAllFutureScriptExecutorGateTest {
     private val id = ProviderId("app.tsuzuki.mangaall")
 
-    private fun executor(code: Long, granted: Boolean, captured: MutableList<String>): ScriptProviderCapabilityExecutor {
+    private fun executor(
+        code: Long,
+        granted: Boolean,
+        captured: MutableList<String>,
+    ): ScriptProviderCapabilityExecutor {
         val manifest = ProviderScriptManifest(
             manifestVersion = 1,
             id = id.value,
