@@ -68,6 +68,12 @@ function createScenario({ first, retry = response(200, { items: [] }), solved = 
 }
 {
   const s = createScenario({ first: response(403, { error: 'captcha_required' }),
+    retry: response(200, { error: 'captcha_required' }) });
+  assert.equal((await s.recovery.fetch(url)).status, 403);
+  assert.equal(s.recovery.status.outcome, 'RETRY_NOT_VALID_API_JSON_200');
+}
+{
+  const s = createScenario({ first: response(403, { error: 'captcha_required' }),
     retry: response(403, { error: 'captcha_required' }) });
   assert.equal((await s.recovery.fetch(url)).status, 403);
   assert.equal(s.counters().closed, 1);
