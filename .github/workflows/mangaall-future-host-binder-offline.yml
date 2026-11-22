@@ -7,7 +7,9 @@ on:
     branches: ['feat/mangaall-future-host-binder-code11-only-*']
     paths:
       - 'app/src/main/aidl/eu/kanade/tachiyomi/provider/runtime/IProviderHostBridge.aidl'
-      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/**'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ProviderHostInvocation.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ProviderRuntimeService.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ScriptProviderCapabilityExecutor.kt'
       - 'app/src/test/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFuture*'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFuture*'
       - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureSnapshotServiceFactory.kt'
@@ -16,7 +18,9 @@ on:
   pull_request:
     paths:
       - 'app/src/main/aidl/eu/kanade/tachiyomi/provider/runtime/IProviderHostBridge.aidl'
-      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/**'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ProviderHostInvocation.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ProviderRuntimeService.kt'
+      - 'app/src/main/java/eu/kanade/tachiyomi/provider/runtime/ScriptProviderCapabilityExecutor.kt'
       - 'app/src/test/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFuture*'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFuture*'
       - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureSnapshotServiceFactory.kt'
@@ -29,6 +33,14 @@ concurrency:
   cancel-in-progress: true
 jobs:
   future-binder-contract:
+    # This opt-in nonshipping workflow must never fail unrelated PRs that
+    # happen to edit Provider runtime files after the branch is merged.
+    if: >-
+      (github.event_name == 'push' &&
+       github.ref_name == 'feat/mangaall-future-host-binder-code11-only-20261122') ||
+      (github.event_name == 'pull_request' &&
+       github.head_ref == 'feat/mangaall-future-host-binder-code11-only-20261122' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     steps:
