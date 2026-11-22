@@ -52,3 +52,25 @@ jobs:
         run: ./gradlew :core:common:spotlessKotlinCheck --stacktrace
       - name: Full private snapshot capacity regression on JVM
         run: ./gradlew :core:common:testDebugUnitTest --tests 'tachiyomi.core.provider.runtime.MangaAllFutureHostChapterSnapshotTest' --stacktrace
+      - name: Regress all existing core-common JUnit Jupiter tests
+        run: |
+          ./gradlew :core:common:testDebugUnitTest --stacktrace
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          directory=Path('core/common/build/test-results/testDebugUnitTest')
+          reports=list(directory.glob('TEST-*.xml'))
+          assert reports, 'No JUnit reports discovered'
+          counts={'tests':0,'failures':0,'errors':0}
+          target=0
+          for report in reports:
+              root=ET.parse(report).getroot()
+              for key in counts:
+                  counts[key]+=int(root.get(key,'0'))
+              if 'MangaAllFutureHostChapterSnapshotTest' in report.name:
+                  target+=int(root.get('tests','0'))
+          assert target>=3, 'Future snapshot regression must run at least three JVM tests'
+          assert counts['failures']==0 and counts['errors']==0
+          print('MANGAALL_HOST_PRIVATE_SNAPSHOT|JUNIT_CLASS_DISCOVERED='+str(target)+
+                '|CORE_COMMON_JUNIT_TESTS='+str(counts['tests'])+'|result=PASS')
+          PY
