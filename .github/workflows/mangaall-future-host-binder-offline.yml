@@ -14,6 +14,7 @@ on:
       - 'app/src/test/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFuture*'
       - 'app/src/test/java/eu/kanade/tachiyomi/provider/reading/MangaAllFutureGatewaySnapshotGateTest.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFuture*'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/ProviderRuntimeIsolationTest.kt'
       - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureSnapshotServiceFactory.kt'
       - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/ProviderRuntimeProtocol.kt'
       - '.github/workflows/mangaall-future-host-binder-offline.yml'
@@ -27,6 +28,7 @@ on:
       - 'app/src/test/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFuture*'
       - 'app/src/test/java/eu/kanade/tachiyomi/provider/reading/MangaAllFutureGatewaySnapshotGateTest.kt'
       - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFuture*'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/ProviderRuntimeIsolationTest.kt'
       - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/MangaAllFutureSnapshotServiceFactory.kt'
       - 'core/common/src/main/kotlin/tachiyomi/core/provider/runtime/ProviderRuntimeProtocol.kt'
       - '.github/workflows/mangaall-future-host-binder-offline.yml'
@@ -71,7 +73,7 @@ jobs:
           else
             test "${GITHUB_REF_NAME}" = 'feat/mangaall-future-host-binder-code11-only-20261122'
           fi
-          if grep -Ev '^(\.github/workflows/mangaall-future-host-(binder-offline|grant-offline)\.yml|core/common/src/main/kotlin/tachiyomi/core/provider/runtime/(MangaAllFutureSnapshotServiceFactory|ProviderRuntimeProtocol)\.kt|app/src/main/aidl/eu/kanade/tachiyomi/provider/runtime/IProviderHostBridge\.aidl|app/src/main/java/eu/kanade/tachiyomi/provider/runtime/(ProviderHostInvocation|ProviderRuntimeService|ScriptProviderCapabilityExecutor)\.kt|app/src/main/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGateway\.kt|app/src/test/java/eu/kanade/tachiyomi/provider/runtime/(MangaAllFutureHostBinderPolicyTest|MangaAllFutureScriptExecutorGateTest)\.kt|app/src/test/java/eu/kanade/tachiyomi/provider/reading/MangaAllFutureGatewaySnapshotGateTest\.kt|app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureBinderSnapshotInstrumentedTest\.kt|docs/mangaall-future-host-binder-20261122\.md)$' /tmp/mangaall-future-binder-files.txt; then
+          if grep -Ev '^(\.github/workflows/mangaall-future-host-(binder-offline|grant-offline)\.yml|core/common/src/main/kotlin/tachiyomi/core/provider/runtime/(MangaAllFutureSnapshotServiceFactory|ProviderRuntimeProtocol)\.kt|app/src/main/aidl/eu/kanade/tachiyomi/provider/runtime/IProviderHostBridge\.aidl|app/src/main/java/eu/kanade/tachiyomi/provider/runtime/(ProviderHostInvocation|ProviderRuntimeService|ScriptProviderCapabilityExecutor)\.kt|app/src/main/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGateway\.kt|app/src/test/java/eu/kanade/tachiyomi/provider/runtime/(MangaAllFutureHostBinderPolicyTest|MangaAllFutureScriptExecutorGateTest)\.kt|app/src/test/java/eu/kanade/tachiyomi/provider/reading/MangaAllFutureGatewaySnapshotGateTest\.kt|app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/(MangaAllFutureBinderSnapshotInstrumentedTest|ProviderRuntimeIsolationTest)\.kt|docs/mangaall-future-host-binder-20261122\.md)$' /tmp/mangaall-future-binder-files.txt; then
             echo '::error::Unexpected path in future Binder scope; signed assets and unrelated runtime must remain intact'
             exit 1
           fi
