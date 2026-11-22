@@ -7,13 +7,13 @@ import org.junit.jupiter.api.Test
 class ProviderQuickJsRuntimeTest {
 
     @Test
-    fun `evaluates primitive JavaScript result`() = runBlocking {
+    fun `evaluates primitive JavaScript result`(): Unit = runBlocking {
         ProviderQuickJsRuntime().evaluate("1 + 2") shouldBe
             ProviderScriptExecution.Success("3")
     }
 
     @Test
-    fun `uses a fresh JavaScript VM for every invocation`() = runBlocking {
+    fun `uses a fresh JavaScript VM for every invocation`(): Unit = runBlocking {
         val runtime = ProviderQuickJsRuntime()
         val source = "globalThis.counter = (globalThis.counter || 0) + 1; counter"
 
@@ -22,7 +22,7 @@ class ProviderQuickJsRuntimeTest {
     }
 
     @Test
-    fun `interrupts runaway JavaScript and sanitizes script failures`() = runBlocking {
+    fun `interrupts runaway JavaScript and sanitizes script failures`(): Unit = runBlocking {
         val runtime = ProviderQuickJsRuntime(
             limits = ProviderRuntimeLimits(
                 wallClockTimeoutMs = 100,
@@ -39,7 +39,7 @@ class ProviderQuickJsRuntimeTest {
     }
 
     @Test
-    fun `distinguishes host service failures from provider script failures`() = runBlocking {
+    fun `distinguishes host service failures from provider script failures`(): Unit = runBlocking {
         val runtime = ProviderQuickJsRuntime()
         val services = ProviderHostServices(
             http = object : ProviderHttpHostService {
@@ -60,7 +60,7 @@ class ProviderQuickJsRuntimeTest {
     }
 
     @Test
-    fun `provider scripts can issue typed HTTP API requests through host service`() = runBlocking {
+    fun `provider scripts can issue typed HTTP API requests through host service`(): Unit = runBlocking {
         var captured: ProviderHttpRequest? = null
         val services = ProviderHostServices(
             http = object : ProviderHttpHostService {
@@ -105,7 +105,7 @@ class ProviderQuickJsRuntimeTest {
     }
 
     @Test
-    fun `provider scripts can use host granted p2p without receiving native authority`() = runBlocking {
+    fun `provider scripts can use host granted p2p without receiving native authority`(): Unit = runBlocking {
         var captured: ProviderP2pAcquireRequest? = null
         val services = ProviderHostServices(
             p2p = ProviderP2pHostService { request ->
@@ -142,7 +142,7 @@ class ProviderQuickJsRuntimeTest {
     }
 
     @Test
-    fun `exposes only configured host service modules`() = runBlocking {
+    fun `exposes only configured host service modules`(): Unit = runBlocking {
         val services = ProviderHostServices(
             http = object : ProviderHttpHostService {
                 override suspend fun getText(url: String): String {
@@ -183,5 +183,32 @@ class ProviderQuickJsRuntimeTest {
             source = "await tsuzuki.secrets.get('missing')",
             hostServices = services,
         ) shouldBe ProviderScriptExecution.Failure(ProviderScriptFailure.SCRIPT_ERROR)
+    }
+
+    @Test
+    fun raw_quickjs_evaluation_never_receives_future_mangaall_snapshot_even_when_injected(): Unit = runBlocking {
+        var invoked = 0
+        val future = object : ProviderMangaAllChapterSnapshotHostService {
+            override suspend fun start(workId: String, language: String): String {
+                invoked++
+                return """{"items":[],"nextCursor":null}"""
+            }
+
+            override suspend fun next(workId: String, language: String, cursor: String): String {
+                invoked++
+                return """{"items":[],"nextCursor":null}"""
+            }
+        }
+        val services = ProviderHostServices(mangaAllChapterSnapshot = future)
+        val raw = ProviderQuickJsRuntime()
+        raw.evaluate(
+            source = "typeof tsuzuki.mangaAllChapterSnapshot",
+            hostServices = services,
+        ) shouldBe ProviderScriptExecution.Success("undefined")
+        raw.evaluate(
+            source = """await tsuzuki.mangaAllChapterSnapshot.start("mangadot:131", "en")""",
+            hostServices = services,
+        ) shouldBe ProviderScriptExecution.Failure(ProviderScriptFailure.SCRIPT_ERROR)
+        invoked shouldBe 0
     }
 }
