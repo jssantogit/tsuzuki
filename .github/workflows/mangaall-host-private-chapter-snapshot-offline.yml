@@ -38,6 +38,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - name: Verify no production or signed release paths were changed
         shell: bash
+        env:
+          GITHUB_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           set -euo pipefail
           base="$(git merge-base origin/main HEAD)"
@@ -53,7 +55,8 @@ jobs:
           fi
           if grep -E '^core/common/src/main/kotlin/tachiyomi/core/provider/runtime/(ProviderQuickJsRuntime|ProviderScriptPackageRuntime)\.kt$' /tmp/mangaall-host-snapshot-changed.txt; then
             if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ||
-                  "${GITHUB_HEAD_REF:-}" != "feat/mangaall-host-large-chapter-grant-code11-only-20261122" ]] ||
+                  "${GITHUB_HEAD_REF:-}" != "feat/mangaall-host-large-chapter-grant-code11-only-20261122" ||
+                  "${GITHUB_HEAD_REPO:-}" != "${GITHUB_REPOSITORY}" ]] ||
                ! grep -Fxq '.github/workflows/mangaall-future-host-grant-offline.yml' /tmp/mangaall-host-snapshot-changed.txt; then
               echo "::error::QuickJs may change only in the explicit future-code11 permission PR with its independent gate"
               exit 1
