@@ -16,6 +16,7 @@ from mangaall_code10_canonical_smoke_plan import parse_plan, ACK
 SHA = "bcdfd03ac18c3cfdd0517e08b58dde7efa1f5baa874e93002af28e518860f95f"
 SQL = "MANGAALL_REAL_SQLITE_REFRESH|"
 COL = "MANGAALL_CANONICAL_COLLECTOR|"
+DEC = "MANGAALL_REAL_HOST_DECODER|"
 CASE = re.compile(r"user-[a-f0-9]{12}\Z")
 SAFE = re.compile(r"[A-Za-z0-9_.,:-]{1,500}\Z")
 
@@ -219,7 +220,7 @@ def bounded_source_observations(source_case):
 
 
 def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows,
-          shard_index=0, shard_count=1):
+          shard_index=0, shard_count=1, decoder_rows=None):
     complete_vector = parse_plan(works, tier, ACK)
     if type(shard_index) is not int or type(shard_count) is not int or (
         shard_count, shard_index
@@ -259,7 +260,13 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows,
     matrices = _by_case(matrix.get("cases", []), "case")
     collectors = _by_case(collector_rows, "case")
     sqlites = _by_case(sqlite_rows, "case")
-    if any(set(group) != ids for group in (sources, catalogs, matrices, collectors, sqlites)):
+    # The real workflow supplies exact Host decoder verdicts from the SAME
+    # capture/shard. Synthetic offline report-contract tests may omit them.
+    decoders = _by_case(decoder_rows, "case") if decoder_rows is not None else None
+    if any(set(group) != ids for group in (
+        sources, catalogs, matrices, collectors, sqlites,
+        *([decoders] if decoders is not None else []),
+    )):
         raise ValueError("Source/catalog/Host/SQLite case set differs; no cross-work substitution")
 
     rows = []
@@ -278,6 +285,23 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows,
         cat = catalogs[cid].get("status")
         col = collectors[cid]
         sql = sqlites[cid]
+        host_limited = 0
+        host_gaps = 0
+        if decoders is not None:
+            decoder = decoders[cid]
+            host_limited = bounded_count(decoder.get("hostResultLimit"), "Host result limit")
+            host_gaps = bounded_count(decoder.get("replayGaps"), "Host decoder gaps")
+            if decoder.get("source") not in {
+                "REPLAY_GAP", "INCONCLUSIVE_HOST_RESULT_LIMIT",
+                "INCONCLUSIVE_UPSTREAM", "INCOMPLETE_CAPTURE_CURSOR",
+                "NO_REPLAYABLE_SOURCE_RESPONSE", "REAL_RESPONSES_DECODED_NOT_CANONICAL",
+                "INCOMPLETE_REJECTED_FIELDS", "INCOMPLETE_BUDGET_EXCEEDED",
+            }:
+                raise ValueError("Unknown Host decoder source state")
+            if host_limited and decoder["source"] != "INCONCLUSIVE_HOST_RESULT_LIMIT":
+                raise ValueError("Host oversized responses were not classified inconclusive")
+            if host_gaps and decoder["source"] != "REPLAY_GAP":
+                raise ValueError("Host decoder replay gap was not classified closed")
         if not isinstance(cat, str) or not re.fullmatch(r"[A-Z_]+", cat):
             raise ValueError("Unclosed catalog status")
         # These are only closed counters emitted by production Host tests.
@@ -307,7 +331,8 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows,
                 counts["readerUnique"] + counts["readerAmbiguous"] + counts["readerMissing"] !=
                 counts["readerSampled"]):
             raise ValueError("Inconsistent canonical SQLite/Reader observation counters")
-        if collector_gaps or counts["replayGaps"]:
+        source_incomplete = source_incomplete or host_limited > 0
+        if collector_gaps or counts["replayGaps"] or host_gaps:
             outcome = "REPLAY_GAP"
         elif source_incomplete:
             outcome = "INCONCLUSIVE_SOURCE"
@@ -322,6 +347,7 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows,
             "caseId": cid,
             "outcome": outcome,
             "sourceIncomplete": source_incomplete,
+            "hostResultLimitResponses": host_limited,
             "sourceHttp403": blocked,
             "catalog": cat,
             "sqliteConfirmed": counts["confirmed"],
@@ -365,8 +391,8 @@ def has_internal_replay_gap(summary):
 
 
 def main():
-    if len(sys.argv) != 7:
-        raise SystemExit("usage: report.py SOURCE.json MATRIX.json CATALOG.json COLLECTOR.xml SQLITE.xml OUT.json")
+    if len(sys.argv) != 8:
+        raise SystemExit("usage: report.py SOURCE.json MATRIX.json CATALOG.json COLLECTOR.xml SQLITE.xml DECODER.xml OUT.json")
     source, matrix, catalog = map(json_object, sys.argv[1:4])
     shard_index = int(os.environ.get("MANGAALL_SHARD_INDEX", "0"))
     shard_count = int(os.environ.get("MANGAALL_SHARD_COUNT", "1"))
@@ -374,9 +400,10 @@ def main():
                    source, matrix, catalog,
                    closed_lines(sys.argv[4], COL),
                    closed_lines(sys.argv[5], SQL),
-                   shard_index=shard_index, shard_count=shard_count)
-    Path(sys.argv[6]).parent.mkdir(parents=True, exist_ok=True)
-    Path(sys.argv[6]).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                   shard_index=shard_index, shard_count=shard_count,
+                   decoder_rows=closed_lines(sys.argv[6], DEC))
+    Path(sys.argv[7]).parent.mkdir(parents=True, exist_ok=True)
+    Path(sys.argv[7]).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     counts = {}
     for row in result["results"]:
         counts[row["outcome"]] = counts.get(row["outcome"], 0) + 1
