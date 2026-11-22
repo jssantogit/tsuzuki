@@ -5,6 +5,9 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import tachiyomi.core.provider.packageformat.ParsedProviderPackage
 import tachiyomi.core.provider.packageformat.ProviderManifestCapability
+import tachiyomi.core.provider.packageformat.ProviderManifestMangaAllChapterSnapshotPermission
+import tachiyomi.core.provider.packageformat.ProviderManifestNetworkPermission
+import tachiyomi.core.provider.packageformat.ProviderManifestPermissions
 import tachiyomi.core.provider.packageformat.ProviderManifestVersion
 import tachiyomi.core.provider.packageformat.ProviderScriptManifest
 
@@ -201,6 +204,110 @@ class ProviderScriptPackageRuntimeTest {
 
         runtime.invoke(pkg, "reading.chapters", 1, "{}") shouldBe
             ProviderPackageExecution.Failure(ProviderPackageFailure.MALFORMED_RESULT)
+    }
+
+    @Test
+    fun `future MangaALL snapshots require exact manifest scope and code11`(): Unit = runBlocking {
+        val main = """
+            export default {
+              reading: {
+                chapters: async () => {
+                  const first = JSON.parse(await tsuzuki.mangaAllChapterSnapshot.start("mangadot:131", "en"));
+                  const next = JSON.parse(await tsuzuki.mangaAllChapterSnapshot.next("mangadot:131", "en", first.nextCursor));
+                  return { chapters: first.items.concat(next.items).map(x => x.id) };
+                }
+              }
+            };
+        """.trimIndent()
+        val original = providerPackage(main)
+        val granted = original.copy(
+            manifest = original.manifest.copy(
+                id = "app.tsuzuki.mangaall",
+                version = ProviderManifestVersion("0.6.0-unsigned", 11),
+                minHostApi = 2,
+                permissions = ProviderManifestPermissions(
+                    network = ProviderManifestNetworkPermission(origins = setOf("https://mangadot.net")),
+                    mangaAllChapterSnapshot = ProviderManifestMangaAllChapterSnapshotPermission(enabled = true),
+                ),
+            ),
+        )
+        val calls = mutableListOf<String>()
+        val bridge = object : ProviderMangaAllChapterSnapshotHostService {
+            override suspend fun start(workId: String, language: String): String {
+                calls += "start:$workId:$language"
+                return """{"items":[{"id":"first"}],"nextCursor":"m1:131:en:0000000000000001:1"}"""
+            }
+
+            override suspend fun next(workId: String, language: String, cursor: String): String {
+                calls += "next:$workId:$language:$cursor"
+                return """{"items":[{"id":"second"}],"nextCursor":null}"""
+            }
+        }
+        val services = ProviderHostServices(mangaAllChapterSnapshot = bridge)
+        val runtime = ProviderScriptPackageRuntime()
+        runtime.invoke(granted, "reading.chapters", 1, "{}", services) shouldBe
+            ProviderPackageExecution.Success("""{"chapters":["first","second"]}""")
+        calls.size shouldBe 2
+
+        // All invalid/legacy grants deny the *same injected* native bridge.
+        val denied = listOf(
+            granted.copy(manifest = granted.manifest.copy(version = ProviderManifestVersion("0.5.5", 10))),
+            granted.copy(manifest = granted.manifest.copy(id = "foreign.provider")),
+            granted.copy(manifest = granted.manifest.copy(minHostApi = 1)),
+            granted.copy(manifest = granted.manifest.copy(permissions = ProviderManifestPermissions())),
+        )
+        for (candidate in denied) {
+            runtime.invoke(candidate, "reading.chapters", 1, "{}", services) shouldBe
+                ProviderPackageExecution.Failure(ProviderPackageFailure.MODULE_ERROR)
+        }
+        calls.size shouldBe 2
+    }
+
+    @Test
+    fun `future Host JS bridge rejects oversized and malformed native page results`(): Unit = runBlocking {
+        val base = providerPackage(
+            main = """
+                export default {
+                  reading: { chapters: async () =>
+                    JSON.parse(await tsuzuki.mangaAllChapterSnapshot.start("mangadot:131", "en")) }
+                };
+            """.trimIndent(),
+        )
+        val pkg = base.copy(
+            manifest = base.manifest.copy(
+                id = "app.tsuzuki.mangaall",
+                version = ProviderManifestVersion("0.6.0-unsigned", 11),
+                minHostApi = 2,
+                permissions = ProviderManifestPermissions(
+                    network = ProviderManifestNetworkPermission(origins = setOf("https://mangadot.net")),
+                    mangaAllChapterSnapshot = ProviderManifestMangaAllChapterSnapshotPermission(true),
+                ),
+            ),
+        )
+        val runtime = ProviderScriptPackageRuntime()
+        for (
+        badResult in listOf(
+            "not-json",
+            """{"items":[not-json],"nextCursor":null}""",
+            """{"items":[],"nextCursor":0}""",
+            """{"unrelated":1}""",
+            "x".repeat(60 * 1024),
+        )
+        ) {
+            val bridge = object : ProviderMangaAllChapterSnapshotHostService {
+                override suspend fun start(workId: String, language: String) = badResult
+                override suspend fun next(workId: String, language: String, cursor: String) =
+                    error("Not reached")
+            }
+            val execution = runtime.invoke(
+                pkg,
+                "reading.chapters",
+                1,
+                "{}",
+                ProviderHostServices(mangaAllChapterSnapshot = bridge),
+            )
+            execution shouldBe ProviderPackageExecution.Failure(ProviderPackageFailure.HOST_ERROR)
+        }
     }
 
     private fun providerPackage(

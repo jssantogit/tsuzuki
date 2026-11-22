@@ -152,6 +152,35 @@ class ProviderPackageParserTest {
         }
     }
 
+    @Test
+    fun `future MangaALL snapshot permission requires exact source, code and host API`() {
+        val future = manifest(networkOrigin = "https://mangadot.net")
+            .replace("\"id\": \"reader.example\"", "\"id\": \"app.tsuzuki.mangaall\"")
+            .replace("\"code\": 2", "\"code\": 11")
+            .replace("\"minHostApi\": 1", "\"minHostApi\": 2")
+            .replace(
+                "\"secrets\": [\"session\"]",
+                "\"mangaAllChapterSnapshot\": {\"enabled\": true}, \"secrets\": [\"session\"]",
+            )
+        val futurePackage = tsz("manifest.json" to future, "main.js" to "export default {}")
+        parser.parse(futurePackage).manifest.permissions.mangaAllChapterSnapshot.enabled shouldBe true
+        val invalid = listOf(
+            future.replace("\"code\": 11", "\"code\": 10"),
+            future.replace("\"minHostApi\": 2", "\"minHostApi\": 1"),
+            future.replace("\"id\": \"app.tsuzuki.mangaall\"", "\"id\": \"other.provider\""),
+            future.replace("https://mangadot.net", "https://other.example"),
+            future.replace("\"localNetwork\": false", "\"localNetwork\": true"),
+        )
+        invalid.forEach { manifest ->
+            shouldThrow<ProviderPackageException> {
+                parser.parse(tsz("manifest.json" to manifest, "main.js" to "export default {}"))
+            }
+        }
+        parser.parse(
+            tsz("manifest.json" to manifest(), "main.js" to "export default {}"),
+        ).manifest.permissions.mangaAllChapterSnapshot.enabled shouldBe false
+    }
+
     private fun manifest(
         capabilities: String = """[{"id":"reading.chapters","version":1}]""",
         networkOrigin: String = "https://reader.example",

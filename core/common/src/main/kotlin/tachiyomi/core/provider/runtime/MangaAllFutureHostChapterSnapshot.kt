@@ -513,3 +513,29 @@ internal data class MangaAllFutureChapterPage(
     val items: List<JsonObject>,
     val nextCursor: String?,
 )
+
+/**
+ * Future unsigned code11-only bridge adapter. A Host caller must explicitly
+ * provide it after manifest permission validation; code10 receives no binding.
+ */
+internal class MangaAllFutureChapterSnapshotHostBridge(
+    private val snapshot: MangaAllFutureHostChapterSnapshot,
+) : ProviderMangaAllChapterSnapshotHostService {
+    override suspend fun start(workId: String, language: String): String =
+        encode(snapshot.start(workId, language))
+
+    override suspend fun next(workId: String, language: String, cursor: String): String =
+        encode(snapshot.next(workId, language, cursor))
+
+    private fun encode(page: MangaAllFutureChapterPage): String =
+        JsonObject(
+            mapOf(
+                "items" to JsonArray(page.items),
+                "nextCursor" to (page.nextCursor?.let(::JsonPrimitive) ?: JsonNull),
+            ),
+        ).toString().also { json ->
+            if (json.length > 48 * 1024 || json.encodeToByteArray().size > 48 * 1024) {
+                throw ProviderHostServiceException("Future MangaALL chapter output exceeds the Host boundary")
+            }
+        }
+}

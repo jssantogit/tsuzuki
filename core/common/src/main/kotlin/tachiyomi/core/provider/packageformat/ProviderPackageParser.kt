@@ -37,10 +37,18 @@ data class ProviderManifestStoragePermission(
 )
 
 @Serializable
+data class ProviderManifestMangaAllChapterSnapshotPermission(
+    val enabled: Boolean = false,
+)
+
+@Serializable
 data class ProviderManifestPermissions(
     val network: ProviderManifestNetworkPermission? = null,
     val browser: ProviderManifestBrowserPermission? = null,
     val storage: ProviderManifestStoragePermission = ProviderManifestStoragePermission(),
+    // Future-only: independent of unrestricted Provider storage permissions.
+    val mangaAllChapterSnapshot: ProviderManifestMangaAllChapterSnapshotPermission =
+        ProviderManifestMangaAllChapterSnapshotPermission(),
     val secrets: Set<String> = emptySet(),
 )
 
@@ -227,6 +235,17 @@ class ProviderPackageParser(
 
         manifest.permissions.network?.origins?.forEach(::validateOrigin)
         manifest.permissions.browser?.origins?.forEach(::validateOrigin)
+        if (manifest.permissions.mangaAllChapterSnapshot.enabled &&
+            (
+                manifest.id != "app.tsuzuki.mangaall" ||
+                    manifest.version.code < 11L ||
+                    manifest.minHostApi < 2 ||
+                    manifest.permissions.network?.localNetwork != false ||
+                    "https://mangadot.net" !in manifest.permissions.network?.origins.orEmpty()
+                )
+        ) {
+            fail("Future MangaALL chapter snapshot permission is not supported by this package")
+        }
         if (manifest.permissions.secrets.any { !SETTING_KEY.matches(it) }) {
             fail("Provider manifest secret identifier is invalid")
         }

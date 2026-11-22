@@ -38,16 +38,45 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - name: Verify no production or signed release paths were changed
         shell: bash
+        env:
+          GITHUB_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           set -euo pipefail
           base="$(git merge-base origin/main HEAD)"
           test -n "$base"
           git diff --name-only "$base" HEAD | tee /tmp/mangaall-host-snapshot-changed.txt
-          if grep -E '^(providers/|dist/|app/src/|core/common/src/main/kotlin/tachiyomi/core/provider/runtime/(ProviderQuickJsRuntime|ProviderScriptPackageRuntime|ProviderHttpProtocol|ProviderHttpHostService)\.kt)' /tmp/mangaall-host-snapshot-changed.txt; then
-            echo "::error::Signed Provider or production Host API touched by offline snapshot gate"
+          # The original private-snapshot smoke protects code10 and generic
+          # Host HTTP, but the separate future-code11 permission PR now
+          # legitimately touches the QuickJs package runtime. Never relax
+          # this check for ordinary snapshot changes or unreviewed branches.
+          if grep -E '^(providers/|dist/|app/src/|core/common/src/main/kotlin/tachiyomi/core/provider/runtime/(ProviderHttpProtocol|ProviderHttpHostService)\.kt)' /tmp/mangaall-host-snapshot-changed.txt; then
+            echo "::error::Signed Provider or generic production HTTP API touched"
             exit 1
           fi
-          echo 'MANGAALL_HOST_PRIVATE_SNAPSHOT|signed_code10=UNCHANGED|quickjs_bindings=UNCHANGED|network=NONE'
+          if grep -E '^core/common/src/main/kotlin/tachiyomi/core/provider/runtime/(ProviderQuickJsRuntime|ProviderScriptPackageRuntime)\.kt$' /tmp/mangaall-host-snapshot-changed.txt; then
+            if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ||
+                  "${GITHUB_HEAD_REF:-}" != "feat/mangaall-host-large-chapter-grant-code11-only-20261122" ||
+                  "${GITHUB_HEAD_REPO:-}" != "${GITHUB_REPOSITORY}" ]] ||
+               ! grep -Fxq '.github/workflows/mangaall-future-host-grant-offline.yml' /tmp/mangaall-host-snapshot-changed.txt; then
+              echo "::error::QuickJs may change only in the explicit future-code11 permission PR with its independent gate"
+              exit 1
+            fi
+            # Require both grant-side source and regression coverage, not just
+            # an empty workflow marker. The dedicated gate separately tests
+            # actual manifest authorization and signed-code10 denial.
+            for required in \
+              'core/common/src/main/kotlin/tachiyomi/core/provider/packageformat/ProviderPackageParser.kt' \
+              'core/common/src/test/kotlin/tachiyomi/core/provider/packageformat/ProviderPackageParserTest.kt' \
+              'core/common/src/test/kotlin/tachiyomi/core/provider/runtime/ProviderScriptPackageRuntimeTest.kt'; do
+              if ! grep -Fxq "$required" /tmp/mangaall-host-snapshot-changed.txt; then
+                echo "::error::Future-code11 grant lacks required manifest or runtime test coverage"
+                exit 1
+              fi
+            done
+            echo 'MANGAALL_HOST_PRIVATE_SNAPSHOT|signed_code10=UNCHANGED|quickjs=CODE11_ONLY_SEPARATELY_GATED|network=NONE'
+          else
+            echo 'MANGAALL_HOST_PRIVATE_SNAPSHOT|signed_code10=UNCHANGED|quickjs_bindings=UNCHANGED|network=NONE'
+          fi
       - name: Kotlin formatting
         run: ./gradlew :core:common:spotlessKotlinCheck --stacktrace
       - name: Full private snapshot capacity regression on JVM

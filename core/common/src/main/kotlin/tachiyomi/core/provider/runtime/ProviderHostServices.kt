@@ -23,6 +23,17 @@ interface ProviderBrowserHostService {
     ): String
 }
 
+/**
+ * Future MangaALL-only chapter-list continuation, never ordinary HTTP.
+ * The Host grants this interface only to an explicitly authorized provider
+ * manifest; it is not part of the generic storage or network capabilities.
+ */
+interface ProviderMangaAllChapterSnapshotHostService {
+    suspend fun start(workId: String, language: String): String
+
+    suspend fun next(workId: String, language: String, cursor: String): String
+}
+
 interface ProviderStorageHostService {
     suspend fun get(key: String): String?
 
@@ -88,6 +99,7 @@ data class ProviderHostServices(
     val dom: ProviderDomHostService? = null,
     val browser: ProviderBrowserHostService? = null,
     val storage: ProviderStorageHostService? = null,
+    val mangaAllChapterSnapshot: ProviderMangaAllChapterSnapshotHostService? = null,
     val secrets: ProviderSecretsHostService? = null,
     val binary: ProviderBinaryHostService? = null,
     val crypto: ProviderCryptoHostService? = null,

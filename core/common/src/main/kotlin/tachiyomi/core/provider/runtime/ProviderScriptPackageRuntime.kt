@@ -97,7 +97,20 @@ class ProviderScriptPackageRuntime(
                 providerPackage = providerPackage,
                 source = source,
                 resultMode = ResultMode.INVOCATION,
-                hostServices = hostServices,
+                // Never infer this future permission from mere Host injection.
+                // A code10 package, another Provider, or absent manifest grant
+                // cannot access chapter snapshot methods through QuickJs.
+                hostServices = hostServices.copy(
+                    mangaAllChapterSnapshot = hostServices.mangaAllChapterSnapshot?.takeIf {
+                        providerPackage.manifest.id == "app.tsuzuki.mangaall" &&
+                            providerPackage.manifest.version.code >= 11L &&
+                            providerPackage.manifest.minHostApi >= 2 &&
+                            providerPackage.manifest.permissions.mangaAllChapterSnapshot.enabled &&
+                            providerPackage.manifest.permissions.network?.localNetwork == false &&
+                            "https://mangadot.net" in
+                            providerPackage.manifest.permissions.network?.origins.orEmpty()
+                    },
+                ),
             )
         ) {
             is ModuleEvaluation.Success -> {
