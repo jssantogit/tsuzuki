@@ -93,10 +93,18 @@ export function makeTestOnlyMangaFireFetch({ fetchImpl, browserFactory, enabled 
         return response;
       }
       const retry = await candidate.request(url, options);
-      if (retry.status !== 200 || !/\b(?:application\/json|\w+\/\w+\+json)\b/i.test(
+      let validJson = false;
+      if (retry.status === 200 && /\b(?:application\/json|\w+\/\w+\+json)\b/i.test(
         retry.headers.get('content-type') || '')) {
+        try {
+          const payload = await retry.clone().json();
+          validJson = payload !== null && typeof payload === 'object' &&
+            !Array.isArray(payload) && !payload.error;
+        } catch { /* A 200 header with broken JSON is not a solved challenge. */ }
+      }
+      if (!validJson) {
         lastOutcome = retry.status === 403
-          ? await classifyMangaFireChallenge(retry) : 'RETRY_NOT_JSON_200';
+          ? await classifyMangaFireChallenge(retry) : 'RETRY_NOT_VALID_API_JSON_200';
         await candidate.close();
         candidate = null;
         return response;
