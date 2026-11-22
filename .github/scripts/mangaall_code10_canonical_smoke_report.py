@@ -233,7 +233,7 @@ def merge(works, tier, source, matrix, catalog, collector_rows, sqlite_rows):
             not isinstance(catalog.get("sha256"), str)):
         raise ValueError("Catalog proof cannot be promoted or spoofed")
     if (matrix.get("provider") != "app.tsuzuki.mangaall" or
-            matrix.get("version") != "0.5.4" or
+            matrix.get("version") != "0.5.5" or
             matrix.get("shardCount") != 1 or matrix.get("shardIndex") != 0 or
             matrix.get("selectionSource") != "USER_INPUT"):
         raise ValueError("Source matrix not from the same code10 vector")
