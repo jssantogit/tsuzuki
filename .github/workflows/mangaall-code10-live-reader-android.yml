@@ -6,7 +6,7 @@ name: MangaAll signed code10 — real Android CDN transport and Reader pixels
 # Main pushes, scheduled jobs and the canonical smoke never launch live CDN.
 on:
   push:
-    branches: ['test/mangaall-code10-real-reader-cdn-opt-in-*', 'fix/mangaall-code10-real-reader-cdn-opt-in-*', 'fix/mangaall-code10-commit-triggered-live-cdn-*', 'probe/mangaall-code10-live-reader-*']
+    branches: ['test/mangaall-code10-real-reader-cdn-opt-in-*', 'fix/mangaall-code10-real-reader-cdn-opt-in-*', 'fix/mangaall-code10-commit-triggered-live-cdn-*', 'fix/mangaall-code10-live-chapter-attestation-diagnostics-*', 'probe/mangaall-code10-live-reader-*']
     paths:
       - '.github/mangaall-code10-live-reader-request.json'
       - '.github/workflows/mangaall-code10-live-reader-android.yml'
