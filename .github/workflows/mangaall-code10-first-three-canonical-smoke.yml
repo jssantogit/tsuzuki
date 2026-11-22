@@ -60,7 +60,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: jssantogit/providers-tsuzuki
-          ref: 12928017e82db8ba118dee9223c97db7e35f378e
+          ref: 195502f981bd776a68feebde3efc6d20f55cca65
           path: mangaall-signed-source
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -98,7 +98,11 @@ jobs:
             manga :: Bleach
           MANGAALL_SHARD_INDEX: '0'
           MANGAALL_SHARD_COUNT: '1'
-        run: node tooling/mangaall_live_matrix.mjs --plan
+        run: |
+          # Verify the 8-page Host capture bound before a single upstream GET.
+          # This is the immutable, signed-code10 source checkout tooling only.
+          node tooling/test_mangaall_live_journey.mjs
+          node tooling/mangaall_live_matrix.mjs --plan
       - name: Fetch authentic signed code10 V1 lookup/chapter envelopes (one three-source lookup per title)
         working-directory: mangaall-signed-source
         env:
@@ -205,7 +209,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: jssantogit/providers-tsuzuki
-          ref: 12928017e82db8ba118dee9223c97db7e35f378e
+          ref: 195502f981bd776a68feebde3efc6d20f55cca65
           path: signed-mangaall
           persist-credentials: false
       - name: Retrieve original real-source envelopes from matching shard
