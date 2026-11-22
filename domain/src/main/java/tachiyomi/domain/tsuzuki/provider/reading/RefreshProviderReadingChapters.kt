@@ -53,7 +53,11 @@ class RefreshProviderReadingChapters internal constructor(
         val snapshotObservedAt = clock()
         require(snapshotObservedAt >= 0L) { "Provider snapshot timestamp must not be negative" }
 
-        val observations = ArrayList<ProviderChapterObservation>()
+        // A provisional HID never publishes a full inventory. Avoid retaining a
+        // second growing list of chapter objects in addition to validated pages
+        // held by the caller for timeout-safe, additive reconciliation.
+        val observations = if (publishSnapshot != null) ArrayList<ProviderChapterObservation>() else null
+        var observationCount = 0
         val seenChapterIds = hashSetOf<String>()
         val seenCursors = hashSetOf<String>()
         startingCursor?.let { seenCursors += it.value }
@@ -86,10 +90,11 @@ class RefreshProviderReadingChapters internal constructor(
                 if (!seenChapterIds.add(observation.providerChapterId)) {
                     return failure(ProviderErrorCode.MALFORMED_RESULT)
                 }
-                observations += observation
-                if (observations.size > MAX_OBSERVATIONS) {
+                observationCount++
+                if (observationCount > MAX_OBSERVATIONS) {
                     return failure(ProviderErrorCode.RESOURCE_LIMIT)
                 }
+                observations?.add(observation)
             }
 
             val next = page.nextCursor
@@ -100,7 +105,7 @@ class RefreshProviderReadingChapters internal constructor(
             // Never publish a canonical snapshot until the final page is verified, so a
             // stalled or failed later page cannot detach previously recorded chapters.
             // The incomplete result must not pretend that the inventory is complete.
-            onPageObserved(it + 1, observations.size)
+            onPageObserved(it + 1, observationCount)
             // Observed chapters may be used additively if a later page stalls. This is
             // not a complete snapshot and must never detach older Provider support.
             onPageCollected(page.items, snapshotObservedAt)
@@ -114,7 +119,7 @@ class RefreshProviderReadingChapters internal constructor(
                     val evidence = evidenceAdapter.toEvidence(
                         canonicalTitleId = binding.canonicalTitleId,
                         binding = binding.ref,
-                        observations = observations,
+                        observations = checkNotNull(observations),
                         observedAt = snapshotObservedAt,
                     )
                     publisher(
@@ -124,7 +129,7 @@ class RefreshProviderReadingChapters internal constructor(
                         evidence,
                     )
                 }
-                return ProviderCallResult.Success(observations.size)
+                return ProviderCallResult.Success(observationCount)
             }
             cursor = next
         }
@@ -133,7 +138,7 @@ class RefreshProviderReadingChapters internal constructor(
         // already passed the strict per-page validation and can be committed
         // additively before the next refresh resumes at the next cursor.
         return if (allowPartialPageLimit) {
-            ProviderCallResult.Success(observations.size)
+            ProviderCallResult.Success(observationCount)
         } else {
             failure(ProviderErrorCode.RESOURCE_LIMIT)
         }
