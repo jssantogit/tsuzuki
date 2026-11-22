@@ -4,6 +4,7 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.io.RandomAccessFile
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
@@ -156,6 +157,50 @@ class ProviderStateHostServicesTest {
         }
         storage.get("existing") shouldBe "preserved"
         storage.get("uncommitted") shouldBe null
+    }
+
+    @Test
+    fun `queued future MangaALL callers share one timeout budget across JVM and OS locks`() {
+        val root = tempDir.resolve("queued-lock").toFile()
+        val a = FileProviderStorageHostService(root, "app.tsuzuki.mangaall")
+        val b = FileProviderStorageHostService(root, "app.tsuzuki.mangaall")
+        runBlocking { a.set("existing", "preserved") }
+        val lockFile = root.resolve(".app.tsuzuki.mangaall.snapshot.lock")
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            RandomAccessFile(lockFile, "rw").use { handle ->
+                handle.channel.lock().use {
+                    val entered = CountDownLatch(2)
+                    val start = CountDownLatch(1)
+                    val attempts = listOf(a, b).map { storage ->
+                        pool.submit<Throwable?> {
+                            entered.countDown()
+                            start.await()
+                            runCatching {
+                                runBlocking { storage.set("uncommitted", "bad") }
+                            }.exceptionOrNull()
+                        }
+                    }
+                    entered.await(3, TimeUnit.SECONDS) shouldBe true
+                    val began = System.nanoTime()
+                    start.countDown()
+                    // The former synchronized(monitor) implementation could
+                    // serialize two separate 3s waits into 6s. Both operations
+                    // must fail within ONE deadline even with OS contention.
+                    attempts.forEach { attempt ->
+                        (attempt.get(5, TimeUnit.SECONDS) is ProviderHostServiceException) shouldBe true
+                    }
+                    val elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - began)
+                    (elapsed < 5_000L) shouldBe true
+                }
+            }
+            runBlocking {
+                a.get("existing") shouldBe "preserved"
+                b.get("uncommitted") shouldBe null
+            }
+        } finally {
+            pool.shutdownNow()
+        }
     }
 
     @Test
