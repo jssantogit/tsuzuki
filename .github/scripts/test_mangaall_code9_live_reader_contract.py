@@ -87,7 +87,7 @@ class SignedCode9LiveReaderContract(unittest.TestCase):
         script = SCRIPT.read_text(encoding="utf-8")
         self.assertIn("failure.error.code.name", probe)
         self.assertIn('failure.error.pageFailureStage?.name ?: "NONE"', probe)
-        self.assertIn("signedCode == 9L", probe)
+        self.assertIn('9L -> "0.5.4"', probe)
         self.assertIn("providerError=(", script)
         self.assertIn("pageFailureStage=(", script)
         matched = re.search(r"grep -oE '([^']+)'", script)
