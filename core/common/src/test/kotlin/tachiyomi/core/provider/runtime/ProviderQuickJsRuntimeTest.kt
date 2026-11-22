@@ -184,6 +184,7 @@ class ProviderQuickJsRuntimeTest {
             hostServices = services,
         ) shouldBe ProviderScriptExecution.Failure(ProviderScriptFailure.SCRIPT_ERROR)
     }
+
     @Test
     fun raw_quickjs_evaluation_never_receives_future_mangaall_snapshot_even_when_injected(): Unit = runBlocking {
         var invoked = 0
@@ -209,6 +210,4 @@ class ProviderQuickJsRuntimeTest {
             hostServices = services,
         ) shouldBe ProviderScriptExecution.Failure(ProviderScriptFailure.SCRIPT_ERROR)
         invoked shouldBe 0
-    }
-
-}
+    }}
