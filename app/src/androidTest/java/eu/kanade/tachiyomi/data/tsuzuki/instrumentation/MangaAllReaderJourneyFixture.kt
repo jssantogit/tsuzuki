@@ -98,7 +98,13 @@ internal class MangaAllReaderJourneyFixture(
     private val liveTarget: MangaAllLiveReaderTarget? = null,
 ) : AutoCloseable {
     init {
-        require(listOf(originalCode7Package, originalCode8Package, originalCode9Package, originalCode10Package).count { it } <= 1) {
+        val originalPackageFlags = listOf(
+            originalCode7Package,
+            originalCode8Package,
+            originalCode9Package,
+            originalCode10Package,
+        )
+        require(originalPackageFlags.count { it } <= 1) {
             "Select at most one original MangaAll package"
         }
         require(liveTarget == null || originalCode8Package || originalCode9Package || originalCode10Package) {
@@ -232,7 +238,9 @@ internal class MangaAllReaderJourneyFixture(
                 permissions = ProviderPermissionSet(
                     network = if (liveSignedOrigins != null) {
                         ProviderNetworkPermission(liveSignedOrigins, localNetwork = false)
-                    } else if (originalCode7Package || originalCode8Package || originalCode9Package || originalCode10Package) {
+                    } else if (originalCode7Package || originalCode8Package || originalCode9Package ||
+                        originalCode10Package
+                    ) {
                         ProviderNetworkPermission(
                             setOf(
                                 "https://api.mangadex.org",
