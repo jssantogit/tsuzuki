@@ -1,12 +1,14 @@
 name: MangaAll signed code10 — real Android CDN transport and Reader pixels
 
-# PRs and narrowly-scoped branch pushes run ONLY offline lint/compile checks.
-# Real source and CDN traffic requires an explicit workflow_dispatch with
-# an exact operator chapter HID; green canonical smoke never launches it.
+# Ordinary PRs and fix/test pushes run ONLY offline lint/compile checks.
+# An explicit source/chapter request commit on a restricted probe branch may
+# launch bounded CDN traffic; manual dispatch remains available.
+# Main pushes, scheduled jobs and the canonical smoke never launch live CDN.
 on:
   push:
-    branches: ['test/mangaall-code10-real-reader-cdn-opt-in-*', 'fix/mangaall-code10-real-reader-cdn-opt-in-*']
+    branches: ['test/mangaall-code10-real-reader-cdn-opt-in-*', 'fix/mangaall-code10-real-reader-cdn-opt-in-*', 'fix/mangaall-code10-commit-triggered-live-cdn-*', 'probe/mangaall-code10-live-reader-*']
     paths:
+      - '.github/mangaall-code10-live-reader-request.json'
       - '.github/workflows/mangaall-code10-live-reader-android.yml'
       - '.github/scripts/test_mangaall_code10_live_reader_contract.py'
       - '.github/scripts/run_mangaall_live_pages_android.sh'
@@ -62,7 +64,7 @@ concurrency:
 
 jobs:
   offline-contract:
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/heads/probe/mangaall-code10-live-reader-'))
     runs-on: ubuntu-24.04
     timeout-minutes: 65
     steps:
@@ -85,7 +87,7 @@ jobs:
         run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebugAndroidTest
 
   signed-code10-live-android:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/probe/mangaall-code10-live-reader-'))
     name: Exact signed code10 -> source chapter -> Android CDN / Reader pixels
     runs-on: ubuntu-24.04
     timeout-minutes: 95
@@ -101,6 +103,43 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Load exact one-shot commit request (NO NETWORK)
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          assert re.fullmatch(r'refs/heads/probe/mangaall-code10-live-reader-[a-z0-9-]{1,80}', os.environ['GITHUB_REF']), 'Not a reviewed probe branch'
+          path = Path('.github/mangaall-code10-live-reader-request.json')
+          raw = path.read_bytes()
+          assert len(raw) <= 2048, 'Oversized request'
+          request = json.loads(raw)
+          expected = {
+              'work_id': 'mangadex:239d6260-d71f-43b0-afff-074e3619e3de',
+              'chapter_id': 'mangadex:2af914dc-0d63-4ac0-875e-75390ce59390',
+              'chapter_number': '336',
+              'language': 'en',
+              'mode': 'transport',
+              'acknowledge': 'I_ACCEPT_SIGNED_CODE10_LIVE_READER',
+          }
+          assert type(request) is dict and request == expected, 'Unapproved source, chapter or mode'
+          keys = {
+              'work_id': 'MANGAALL_WORK_ID',
+              'chapter_id': 'MANGAALL_CHAPTER_ID',
+              'chapter_number': 'MANGAALL_CHAPTER_NUMBER',
+              'language': 'MANGAALL_LANGUAGE',
+              'mode': 'MANGAALL_GATE_MODE',
+              'acknowledge': 'MANGAALL_READER_ACK',
+          }
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as target:
+              for source, name in keys.items():
+                  value = request[source]
+                  assert re.fullmatch(r'[A-Za-z0-9_.:-]+', value), 'Invalid request field'
+                  print(f'{name}={value}', file=target)
+          print('MANGAALL_CODE10_COMMIT_REQUEST|scope=BLEACH_336_TRANSPORT|source=SIGNED_CODE10|mode=transport|cdn=NOT_YET_CALLED')
+          PY
       - name: Reject all unapproved live requests BEFORE upstream traffic
         shell: bash
         run: |

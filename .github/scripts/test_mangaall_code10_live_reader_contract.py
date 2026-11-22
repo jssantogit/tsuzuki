@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline, fail-closed wiring regression for manually dispatched signed code10 CDN/Reader proof."""
+"""Offline, fail-closed wiring regression for manual/commit signed code10 CDN/Reader proof."""
 from pathlib import Path
 import re
 import subprocess
@@ -20,15 +20,27 @@ CODE9_SHA = "d9c223146faa9fea0e5b1593711b74836bc0af3c2939b2c6f246dbb2e4646622"
 
 
 class SignedCode10LiveReaderContract(unittest.TestCase):
-    def test_only_operator_dispatch_may_touch_source_or_cdn(self):
+    def test_only_explicit_manual_or_approved_probe_commit_may_touch_cdn(self):
         wf = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("\n  workflow_dispatch:", wf)
         self.assertIn("\n  pull_request:", wf)
         for forbidden in ("\n  schedule:", "\n  issue_comment:", "workflow_run:"):
             self.assertNotIn(forbidden, wf)
-        self.assertIn("  push:\n    branches: ['test/mangaall-code10-real-reader-cdn-opt-in-*', 'fix/mangaall-code10-real-reader-cdn-opt-in-*']", wf)
-        self.assertIn("offline-contract:\n    if: github.event_name == 'pull_request' || github.event_name == 'push'", wf)
-        self.assertIn("signed-code10-live-android:\n    if: github.event_name == 'workflow_dispatch'", wf)
+        self.assertIn("'fix/mangaall-code10-commit-triggered-live-cdn-*'", wf)
+        self.assertIn("'probe/mangaall-code10-live-reader-*'", wf)
+        self.assertIn("'.github/mangaall-code10-live-reader-request.json'", wf)
+        self.assertIn("offline-contract:\n    if: github.event_name == 'pull_request' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/heads/probe/mangaall-code10-live-reader-'))", wf)
+        self.assertIn("signed-code10-live-android:\n    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/probe/mangaall-code10-live-reader-'))", wf)
+        self.assertIn("if: github.event_name == 'push'", wf)
+        self.assertIn("raw = path.read_bytes()", wf)
+        self.assertIn("assert len(raw) <= 2048", wf)
+        self.assertIn("assert type(request) is dict and request == expected", wf)
+        self.assertIn("'mode': 'transport'", wf)
+        self.assertIn("'chapter_number': '336'", wf)
+        self.assertIn("'work_id': 'mangadex:239d6260-d71f-43b0-afff-074e3619e3de'", wf)
+        self.assertIn("'chapter_id': 'mangadex:2af914dc-0d63-4ac0-875e-75390ce59390'", wf)
+        self.assertIn("MANGAALL_CODE10_COMMIT_REQUEST|scope=BLEACH_336_TRANSPORT", wf)
+        self.assertNotIn("'mode': 'reader',", wf.split("expected = {", 1)[1].split("}", 1)[0])
         self.assertIn(ACK, wf)
         self.assertIn("assert chapter.startswith(work.split(':', 1)[0] + ':')", wf)
         self.assertIn("assert os.environ['MANGAALL_LANGUAGE'] == 'en'", wf)
