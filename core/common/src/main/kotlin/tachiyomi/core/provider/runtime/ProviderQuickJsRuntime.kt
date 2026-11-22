@@ -162,6 +162,28 @@ internal fun QuickJs.installHostServices(
                 }
             }
         }
+        services.mangaAllChapterSnapshot?.let { snapshot ->
+            define("mangaAllChapterSnapshot") {
+                asyncFunction("start") { args ->
+                    hostFailures.call {
+                        boundedMangaAllChapterSnapshotResult(
+                            snapshot.start(args.stringArgument(0), args.stringArgument(1)),
+                        )
+                    }
+                }
+                asyncFunction("next") { args ->
+                    hostFailures.call {
+                        boundedMangaAllChapterSnapshotResult(
+                            snapshot.next(
+                                args.stringArgument(0),
+                                args.stringArgument(1),
+                                args.stringArgument(2),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
         services.storage?.let { storage ->
             define("storage") {
                 asyncFunction("get") { args ->
@@ -290,6 +312,16 @@ private fun Array<Any?>.intArgument(index: Int): Int =
 
 private fun Array<Any?>.optionalStringArgument(index: Int): String? =
     getOrNull(index)?.toString()
+
+private fun boundedMangaAllChapterSnapshotResult(value: String): String {
+    if (value.length > 48 * 1024 ||
+        value.encodeToByteArray().size > 48 * 1024 ||
+        runCatching { HOST_JSON.parseToJsonElement(value) }.isFailure
+    ) {
+        throw ProviderHostServiceException("Future MangaALL chapter output exceeds the Host boundary")
+    }
+    return value
+}
 
 private fun decodeHttpHeaders(value: String): Map<String, String> {
     if (value.length > ProviderHttpProtocol.MAX_REQUEST_JSON_CHARS) {
