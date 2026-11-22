@@ -4,7 +4,12 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 class ProviderStateHostServicesTest {
 
@@ -48,6 +53,105 @@ class ProviderStateHostServicesTest {
 
         storage.set("b", "12")
         (runCatching { storage.set("c", "1") }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
+    }
+
+    @Test
+    fun `future MangaALL shared storage retains concurrent writes across independent instances`() {
+        val root = tempDir.resolve("shared-mangaall").toFile()
+        val first = FileProviderStorageHostService(root, "app.tsuzuki.mangaall")
+        val second = FileProviderStorageHostService(root, "app.tsuzuki.mangaall")
+        val pool = Executors.newFixedThreadPool(6)
+        val start = CountDownLatch(1)
+        try {
+            val updates = (0 until 60).map { n ->
+                pool.submit {
+                    start.await()
+                    runBlocking {
+                        (if (n % 2 == 0) first else second).set("entry$n", "value$n")
+                    }
+                }
+            }
+            start.countDown()
+            updates.forEach { it.get(20, TimeUnit.SECONDS) }
+            runBlocking {
+                for (n in 0 until 60) {
+                    first.get("entry$n") shouldBe "value$n"
+                    second.get("entry$n") shouldBe "value$n"
+                }
+            }
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `future MangaALL storage respects an OS lock held by another process`() {
+        val root = tempDir.resolve("multiprocess").toFile()
+        val storage = FileProviderStorageHostService(root, "app.tsuzuki.mangaall")
+        runBlocking { storage.set("existing", "preserved") }
+        val helper = tempDir.resolve("HoldMangaAllFileLock.java")
+        Files.writeString(
+            helper,
+            """
+            import java.io.RandomAccessFile;
+            import java.nio.channels.FileLock;
+            public class HoldMangaAllFileLock {
+                public static void main(String[] args) throws Exception {
+                    try (RandomAccessFile file = new RandomAccessFile(args[0], "rw");
+                         FileLock lock = file.getChannel().lock()) {
+                        System.out.println("LOCKED");
+                        System.out.flush();
+                        Thread.sleep(1400);
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+        val java = Path.of(System.getProperty("java.home"), "bin", "java").toString()
+        val lockFile = root.resolve(".app.tsuzuki.mangaall.snapshot.lock")
+        val child = ProcessBuilder(java, helper.toString(), lockFile.toString())
+            .redirectErrorStream(true)
+            .start()
+        val pool = Executors.newSingleThreadExecutor()
+        try {
+            child.inputStream.bufferedReader().readLine() shouldBe "LOCKED"
+            val started = CountDownLatch(1)
+            val waiting = pool.submit {
+                started.countDown()
+                runBlocking { storage.set("later", "success") }
+            }
+            started.await(3, TimeUnit.SECONDS) shouldBe true
+            (runCatching { waiting.get(150, TimeUnit.MILLISECONDS) }
+                .exceptionOrNull() is TimeoutException) shouldBe true
+            child.waitFor(10, TimeUnit.SECONDS) shouldBe true
+            child.exitValue() shouldBe 0
+            waiting.get(10, TimeUnit.SECONDS)
+            runBlocking {
+                storage.get("existing") shouldBe "preserved"
+                storage.get("later") shouldBe "success"
+            }
+        } finally {
+            pool.shutdownNow()
+            child.destroyForcibly()
+        }
+    }
+
+    @Test
+    fun `future MangaALL lock errors leave committed state intact`() = runBlocking {
+        val root = tempDir.resolve("blocked-lock").toFile()
+        val storage = FileProviderStorageHostService(root, "app.tsuzuki.mangaall")
+        storage.set("existing", "preserved")
+        val lockFile = root.resolve(".app.tsuzuki.mangaall.snapshot.lock").toPath()
+        Files.delete(lockFile)
+        Files.createDirectory(lockFile)
+        try {
+            (runCatching { storage.set("uncommitted", "bad") }
+                .exceptionOrNull() is ProviderHostServiceException) shouldBe true
+        } finally {
+            Files.delete(lockFile)
+        }
+        storage.get("existing") shouldBe "preserved"
+        storage.get("uncommitted") shouldBe null
     }
 
     @Test
