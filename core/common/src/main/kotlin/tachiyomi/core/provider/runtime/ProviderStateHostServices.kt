@@ -5,9 +5,13 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
+import java.io.RandomAccessFile
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.nio.channels.OverlappingFileLockException
+import java.util.concurrent.ConcurrentHashMap
 
 class FileProviderStorageHostService(
     private val root: File,
@@ -34,13 +38,13 @@ class FileProviderStorageHostService(
         ensureDirectory(root)
     }
 
-    override suspend fun get(key: String): String? = synchronized(lock) {
+    override suspend fun get(key: String): String? = withStateLock {
         validateKey(key)
         readState()[key]
     }
 
     override suspend fun set(key: String, value: String) {
-        synchronized(lock) {
+        withStateLock {
             validateKey(key)
             if (value.length > maxValueChars) {
                 throw ProviderHostServiceException("Provider storage value exceeds the size limit")
@@ -68,7 +72,7 @@ class FileProviderStorageHostService(
         if (providerId != "app.tsuzuki.mangaall" || parts.size > 16) {
             throw ProviderHostServiceException("Future MangaALL snapshot scope is invalid")
         }
-        synchronized(lock) {
+        withStateLock {
             val replacement = readState().toMutableMap()
             replacement.remove(FUTURE_MANGAALL_INDEX_KEY)
             repeat(16) { replacement.remove(FUTURE_MANGAALL_PART_PREFIX + it) }
@@ -100,11 +104,71 @@ class FileProviderStorageHostService(
     }
 
     override suspend fun remove(key: String) {
-        synchronized(lock) {
+        withStateLock {
             validateKey(key)
             val state = readState().toMutableMap()
             if (state.remove(key) != null) {
                 writeState(state)
+            }
+        }
+    }
+
+    /**
+     * Future MangaALL's single provider-state file is shared by fresh Host
+     * instances and may be opened from different Android processes. Atomic
+     * rename alone does not serialize independent read-modify-write cycles.
+     *
+     * Keep the existing per-instance behavior for every other Provider.
+     * MangaALL uses one JVM monitor per canonical lock path (FileLock otherwise
+     * throws OverlappingFileLockException in one process), and an OS advisory
+     * lock for every state read/write, including unrelated storage keys. The
+     * lock is held only for bounded filesystem work, never while HTTP or JS
+     * executes. All callers must use this storage service to honor the lock.
+     *
+     * Do not lock the replaced JSON inode: its inode changes on atomic rename.
+     * A stable sidecar file remains the coordination point across processes.
+     */
+    private fun <T> withStateLock(block: () -> T): T {
+        if (providerId != FUTURE_MANGAALL_PROVIDER_ID) {
+            return synchronized(lock) { block() }
+        }
+        val lockFile = try {
+            File(root.canonicalFile, ".$providerId.snapshot.lock")
+        } catch (error: IOException) {
+            throw ProviderHostServiceException("Future MangaALL storage lock path is unavailable", error)
+        }
+        val monitor = FUTURE_MANGAALL_LOCKS.computeIfAbsent(lockFile.path) { Any() }
+        return synchronized(monitor) {
+            try {
+                RandomAccessFile(lockFile, "rw").use { file ->
+                    file.channel.use { channel ->
+                        val startedAt = System.nanoTime()
+                        var acquired = try {
+                            channel.tryLock()
+                        } catch (_: OverlappingFileLockException) {
+                            null
+                        }
+                        while (acquired == null) {
+                            if (System.nanoTime() - startedAt >= LOCK_WAIT_NANOS) {
+                                throw ProviderHostServiceException("Future MangaALL storage lock is busy")
+                            }
+                            Thread.sleep(LOCK_RETRY_MILLIS)
+                            acquired = try {
+                                channel.tryLock()
+                            } catch (_: OverlappingFileLockException) {
+                                null
+                            }
+                        }
+                        acquired.use { block() }
+                    }
+                }
+            } catch (error: ProviderHostServiceException) {
+                throw error
+            } catch (error: InterruptedException) {
+                Thread.currentThread().interrupt()
+                throw ProviderHostServiceException("Future MangaALL storage lock was interrupted", error)
+            } catch (error: IOException) {
+                throw ProviderHostServiceException("Future MangaALL storage lock could not be acquired", error)
             }
         }
     }
@@ -148,6 +212,10 @@ class FileProviderStorageHostService(
     private companion object {
         val PROVIDER_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
         val STORAGE_KEY = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+        const val FUTURE_MANGAALL_PROVIDER_ID = "app.tsuzuki.mangaall"
+        const val LOCK_WAIT_NANOS = 3_000_000_000L
+        const val LOCK_RETRY_MILLIS = 20L
+        val FUTURE_MANGAALL_LOCKS = ConcurrentHashMap<String, Any>()
         const val FUTURE_MANGAALL_INDEX_KEY = "mangaall_private_chapters_index"
         const val FUTURE_MANGAALL_PART_PREFIX = "mangaall_private_chapters_part_"
     }
