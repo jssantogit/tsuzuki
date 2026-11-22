@@ -1,9 +1,18 @@
 name: MangaAll signed code10 — real Android CDN transport and Reader pixels
 
-# PRs run ONLY offline lint/compile checks. Real source and CDN traffic
-# requires an explicit workflow_dispatch with an exact operator chapter HID.
-# No branch push, cron, other workflow, or green canonical smoke launches it.
+# PRs and narrowly-scoped branch pushes run ONLY offline lint/compile checks.
+# Real source and CDN traffic requires an explicit workflow_dispatch with
+# an exact operator chapter HID; green canonical smoke never launches it.
 on:
+  push:
+    branches: ['test/mangaall-code10-real-reader-cdn-opt-in-*']
+    paths:
+      - '.github/workflows/mangaall-code10-live-reader-android.yml'
+      - '.github/scripts/test_mangaall_code10_live_reader_contract.py'
+      - '.github/scripts/run_mangaall_live_pages_android.sh'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/reading/ScriptProviderReadingGatewayIsolationTest.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/MangaAllReaderJourneyFixture.kt'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/data/tsuzuki/instrumentation/CanonicalReaderSourceSwitchInstrumentedTest.kt'
   pull_request:
     paths:
       - '.github/workflows/mangaall-code10-live-reader-android.yml'
@@ -53,7 +62,7 @@ concurrency:
 
 jobs:
   offline-contract:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 65
     steps:
