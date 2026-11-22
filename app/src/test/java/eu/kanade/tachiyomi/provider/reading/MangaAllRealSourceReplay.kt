@@ -8,10 +8,10 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
-import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
 import tachiyomi.core.provider.packageformat.ProviderPackageParser
 import tachiyomi.core.provider.runtime.ProviderRuntimeInvocationResponse
+import tachiyomi.core.provider.runtime.ProviderRuntimeProtocol
+import tachiyomi.domain.tsuzuki.diagnostics.DiagnosticProviderMalformedResultStage
 import tachiyomi.domain.tsuzuki.provider.DefaultProviderRegistry
 import tachiyomi.domain.tsuzuki.provider.ProviderCapabilities
 import tachiyomi.domain.tsuzuki.provider.ProviderDescriptor
