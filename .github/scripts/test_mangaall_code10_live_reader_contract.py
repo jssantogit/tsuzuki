@@ -125,18 +125,22 @@ class SignedCode10LiveReaderContract(unittest.TestCase):
         self.assertIn('failure.error.sourceFailureCode?.name ?: "NONE"', probe)
         self.assertIn('failure.error.httpStatus?.toString() ?: "NONE"', probe)
         self.assertIn("failure.error.retryable", probe)
+        self.assertIn("mangaDexChapterRequests.incrementAndGet()", probe)
+        self.assertIn("mangaDexChapterStatus.set(response.code)", probe)
+        self.assertIn('request.url.encodedPath == "/chapter"', probe)
         self.assertIn("Code10 real Android chapter attestation", kotlin)
         self.assertIn(r"\|sourceFailure=(NONE|CHALLENGE_BLOCKED|HTTP_ERROR|INVALID_RESPONSE|UNCLASSIFIED_ERROR)", kotlin)
         self.assertIn(r"\|httpStatus=(NONE|[1-5][0-9]{2})\|retryable=(true|false)", kotlin)
+        self.assertIn(r"\|sourceRequests=([0-9]|[1-9][0-9])\|sourceHttp=(NONE|[1-5][0-9]{2})", kotlin)
         matched = re.search(r"grep -oE '([^']+)'", script)
         self.assertIsNotNone(matched)
         extractor = matched.group(1)
         prefix = ("INSTRUMENTATION_STATUS: stream=MANGAALL_LIVE_PAGE_GATE"
                   "|outcome=INCONCLUSIVE|reason=CHAPTER_ATTESTATION_UNAVAILABLE")
         for suffix in (
-            "|providerError=SOURCE_READ_ERROR|sourceFailure=HTTP_ERROR|httpStatus=429|retryable=true",
-            "|providerError=SOURCE_READ_ERROR|sourceFailure=UNCLASSIFIED_ERROR|httpStatus=NONE|retryable=false",
-            "|providerError=TIMEOUT|sourceFailure=NONE|httpStatus=NONE|retryable=true",
+            "|providerError=SOURCE_READ_ERROR|sourceFailure=HTTP_ERROR|httpStatus=429|retryable=true|sourceRequests=1|sourceHttp=429",
+            "|providerError=SOURCE_READ_ERROR|sourceFailure=UNCLASSIFIED_ERROR|httpStatus=NONE|retryable=false|sourceRequests=3|sourceHttp=200",
+            "|providerError=TIMEOUT|sourceFailure=NONE|httpStatus=NONE|retryable=true|sourceRequests=1|sourceHttp=NONE",
         ):
             value = prefix + suffix
             result = subprocess.run(["grep", "-oE", extractor], input=value + "\n",
@@ -148,7 +152,8 @@ class SignedCode10LiveReaderContract(unittest.TestCase):
             self.assertEqual(result.stdout.strip(), value)
         for invalid in ("|providerError=UPSTREAM_PRIVATE_ERROR",
                         "|providerError=SOURCE_READ_ERROR|sourceFailure=PRIVATE",
-                        "|providerError=SOURCE_READ_ERROR|sourceFailure=HTTP_ERROR|httpStatus=999"):
+                        "|providerError=SOURCE_READ_ERROR|sourceFailure=HTTP_ERROR|httpStatus=999",
+                        "|providerError=SOURCE_READ_ERROR|sourceFailure=HTTP_ERROR|httpStatus=429|retryable=true|sourceRequests=100|sourceHttp=200"):
             result = subprocess.run(["grep", "-oE", extractor], input=prefix + invalid + "\n",
                                     text=True, capture_output=True, check=False)
             self.assertEqual(result.stdout.strip(), prefix)
