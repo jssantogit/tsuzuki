@@ -1,0 +1,99 @@
+name: MangaALL — real three-source unsigned code11 isolated Android IPC (OFFLINE)
+
+# Research-only, exact branch and pinned unsigned Provider source. No release.
+on:
+  push:
+    branches: ['test/mangaall-future-real-three-source-code11-android-ipc-20261122']
+    paths:
+      - '.github/workflows/mangaall-future-real-three-source-code11-ipc-offline.yml'
+      - '.github/scripts/run_mangaall_future_real_three_source_code11_ipc.sh'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureRealThreeSourceCode11InstrumentedTest.kt'
+permissions:
+  contents: read
+concurrency:
+  group: mangaall-real-three-source-code11-ipc-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  three-source-isolated-ipc:
+    if: github.ref_name == 'test/mangaall-future-real-three-source-code11-android-ipc-20261122'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Allow only one test class, one CI runner and one offline workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$(git merge-base origin/main HEAD)"
+          git diff --name-only "$base" HEAD | tee /tmp/mangaall-real-three-source-ipc-files.txt
+          test "$(wc -l < /tmp/mangaall-real-three-source-ipc-files.txt)" -eq 3
+          if grep -Ev '^(\.github/workflows/mangaall-future-real-three-source-code11-ipc-offline\.yml|\.github/scripts/run_mangaall_future_real_three_source_code11_ipc\.sh|app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureRealThreeSourceCode11InstrumentedTest\.kt)$' /tmp/mangaall-real-three-source-ipc-files.txt; then
+            echo '::error::No production Host, provider, signing or index changes allowed'
+            exit 1
+          fi
+          bash -n .github/scripts/run_mangaall_future_real_three_source_code11_ipc.sh
+          echo 'MANGAALL_REAL_JS_CODE11|diff=THREE_TEST_FILES_ONLY|signed_code10=UNCHANGED'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jssantogit/providers-tsuzuki
+          ref: 89b5979fff297c2a099359258c9f9249e0089db4
+          path: future-code11-source
+          persist-credentials: false
+      - name: Generate ephemeral unsigned ZIP from byte-pinned original three-source modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C future-code11-source rev-parse HEAD)" = 89b5979fff297c2a099359258c9f9249e0089db4
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, sys, zipfile, io
+          provider=Path('future-code11-source').resolve()
+          sys.path.insert(0,str(provider/'tooling'))
+          from mangaall_future_code11_candidate import unsigned_candidate_zip
+          raw=unsigned_candidate_zip(provider)
+          with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+              assert archive.testzip() is None
+              assert 'modules/sources/mangadot/future-main.js' in archive.namelist()
+          target=Path('app/src/androidTest/assets/mangaall-future-code11-unsigned-research.zip')
+          target.parent.mkdir(parents=True,exist_ok=True)
+          target.write_bytes(raw)
+          print('MANGAALL_REAL_JS_CODE11|ZIP_TEST_ONLY=TRUE|SHA256='+hashlib.sha256(raw).hexdigest()+
+                '|signed=false|publication=false')
+          PY
+          test -s 'app/src/androidTest/assets/mangaall-future-code11-unsigned-research.zip'
+          if git ls-files --error-unmatch 'app/src/androidTest/assets/mangaall-future-code11-unsigned-research.zip' >/dev/null 2>&1; then
+            echo '::error::Research ZIP must be transient, not tracked in Git'
+            exit 1
+          fi
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - name: Check Kotlin format and assemble only debug app + AndroidTest APKs
+        run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Execute genuine MangaALL three-source modules in isolated QuickJs Binder
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaall_future_real_three_source_code11_ipc.sh
+      - name: Preserve closed emulator diagnostics only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-real-three-source-code11-ipc-offline
+          path: .github/results/mangaall-future-real-three-source-ipc
+          if-no-files-found: ignore
+          retention-days: 2
