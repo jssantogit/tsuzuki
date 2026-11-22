@@ -12,6 +12,8 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
 
 class FileProviderStorageHostService(
     private val root: File,
@@ -137,39 +139,45 @@ class FileProviderStorageHostService(
         } catch (error: IOException) {
             throw ProviderHostServiceException("Future MangaALL storage lock path is unavailable", error)
         }
-        val monitor = FUTURE_MANGAALL_LOCKS.computeIfAbsent(lockFile.path) { Any() }
-        return synchronized(monitor) {
-            try {
-                RandomAccessFile(lockFile, "rw").use { file ->
-                    file.channel.use { channel ->
-                        val startedAt = System.nanoTime()
-                        var acquired = try {
+        val startedAt = System.nanoTime()
+        val monitor = FUTURE_MANGAALL_LOCKS.computeIfAbsent(lockFile.path) { ReentrantLock() }
+        var heldMonitor = false
+        try {
+            // The same three-second budget covers BOTH contention in this JVM
+            // and the OS sidecar file, preventing 3s * N queued callers.
+            if (!monitor.tryLock(LOCK_WAIT_NANOS, TimeUnit.NANOSECONDS)) {
+                throw ProviderHostServiceException("Future MangaALL storage lock is busy")
+            }
+            heldMonitor = true
+            RandomAccessFile(lockFile, "rw").use { file ->
+                file.channel.use { channel ->
+                    while (true) {
+                        if (System.nanoTime() - startedAt >= LOCK_WAIT_NANOS) {
+                            throw ProviderHostServiceException("Future MangaALL storage lock is busy")
+                        }
+                        val acquired = try {
                             channel.tryLock()
                         } catch (_: OverlappingFileLockException) {
                             null
                         }
-                        while (acquired == null) {
-                            if (System.nanoTime() - startedAt >= LOCK_WAIT_NANOS) {
-                                throw ProviderHostServiceException("Future MangaALL storage lock is busy")
-                            }
-                            Thread.sleep(LOCK_RETRY_MILLIS)
-                            acquired = try {
-                                channel.tryLock()
-                            } catch (_: OverlappingFileLockException) {
-                                null
-                            }
+                        if (acquired != null) {
+                            return acquired.use { block() }
                         }
-                        acquired.use { block() }
+                        Thread.sleep(LOCK_RETRY_MILLIS)
                     }
+                    @Suppress("UNREACHABLE_CODE")
+                    throw IllegalStateException("Unreachable storage lock")
                 }
-            } catch (error: ProviderHostServiceException) {
-                throw error
-            } catch (error: InterruptedException) {
-                Thread.currentThread().interrupt()
-                throw ProviderHostServiceException("Future MangaALL storage lock was interrupted", error)
-            } catch (error: IOException) {
-                throw ProviderHostServiceException("Future MangaALL storage lock could not be acquired", error)
             }
+        } catch (error: ProviderHostServiceException) {
+            throw error
+        } catch (error: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw ProviderHostServiceException("Future MangaALL storage lock was interrupted", error)
+        } catch (error: IOException) {
+            throw ProviderHostServiceException("Future MangaALL storage lock could not be acquired", error)
+        } finally {
+            if (heldMonitor) monitor.unlock()
         }
     }
 
@@ -215,7 +223,7 @@ class FileProviderStorageHostService(
         const val FUTURE_MANGAALL_PROVIDER_ID = "app.tsuzuki.mangaall"
         const val LOCK_WAIT_NANOS = 3_000_000_000L
         const val LOCK_RETRY_MILLIS = 20L
-        val FUTURE_MANGAALL_LOCKS = ConcurrentHashMap<String, Any>()
+        val FUTURE_MANGAALL_LOCKS = ConcurrentHashMap<String, ReentrantLock>()
         const val FUTURE_MANGAALL_INDEX_KEY = "mangaall_private_chapters_index"
         const val FUTURE_MANGAALL_PART_PREFIX = "mangaall_private_chapters_part_"
     }
