@@ -1,0 +1,69 @@
+name: MangaALL — future code11 real isolated QuickJs Binder 4341 offline
+
+# Test-only, disposable Android emulator and unsigned in-memory synthetic ZIP.
+# No installable code11 provider, source network, Reader CDN or signing.
+on:
+  push:
+    branches: ['test/mangaall-future-code11-interprocess-ipc-offline-20261122']
+    paths:
+      - '.github/workflows/mangaall-future-code11-real-ipc-offline.yml'
+      - '.github/scripts/run_mangaall_future_code11_interprocess_offline.sh'
+      - 'app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureCode11InterprocessInstrumentedTest.kt'
+permissions:
+  contents: read
+concurrency:
+  group: mangaall-code11-real-ipc-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-isolated-ipc-offline:
+    if: github.ref_name == 'test/mangaall-future-code11-interprocess-ipc-offline-20261122'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Limit test changes to exact isolated Android instrumentation files
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='645f7435112ccbcba434e56cd40c6769f8aa4c70'
+          test "$(git merge-base "$base" HEAD)" = "$base"
+          git diff --name-only "$base" HEAD | tee /tmp/mangaall-code11-ipc-files.txt
+          test "$(wc -l < /tmp/mangaall-code11-ipc-files.txt)" -eq 3
+          if grep -Ev '^(\.github/workflows/mangaall-future-code11-real-ipc-offline\.yml|\.github/scripts/run_mangaall_future_code11_interprocess_offline\.sh|app/src/androidTest/java/eu/kanade/tachiyomi/provider/runtime/MangaAllFutureCode11InterprocessInstrumentedTest\.kt)$' /tmp/mangaall-code11-ipc-files.txt; then
+            echo '::error::Unsigned real IPC acceptance cannot change production/Provider/signed paths'
+            exit 1
+          fi
+          bash -n .github/scripts/run_mangaall_future_code11_interprocess_offline.sh
+          echo 'MANGAALL_CODE11_IPC|diff=THREE_TEST_FILES_ONLY|source=OFFLINE|code10=UNCHANGED'
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - name: Kotlin formatting and Android isolated package instrumentation compile
+        run: ./gradlew :app:spotlessKotlinCheck :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Execute synthetic future code11 QuickJs in separate isolated Android process
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/run_mangaall_future_code11_interprocess_offline.sh
+      - name: Preserve closed emulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mangaall-future-code11-real-ipc
+          path: .github/results/mangaall-future-code11-real-ipc
+          if-no-files-found: ignore
+          retention-days: 2
