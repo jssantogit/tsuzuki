@@ -447,8 +447,16 @@ class MangaAllFutureHostChapterSnapshotTest {
         originalRows.first()[5].jsonPrimitive.content shouldBe "Ju-Ni"
         val referenceParts = mutableListOf<List<JsonArray>>()
         var current = mutableListOf<JsonArray>()
+        // A JsonArray is itself Iterable<JsonElement>: current + row
+        // FLATTENS the tuple through Kotlin's plus(Iterable) overload.
+        // The original legacy budget check made exactly that mistake and
+        // could compare a different JSON shape than the persisted array.
+        // Explicit listOf(row) yields the actual saved array-of-tuples shape.
+        val first = originalRows.first()
+        (JsonArray(mutableListOf<JsonArray>() + first).toString() !=
+            JsonArray(listOf(first)).toString()) shouldBe true
         for (row in originalRows) {
-            val proposed = JsonArray(current + row).toString()
+            val proposed = JsonArray(current + listOf(row)).toString()
             if (proposed.length > 48 * 1024 || proposed.encodeToByteArray().size > 48 * 1024) {
                 referenceParts += current
                 current = mutableListOf()
