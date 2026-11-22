@@ -46,6 +46,9 @@ class SignedCode10LiveReaderContract(unittest.TestCase):
         self.assertIn("hashlib.sha256(archive.read_bytes()).hexdigest() == sha", wf)
         self.assertIn("hashlib.sha256(Path('/tmp/mangaall-code10-reader-proof.tsz').read_bytes()).hexdigest() == sha", wf)
         self.assertIn("mangaall/code10-published-package.tsz", wf)
+        self.assertIn("dist/providers/app.tsuzuki.mangaall-10.tsz", wf)
+        self.assertIn("|code=10|sequence=36", wf)
+        self.assertNotIn("dist/providers/app.tsuzuki.mangaall-9.tsz", wf)
         self.assertIn("MANGAALL_SIGNED_CODE: '10'", wf)
         for forbidden in ("PUBLISH_MANGAALL_CODE10", "TSUZUKI_PROVIDER_SIGNING_KEY_PEM",
                           "allow-cloudflare-bypass", "curl -k", "export COOKIES"):
