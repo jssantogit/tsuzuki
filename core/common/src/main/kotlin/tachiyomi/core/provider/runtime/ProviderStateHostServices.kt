@@ -142,7 +142,7 @@ class FileProviderStorageHostService(
         val startedAt = System.nanoTime()
         val monitor = FUTURE_MANGAALL_LOCKS.computeIfAbsent(lockFile.path) { ReentrantLock() }
         var heldMonitor = false
-        try {
+        return try {
             // The same three-second budget covers BOTH contention in this JVM
             // and the OS sidecar file, preventing 3s * N queued callers.
             if (!monitor.tryLock(LOCK_WAIT_NANOS, TimeUnit.NANOSECONDS)) {
