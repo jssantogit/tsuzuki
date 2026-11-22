@@ -150,7 +150,8 @@ class MangaAllFutureHostChapterSnapshotTest {
             {"id":171,"chapter_number":2,"language":"en","source":"user"},
             {"id":171,"chapter_number":2,"language":"en","source":"other"},
             {"id":171,"chapter_number":2,"language":"en","source":"user"}
-        ]""".trimIndent()
+        ]
+        """.trimIndent()
         val (service, calls) = fixture { raw }
         val result = service.start("mangadot:131", "en")
         result.items.map { it["providerChapterId"]!!.jsonPrimitive.content } shouldBe listOf(
@@ -178,9 +179,11 @@ class MangaAllFutureHostChapterSnapshotTest {
         // Compact source rows fit the dedicated 440KiB envelope, but the
         // combined full provider storage exceeds 512KiB due to unrelated keys.
         current = source(4341, 0)
-        (runCatching {
-            service.start("mangadot:131", "en")
-        }.exceptionOrNull() is ProviderHostServiceException) shouldBe true
+        (
+            runCatching {
+                service.start("mangadot:131", "en")
+            }.exceptionOrNull() is ProviderHostServiceException
+            ) shouldBe true
 
         shared.get("mangaall_private_chapters_index") shouldBe oldIndex
         repeat(6) { shared.get("other" + it) shouldBe "a".repeat(60 * 1024) }
