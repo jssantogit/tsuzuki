@@ -292,7 +292,10 @@ class ProviderScriptPackageRuntimeTest {
                     error("Not reached")
             }
             runtime.invoke(
-                pkg, "reading.chapters", 1, "{}",
+                pkg,
+                "reading.chapters",
+                1,
+                "{}",
                 ProviderHostServices(mangaAllChapterSnapshot = bridge),
             ) shouldBe ProviderPackageExecution.Failure(ProviderPackageFailure.HOST_ERROR)
         }
