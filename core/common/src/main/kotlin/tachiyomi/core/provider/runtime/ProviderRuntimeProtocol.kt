@@ -57,6 +57,7 @@ enum class ProviderHostModule {
     CRYPTO,
     IMAGE,
     LOG,
+
     // Future code11-only, strictly independent of generic HTTP/storage grants.
     MANGAALL_CHAPTER_SNAPSHOT,
 }
