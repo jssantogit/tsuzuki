@@ -59,7 +59,15 @@ class ProviderQuickJsRuntime(
             runtime.memoryLimit = limits.memoryLimitBytes
             runtime.maxStackSize = limits.stackLimitBytes
             runtime.evaluationTimeoutMillis = limits.jsExecutionTimeoutMs
-            runtime.installHostServices(hostServices, hostFailures)
+            // This raw evaluate() path has NO verified Provider package or
+            // manifest to authorize the future MangaALL snapshot privilege.
+            // Only ProviderScriptPackageRuntime.invoke may expose it after
+            // independently checking the exact code11 manifest grant.
+            // Never infer authorization from an injected native Host object.
+            runtime.installHostServices(
+                hostServices.copy(mangaAllChapterSnapshot = null),
+                hostFailures,
+            )
 
             val value = withTimeout(limits.wallClockTimeoutMs) {
                 runtime.evaluate<Any?>(
