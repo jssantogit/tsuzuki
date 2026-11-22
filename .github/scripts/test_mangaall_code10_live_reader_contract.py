@@ -26,7 +26,7 @@ class SignedCode10LiveReaderContract(unittest.TestCase):
         self.assertIn("\n  pull_request:", wf)
         for forbidden in ("\n  schedule:", "\n  issue_comment:", "workflow_run:"):
             self.assertNotIn(forbidden, wf)
-        self.assertIn("  push:\n    branches: ['test/mangaall-code10-real-reader-cdn-opt-in-*']", wf)
+        self.assertIn("  push:\n    branches: ['test/mangaall-code10-real-reader-cdn-opt-in-*', 'fix/mangaall-code10-real-reader-cdn-opt-in-*']", wf)
         self.assertIn("offline-contract:\n    if: github.event_name == 'pull_request' || github.event_name == 'push'", wf)
         self.assertIn("signed-code10-live-android:\n    if: github.event_name == 'workflow_dispatch'", wf)
         self.assertIn(ACK, wf)
