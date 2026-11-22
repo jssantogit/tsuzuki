@@ -50,8 +50,6 @@ def summarize(works, acknowledgement, summaries):
             raise ValueError("Source shard original global work order is inconsistent")
         for row in rows:
             position, case = row.get("position"), row.get("caseId")
-            if expected.get(position - 1, {}) if False else False:
-                raise AssertionError("unreachable")
             if type(position) is not int or positions.get(position) != case or case in seen_cases:
                 raise ValueError("Foreign, duplicated or substituted work in scaled Host report")
             if row.get("outcome") not in ALLOWED or row.get("readerPixels") != "NOT_TESTED_REAL_CDN":
@@ -64,6 +62,10 @@ def summarize(works, acknowledgement, summaries):
                 "NO_CHAPTER_BINDING_OBSERVED",
             }:
                 raise ValueError("Unrecognized editorial observation")
+            for field in ("sqliteConfirmed", "sqliteProvisional", "sqliteBindings"):
+                number = row.get(field)
+                if type(number) is not int or number < 0 or number > 16_000:
+                    raise ValueError("Invalid observed Host SQLite counter")
             seen_cases.add(case)
             results.append({
                 "position": position, "caseId": case, "outcome": row["outcome"],
