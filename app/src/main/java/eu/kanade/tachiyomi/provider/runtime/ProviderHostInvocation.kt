@@ -94,7 +94,7 @@ data class ProviderHostInvocationPolicy(
                 allowLocalNetwork = manifest.permissions.network?.localNetwork == true,
                 storageEnabled = manifest.permissions.storage.enabled,
                 mangaAllChapterSnapshotEnabled =
-                    manifest.id == "app.tsuzuki.mangaall" &&
+                manifest.id == "app.tsuzuki.mangaall" &&
                     manifest.version.code >= 11L &&
                     manifest.minHostApi >= 2 &&
                     manifest.permissions.mangaAllChapterSnapshot.enabled &&
