@@ -62,15 +62,19 @@ def summarize(works, acknowledgement, summaries):
                 "NO_CHAPTER_BINDING_OBSERVED",
             }:
                 raise ValueError("Unrecognized editorial observation")
-            for field in ("sqliteConfirmed", "sqliteProvisional", "sqliteBindings"):
+            for field in ("sqliteConfirmed", "sqliteProvisional", "sqliteBindings",
+                          "hostResultLimitResponses"):
                 number = row.get(field)
                 if type(number) is not int or number < 0 or number > 16_000:
-                    raise ValueError("Invalid observed Host SQLite counter")
+                    raise ValueError("Invalid observed Host counter")
+            if row["hostResultLimitResponses"] and row.get("sourceIncomplete") is not True:
+                raise ValueError("Oversized Host result cannot be marked complete")
             seen_cases.add(case)
             results.append({
                 "position": position, "caseId": case, "outcome": row["outcome"],
                 "readerPixels": "NOT_TESTED_REAL_CDN",
                 "sourceIncomplete": row.get("sourceIncomplete") is True,
+                "hostResultLimitResponses": row["hostResultLimitResponses"],
                 "sqliteConfirmed": row.get("sqliteConfirmed"),
                 "sqliteProvisional": row.get("sqliteProvisional"),
                 "sqliteBindings": row.get("sqliteBindings"),
@@ -88,6 +92,7 @@ def summarize(works, acknowledgement, summaries):
         "signedIndexSequence": 36, "signedCode10Sha256": SHA,
         "totalWorks": 30, "shardCount": 3, "sourceShards": [0, 1, 2],
         "outcomes": counts, "results": results,
+        "hostResultLimitResponses": sum(row["hostResultLimitResponses"] for row in results),
         "allThirtyFunctional": False,
         "readerPixels": "NOT_TESTED_REAL_CDN",
         "automaticEditorialBindingFromPartialV1": False,
