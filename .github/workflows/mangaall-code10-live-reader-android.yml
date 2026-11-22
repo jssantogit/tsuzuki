@@ -116,12 +116,14 @@ jobs:
           raw = path.read_bytes()
           assert len(raw) <= 2048, 'Oversized request'
           request = json.loads(raw)
+          assert type(request) is dict, 'Invalid request object'
+          assert request.get('mode') in ('transport', 'reader'), 'Unapproved live mode'
           expected = {
               'work_id': 'mangadex:239d6260-d71f-43b0-afff-074e3619e3de',
               'chapter_id': 'mangadex:2af914dc-0d63-4ac0-875e-75390ce59390',
               'chapter_number': '336',
               'language': 'en',
-              'mode': 'transport',
+              'mode': request['mode'],
               'acknowledge': 'I_ACCEPT_SIGNED_CODE10_LIVE_READER',
           }
           assert type(request) is dict and request == expected, 'Unapproved source, chapter or mode'
@@ -138,7 +140,7 @@ jobs:
                   value = request[source]
                   assert re.fullmatch(r'[A-Za-z0-9_.:-]+', value), 'Invalid request field'
                   print(f'{name}={value}', file=target)
-          print('MANGAALL_CODE10_COMMIT_REQUEST|scope=BLEACH_336_TRANSPORT|source=SIGNED_CODE10|mode=transport|cdn=NOT_YET_CALLED')
+          print(f"MANGAALL_CODE10_COMMIT_REQUEST|scope=BLEACH_336_{request['mode'].upper()}|source=SIGNED_CODE10|mode={request['mode']}|cdn=NOT_YET_CALLED")
           PY
       - name: Reject all unapproved live requests BEFORE upstream traffic
         shell: bash
